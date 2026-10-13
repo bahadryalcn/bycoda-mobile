@@ -1,0 +1,70 @@
+/** Only known reads may retry. Mutation requests must never be replayed. */
+const READ_METHODS = new Set([
+  "environment.describe",
+  "projects.list",
+  "projects.directory",
+  "projects.browse",
+  "models.list",
+  "sessions.list",
+  "sessions.get",
+  "sessions.page",
+  "sessions.sync",
+  "sessions.syncChunk",
+  "sessions.block",
+  "sessions.adopted",
+  "machine.changes",
+  "commands.status",
+  "attachments.status",
+  "attachments.read",
+  "html.artifacts.list",
+  "html.artifacts.read",
+  "events.read",
+  "files.read",
+  "files.list",
+  "files.index",
+  "files.search",
+  "files.searchContent",
+  "git.index",
+  "git.fileDiff",
+  "git.diff",
+  "git.branches",
+  "git.worktrees",
+  "automations.list",
+  "automations.runs",
+  "tasks.list",
+  "goals.list",
+  "stewards.list",
+  "host.settings.get",
+  "delivery.pr.list",
+  "shell.profiles",
+  "notes.list",
+  "notes.get",
+  "inbox.list",
+  "inbox.provider.status",
+  "inbox.provider.result",
+  "social.oauth.availability",
+  "social.oauth.status",
+  "social.browser.availability",
+  "social.browser.status",
+]);
+
+const READ_SOCIAL_ACTIONS = new Set([
+  "snapshot",
+  "policy.get",
+  "accounts.list",
+  "capabilities.get",
+  "inbox.list",
+  "thread.read",
+  "campaigns.status",
+  "contacts.search",
+  "jobs.status",
+]);
+
+export function readonlyRequest(method: string, params: Record<string, unknown>): boolean {
+  return (
+    READ_METHODS.has(method) ||
+    (method === "social.request" &&
+      typeof params.action === "string" &&
+      READ_SOCIAL_ACTIONS.has(params.action))
+  );
+}
