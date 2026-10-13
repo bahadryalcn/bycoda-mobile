@@ -8,10 +8,9 @@ ios/
 .env*
 !.env.example
 
-# Local notes and documentation are not part of this repository.
-*.md
+# Local personal notes and document restoration patches.
+/PRIVATE-NOTES.md
 /private-docs/
-/docs/
 /temp/
 *.log
 *.local
