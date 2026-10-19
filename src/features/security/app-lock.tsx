@@ -1,25 +1,26 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useRef, useState, type PropsWithChildren } from "react";
-import { BackHandler, Modal, ScrollView, StyleSheet, View } from "react-native";
+import { BackHandler, Modal, ScrollView, StyleSheet, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { enterItem } from "../../ui/motion";
 import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import { useSecurity } from "../../state/security";
 import {
   Body,
   Button,
-  Card,
   ErrorText,
   Heading,
   IconButton,
   Loading,
   Row,
   Screen,
-  Stack,
 } from "../../ui/primitives";
 import { uiStyles } from "../../ui/styles";
-import { colors, metrics, space } from "../../ui/tokens";
+import { colors, fontSize, metrics, radii, space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BrandLogo, LegalLinks, type LegalLinkTarget } from "../../ui/brand";
+import { LegalLinks, type LegalLinkTarget } from "../../ui/brand";
 import { LegalDocument, legalDocumentTitle } from "../legal/legal-document";
 
 export function useSecurityError() {
@@ -51,6 +52,7 @@ export function useSecurityError() {
 }
 
 export function SecurityGate({ children }: PropsWithChildren) {
+  useMobileTheme();
   const security = useSecurity();
   const copy = useCopy();
   const describeError = useSecurityError();
@@ -86,69 +88,87 @@ export function SecurityGate({ children }: PropsWithChildren) {
           paddingRight: Math.max(insets.right, space.screen),
         }}
       >
-        <Stack
+        <Animated.View
+          entering={enterItem(0)}
           style={{
             width: "100%",
             maxWidth: metrics.entryWidth,
             alignSelf: "center",
+            alignItems: "center",
             gap: space.lg,
           }}
         >
-          <View style={{ alignItems: "center" }}>
-            <BrandLogo compact />
-          </View>
-          {security.status === "suspended" ? (
-            <Card>
-              <Row>
-                <LockKeyhole size={20} color={colors.muted} />
-                <Heading style={[uiStyles.title, uiStyles.grow]}>
-                  {copy("Çalışma alanın gizlendi", "Your workspace is hidden")}
-                </Heading>
-              </Row>
-              <Body muted>
-                {copy(
-                  "Uygulamaya döndüğünde güvenli erişimin kontrol edilir.",
-                  "Secure access will be checked when you return to the app.",
-                )}
-              </Body>
-            </Card>
-          ) : security.status === "loading" ? (
+          {security.status === "loading" ? (
             <Loading label={copy("Güvenlik kontrol ediliyor…", "Checking security…")} centered />
           ) : (
-            <Card style={{ padding: space.lg, gap: space.md }}>
-              <Row>
-                <LockKeyhole size={20} color={colors.accent} />
-                <Heading style={[uiStyles.title, uiStyles.grow]}>
-                  {copy("bycoda kilitli", "bycoda is locked")}
-                </Heading>
-              </Row>
-              <Body muted>
-                {copy(
-                  "Bilgisayarlarına erişmek için telefonunun ekran kilidini veya biyometrisini kullan.",
-                  "Use your phone’s screen lock or biometrics to access your computers.",
-                )}
-              </Body>
-              <ErrorText
-                error={security.error}
-                message={describeError(security.error) ?? undefined}
-              />
-              <Button
-                label={
-                  security.error === "storage"
-                    ? copy("Yeniden dene", "Retry")
-                    : copy("Kilidi aç", "Unlock")
-                }
-                tone="primary"
-                busy={security.busy}
-                onPress={() => {
-                  if (security.error === "storage") void security.initialize();
-                  else void security.unlock(copy("bycoda güvenli giriş", "Unlock bycoda"));
+            <>
+              <View
+                accessible={false}
+                style={{
+                  width: 96,
+                  height: 96,
+                  borderRadius: radii.pill,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: colors.selected,
                 }}
-              />
-            </Card>
+              >
+                <LockKeyhole
+                  size={44}
+                  strokeWidth={2}
+                  color={security.status === "suspended" ? colors.muted : colors.accent}
+                />
+              </View>
+              <View style={{ alignItems: "center", gap: space.sm }}>
+                <Text
+                  selectable
+                  accessibilityRole="header"
+                  style={[uiStyles.heading, { fontSize: fontSize.hero, lineHeight: 34, textAlign: "center" }]}
+                >
+                  {security.status === "suspended"
+                    ? copy("Çalışma alanın gizlendi", "Your workspace is hidden")
+                    : copy("bycoda kilitli", "bycoda is locked")}
+                </Text>
+                <Body muted style={{ textAlign: "center" }}>
+                  {security.status === "suspended"
+                    ? copy(
+                        "Uygulamaya döndüğünde güvenli erişimin kontrol edilir.",
+                        "Secure access will be checked when you return to the app.",
+                      )
+                    : copy(
+                        "Bilgisayarlarına erişmek için telefonunun ekran kilidini veya biyometrisini kullan.",
+                        "Use your phone’s screen lock or biometrics to access your computers.",
+                      )}
+                </Body>
+              </View>
+              {security.status !== "suspended" ? (
+                <View style={{ width: "100%", gap: space.sm }}>
+                  <ErrorText
+                    error={security.error}
+                    message={describeError(security.error) ?? undefined}
+                  />
+                  <Button
+                    label={
+                      security.error === "storage"
+                        ? copy("Yeniden dene", "Retry")
+                        : copy("Kilidi aç", "Unlock")
+                    }
+                    tone="primary"
+                    fullWidth
+                    busy={security.busy}
+                    onPress={() => {
+                      if (security.error === "storage") void security.initialize();
+                      else void security.unlock(copy("bycoda güvenli giriş", "Unlock bycoda"));
+                    }}
+                  />
+                </View>
+              ) : null}
+              {security.status !== "suspended" ? (
+                <LegalLinks onOpen={setDocument} />
+              ) : null}
+            </>
           )}
-          {security.status !== "suspended" ? <LegalLinks onOpen={setDocument} /> : null}
-        </Stack>
+        </Animated.View>
       </ScrollView>
       <Modal
         visible={document !== null && security.status === "locked"}
@@ -163,8 +183,6 @@ export function SecurityGate({ children }: PropsWithChildren) {
             style={{
               paddingTop: insets.top,
               backgroundColor: colors.panel,
-              borderBottomWidth: 1,
-              borderBottomColor: colors.border,
             }}
           >
             <Row

@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { CodeText, Loading as SharedLoading } from "../../ui/primitives";
 
 export { uiStyles as styles } from "../../ui/styles";
@@ -11,8 +12,10 @@ export const workspaceKey = (machineId: string, projectId: string, ...parts: str
   ...parts,
 ];
 export function Loading() {
+  useMobileTheme();
   return <SharedLoading label="Yükleniyor…" centered />;
 }
 export function Mono({ children }: { children: string }) {
+  useMobileTheme();
   return <CodeText>{children}</CodeText>;
 }

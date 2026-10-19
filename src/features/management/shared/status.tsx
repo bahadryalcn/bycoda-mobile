@@ -5,6 +5,7 @@ import type { StatusProps } from "./types";
 export function Status({ value }: StatusProps) {
   const copy = useCopy();
   const translated: Record<string, readonly [string, string]> = {
+    idle: ["Hazır", "Ready"],
     todo: ["Yapılacak", "To do"],
     queued: ["Sırada", "Queued"],
     running: ["Çalışıyor", "Running"],

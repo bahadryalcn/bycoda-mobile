@@ -6,6 +6,10 @@ on the computer. The phone has no local agent runtime or local project checkout.
 
 ## Run the application
 
+For development, read the [design system](../reference/design-system.md),
+[coding standards](../reference/coding-standards.md) and
+[UI implementation guide](../../src/ui/README.md).
+
 Use the repository's pinned pnpm 12.8.2. Mobile has a separate workspace and
 lockfile; installing it does not upgrade desktop dependencies.
 

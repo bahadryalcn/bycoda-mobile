@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
 import { Badge, Body, CodePanel, CodeText, Row } from "@/ui/primitives";
 import { MessageText } from "@/ui/message-text";
@@ -15,6 +16,7 @@ export function TranscriptStructured({
   block: Block;
   context?: MessageContext;
 }) {
+  useMobileTheme();
   const copy = useCopy();
   const list = block.taskList;
   const done = list?.items.filter((item) => item.status === "completed").length ?? 0;

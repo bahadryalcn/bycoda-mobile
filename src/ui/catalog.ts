@@ -1,300 +1,987 @@
-/** Installed gluestack v5 UniWind source catalog, customized for bycoda. */
+/** Complete module inventory of installed panelui-native 0.112.0.
+ * Availability does not enable external services or bypass product permission gates.
+ */
 export const componentCatalog = [
   {
-    id: "accordion",
-    group: "navigation",
-    capability: "universal",
+    "id": "accordion",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/accordion"
   },
   {
-    id: "actionsheet",
-    group: "overlays",
-    capability: "universal",
+    "id": "ai-input",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/ai-components/ai-input"
   },
   {
-    id: "alert",
-    group: "feedback",
-    capability: "universal",
+    "id": "alert",
+    "group": "overlays",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/alert"
   },
   {
-    id: "alert-dialog",
-    group: "overlays",
-    capability: "universal",
+    "id": "animated-badge",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/animated-badge"
   },
   {
-    id: "avatar",
-    group: "text",
-    capability: "universal",
+    "id": "area-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/area-chart"
   },
   {
-    id: "badge",
-    group: "feedback",
-    capability: "universal",
+    "id": "attachment",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/attachment"
   },
   {
-    id: "bottomsheet",
-    group: "overlays",
-    capability: "native-gesture-sheet",
+    "id": "avatar",
+    "group": "media",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/avatar"
   },
   {
-    id: "box",
-    group: "layout",
-    capability: "universal",
+    "id": "avatar-cropper",
+    "group": "media",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/avatar-cropper"
   },
   {
-    id: "button",
-    group: "controls",
-    capability: "universal",
+    "id": "badge",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/badge"
   },
   {
-    id: "calendar",
-    group: "controls",
-    capability: "universal",
+    "id": "bar-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/bar-chart"
   },
   {
-    id: "card",
-    group: "layout",
-    capability: "universal",
+    "id": "bottom-sheet",
+    "group": "overlays",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/bottom-sheet"
   },
   {
-    id: "center",
-    group: "layout",
-    capability: "universal",
+    "id": "breadcrumb",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/breadcrumb"
   },
   {
-    id: "chat-ai",
-    group: "chat",
-    capability: "universal",
+    "id": "bubble-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/bubble-chart"
   },
   {
-    id: "checkbox",
-    group: "controls",
-    capability: "universal",
+    "id": "bump-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/bump-chart"
   },
   {
-    id: "date-time-picker",
-    group: "controls",
-    capability: "universal",
+    "id": "button",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/button"
   },
   {
-    id: "divider",
-    group: "layout",
-    capability: "universal",
+    "id": "button-group",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/button-group"
   },
   {
-    id: "drawer",
-    group: "overlays",
-    capability: "universal",
+    "id": "calendar",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/calendar"
   },
   {
-    id: "fab",
-    group: "controls",
-    capability: "universal",
+    "id": "candlestick-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/candlestick-chart"
   },
   {
-    id: "flat-list",
-    group: "lists",
-    capability: "universal",
+    "id": "card",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/card"
   },
   {
-    id: "form-control",
-    group: "controls",
-    capability: "universal",
+    "id": "carousel",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/carousel"
   },
   {
-    id: "gluestack-ui-provider",
-    group: "platform",
-    capability: "universal",
+    "id": "checkbox",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/checkbox"
   },
   {
-    id: "grid",
-    group: "layout",
-    capability: "universal",
+    "id": "chip",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/chip"
   },
   {
-    id: "heading",
-    group: "text",
-    capability: "universal",
+    "id": "circular-text",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/circular-text"
   },
   {
-    id: "hstack",
-    group: "layout",
-    capability: "universal",
+    "id": "code-block",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/ai-components/code-block"
   },
   {
-    id: "icon",
-    group: "text",
-    capability: "universal",
+    "id": "collapsible",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/collapsible"
   },
   {
-    id: "image",
-    group: "text",
-    capability: "universal",
+    "id": "color-picker",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/color-picker"
   },
   {
-    id: "image-background",
-    group: "text",
-    capability: "universal",
+    "id": "combobox",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/combobox"
   },
   {
-    id: "image-viewer",
-    group: "text",
-    capability: "universal",
+    "id": "compare",
+    "group": "media",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/compare"
   },
   {
-    id: "input",
-    group: "controls",
-    capability: "universal",
+    "id": "context-menu",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/context-menu"
   },
   {
-    id: "input-accessory-view",
-    group: "platform",
-    capability: "ios-only",
+    "id": "countdown",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/countdown"
   },
   {
-    id: "keyboard-avoiding-view",
-    group: "platform",
-    capability: "universal",
+    "id": "date-picker",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/date-picker"
   },
   {
-    id: "link",
-    group: "controls",
-    capability: "universal",
+    "id": "date-time-picker",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/date-time-picker"
   },
   {
-    id: "liquid-glass",
-    group: "platform",
-    capability: "ios-glass-with-panel-fallback",
+    "id": "dialog",
+    "group": "overlays",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/dialog"
   },
   {
-    id: "menu",
-    group: "navigation",
-    capability: "universal",
+    "id": "direction",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/direction"
   },
   {
-    id: "modal",
-    group: "overlays",
-    capability: "universal",
+    "id": "drawer",
+    "group": "overlays",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/drawer"
   },
   {
-    id: "popover",
-    group: "overlays",
-    capability: "universal",
+    "id": "empty-state",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/empty-state"
   },
   {
-    id: "portal",
-    group: "overlays",
-    capability: "universal",
+    "id": "fab",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/fab"
   },
   {
-    id: "pressable",
-    group: "controls",
-    capability: "universal",
+    "id": "feedback",
+    "group": "overlays",
+    "capability": "requires-explicit-service-setup",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/feedback"
   },
   {
-    id: "progress",
-    group: "feedback",
-    capability: "universal",
+    "id": "field",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/field"
   },
   {
-    id: "radio",
-    group: "controls",
-    capability: "universal",
+    "id": "file-upload",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components"
   },
   {
-    id: "refresh-control",
-    group: "lists",
-    capability: "universal",
+    "id": "flip-card",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/flip-card"
   },
   {
-    id: "safe-area-view",
-    group: "platform",
-    capability: "universal",
+    "id": "flow",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/flow"
   },
   {
-    id: "scroll-view",
-    group: "lists",
-    capability: "universal",
+    "id": "form",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/form"
   },
   {
-    id: "section-list",
-    group: "lists",
-    capability: "universal",
+    "id": "frame",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/frame"
   },
   {
-    id: "select",
-    group: "controls",
-    capability: "universal",
+    "id": "funnel-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/funnel-chart"
   },
   {
-    id: "skeleton",
-    group: "feedback",
-    capability: "universal",
+    "id": "grid-item",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/grid-item"
   },
   {
-    id: "slider",
-    group: "controls",
-    capability: "universal",
+    "id": "heatmap-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/heatmap-chart"
   },
   {
-    id: "spinner",
-    group: "feedback",
-    capability: "universal",
+    "id": "hex-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/hex-chart"
   },
   {
-    id: "status-bar",
-    group: "platform",
-    capability: "universal",
+    "id": "image-generation",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/ai-components/image-generation"
   },
   {
-    id: "switch",
-    group: "controls",
-    capability: "universal",
+    "id": "image-viewer",
+    "group": "media",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/image-viewer"
   },
   {
-    id: "table",
-    group: "lists",
-    capability: "universal",
+    "id": "input",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/input"
   },
   {
-    id: "tabs",
-    group: "navigation",
-    capability: "universal",
+    "id": "input-group",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/input-group"
   },
   {
-    id: "text",
-    group: "text",
-    capability: "universal",
+    "id": "item",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/item"
   },
   {
-    id: "textarea",
-    group: "controls",
-    capability: "universal",
+    "id": "kpi",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/kpi"
   },
   {
-    id: "toast",
-    group: "feedback",
-    capability: "universal",
+    "id": "label",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/label"
   },
   {
-    id: "tooltip",
-    group: "overlays",
-    capability: "universal",
+    "id": "leaderboard",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/leaderboard"
   },
   {
-    id: "view",
-    group: "layout",
-    capability: "universal",
+    "id": "line-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/line-chart"
   },
   {
-    id: "virtualized-list",
-    group: "lists",
-    capability: "universal",
+    "id": "live-line-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/live-line-chart"
   },
   {
-    id: "vstack",
-    group: "layout",
-    capability: "universal",
+    "id": "loader",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/loader"
   },
+  {
+    "id": "map",
+    "group": "data",
+    "capability": "optional-native-map",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/map"
+  },
+  {
+    "id": "markdown-editor",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/markdown-editor"
+  },
+  {
+    "id": "marker",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/marker"
+  },
+  {
+    "id": "marquee",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/marquee"
+  },
+  {
+    "id": "menu",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/menu"
+  },
+  {
+    "id": "message",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/message"
+  },
+  {
+    "id": "message-scroller",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/message-scroller"
+  },
+  {
+    "id": "meter",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/meter"
+  },
+  {
+    "id": "mirror-area-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/mirror-area-chart"
+  },
+  {
+    "id": "number-input",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/number-input"
+  },
+  {
+    "id": "otp-input",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/otp-input"
+  },
+  {
+    "id": "page-header",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/page-header"
+  },
+  {
+    "id": "pagination",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/pagination"
+  },
+  {
+    "id": "panelside",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/ai-components/panelside"
+  },
+  {
+    "id": "pie-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/pie-chart"
+  },
+  {
+    "id": "plan",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/ai-components/plan"
+  },
+  {
+    "id": "planner",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/planner"
+  },
+  {
+    "id": "plot",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/plot"
+  },
+  {
+    "id": "polar-area-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/polar-area-chart"
+  },
+  {
+    "id": "popover",
+    "group": "overlays",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/popover"
+  },
+  {
+    "id": "post",
+    "group": "media",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/post"
+  },
+  {
+    "id": "progress",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/progress"
+  },
+  {
+    "id": "progress-button",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/progress-button"
+  },
+  {
+    "id": "pyramid-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/pyramid-chart"
+  },
+  {
+    "id": "qr-code",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/qr-code"
+  },
+  {
+    "id": "questionnaire",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/questionnaire"
+  },
+  {
+    "id": "radar-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/radar-chart"
+  },
+  {
+    "id": "radio-group",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/radio-group"
+  },
+  {
+    "id": "rating",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/rating"
+  },
+  {
+    "id": "reasoning",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/ai-components/reasoning"
+  },
+  {
+    "id": "response",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/ai-components/response"
+  },
+  {
+    "id": "ring-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/ring-chart"
+  },
+  {
+    "id": "sankey-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/sankey-chart"
+  },
+  {
+    "id": "scatter-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/scatter-chart"
+  },
+  {
+    "id": "scroll-blur",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/scroll-blur"
+  },
+  {
+    "id": "scroll-canvas",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/scroll-canvas"
+  },
+  {
+    "id": "scroll-fade",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/scroll-fade"
+  },
+  {
+    "id": "scroll-header",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/scroll-header"
+  },
+  {
+    "id": "scroll-text",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/scroll-text"
+  },
+  {
+    "id": "search-bar",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/search-bar"
+  },
+  {
+    "id": "section-progress",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/section-progress"
+  },
+  {
+    "id": "section-rail",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/section-rail"
+  },
+  {
+    "id": "select",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/select"
+  },
+  {
+    "id": "selection-mode",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/selection-mode"
+  },
+  {
+    "id": "separator",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/separator"
+  },
+  {
+    "id": "shimmer",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/ai-components/shimmer"
+  },
+  {
+    "id": "signature",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/signature"
+  },
+  {
+    "id": "skeleton",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/skeleton"
+  },
+  {
+    "id": "sketch",
+    "group": "media",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/sketch"
+  },
+  {
+    "id": "slide-button",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/slide-button"
+  },
+  {
+    "id": "slider",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/slider"
+  },
+  {
+    "id": "sortable",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/sortable"
+  },
+  {
+    "id": "soundwave",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/ai-components/soundwave"
+  },
+  {
+    "id": "sources",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/ai-components/sources"
+  },
+  {
+    "id": "spinner",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/spinner"
+  },
+  {
+    "id": "split-view",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/split-view"
+  },
+  {
+    "id": "splitter",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/splitter"
+  },
+  {
+    "id": "stack-card",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/stack-card"
+  },
+  {
+    "id": "steps",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/steps"
+  },
+  {
+    "id": "support",
+    "group": "overlays",
+    "capability": "requires-explicit-service-setup",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/support"
+  },
+  {
+    "id": "surface",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/surface"
+  },
+  {
+    "id": "swipe",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/swipe"
+  },
+  {
+    "id": "switch",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/switch"
+  },
+  {
+    "id": "table",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/table"
+  },
+  {
+    "id": "tabs",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/tabs"
+  },
+  {
+    "id": "tag-input",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/tag-input"
+  },
+  {
+    "id": "task",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/ai-components/task"
+  },
+  {
+    "id": "text-animation",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/text-animation"
+  },
+  {
+    "id": "textarea",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/textarea"
+  },
+  {
+    "id": "theme-selector",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/theme-selector"
+  },
+  {
+    "id": "thinking-orb",
+    "group": "chat",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/ai-components/thinking-orb"
+  },
+  {
+    "id": "time-picker",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/time-picker"
+  },
+  {
+    "id": "timeline",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/timeline"
+  },
+  {
+    "id": "toast",
+    "group": "overlays",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/toast"
+  },
+  {
+    "id": "toggle-button",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/toggle-button"
+  },
+  {
+    "id": "tooltip",
+    "group": "overlays",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/tooltip"
+  },
+  {
+    "id": "tour",
+    "group": "overlays",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/tour"
+  },
+  {
+    "id": "tree",
+    "group": "navigation",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/tree"
+  },
+  {
+    "id": "treemap-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/treemap-chart"
+  },
+  {
+    "id": "typography",
+    "group": "layout",
+    "capability": "universal",
+    "priority": "core",
+    "docs": "https://panelui.dev/docs/components/typography"
+  },
+  {
+    "id": "waterfall-chart",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/charts/waterfall-chart"
+  }
 ] as const;
-export type ComponentId = (typeof componentCatalog)[number]["id"];
-export type ComponentGroup = (typeof componentCatalog)[number]["group"];
+
+export type ComponentCatalogEntry = (typeof componentCatalog)[number];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { colors, semanticColors } from "./tokens";
+import { themePalettes, semanticPalettes } from "./tokens";
 
 function luminance(hex: string) {
   const rgb = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
@@ -13,7 +13,9 @@ function contrast(a: string, b: string) {
   return (values[0]! + 0.05) / (values[1]! + 0.05);
 }
 
-describe("mobile reading contrast", () => {
+describe.each(["light", "dark"] as const)("mobile %s reading contrast", (mode) => {
+  const colors = themePalettes[mode];
+  const semanticColors = semanticPalettes[mode];
   it("keeps small body, metadata and action text readable on every workbench surface", () => {
     for (const background of [
       colors.background,
@@ -21,6 +23,7 @@ describe("mobile reading contrast", () => {
       colors.raised,
       colors.selected,
       colors.userMessage,
+      colors.elevated,
     ]) {
       for (const foreground of [colors.text, colors.muted, colors.subtle, colors.accent]) {
         expect(

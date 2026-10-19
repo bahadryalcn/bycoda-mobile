@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useState, type PropsWithChildren } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -8,9 +9,10 @@ import { ProviderConsentGate } from "./features/privacy/provider-consent";
 import { OverlayProvider } from "./ui/overlays";
 import { colors } from "./ui/tokens";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { BycodaUIProvider } from "./ui/provider";
+import { BycodaUIProvider, MobileThemeController } from "./ui/provider";
 
 export function AppProviders({ children }: PropsWithChildren) {
+  useMobileTheme();
   const [cache] = useState(
     () =>
       new QueryClient({
@@ -27,6 +29,7 @@ export function AppProviders({ children }: PropsWithChildren) {
   );
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <MobileThemeController />
       <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
         <QueryClientProvider client={cache}>
           <AppLifecycle cache={cache}>

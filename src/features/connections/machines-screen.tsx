@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useState } from "react";
 import { router, Stack } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
@@ -6,6 +7,9 @@ import Check from "lucide-react-native/icons/check";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import Laptop from "lucide-react-native/icons/laptop";
 import Plus from "lucide-react-native/icons/plus";
+import Animated from "react-native-reanimated";
+import { IconTile } from "@/ui/icon-tile";
+import { enterItem } from "@/ui/motion";
 import { useMachines } from "@/state/machines";
 import { assertAppAccess } from "@/state/security";
 import { Body, Button, Disclosure, ErrorNotice, IconButton, Loading, MutationState, NavigationGroup, NavigationRow, Screen, Sheet } from "@/ui/primitives";
@@ -20,6 +24,7 @@ import { reloadSavedConnections, selectSavedComputer } from "./recovery";
 import { useComputerConnection } from "./use-computer-connection";
 
 export function MachinesScreen() {
+  useMobileTheme();
   const copy = useCopy();
   const focused = useIsFocused();
   const state = useMachines();
@@ -71,8 +76,9 @@ export function MachinesScreen() {
       title: copy("Bilgisayarlar", "Computers"),
       gestureEnabled: !busy && !controller.form.dirty,
       headerLeft: insideEntry ? () => <IconButton label={copy("Geri", "Back")} disabled={busy} onPress={cancelEntry}><ChevronLeft size={22} color={colors.text} /></IconButton> : undefined,
+      headerRight: !insideEntry && !adding && state.machines.length ? () => <IconButton label={copy("Bilgisayar ekle", "Add computer")} disabled={unavailable || busy} onPress={() => controller.begin("choices")}><Plus size={22} strokeWidth={2.2} color={colors.accent} /></IconButton> : undefined,
     }} />
-    <View style={{ width: "100%", maxWidth: metrics.entryWidth, alignSelf: "center", gap: space.lg }}>
+    <View style={{ width: "100%", maxWidth: metrics.entryWidth, alignSelf: "center", gap: space.lg, paddingTop: space.sm }}>
       {!state.hydrated && !state.storageError ? <Loading /> : null}
       <ErrorNotice error={state.storageError} retryLabel={copy("Depolamayı yeniden yükle", "Reload saved connections")} onRetry={() => {
         void recover(() => reloadSavedConnections({
@@ -81,15 +87,17 @@ export function MachinesScreen() {
         }), copy("Kaydedilmiş bağlantılar yeniden yüklendi.", "Saved connections reloaded."));
       }} />
       <MutationState mutation={operation} success={operation.data?.message} />
-      {!adding && state.machines.length ? <NavigationGroup>
-        {state.machines.map((machine) => <NavigationRow
-          key={machine.id} label={machine.name} detail={machine.endpoint}
-          icon={<Laptop size={21} color={colors.muted} />}
-          trailing={machine.id === state.activeId ? <Check size={18} color={colors.success} /> : undefined}
-          disabled={unavailable || busy} onPress={() => setManaging(machine.id)}
-        />)}
-      </NavigationGroup> : null}
-      {!adding && state.machines.length ? <Button label={copy("Bilgisayar ekle", "Add computer")} tone="primary" disabled={unavailable || busy} onPress={() => controller.begin("choices")}><Plus color={colors.primaryText} size={18} /></Button> : null}
+      {!adding && state.machines.length ? <Animated.View entering={enterItem(0)}><NavigationGroup>
+        {state.machines.map((machine) => {
+          const active = machine.id === state.activeId;
+          return <NavigationRow
+            key={machine.id} label={machine.name} detail={machine.endpoint}
+            icon={<IconTile color={active ? colors.success : colors.muted}><Laptop size={18} strokeWidth={2} color={active ? colors.success : colors.muted} /></IconTile>}
+            trailing={active ? <Check size={18} strokeWidth={2.4} color={colors.success} /> : undefined}
+            disabled={unavailable || busy} onPress={() => setManaging(machine.id)}
+          />;
+        })}
+      </NavigationGroup></Animated.View> : null}
       {adding || !state.machines.length ? <PairingEntry controller={{ ...controller, cancel: cancelEntry }} disabled={unavailable} /> : null}
       <Disclosure label={copy("Bağlantı kurulum yardımı", "Connection setup help")}>
         <Body muted>{copy(

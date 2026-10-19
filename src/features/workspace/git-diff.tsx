@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useMemo } from "react";
 import { View } from "react-native";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
@@ -21,6 +22,7 @@ export function GitDiffPanel({
   onDiscard,
   children,
 }: GitDiffPanelProps) {
+  useMobileTheme();
   const copy = useCopy();
   const diff = useGitDiff(scope, selection);
   const preview = useMemo(

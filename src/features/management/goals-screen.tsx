@@ -1,19 +1,20 @@
-import { Input } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
 import { useProjectList } from "../workspace/use-project-directory";
 import { useReducer, useState } from "react";
+import Plus from "lucide-react-native/icons/plus";
 
 import {
   Button,
-  Card,
+  IconButton,
   MutationState,
   Notice,
   Heading,
   QueryState,
-  Screen,
+  SearchField,
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { colors } from "@/ui/tokens";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import type { HostGoal } from "@/domain/types";
@@ -51,14 +52,18 @@ export function GoalsScreen() {
     <ScreenList<HostGoal> title={copy("Hedefler", "Goals")} query={query}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
+      actions={
+        <IconButton
+          label={copy("Yeni hedef", "New goal")}
+          disabled={!projectId || !machine?.providers?.length || flow.kind !== "closed" || busy}
+          onPress={() => { create.reset(); if (projectId) dispatch({ type: "new", projectId }); }}
+        >
+          <Plus size={22} strokeWidth={2.2} color={colors.accent} />
+        </IconButton>
+      }
       header={<>
       <Scope allowAll />
-      <Input label={copy("Ara", "Search")} placeholder={copy("Ara", "Search")} value={search} onChangeText={setSearch} autoCorrect={false} />
-      <Button
-        label={copy("Yeni hedef", "New goal")}
-        disabled={!projectId || !machine?.providers?.length || flow.kind !== "closed" || busy}
-        onPress={() => { create.reset(); if (projectId) dispatch({ type: "new", projectId }); }}
-      />
+      <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
       <MutationState
         mutation={create}
         success={copy("Hedef planlaması istendi.", "Goal planning requested.")}

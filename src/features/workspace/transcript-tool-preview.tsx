@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { View } from "react-native";
 import * as Clipboard from "expo-clipboard";
@@ -18,6 +19,7 @@ type PreviewProps = {
 };
 
 export function TranscriptToolPreview(props: PreviewProps) {
+  useMobileTheme();
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   const preview = props.preview;
@@ -45,6 +47,7 @@ export function TranscriptToolPreview(props: PreviewProps) {
 }
 
 function PreviewContent({ preview, status, context }: PreviewProps) {
+  useMobileTheme();
   const copy = useCopy();
   const [file, setFile] = useState(false);
   const [error, setError] = useState<unknown>(null);

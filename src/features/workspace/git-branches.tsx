@@ -1,22 +1,22 @@
+import { useMobileTheme } from "@/ui/theme";
 import {
   Body,
   Button,
   Disclosure,
   IdentifierField,
-  Input,
   NavigationRow,
   QueryState,
   ScreenList,
+  SearchField,
   Sheet,
 } from "@/ui/primitives";
 import { useMemo, useState } from "react";
-import { View } from "react-native";
-import Search from "lucide-react-native/icons/search";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import Check from "lucide-react-native/icons/check";
 import { IconTile } from "@/ui/icon-tile";
-import { colors, space } from "@/ui/tokens";
+import { colors } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { GroupedListRow, rowInset } from "./shared";
 import { useGitBranches } from "./git-queries";
 import type { GitBranchesPanelProps } from "./git-types";
 
@@ -30,6 +30,7 @@ export function GitBranchesPanel({
   onClose,
   children,
 }: GitBranchesPanelProps) {
+  useMobileTheme();
   const copy = useCopy();
   const branches = useGitBranches(scope);
   const [search, setSearch] = useState("");
@@ -88,20 +89,15 @@ export function GitBranchesPanel({
         data={rows}
         keyExtractor={(row) => row.key}
         query={branches}
+        contentContainerStyle={{ gap: 0 }}
         header={
           <>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-              <Search size={19} color={colors.muted} />
-              <Input
-                label={copy("Ara", "Search")}
-                placeholder={copy("Ara", "Search")}
-                value={search}
-                onChangeText={setSearch}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={{ flex: 1 }}
-              />
-            </View>
+            <SearchField
+              label={copy("Ara", "Search")}
+              placeholder={copy("Ara", "Search")}
+              value={search}
+              onChangeText={setSearch}
+            />
             <QueryState query={branches} />
             <Disclosure label={copy("Dal değiştirme hakkında", "About switching branches")}>
               <Body muted>
@@ -113,34 +109,48 @@ export function GitBranchesPanel({
             </Disclosure>
           </>
         }
-        renderItem={({ item }) => (
-          <NavigationRow
-            label={item.key}
-            icon={
-              <IconTile>
-                <GitBranch
-                  size={20}
+        renderItem={({ item, index }) => (
+          <GroupedListRow
+            first={index === 0}
+            last={index === rows.length - 1}
+            inset={rowInset}
+          >
+            <NavigationRow
+              variant="plain"
+              label={item.key}
+              icon={
+                <IconTile
                   color={
                     !item.remote && branches.data?.current === item.branch
                       ? colors.success
-                      : colors.muted
+                      : undefined
                   }
-                />
-              </IconTile>
-            }
-            trailing={
-              !item.remote && branches.data?.current === item.branch ? (
-                <Check size={18} color={colors.success} />
-              ) : undefined
-            }
-            disabled={creating || (!item.remote && branches.data?.current === item.branch)}
-            detail={
-              !item.remote && branches.data?.current === item.branch
-                ? copy("Geçerli dal", "Current branch")
-                : undefined
-            }
-            onPress={() => onChoose({ kind: "switch", branch: item.branch, remote: item.remote })}
-          />
+                >
+                  <GitBranch
+                    size={18}
+                    strokeWidth={2}
+                    color={
+                      !item.remote && branches.data?.current === item.branch
+                        ? colors.success
+                        : colors.muted
+                    }
+                  />
+                </IconTile>
+              }
+              trailing={
+                !item.remote && branches.data?.current === item.branch ? (
+                  <Check size={18} color={colors.success} />
+                ) : undefined
+              }
+              disabled={creating || (!item.remote && branches.data?.current === item.branch)}
+              detail={
+                !item.remote && branches.data?.current === item.branch
+                  ? copy("Geçerli dal", "Current branch")
+                  : undefined
+              }
+              onPress={() => onChoose({ kind: "switch", branch: item.branch, remote: item.remote })}
+            />
+          </GroupedListRow>
         )}
       />
     </Sheet>

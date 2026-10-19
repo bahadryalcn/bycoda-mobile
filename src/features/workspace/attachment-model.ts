@@ -1,6 +1,6 @@
 export const ATTACHMENT_LIMIT = 20 * 1024 * 1024;
 export const ATTACHMENT_COUNT = 20;
-export type StagedAttachment = { id: string; name: string; mimeType: string; kind: "image" | "audio" | "file"; size: number; uri: string };
+export type StagedAttachment = { id: string; name: string; mimeType: string; kind: "image" | "audio" | "file"; size: number; uri: string; claimId?: string };
 export type TransferState = { status: "uploading" | "ready" | "error"; progress: number; error?: unknown };
 export function validateAttachment(file: Pick<StagedAttachment, "size" | "name">) {
   if (!Number.isSafeInteger(file.size) || file.size < 0 || file.size > ATTACHMENT_LIMIT) throw new Error("Each attachment must be at most 20 MiB.");

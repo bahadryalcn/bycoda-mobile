@@ -9,9 +9,11 @@ import {
   Field,
   FormActions,
   Heading,
+  NavigationGroup,
   Row,
   ToggleField,
 } from "@/ui/primitives";
+import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { useFormDraft } from "@/state/form-draft";
 import { useSheetGuard } from "@/ui/sheet-guard";
@@ -101,18 +103,20 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
         onChange={(agent) => update(agent)}
       />
       <Disclosure label={copy("Çalışma seçenekleri", "Execution options")}>
-      <ToggleField
-        disabled={busy}
-        label={copy("Çalışmadan önce planı onayla", "Approve the plan before work")}
-        value={draft.approvePlan}
-        onChange={(approvePlan) => update({ approvePlan })}
-      />
-      <ToggleField
-        disabled={busy}
-        label={copy("Görevleri incelet", "Review tasks")}
-        value={draft.verifyDefaults.review}
-        onChange={(review) => update({ verifyDefaults: { ...draft.verifyDefaults, review } })}
-      />
+      <NavigationGroup>
+        <ToggleField
+          disabled={busy}
+          label={copy("Çalışmadan önce planı onayla", "Approve the plan before work")}
+          value={draft.approvePlan}
+          onChange={(approvePlan) => update({ approvePlan })}
+        />
+        <ToggleField
+          disabled={busy}
+          label={copy("Görevleri incelet", "Review tasks")}
+          value={draft.verifyDefaults.review}
+          onChange={(review) => update({ verifyDefaults: { ...draft.verifyDefaults, review } })}
+        />
+      </NavigationGroup>
       <Body muted>
         {copy(
           "Bu yeni hedefte otomatik Git birleştirmesi kapalıdır.",
@@ -120,8 +124,8 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
         )}
       </Body>
       </Disclosure>
-      <MutationState mutation={create} />
       <FormActions
+        feedback={<MutationState mutation={create} />}
         submitLabel={copy("Planlamayı başlat", "Start planning")}
         busy={create.isPending}
         disabled={
@@ -132,7 +136,7 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
           !draft.projectIds.length ||
           busy
         }
-        onSubmit={() => create.mutate({ goal: normalized }, { onSuccess: () => onClose() })}
+        onSubmit={() => create.mutate({ goal: normalized }, { onSuccess: () => { haptic.success(); onClose(); } })}
         cancelDisabled={busy}
         cancelLabel={copy("Vazgeç", "Cancel")}
         onCancel={requestClose}

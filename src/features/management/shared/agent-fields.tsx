@@ -8,7 +8,7 @@ import type { HostModelCatalog } from "@/domain/types";
 import { effectiveAgentModel } from "../agent-model";
 import type { AgentFieldsProps } from "./types";
 
-export function AgentFields({ value, onChange, projectId, disabled, onValidityChange }: AgentFieldsProps) {
+export function AgentFields({ value, onChange, projectId, disabled, onValidityChange, showRunLimit = true }: AgentFieldsProps) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const [minutes, setMinutes] = useState(String(value.maxRunMinutes));
@@ -78,7 +78,7 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
           disabled={disabled}
           onChange={(runtimeMode) => onChange({ ...value, runtimeMode })}
         />
-        <Field
+        {showRunLimit ? <><Field
           label={copy(
             "Çalışma sınırı (dakika, 0 = sınırsız)",
             "Run limit (minutes, 0 = unlimited)",
@@ -91,7 +91,7 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
           editable={!disabled}
           keyboardType="number-pad"
         />
-        {!minutesValid && <ErrorText error={copy("0 ile 10080 arasında dakika girin.", "Enter minutes from 0 to 10080.")} />}
+        {!minutesValid && <ErrorText error={copy("0 ile 10080 arasında dakika girin.", "Enter minutes from 0 to 10080.")} />}</> : null}
       </Disclosure>
       <QueryState query={models} loading="inline" />
     </>

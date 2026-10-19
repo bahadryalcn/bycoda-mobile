@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useRef, useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,6 +19,7 @@ function Questions({
   busy: boolean;
   onReply: (reply: UserQuestionReply) => void;
 }) {
+  useMobileTheme();
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
   const [custom, setCustom] = useState<Record<string, string>>({});
   const complete = prompt.questions.every((q) => {
@@ -90,6 +92,7 @@ function TranscriptBlock({
   onApprove: (requestId: number, decision: "allow" | "deny") => void;
   onExpand: (block: Block) => void;
 }) {
+  useMobileTheme();
   if (block.internal) return null;
   const [expanded, setExpanded] = useState(false);
   const long = block.role === "tool" || block.role === "reasoning";
@@ -157,6 +160,7 @@ export function SessionScreen({
   projectId,
   sessionId,
 }: ProjectScreenProps & { sessionId: string }) {
+  useMobileTheme();
   const client = useHostClient(machineId);
   const cache = useQueryClient();
   const key = workspaceKey(machineId, projectId, "session", sessionId);

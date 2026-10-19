@@ -1,4 +1,4 @@
-import { Input } from "@/ui/primitives";
+import { useMobileTheme } from "@/ui/theme";
 import { ScreenList } from "@/ui/screen-list";
 import { Sheet } from "@/ui/primitives";
 import { useProjectList } from "../workspace/use-project-directory";
@@ -6,15 +6,16 @@ import { useReducer, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import History from "lucide-react-native/icons/rotate-ccw-clock";
+import Plus from "lucide-react-native/icons/plus";
 import {
+  ActionMenu,
   Body,
   Button,
   IconButton,
   MutationState,
   Notice,
   QueryState,
-  Row,
-  Screen,
+  SearchField,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useHostMutation, useHostQuery } from "@/state/queries";
@@ -36,6 +37,7 @@ import { NoteSummaryRow } from "./notes/note-summary-row";
 const draftStore = createNoteDraftStore(AsyncStorage);
 
 export function NotesScreen() {
+  useMobileTheme();
   const copy = useCopy();
   const [search, setSearch] = useState("");
   const machine = useActiveMachine();
@@ -70,50 +72,58 @@ export function NotesScreen() {
   const busy = save.isPending || remove.isPending || recovery.isPending;
   const visible = query.data?.notes.filter((note) => (note.title + " " + note.tags.join(" ")).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   return (
-    <ScreenList<NoteList["notes"][number]> title={copy("Notlar", "Notes")} query={query} data={visible ?? []} keyExtractor={(note) => note.id} header={<>
+    <ScreenList<NoteList["notes"][number]> title={copy("Notlar", "Notes")} query={query} data={visible ?? []} keyExtractor={(note) => note.id}
+      actions={!editorOpen ? (
+        <>
+          <ActionMenu
+            label={copy("Diğer not işlemleri", "More note actions")}
+            trigger={<History size={22} strokeWidth={2} color={colors.accent} />}
+            actions={[
+              {
+                key: "recover",
+                label: copy("Kaydedilmemiş taslağı aç", "Recover unsaved draft"),
+                disabled: editorOpen || save.isPending || remove.isPending || recovery.isPending,
+                onPress: () => {
+                  storage.reset();
+                  void recovery.run(async () => {
+                    const draft = machine ? await draftStore.recover(machine.id) : null;
+                    if (draft) dispatch({ type: "recover", initial: draft, expected: flow });
+                    return draft;
+                  });
+                },
+              },
+            ]}
+          />
+          <IconButton
+            label={copy("Yeni not", "New note")}
+            disabled={editorOpen || busy || (!!projectId && !sourceCwd)}
+            onPress={() => {
+              recovery.reset();
+              storage.reset();
+              save.reset();
+              remove.reset();
+              dispatch({
+                type: "draft",
+                initial: {
+                  id: identifier(),
+                  title: "",
+                  body: "",
+                  tags: "",
+                  sourceCwd,
+                  expectedUpdatedAt: 0,
+                },
+              });
+            }}
+          >
+            <Plus size={22} strokeWidth={2.2} color={colors.accent} />
+          </IconButton>
+        </>
+      ) : undefined}
+      header={<>
       {!editorOpen ? (
         <>
           <Scope allowAll />
-      <Input label={copy("Ara", "Search")} placeholder={copy("Ara", "Search")} value={search} onChangeText={setSearch} autoCorrect={false} />
-          <Row style={{ justifyContent: "space-between" }}>
-            <Button
-              label={copy("Yeni not", "New note")}
-              tone="primary"
-              disabled={editorOpen || busy || (!!projectId && !sourceCwd)}
-              onPress={() => {
-                recovery.reset();
-                storage.reset();
-                save.reset();
-                remove.reset();
-                dispatch({
-                  type: "draft",
-                  initial: {
-                    id: identifier(),
-                    title: "",
-                    body: "",
-                    tags: "",
-                    sourceCwd,
-                    expectedUpdatedAt: 0,
-                  },
-                });
-              }}
-            />
-            <IconButton
-              label={copy("Kaydedilmemiş taslağı aç", "Recover unsaved draft")}
-              disabled={editorOpen || save.isPending || remove.isPending}
-              busy={recovery.isPending}
-              onPress={() => {
-                storage.reset();
-                void recovery.run(async () => {
-                  const draft = machine ? await draftStore.recover(machine.id) : null;
-                  if (draft) dispatch({ type: "recover", initial: draft, expected: flow });
-                  return draft;
-                });
-              }}
-            >
-              <History size={18} color={colors.muted} />
-            </IconButton>
-          </Row>
+          <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
         </>
       ) : null}
       <MutationState mutation={recovery} />

@@ -1,3 +1,4 @@
+import { useMobileTheme } from "./theme";
 import {
   createContext,
   useCallback,
@@ -6,6 +7,7 @@ import {
   useId,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
@@ -14,6 +16,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
+  Easing,
   type SharedValue,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
@@ -23,10 +26,14 @@ import type { OverlayEntry, OverlayRegistry, ScreenOverlayProps } from "./overla
 import { canRemoveOverlay, closeOverlay, showOverlay, type OverlayState } from "./overlay-state";
 import { motionTiming } from "./motion";
 import { motion } from "./tokens";
+import { asWebElement, createOverlayWebFocus } from "./overlay-web-focus";
 
 const Context = createContext<OverlayRegistry | null>(null);
 const LayerPriority = createContext(0);
 const LayerProgress = createContext<SharedValue<number> | null>(null);
+
+/** UIKit sheet curve: fast departure, long gentle settle. */
+const sheetEasing = Easing.bezier(0.32, 0.72, 0, 1);
 
 export function useOverlayProgress() {
   return useContext(LayerProgress);
@@ -37,19 +44,24 @@ function OverlayLayer({
   entry,
   active,
   onHidden,
+  onElement,
 }: {
   id: string;
   entry: OverlayState<OverlayEntry>;
   active: boolean;
   onHidden(id: string, generation: number): void;
+  onElement(id: string, value: unknown): void;
 }) {
+  useMobileTheme();
   const progress = useSharedValue(0);
   useEffect(() => {
     const generation = entry.generation;
     const visible = entry.visible;
     progress.value = withTiming(
       visible ? 1 : 0,
-      { ...motionTiming, duration: motion.sheet },
+      visible
+        ? { ...motionTiming, duration: motion.sheet + 100, easing: sheetEasing }
+        : { ...motionTiming, duration: motion.sheet - 60 },
       (finished) => {
         if (finished && !visible) scheduleOnRN(onHidden, id, generation);
       },
@@ -58,10 +70,11 @@ function OverlayLayer({
   const style = useAnimatedStyle(() => ({ opacity: progress.value }));
   return (
     <Animated.View
+      ref={(element: unknown) => onElement(id, element)}
       style={[StyleSheet.absoluteFill, { flex: 1 }, style]}
       accessibilityViewIsModal={active}
       accessibilityElementsHidden={!active}
-      aria-hidden={!active}
+      aria-hidden={process.env.EXPO_OS === "web" ? undefined : !active}
       importantForAccessibility={active ? "auto" : "no-hide-descendants"}
       pointerEvents={active && entry.visible ? "auto" : "none"}
     >
@@ -74,7 +87,17 @@ function OverlayLayer({
 
 /** Private overlays share the activity window and the application's lock boundary. */
 export function OverlayProvider({ children }: PropsWithChildren) {
+  useMobileTheme();
   const [entries, setEntries] = useState<Map<string, OverlayState<OverlayEntry>>>(() => new Map());
+  const background = useRef<View>(null);
+  const elements = useRef(new Map<string, HTMLElement>());
+  const webFocus = useRef<ReturnType<typeof createOverlayWebFocus> | null>(null);
+  const captureElement = useCallback((id: string, value: unknown) => {
+    if (process.env.EXPO_OS !== "web") return;
+    const element = asWebElement(value);
+    if (element) elements.current.set(id, element);
+    else elements.current.delete(id);
+  }, []);
   const unlocked = useSecurity((state) => state.status === "unlocked");
   const update = useCallback((id: string, entry: OverlayEntry) => {
     setEntries((current) => new Map(current).set(id, showOverlay(current.get(id), entry)));
@@ -99,6 +122,25 @@ export function OverlayProvider({ children }: PropsWithChildren) {
     ? [...entries.entries()].sort((a, b) => a[1].value.priority - b[1].value.priority)
     : [];
   const active = layers.at(-1)?.[1];
+  useLayoutEffect(() => {
+    if (process.env.EXPO_OS !== "web" || typeof document === "undefined") return;
+    const controller = createOverlayWebFocus(document);
+    webFocus.current = controller;
+    return () => {
+      controller.dispose();
+      webFocus.current = null;
+    };
+  }, []);
+  useLayoutEffect(() => {
+    webFocus.current?.sync({
+      background: asWebElement(background.current),
+      unlocked,
+      layers: layers.flatMap(([id, entry]) => {
+        const element = elements.current.get(id);
+        return element ? [{ id, element, ...entry.value, visible: entry.visible }] : [];
+      }),
+    });
+  });
   useEffect(() => {
     if (!active || process.env.EXPO_OS === "web") return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -112,6 +154,7 @@ export function OverlayProvider({ children }: PropsWithChildren) {
     <Context.Provider value={registry}>
       <View style={uiStyles.screen}>
         <View
+          ref={background}
           style={uiStyles.screen}
           pointerEvents={active ? "none" : "auto"}
           accessibilityElementsHidden={!!active}
@@ -126,6 +169,7 @@ export function OverlayProvider({ children }: PropsWithChildren) {
             entry={entry}
             active={index === layers.length - 1}
             onHidden={finishClose}
+            onElement={captureElement}
           />
         ))}
       </View>
@@ -133,16 +177,17 @@ export function OverlayProvider({ children }: PropsWithChildren) {
   );
 }
 
-export function ScreenOverlay({ visible, priority, onClose, children }: ScreenOverlayProps) {
+export function ScreenOverlay({ visible, priority, label, onClose, children }: ScreenOverlayProps) {
+  useMobileTheme();
   const registry = useContext(Context);
   const parentPriority = useContext(LayerPriority);
   const layerPriority = priority ?? Math.max(20, parentPriority + 1);
   const id = useId();
   if (!registry) throw new Error("ScreenOverlay requires OverlayProvider.");
   useLayoutEffect(() => {
-    if (visible) registry.update(id, { children, onClose, priority: layerPriority });
+    if (visible) registry.update(id, { children, onClose, label, priority: layerPriority });
     else registry.remove(id);
-  }, [registry, id, visible, children, onClose, layerPriority]);
+  }, [registry, id, visible, children, label, onClose, layerPriority]);
   useLayoutEffect(() => () => registry.remove(id), [registry, id]);
   return null;
 }

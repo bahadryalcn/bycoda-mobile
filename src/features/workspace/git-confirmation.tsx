@@ -1,5 +1,6 @@
 import { Body, CodePanel, CodeText, ConfirmationCard } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { useMobileTheme } from "@/ui/theme";
 import type { GitConfirmationCardProps } from "./git-types";
 
 export function GitConfirmationCard({
@@ -8,6 +9,7 @@ export function GitConfirmationCard({
   onCancel,
   onConfirm,
 }: GitConfirmationCardProps) {
+  useMobileTheme();
   const copy = useCopy();
   let message: string;
   let label: string;

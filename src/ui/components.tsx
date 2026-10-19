@@ -1,3 +1,4 @@
+import { useMobileTheme } from "./theme";
 import { View } from "react-native";
 import {
   Body,
@@ -22,11 +23,13 @@ export function Button({
   busy?: boolean;
   variant?: "primary" | "secondary" | "danger";
 }) {
+  useMobileTheme();
   return (
     <SharedButton label={title} onPress={onPress} disabled={disabled} busy={busy} tone={variant} />
   );
 }
 export function SectionTitle({ title, detail }: { title: string; detail?: string }) {
+  useMobileTheme();
   return (
     <View style={uiStyles.titleGroup}>
       <Heading>{title}</Heading>
@@ -35,5 +38,6 @@ export function SectionTitle({ title, detail }: { title: string; detail?: string
   );
 }
 export function ErrorNotice(props: { error: unknown; onRetry?: () => void }) {
+  useMobileTheme();
   return <SharedErrorNotice {...props} retryLabel="Retry / Yeniden dene" />;
 }

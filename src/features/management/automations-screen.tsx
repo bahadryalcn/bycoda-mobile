@@ -1,10 +1,11 @@
 import { useEditorRecord } from "./shared/use-editor-record";
-import { Input } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
 import { useState } from "react";
+import Plus from "lucide-react-native/icons/plus";
 
-import { Body, Button, MutationState, Notice, QueryState, Screen, Sheet } from "@/ui/primitives";
+import { Button, IconButton, MutationState, Notice, QueryState, SearchField, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { colors } from "@/ui/tokens";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import type { HostAutomation } from "@/domain/types";
@@ -45,33 +46,37 @@ export function AutomationsScreen() {
     <ScreenList<HostAutomation> title={copy("Otomasyonlar", "Automations")} query={query}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
+      actions={
+        <IconButton
+          label={copy("Yeni otomasyon", "New automation")}
+          disabled={!projectId || !machine?.providers?.length || !!editor || busy}
+          onPress={() => {
+            save.reset();
+            return projectId &&
+            setEditor({
+              kind: "new",
+              initial: {
+                ...initialAgent(machine?.providers),
+                id: identifier(),
+                name: "",
+                prompt: "",
+                projectId,
+                enabled: true,
+                scheduleKind: "daily",
+                time: "09:00",
+                minute: 0,
+                dayOfWeek: 1,
+                maxRunsPerDay: 0,
+              },
+            });
+          }}
+        >
+          <Plus size={22} strokeWidth={2.2} color={colors.accent} />
+        </IconButton>
+      }
       header={<>
       <Scope allowAll />
-      <Input label={copy("Ara", "Search")} placeholder={copy("Ara", "Search")} value={search} onChangeText={setSearch} autoCorrect={false} />
-      <Button
-        label={copy("Yeni otomasyon", "New automation")}
-        disabled={!projectId || !machine?.providers?.length || !!editor || busy}
-        onPress={() => {
-          save.reset();
-          return projectId &&
-          setEditor({
-            kind: "new",
-            initial: {
-              ...initialAgent(machine?.providers),
-              id: identifier(),
-              name: "",
-              prompt: "",
-              projectId,
-              enabled: true,
-              scheduleKind: "daily",
-              time: "09:00",
-              minute: 0,
-              dayOfWeek: 1,
-              maxRunsPerDay: 0,
-            },
-          });
-        }}
-      />
+      <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
 
       {!editor && <MutationState mutation={save} success={copy("Otomasyon kaydedildi.", "Automation saved.")} />}
       <MutationState mutation={run} success={copy("Çalıştırma istendi.", "Run requested.")} />

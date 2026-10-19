@@ -1,3 +1,4 @@
+import { boundedResponseText } from "./response-body";
 import { gcm } from "@noble/ciphers/aes.js";
 import { x25519 } from "@noble/curves/ed25519.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
@@ -12,34 +13,8 @@ import {
   readLanEnvelope,
 } from "../../../src/integrations/mobile-lan";
 
-async function boundedText(response: Response, limit: number): Promise<string> {
-  if (Number(response.headers.get("content-length")) > limit)
-    throw new Error("Local network response too large.");
-  const reader = response.body?.getReader?.();
-  if (!reader) {
-    const text = await response.text();
-    if (text.length > limit) throw new Error("Local network response too large.");
-    return text;
-  }
-  let text = "";
-  let size = 0;
-  const decoder = new TextDecoder();
-  try {
-    while (true) {
-      const part = await reader.read();
-      if (part.done) break;
-      size += part.value.byteLength;
-      if (size > limit) {
-        await reader.cancel();
-        throw new Error("Local network response too large.");
-      }
-      text += decoder.decode(part.value, { stream: true });
-    }
-    return text + decoder.decode();
-  } finally {
-    reader.releaseLock();
-  }
-}
+const boundedText = (response: Response, limit: number) =>
+  boundedResponseText(response, limit, () => new Error("Local network response too large."));
 
 /** HTTP carries only ciphertext. The host key is pinned by the owner-created QR. */
 export function encryptedLanFetch(

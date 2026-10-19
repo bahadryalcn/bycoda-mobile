@@ -1,3 +1,4 @@
+import { useMobileTheme } from "./theme";
 import { Image } from "expo-image";
 import { View } from "react-native";
 import UserRound from "lucide-react-native/icons/user-round";
@@ -19,6 +20,7 @@ export function AgentAvatar({
   user?: boolean;
   size?: number;
 }) {
+  useMobileTheme();
   const provider = author?.toLowerCase().split(/[\s·/]/)[0];
   const source = providers[provider as keyof typeof providers] ?? mark;
   return (

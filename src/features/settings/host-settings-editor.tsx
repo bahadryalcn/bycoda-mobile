@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import Animated from "react-native-reanimated";
 import type { HostSettingsState } from "../../remote/types";
 import { hostKey, useHostMutation, useHostQuery } from "../../state/queries";
 import {
@@ -7,12 +8,14 @@ import {
   Card,
   Field,
   QueryState,
-  Section,
   MutationState,
   Notice,
   Stack,
   ErrorText,
 } from "../../ui/primitives";
+import { uiStyles } from "../../ui/styles";
+import { enterItem } from "../../ui/motion";
+import { space } from "../../ui/tokens";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useFormDraft } from "../../state/form-draft";
 import { useAsyncAction } from "../../state/actions";
@@ -60,28 +63,36 @@ export function HostSettingsEditor({ machineId }: HostSettingsEditorProps) {
     });
   };
   return (
-    <Stack>
+    <Stack style={{ gap: space.lg }}>
       <QueryState query={settings} />
       {settings.data ? (
-        <Stack>
-          <Field
-            label={copy("Aynı anda çalışan görev (1–8)", "Concurrent tasks (1–8)")}
-            value={fields.maxRunning}
-            onChangeText={(value) => update("maxRunning", value)}
-            keyboardType="number-pad"
-          />
-          {!validMax && <ErrorText error={copy("Aynı anda 1–8 görev çalışabilir.", "Choose 1–8 concurrent tasks.")} />}
-          <Field
-            label={copy(
-              "Günlük agent süresi (dakika, 0 sınırsız)",
-              "Daily agent time (minutes, 0 unlimited)",
-            )}
-            value={fields.dailyMinutes}
-            onChangeText={(value) => update("dailyMinutes", value)}
-            keyboardType="number-pad"
-          />
-          {!validMinutes && <ErrorText error={copy("Sıfır veya pozitif bir tam dakika girin.", "Enter zero or a positive whole number of minutes.")} />}
-          <Body muted>
+        <>
+          <Animated.View entering={enterItem(0)}>
+            <Card>
+              <Field
+                label={copy("Aynı anda çalışan görev (1–8)", "Concurrent tasks (1–8)")}
+                value={fields.maxRunning}
+                onChangeText={(value) => update("maxRunning", value)}
+                keyboardType="number-pad"
+              />
+              {!validMax ? (
+                <ErrorText error={copy("Aynı anda 1–8 görev çalışabilir.", "Choose 1–8 concurrent tasks.")} />
+              ) : null}
+              <Field
+                label={copy(
+                  "Günlük agent süresi (dakika, 0 sınırsız)",
+                  "Daily agent time (minutes, 0 unlimited)",
+                )}
+                value={fields.dailyMinutes}
+                onChangeText={(value) => update("dailyMinutes", value)}
+                keyboardType="number-pad"
+              />
+              {!validMinutes ? (
+                <ErrorText error={copy("Sıfır veya pozitif bir tam dakika girin.", "Enter zero or a positive whole number of minutes.")} />
+              ) : null}
+            </Card>
+          </Animated.View>
+          <Body muted style={uiStyles.caption}>
             {copy(
               `Bugün ${settings.data.usedMinutes.toFixed(1)} dakika kullanıldı.`,
               `${settings.data.usedMinutes.toFixed(1)} minutes used today.`,
@@ -110,9 +121,10 @@ export function HostSettingsEditor({ machineId }: HostSettingsEditorProps) {
             busy={action.isPending || save.isPending}
             disabled={!dirty || !validSettingsFields(fields)}
             tone="primary"
+            fullWidth
             onPress={submit}
           />
-        </Stack>
+        </>
       ) : null}
     </Stack>
   );

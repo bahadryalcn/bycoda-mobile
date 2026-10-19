@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useEffect, type ReactNode } from "react";
 import { View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -6,6 +7,7 @@ import { colors, radii } from "./tokens";
 
 /** A quiet selection cue; the tab button owns the label and full touch area. */
 export function NavigationIcon({ focused, children }: { focused: boolean; children: ReactNode }) {
+  useMobileTheme();
   const progress = useSharedValue(focused ? 1 : 0);
   useEffect(() => {
     progress.value = withTiming(focused ? 1 : 0, motionTiming);

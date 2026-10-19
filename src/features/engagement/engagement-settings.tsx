@@ -1,11 +1,27 @@
 import { useRef, useState } from "react";
 import Constants from "expo-constants";
 import { findNodeHandle, Linking, Share, View } from "react-native";
-import { Body, Button, Card, ErrorText, Section, Stack, Disclosure, NavigationGroup, NavigationRow } from "../../ui/primitives";
+import Animated from "react-native-reanimated";
+import Star from "lucide-react-native/icons/star";
+import Share2 from "lucide-react-native/icons/share-2";
+import Globe from "lucide-react-native/icons/globe";
+import Mail from "lucide-react-native/icons/mail";
+import { Body, ErrorText, Stack, Disclosure, NavigationGroup, NavigationRow } from "../../ui/primitives";
+import { IconTile } from "../../ui/icon-tile";
+import { enterItem } from "../../ui/motion";
+import { colors, space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
 import { supportEmail } from "../legal/legal-content";
 import { appIdentity, engagementLinks, feedbackUrl } from "./engagement-model";
 import { openPublicLink, sharePublicApp } from "./engagement-actions";
+
+function tile(Glyph: typeof Star, color: string) {
+  return (
+    <IconTile color={color}>
+      <Glyph size={18} strokeWidth={2} color={color} />
+    </IconTile>
+  );
+}
 
 /** User initiated public actions. This does not publish through connected social accounts. */
 export function EngagementSettings() {
@@ -87,21 +103,61 @@ export function EngagementSettings() {
   }
 
   return (
-    <Stack>
-      <Body>{copy("Sürüm: ", "Version: ")}{identity.version ?? copy("Bilinmiyor", "Unknown")}</Body>
-      <Body muted>{identity.preview ? copy("Önizleme — mağaza derlemesi değil.", "Preview — a store build is not running.") : `${copy("Derleme: ", "Build: ")}${identity.nativeBuild ?? copy("Bilinmiyor", "Unknown")}`}</Body>
-      <NavigationGroup>
-        <NavigationRow label={copy("Uygulamayı değerlendir", "Rate the app")} disabled={!!busy || !links.reviewUrl} detail={!links.reviewUrl ? copy("Mağazada yayımlandığında kullanılabilir.", "Available after the store release.") : undefined} onPress={() => { void perform("review"); }} />
-        <View ref={shareAnchor} collapsable={false}>
-          <NavigationRow variant="plain" label={copy("Uygulamayı paylaş", "Share the app")} disabled={!!busy || !nativeSharing} onPress={() => { void perform("share"); }} />
-        </View>
-        <NavigationRow label={copy("Uygulama sayfası", "App page")} disabled={!!busy} onPress={() => { void perform("public"); }} />
-        <NavigationRow label={copy("Geri bildirim gönder", "Send feedback")} detail={supportEmail} disabled={!!busy} onPress={() => { void perform("feedback"); }} />
-      </NavigationGroup>
-      <Body muted>{copy("E-posta uygulaman sürüm bilgisiyle açılır. Mesajını inceleyip kendin gönderirsin.", "Your email app opens with version details. Review and send the message yourself.")}</Body>
-      <Disclosure label={copy("Bağlantı ayrıntıları", "Link details")}><Body selectable>{links.shareUrl}</Body><Body selectable>{supportEmail}</Body></Disclosure>
-      {notice ? <Body accessibilityLiveRegion="polite">{notice}</Body> : null}
+    <Stack style={{ gap: space.lg }}>
+      <Animated.View entering={enterItem(0)}>
+        <NavigationGroup>
+          <NavigationRow
+            label={copy("Uygulamayı değerlendir", "Rate the app")}
+            disabled={!!busy || !links.reviewUrl}
+            detail={!links.reviewUrl ? copy("Mağazada yayımlandığında kullanılabilir.", "Available after the store release.") : undefined}
+            icon={tile(Star, colors.warning)}
+            onPress={() => { void perform("review"); }}
+          />
+          <View ref={shareAnchor} collapsable={false}>
+            <NavigationRow
+              label={copy("Uygulamayı paylaş", "Share the app")}
+              disabled={!!busy || !nativeSharing}
+              icon={tile(Share2, colors.accent)}
+              onPress={() => { void perform("share"); }}
+            />
+          </View>
+          <NavigationRow
+            label={copy("Uygulama sayfası", "App page")}
+            disabled={!!busy}
+            icon={tile(Globe, colors.info)}
+            onPress={() => { void perform("public"); }}
+          />
+          <NavigationRow
+            label={copy("Geri bildirim gönder", "Send feedback")}
+            detail={supportEmail}
+            disabled={!!busy}
+            icon={tile(Mail, colors.muted)}
+            onPress={() => { void perform("feedback"); }}
+          />
+        </NavigationGroup>
+      </Animated.View>
+      {notice ? <Body accessibilityLiveRegion="polite" muted>{notice}</Body> : null}
       <ErrorText error={error} />
+      <NavigationGroup>
+        <Disclosure label={copy("Sürüm ve bağlantılar", "Version & links")}>
+          <Body>
+            {copy("Sürüm: ", "Version: ")}
+            {identity.version ?? copy("Bilinmiyor", "Unknown")}
+          </Body>
+          <Body muted>
+            {identity.preview
+              ? copy("Önizleme — mağaza derlemesi değil.", "Preview — a store build is not running.")
+              : `${copy("Derleme: ", "Build: ")}${identity.nativeBuild ?? copy("Bilinmiyor", "Unknown")}`}
+          </Body>
+          <Body muted selectable>{links.shareUrl}</Body>
+          <Body muted>
+            {copy(
+              "E-posta uygulaman sürüm bilgisiyle açılır. Mesajını inceleyip kendin gönderirsin.",
+              "Your email app opens with version details. Review and send the message yourself.",
+            )}
+          </Body>
+        </Disclosure>
+      </NavigationGroup>
     </Stack>
   );
 }

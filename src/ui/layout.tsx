@@ -1,18 +1,23 @@
+import { useMobileTheme } from "./theme";
 import { createContext, use, useMemo } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Heading, Body } from "./typography";
-import { colors, space } from "./tokens";
+import { Body } from "./typography";
+import Animated from "react-native-reanimated";
+import { reveal } from "./motion";
+import { colors, metrics, space } from "./tokens";
 import { uiStyles } from "./styles";
-import { Card as GlueCard } from "./gluestack/card";
-import { HStack } from "./gluestack/hstack";
-import { VStack } from "./gluestack/vstack";
+import { Card as PanelCard } from "panelui-native/components/card";
 import { surfaceClasses } from "./design-system";
-import type { PropsWithChildren } from "react";
+import type { PropsWithChildren, ReactNode } from "react";
 import type { ScreenProps, ContainerProps, SectionProps, CodePanelProps } from "./component-props";
 
-const ScreenChrome = createContext({ nativeTitle: false, bottomSafeArea: true });
+const ScreenChrome = createContext<{
+  nativeTitle: boolean;
+  bottomSafeArea: boolean;
+  headerAccessory?: ReactNode;
+}>({ nativeTitle: false, bottomSafeArea: true });
 export function useScreenChrome() {
   return use(ScreenChrome);
 }
@@ -22,26 +27,98 @@ export function ScreenChromeProvider({
   children,
   nativeTitle = false,
   bottomSafeArea = true,
-}: PropsWithChildren<{ nativeTitle?: boolean; bottomSafeArea?: boolean }>) {
-  const value = useMemo(() => ({ nativeTitle, bottomSafeArea }), [nativeTitle, bottomSafeArea]);
+  headerAccessory,
+}: PropsWithChildren<{
+  nativeTitle?: boolean;
+  bottomSafeArea?: boolean;
+  /** Shown beside every large title in this navigator, e.g. the computer switcher. */
+  headerAccessory?: ReactNode;
+}>) {
+  useMobileTheme();
+  const value = useMemo(
+    () => ({ nativeTitle, bottomSafeArea, headerAccessory }),
+    [nativeTitle, bottomSafeArea, headerAccessory],
+  );
   return <ScreenChrome.Provider value={value}>{children}</ScreenChrome.Provider>;
 }
 
-export function Screen({ children, title, subtitle, scroll = true, query, refresh }: ScreenProps) {
+/** Title ownership never determines whether commands remain available. */
+function ScreenActions({ actions }: { actions?: ReactNode }) {
+  const chrome = use(ScreenChrome);
+  if (!chrome.headerAccessory && !actions) return null;
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center",
+      justifyContent: chrome.headerAccessory ? "space-between" : "flex-end",
+      gap: space.sm, minHeight: metrics.touchTarget }}>
+      {chrome.headerAccessory ? <View style={{ flexShrink: 1, minWidth: 0 }}>{chrome.headerAccessory}</View> : null}
+      {actions ? <View style={{ flexDirection: "row", flexWrap: "wrap", flexShrink: 1,
+        justifyContent: "flex-end", minWidth: 0, maxWidth: "100%", gap: space.xs }}>{actions}</View> : null}
+    </View>
+  );
+}
+
+export function ScreenHeading({ title, subtitle, actions }: {
+  title?: string; subtitle?: string; actions?: ReactNode;
+}) {
+  useMobileTheme();
+  const chrome = use(ScreenChrome);
+  if (title && !chrome.nativeTitle) return <LargeTitle title={title} subtitle={subtitle} actions={actions} />;
+  if (!subtitle && !actions && !(title && chrome.headerAccessory)) return null;
+  return <View style={uiStyles.titleGroup}>
+    <ScreenActions actions={actions} />
+    {subtitle ? <Body muted>{subtitle}</Body> : null}
+  </View>;
+}
+
+/** iOS large title with the navigator's accessory and optional trailing actions. */
+export function LargeTitle({
+  title,
+  subtitle,
+  actions,
+}: {
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+}) {
+  useMobileTheme();
+  const chrome = use(ScreenChrome);
+  return (
+    <Animated.View entering={reveal} style={uiStyles.titleGroup}>
+      {chrome.headerAccessory ? (
+        <View style={{ alignSelf: "flex-start", maxWidth: "100%" }}>{chrome.headerAccessory}</View>
+      ) : null}
+      <View style={uiStyles.titleRow}>
+        <Text selectable accessibilityRole="header" style={[uiStyles.largeTitle, uiStyles.titleText]}>
+          {title}
+        </Text>
+        {actions ? <View style={uiStyles.titleActions}>{actions}</View> : null}
+      </View>
+      {subtitle ? (
+        <Body muted style={uiStyles.caption}>
+          {subtitle}
+        </Body>
+      ) : null}
+    </Animated.View>
+  );
+}
+
+export function Screen({
+  children,
+  title,
+  subtitle,
+  scroll = true,
+  query,
+  refresh,
+  actions,
+}: ScreenProps) {
+  useMobileTheme();
   const insets = useSafeAreaInsets();
   const chrome = use(ScreenChrome);
-  const showTitle = !!title && !chrome.nativeTitle;
-  const heading =
-    showTitle || subtitle ? (
-      <View style={uiStyles.titleGroup}>
-        {showTitle ? <Heading>{title}</Heading> : null}
-        {subtitle ? <Body muted>{subtitle}</Body> : null}
-      </View>
-    ) : null;
+  const heading = <ScreenHeading title={title} subtitle={subtitle} actions={actions} />;
   if (!scroll)
     return (
       <View style={uiStyles.screen}>
-        {heading}
+        {title || subtitle || actions ? <ScreenHeader>{heading}</ScreenHeader> : null}
         {children}
       </View>
     );
@@ -81,39 +158,44 @@ export function Screen({ children, title, subtitle, scroll = true, query, refres
 }
 
 export function ScreenHeader({ children }: PropsWithChildren) {
+  useMobileTheme();
   return <View style={uiStyles.header}>{children}</View>;
 }
 
 export function Card({ children, style }: ContainerProps) {
+  useMobileTheme();
   return (
-    <GlueCard className={surfaceClasses} style={StyleSheet.flatten([uiStyles.card, style])}>
+    <PanelCard className={surfaceClasses} style={StyleSheet.flatten([uiStyles.card, style])}>
       {children}
-    </GlueCard>
+    </PanelCard>
   );
 }
 
 export function Row({ children, style }: ContainerProps) {
+  useMobileTheme();
   return (
-    <HStack
+    <View
       className="flex-row flex-wrap items-center gap-ui-row"
       style={StyleSheet.flatten([uiStyles.row, style])}
     >
       {children}
-    </HStack>
+    </View>
   );
 }
 
 export function Stack({ children, style }: ContainerProps) {
+  useMobileTheme();
   return (
-    <VStack className="gap-ui-md" style={StyleSheet.flatten([uiStyles.stack, style])}>
+    <View style={StyleSheet.flatten([uiStyles.stack, style])}>
       {children}
-    </VStack>
+    </View>
   );
 }
 
 export function Section({ title, children }: SectionProps) {
+  useMobileTheme();
   return (
-    <Stack style={{ paddingTop: space.sm }}>
+    <Stack style={{ gap: space.sm }}>
       <Text selectable accessibilityRole="header" style={uiStyles.sectionLabel}>
         {title}
       </Text>
@@ -123,6 +205,7 @@ export function Section({ title, children }: SectionProps) {
 }
 
 export function CodePanel({ children, horizontal = true, style }: CodePanelProps) {
+  useMobileTheme();
   if (!horizontal)
     return <View style={[uiStyles.codePanel, uiStyles.codeContent, style]}>{children}</View>;
   return (

@@ -3,21 +3,26 @@ import { Linking } from "react-native";
 import { Stack as RouterStack, router } from "expo-router";
 import { assertAppAccess } from "@/state/security";
 import { useCopy } from "@/ui/copy";
+import Animated from "react-native-reanimated";
+import Flag from "lucide-react-native/icons/flag";
 import {
   Body,
   Button,
   Card,
-  ChoiceChip,
+  Disclosure,
   ErrorText,
   Field,
-  Row,
+  NavigationGroup,
   Screen,
-  Section,
-  ToggleField,
-  Disclosure,
+  SelectField,
   Sheet,
   ConfirmationCard,
+  ToggleField,
 } from "@/ui/primitives";
+import { IconTile } from "@/ui/icon-tile";
+import { enterItem } from "@/ui/motion";
+import { uiStyles } from "@/ui/styles";
+import { colors, space } from "@/ui/tokens";
 import { supportEmail } from "../legal/legal-content";
 import {
   maxReportDescription,
@@ -31,6 +36,14 @@ import {
   updateContentReport,
   useContentReport,
 } from "./report-store";
+
+function tile(Glyph: typeof Flag, color: string) {
+  return (
+    <IconTile color={color}>
+      <Glyph size={18} strokeWidth={2} color={color} />
+    </IconTile>
+  );
+}
 
 export function ContentReportScreen() {
   const copy = useCopy();
@@ -67,53 +80,67 @@ export function ContentReportScreen() {
   return (
     <Screen>
       <RouterStack.Screen options={{ title: copy("İçerik bildir", "Report content") }} />
-      <Section title={copy("Bildirim nedeni", "Report reason")}>
-        <Row>
-          {reportReasons.map((reason) => (
-            <ChoiceChip
-              key={reason}
-              label={reasonLabels[reason]}
-              selected={draft.reason === reason}
-              disabled={busy}
-              onPress={() => updateContentReport({ reason })}
-            />
-          ))}
-        </Row>
-      </Section>
-      <Card>
-        <Field
-          label={copy("Açıklama", "Description")}
-          value={draft.description}
-          multiline
-          editable={!busy}
-          onChangeText={(description) => updateContentReport({ description })}
-        />
-        <Body muted>
-          {Array.from(draft.description).length} / {maxReportDescription}
-        </Body>
+      <Animated.View entering={enterItem(0)}>
+        <NavigationGroup>
+          <SelectField
+            variant="row"
+            icon={tile(Flag, colors.danger)}
+            label={copy("Bildirim nedeni", "Report reason")}
+            value={draft.reason}
+            disabled={busy}
+            options={reportReasons.map((reason) => ({ value: reason, label: reasonLabels[reason] }))}
+            onChange={(reason) => updateContentReport({ reason })}
+          />
+        </NavigationGroup>
+      </Animated.View>
+      <Animated.View entering={enterItem(1)}>
+        <Card>
+          <Field
+            label={copy("Açıklama", "Description")}
+            value={draft.description}
+            multiline
+            editable={!busy}
+            onChangeText={(description) => updateContentReport({ description })}
+          />
+          <Body muted style={uiStyles.caption}>
+            {Array.from(draft.description).length} / {maxReportDescription}
+          </Body>
+        </Card>
+      </Animated.View>
+      <NavigationGroup>
         <ToggleField
           label={copy("İçerikten alıntı ekle", "Include a content excerpt")}
           value={draft.includeExcerpt}
           disabled={busy}
           onChange={(includeExcerpt) => updateContentReport({ includeExcerpt, consent: false })}
         />
-        {draft.includeExcerpt ? (
-          <>
-            <Field
-              label={copy(
-                "Paylaşılacak alıntı — göndermeden önce düzenle",
-                "Excerpt to share — edit before sending",
-              )}
-              value={draft.excerpt}
-              multiline
-              editable={!busy}
-              onChangeText={(excerpt) => updateContentReport({ excerpt, consent: false })}
-            />
-            <Body muted>
-              {Array.from(draft.excerpt).length} / {maxReportExcerpt}
-            </Body>
-          </>
-        ) : null}
+        <ToggleField
+          label={copy(
+            "Yukarıda seçtiğim bilgilerin destek e-posta taslağına eklenmesini onaylıyorum.",
+            "I agree to add the information I selected above to the support email draft.",
+          )}
+          value={draft.consent}
+          disabled={busy}
+          onChange={(consent) => updateContentReport({ consent })}
+        />
+      </NavigationGroup>
+      {draft.includeExcerpt ? (
+        <Card>
+          <Field
+            label={copy(
+              "Paylaşılacak alıntı — göndermeden önce düzenle",
+              "Excerpt to share — edit before sending",
+            )}
+            value={draft.excerpt}
+            multiline
+            editable={!busy}
+            onChangeText={(excerpt) => updateContentReport({ excerpt, consent: false })}
+          />
+          <Body muted style={uiStyles.caption}>
+            {Array.from(draft.excerpt).length} / {maxReportExcerpt}
+          </Body>
+        </Card>
+      ) : null}
       <Disclosure label={copy("Bildirim ve gizlilik", "Reporting & privacy")}>
         <Body>
           {copy(
@@ -130,46 +157,44 @@ export function ContentReportScreen() {
         </Body>
         <Button
           label={copy("Gizlilik politikası", "Privacy policy")}
+          tone="quiet"
           onPress={() => router.push("/legal/privacy")}
         />
       </Disclosure>
-        <ToggleField
-          label={copy(
-            "Yukarıda seçtiğim bilgilerin destek e-posta taslağına eklenmesini onaylıyorum.",
-            "I agree to add the information I selected above to the support email draft.",
+      <ErrorText error={visibleError} message={visibleError ? errorLabels[visibleError] : undefined} />
+      {status === "opened" ? (
+        <Body accessibilityLiveRegion="polite">
+          {copy(
+            "E-posta uygulaması açıldı; bildirimi orada inceleyip gönder. bycoda gönderildiğini veya teslim edildiğini doğrulamaz.",
+            "The email app opened; review and send your report there. bycoda cannot confirm sending or delivery.",
           )}
-          value={draft.consent}
-          disabled={busy}
-          onChange={(consent) => updateContentReport({ consent })}
-        />
-        <ErrorText error={visibleError} message={visibleError ? errorLabels[visibleError] : undefined} />
-        {status === "opened" ? (
-          <Body accessibilityLiveRegion="polite">
-            {copy(
-              "E-posta uygulaması açıldı; bildirimi orada inceleyip gönder. bycoda gönderildiğini veya teslim edildiğini doğrulamaz.",
-              "The email app opened; review and send your report there. bycoda cannot confirm sending or delivery.",
-            )}
-          </Body>
-        ) : null}
-        <Button
-          label={copy("E-posta ile bildir", "Report by email")}
-          tone="primary"
-          busy={busy}
-          disabled={!!reportDraftError(draft)}
-          onPress={() => {
-            void openContentReportEmail({
-              recipient: supportEmail,
-              turkish: copy("tr", "en") === "tr",
-              assertAccess: assertAppAccess,
-              openURL: (url) => Linking.openURL(url),
-            }).catch(() => {});
-          }}
-        />
-        <Button label={copy("Taslağı sil", "Discard draft")} tone="quiet" disabled={busy} onPress={() => setDiscarding(true)} />
+        </Body>
+      ) : null}
+      <Button
+        label={copy("E-posta ile bildir", "Report by email")}
+        tone="primary"
+        fullWidth
+        busy={busy}
+        disabled={!!reportDraftError(draft)}
+        onPress={() => {
+          void openContentReportEmail({
+            recipient: supportEmail,
+            turkish: copy("tr", "en") === "tr",
+            assertAccess: assertAppAccess,
+            openURL: (url) => Linking.openURL(url),
+          }).catch(() => {});
+        }}
+      />
+      <Button
+        label={copy("Taslağı sil", "Discard draft")}
+        tone="quiet"
+        disabled={busy}
+        onPress={() => setDiscarding(true)}
+        style={{ alignSelf: "center" }}
+      />
         <Sheet visible={discarding} size="compact" title={copy("Taslağı sil", "Discard draft")} onClose={() => setDiscarding(false)}>
           <ConfirmationCard message={copy("Bu bildirim taslağı silinsin mi?", "Discard this report draft?")} cancelLabel={copy("Taslağı koru", "Keep draft")} confirmLabel={copy("Taslağı sil", "Discard draft")} onCancel={() => setDiscarding(false)} onConfirm={() => { discardContentReport(); setDiscarding(false); }} />
         </Sheet>
-      </Card>
     </Screen>
   );
 }

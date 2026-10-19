@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMobileTheme } from "@/ui/theme";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { Body, Button, CodePanel, CodeText, ErrorText, Row, Sheet } from "./primitives";
+import { Body, Button, CodePanel, CodeText, ErrorText, Loading, Row, Sheet } from "./primitives";
 import { HtmlDocument } from "./html-document";
 import type { MessageContext } from "./media-policy";
-import { MessageDiagram } from "./message-diagram";
 import { useCopy } from "./copy";
 import { colors, space } from "./tokens";
 import { chatTextStyles } from "./chat-styles";
@@ -13,10 +13,14 @@ import { highlightCode } from "./message-highlight";
 import Code from "lucide-react-native/icons/code";
 import { ChatSummary } from "./chat-controls";
 
+// The embedded diagram runtime is large; load it only when a complete diagram is opened.
+const MessageDiagram = lazy(() => import("./message-diagram").then((module) => ({ default: module.MessageDiagram })));
+
 export function MessageCode({
   compact = false,
   ...props
 }: Parameters<typeof ExpandedMessageCode>[0] & { compact?: boolean }) {
+  useMobileTheme();
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   if (!compact) return <ExpandedMessageCode {...props} />;
@@ -52,6 +56,7 @@ function ExpandedMessageCode({
   context?: MessageContext;
   allLines?: boolean;
 }) {
+  useMobileTheme();
   const copy = useCopy();
   const [preview, setPreview] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -91,7 +96,7 @@ function ExpandedMessageCode({
           ) : null}
         </Row>
       </Row>
-      {diagram ? <MessageDiagram source={code} /> : null}
+      {diagram ? <Suspense fallback={<Loading />}><MessageDiagram source={code} /></Suspense> : null}
       <CodePanel>
         <CodeText style={styles.code}>
           {tokens.map((token, index) => (

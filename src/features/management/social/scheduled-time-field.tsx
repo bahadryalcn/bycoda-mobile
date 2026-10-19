@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Body, ErrorText, Field, ToggleField } from "@/ui/primitives";
+import { Body, ErrorText, Field, NavigationGroup, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { nextPublishTime, parseLocalPublishTime, type ScheduledTimeProps } from "./scheduled-time-types";
 
@@ -18,7 +18,9 @@ export function ScheduledTimeField({ value, onChange, disabled, onValidityChange
     if (parsed) onChange(parsed.toISOString());
   }
   return <>
-    <ToggleField label={copy("Yayın zamanı seç", "Choose a publish time")} value={!!value} disabled={disabled} onChange={(enabled) => onChange(enabled ? (parseLocalPublishTime(parts.date, parts.time) ?? nextPublishTime()).toISOString() : "")} />
+    <NavigationGroup>
+      <ToggleField label={copy("Yayın zamanı seç", "Choose a publish time")} value={!!value} disabled={disabled} onChange={(enabled) => onChange(enabled ? (parseLocalPublishTime(parts.date, parts.time) ?? nextPublishTime()).toISOString() : "")} />
+    </NavigationGroup>
     {value && <>
       <Field label={copy("Tarih (YYYY-AA-GG)", "Date (YYYY-MM-DD)")} value={parts.date} editable={!disabled} onChangeText={(date) => update({ date })} />
       <Field label={copy("Saat (SS:DD)", "Time (HH:MM)")} value={parts.time} editable={!disabled} onChangeText={(time) => update({ time })} />

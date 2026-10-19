@@ -1,3 +1,4 @@
+import { haptic } from "@/ui/motion";
 import { MessageText } from "@/ui/message-text";
 import { Stack } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
@@ -59,7 +60,7 @@ export function ThreadEditor({ thread, accounts, projects, profiles, onClose }: 
         );
       await action.mutateAsync(
         request("replies.draft", { threadId: current.id, text, factIds: facts }),
-        { onSuccess: onClose },
+        { onSuccess: () => { haptic.success(); onClose(); } },
       );
     });
   return (
@@ -92,7 +93,7 @@ export function ThreadEditor({ thread, accounts, projects, profiles, onClose }: 
                 onPress={() =>
                   assign.mutate(
                     request("thread.assign", { id: current.id, projectId: project.id }),
-                    { onSuccess: onClose },
+                    { onSuccess: () => { haptic.success(); onClose(); } },
                   )
                 }
               />
@@ -125,9 +126,9 @@ export function ThreadEditor({ thread, accounts, projects, profiles, onClose }: 
         onChange={(facts) => form.setField("facts", facts)}
         disabled={busy}
       />
-      <MutationState mutation={submission} />
-      <MutationState mutation={assign} />
       <FormActions
+        feedback={<><MutationState mutation={submission} />
+      <MutationState mutation={assign} /></>}
         submitLabel={copy("Taslağı kaydet", "Save draft")}
         busy={busy}
         disabled={

@@ -12,7 +12,7 @@ import type {
 import type { InboxCommentParams, InboxOrigin, InboxWriteStatus } from "./provider-protocol";
 import type { InboxCommentDraft } from "./provider-state";
 
-export type ProviderInboxBrowseProps = { origin: InboxOrigin };
+export type ProviderInboxBrowseProps = { origin: InboxOrigin; embedded?: boolean };
 
 export type ProviderConnectionsProps = { providers: RemoteInboxProviderState[] };
 

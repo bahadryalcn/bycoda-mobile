@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { Alert, type TextInputProps } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHostClient } from "../../state/host-context";
@@ -18,6 +19,7 @@ export function Action({
   disabled?: boolean;
   danger?: boolean;
 }) {
+  useMobileTheme();
   return (
     <Button
       label={title}
@@ -28,6 +30,7 @@ export function Action({
   );
 }
 export function Input(props: TextInputProps & { label: string }) {
+  useMobileTheme();
   return <Field {...props} />;
 }
 export function confirm(title: string, detail: string, action: () => void) {
@@ -79,6 +82,7 @@ export function Feedback({
   error?: unknown;
   retry?: () => void;
 }) {
+  useMobileTheme();
   useLocale();
   return loading ? (
     <Loading label={tr("Loading", "Yükleniyor")} />

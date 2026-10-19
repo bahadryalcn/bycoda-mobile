@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { Image } from "expo-image";
@@ -9,6 +10,7 @@ import { useCopy } from "./copy";
 import { colors, space } from "./tokens";
 
 export function MediaViewer({ uri, name, visible, onClose }: { uri: string; name: string; visible: boolean; onClose: () => void }) {
+  useMobileTheme();
   const copy = useCopy();
   const [error, setError] = useState<unknown>(null);
   const scale = useSharedValue(1); const saved = useSharedValue(1);

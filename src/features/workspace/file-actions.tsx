@@ -11,6 +11,7 @@ import {
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { useMobileTheme } from "@/ui/theme";
 import { useProjectRefresh, workspaceStyles } from "./shared";
 
 function joinHostPath(root: string, path: string) {
@@ -25,6 +26,7 @@ export function FileActions({
   onCompleted,
   action,
 }: FileActionsProps) {
+  useMobileTheme();
   const copy = useCopy();
   const form = useFormDraft<FileActionDraft>({
     operation: "rename_path",

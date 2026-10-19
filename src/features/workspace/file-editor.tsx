@@ -11,14 +11,22 @@ import {
   Body,
   Button,
   ConfirmationCard,
+  IconButton,
   Input,
   MutationState,
   Notice,
   QueryState,
   Row,
   Screen,
+  SegmentedControl,
   Sheet,
 } from "@/ui/primitives";
+import ChevronLeft from "lucide-react-native/icons/chevron-left";
+import { useMobileTheme } from "@/ui/theme";
+import { haptic } from "@/ui/motion";
+import { colors, radii, space } from "@/ui/tokens";
+import { uiStyles } from "@/ui/styles";
+import { View } from "react-native";
 import { DocumentPreview, ProjectMedia } from "@/ui/document-preview";
 import { isFileConflict, isMediaFile } from "./file-preview-model";
 import { useCopy } from "@/ui/copy";
@@ -33,6 +41,7 @@ const encodeFileDraft = (value: FileDraft | null) =>
   value && value.content !== value.expected ? JSON.stringify(value) : null;
 
 export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }: FileEditorProps) {
+  useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const client = useHostClient();
@@ -113,13 +122,28 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
   }, [confirmation, navigation, onBack]);
   return (
     <Screen>
-      <Row>
-        <Button
+      <Row style={{ flexWrap: "nowrap" }}>
+        <IconButton
           label={copy("Dosyalara dön", "Back to files")}
           disabled={transition.isPending || save.isPending}
           onPress={() => (dirty ? setConfirmation({ kind: "leave" }) : onBack())}
-        />
-        <Body mono>{path}</Body>
+        >
+          <ChevronLeft size={22} strokeWidth={2.2} color={colors.accent} />
+        </IconButton>
+        <Body
+          mono
+          numberOfLines={1}
+          ellipsizeMode="middle"
+          style={[uiStyles.grow, { fontWeight: "600" }]}
+        >
+          {path}
+        </Body>
+        {!binary && edit && draft.ready ? (
+          <Badge
+            label={dirty ? copy("Kaydedilmedi", "Unsaved") : copy("Kaydedildi", "Saved")}
+            tone={dirty ? "warning" : undefined}
+          />
+        ) : null}
       </Row>
       {confirmation?.kind === "leave" ? (
         <Sheet
@@ -196,14 +220,23 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
       ) : null}
       {!binary && edit && draft.ready ? (
         <>
-          <Row>
-            <Button
-              label={editing ? copy("Önizle", "Preview") : copy("Düzenle", "Edit")}
-              disabled={transition.isPending}
-              onPress={() => setMode(editing ? "preview" : "edit")}
-            />
+          <Row style={{ flexWrap: "nowrap" }}>
+            <View style={uiStyles.grow}>
+              <SegmentedControl
+                label={copy("Düzenle veya önizle", "Edit or preview")}
+                value={editing ? "edit" : "preview"}
+                disabled={transition.isPending}
+                options={[
+                  { value: "edit", label: copy("Düzenle", "Edit") },
+                  { value: "preview", label: copy("Önizle", "Preview") },
+                ]}
+                onChange={(value) => setMode(value)}
+              />
+            </View>
             <Button
               label={copy("Kaydet", "Save")}
+              tone="primary"
+              density="compact"
               disabled={!dirty || transition.isPending}
               busy={save.isPending}
               onPress={() => {
@@ -221,14 +254,11 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
                       expected: submitted.content,
                       content: current?.content ?? submitted.content,
                     }));
+                    haptic.success();
                     void refreshProject();
                   })
                   .catch(() => {});
               }}
-            />
-            <Badge
-              label={dirty ? copy("Kaydedilmedi", "Unsaved") : copy("Kaydedildi", "Saved")}
-              tone={dirty ? "warning" : undefined}
             />
           </Row>
           <MutationState
@@ -286,6 +316,7 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
             </Sheet>
           ) : null}
           {editing ? (
+            <View style={{ backgroundColor: colors.panel, borderRadius: radii.card, padding: space.sm }}>
             <Input
               label={copy("Dosya içeriği", "File content")}
               mono
@@ -301,6 +332,7 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
               textAlignVertical="top"
               style={{ minHeight: 340 }}
             />
+            </View>
           ) : (
             <DocumentPreview name={path} text={edit.content} context={context} />
           )}

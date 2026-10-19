@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, View } from "react-native";
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
@@ -30,6 +31,7 @@ export function SessionTranscript({
   onCommand,
   onReceiptHandled,
 }: SessionTranscriptProps) {
+  useMobileTheme();
   const copy = useCopy();
   const client = useHostClient();
   const context = useMemo(

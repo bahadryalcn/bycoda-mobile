@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient, type MutateOptions } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { focusManager, onlineManager, useMutation, useQuery, useQueryClient, type MutateOptions } from "@tanstack/react-query";
 import { HostTransport } from "../remote/transport";
 import { credentials, useActiveMachine, useMachines } from "./machines";
 import { assertAppAccess, useSecurity } from "./security";
@@ -16,6 +16,8 @@ import {
   type HostWriteContext,
 } from "./host-request";
 
+import { attachmentReleases } from "../features/workspace/attachment-ownership";
+
 export { hostKey } from "./host-request";
 export function useHostClient() {
   const machine = useActiveMachine();
@@ -23,7 +25,7 @@ export function useHostClient() {
   const ready = useMachines((s) => s.hydrated && !s.storageError && !s.connectionPending);
   const scope = machine ? consentScope(machine.environmentId, machine.providers ?? []) : "";
   const consented = useProviderPermission((state) => state.scopes[scope] === true);
-  return useMemo(() => {
+  const client = useMemo(() => {
     if (!machine || !unlocked || !ready || !consented) return null;
     const assertAccess = () => {
       assertAppAccess();
@@ -46,13 +48,32 @@ export function useHostClient() {
     ready,
     consented,
     scope,
+    machine?.capabilities,
   ]);
+  return client;
+}
+
+/** One app-level retry subscription; draft claims survive navigation and suspension. */
+export function useAttachmentReleaseRetry() {
+  const client = useHostClient();
+  useEffect(() => {
+    if (!client) return;
+    const flush = () => {
+      const access = useSecurity.getState();
+      if (focusManager.isFocused() && access.status === "unlocked" && access.appState === "active" && access.windowFocused)
+        void attachmentReleases.flush(client).catch(() => {});
+    };
+    flush();
+    const online = onlineManager.subscribe((connected) => { if (connected) flush(); });
+    const focus = focusManager.subscribe((focused) => { if (focused) flush(); });
+    return () => { online(); focus(); };
+  }, [client]);
 }
 export function useHostQuery<T>(
   key: readonly unknown[],
   method: string,
   params: Record<string, unknown> = {},
-  options: { enabled?: boolean; interval?: number } = {},
+  options: { enabled?: boolean; interval?: number; queryFn?: (client: HostTransport, signal: AbortSignal) => Promise<T> } = {},
 ) {
   const machine = useActiveMachine();
   const client = useHostClient();
@@ -60,7 +81,7 @@ export function useHostQuery<T>(
     queryKey: hostKey(machine?.id ?? null, [...key, { method, params }]),
     queryFn: ({ signal }) => {
       if (!client) throw new Error("Choose a computer first.");
-      return client.request<T>(method, params, { signal });
+      return options.queryFn ? options.queryFn(client, signal) : client.request<T>(method, params, { signal });
     },
     enabled: !!client && options.enabled !== false,
     staleTime: 4000,

@@ -1,21 +1,21 @@
+import { useMobileTheme } from "@/ui/theme";
+import { FilterButton, FilterSheet } from "@/ui/filter-sheet";
+import { SearchField } from "@/ui/search-field";
 import { useEffect, useReducer, useState } from "react";
 import { View } from "react-native";
 import {
   Row,
   Button,
   Empty,
-  Input,
   IconButton,
   Notice,
   QueryState,
   Screen,
   Sheet,
-  ToggleField,
+  ToggleField, NavigationGroup,
 } from "@/ui/primitives";
-import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
-import Search from "lucide-react-native/icons/search";
-import { colors, radii, space } from "@/ui/tokens";
+import { colors, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { Scope } from "../management/common";
 import { ProviderInboxDetail } from "./provider-detail";
@@ -27,9 +27,10 @@ import { inboxBrowseReducer, initialInboxBrowseState } from "./provider-state";
 
 export { type ProviderInboxBrowseProps } from "./provider-component-types";
 
-export function ProviderInboxBrowse({ origin }: ProviderInboxBrowseProps) {
+export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxBrowseProps) {
+  useMobileTheme();
   const copy = useCopy();
-  const [filters, setFilters] = useState(false);
+  const [filterDraft, setFilterDraft] = useState<{ assigned: boolean; all: boolean } | null>(null);
   const [browse, dispatch] = useReducer(inboxBrowseReducer, initialInboxBrowseState);
   const { assigned, all, search, committedSearch, selected, limit, notice } = browse;
   useEffect(() => {
@@ -61,7 +62,7 @@ export function ProviderInboxBrowse({ origin }: ProviderInboxBrowseProps) {
 
   const empty = items.data?.items.length === 0 && Object.keys(items.data.errors).length === 0;
   return (
-    <Screen title={copy("Servis gelen kutusu", "Provider inbox")} query={items} refresh={refresh}>
+    <Screen title={embedded ? undefined : copy("Servis gelen kutusu", "Provider inbox")} query={items} refresh={refresh}>
       {view.kind === "detail" && <Sheet visible size="full" scroll={false} title={view.item.title} onClose={() => dispatch({ type: "close" })}>
         <ProviderInboxDetail key={inboxItemKey(view.item)} item={view.item} origin={origin} availability={availability} onClose={(message) => dispatch({ type: "close", notice: message })} />
       </Sheet>}
@@ -82,32 +83,16 @@ export function ProviderInboxBrowse({ origin }: ProviderInboxBrowseProps) {
           <QueryState query={providers} loading="none" />
           {providers.data ? <ProviderConnections providers={providers.data} /> : null}
           <Row style={{ flexWrap: "nowrap" }}>
-            <View
-              style={{
-                flex: 1,
-                minWidth: 0,
-                flexDirection: "row",
-                alignItems: "center",
-                backgroundColor: colors.panel,
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: radii.control,
-                paddingStart: space.sm,
-              }}
-            >
-              <Search size={16} color={colors.muted} />
-              <Input
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <SearchField
                 label={copy("Ara", "Search")}
                 value={search}
                 onChangeText={(value) => dispatch({ type: "search", value })}
                 autoCorrect={false}
                 placeholder={copy("Issue veya PR ara", "Search issues or PRs")}
-                style={{ flex: 1, minWidth: 0, borderWidth: 0 }}
               />
             </View>
-            <IconButton label={copy("Filtreler", "Filters")} onPress={() => setFilters(true)}>
-              <SlidersHorizontal size={19} color={colors.muted} />
-            </IconButton>
+            <FilterButton count={Number(assigned) + Number(all)} onPress={() => setFilterDraft({ assigned, all })} />
             <IconButton
               label={copy("Yenile", "Refresh")}
               busy={items.isFetching}
@@ -118,23 +103,26 @@ export function ProviderInboxBrowse({ origin }: ProviderInboxBrowseProps) {
               <RefreshCw size={18} color={colors.muted} />
             </IconButton>
           </Row>
-          <Sheet
-            visible={filters}
-            size="compact"
-            title={copy("Filtreler", "Filters")}
-            onClose={() => setFilters(false)}
-          >
-            <ToggleField
+          {filterDraft ? <FilterSheet visible onClose={() => setFilterDraft(null)}
+            onReset={() => setFilterDraft({ assigned: false, all: false })}
+            onApply={() => {
+              dispatch({ type: "filter", key: "assigned", value: filterDraft.assigned });
+              dispatch({ type: "filter", key: "all", value: filterDraft.all });
+              setFilterDraft(null);
+            }}>
+            <NavigationGroup>
+              <ToggleField
               label={copy("Yalnız bana atananlar", "Assigned to me only")}
-              value={assigned}
-              onChange={(value) => dispatch({ type: "filter", key: "assigned", value })}
+              value={filterDraft.assigned}
+              onChange={(assigned) => setFilterDraft({ ...filterDraft, assigned })}
             />
-            <ToggleField
+              <ToggleField
               label={copy("Kapalı kayıtları da göster", "Include closed items")}
-              value={all}
-              onChange={(value) => dispatch({ type: "filter", key: "all", value })}
+              value={filterDraft.all}
+              onChange={(all) => setFilterDraft({ ...filterDraft, all })}
             />
-          </Sheet>
+            </NavigationGroup>
+          </FilterSheet> : null}
           <QueryState
             query={items}
             empty={empty}

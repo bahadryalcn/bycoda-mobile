@@ -1,21 +1,22 @@
+import { useMobileTheme } from "@/ui/theme";
 import type { ProjectSessionsProps, SessionCreationDraft } from "./sessions-panel-types";
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
-import RefreshCw from "lucide-react-native/icons/refresh-cw";
-import Archive from "lucide-react-native/icons/archive";
-import { colors } from "@/ui/tokens";
-import { stamp } from "../management/shared/format";
+import MessageSquare from "lucide-react-native/icons/message-square";
+import Plus from "lucide-react-native/icons/plus";
+import { colors, space } from "@/ui/tokens";
+import { uiStyles } from "@/ui/styles";
 import { router } from "expo-router";
 import { useFormDraft } from "@/state/form-draft";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
+import { haptic } from "@/ui/motion";
 import {
-  Badge,
+  ActionMenu,
   Body,
   Button,
   SelectField,
   Sheet,
-  IconButton,
   SearchField,
   Notice,
   NavigationRow,
@@ -23,13 +24,24 @@ import {
   QueryState,
   Row,
 } from "@/ui/primitives";
-import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
-import { CommandError, ErrorText, useCommands, workspaceStyles } from "./shared";
+import { IconTile } from "@/ui/icon-tile";
+import {
+  CommandError,
+  ErrorText,
+  GroupedListRow,
+  relativeTime,
+  rowInset,
+  sessionStatus,
+  StatusDot,
+  useCommands,
+  workspaceStyles,
+} from "./shared";
 import { catalogModel, catalogProviders, modelDefaults } from "./catalog";
 import type { HostSessionSummary, HostModelCatalog } from "./wire";
 
-export function ProjectSessions({ projectId, cwd }: ProjectSessionsProps) {
+export function ProjectSessions({ projectId, cwd, initialCreating = false }: ProjectSessionsProps) {
+  useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const mounted = useRef(true);
@@ -49,7 +61,7 @@ export function ProjectSessions({ projectId, cwd }: ProjectSessionsProps) {
   };
   const [search, setSearch] = useState("");
   const [archived, setArchived] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(initialCreating);
   const form = useFormDraft<SessionCreationDraft>({ provider: undefined, model: "" });
   const { provider, model } = form.values;
   const sessions = useHostQuery<HostSessionSummary[]>(
@@ -92,32 +104,39 @@ export function ProjectSessions({ projectId, cwd }: ProjectSessionsProps) {
       data={visible}
       keyExtractor={(session) => session.id}
       query={sessions}
+      contentContainerStyle={{ gap: 0 }}
       header={
-        <View style={workspaceStyles.stack}>
-          <Row>
+        <View style={[workspaceStyles.stack, { paddingBottom: space.md }]}>
+          <Row style={{ flexWrap: "nowrap" }}>
             <Button
               label={creating ? copy("Kapat", "Close") : copy("Yeni oturum", "New session")}
               disabled={locked}
               tone="primary"
               onPress={() => setCreating((value) => !value)}
+            >
+              {creating ? null : <Plus size={17} strokeWidth={2.4} color={colors.primaryText} />}
+            </Button>
+            <View style={uiStyles.grow} />
+            <ActionMenu
+              label={copy("Oturum seçenekleri", "Session options")}
+              active={archived}
+              actions={[
+                {
+                  key: "archive",
+                  label: archived ? copy("Etkin oturumlar", "Active sessions") : copy("Arşiv", "Archive"),
+                  selected: archived,
+                  onPress: () => setArchived((value) => !value),
+                },
+                {
+                  key: "refresh",
+                  label: copy("Yenile", "Refresh"),
+                  disabled: sessions.isFetching,
+                  onPress: () => {
+                    void sessions.refetch();
+                  },
+                },
+              ]}
             />
-            <IconButton
-              label={
-                archived ? copy("Etkin oturumlar", "Active sessions") : copy("Arşiv", "Archive")
-              }
-              onPress={() => setArchived(!archived)}
-            >
-              <Archive size={19} color={archived ? colors.accent : colors.muted} />
-            </IconButton>
-            <IconButton
-              label={copy("Yenile", "Refresh")}
-              disabled={sessions.isFetching}
-              onPress={() => {
-                void sessions.refetch();
-              }}
-            >
-              <RefreshCw size={18} color={colors.muted} />
-            </IconButton>
           </Row>
           <SearchField
             label={copy("Oturum ara", "Search sessions")}
@@ -184,7 +203,7 @@ export function ProjectSessions({ projectId, cwd }: ProjectSessionsProps) {
                   onChange={(value) => form.setField("model", value)}
                   disabled={locked || !models.length}
                 />
-                <Body muted>
+                <Body muted style={uiStyles.caption}>
                   {copy(
                     "Başlangıçta komut ve dosya değişiklikleri için onay istenir. Oturum ayarlarından değiştirebilirsin.",
                     "Commands and file changes ask for approval initially. You can change this in session settings.",
@@ -215,6 +234,7 @@ export function ProjectSessions({ projectId, cwd }: ProjectSessionsProps) {
                         runtimeMode: "supervised",
                       })
                       .then((receipt) => {
+                        haptic.success();
                         openSession(receipt.sessionId);
                       })
                       .catch(() => {});
@@ -235,40 +255,36 @@ export function ProjectSessions({ projectId, cwd }: ProjectSessionsProps) {
                 : undefined
             }
           />
-          {archived ? (
-            <Body muted style={uiStyles.caption}>
-              {copy("Arşiv", "Archive")}
-            </Body>
-          ) : null}
         </View>
       }
-      renderItem={({ item: session }) => (
-        <NavigationRow
-          label={session.title || copy("Yeni oturum", "New session")}
-          detail={[session.harness, session.branch || session.model, stamp(session.updatedAt)]
-            .filter(Boolean)
-            .join(" · ")}
-          trailing={
-            <Badge
-              label={
-                session.needsInput
-                  ? copy("Yanıt", "Reply")
-                  : session.status === "running"
-                    ? copy("Çalışıyor", "Running")
-                    : session.status === "interrupted"
-                      ? copy("Durduruldu", "Interrupted")
-                      : session.pinned
-                        ? copy("Sabit", "Pinned")
-                        : copy("Hazır", "Ready")
+      renderItem={({ item: session, index }) => {
+        const status = sessionStatus(session, copy);
+        return (
+          <GroupedListRow first={index === 0} last={index === visible.length - 1} inset={rowInset}>
+            <NavigationRow
+              variant="plain"
+              label={session.title || copy("Yeni oturum", "New session")}
+              detail={[status.label, session.harness, session.branch || session.model]
+                .filter(Boolean)
+                .join(" · ")}
+              icon={
+                <IconTile color={status.color}>
+                  <MessageSquare size={18} strokeWidth={2} color={status.color} />
+                </IconTile>
               }
-              tone={
-                session.needsInput ? "warning" : session.status === "running" ? "active" : undefined
+              trailing={
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+                  <StatusDot color={status.color} />
+                  <Body muted style={uiStyles.caption}>
+                    {relativeTime(session.updatedAt, copy)}
+                  </Body>
+                </View>
               }
+              onPress={() => openSession(session.id)}
             />
-          }
-          onPress={() => openSession(session.id)}
-        />
-      )}
+          </GroupedListRow>
+        );
+      }}
     />
   );
 }

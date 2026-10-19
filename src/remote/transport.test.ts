@@ -340,3 +340,54 @@ describe("mobile host transport", () => {
     }
   });
 });
+
+
+describe("whole mobile request budget", () => {
+  it("times out stalled credentials without fetching or retrying beyond the deadline", async () => {
+    vi.useFakeTimers();
+    let finish!: (value: string) => void;
+    const credentials = vi.fn(() => new Promise<string>((resolve) => { finish = resolve; }));
+    const fetcher = vi.fn<typeof fetch>();
+    try {
+      const pending = new HostTransport(machine, credentials, fetcher).request("projects.list", {}, { timeoutMs: 1000 });
+      const rejected = expect(pending).rejects.toMatchObject({ kind: "timeout", uncertain: false });
+      await vi.advanceTimersByTimeAsync(1000);
+      await rejected;
+      finish(credential);
+      await Promise.resolve();
+      expect(credentials).toHaveBeenCalledOnce();
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it("aborts stalled credentials and ignores a late credential", async () => {
+    let finish!: (value: string) => void;
+    const fetcher = vi.fn<typeof fetch>();
+    const controller = new AbortController();
+    const pending = new HostTransport(machine, () => new Promise<string>((resolve) => { finish = resolve; }), fetcher)
+      .request("sessions.create", {}, { signal: controller.signal });
+    const rejected = expect(pending).rejects.toMatchObject({ kind: "aborted", uncertain: false });
+    await Promise.resolve();
+    controller.abort();
+    await rejected;
+    finish(credential);
+    await Promise.resolve();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("rejects a chunked HTTPS response at limit+1 and aborts its request", async () => {
+    const cancel = vi.fn();
+    let pulls = 0;
+    const response = new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls++;
+        controller.enqueue(new Uint8Array(pulls === 1 ? 16 * 1024 * 1024 : 1));
+      }, cancel,
+    }, { highWaterMark: 0 }), { headers: { "content-length": "1" } });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response);
+    await expect(new HostTransport(machine, async () => credential, fetcher).request("projects.list"))
+      .rejects.toMatchObject({ kind: "protocol" });
+    expect(pulls).toBe(2);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(true);
+  });
+});

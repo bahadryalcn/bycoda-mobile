@@ -1,6 +1,7 @@
 import { PagedRows } from "../shared/paged-rows";
 import { ContentExcerpt } from "./content-excerpt";
 import { Body, Button, Card, ErrorText, Row } from "@/ui/primitives";
+import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { stamp } from "../shared/format";
@@ -17,36 +18,40 @@ export function JobsPanel({ state, projectId, action, run }: JobsPanelProps) {
       <Card key={job.id}>
         <Row>
           <Status value={job.status} />
-          <Body muted>{stamp(job.scheduledAt)}</Body>
+          <Body muted style={[uiStyles.caption, uiStyles.grow]}>{stamp(job.scheduledAt)}</Body>
         </Row>
         <ContentExcerpt text={job.payload.text} />
         <ErrorText error={job.error} />
-        <Row>
-          {job.status === "queued" && (
-            <Button
-              label={copy("İptal et", "Cancel")}
-              disabled={action.isPending}
-              onPress={() => run("jobs.cancel", { id: job.id })}
-            />
-          )}
-          {job.status === "failed" && (
-            <Button
-              label={copy("Tekrar dene", "Retry")}
-              disabled={action.isPending}
-              onPress={() =>
-                confirmAction(
-                  copy("Gönderimi tekrar dene", "Retry send"),
-                  copy(
-                    "Host önceki işlemin sonucunu kontrol eder; belirsiz işlemler inceleme gerektirir.",
-                    "The host checks the previous result; uncertain sends require review.",
-                  ),
-                  copy("Tekrar dene", "Retry"),
-                  () => run("jobs.retry", { id: job.id }),
-                )
-              }
-            />
-          )}
-        </Row>
+        {job.status === "queued" || job.status === "failed" ? (
+          <Row>
+            {job.status === "queued" && (
+              <Button
+                label={copy("İptal et", "Cancel")}
+                tone="quiet"
+                disabled={action.isPending}
+                onPress={() => run("jobs.cancel", { id: job.id })}
+              />
+            )}
+            {job.status === "failed" && (
+              <Button
+                label={copy("Tekrar dene", "Retry")}
+                tone="secondary"
+                disabled={action.isPending}
+                onPress={() =>
+                  confirmAction(
+                    copy("Gönderimi tekrar dene", "Retry send"),
+                    copy(
+                      "Host önceki işlemin sonucunu kontrol eder; belirsiz işlemler inceleme gerektirir.",
+                      "The host checks the previous result; uncertain sends require review.",
+                    ),
+                    copy("Tekrar dene", "Retry"),
+                    () => run("jobs.retry", { id: job.id }),
+                  )
+                }
+              />
+            )}
+          </Row>
+        ) : null}
       </Card>
     )} />;
 }

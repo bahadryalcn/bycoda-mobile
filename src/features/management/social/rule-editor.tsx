@@ -1,3 +1,4 @@
+import { haptic } from "@/ui/motion";
 import { ErrorText } from "@/ui/primitives";
 import { Stack } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
@@ -60,7 +61,7 @@ export function RuleEditor({ account, projectId, profile, onClose }: RuleEditorP
           answers: [{ keyword, factId }],
           ...(latest.effective.agent ? { agent: latest.effective.agent } : {}),
         }),
-        { onSuccess: onClose },
+        { onSuccess: () => { haptic.success(); onClose(); } },
       );
     });
   return (
@@ -128,8 +129,8 @@ export function RuleEditor({ account, projectId, profile, onClose }: RuleEditorP
       {!validLimit && <ErrorText error={copy("1 ile 100 arasında bir sınır girin.", "Enter a limit from 1 to 100.")} />}
       <QueryState query={policy} loading="inline" />
       <PolicyInfo policy={policy.data?.effective} />
-      <MutationState mutation={submission} />
       <FormActions
+        feedback={<><MutationState mutation={submission} /></>}
         submitLabel={copy("Duraklatılmış kural oluştur", "Create paused rule")}
         busy={busy}
         disabled={!validLimit || !name.trim() || !keyword.trim() || !fact || !policy.data}

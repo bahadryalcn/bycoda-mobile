@@ -1,5 +1,8 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useState, type PropsWithChildren } from "react";
 import { View } from "react-native";
+import Animated from "react-native-reanimated";
+import Laptop from "lucide-react-native/icons/laptop";
 import { usePathname } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
@@ -21,6 +24,8 @@ import {
   Screen,
   Sheet,
 } from "../../ui/primitives";
+import { IconTile } from "../../ui/icon-tile";
+import { enterItem } from "../../ui/motion";
 import { colors, space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
 import { LegalDocument, legalDocumentTitle, type LegalDocumentId } from "../legal/legal-document";
@@ -41,6 +46,7 @@ export async function revokeProviderConsent() {
 
 /** Keep navigation mounted; request-time guards protect the workspace beneath this overlay. */
 export function ProviderConsentGate({ children }: PropsWithChildren) {
+  useMobileTheme();
   const copy = useCopy();
   const pathname = usePathname();
   const machine = useActiveMachine();
@@ -117,60 +123,61 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
             paddingTop: insets.top,
           }}
         >
-          <Screen>
+          <Screen title={loaded ? copy("Verilerin nereye gider?", "Where does your data go?") : undefined}>
             {!loaded ? (
               <Loading
                 label={copy("Gizlilik tercihi yükleniyor…", "Loading privacy preference…")}
               />
             ) : (
               <>
-                <Row>
-                  <ShieldCheck size={24} color={colors.success} />
-                  <Heading>{copy("Verilerin nereye gider?", "Where does your data go?")}</Heading>
-                </Row>
-                <Card>
-                  <Heading>{machine?.name}</Heading>
-                  <Body muted>{machine?.endpoint}</Body>
-                </Card>
-                <Body>
-                  {copy(
-                    "Gönderdiğin mesajlar, seçtiğin dosyalar, kod, ekler ve işlem sonuçları bu bilgisayara iletilir. Bir AI oturumu başlattığında veya ona mesaj gönderdiğinde bilgisayarda seçilen sağlayıcı bu içeriği işleyebilir.",
-                    "Messages, selected files, code, attachments and operation results are sent to this computer. When you start or message an AI session, the provider selected on that computer may process this content.",
-                  )}
-                </Body>
-                <Disclosure
-                  label={copy("Sağlayıcılar ve veri kullanımı", "Providers and data use")}
-                >
-                  <Body muted>
-                    {copy(
-                      "Bilgisayarda kullanılabilen sağlayıcılar: ",
-                      "Providers available on this computer: ",
-                    )}
-                    {machine?.providers?.join(", ") ||
-                      copy(
-                        "Bilgisayarın ayarlarından belirlenir.",
-                        "Set in your computer’s settings.",
+                <Animated.View entering={enterItem(0)}>
+                  <Card>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                      <IconTile color={colors.accent}>
+                        <Laptop size={18} strokeWidth={2} color={colors.accent} />
+                      </IconTile>
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Body>{machine?.name ?? copy("Bilgisayar", "Computer")}</Body>
+                        <Body muted numberOfLines={1}>{machine?.endpoint}</Body>
+                      </View>
+                    </View>
+                  </Card>
+                </Animated.View>
+                <Animated.View entering={enterItem(1)}>
+                  <Card>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                      <IconTile color={colors.success}>
+                        <ShieldCheck size={18} strokeWidth={2} color={colors.success} />
+                      </IconTile>
+                      <Heading style={{ flex: 1 }}>
+                        {copy("Gönderilenler", "What is sent")}
+                      </Heading>
+                    </View>
+                    <Body>
+                      {copy(
+                        "Gönderdiğin mesajlar, seçtiğin dosyalar, kod, ekler ve işlem sonuçları bu bilgisayara iletilir. Bir AI oturumu başlattığında veya ona mesaj gönderdiğinde bilgisayarda seçilen sağlayıcı bu içeriği işleyebilir.",
+                        "Messages, selected files, code, attachments and operation results are sent to this computer. When you start or message an AI session, the provider selected on that computer may process this content.",
                       )}
-                  </Body>
-                  <Body muted>
-                    {copy(
-                      "Sağlayıcının saklama ve eğitim kuralları kendi hesabına ve ayarlarına bağlıdır. bycoda geliştiricisi çalışma alanını almaz veya izlemez. Hassas bilgileri yalnız paylaşmaya yetkiliysen gönder.",
-                      "Provider retention and training depend on your account and settings. The bycoda developer does not receive or monitor your workspace. Only share sensitive information you are authorized to send.",
-                    )}
-                  </Body>
-                </Disclosure>
-                <Row>
-                  <Button
-                    tone="quiet"
-                    label={copy("Gizlilik politikası", "Privacy policy")}
-                    onPress={() => setDocument("privacy")}
-                  />
-                  <Button
-                    tone="quiet"
-                    label={copy("Kullanım koşulları", "Terms of use")}
-                    onPress={() => setDocument("terms")}
-                  />
-                </Row>
+                    </Body>
+                  </Card>
+                </Animated.View>
+                <Animated.View entering={enterItem(2)}>
+                  <Card>
+                    <Heading>{copy("Sağlayıcılar", "Providers")}</Heading>
+                    <Body muted>
+                      {machine?.providers?.join(", ") ||
+                        copy("Bilgisayarın ayarlarından belirlenir.", "Set in your computer’s settings.")}
+                    </Body>
+                    <Disclosure label={copy("Veri kullanımı", "Data use")}>
+                      <Body muted>
+                        {copy(
+                          "Sağlayıcının saklama ve eğitim kuralları kendi hesabına ve ayarlarına bağlıdır. bycoda geliştiricisi çalışma alanını almaz veya izlemez. Hassas bilgileri yalnız paylaşmaya yetkiliysen gönder.",
+                          "Provider retention and training depend on your account and settings. The bycoda developer does not receive or monitor your workspace. Only share sensitive information you are authorized to send.",
+                        )}
+                      </Body>
+                    </Disclosure>
+                  </Card>
+                </Animated.View>
                 <ErrorText
                   error={permission.error || action.error}
                   message={copy(
@@ -181,6 +188,8 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                 {permission.error ? (
                   <Button
                     label={copy("Yeniden yükle", "Reload")}
+                    tone="secondary"
+                    fullWidth
                     onPress={() =>
                       useConsentRevision.setState((state) => ({
                         revision: state.revision + 1,
@@ -188,31 +197,47 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                     }
                   />
                 ) : null}
-                <Button
-                  label={copy(
-                    "Veri paylaşımına izin ver ve devam et",
-                    "Allow data sharing and continue",
-                  )}
-                  tone="primary"
-                  busy={action.isPending}
-                  disabled={permission.error}
-                  onPress={() => {
-                    void allow();
-                  }}
-                />
-                <Button
-                  tone="quiet"
-                  label={copy("İzin vermeden bağlantıyı kaldır", "Disconnect without allowing")}
-                  disabled={action.isPending}
-                  onPress={() => {
-                    if (!machine) return;
-                    void action.run(async () => {
-                      assertAppAccess();
-                      await useMachines.getState().removeMachine(machine.id);
-                    });
-                  }}
-                />
-                <Body muted style={{ paddingBottom: space.lg }}>
+                <View style={{ gap: space.sm }}>
+                  <Button
+                    label={copy(
+                      "Veri paylaşımına izin ver ve devam et",
+                      "Allow data sharing and continue",
+                    )}
+                    tone="primary"
+                    fullWidth
+                    busy={action.isPending}
+                    disabled={permission.error}
+                    onPress={() => {
+                      void allow();
+                    }}
+                  />
+                  <Row style={{ justifyContent: "center" }}>
+                    <Button
+                      tone="secondary"
+                      label={copy("Gizlilik politikası", "Privacy policy")}
+                      onPress={() => setDocument("privacy")}
+                    />
+                    <Button
+                      tone="secondary"
+                      label={copy("Kullanım koşulları", "Terms of use")}
+                      onPress={() => setDocument("terms")}
+                    />
+                  </Row>
+                  <Button
+                    tone="quiet"
+                    label={copy("İzin vermeden bağlantıyı kaldır", "Disconnect without allowing")}
+                    disabled={action.isPending}
+                    onPress={() => {
+                      if (!machine) return;
+                      void action.run(async () => {
+                        assertAppAccess();
+                        await useMachines.getState().removeMachine(machine.id);
+                      });
+                    }}
+                    style={{ alignSelf: "center" }}
+                  />
+                </View>
+                <Body muted style={{ textAlign: "center" }}>
                   {copy(
                     "İznini Ayarlar → Gizlilik ve veriler bölümünden geri çekebilirsin. Bilgisayarında zaten çalışan işler bağımsız olarak devam eder.",
                     "Withdraw permission in Settings → Privacy & data. Work already running on your computer continues independently.",

@@ -1,10 +1,12 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useEditorRecord } from "../shared/use-editor-record";
 import { Stack, MutationState, SegmentedControl } from "@/ui/primitives";
 import { MessageText } from "@/ui/message-text";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useRef, useState } from "react";
 import { uiStyles } from "@/ui/styles";
-import { Body, Button, Card, Field, FormActions, Heading, QueryState } from "@/ui/primitives";
+import { ActionMenu, Body, Button, Card, Field, FormActions, Heading, QueryState, Row } from "@/ui/primitives";
+import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useHostQuery } from "@/state/queries";
@@ -14,6 +16,7 @@ import type { LocalNoteDraft } from "../note-drafts";
 import type { ExistingNoteProps, NoteEditorProps } from "./types";
 
 export function ExistingNote({ id, ...props }: ExistingNoteProps) {
+  useMobileTheme();
   const query = useHostQuery<Note | null>(["notes", "detail", id], "notes.get", { id });
   const copy = useCopy();
   const note = useEditorRecord(id, query.data ?? undefined);
@@ -49,6 +52,7 @@ export function ExistingNote({ id, ...props }: ExistingNoteProps) {
 }
 
 export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEditorProps) {
+  useMobileTheme();
   const copy = useCopy();
   const base = useRef(initial).current;
   const form = useFormDraft(base);
@@ -91,7 +95,8 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
         editable={!busy}
       />
       </>}
-      <MutationState mutation={save} />
+      <FormActions
+        feedback={<><MutationState mutation={save} />
       <MutationState mutation={remove} />
       <MutationState mutation={storage} />
       {storage.isError && (
@@ -99,8 +104,7 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
           label={copy("Taslağı telefona tekrar kaydet", "Retry saving draft on phone")}
           onPress={() => storage.mutate({ kind: "save", draft })}
         />
-      )}
-      <FormActions
+      )}</>}
         submitLabel={copy("Bilgisayara kaydet", "Save to computer")}
         busy={busy}
         onSubmit={() =>
@@ -116,7 +120,7 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
               },
               expectedUpdatedAt: draft.expectedUpdatedAt,
             },
-            { onSuccess: finish },
+            { onSuccess: () => { haptic.success(); finish(); } },
           )
         }
         cancelDisabled={busy || storage.isPending}
@@ -124,27 +128,34 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
         onCancel={requestClose}
       />
       {draft.expectedUpdatedAt > 0 && (
-        <Button
-          label={copy("Notu sil", "Delete note")}
-          tone="danger"
-          disabled={busy}
-          onPress={() =>
-            confirmAction(
-              copy("Notu sil", "Delete note"),
-              copy(
-                "Bu not bilgisayardan kalıcı olarak silinecek.",
-                "This note will be permanently deleted from the computer.",
-              ),
-              copy("Sil", "Delete"),
-              () =>
-                remove.mutate(
-                  { id: draft.id, expectedUpdatedAt: draft.expectedUpdatedAt },
-                  { onSuccess: finish },
-                ),
-              copy("Vazgeç", "Cancel"),
-            )
-          }
-        />
+        <Row style={{ justifyContent: "flex-end" }}>
+          <ActionMenu
+            label={copy("Not işlemleri", "Note actions")}
+            actions={[
+              {
+                key: "delete",
+                label: copy("Notu sil", "Delete note"),
+                destructive: true,
+                disabled: busy,
+                onPress: () =>
+                  confirmAction(
+                    copy("Notu sil", "Delete note"),
+                    copy(
+                      "Bu not bilgisayardan kalıcı olarak silinecek.",
+                      "This note will be permanently deleted from the computer.",
+                    ),
+                    copy("Sil", "Delete"),
+                    () =>
+                      remove.mutate(
+                        { id: draft.id, expectedUpdatedAt: draft.expectedUpdatedAt },
+                        { onSuccess: finish },
+                      ),
+                    copy("Vazgeç", "Cancel"),
+                  ),
+              },
+            ]}
+          />
+        </Row>
       )}
       {changed && !storage.isError && !storage.isPending && <Body muted>{copy("Taslak bu telefonda saklandı.", "Draft saved on this phone.")}</Body>}
       <Body muted style={uiStyles.caption}>

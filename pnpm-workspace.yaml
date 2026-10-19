@@ -9,3 +9,6 @@ minimumReleaseAgeExclude:
   - '@ai-sdk/provider-utils@5.0.59'
   - '@ai-sdk/provider@4.0.27'
   - ai@7.0.138
+  - panelui-native@0.112.0
+patchedDependencies:
+  panelui-native@0.112.0: vendor/patches/panelui-native@0.112.0.patch

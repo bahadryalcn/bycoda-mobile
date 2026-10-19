@@ -4,6 +4,7 @@ import { useReducer } from "react";
 import {
   Body,
   Button,
+  NavigationGroup,
   SelectField,
   MutationState,
   Notice,
@@ -88,19 +89,22 @@ export function SocialScreen() {
   return (
     <Screen title={copy("Sosyal medya", "Social media")} query={query}>
       <Scope allowAll />
-      <SelectField
-        label={copy("Görünüm", "View")}
-        value={tab}
-        options={[
-          { value: "inbox", label: copy("Gelen kutusu", "Inbox") },
-          { value: "drafts", label: copy("Taslaklar", "Drafts") },
-          { value: "accounts", label: copy("Hesaplar", "Accounts") },
-          { value: "campaigns", label: copy("İçerikler", "Content") },
-          { value: "automations", label: copy("Kurallar", "Rules") },
-          { value: "jobs", label: copy("Gönderim geçmişi", "Sending history") },
-        ]}
-        onChange={(tab) => dispatch({ type: "tab", tab })}
-      />
+      <NavigationGroup>
+        <SelectField
+          variant="row"
+          label={copy("Görünüm", "View")}
+          value={tab}
+          options={[
+            { value: "inbox", label: copy("Gelen kutusu", "Inbox") },
+            { value: "drafts", label: copy("Taslaklar", "Drafts") },
+            { value: "accounts", label: copy("Hesaplar", "Accounts") },
+            { value: "campaigns", label: copy("İçerikler", "Content") },
+            { value: "automations", label: copy("Kurallar", "Rules") },
+            { value: "jobs", label: copy("Gönderim geçmişi", "Sending history") },
+          ]}
+          onChange={(tab) => dispatch({ type: "tab", tab })}
+        />
+      </NavigationGroup>
       <QueryState query={query} empty={itemCount === 0} emptyTitle={emptyTitles[tab]} />
       <MutationState mutation={action} />
       {state && (

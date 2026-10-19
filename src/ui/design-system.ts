@@ -1,29 +1,35 @@
-import { tva } from "@gluestack-ui/utils/nativewind-utils";
+import { cn } from "panelui-native/utils/cn";
+import type { ButtonProps } from "./component-props";
 
 /** Product variants shared by every screen; raw upstream defaults stay behind the UI facade. */
-export const controlClasses = tva({
-  base: "min-h-control min-w-touch flex-row items-center justify-center gap-ui-sm rounded-control border px-ui-lg py-ui-sm web:focus-visible:outline-2 web:focus-visible:outline-ring data-[disabled=true]:opacity-45",
-  variants: {
-    tone: {
-      default: "border-separator bg-raised dark:border-separator dark:bg-raised active:bg-accent",
-      primary: "border-primary bg-primary active:opacity-80",
-      secondary: "border-transparent bg-secondary active:bg-accent",
-      quiet: "border-transparent bg-transparent active:bg-accent",
-      info: "border-info-border bg-info-surface active:opacity-80",
-      success: "border-success-border bg-success-surface active:opacity-80",
-      warning: "border-warning-border bg-warning-surface active:opacity-80",
-      danger: "border-danger-border bg-danger-surface active:opacity-80",
-    },
-    density: { regular: "min-h-control", compact: "min-h-control px-ui-md" },
-    selected: { true: "border-ring bg-accent", false: "" },
-  },
-  defaultVariants: { tone: "default", density: "regular" },
-});
+const toneClasses = {
+  default: "border-transparent bg-fill",
+  primary: "border-transparent bg-primary",
+  secondary: "border-transparent bg-info-surface",
+  quiet: "border-transparent bg-transparent",
+  info: "border-transparent bg-info-surface",
+  success: "border-transparent bg-success-surface",
+  warning: "border-transparent bg-warning-surface",
+  danger: "border-transparent bg-danger-surface",
+} satisfies Record<NonNullable<ButtonProps["tone"]>, string>;
+
+export function controlClasses({
+  tone = "default",
+  density = "regular",
+  selected,
+}: Pick<ButtonProps, "tone" | "density" | "selected"> = {}) {
+  return cn(
+    "min-h-control min-w-touch flex-row items-center justify-center gap-ui-sm rounded-full border-0 shadow-none px-ui-lg py-ui-sm web:focus-visible:outline-2 web:focus-visible:outline-ring",
+    toneClasses[tone],
+    density === "compact" && "px-ui-md",
+    selected && "bg-info-surface",
+  );
+}
 
 export const fieldClasses =
-  "min-h-control rounded-control border border-input bg-panel text-foreground px-ui-md py-ui-sm web:focus-visible:outline-2 web:focus-visible:outline-ring";
-export const surfaceClasses = "rounded-card border-0 bg-card p-ui-md gap-ui-sm";
+  "min-h-control rounded-control border-0 bg-fill text-foreground px-ui-md py-ui-sm web:focus-visible:outline-2 web:focus-visible:outline-ring";
+export const surfaceClasses = "rounded-card border-0 bg-card p-ui-lg gap-ui-sm";
 export const rowClasses =
-  "min-h-control rounded-control border-0 bg-panel p-ui-md active:bg-raised";
+  "min-h-control rounded-control border-0 bg-panel p-ui-lg active:bg-raised";
 export const bodyClasses = "text-base text-foreground";
 export const metadataClasses = "text-xs text-muted-foreground";

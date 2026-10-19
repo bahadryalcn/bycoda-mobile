@@ -1,6 +1,7 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
-import { AppState, BackHandler, Linking, View } from "react-native";
+import { AppState, BackHandler, Linking, StyleSheet, View } from "react-native";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useIsFocused } from "expo-router/react-navigation";
@@ -14,14 +15,16 @@ import {
   Loading,
   MutationState,
   Notice,
-  Row,
   Screen,
 } from "@/ui/primitives";
 import { colors, radii, space } from "@/ui/tokens";
+import { enterItem } from "@/ui/motion";
+import Animated from "react-native-reanimated";
 import { useCopy } from "@/ui/copy";
 import type { PairingScannerProps } from "./connection-types";
 
 export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps) {
+  useMobileTheme();
   const copy = useCopy();
   const focused = useIsFocused();
   const unlocked = useSecurity((state) => state.status === "unlocked");
@@ -61,7 +64,8 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
   return (
     <Screen>
       <Stack.Screen options={{ title: copy("QR kodu tara", "Scan QR code"), headerLeft: () => <IconButton label={copy("Geri", "Back")} onPress={onClose}><ChevronLeft size={22} color={colors.text} /></IconButton> }} />
-      <Body muted>
+      <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
+      <Body muted style={{ textAlign: "center" }}>
         {copy(
           "Bilgisayarındaki Bycoda bağlantı QR kodunu kameraya göster.",
           "Point the camera at the pairing QR code in Bycoda on your computer.",
@@ -97,7 +101,8 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
         <View
           style={{
             aspectRatio: 1,
-            borderRadius: radii.card,
+            borderRadius: radii.sheet,
+            borderCurve: "continuous",
             overflow: "hidden",
             backgroundColor: colors.background,
           }}
@@ -115,6 +120,18 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
                   }
             }
           />
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>
+            <View
+              style={{
+                width: "62%",
+                aspectRatio: 1,
+                borderWidth: 3,
+                borderColor: colors.primaryText,
+                borderRadius: radii.card,
+                borderCurve: "continuous",
+              }}
+            />
+          </View>
         </View>
       ) : null}
       <ErrorNotice
@@ -131,9 +148,13 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
       />
       <MutationState mutation={permissionAction} />
       <MutationState mutation={scan} />
-      <Row style={{ gap: space.sm }}>
-        <Button label={copy("Kodu yapıştır", "Paste pairing code")} tone="quiet" onPress={onPaste} />
-      </Row>
+      <Button
+        label={copy("Kodu yapıştır", "Paste pairing code")}
+        tone="quiet"
+        onPress={onPaste}
+        style={{ alignSelf: "center" }}
+      />
+      </Animated.View>
     </Screen>
   );
 }

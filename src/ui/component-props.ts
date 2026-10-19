@@ -14,6 +14,7 @@ export type ContainerProps = PropsWithChildren<{ style?: StyleProp<ViewStyle> }>
 
 export type ButtonProps = PropsWithChildren<{
   label: string;
+  accessibilityLabel?: string;
   onPress: () => void;
   disabled?: boolean;
   busy?: boolean;
@@ -36,6 +37,8 @@ export type InputProps = TextInputProps & {
 export type ScreenProps = PropsWithChildren<{
   title?: string;
   subtitle?: string;
+  /** Trailing large-title actions, e.g. one add button or an overflow menu. */
+  actions?: ReactNode;
   scroll?: boolean;
   query?: QueryLike;
   refresh?: () => unknown;
@@ -80,6 +83,8 @@ export type IconButtonProps = PropsWithChildren<{
   disabled?: boolean;
   busy?: boolean;
   density?: "regular" | "compact";
+  tone?: "default" | "primary";
+  expanded?: boolean;
 }>;
 
 export type BadgeProps = {
@@ -128,6 +133,8 @@ export type MutationStateProps = {
 };
 
 export type FormActionsProps = {
+  /** Operation feedback stays beside actions; field errors remain in the form. */
+  feedback?: ReactNode;
   submitLabel: string;
   onSubmit: () => void;
   onCancel?: () => void;

@@ -1,5 +1,6 @@
 import { router } from "expo-router";
-import { Body, Button, Card, ErrorText, QueryState, Row } from "@/ui/primitives";
+import { Body, Button, ErrorText, QueryState, Row, Separator, Stack } from "@/ui/primitives";
+import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
@@ -21,15 +22,17 @@ export function AutomationHistory({ automationId, projectId }: AutomationHistory
     <>
       <QueryState query={query} empty={!query.data?.length} />
       {query.data?.slice(0, 20).map((run) => (
-        <Card key={run.id}>
+        <Stack key={run.id}>
+          <Separator />
           <Row>
             <Status value={run.status} />
-            <Body muted>{stamp(run.createdAt)}</Body>
+            <Body muted style={uiStyles.caption}>{stamp(run.createdAt)}</Body>
           </Row>
           <ErrorText error={run.error} />
           {run.sessionId && (
             <Button
               label={copy("Oturumu aç", "Open session")}
+              tone="quiet"
               onPress={() => {
                 if (machine && run.sessionId)
                   router.push({
@@ -39,7 +42,7 @@ export function AutomationHistory({ automationId, projectId }: AutomationHistory
               }}
             />
           )}
-        </Card>
+        </Stack>
       ))}
     </>
   );

@@ -1,12 +1,13 @@
-import { Text as GlueText } from "./gluestack/text";
-import { Heading as GlueHeading } from "./gluestack/heading";
+import { useMobileTheme } from "./theme";
+import { Typography } from "panelui-native/components/typography";
 import { uiStyles } from "./styles";
 import { bodyClasses } from "./design-system";
 import { StyleSheet } from "react-native";
 import type { BodyProps, TextContentProps } from "./component-props";
 export function Body({ children, muted, mono, style, ...props }: BodyProps) {
+  useMobileTheme();
   return (
-    <GlueText
+    <Typography
       selectable
       {...props}
       className={bodyClasses}
@@ -18,12 +19,13 @@ export function Body({ children, muted, mono, style, ...props }: BodyProps) {
       ])}
     >
       {children}
-    </GlueText>
+    </Typography>
   );
 }
 export function Heading({ children, style, ...props }: TextContentProps) {
+  useMobileTheme();
   return (
-    <GlueHeading
+    <Typography.Heading
       selectable
       accessibilityRole="header"
       {...props}
@@ -31,18 +33,19 @@ export function Heading({ children, style, ...props }: TextContentProps) {
       style={StyleSheet.flatten([uiStyles.heading, style])}
     >
       {children}
-    </GlueHeading>
+    </Typography.Heading>
   );
 }
 export function CodeText({ children, style, ...props }: TextContentProps) {
+  useMobileTheme();
   return (
-    <GlueText
+    <Typography
       selectable
       {...props}
       className="font-mono text-sm text-foreground"
       style={StyleSheet.flatten([uiStyles.mono, style])}
     >
       {children}
-    </GlueText>
+    </Typography>
   );
 }

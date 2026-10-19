@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useMemo, useState } from "react";
 import { FlatList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,21 +10,21 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import {
   Badge,
   Body,
-  Button,
-  Heading,
-  SearchField,
+  IconButton,
+  LargeTitle,
   MutationState,
+  NavigationGroup,
   NavigationRow,
   Notice,
   PressableCard,
   QueryState,
-  Row,
   Screen,
-  Separator,
+  SearchField,
 } from "@/ui/primitives";
 import { uiStyles } from "@/ui/styles";
-import { colors, metrics, radii, space } from "@/ui/tokens";
+import { colors, metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { haptic } from "@/ui/motion";
 import type { HostProject } from "@/domain/types";
 import {
   directorySections,
@@ -35,8 +36,10 @@ import { ProjectFolderBrowser } from "./project-folder-browser";
 import { WelcomeScreen } from "../connections/welcome-screen";
 import { DisclosureBody, DisclosureChevron } from "@/ui/disclosure-motion";
 import { IconTile } from "@/ui/icon-tile";
+import { StatusDot } from "./shared";
 
 export function ProjectsScreen() {
+  useMobileTheme();
   const copy = useCopy();
   const insets = useSafeAreaInsets();
   const machine = useActiveMachine();
@@ -66,34 +69,37 @@ export function ProjectsScreen() {
     setOpeningId(project.id);
     void open
       .mutateAsync({ cwd: project.cwd })
-      .then(go)
+      .then((opened) => {
+        haptic.success();
+        go(opened);
+      })
       .catch(() => {})
       .finally(() => setOpeningId(undefined));
   };
   if (!machine) return <WelcomeScreen />;
   const header = (
-    <View style={{ gap: space.md, paddingBottom: space.md }}>
-      <Row style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-        <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
-          <Heading>{copy("Projeler", "Projects")}</Heading>
-          {query.isSuccess && !privacyPending ? (
-            <Body muted style={uiStyles.caption}>
-              {copy("{p0} proje", "{p0} projects", { p0: projects.length })}
-            </Body>
-          ) : null}
-        </View>
-        <Button
-          label={copy("Proje ekle", "Add project")}
-          tone="primary"
-          disabled={open.isPending}
-          onPress={() => {
-            open.reset();
-            setAdding(true);
-          }}
-        >
-          <Plus size={16} color={colors.primaryText} />
-        </Button>
-      </Row>
+    <View style={{ gap: space.md, paddingBottom: space.xs }}>
+      <LargeTitle
+        title={copy("Projeler", "Projects")}
+        subtitle={
+          query.isSuccess && !privacyPending
+            ? copy("{p0} proje", "{p0} projects", { p0: projects.length })
+            : undefined
+        }
+        actions={
+          <IconButton
+            label={copy("Proje ekle", "Add project")}
+            tone="primary"
+            disabled={open.isPending}
+            onPress={() => {
+              open.reset();
+              setAdding(true);
+            }}
+          >
+            <Plus size={20} strokeWidth={2.4} color={colors.primaryText} />
+          </IconButton>
+        }
+      />
       <SearchField
         label={copy("Projelerinde ara", "Search projects")}
         value={search}
@@ -156,70 +162,59 @@ export function ProjectsScreen() {
         }}
         ListHeaderComponent={header}
         renderItem={({ item: section }) => {
-          const expanded = !!search.trim() || !collapsed[`${machine.id}:${section.key}`];
+          const key = `${machine.id}:${section.key}`;
+          const expanded = !!search.trim() || !collapsed[key];
           const color = section.group?.color ?? colors.accent;
+          const name = section.group?.name ?? copy("Grupsuz", "Ungrouped");
+          const count = search.trim() ? section.count : section.total;
           return (
-            <View
-              style={{
-                backgroundColor: colors.panel,
-                borderWidth: 0,
-                borderColor: colors.separator,
-                borderRadius: radii.card,
-                overflow: "hidden",
-                marginBottom: space.md,
-              }}
-            >
+            <View style={{ marginBottom: space.lg }}>
               {groups.length || section.group ? (
                 <PressableCard
-                  label={section.group?.name ?? copy("Grupsuz", "Ungrouped")}
+                  label={`${name}. ${count}`}
                   expanded={expanded}
                   onPress={() => {
                     if (search.trim()) return;
-                    const key = `${machine.id}:${section.key}`;
                     setCollapsed((values) => ({ ...values, [key]: expanded }));
                   }}
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
                     borderWidth: 0,
-                    borderRadius: radii.badge,
+                    borderTopStartRadius: 0,
+                    borderTopEndRadius: 0,
+                    borderBottomStartRadius: 0,
+                    borderBottomEndRadius: 0,
+                    backgroundColor: colors.background,
+                    paddingHorizontal: space.lg,
                     paddingVertical: space.sm,
                     gap: space.sm,
                   }}
                 >
-                  <View
-                    style={{
-                      width: 3,
-                      height: 20,
-                      backgroundColor: color,
-                      borderRadius: radii.badge,
-                    }}
-                  />
-                  <Body numberOfLines={1} style={[uiStyles.grow, uiStyles.label]}>
-                    {section.group?.name ?? copy("Grupsuz", "Ungrouped")}
+                  <StatusDot color={color} size={9} />
+                  <Body
+                    numberOfLines={1}
+                    style={[uiStyles.grow, uiStyles.sectionLabel, { paddingHorizontal: 0 }]}
+                  >
+                    {name}
                   </Body>
-                  <Body muted style={uiStyles.caption}>
-                    {String(search.trim() ? section.count : section.total)}
-                  </Body>
-                  <DisclosureChevron expanded={expanded} color={colors.muted} />
+                  <Badge label={String(count)} />
+                  <DisclosureChevron expanded={expanded} color={colors.tertiary} size={14} />
                 </PressableCard>
               ) : null}
               <DisclosureBody expanded={expanded}>
-                {section.data.map((item, index) => (
-                  <View key={item.id}>
-                    {index || groups.length || section.group ? (
-                      <Separator style={{ marginHorizontal: space.md }} />
-                    ) : null}
+                <NavigationGroup>
+                  {section.data.map((item) => (
                     <NavigationRow
+                      key={item.id}
                       label={item.name}
                       detail={item.cwd}
                       detailSelectable={false}
                       detailEllipsizeMode="middle"
-                      variant="plain"
                       disabled={open.isPending}
                       icon={
-                        <IconTile color={colors.separator}>
-                          <FolderGit2 size={20} color={color} />
+                        <IconTile color={section.group?.color ?? colors.accent}>
+                          <FolderGit2 size={18} strokeWidth={2} color={color} />
                         </IconTile>
                       }
                       trailing={
@@ -229,8 +224,8 @@ export function ProjectsScreen() {
                       }
                       onPress={() => choose(item)}
                     />
-                  </View>
-                ))}
+                  ))}
+                </NavigationGroup>
               </DisclosureBody>
             </View>
           );
@@ -257,6 +252,7 @@ export function ProjectsScreen() {
             void open
               .mutateAsync({ cwd: path })
               .then((project) => {
+                haptic.success();
                 setAdding(false);
                 go(project);
               })

@@ -1,6 +1,8 @@
+import { RecordCard } from "@/ui/record-card";
+import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
 import { uiStyles } from "@/ui/styles";
-import { Body, Button, Card, Disclosure, ErrorText, Heading, Row } from "@/ui/primitives";
+import { ActionMenu, Body, Button, ErrorText, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
@@ -10,6 +12,7 @@ import { ReviewNotes } from "./review-notes";
 import type { TaskCardProps } from "./types";
 
 export function TaskCard({ task, busy, editorOpen, onEdit, onDelivery, move, remove, recheck, start, reorder, tasks, lifecycleReady }: TaskCardProps) {
+  useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const moves = taskActions(task);
@@ -22,31 +25,69 @@ export function TaskCard({ task, busy, editorOpen, onEdit, onDelivery, move, rem
     [ids[position], ids[position + delta]] = [ids[position + delta], ids[position]];
     reorder.mutate({ taskIds: ids });
   };
+  const queued = supported && (task.status === "todo" || task.status === "queued");
+  // Rare or secondary actions live in the overflow menu; the card keeps only the next step.
+  const menu = [
+    moves.edit && {
+      key: "edit",
+      label: copy("Düzenle", "Edit"),
+      disabled: busy || editorOpen,
+      onPress: () => onEdit(task),
+    },
+    queued && {
+      key: "up",
+      label: copy("Sırada yukarı taşı", "Move up in queue"),
+      disabled: busy || !lifecycleReady || position <= 0,
+      onPress: () => changeOrder(-1),
+    },
+    queued && {
+      key: "down",
+      label: copy("Sırada aşağı taşı", "Move down in queue"),
+      disabled: busy || !lifecycleReady || position < 0 || position >= ordered.length - 1,
+      onPress: () => changeOrder(1),
+    },
+    supported && task.status === "review" && !!task.branch && !task.merged && {
+      key: "delivery",
+      label: copy("Teslim hedefini değiştir", "Change delivery target"),
+      disabled: busy || editorOpen,
+      onPress: () => onDelivery(task),
+    },
+    moves.toDo && {
+      key: "todo",
+      label: copy("Yapılacaklara geri al", "Return to to-do"),
+      disabled: busy,
+      onPress: () => move.mutate({ taskId: task.id, to: "todo" }),
+    },
+    task.status === "review" && {
+      key: "recheck",
+      label: copy("İncelemeyi yenile", "Recheck review"),
+      disabled: busy,
+      onPress: () => recheck.mutate({ taskId: task.id }),
+    },
+    !["running", "verifying"].includes(task.status) && {
+      key: "delete",
+      label: copy("Sil", "Delete"),
+      destructive: true,
+      disabled: busy,
+      onPress: () =>
+        confirmAction(
+          copy("Görevi sil", "Delete task"),
+          copy(
+            "Görev kaydı silinecek. Birleştirilmemiş çalışma varsa host işlemi engeller.",
+            "The task record will be deleted. The host prevents deletion if unmerged work remains.",
+          ),
+          copy("Sil", "Delete"),
+          () => remove.mutate({ taskId: task.id, discard: false }),
+        ),
+    },
+  ];
   return (
-    <Card key={task.id}>
-      <Row>
-        <Status value={task.status} />
-        <Body muted numberOfLines={1} style={[uiStyles.caption, uiStyles.grow]}>
-          {task.harness} · {task.model}
-        </Body>
-      </Row>
-      <Heading numberOfLines={2} style={uiStyles.title}>
-        {task.title}
-      </Heading>
-      <ErrorText error={task.error} />
-      <ErrorText error={task.mergeError} />
-      {!!waiting.length && <Body muted>{copy("Beklenen görevler", "Waiting for tasks")}: {waiting.map((item) => item.title).join(", ")}</Body>}
-      {task.merged && <Body>{copy("Hedef dala teslim edildi", "Delivered to target branch")}: {task.baseBranch}</Body>}
-      {moves.queue && moves.queueBlocked && (
-        <Body muted>
-          {!task.prompt.trim()
-            ? copy("Çalıştırmadan önce bir açıklama ekleyin.", "Add a description before running.")
-            : copy(
-                "Yeniden çalıştırmadan önce görev açıklamasını güncelleyin.",
-                "Update the task instructions before retrying.",
-              )}
-        </Body>
-      )}
+    <RecordCard
+      title={task.title}
+      status={<Status value={task.status} />}
+      metadata={[task.harness, task.model].filter(Boolean).join(" · ")}
+      menu={<ActionMenu label={copy("Görev işlemleri", "Task actions")} actions={menu} />}
+      footer={
       <Row>
         {supported && (task.status === "todo" || task.status === "queued" || task.status === "blocked") && <Button label={copy("Şimdi başlat", "Start now")} tone="primary" disabled={busy || !lifecycleReady || moves.queueBlocked || waiting.length > 0} onPress={() => start.mutate({ taskId: task.id })} />}
         {task.sessionId && (
@@ -70,7 +111,7 @@ export function TaskCard({ task, busy, editorOpen, onEdit, onDelivery, move, rem
                   ? copy("Tekrar çalıştır", "Retry")
                   : copy("Sıraya al", "Queue")
             }
-            tone={supported ? "quiet" : "primary"}
+            tone={supported ? "secondary" : "primary"}
             disabled={busy || moves.queueBlocked}
             onPress={() => move.mutate({ taskId: task.id, to: "queued" })}
           />
@@ -117,61 +158,32 @@ export function TaskCard({ task, busy, editorOpen, onEdit, onDelivery, move, rem
           />
         )}
       </Row>
-      <Disclosure label={copy("Görev ayrıntıları", "Task details")}>
-        {supported && lifecycleReady && (task.status === "todo" || task.status === "queued") && <Body muted>{copy("Bilgisayardaki sıra", "Queue position on computer")}: {position + 1}</Body>}
+      }
+      details={<>
+        {supported && lifecycleReady && (task.status === "todo" || task.status === "queued") && <Body muted style={uiStyles.caption}>{copy("Bilgisayardaki sıra", "Queue position on computer")}: {position + 1}</Body>}
         {(task.worktreeCwd || task.workspace?.checkoutCwd) && <Body mono>{copy("Çalışma", "Execution")}: {task.worktreeCwd || task.workspace?.checkoutCwd}</Body>}
         {(task.deliveryCwd || task.baseBranch) && <Body mono>{copy("Teslim", "Delivery")}: {[task.deliveryCwd, task.baseBranch].filter(Boolean).join(" · ")}</Body>}
         {task.branch && <Body mono>{task.branch}</Body>}
         <Body>{task.prompt}</Body>
         {task.diffStat && <Body mono>{task.diffStat}</Body>}
         <ReviewNotes task={task} />
-        <Row>
-          {supported && (task.status === "todo" || task.status === "queued") && <>
-            <Button label={copy("Sırada yukarı taşı", "Move up in queue")} tone="quiet" disabled={busy || !lifecycleReady || position <= 0} onPress={() => changeOrder(-1)} />
-            <Button label={copy("Sırada aşağı taşı", "Move down in queue")} tone="quiet" disabled={busy || !lifecycleReady || position < 0 || position >= ordered.length - 1} onPress={() => changeOrder(1)} />
-          </>}
-          {supported && task.status === "review" && task.branch && !task.merged && <Button label={copy("Teslim hedefini değiştir", "Change delivery target")} disabled={busy || editorOpen} onPress={() => onDelivery(task)} />}
-          {moves.edit && (
-            <Button
-              label={copy("Düzenle", "Edit")}
-              disabled={busy || editorOpen}
-              onPress={() => onEdit(task)}
-            />
-          )}
-          {moves.toDo && (
-            <Button
-              label={copy("Yapılacaklara geri al", "Return to to-do")}
-              disabled={busy}
-              onPress={() => move.mutate({ taskId: task.id, to: "todo" })}
-            />
-          )}
-          {task.status === "review" && (
-            <Button
-              label={copy("İncelemeyi yenile", "Recheck review")}
-              disabled={busy}
-              onPress={() => recheck.mutate({ taskId: task.id })}
-            />
-          )}
-          {!["running", "verifying"].includes(task.status) && (
-            <Button
-              label={copy("Sil", "Delete")}
-              tone="danger"
-              disabled={busy}
-              onPress={() =>
-                confirmAction(
-                  copy("Görevi sil", "Delete task"),
-                  copy(
-                    "Görev kaydı silinecek. Birleştirilmemiş çalışma varsa host işlemi engeller.",
-                    "The task record will be deleted. The host prevents deletion if unmerged work remains.",
-                  ),
-                  copy("Sil", "Delete"),
-                  () => remove.mutate({ taskId: task.id, discard: false }),
-                )
-              }
-            />
-          )}
-        </Row>
-      </Disclosure>
-    </Card>
+      </>}
+    >
+      <ErrorText error={task.error} />
+      <ErrorText error={task.mergeError} />
+      {!!waiting.length && <Body muted style={uiStyles.caption}>{copy("Beklenen görevler", "Waiting for tasks")}: {waiting.map((item) => item.title).join(", ")}</Body>}
+      {task.merged && <Body style={uiStyles.caption}>{copy("Hedef dala teslim edildi", "Delivered to target branch")}: {task.baseBranch}</Body>}
+      {moves.queue && moves.queueBlocked && (
+        <Body muted style={uiStyles.caption}>
+          {!task.prompt.trim()
+            ? copy("Çalıştırmadan önce bir açıklama ekleyin.", "Add a description before running.")
+            : copy(
+                "Yeniden çalıştırmadan önce görev açıklamasını güncelleyin.",
+                "Update the task instructions before retrying.",
+              )}
+        </Body>
+      )}
+
+    </RecordCard>
   );
 }

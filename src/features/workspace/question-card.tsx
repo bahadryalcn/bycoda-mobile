@@ -1,12 +1,14 @@
+import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
 import { useFormDraft } from "@/state/form-draft";
 import { Badge, Button, Card, Field, MultiSelectField, SelectField, Row } from "@/ui/primitives";
-import { semanticColors } from "@/ui/tokens";
+import { colors } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { workspaceStyles } from "./shared";
 import type { QuestionCardProps, QuestionDraft } from "./session-types";
 
 export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps) {
+  useMobileTheme();
   const copy = useCopy();
   const form = useFormDraft<QuestionDraft>({ answers: {}, custom: {} });
   const { answers, custom } = form.values;
@@ -32,8 +34,8 @@ export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps
   return (
     <Card
       style={{
-        backgroundColor: semanticColors.warning.surface,
-        borderColor: semanticColors.warning.border,
+        backgroundColor: colors.panel,
+        borderWidth: 0,
       }}
     >
       <View style={workspaceStyles.stack}>
@@ -83,19 +85,23 @@ export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps
             ) : null}
           </View>
         ))}
-        <Row>
+        <Row style={{ flexWrap: "nowrap" }}>
+          <Button
+            label={copy("Atla", "Skip")}
+            disabled={disabled}
+            style={{ flex: 1 }}
+            fullWidth
+            onPress={() => {
+              void onAnswer({ kind: "skipped" }).catch(() => {});
+            }}
+          />
           <Button
             label={copy("Yanıtla", "Answer")}
             tone="primary"
             disabled={disabled || !complete}
+            style={{ flex: 1 }}
+            fullWidth
             onPress={answer}
-          />
-          <Button
-            label={copy("Atla", "Skip")}
-            disabled={disabled}
-            onPress={() => {
-              void onAnswer({ kind: "skipped" }).catch(() => {});
-            }}
           />
         </Row>
       </View>

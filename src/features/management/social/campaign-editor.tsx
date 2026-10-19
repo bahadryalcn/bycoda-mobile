@@ -1,3 +1,4 @@
+import { haptic } from "@/ui/motion";
 import { useState } from "react";
 import { ScheduledTimeField } from "./scheduled-time-field";
 import { Stack } from "@/ui/primitives";
@@ -61,7 +62,7 @@ export function CampaignEditor({ account, projectId, profile, onClose }: Campaig
             },
           ],
         }),
-        { onSuccess: onClose },
+        { onSuccess: () => { haptic.success(); onClose(); } },
       );
     });
   return (
@@ -98,8 +99,8 @@ export function CampaignEditor({ account, projectId, profile, onClose }: Campaig
         onChange={(facts) => form.setField("facts", facts)}
         disabled={busy}
       />
-      <MutationState mutation={submission} />
       <FormActions
+        feedback={<><MutationState mutation={submission} /></>}
         submitLabel={copy("Taslak oluştur", "Create draft")}
         busy={busy}
         disabled={

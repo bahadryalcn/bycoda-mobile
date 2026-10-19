@@ -1,6 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useMobileTheme } from "./theme";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import ChevronsUpDown from "lucide-react-native/icons/chevrons-up-down";
 import { FlatList, Text, View } from "react-native";
-import { Pressable } from "./gluestack/pressable";
+import { Pressable } from "react-native";
 import Check from "lucide-react-native/icons/check";
 import { DisclosureChevron } from "./disclosure-motion";
 import Search from "lucide-react-native/icons/search";
@@ -26,6 +28,9 @@ type CommonProps<T extends string> = {
   summaryLimit?: number;
   hint?: string;
   error?: string;
+  /** "row" renders an iOS settings row (label, value, chevrons) for use inside NavigationGroup. */
+  variant?: "field" | "row";
+  icon?: ReactNode;
 };
 type SelectProps<T extends string> = CommonProps<T> & { value?: T; onChange: (value: T) => void };
 type MultiSelectProps<T extends string> = CommonProps<T> & {
@@ -35,6 +40,7 @@ type MultiSelectProps<T extends string> = CommonProps<T> & {
 };
 
 export function SelectField<T extends string>(props: SelectProps<T>) {
+  useMobileTheme();
   return (
     <SelectionField
       {...props}
@@ -44,6 +50,7 @@ export function SelectField<T extends string>(props: SelectProps<T>) {
   );
 }
 export function MultiSelectField<T extends string>(props: MultiSelectProps<T>) {
+  useMobileTheme();
   return <SelectionField {...props} multiple />;
 }
 
@@ -62,7 +69,10 @@ function SelectionField<T extends string>({
   summaryLimit = 2,
   hint,
   error,
+  variant = "field",
+  icon,
 }: MultiSelectProps<T> & { multiple?: boolean }) {
+  useMobileTheme();
   const copy = useCopy();
   const trigger = useRef<View>(null);
   const [open, setOpen] = useState(false);
@@ -78,9 +88,45 @@ function SelectionField<T extends string>({
     : (placeholder ?? copy("Seç…", "Select…"));
   const filtered = useMemo(() => filterSelection(options, search), [options, search]);
   const searchEnabled = searchable ?? options.length > 6;
+  const row = variant === "row";
   return (
-    <View style={uiStyles.field}>
-      {!hideLabel ? <Text style={uiStyles.fieldLabel}>{label}</Text> : null}
+    <View style={row ? undefined : uiStyles.field}>
+      {!hideLabel && !row ? <Text style={uiStyles.fieldLabel}>{label}</Text> : null}
+      {row ? (
+        <Pressable
+          ref={trigger}
+          accessibilityRole="combobox"
+          accessibilityLabel={`${label}: ${labels.length ? labels.join(", ") : summary}`}
+          accessibilityHint={error ?? hint}
+          accessibilityState={{ expanded: open, disabled: !!disabled }}
+          aria-expanded={open}
+          aria-disabled={!!disabled}
+          disabled={disabled}
+          onPress={() => {
+            setSearch("");
+            setOpen(true);
+          }}
+          style={({ pressed }) => ({
+            minHeight: 52,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: space.row,
+            paddingHorizontal: space.lg,
+            paddingVertical: space.sm,
+            backgroundColor: pressed ? colors.raised : "transparent",
+            opacity: disabled ? opacity.disabled : 1,
+          })}
+        >
+          {icon}
+          <Body numberOfLines={1} style={[uiStyles.label, uiStyles.grow]}>
+            {label}
+          </Body>
+          <Body numberOfLines={1} muted style={{ flexShrink: 1, maxWidth: "55%" }}>
+            {summary}
+          </Body>
+          <ChevronsUpDown size={15} strokeWidth={2.2} color={colors.tertiary} />
+        </Pressable>
+      ) : (
       <Pressable
         ref={trigger}
         accessibilityRole="combobox"
@@ -137,6 +183,7 @@ function SelectionField<T extends string>({
           openAngle={270}
         />
       </Pressable>
+      )}
       {error ? (
         <Text selectable accessibilityRole="alert" style={uiStyles.error}>
           {error}
@@ -265,8 +312,8 @@ function SelectionField<T extends string>({
                     paddingHorizontal: space.md,
                     paddingVertical: space.sm,
                     borderRadius: radii.control,
-                    backgroundColor: selected ? colors.selected : colors.background,
-                    opacity: off ? opacity.disabled : pressed ? opacity.pressed : 1,
+                    backgroundColor: pressed ? colors.raised : "transparent",
+                    opacity: off ? opacity.disabled : 1,
                   })}
                 >
                   <View style={[uiStyles.grow, { gap: 2 }]}>
@@ -288,7 +335,7 @@ function SelectionField<T extends string>({
                       <Square color={colors.muted} size={20} />
                     )
                   ) : selected ? (
-                    <Check color={colors.accent} size={20} />
+                    <Check color={colors.accent} strokeWidth={2.6} size={20} />
                   ) : null}
                 </Pressable>
               );

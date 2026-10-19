@@ -1,11 +1,14 @@
+import { useMobileTheme } from "@/ui/theme";
 import type { PropsWithChildren } from "react";
-import { ActivityIndicator, View } from "react-native";
-import { Pressable } from "./gluestack/pressable";
-import Animated from "react-native-reanimated";
+import { View } from "react-native";
+import { Pressable } from "react-native";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import { Body } from "./typography";
+import { colors, fontSize, metrics, radii, space } from "./tokens";
+import { IconButton } from "./buttons";
+import Animated from "react-native-reanimated";
+import { Spinner } from "panelui-native/components/spinner";
 import { usePressMotion } from "./motion";
-import { colors, fontSize, metrics, opacity, radii, space } from "./tokens";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -24,42 +27,78 @@ export function ChatAction({
   busy?: boolean;
   primary?: boolean;
 }>) {
-  const press = usePressMotion();
+  useMobileTheme();
+  return (
+    <IconButton
+      label={label}
+      disabled={disabled}
+      busy={busy}
+      tone={primary ? "primary" : "default"}
+      density="compact"
+      onPress={onPress}
+    >
+      {children}
+    </IconButton>
+  );
+}
+
+/**
+ * Circular composer action: a 34pt disc (filled accent when active, gray otherwise) inside a
+ * 44pt touch area, with a spring press and busy spinner.
+ */
+export function ChatCircleAction({
+  label,
+  onPress,
+  disabled,
+  busy,
+  active,
+  children,
+}: PropsWithChildren<{
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  busy?: boolean;
+  /** Filled accent when the action can be performed; gray otherwise. */
+  active?: boolean;
+}>) {
+  useMobileTheme();
+  const press = usePressMotion(0.88);
   const off = !!(disabled || busy);
   return (
     <AnimatedPressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: off, busy: !!busy }}
+      aria-disabled={off}
+      aria-busy={busy || undefined}
       disabled={off}
-      hitSlop={(metrics.touchTarget - 36) / 2}
       onPress={onPress}
       onPressIn={press.onPressIn}
       onPressOut={press.onPressOut}
+      hitSlop={6}
       style={[
-        {
-          width: 36,
-          height: 36,
-          flexShrink: 0,
-          alignItems: "center",
-          justifyContent: "center",
-          borderRadius: 18,
-          backgroundColor: primary ? colors.accentSolid : "transparent",
-          opacity: off ? opacity.disabled : 1,
-        },
+        { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
         press.animatedStyle,
       ]}
     >
-      {busy ? (
-        <ActivityIndicator size="small" color={primary ? colors.primaryText : colors.accent} />
-      ) : (
-        children
-      )}
+      <View
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: radii.pill,
+          backgroundColor: active ? colors.accentSolid : colors.fill,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: disabled && !busy ? 0.6 : 1,
+        }}
+      >
+        {busy ? <Spinner size="sm" color={active ? colors.primaryText : colors.muted} /> : children}
+      </View>
     </AnimatedPressable>
   );
 }
 
-/** One readable entry point, with the result visible before opening its details. */
+/** A quiet, borderless row for one-line activity, tools and code (icon, summary, chevron). */
 export function ChatSummary({
   label,
   detail,
@@ -75,6 +114,7 @@ export function ChatSummary({
   icon: import("react").ReactNode;
   onPress: () => void;
 }) {
+  useMobileTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -87,7 +127,7 @@ export function ChatSummary({
         flexDirection: "row",
         alignItems: "center",
         gap: space.sm,
-        backgroundColor: pressed ? colors.raised : colors.panel,
+        backgroundColor: pressed ? colors.raised : "transparent",
         borderRadius: radii.control,
       })}
     >

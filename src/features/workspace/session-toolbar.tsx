@@ -1,15 +1,18 @@
+import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
 import { useState } from "react";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import Square from "lucide-react-native/icons/square";
 import { router } from "expo-router";
-import { Badge, Body, NavigationGroup, NavigationRow, Row, Sheet } from "@/ui/primitives";
-import { colors, space } from "@/ui/tokens";
+import { Body, Button, NavigationGroup, NavigationRow, Row, Sheet } from "@/ui/primitives";
+import { colors, radii, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import type { SessionToolbarProps } from "./session-types";
 import { SessionArtifacts } from "./session-artifacts";
 import { ChatAction } from "@/ui/chat-controls";
+import { SessionFiles } from "./session-files";
+import { useSessionQueue } from "./use-session-queue";
 
 export function SessionToolbar({
   scope,
@@ -21,9 +24,11 @@ export function SessionToolbar({
   onRefresh,
   onCommand,
 }: SessionToolbarProps) {
+  useMobileTheme();
   const copy = useCopy();
   const session = query.data;
   const [menu, setMenu] = useState(false);
+  const queue = useSessionQueue(scope);
   const status = !session
     ? query.error
       ? copy("Durum yüklenemedi", "Status unavailable")
@@ -48,24 +53,31 @@ export function SessionToolbar({
     });
   };
 
+  const dotColor =
+    !session && query.error
+      ? colors.danger
+      : session?.session.pendingQuestion || session?.status === "interrupted"
+        ? colors.warning
+        : session?.status === "running"
+          ? colors.live
+          : colors.muted;
   return (
-    <View
-      style={{ borderBottomWidth: 1, borderBottomColor: colors.separator, paddingBottom: space.xs }}
-    >
+    <View style={{ paddingBottom: space.xs }}>
       <Row style={{ flexWrap: "nowrap", gap: space.sm }}>
-        <Row style={{ flex: 1, minWidth: 0, gap: space.xs }}>
-          <Badge
-            label={status}
-            tone={
-              !session && query.error
-                ? "danger"
-                : session?.session.pendingQuestion || session?.status === "interrupted"
-                  ? "warning"
-                  : session?.status === "running"
-                    ? "active"
-                    : undefined
-            }
+        <Row style={{ flex: 1, minWidth: 0, gap: space.xs, flexWrap: "nowrap" }}>
+          <View
+            accessible
+            accessibilityLabel={status}
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: radii.pill,
+              backgroundColor: dotColor,
+            }}
           />
+          <Body numberOfLines={1} style={[uiStyles.caption, { color: colors.text, fontWeight: "600", flexShrink: 0 }]}>
+            {status}
+          </Body>
           <Body muted numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1 }]}>
             {session
               ? [session.session.harness, session.session.model.replace(/^[^:]+:/, "")].join(" · ")
@@ -73,21 +85,29 @@ export function SessionToolbar({
           </Body>
         </Row>
         {session?.status === "running" && session.runId ? (
-          <ChatAction
+          <Button
             label={copy("Durdur", "Stop")}
+            tone="danger"
+            density="compact"
             busy={command.isPending}
             disabled={blocked}
             onPress={() => {
-              void onCommand({
-                type: "cancel",
-                sessionId: scope.sessionId,
-                runId: session.runId,
-              }).catch(() => {});
+              // Pause durable follow-ups before stopping the exact active run.
+              // A pause failure must not hide the session's primary Stop action.
+              void (async () => {
+                if (queue.supported) await queue.pause().catch(() => {});
+                await onCommand({
+                  type: "cancel",
+                  sessionId: scope.sessionId,
+                  runId: session.runId,
+                });
+              })().catch(() => {});
             }}
           >
-            <Square size={18} color={colors.danger} />
-          </ChatAction>
+            <Square size={14} strokeWidth={2.4} color={colors.danger} />
+          </Button>
         ) : null}
+        {session ? <SessionFiles scope={scope} session={session} /> : null}
         <ChatAction
           label={copy("Oturum seçenekleri", "Session options")}
           onPress={() => setMenu(true)}

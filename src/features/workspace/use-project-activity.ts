@@ -2,7 +2,7 @@ import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { hostKey, useHostClient } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { readProjectSummaries, type ProjectSummaries } from "./project-summaries";
-import { activeProjectSessions } from "./activity-model";
+import { projectSessionDirectory } from "./activity-model";
 import { useProjectList } from "./use-project-directory";
 
 export function useProjectActivity() {
@@ -34,13 +34,16 @@ export function useProjectActivity() {
       };
     }),
   });
-  const sessions = activeProjectSessions(
+  const directory = projectSessionDirectory(
     projects.data ?? [],
     queries.map((query) => query.data),
   );
   return {
     projects,
-    sessions,
+    directory,
+    sessions: directory.filter(
+      ({ session }) => !session.archived && (session.status === "running" || session.needsInput),
+    ),
     complete:
       projects.isSuccess &&
       queries.every(

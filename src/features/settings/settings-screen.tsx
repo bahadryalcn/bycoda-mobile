@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { router } from "expo-router";
 import Laptop from "lucide-react-native/icons/laptop";
@@ -7,19 +8,24 @@ import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
 import LifeBuoy from "lucide-react-native/icons/life-buoy";
 import Info from "lucide-react-native/icons/info";
 import Type from "lucide-react-native/icons/type";
+import Moon from "lucide-react-native/icons/moon";
+import Sun from "lucide-react-native/icons/sun";
+import Globe from "lucide-react-native/icons/globe";
+import Flag from "lucide-react-native/icons/flag";
+import { IconTile } from "../../ui/icon-tile";
 import { LANGUAGES } from "../../localization";
 import { useActiveMachine, useMachines } from "../../state/machines";
+import { useAppearance } from "../../state/appearance";
 import {
-  Body,
   NavigationGroup,
   NavigationRow,
+  Notice,
   Screen,
   Section,
   SelectField,
   Sheet,
 } from "../../ui/primitives";
 import { colors } from "../../ui/tokens";
-import { uiStyles } from "../../ui/styles";
 import { useCopy } from "../../ui/copy";
 import { SecuritySettings } from "../security/security-settings";
 import { EngagementSettings } from "../engagement/engagement-settings";
@@ -28,10 +34,15 @@ import { LocalDataControls } from "./local-data-controls";
 import { ChatAppearanceSettings } from "./chat-appearance-settings";
 
 export function SettingsScreen() {
+  useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const language = useMachines((s) => s.language);
   const setLanguage = useMachines((s) => s.setLanguage);
+  const themeMode = useAppearance((s) => s.themeMode);
+  const setThemeMode = useAppearance((s) => s.setThemeMode);
+  const appearanceHydrated = useAppearance((s) => s.hydrated);
+  const appearanceError = useAppearance((s) => s.storageError);
   const [panel, setPanel] = useState<
     "security" | "host" | "privacy" | "about" | "appearance" | null
   >(null);
@@ -42,78 +53,98 @@ export function SettingsScreen() {
     about: copy("bycoda hakkında", "About bycoda"),
     appearance: copy("Sohbet görünümü", "Chat appearance"),
   };
+  const tile = (Glyph: typeof Laptop, color: string) => (
+    <IconTile color={color}>
+      <Glyph size={18} strokeWidth={2} color={color} />
+    </IconTile>
+  );
   return (
     <Screen title={copy("Ayarlar", "Settings")}>
-      <Section title={copy("Bağlantılar", "Connections")}>
+      <NavigationGroup>
         <NavigationRow
           label={machine?.name ?? copy("Bilgisayar seçilmedi", "No computer selected")}
           detail={machine?.endpoint ?? copy("Bilgisayar bağla", "Connect a computer")}
-          icon={<Laptop size={20} color={colors.muted} />}
+          icon={tile(Laptop, colors.accent)}
           onPress={() => router.push("/machines")}
         />
-      </Section>
-      <SelectField
-        label={copy("Dil", "Language")}
-        value={language}
-        options={[{ value: "system" as const, label: copy("Sistem", "System") }, ...LANGUAGES]}
-        onChange={setLanguage}
-      />
+      </NavigationGroup>
       <Section title={copy("Tercihler", "Preferences")}>
         <NavigationGroup>
+          <SelectField
+            variant="row"
+            icon={tile(themeMode === "dark" ? Moon : Sun, colors.warning)}
+            label={copy("Tema", "Theme")}
+            value={themeMode}
+            disabled={!appearanceHydrated}
+            options={[
+              { value: "system" as const, label: copy("Sistem", "System") },
+              { value: "light" as const, label: copy("Açık", "Light") },
+              { value: "dark" as const, label: copy("Koyu", "Dark") },
+            ]}
+            onChange={(value) => {
+              void setThemeMode(value);
+            }}
+          />
+          <SelectField
+            variant="row"
+            icon={tile(Globe, colors.info)}
+            label={copy("Dil", "Language")}
+            value={language}
+            options={[{ value: "system" as const, label: copy("Sistem", "System") }, ...LANGUAGES]}
+            onChange={setLanguage}
+          />
           <NavigationRow
             label={titles.appearance}
-            detail={copy("Mesaj yazı boyutu ve önizleme", "Message text size and preview")}
-            icon={<Type size={20} color={colors.muted} />}
+            icon={tile(Type, colors.muted)}
             onPress={() => setPanel("appearance")}
           />
-          <NavigationRow
-            label={titles.security}
-            detail={copy("Uygulama kilidi ve biyometri", "App lock and biometrics")}
-            icon={<ShieldCheck size={20} color={colors.muted} />}
-            onPress={() => setPanel("security")}
-          />
-          {machine ? (
-            <NavigationRow
-              label={titles.host}
-              detail={copy("Çalışma ve günlük süre sınırları", "Concurrency and daily time limits")}
-              icon={<SlidersHorizontal size={20} color={colors.muted} />}
-              onPress={() => setPanel("host")}
-            />
-          ) : null}
-          <NavigationRow
-            label={titles.privacy}
-            detail={copy(
-              "İzinler, kayıtlı bilgisayarlar ve taslaklar",
-              "Permissions, saved computers and drafts",
-            )}
-            icon={<LockKeyhole size={20} color={colors.muted} />}
-            onPress={() => setPanel("privacy")}
-          />
         </NavigationGroup>
-      </Section>
-      <Section title={copy("Yardım ve destek", "Help & support")}>
-        <NavigationGroup>
-          <NavigationRow
-            label={copy("Yardım ve destek", "Help & support")}
-            detail={copy(
-              "Bağlantı sorunları ve iletişim",
-              "Connection troubleshooting and contact",
+        {appearanceError ? (
+          <Notice
+            tone="warning"
+            message={copy(
+              "Tema tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.",
+              "The theme preference could not be read or saved. Select it again to retry.",
             )}
-            icon={<LifeBuoy size={20} color={colors.muted} />}
-            onPress={() => router.push("/legal/help")}
           />
-          <NavigationRow
-            label={copy("AI içeriğini bildir", "Report AI content")}
-            onPress={() => router.push("/report")}
-          />
-          <NavigationRow
-            label={titles.about}
-            detail={copy("Sürüm, paylaşım ve geri bildirim", "Version, sharing and feedback")}
-            icon={<Info size={20} color={colors.muted} />}
-            onPress={() => setPanel("about")}
-          />
-        </NavigationGroup>
+        ) : null}
       </Section>
+      <NavigationGroup>
+        <NavigationRow
+          label={titles.security}
+          icon={tile(ShieldCheck, colors.success)}
+          onPress={() => setPanel("security")}
+        />
+        <NavigationRow
+          label={titles.privacy}
+          icon={tile(LockKeyhole, colors.accent)}
+          onPress={() => setPanel("privacy")}
+        />
+        {machine ? (
+          <NavigationRow
+            label={titles.host}
+            icon={tile(SlidersHorizontal, colors.warning)}
+            onPress={() => setPanel("host")}
+          />
+        ) : null}
+      </NavigationGroup>
+      <NavigationGroup>
+        <NavigationRow
+          label={copy("Yardım ve destek", "Help & support")}
+          icon={tile(LifeBuoy, colors.muted)}
+          onPress={() => router.push("/legal/help")}
+        />
+        <NavigationRow
+          label={copy("AI içeriğini bildir", "Report AI content")}
+          icon={tile(Flag, colors.danger)}
+          onPress={() => router.push("/report")}
+        />
+        <NavigationRow
+          label={titles.about}
+          icon={tile(Info, colors.muted)}
+          onPress={() => setPanel("about")}
+        />
+      </NavigationGroup>
       {panel ? (
         <Sheet visible size={panel === "appearance" ? "compact" : "form"} title={titles[panel]} onClose={() => setPanel(null)}>
           {panel === "appearance" ? (

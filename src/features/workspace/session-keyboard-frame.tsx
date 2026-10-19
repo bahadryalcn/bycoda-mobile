@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import {
   createContext,
   useCallback,
@@ -23,6 +24,7 @@ export function SessionKeyboardFrame({
   composer,
   style,
 }: PropsWithChildren<{ composer: ReactNode; style?: StyleProp<ViewStyle> }>) {
+  useMobileTheme();
   const insets = useSafeAreaInsets();
   const { height, progress } = useReanimatedKeyboardAnimation();
   const keyboardHeight = useKeyboardState((state) => state.height);

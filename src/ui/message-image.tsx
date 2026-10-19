@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { mediaQueryKey, visibleMediaData } from "./media-policy";
 import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
@@ -18,6 +19,7 @@ export function MessageImage({
   deferred = false,
   ...props
 }: Parameters<typeof InlineMessageImage>[0] & { deferred?: boolean }) {
+  useMobileTheme();
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   if (!deferred) return <InlineMessageImage {...props} />;
@@ -54,6 +56,7 @@ function InlineMessageImage({
   localFile?: boolean;
   onReload?: () => void;
 }) {
+  useMobileTheme();
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);

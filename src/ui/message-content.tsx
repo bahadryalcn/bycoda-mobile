@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { Fragment, memo, useMemo, type ReactNode } from "react";
 import { Linking, ScrollView, Text, View } from "react-native";
 import { Body } from "./primitives";
@@ -24,6 +25,7 @@ function FileLink({
   children: ReactNode;
   onOpenFile?: OpenDocument;
 }) {
+  useMobileTheme();
   return (
     <Text
       accessibilityRole={context && onOpenFile ? "link" : undefined}
@@ -52,6 +54,7 @@ export const MessageContent = memo(function MessageContent({
   context?: MessageContext;
   onOpenFile?: OpenDocument;
 }) {
+  useMobileTheme();
   const preference = useChatAppearance((state) => state.textSize);
   const typography = chatTextStyles(textSize ?? preference);
   const bodyStyle = role === "user" ? typography.user : typography.assistant;

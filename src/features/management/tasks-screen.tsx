@@ -1,12 +1,15 @@
 import { useEditorRecord } from "./shared/use-editor-record";
-import { Input } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
 import { useState } from "react";
+import { FilterButton, FilterSheet } from "@/ui/filter-sheet";
+import Plus from "lucide-react-native/icons/plus";
 
 import {
   Body,
   Button,
   Card,
+  IconButton,
+  SearchField,
   SelectField,
   Sheet,
   MutationState,
@@ -23,6 +26,7 @@ import { identifier } from "./shared/format";
 import { initialAgent } from "./shared/agent";
 import { Scope } from "./shared/scope";
 import { taskMatchesFilter } from "./task-actions";
+import { colors } from "@/ui/tokens";
 
 import { TaskEditor } from "./tasks/task-editor";
 import { DeliveryEditor } from "./tasks/delivery-editor";
@@ -65,6 +69,7 @@ export function TasksScreen() {
         : undefined;
   const draft = useEditorRecord(editor?.kind === "new" ? editor.initial.id : editor?.id ?? null, fetchedDraft);
   const [filter, setFilter] = useState<string>("active");
+  const [filterDraft, setFilterDraft] = useState<string | null>(null);
   const start = () => {
     save.reset();
     if (projectId)
@@ -85,37 +90,43 @@ export function TasksScreen() {
         },
       });
   };
+  const filterOptions = [
+    { value: "active", label: copy("Aktif", "Active") },
+    { value: "todo", label: copy("Yapılacak", "To do") },
+    { value: "queued", label: copy("Sırada", "Queued") },
+    { value: "running", label: copy("Çalışıyor", "Running") },
+    { value: "review", label: copy("İncelemede", "In review") },
+    { value: "blocked", label: copy("Engellendi", "Blocked") },
+    { value: "done", label: copy("Tamamlandı", "Done") },
+    { value: "all", label: copy("Tümü", "All") },
+  ];
   const busy = save.isPending || move.isPending || remove.isPending || recheck.isPending || manualStart.isPending || reorder.isPending;
   const visible = query.data?.filter((task) => taskMatchesFilter(task, filter) && (task.title + " " + task.prompt).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   return (
     <ScreenList<HostTask> title={copy("Görevler", "Tasks")} query={query}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
+      actions={
+        <>
+          <FilterButton count={filter !== "active" ? 1 : 0} onPress={() => setFilterDraft(filter)} />
+          <IconButton
+            label={copy("Yeni görev", "New task")}
+            disabled={!projectId || !machine?.providers?.length || busy || !!editor}
+            onPress={start}
+          >
+            <Plus size={22} strokeWidth={2.2} color={colors.accent} />
+          </IconButton>
+        </>
+      }
       header={<>
+      <FilterSheet visible={filterDraft !== null} onClose={() => setFilterDraft(null)}
+        onReset={() => setFilterDraft("active")}
+        onApply={() => { if (filterDraft !== null) setFilter(filterDraft); setFilterDraft(null); }}>
+        <SelectField label={copy("Duruma göre filtrele", "Filter by status")} value={filterDraft ?? filter}
+          options={filterOptions} onChange={setFilterDraft} />
+      </FilterSheet>
       <Scope allowAll />
-      <Input label={copy("Ara", "Search")} placeholder={copy("Ara", "Search")} value={search} onChangeText={setSearch} autoCorrect={false} />
-      <Row>
-        <Button
-          label={copy("Yeni görev", "New task")}
-          onPress={start}
-          disabled={!projectId || !machine?.providers?.length || busy || !!editor}
-        />
-      </Row>
-      <SelectField
-        label={copy("Durum", "Status")}
-        value={filter}
-        options={[
-          { value: "active", label: copy("Aktif", "Active") },
-          { value: "todo", label: copy("Yapılacak", "To do") },
-          { value: "queued", label: copy("Sırada", "Queued") },
-          { value: "running", label: copy("Çalışıyor", "Running") },
-          { value: "review", label: copy("İncelemede", "In review") },
-          { value: "blocked", label: copy("Engellendi", "Blocked") },
-          { value: "done", label: copy("Tamamlandı", "Done") },
-          { value: "all", label: copy("Tümü", "All") },
-        ]}
-        onChange={setFilter}
-      />
+      <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
       {!projectId && (
         <Body muted>
           {copy("Görev eklemek için projesini seçin.", "Select a project to add a task.")}

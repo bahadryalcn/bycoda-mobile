@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import X from "lucide-react-native/icons/x";
@@ -24,6 +25,7 @@ export function ComposerAttachments({
   onRetry: (file: StagedAttachment) => void;
   disabled: boolean;
 }) {
+  useMobileTheme();
   const copy = useCopy();
   const [selected, setSelected] = useState<StagedAttachment | null>(null);
   return (

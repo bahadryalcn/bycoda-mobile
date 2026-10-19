@@ -1,3 +1,5 @@
+import { createThemedStyles } from "./themed-styles";
+import { useMobileTheme } from "./theme";
 import { Image } from "expo-image";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useCopy } from "./copy";
@@ -8,9 +10,11 @@ const logo = require("../../../public/brand/bycoda/logo-horizontal-white.png");
 export type LegalLinkTarget = "privacy" | "terms" | "help";
 
 export function BrandLogo({ compact = false }: { compact?: boolean }) {
+  useMobileTheme();
   return (
     <Image
       source={logo}
+      tintColor={colors.brand}
       contentFit="contain"
       contentPosition="left"
       accessible
@@ -24,6 +28,7 @@ export const Brand = BrandLogo;
 
 /** Receives navigation so the same links also work before the router is mounted. */
 export function LegalLinks({ onOpen }: { onOpen: (document: LegalLinkTarget) => void }) {
+  useMobileTheme();
   const copy = useCopy();
   const links: { document: LegalLinkTarget; label: string }[] = [
     { document: "privacy", label: copy("Gizlilik", "Privacy") },
@@ -47,16 +52,15 @@ export function LegalLinks({ onOpen }: { onOpen: (document: LegalLinkTarget) => 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   logo: { width: "100%", maxWidth: 254, aspectRatio: 390 / 80 },
   compactLogo: { maxWidth: 152 },
   links: {
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
+    justifyContent: "center",
     columnGap: space.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
     paddingTop: space.sm,
   },
   link: {
@@ -69,6 +73,5 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: fontSize.small,
     lineHeight: 20,
-    textDecorationLine: "underline",
   },
-});
+}));

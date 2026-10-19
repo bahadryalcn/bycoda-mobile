@@ -1,3 +1,4 @@
+import { useMobileTheme } from "./theme";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body, Heading } from "./typography";
@@ -9,7 +10,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useId, useLayoutEffect, useSyncExternalStore, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import X from "lucide-react-native/icons/x";
 import { Card, Row } from "./layout";
@@ -22,6 +23,45 @@ import type { FormActionsProps, ConfirmationCardProps, SheetProps } from "./comp
 import { ScreenOverlay, useOverlayProgress } from "./overlays";
 import { SheetGuardContext, useSheetGuards } from "./sheet-guard";
 import { useSecurity } from "@/state/security";
+import { createSheetActionsStore } from "./sheet-actions-store";
+
+const SheetActionsContext = createContext<ReturnType<typeof createSheetActionsStore> | null>(null);
+
+/** Editors retain their state; only their action presentation moves to the footer. */
+export function FormActions(props: FormActionsProps) {
+  const store = useContext(SheetActionsContext);
+  const id = useId();
+  useLayoutEffect(() => { store?.set(id, props); }, [store, id, props]);
+  useLayoutEffect(() => () => { store?.remove(id); }, [store, id]);
+  return store ? null : <FormActionRow {...props} />;
+}
+
+function SheetActionArea({ store, footer, bottom }: {
+  store: ReturnType<typeof createSheetActionsStore>;
+  footer: import("react").ReactNode;
+  bottom: number;
+}) {
+  useMobileTheme();
+  const insets = useSafeAreaInsets();
+  const entries = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const content = !!footer || entries.length > 0;
+  return (
+    <View style={{
+      flexShrink: 0,
+      paddingStart: Math.max(space.screen, insets.left),
+      paddingEnd: Math.max(space.screen, insets.right),
+      paddingTop: content ? space.md : 0,
+      paddingBottom: bottom + (content ? space.md : 0),
+      gap: space.sm,
+      borderTopWidth: content ? 1 : 0,
+      borderTopColor: colors.separator,
+      backgroundColor: colors.panel,
+    }}>
+      {footer}
+      {entries.map(([id, actions]) => <FormActionRow key={id} {...actions} />)}
+    </View>
+  );
+}
 
 function SheetSurface({
   full,
@@ -31,6 +71,7 @@ function SheetSurface({
   full: boolean;
   style: import("react-native").StyleProp<import("react-native").ViewStyle>;
 }>) {
+  useMobileTheme();
   const progress = useOverlayProgress();
   const { height } = useWindowDimensions();
   const animation = useAnimatedStyle(() => ({
@@ -39,7 +80,8 @@ function SheetSurface({
   return <Animated.View style={[style, animation]}>{children}</Animated.View>;
 }
 
-export function FormActions({
+function FormActionRow({
+  feedback,
   submitLabel,
   onSubmit,
   onCancel,
@@ -49,19 +91,29 @@ export function FormActions({
   disabled,
   tone = "primary",
 }: FormActionsProps) {
+  useMobileTheme();
   const copy = useCopy();
+  const { height } = useWindowDimensions();
   return (
-    <Row>
-      <Button label={submitLabel} onPress={onSubmit} busy={busy} disabled={disabled} tone={tone} />
+    <View style={{ gap: space.sm }}>
+    {feedback ? <ScrollView
+      style={{ maxHeight: Math.max(metrics.touchTarget, height * 0.25), flexShrink: 1 }}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ gap: space.sm }}
+    >{feedback}</ScrollView> : null}
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+      <Button label={submitLabel} onPress={onSubmit} busy={busy} disabled={disabled} tone={tone} style={{ flexGrow: 1, flexBasis: 160, minWidth: 0 }} />
       {onCancel ? (
         <Button
           label={cancelLabel ?? copy("Vazgeç", "Cancel")}
           onPress={onCancel}
           disabled={cancelDisabled || busy}
           tone="quiet"
+          style={{ flexGrow: 1, flexBasis: 96, minWidth: 0 }}
         />
       ) : null}
-    </Row>
+    </View>
+    </View>
   );
 }
 
@@ -77,6 +129,7 @@ export function ConfirmationCard({
   tone = "danger",
   additionalActions,
 }: ConfirmationCardProps) {
+  useMobileTheme();
   return (
     <Card>
       {message ? <Body>{message}</Body> : null}
@@ -109,12 +162,14 @@ export function Sheet({
   dirty = false,
   returnFocusRef,
 }: SheetProps) {
+  useMobileTheme();
   const insets = useSafeAreaInsets();
   const copy = useCopy();
   const { height } = useWindowDimensions();
   const heading = useRef<View>(null);
   const guards = useSheetGuards();
   const [confirming, setConfirming] = useState(false);
+  const [actionsStore] = useState(createSheetActionsStore);
   const canClose = dismissible && !guards.pending;
   const requestClose = useCallback(() => {
     if (!canClose) return;
@@ -150,31 +205,13 @@ export function Sheet({
     };
   }, [visible, returnFocusRef]);
   const bodyStyle = {
-    paddingTop: space.lg,
+    paddingTop: space.sm,
     paddingStart: Math.max(space.screen, insets.left),
     paddingEnd: Math.max(space.screen, insets.right),
-    paddingBottom: space.lg + insets.bottom,
+    paddingBottom: space.lg,
   };
-  const body = (
-    <>
-      {children}
-      {footer ? (
-        <View
-          style={{
-            gap: space.sm,
-            paddingTop: space.lg,
-            paddingStart: scroll ? 0 : Math.max(space.screen, insets.left),
-            paddingEnd: scroll ? 0 : Math.max(space.screen, insets.right),
-            paddingBottom: scroll ? 0 : space.lg,
-          }}
-        >
-          {footer}
-        </View>
-      ) : null}
-    </>
-  );
   return (
-    <ScreenOverlay visible={visible} onClose={requestClose}>
+    <ScreenOverlay visible={visible} label={title} onClose={requestClose}>
       <KeyboardAvoidingView
         behavior="padding"
         automaticOffset
@@ -215,15 +252,16 @@ export function Sheet({
             <View
               accessible={false}
               style={{
-                height: 4,
-                width: 32,
-                borderRadius: radii.badge,
-                backgroundColor: colors.border,
+                height: 5,
+                width: 36,
+                borderRadius: radii.pill,
+                backgroundColor: colors.tertiary,
                 alignSelf: "center",
                 marginBottom: space.xs,
               }}
             />
           ) : null}
+          <SheetActionsContext.Provider value={actionsStore}>
           <SheetGuardContext.Provider value={guardContext}>
             <View
               style={[
@@ -233,20 +271,17 @@ export function Sheet({
                   alignItems: "center",
                   paddingVertical: space.xs,
                   paddingLeft: Math.max(space.screen, insets.left),
-                  paddingRight: Math.max(space.screen, insets.right),
-                  borderBottomWidth: 1,
-                  borderBottomColor: colors.separator,
+                  paddingRight: Math.max(space.sm, insets.right),
                 },
               ]}
             >
               <View
                 ref={heading}
                 accessible
-                accessibilityRole="header"
                 accessibilityLabel={title}
                 style={uiStyles.grow}
               >
-                <Heading accessible={false} style={uiStyles.title}>
+                <Heading style={[uiStyles.title, { fontWeight: "700" }]}>
                   {title}
                 </Heading>
               </View>
@@ -256,7 +291,18 @@ export function Sheet({
                   onPress={requestClose}
                   disabled={!canClose}
                 >
-                  <X size={20} color={colors.muted} />
+                  <View
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: radii.pill,
+                      backgroundColor: colors.fill,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <X size={16} strokeWidth={2.6} color={colors.muted} />
+                  </View>
                 </IconButton>
               )}
             </View>
@@ -264,27 +310,29 @@ export function Sheet({
               // The outer frame owns keyboard geometry. A second keyboard-aware
               // scroller would add the IME height again and scroll short forms away.
               <ScrollView
-                style={{ flexShrink: 1, flexGrow: full ? 1 : 0 }}
+                style={{ flexShrink: 1, flexGrow: full ? 1 : 0, minHeight: 0 }}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode={process.env.EXPO_OS === "ios" ? "interactive" : "on-drag"}
                 automaticallyAdjustKeyboardInsets={false}
                 contentInsetAdjustmentBehavior="never"
                 contentContainerStyle={[uiStyles.content, bodyStyle]}
               >
-                {body}
+                {children}
               </ScrollView>
             ) : (
               <View
                 style={{
                   flexShrink: 1,
                   flexGrow: size === "compact" ? 0 : 1,
-                  paddingBottom: insets.bottom,
+                  minHeight: 0,
                 }}
               >
-                {body}
+                {children}
               </View>
             )}
+            <SheetActionArea store={actionsStore} footer={footer} bottom={insets.bottom} />
           </SheetGuardContext.Provider>
+          </SheetActionsContext.Provider>
         </SheetSurface>
       </KeyboardAvoidingView>
       {confirming ? (

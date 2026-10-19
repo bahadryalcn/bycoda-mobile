@@ -1,3 +1,4 @@
+import { haptic } from "@/ui/motion";
 import { Stack } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import {
@@ -46,7 +47,7 @@ export function DraftEditor({ draft, thread, profile, onClose }: DraftEditorProp
           ),
         );
       await action.mutateAsync(request("drafts.update", { id: draft.id, text, factIds: facts }), {
-        onSuccess: onClose,
+        onSuccess: () => { haptic.success(); onClose(); },
       });
     });
   return (
@@ -73,8 +74,8 @@ export function DraftEditor({ draft, thread, profile, onClose }: DraftEditorProp
           "Saving removes previous sending approval.",
         )}
       </Body>
-      <MutationState mutation={submission} />
       <FormActions
+        feedback={<><MutationState mutation={submission} /></>}
         submitLabel={copy("Kaydet", "Save")}
         busy={busy}
         disabled={

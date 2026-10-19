@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
@@ -17,6 +18,7 @@ export function NoteSummaryRow({
   disabled: boolean;
   onPress: () => void;
 }) {
+  useMobileTheme();
   const copy = useCopy();
   const title = note.title.trim() || copy("Başlıksız", "Untitled");
   const excerpt = note.body.replace(/\s+/g, " ").trim().slice(0, 600);
@@ -43,14 +45,11 @@ export function NoteSummaryRow({
     >
       <NotebookPen size={18} color={colors.accent} style={{ marginTop: 2 }} />
       <View style={[uiStyles.grow, { gap: 3 }]}>
-        <Body
-          numberOfLines={2}
-          style={{ fontSize: fontSize.title, lineHeight: 21, fontWeight: "600" }}
-        >
+        <Body numberOfLines={2} style={uiStyles.title}>
           {title}
         </Body>
         {excerpt ? (
-          <Body muted numberOfLines={2} style={{ fontSize: fontSize.control, lineHeight: 19 }}>
+          <Body muted numberOfLines={2} style={{ fontSize: fontSize.control, lineHeight: 20 }}>
             {excerpt}
           </Body>
         ) : null}

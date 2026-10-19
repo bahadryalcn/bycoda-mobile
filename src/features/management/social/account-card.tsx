@@ -1,16 +1,17 @@
 import * as Linking from "expo-linking";
 import {
+  ActionMenu,
   Body,
   Button,
   Card,
   ChoiceChip,
-  Heading,
   MutationState,
   Row,
   ErrorNotice,
   QueryState,
   Disclosure,
 } from "@/ui/primitives";
+import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useHostMutation, useHostQuery } from "@/state/queries";
@@ -35,23 +36,49 @@ export function AccountCard({ account, state, projectId }: AccountCardProps) {
   const busy = connection.isPending || action.isPending || select.isPending;
   return (
     <Card>
-      <Heading>{account.name}</Heading>
-      <Body muted>
-        {account.platform} ·{" "}
-        {account.connected ? copy("Bağlı", "Connected") : copy("Bağlı değil", "Disconnected")} ·{" "}
-        {account.paused ? copy("Duraklatıldı", "Paused") : copy("Etkin", "Active")}
-      </Body>
-      <Disclosure label={copy("Yetenekler", "Capabilities")}>
-      <Body muted>
-        {state.capabilities[account.id]
-          ?.map((capability) => `${socialLabel(capability.operation, copy)}: ${socialLabel(capability.status, copy)}`)
-          .join(" · ")}
-      </Body>
-      </Disclosure>
       <Row>
-        {!account.connected && account.connection !== "browser" && (
+        <Body muted style={[uiStyles.caption, uiStyles.grow]}>
+          {account.platform} ·{" "}
+          {account.connected ? copy("Bağlı", "Connected") : copy("Bağlı değil", "Disconnected")} ·{" "}
+          {account.paused ? copy("Duraklatıldı", "Paused") : copy("Etkin", "Active")}
+        </Body>
+        <ActionMenu
+          label={copy("Hesap işlemleri", "Account actions")}
+          actions={[
+            {
+              key: "pause",
+              label: account.paused ? copy("Devam et", "Resume") : copy("Duraklat", "Pause"),
+              disabled: busy,
+              onPress: () =>
+                action.mutate(
+                  request("accounts.pause", { accountId: account.id, paused: !account.paused }),
+                ),
+            },
+            account.connected && {
+              key: "disconnect",
+              label: copy("Bağlantıyı kes", "Disconnect"),
+              destructive: true,
+              disabled: busy,
+              onPress: () =>
+                confirmAction(
+                  copy("Hesap bağlantısını kes", "Disconnect account"),
+                  copy(
+                    "Bu host hesabın erişim bilgilerini kaldıracak ve hesap duraklatılacak.",
+                    "This host will remove the account credentials and pause the account.",
+                  ),
+                  copy("Bağlantıyı kes", "Disconnect"),
+                  () => action.mutate(request("accounts.disconnect", { accountId: account.id })),
+                ),
+            },
+          ]}
+        />
+      </Row>
+      <Body style={uiStyles.title}>{account.name}</Body>
+      {!account.connected && account.connection !== "browser" && (
+        <Row>
           <Button
             label={copy("OAuth ile bağla", "Connect with OAuth")}
+            tone="primary"
             busy={connection.isPending}
             disabled={busy}
             onPress={() => {
@@ -61,43 +88,23 @@ export function AccountCard({ account, state, projectId }: AccountCardProps) {
               });
             }}
           />
-        )}
-        {account.connection === "browser" && !account.connected && (
-          <Body muted>
-            {copy(
-              "X tarayıcı hesabını bilgisayardaki bycoda ile bağlayın.",
-              "Connect the X browser account in bycoda on the computer.",
-            )}
-          </Body>
-        )}
-        <Button
-          label={account.paused ? copy("Devam et", "Resume") : copy("Duraklat", "Pause")}
-          busy={action.isPending}
-          disabled={busy}
-          onPress={() =>
-            action.mutate(
-              request("accounts.pause", { accountId: account.id, paused: !account.paused }),
-            )
-          }
-        />
-        {account.connected && (
-          <Button
-            label={copy("Bağlantıyı kes", "Disconnect")}
-            disabled={busy}
-            onPress={() =>
-              confirmAction(
-                copy("Hesap bağlantısını kes", "Disconnect account"),
-                copy(
-                  "Bu host hesabın erişim bilgilerini kaldıracak ve hesap duraklatılacak.",
-                  "This host will remove the account credentials and pause the account.",
-                ),
-                copy("Bağlantıyı kes", "Disconnect"),
-                () => action.mutate(request("accounts.disconnect", { accountId: account.id })),
-              )
-            }
-          />
-        )}
-      </Row>
+        </Row>
+      )}
+      {account.connection === "browser" && !account.connected && (
+        <Body muted style={uiStyles.caption}>
+          {copy(
+            "X tarayıcı hesabını bilgisayardaki bycoda ile bağlayın.",
+            "Connect the X browser account in bycoda on the computer.",
+          )}
+        </Body>
+      )}
+      <Disclosure label={copy("Yetenekler", "Capabilities")}>
+        <Body muted style={uiStyles.caption}>
+          {state.capabilities[account.id]
+            ?.map((capability) => `${socialLabel(capability.operation, copy)}: ${socialLabel(capability.status, copy)}`)
+            .join(" · ")}
+        </Body>
+      </Disclosure>
       {oauth.data?.candidates?.map((candidate) => (
         <Button
           key={candidate.id}

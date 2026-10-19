@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -35,6 +36,7 @@ export function ScopedFilePreview({
   context: MessageContext;
   onClose: () => void;
 }) {
+  useMobileTheme();
   const copy = useCopy();
   const resolved = resolveMediaPath(context, path);
   const binary =

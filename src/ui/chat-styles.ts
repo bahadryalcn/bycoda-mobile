@@ -1,4 +1,4 @@
-import { StyleSheet } from "react-native";
+import { createThemedStyles } from "./themed-styles";
 import { colors, monoFont } from "./tokens";
 import type { ChatTextSize } from "@/state/chat-appearance-model";
 
@@ -36,7 +36,7 @@ const sizes = {
 } as const;
 
 function createTextStyles(size: (typeof sizes)[ChatTextSize]) {
-  return StyleSheet.create({
+  return createThemedStyles(() => ({
     assistant: { color: colors.text, fontSize: size.assistant, lineHeight: size.line },
     user: { color: colors.text, fontSize: size.user, lineHeight: size.userLine },
     code: {
@@ -53,7 +53,7 @@ function createTextStyles(size: (typeof sizes)[ChatTextSize]) {
     },
     author: { fontSize: 12, lineHeight: 16, fontWeight: "600" },
     metadata: { color: colors.muted, fontSize: 12, lineHeight: 16 },
-  });
+  }));
 }
 
 const presets = {

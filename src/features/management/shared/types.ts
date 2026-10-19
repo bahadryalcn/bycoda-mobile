@@ -9,6 +9,7 @@ export type AgentFieldsProps = {
   projectId?: string | null;
   disabled?: boolean;
   onValidityChange?: (valid: boolean) => void;
+  showRunLimit?: boolean;
 };
 export type ScopeProps = { allowAll?: boolean };
 export type ScopeChooser = { search: string } | null;

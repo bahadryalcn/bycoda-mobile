@@ -1,0 +1,227 @@
+diff --git a/lib/module/components/checkbox/index.js b/lib/module/components/checkbox/index.js
+index 2610309f8b08ce22b107bd6eb448a8f68cd60ecc..fb8fce44f210efdff0d5c703e61b9899e6bb3209 100644
+--- a/lib/module/components/checkbox/index.js
++++ b/lib/module/components/checkbox/index.js
+@@ -161,6 +161,8 @@ export const Checkbox = /*#__PURE__*/forwardRef(({
+       checked: indeterminate ? 'mixed' : checked,
+       disabled: !!disabled
+     },
++    "aria-checked": indeterminate ? 'mixed' : checked,
++    "aria-disabled": !!disabled,
+     accessibilityLabel: label,
+     accessibilityHint: description,
+     disabled: disabled
+diff --git a/lib/module/components/progress/index.js b/lib/module/components/progress/index.js
+index 5f6eddac5da1844b7cfbef256e6c957e13b0eef3..fcdbdd230e6ebf1b2db864e410f231bc00b0835b 100644
+--- a/lib/module/components/progress/index.js
++++ b/lib/module/components/progress/index.js
+@@ -245,6 +245,11 @@ export const Progress = /*#__PURE__*/forwardRef(({
+     accessibilityState: {
+       busy: indeterminate
+     },
++    "aria-busy": indeterminate,
++    "aria-valuemin": indeterminate ? undefined : minValue,
++    "aria-valuemax": indeterminate ? undefined : maxValue,
++    "aria-valuenow": indeterminate ? undefined : clamp(value, minValue, maxValue),
++    "aria-valuetext": indeterminate ? undefined : spoken,
+     accessibilityValue: indeterminate ? undefined : {
+       min: minValue,
+       max: maxValue,
+diff --git a/lib/module/components/radio-group/index.js b/lib/module/components/radio-group/index.js
+index 2114dc05ef1eafd8157e71469206c62f869f3936..1609896ef53b587d3492d1f4c3604b50722a1c83 100644
+--- a/lib/module/components/radio-group/index.js
++++ b/lib/module/components/radio-group/index.js
+@@ -246,8 +246,10 @@ const RadioGroupItem = /*#__PURE__*/forwardRef(({
+   return /*#__PURE__*/_jsx(Pressable, {
+     ref: ref,
+     accessibilityRole: "radio",
++    "aria-checked": selected,
++    "aria-disabled": !!disabled,
+     accessibilityState: {
+-      selected,
++      checked: selected,
+       disabled: !!disabled
+     },
+     accessibilityLabel: label,
+diff --git a/lib/module/components/slider/index.js b/lib/module/components/slider/index.js
+index 7748138bdcf9a2532b3524807755e702e036ce56..af8bd60cce8d8d849e47c9f3835a6c40e6ef4bbe 100644
+--- a/lib/module/components/slider/index.js
++++ b/lib/module/components/slider/index.js
+@@ -535,6 +535,11 @@ export const Slider = /*#__PURE__*/forwardRef(({
+           accessible: true,
+           accessibilityRole: "adjustable",
+           accessibilityLabel: label ? `${label}, minimum` : 'Minimum',
++          "aria-disabled": disabled,
++          "aria-valuemin": min,
++          "aria-valuemax": Math.round(high),
++          "aria-valuenow": Math.round(low),
++          "aria-valuetext": print(low),
+           accessibilityState: {
+             disabled
+           },
+@@ -566,6 +571,11 @@ export const Slider = /*#__PURE__*/forwardRef(({
+           accessible: true,
+           accessibilityRole: "adjustable",
+           accessibilityLabel: isRange ? label ? `${label}, maximum` : 'Maximum' : label,
++          "aria-disabled": disabled,
++          "aria-valuemin": isRange ? Math.round(low) : min,
++          "aria-valuemax": max,
++          "aria-valuenow": Math.round(isRange ? high : value),
++          "aria-valuetext": isRange ? print(high) : shownValue,
+           accessibilityState: {
+             disabled
+           },
+diff --git a/lib/module/components/switch/index.js b/lib/module/components/switch/index.js
+index 4f2f85c9a6ca93d9b71ca4f68bb2cf928c4d2e8e..80e005a8d98420176c2d1e0e49fd57bf76f06a8e 100644
+--- a/lib/module/components/switch/index.js
++++ b/lib/module/components/switch/index.js
+@@ -195,6 +195,8 @@ export const Switch = /*#__PURE__*/forwardRef(({
+   return /*#__PURE__*/_jsx(Pressable, {
+     ref: ref,
+     accessibilityRole: "switch",
++      "aria-checked": value,
++      "aria-disabled": !!disabled,
+     accessibilityState: {
+       checked: value,
+       disabled: !!disabled
+diff --git a/lib/module/components/tabs/index.js b/lib/module/components/tabs/index.js
+index 31e9b80fc728160ef438a6b6ae82857c670a7e41..25a6a042598e5bd4b92bc48cbdd23ade04e8d1f7 100644
+--- a/lib/module/components/tabs/index.js
++++ b/lib/module/components/tabs/index.js
+@@ -948,6 +948,7 @@ function TabsTrigger({
+   }
+   return /*#__PURE__*/_jsxs(Pressable, {
+     accessibilityRole: "tab",
++      "aria-selected": active,
+     accessibilityState: {
+       selected: active,
+       disabled
+@@ -1033,6 +1034,7 @@ function ExpandingTrigger({
+   }));
+   return /*#__PURE__*/_jsxs(Pressable, {
+     accessibilityRole: "tab",
++      "aria-selected": active,
+     accessibilityState: {
+       selected: active,
+       disabled
+diff --git a/package.json b/package.json
+index ea75d8488bdde684cfd767a22de86aacf1dcdcd6..f51c25f832ab058b79805c17fc06a807a57e819e 100644
+--- a/package.json
++++ b/package.json
+@@ -42,6 +42,11 @@
+       "react-native": "./src/primitives/text.tsx",
+       "default": "./lib/module/primitives/text.js"
+     },
++    "./primitives/portal": {
++      "types": "./lib/typescript/src/primitives/portal.d.ts",
++      "react-native": "./src/primitives/portal.tsx",
++      "default": "./lib/module/primitives/portal.js"
++    },
+     "./primitives/animated-pressable": {
+       "types": "./lib/typescript/src/primitives/animated-pressable.d.ts",
+       "react-native": "./src/primitives/animated-pressable.tsx",
+diff --git a/src/components/checkbox/index.tsx b/src/components/checkbox/index.tsx
+index ebd74ced0f6bcb1b35c60969dcd364ab2028a6ac..c33affc7366ed8711cb746dc13a211b3e0b9c363 100644
+--- a/src/components/checkbox/index.tsx
++++ b/src/components/checkbox/index.tsx
+@@ -180,6 +180,8 @@ export const Checkbox = forwardRef<View, CheckboxProps>(
+           checked: indeterminate ? 'mixed' : checked,
+           disabled: !!disabled,
+         }}
++        aria-checked={indeterminate ? 'mixed' : checked}
++        aria-disabled={!!disabled}
+         accessibilityLabel={label}
+         accessibilityHint={description}
+         disabled={disabled}
+diff --git a/src/components/progress/index.tsx b/src/components/progress/index.tsx
+index a1dd8839c938134fc29b524e606f7c25e67e1766..f00e1022da3223e04900f2a2a2592286ec07eec2 100644
+--- a/src/components/progress/index.tsx
++++ b/src/components/progress/index.tsx
+@@ -308,6 +308,11 @@ export const Progress = forwardRef<View, ProgressProps>(
+         // Always a boolean, never `undefined`: Android ignores a state that
+         // goes missing, so a bar turning determinate would still read as busy.
+         accessibilityState={{ busy: indeterminate }}
++        aria-busy={indeterminate}
++        aria-valuemin={indeterminate ? undefined : minValue}
++        aria-valuemax={indeterminate ? undefined : maxValue}
++        aria-valuenow={indeterminate ? undefined : clamp(value, minValue, maxValue)}
++        aria-valuetext={indeterminate ? undefined : spoken}
+         accessibilityValue={
+           indeterminate
+             ? undefined
+diff --git a/src/components/radio-group/index.tsx b/src/components/radio-group/index.tsx
+index 924bae227b7bf3ab05f96a5c778db2d605278e90..2bbfad72a44aa2d4561b9b10fe9b67e81fedd9be 100644
+--- a/src/components/radio-group/index.tsx
++++ b/src/components/radio-group/index.tsx
+@@ -320,7 +320,9 @@ const RadioGroupItem = forwardRef<View, RadioGroupItemProps>(
+       <Pressable
+         ref={ref}
+         accessibilityRole="radio"
+-        accessibilityState={{ selected, disabled: !!disabled }}
++        accessibilityState={{ checked: selected, disabled: !!disabled }}
++        aria-checked={selected}
++        aria-disabled={!!disabled}
+         accessibilityLabel={label}
+         disabled={disabled}
+         onPress={() =>
+diff --git a/src/components/slider/index.tsx b/src/components/slider/index.tsx
+index 6972bd686fdd66ca93a92150ca770bf724078673..6f651330003b967f1dc5f0880019d8bde5a26d68 100644
+--- a/src/components/slider/index.tsx
++++ b/src/components/slider/index.tsx
+@@ -627,6 +627,11 @@ export const Slider = forwardRef<View, SliderProps>(
+                 accessibilityRole="adjustable"
+                 accessibilityLabel={label ? `${label}, minimum` : 'Minimum'}
+                 accessibilityState={{ disabled }}
++                aria-disabled={disabled}
++                aria-valuemin={min}
++                aria-valuemax={Math.round(high)}
++                aria-valuenow={Math.round(low)}
++                aria-valuetext={print(low)}
+                 accessibilityValue={{
+                   min,
+                   max: Math.round(high),
+@@ -652,6 +657,11 @@ export const Slider = forwardRef<View, SliderProps>(
+                 isRange ? (label ? `${label}, maximum` : 'Maximum') : label
+               }
+               accessibilityState={{ disabled }}
++              aria-disabled={disabled}
++              aria-valuemin={isRange ? Math.round(low) : min}
++              aria-valuemax={max}
++              aria-valuenow={Math.round(isRange ? high : value)}
++              aria-valuetext={isRange ? print(high) : shownValue}
+               accessibilityValue={{
+                 min: isRange ? Math.round(low) : min,
+                 max,
+diff --git a/src/components/switch/index.tsx b/src/components/switch/index.tsx
+index f745b1e2b189c57e585e251d586920a3717009be..0ebdd0ec21bb3b7ae01abdc3b8042634aba615a9 100644
+--- a/src/components/switch/index.tsx
++++ b/src/components/switch/index.tsx
+@@ -177,6 +177,8 @@ export const Switch = forwardRef<View, SwitchProps>(
+         ref={ref}
+         accessibilityRole="switch"
+         accessibilityState={{ checked: value, disabled: !!disabled }}
++        aria-checked={value}
++        aria-disabled={!!disabled}
+         accessibilityLabel={accessibilityLabel ?? label}
+         accessibilityHint={accessibilityHint}
+         accessibilityLabelledBy={
+diff --git a/src/components/tabs/index.tsx b/src/components/tabs/index.tsx
+index 858f513305c93790ad6bc61c76d69f19b23a8d5a..3f1c6c5ad45d31b98bee18be5ecbe92face3514d 100644
+--- a/src/components/tabs/index.tsx
++++ b/src/components/tabs/index.tsx
+@@ -1005,6 +1005,7 @@ function TabsTrigger({
+     <Pressable
+       accessibilityRole="tab"
+       accessibilityState={{ selected: active, disabled }}
++      aria-selected={active}
+       disabled={disabled}
+       onPress={() => context.setValue(value)}
+       onLayout={handleLayout}
+@@ -1104,6 +1105,7 @@ function ExpandingTrigger({
+     <Pressable
+       accessibilityRole="tab"
+       accessibilityState={{ selected: active, disabled }}
++      aria-selected={active}
+       // The label may be closed to nothing, and a tab announced as an unlabelled
+       // icon is a tab nobody can choose.
+       accessibilityLabel={typeof children === 'string' ? children : undefined}

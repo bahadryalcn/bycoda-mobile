@@ -14,6 +14,7 @@ import { readonlyRequest } from "./request-policy";
 import { RemoteHostError } from "./host-error";
 import { nativeHostFetch } from "./native-fetch";
 import { encryptedLanFetch } from "./lan-fetch";
+import { boundedResponseText } from "./response-body";
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 
@@ -67,29 +68,20 @@ export class HostTransport {
         "Connect this computer before sending requests.",
       );
     const read = readonlyRequest(method, params);
+    const waiting =
+      ["sessions.sync", "machine.changes"].includes(method) && typeof params.waitMs === "number"
+        ? Math.max(0, params.waitMs) + 5_000
+        : 0;
+    const requestedTimeout = options.timeoutMs ?? Math.max(DEFAULT_TIMEOUT_MS, waiting);
+    const timeout = Number.isFinite(requestedTimeout)
+      ? Math.min(180_000, Math.max(1_000, requestedTimeout))
+      : DEFAULT_TIMEOUT_MS;
+    const deadline = Date.now() + timeout;
     const attempts = read && options.retry !== false ? 2 : 1;
     for (let attempt = 0; attempt < attempts; attempt++) {
       try {
         this.requireAccess();
-        // Re-read on a read retry: lock/revocation/removal can happen after the first attempt.
-        let credential: string | null;
-        try {
-          credential = await this.readCredential();
-        } catch {
-          throw new RemoteHostError(
-            this.machine.id,
-            "auth",
-            "The saved device credential could not be read. Unlock the app or pair this computer again.",
-          );
-        }
-        this.requireAccess();
-        if (!credential || !/^[A-Za-z0-9_-]{43}$/.test(credential))
-          throw new RemoteHostError(
-            this.machine.id,
-            "auth",
-            "Pair this computer with a valid bycoda device credential.",
-          );
-        const result = await this.perform<T>(method, params, credential, read, options);
+        const result = await this.perform<T>(method, params, read, options, deadline);
         this.requireAccess(!read);
         if (method === "environment.describe") {
           let descriptor: HostDescriptor;
@@ -115,7 +107,7 @@ export class HostTransport {
           !(error instanceof RemoteHostError) ||
           attempt + 1 >= attempts ||
           !["network", "timeout"].includes(error.kind) ||
-          options.signal?.aborted
+          options.signal?.aborted || Date.now() >= deadline
         )
           throw error;
       }
@@ -126,31 +118,39 @@ export class HostTransport {
   private async perform<T>(
     method: string,
     params: Record<string, unknown>,
-    credential: string,
     read: boolean,
     options: RemoteRequestOptions,
+    deadline: number,
   ): Promise<T> {
     const controller = new AbortController();
     const abort = () => controller.abort();
     options.signal?.addEventListener("abort", abort, { once: true });
     if (options.signal?.aborted) controller.abort();
-    const waiting =
-      ["sessions.sync", "machine.changes"].includes(method) && typeof params.waitMs === "number"
-        ? Math.max(0, params.waitMs) + 5_000
-        : 0;
-    const requestedTimeout = options.timeoutMs ?? Math.max(DEFAULT_TIMEOUT_MS, waiting);
-    const timeout = Number.isFinite(requestedTimeout)
-      ? Math.min(180_000, Math.max(1_000, requestedTimeout))
-      : DEFAULT_TIMEOUT_MS;
     let timedOut = false;
     let started = false;
+    let credential: string | null = null;
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, timeout);
+    }, Math.max(0, deadline - Date.now()));
     try {
       if (controller.signal.aborted)
         throw new RemoteHostError(this.machine.id, "aborted", "Request cancelled.");
+      // SecureStore is part of the request deadline, even if its native promise stalls.
+      credential = await new Promise<string | null>((resolve, reject) => {
+        const cancel = () => {
+          controller.signal.removeEventListener("abort", cancel);
+          reject(new Error("Request cancelled."));
+        };
+        controller.signal.addEventListener("abort", cancel, { once: true });
+        Promise.resolve().then(() => this.readCredential()).then(resolve, () => reject(
+          new RemoteHostError(this.machine.id, "auth", "The saved device credential could not be read. Unlock the app or pair this computer again."),
+        )).finally(() => controller.signal.removeEventListener("abort", cancel));
+      });
+      if (controller.signal.aborted) throw new Error("Request cancelled.");
+      this.requireAccess();
+      if (!credential || !/^[A-Za-z0-9_-]{43}$/.test(credential))
+        throw new RemoteHostError(this.machine.id, "auth", "Pair this computer with a valid bycoda device credential.");
       const payload = JSON.stringify({
         version: HOST_PROTOCOL_VERSION,
         environmentId: this.machine.environmentId || undefined,
@@ -191,22 +191,10 @@ export class HostTransport {
           "auth",
           "This device credential is invalid or revoked. Pair the computer again.",
         );
-      const length = Number(response.headers.get("content-length"));
-      if (length > MAX_RESPONSE_BYTES)
-        throw new RemoteHostError(
-          this.machine.id,
-          "protocol",
-          "The host response exceeds the transfer limit.",
-          !read,
-        );
-      const raw = await response.text();
-      if (utf8Bytes(raw) > MAX_RESPONSE_BYTES)
-        throw new RemoteHostError(
-          this.machine.id,
-          "protocol",
-          "The host response exceeds the transfer limit.",
-          !read,
-        );
+      const raw = await boundedResponseText(response, MAX_RESPONSE_BYTES, () => {
+        controller.abort();
+        return new RemoteHostError(this.machine.id, "protocol", "The host response exceeds the transfer limit.", !read);
+      });
       let value: unknown;
       try {
         value = JSON.parse(raw);

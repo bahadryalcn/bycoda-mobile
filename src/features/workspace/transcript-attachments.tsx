@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { mediaQueryKey, visibleMediaData } from "@/ui/media-policy";
 import { useState } from "react";
 import { View } from "react-native";
@@ -13,7 +14,7 @@ import { useCopy } from "@/ui/copy";
 import { colors, space } from "@/ui/tokens";
 import type { Block } from "./wire";
 
-function AttachmentFile({
+export function AttachmentFile({
   id,
   name,
   size,
@@ -28,6 +29,7 @@ function AttachmentFile({
   image: boolean;
   context: MessageContext;
 }) {
+  useMobileTheme();
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   const query = useQuery({
@@ -95,6 +97,7 @@ export function TranscriptAttachments({
   block: Block;
   context?: MessageContext;
 }) {
+  useMobileTheme();
   if (!context || (!block.image && !block.attachments?.length)) return null;
   return (
     <View style={{ gap: space.xs }}>
@@ -103,6 +106,7 @@ export function TranscriptAttachments({
           id={block.id}
           name={block.image.name}
           image
+          size={block.image.size}
           mimeType={block.image.mimeType}
           context={context}
         />

@@ -1,4 +1,6 @@
+import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
+import Animated from "react-native-reanimated";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
@@ -13,75 +15,101 @@ import {
   PressableCard,
   Row,
 } from "@/ui/primitives";
-import { colors, metrics, radii, space, fontSize } from "@/ui/tokens";
+import { enterItem } from "@/ui/motion";
+import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
+import { IconTile } from "@/ui/icon-tile";
 import { workspaceStyles } from "./shared";
 import type {
   GitActionFeedbackProps,
   GitConflictsPanelProps,
   GitHeaderProps,
   GitOperationPanelProps,
-  GitSummaryProps,
 } from "./git-types";
 
+/** Branch, sync state and the primary commit/sync entry share one compact summary card. */
 export function GitHeader({
   index,
   refreshing,
   onRefresh,
   onToggleBranches,
+  onOpenActions,
   busy,
-}: GitHeaderProps) {
+}: GitHeaderProps & { onOpenActions: () => void }) {
+  useMobileTheme();
   const copy = useCopy();
   return (
-    <View style={{ gap: space.sm }}>
-      <Row style={{ justifyContent: "space-between" }}>
-        <Heading>{copy("Git", "Git")}</Heading>
-        <Body muted numberOfLines={1} style={[uiStyles.caption, { maxWidth: "65%" }]}>
-          {index.remote || copy("Çalışma klasörü", "Working folder")}
-        </Body>
-      </Row>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-        <PressableCard
-          label={copy("Dallar", "Branches")}
-          onPress={onToggleBranches}
-          disabled={busy}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: space.sm,
-            minHeight: metrics.selectionHeight,
-            paddingHorizontal: space.md,
-            backgroundColor: colors.panel,
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: radii.control,
-            paddingVertical: space.sm,
-          }}
-        >
-          <GitBranch size={17} color={colors.accent} />
-          <Body
-            selectable={false}
-            numberOfLines={1}
-            ellipsizeMode="middle"
-            style={[uiStyles.grow, { fontSize: fontSize.small, lineHeight: 18, fontWeight: "600" }]}
+    <Animated.View entering={enterItem(0)}>
+      <Card>
+        <Row style={{ flexWrap: "nowrap" }}>
+          <PressableCard
+            label={copy("Dallar", "Branches")}
+            onPress={onToggleBranches}
+            disabled={busy}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space.row,
+              padding: 0,
+              borderWidth: 0,
+              borderTopStartRadius: 0,
+              borderTopEndRadius: 0,
+              borderBottomStartRadius: 0,
+              borderBottomEndRadius: 0,
+              backgroundColor: colors.panel,
+            }}
           >
-            {index.branch || copy("Git", "Git")}
-          </Body>
-          <ChevronDown size={15} color={colors.muted} />
-        </PressableCard>
-        <IconButton
-          label={copy("Yenile", "Refresh")}
-          onPress={onRefresh}
-          busy={refreshing}
+            <IconTile color={colors.accent}>
+              <GitBranch size={18} strokeWidth={2} color={colors.accent} />
+            </IconTile>
+            <View style={[uiStyles.grow, { gap: 2 }]}>
+              <Body numberOfLines={1} ellipsizeMode="middle" style={uiStyles.title}>
+                {index.branch || copy("Git", "Git")}
+              </Body>
+              <Body muted numberOfLines={1} ellipsizeMode="middle" style={uiStyles.caption}>
+                {index.remote || copy("Çalışma klasörü", "Working folder")}
+              </Body>
+            </View>
+            <ChevronDown size={15} color={colors.tertiary} />
+          </PressableCard>
+          <IconButton
+            label={copy("Yenile", "Refresh")}
+            onPress={onRefresh}
+            busy={refreshing}
+            disabled={busy}
+          >
+            <RefreshCw size={18} color={colors.muted} />
+          </IconButton>
+        </Row>
+        <GitSyncBadges index={index} />
+        <Button
+          label={copy("Commit ve eşitleme", "Commit and sync")}
+          tone="primary"
+          density="compact"
           disabled={busy}
-        >
-          <RefreshCw size={18} color={colors.muted} />
-        </IconButton>
-      </View>
-    </View>
+          onPress={onOpenActions}
+          style={{ alignSelf: "flex-start" }}
+        />
+      </Card>
+    </Animated.View>
+  );
+}
+
+function GitSyncBadges({ index }: { index: GitHeaderProps["index"] }) {
+  useMobileTheme();
+  const copy = useCopy();
+  if (!index.files.length && !index.ahead && !index.behind) return null;
+  return (
+    <Row style={{ gap: space.xs }}>
+      <Badge label={copy("{p0} dosya", "{p0} files", { p0: index.files.length })} />
+      {index.ahead ? <Badge label={`↑ ${index.ahead}`} tone="info" /> : null}
+      {index.behind ? <Badge label={`↓ ${index.behind}`} tone="warning" /> : null}
+      {index.additions ? <Badge label={`+${index.additions}`} tone="success" /> : null}
+      {index.deletions ? <Badge label={`−${index.deletions}`} tone="danger" /> : null}
+    </Row>
   );
 }
 
@@ -91,6 +119,7 @@ export function GitActionFeedback({
   createBranch,
   switchBranch,
 }: GitActionFeedbackProps) {
+  useMobileTheme();
   const copy = useCopy();
   return (
     <>
@@ -114,23 +143,6 @@ export function GitActionFeedback({
   );
 }
 
-export function GitSummary({ index }: GitSummaryProps) {
-  const copy = useCopy();
-  if (!index.files.length && !index.ahead && !index.behind) return null;
-  return (
-    <Row style={{ gap: space.sm }}>
-      <Body muted style={uiStyles.caption}>
-        {copy("{p0} dosya", "{p0} files", { p0: index.files.length })}
-      </Body>
-      {index.ahead || index.behind ? (
-        <Body muted style={uiStyles.caption}>{`${index.ahead} ↑ · ${index.behind} ↓`}</Body>
-      ) : null}
-      {index.additions ? <Badge label={`+${index.additions}`} tone="success" /> : null}
-      {index.deletions ? <Badge label={`−${index.deletions}`} tone="danger" /> : null}
-    </Row>
-  );
-}
-
 export function GitOperationPanel({
   operation,
   hasConflicts,
@@ -138,6 +150,7 @@ export function GitOperationPanel({
   onChoose,
   children,
 }: GitOperationPanelProps) {
+  useMobileTheme();
   const copy = useCopy();
   return (
     <Card>
@@ -175,6 +188,7 @@ export function GitConflictsPanel({
   onChoose,
   children,
 }: GitConflictsPanelProps) {
+  useMobileTheme();
   const copy = useCopy();
   return (
     <Card>

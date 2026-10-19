@@ -1,4 +1,5 @@
-/** Full gluestack catalog for UI-layer composition. Features use product facades. */
+/** Product facades and complete PanelUI catalog. Legacy parts remain during adapter migration. */
+export * as PanelUI from "./panelui";
 export * from "./primitives";
 export * from "./chat";
 export * as AccordionParts from "./gluestack/accordion";

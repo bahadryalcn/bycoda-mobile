@@ -1,41 +1,35 @@
+import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { haptic, usePressMotion } from "./motion";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Laptop from "lucide-react-native/icons/laptop";
-import MessageSquare from "lucide-react-native/icons/message-square";
+import ChevronDown from "lucide-react-native/icons/chevron-down";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { FadeOut, ReduceMotion } from "react-native-reanimated";
 import { notifyManager, useQueryClient } from "@tanstack/react-query";
 import { useNetInfo } from "@react-native-community/netinfo";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useActiveMachine, useMachines } from "../state/machines";
 import { useHostClient, useHostQuery } from "../state/queries";
 import { useSecurity } from "../state/security";
 import type { HostDescriptor } from "../remote/types";
-import { colors, metrics, motion, opacity, radii, semanticColors, space } from "./tokens";
+import { colors, radii, semanticColors, space } from "./tokens";
 import { uiStyles } from "./styles";
-import { IconButton } from "./primitives";
+import { Body } from "./primitives";
 import { useCopy } from "./copy";
 import { connectionPhase } from "./connection-presentation";
-import { useProjectActivity } from "../features/workspace/use-project-activity";
-import { Menu, MenuItem, MenuItemLabel } from "./gluestack/menu";
-import { reveal } from "./motion";
+import { Menu } from "panelui-native/components/menu";
+import { Spinner } from "panelui-native/components/spinner";
 
-const dismissMenu = FadeOut.duration(motion.press).reduceMotion(ReduceMotion.System);
-
-export function MachineBar() {
-  const insets = useSafeAreaInsets();
+/** Connection state for the active computer; mounting it also keeps the descriptor fresh. */
+function useMachineStatus() {
   const machine = useActiveMachine();
   const copy = useCopy();
   const network = useNetInfo();
   const cache = useQueryClient();
   const client = useHostClient();
   const unlocked = useSecurity((state) => state.status === "unlocked");
-  const activity = useProjectActivity();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
-  useEffect(closeMenu, [machine?.id, closeMenu]);
   const subscribe = useCallback(
     (callback: () => void) => cache.getQueryCache().subscribe(notifyManager.batchCalls(callback)),
     [cache],
@@ -92,134 +86,141 @@ export function MachineBar() {
           : phase === "permission" || phase === "locked"
             ? semanticColors.warning.text
             : colors.muted;
+  return { machine, copy, health, successAt, unlocked, status, statusColor };
+}
+
+/** Headless owner of the periodic connection check while the tab shell is mounted. */
+export function MachineHealthMonitor() {
+  useMachineStatus();
+  return null;
+}
+
+/** Compact computer switcher shown beside large titles: status dot, name and a menu. */
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+export function MachinePill() {
+  useMobileTheme();
+  const { machine, copy, health, successAt, unlocked, status, statusColor } = useMachineStatus();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  useEffect(closeMenu, [machine?.id, closeMenu]);
+  useEffect(() => {
+    if (!unlocked) closeMenu();
+  }, [unlocked, closeMenu]);
+  const press = usePressMotion(0.95);
+  const name = machine?.name ?? copy("Bilgisayar bağla", "Connect a computer");
   return (
-    <View
-      style={{
-        flexDirection: "row",
-        backgroundColor: colors.background,
-        paddingStart: Math.max(space.sm, insets.left),
-        paddingEnd: Math.max(space.sm, insets.right),
-        alignItems: "center",
-        gap: space.sm,
-      }}
-    >
-      <Menu
-        isOpen={menuOpen}
-        onOpen={() => setMenuOpen(true)}
-        onClose={closeMenu}
-        placement="bottom left"
-        offset={space.xs}
-        entering={reveal}
-        exiting={dismissMenu}
-        className="rounded-card bg-panel border-separator p-ui-xs"
-        style={{ width: 280, maxWidth: "100%" }}
-        trigger={(triggerProps) => (
-          <Pressable
-            {...triggerProps}
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <Menu open={menuOpen && unlocked} onOpenChange={(next) => setMenuOpen(unlocked && next)}>
+        <Menu.Trigger>
+          <AnimatedPressable
             accessibilityRole="button"
-            accessibilityLabel={copy("Bilgisayar seç", "Choose computer")}
-            accessibilityState={{ expanded: menuOpen }}
-            style={({ pressed }) => ({
-              width: metrics.touchTarget,
-              height: metrics.touchTarget,
-              borderRadius: radii.control,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: menuOpen ? colors.selected : "transparent",
-              opacity: pressed ? opacity.pressed : 1,
-            })}
+            accessibilityLabel={[name, machine ? status : undefined, copy("Bilgisayar seç", "Choose computer")]
+              .filter(Boolean)
+              .join(". ")}
+            accessibilityState={{ expanded: menuOpen && unlocked }}
+            aria-expanded={menuOpen && unlocked}
+            onPressIn={press.onPressIn}
+            onPressOut={press.onPressOut}
+            onPress={() => haptic.select()}
+            hitSlop={6}
+            style={[
+              {
+                flexDirection: "row",
+                alignItems: "center",
+                gap: space.sm,
+                minHeight: 36,
+                paddingStart: space.md,
+                paddingEnd: space.sm,
+                borderRadius: radii.pill,
+                backgroundColor: colors.fill,
+                maxWidth: 240,
+              },
+              press.animatedStyle,
+            ]}
           >
-            <Laptop size={21} strokeWidth={1.6} color={menuOpen ? colors.accent : colors.muted} />
-          </Pressable>
-        )}
-      >
-        <MenuItem
-          key="computer"
-          textValue={[machine?.name, status, copy("Bilgisayar seç", "Choose computer")]
-            .filter(Boolean)
-            .join(". ")}
-          onPress={() => {
-            closeMenu();
-            router.push("/machines");
-          }}
-          className="gap-ui-sm"
-        >
-          <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
-            <MenuItemLabel style={uiStyles.buttonLabel}>
-              {machine?.name ?? copy("Bilgisayar bağla", "Connect a computer")}
-            </MenuItemLabel>
             {machine ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                {health.isFetching && !successAt ? (
-                  <ActivityIndicator size="small" color={statusColor} />
-                ) : (
-                  <View
-                    style={{
-                      width: 5,
-                      height: 5,
-                      borderRadius: radii.badge,
-                      backgroundColor: statusColor,
-                    }}
-                  />
-                )}
-                <Text style={[uiStyles.caption, { flex: 1, color: statusColor }]}>{status}</Text>
-              </View>
-            ) : null}
-          </View>
-          <ChevronRight size={16} color={colors.muted} />
-        </MenuItem>
-        {machine && health.error ? (
-          <MenuItem
-            key="retry"
-            textValue={copy("Bağlantıyı yeniden dene", "Retry connection")}
+              health.isFetching && !successAt ? (
+                <Spinner size="sm" color={statusColor} />
+              ) : (
+                <View
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: radii.pill,
+                    backgroundColor: statusColor,
+                  }}
+                />
+              )
+            ) : (
+              <Laptop size={15} strokeWidth={2} color={colors.muted} />
+            )}
+            <Text numberOfLines={1} style={[uiStyles.caption, { color: colors.text, fontWeight: "600", flexShrink: 1 }]}>
+              {name}
+            </Text>
+            <ChevronDown size={14} strokeWidth={2.6} color={colors.muted} />
+          </AnimatedPressable>
+        </Menu.Trigger>
+        <Menu.Content
+          placement="bottom"
+          align="start"
+          offset={space.xs}
+          width={280}
+          className="rounded-card bg-popover border-0 p-ui-xs shadow-lg"
+        >
+          <Menu.Item
+            key="computer"
+            accessibilityLabel={[machine?.name, status, copy("Bilgisayar seç", "Choose computer")]
+              .filter(Boolean)
+              .join(". ")}
             onPress={() => {
               closeMenu();
-              void health.refetch();
+              router.push("/machines");
             }}
             className="gap-ui-sm"
+            trailing={<ChevronRight size={16} color={colors.muted} />}
           >
-            <RefreshCw size={17} color={colors.muted} />
-            <MenuItemLabel style={[uiStyles.caption, { flex: 1 }]}>
-              {copy("Bağlantıyı yeniden dene", "Retry connection")}
-            </MenuItemLabel>
-          </MenuItem>
-        ) : null}
-      </Menu>
-      <View style={{ flex: 1 }} />
-      {machine ? (
-        <IconButton
-          label={
-            activity.complete
-              ? copy("Aktif oturumlar: {p0}", "Active sessions: {p0}", {
-                  p0: activity.sessions.length,
-                })
-              : copy("Aktif oturumlar", "Active sessions")
-          }
-          onPress={() => router.push("/sessions")}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-            <MessageSquare
-              size={17}
-              color={activity.sessions.length ? colors.live : colors.muted}
-            />
-            <Text
-              style={[
-                uiStyles.buttonLabel,
-                {
-                  color: activity.sessions.length ? colors.live : colors.muted,
-                  fontVariant: ["tabular-nums"],
-                },
-              ]}
+            <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
+              <Body style={uiStyles.buttonLabel}>
+                {machine?.name ?? copy("Bilgisayar bağla", "Connect a computer")}
+              </Body>
+              {machine ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                  {health.isFetching && !successAt ? (
+                    <Spinner size="sm" color={statusColor} />
+                  ) : (
+                    <View
+                      style={{
+                        width: 5,
+                        height: 5,
+                        borderRadius: radii.badge,
+                        backgroundColor: statusColor,
+                      }}
+                    />
+                  )}
+                  <Text style={[uiStyles.caption, { flex: 1, color: statusColor }]}>{status}</Text>
+                </View>
+              ) : null}
+            </View>
+          </Menu.Item>
+          {machine && health.error ? (
+            <Menu.Item
+              key="retry"
+              accessibilityLabel={copy("Bağlantıyı yeniden dene", "Retry connection")}
+              onPress={() => {
+                closeMenu();
+                void health.refetch();
+              }}
+              className="gap-ui-sm"
+              icon={<RefreshCw size={17} color={colors.muted} />}
             >
-              {activity.complete
-                ? activity.sessions.length > 99
-                  ? "99+"
-                  : activity.sessions.length
-                : "…"}
-            </Text>
-          </View>
-        </IconButton>
-      ) : null}
+              <Body style={[uiStyles.caption, { flex: 1 }]}>
+                {copy("Bağlantıyı yeniden dene", "Retry connection")}
+              </Body>
+            </Menu.Item>
+          ) : null}
+        </Menu.Content>
+      </Menu>
     </View>
   );
 }

@@ -21,6 +21,7 @@ import { TranscriptActions } from "./transcript-actions";
 import { SessionArtifacts } from "./session-artifacts";
 import { AgentAvatar } from "@/ui/agent-avatar";
 import { activityState } from "./transcript-model";
+import { useMobileTheme } from "@/ui/theme";
 
 export const TranscriptBlock = memo(function TranscriptBlock({
   block,
@@ -35,6 +36,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   responseText,
 }: TranscriptBlockProps) {
   const copy = useCopy();
+  useMobileTheme();
   const typography = chatTextStyles(useChatAppearance((state) => state.textSize));
   const [open, setOpen] = useState(false);
   const [actions, setActions] = useState(false);
@@ -312,38 +314,48 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           </Sheet>
         </View>
       ) : (
+        <View
+          style={{
+            alignSelf: value.role === "user" ? "flex-end" : "stretch",
+            maxWidth: value.role === "user" ? "85%" : "100%",
+            width: value.role === "user" ? undefined : "100%",
+            gap: space.xxs,
+          }}
+        >
         <ChatMessage
           role={
             value.role === "user" ? "user" : value.role === "assistant" ? "assistant" : "system"
           }
           style={{
-            alignSelf: value.role === "user" ? "flex-end" : "stretch",
-            maxWidth: value.role === "user" ? "90%" : "100%",
+            alignSelf: "stretch",
             backgroundColor:
               semantic?.surface ?? (value.role === "user" ? colors.userMessage : "transparent"),
             borderColor: semantic?.border ?? colors.separator,
             borderWidth: semantic ? 1 : 0,
-            padding: activityDetail ? 0 : value.role === "user" || semantic ? space.md : space.xs,
-            borderRadius: radii.card,
-            borderBottomEndRadius: value.role === "user" ? radii.control : radii.card,
+            paddingHorizontal:
+              activityDetail || (!semantic && value.role !== "user")
+                ? 0
+                : value.role === "user"
+                  ? space.lg
+                  : space.md,
+            paddingVertical:
+              activityDetail || (!semantic && value.role !== "user") ? 0 : value.role === "user" ? space.sm : space.md,
+            borderRadius: semantic || value.role === "user" ? radii.card : 0,
             gap: space.xs,
           }}
         >
+          {value.role !== "user" ? (
           <Row style={{ flexWrap: "nowrap", gap: space.sm, minHeight: 32 }}>
             {value.role === "assistant" ? (
               <AgentAvatar author={author} size={22} />
-            ) : value.role === "user" ? null : (
+            ) : (
               <Terminal size={15} color={semantic?.text ?? colors.muted} />
             )}
             <Body
               numberOfLines={1}
               style={[typography.author, uiStyles.grow, { color: semantic?.text ?? colors.muted }]}
             >
-              {value.role === "user"
-                ? copy("Sen", "You")
-                : value.role === "assistant"
-                  ? author || "bycoda"
-                  : label}
+              {value.role === "assistant" ? author || "bycoda" : label}
             </Body>
             {value.startedAt ? (
               <Body muted style={typography.metadata}>
@@ -362,6 +374,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
               </ChatAction>
             ) : null}
           </Row>
+          ) : null}
           {value.streaming ? (
             <Body style={[typography.metadata, { color: colors.live }]}>
               {copy("Yazıyor…", "Writing…")}
@@ -379,6 +392,27 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           {contents}
           {planAction}
         </ChatMessage>
+        {value.role === "user" && (value.startedAt || canAct) ? (
+          <Row style={{ justifyContent: "flex-end", flexWrap: "nowrap", gap: space.xxs }}>
+            {value.startedAt ? (
+              <Body muted style={typography.metadata}>
+                {new Date(value.startedAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Body>
+            ) : null}
+            {canAct ? (
+              <ChatAction
+                label={copy("Mesaj seçenekleri", "Message options")}
+                onPress={() => setActions(true)}
+              >
+                <Ellipsis size={16} color={colors.subtle} />
+              </ChatAction>
+            ) : null}
+          </Row>
+        ) : null}
+        </View>
       )}
       {actions ? (
         <TranscriptActions

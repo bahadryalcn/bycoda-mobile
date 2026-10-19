@@ -1,39 +1,111 @@
 # bycoda mobile UI
 
-The application uses UniWind 1.12 and the complete gluestack UI v5 UniWind source catalog. These are styling and interaction building blocks; the product facades own bycoda's presentation and behavior.
+See the [mobile design system](../../docs/reference/design-system.md) and
+[coding standards](../../docs/reference/coding-standards.md) for product rules.
+This README owns library integration details; the design guide owns screen and
+interaction rules.
 
-## Visual language
+Use the [UX quality contract](../../docs/reference/ux-quality.md) for layout and
+acceptance, and the [component adoption map](../../docs/reference/component-adoption.md)
+to select additional library structures. Catalog availability alone is not
+evidence that a screen is usable or a migration is complete.
 
-The mobile workbench uses a true-black canvas, graphite surfaces and an ice-blue action color. The canvas, native navigation, startup and system bars share the same black. Keep color meaningful: blue for the current destination or primary action, green for success, amber for attention and rose for failure. Every state also needs a readable label or icon.
+The native application uses **PanelUI Native 0.112.0**, Expo SDK 57, Uniwind 1.12,
+Tailwind 4, and Reanimated 4. PanelUI is an installed MIT dependency, rather than
+a visual reference. Its upstream license is retained in `vendor/panelui-native.LICENSE`.
+See the [upstream installation guide](https://panelui.dev/docs/installation).
 
-Use one screen heading, grouped navigation rows, and one prominent action per section. Native system sans is the reading face; semibold headings use a tighter scale, while paths and code use the existing platform monospace. Avoid repeated logos, nested cards and competing outlines. SearchField owns one surface and focus boundary. Primary actions use dark ink on blue; secondary actions use regular foreground ink.
+## One product API
 
-Tabs keep their labels and full touch area while NavigationIcon animates a small selection indicator. Navigation listens for system reduced-motion changes; selection, presses, disclosures and sheets use the shared motion timings. Retain native font scaling and let text wrap; do not shrink touch targets to make a screen denser.
+Screens import `ui/primitives`, `ui/chat`, or their focused shared modules.
+Button, IconButton, Input, Field, ToggleField, Card, typography, Badge, Alert,
+Spinner, Skeleton and SegmentedControl adapt real PanelUI components. These
+adapters retain application callbacks, native refs, accessibility labels,
+validation, loading protection and existing state ownership. Use the same
+adapters for new screens; do not create a second button or field system.
 
-## Single source of theme values
+The full upstream public API is exposed as `ui/panelui` and as the `PanelUI`
+namespace in `ui/library`. `catalog.ts` indexes all **140 installed component
+modules**, their roles, core bycoda use cases and optional capabilities.
+`catalog.test.ts` checks the inventory against the installed package. Shared UI
+implementations should import individual `panelui-native/components/...` modules
+when possible. Full catalog availability does not mean every component is shown
+in every product screen.
 
-`tokens.ts` is canonical. `scripts/build-ui-theme.mjs` generates `src/global.css` with Tailwind v4 semantic colors, typography, spacing and radii. Do not edit the generated CSS. `pnpm theme:build` refreshes it; `pnpm theme:check` catches drift. Metro compiles the CSS and generates `uniwind-types.d.ts`. The provider selects the existing dark bycoda theme.
+`vendor/patches/panelui-native@0.112.0.patch` exposes the existing public portal
+primitive without importing the full 140-component barrel in the provider. It
+also declares controlled `aria-selected` on both tab trigger variants,
+`aria-checked`/`aria-disabled` on Switch, Checkbox and RadioGroup items, and
+`aria-valuemin`/`aria-valuemax`/`aria-valuenow`/`aria-valuetext` on both Slider
+thumbs and Progress. Progress also declares `aria-busy` and clears its numeric
+range and value text while indeterminate. React Native Web 0.21 does not reflect
+the native composite state/value props on initial render. Native state/value props remain present, with radio
+selection represented by its correct `checked` state. The narrow pinned patch
+updates both source and compiled entry
+and keeps one upstream portal context. Remove each patch part when upstream
+exposes the portal subpath or declares the corresponding web state. The
+upstream MIT license is retained alongside the patch.
 
-Use named semantic utilities (`bg-panel`, `text-foreground`, `rounded-control`, `gap-ui-sm`) in UI components. Use the same tokens for native styles and dynamic values. `design-system.ts` centralizes control, field and surface variants. All regular controls retain 48dp targets; compact chat controls retain 48dp targets through hit slop. Motion respects the system's reduced-motion preference.
+The previous gluestack source remains under `ui/gluestack` as compatibility
+source. Its retained license belongs to that source, and its namespaces in
+`library.ts` are compatibility exports. Production screens and their shared
+provider do not import this runtime. The offline tour lazy-loads ComponentGallery
+only after the user selects Controls. Its interactive forms, attachments, chat,
+plan, table and timeline examples use focused PanelUI imports and the same product
+adapters. The searchable 140-module catalog provides category/priority filters,
+explicit preview coverage, individual import paths and upstream documentation.
+Optional native or service requirements remain visible; the tour does not connect
+to a host, configure a service or send messages. Do not import the full upstream
+barrel to render the gallery or add it to normal workspace startup.
 
-## Application API
+## Record and collection controls
 
-Features import individual facades from `ui/primitives`, `ui/chat` or their implementation module. They must not import gluestack sources directly. Existing screens use the customized Button, Input, FormControl, Switch, Badge, Alert, Card, Text, Heading, HStack, VStack, Tabs and Pressable underneath those facades. Loading and skeleton states use the same library.
+Focused facades also cover expandable records (`record-card.tsx`, backed by
+PanelUI Accordion), connected plan steps (`plan-steps.tsx`), draft-and-apply
+collection filters (`filter-sheet.tsx`), host-local wall-time selection
+(`time-field.tsx`, with searchable hour/minute choices inside the product Sheet),
+and a field with its adjacent action (`action-field.tsx`). Record bodies mount
+on first expansion and remain mounted on collapse. Critical feedback and
+frequent actions stay outside the collapsed body. These components reuse the
+existing theme, overlay, access and state owners. The lazy Data gallery includes
+interactive examples without host access.
 
-`library.ts` exposes every installed component group as a namespace for UI-layer composition. `catalog.ts` describes all 59 groups and their platform capabilities. `ComponentGallery` provides a synthetic interactive review surface for controls, validation, selection, loading, feedback, panels and ChatAI. It contains no real account/session data and is not linked into production navigation.
+## Light, dark and system appearance
 
-Create reusable product components in `src/ui/`, define their public props, and compose the local gluestack parts there. Keep business state, host RPC and permissions in the owning feature. Import individual groups rather than the full catalog in product screens.
+`tokens.ts` owns the light/dark native palettes, semantic states, typography,
+spacing, shape and motion. `scripts/build-ui-theme.mjs` generates `src/global.css`
+from those tokens, imports the upstream PanelUI theme, and overrides its semantic
+roles in both modes. `pnpm theme:build` regenerates CSS; `pnpm theme:check` verifies
+it. Do not edit the generated CSS.
 
-## ChatAI integration
+`MobileThemeController` applies the persisted system/light/dark preference before
+the private workspace is available, including on the initial lock screen.
+`useMobileTheme()` subscribes renderers using native inline colors. Use
+`createThemedStyles(() => ({ ... }))` for reusable native style sets: it caches
+styles per mode and resolves the current palette when read. Do not capture color
+values in module-level objects or `StyleSheet.create`. A theme change updates
+existing screens without remounting them or clearing drafts and form state.
 
-ChatMessage, ChatConversation and ChatComposerSurface are customized gluestack ChatAI parts used by the production transcript and composer. They preserve the existing virtualized transcript, anchoring, keyboard behavior, persisted drafts, uploads, receipts, approvals and host transport. ChatAI does not make automatic provider requests or pick/upload files itself.
+The dark theme uses black/graphite; the light theme uses neutral white surfaces.
+Both share the same blue action role and semantic status roles. Controls retain
+48dp touch targets, dynamic text and the system reduced-motion preference.
+Contrast tests cover text, metadata, actions and feedback in both palettes.
 
-MessageResponse delegates to the existing scoped rich-text renderer with deferred media. Attachments display a compact icon first and fetch/render an image only after an explicit tap. Response branch controls work and announce their position. Network/file exports require an explicit application callback.
+## Providers and private overlays
 
-## Overlays and capabilities
+The application already owns one gesture root, keyboard provider, safe-area
+provider, query cache and private overlay registry. `BycodaUIProvider` composes
+PanelUI's exported PortalProvider, PortalHost and ToastViewport with those
+existing owners, avoiding duplicate native managers. Its portal host disappears
+immediately on lock while the mounted workspace preserves drafts.
 
-Use the application Sheet facade for forms, confirmation and session details. It preserves dirty-form guards, focus restoration, back handling and the security boundary. Gluestack native portals also unmount immediately when the application locks. Opening a component never grants permission to send, approve or upload.
+Use the application Sheet facade for product forms, selection, confirmation and
+session details. It owns dirty-form guards, back handling, focus restoration and
+security visibility. A library component never grants permission to send,
+approve, upload or publish. Native map rendering requires the optional MapLibre
+integration and a compatible development build. PanelUI Support/Feedback need an
+explicit service setup; installing the library does not configure them.
 
-Liquid glass falls back to a themed panel on platforms without the iOS glass API. InputAccessoryView is iOS-only. Gesture bottom sheets require the existing gesture/Reanimated providers. All catalog groups are installed, but platform-specific rendering requires separate simulator/device acceptance.
-
-The gluestack source license is retained in `gluestack/LICENSE`. The source templates were fetched with gluestack-ui 5.0.3 from its Expo UniWind starter; local customization avoids the NativeWind peer dependency in the upstream motion templates and uses the application's Reanimated runtime instead.
+Type checks, catalog/theme tests and web export validate source integration.
+Keyboard, gestures, text scaling, reduced motion, lock transitions and both
+appearances still require simulator/physical-device acceptance.

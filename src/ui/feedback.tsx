@@ -1,8 +1,9 @@
+import { useMobileTheme } from "./theme";
 import { StyleSheet, Text, View, type ViewStyle } from "react-native";
-import { Badge as GlueBadge, BadgeText } from "./gluestack/badge";
-import { Spinner } from "./gluestack/spinner";
-import { Alert } from "./gluestack/alert";
-import { Skeleton as GlueSkeleton } from "./gluestack/skeleton";
+import { Badge as PanelBadge } from "panelui-native/components/badge";
+import { Spinner } from "panelui-native/components/spinner";
+import { Alert } from "panelui-native/components/alert";
+import { Skeleton as PanelSkeleton } from "panelui-native/components/skeleton";
 import Animated from "react-native-reanimated";
 import { reveal } from "./motion";
 import Info from "lucide-react-native/icons/info";
@@ -26,22 +27,22 @@ import type {
 } from "./component-props";
 
 export function Badge({ label, tone = "default" }: BadgeProps) {
+  useMobileTheme();
   const semantic =
     tone === "default"
       ? undefined
       : semanticColors[tone === "active" || tone === "live" ? "info" : tone];
   return (
-    <GlueBadge
+    <PanelBadge
       variant="outline"
-      className="self-start rounded-badge px-ui-xs py-0 border-0 bg-raised"
+      className="self-start rounded-full px-ui-sm py-0 border-0 bg-fill"
       style={StyleSheet.flatten([
-        { backgroundColor: colors.raised, borderColor: colors.border, borderWidth: 0 },
+        { backgroundColor: colors.fill, borderColor: colors.border, borderWidth: 0 },
         semantic && { backgroundColor: semantic.surface, borderColor: semantic.border },
       ])}
     >
-      <BadgeText
+      <Text
         selectable
-        className="normal-case"
         style={StyleSheet.flatten([
           uiStyles.badge,
           {
@@ -54,23 +55,28 @@ export function Badge({ label, tone = "default" }: BadgeProps) {
         ])}
       >
         {label}
-      </BadgeText>
-    </GlueBadge>
+      </Text>
+    </PanelBadge>
   );
 }
 
 export function Empty({ title, detail, compact = true, action }: EmptyProps) {
+  useMobileTheme();
   return (
-    <View
+    <Animated.View
+      entering={reveal}
       style={{
         gap: space.sm,
-        paddingVertical: compact ? space.lg : space.xl,
-        paddingHorizontal: compact ? 0 : space.lg,
+        alignItems: "center",
+        paddingVertical: compact ? space.xl : space.xxl * 2,
+        paddingHorizontal: space.xl,
       }}
     >
-      <Body style={uiStyles.label}>{title}</Body>
+      <Body style={[compact ? uiStyles.title : uiStyles.heading, { textAlign: "center" }]}>
+        {title}
+      </Body>
       {detail ? (
-        <Body muted style={{ fontSize: 14, lineHeight: 20 }}>
+        <Body muted style={[uiStyles.caption, { textAlign: "center", maxWidth: 320 }]}>
           {detail}
         </Body>
       ) : null}
@@ -79,18 +85,19 @@ export function Empty({ title, detail, compact = true, action }: EmptyProps) {
           label={action.label}
           onPress={action.onPress}
           tone="primary"
-          style={{ alignSelf: "flex-start" }}
+          style={{ alignSelf: "center", marginTop: space.sm }}
         />
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 
 export function Loading({ label, centered = false, showLabel = !!label }: LoadingProps) {
+  useMobileTheme();
   const copy = useCopy();
   const content = (
     <>
-      <Spinner size="small" color={colors.accent} />
+      <Spinner size="sm" color={colors.accent} />
       {showLabel ? (
         <Body muted style={uiStyles.caption}>
           {label ?? copy("Yükleniyor…", "Loading…")}
@@ -104,6 +111,7 @@ export function Loading({ label, centered = false, showLabel = !!label }: Loadin
       accessibilityRole="progressbar"
       accessibilityLabel={label ?? copy("Yükleniyor…", "Loading…")}
       accessibilityState={{ busy: true }}
+      aria-busy
       style={
         centered
           ? uiStyles.loading
@@ -116,6 +124,7 @@ export function Loading({ label, centered = false, showLabel = !!label }: Loadin
 }
 
 export function Skeleton({ variant = "list" }: { variant?: "list" | "content" }) {
+  useMobileTheme();
   const copy = useCopy();
   return (
     <Animated.View
@@ -124,6 +133,7 @@ export function Skeleton({ variant = "list" }: { variant?: "list" | "content" })
       accessibilityRole="progressbar"
       accessibilityLabel={copy("Yükleniyor…", "Loading…")}
       accessibilityState={{ busy: true }}
+      aria-busy
       style={{ gap: space.lg, paddingVertical: space.sm }}
     >
       {(variant === "list" ? [0, 1, 2] : [0, 1]).map((key) => (
@@ -132,7 +142,7 @@ export function Skeleton({ variant = "list" }: { variant?: "list" | "content" })
           importantForAccessibility="no-hide-descendants"
           style={{ gap: space.sm, paddingVertical: space.sm }}
         >
-          <GlueSkeleton
+          <PanelSkeleton
             className="motion-reduce:animate-none"
             style={{
               height: 14,
@@ -141,7 +151,7 @@ export function Skeleton({ variant = "list" }: { variant?: "list" | "content" })
               borderRadius: 4,
             }}
           />
-          <GlueSkeleton
+          <PanelSkeleton
             className="motion-reduce:animate-none"
             style={{
               height: variant === "content" ? 52 : 10,
@@ -157,6 +167,7 @@ export function Skeleton({ variant = "list" }: { variant?: "list" | "content" })
 }
 
 export function ErrorText({ error, message }: ErrorTextProps) {
+  useMobileTheme();
   const copy = useCopy();
   if (!error) return null;
   return (
@@ -167,6 +178,7 @@ export function ErrorText({ error, message }: ErrorTextProps) {
 }
 
 export function ErrorNotice({ error, onRetry, retryLabel, message, children }: ErrorNoticeProps) {
+  useMobileTheme();
   const copy = useCopy();
   if (!error) return null;
   return (
@@ -182,6 +194,7 @@ export function ErrorNotice({ error, onRetry, retryLabel, message, children }: E
 }
 
 export function Notice({ tone = "info", message, children, onRetry, retryLabel }: NoticeProps) {
+  useMobileTheme();
   const copy = useCopy();
   const semantic = semanticColors[tone];
   const Icon =
@@ -198,8 +211,8 @@ export function Notice({ tone = "info", message, children, onRetry, retryLabel }
       variant={tone === "danger" ? "destructive" : "default"}
       className={
         quiet
-          ? "flex-col bg-transparent border-0 px-0 py-ui-xs gap-ui-sm"
-          : "flex-col p-ui-md gap-ui-sm"
+          ? "flex-col bg-transparent border-0 px-0 py-ui-xs gap-ui-xs"
+          : "flex-col p-ui-md gap-ui-xs rounded-card border-0"
       }
       style={StyleSheet.flatten<ViewStyle>(
         quiet
@@ -208,11 +221,11 @@ export function Notice({ tone = "info", message, children, onRetry, retryLabel }
       )}
     >
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.sm }}>
-        <Icon size={16} color={semantic.text} style={{ marginTop: 2 }} />
+        <Icon size={17} strokeWidth={2} color={semantic.text} style={{ marginTop: 1 }} />
         <Body
           accessibilityRole={tone === "danger" ? "alert" : "text"}
           accessibilityLiveRegion="polite"
-          style={[uiStyles.grow, { color: semantic.text, fontSize: 14, lineHeight: 20 }]}
+          style={[uiStyles.grow, uiStyles.caption, { color: quiet ? colors.muted : semantic.text }]}
         >
           {message}
         </Body>
@@ -220,9 +233,10 @@ export function Notice({ tone = "info", message, children, onRetry, retryLabel }
       {onRetry ? (
         <Button
           density="compact"
+          tone="quiet"
           label={retryLabel ?? copy("Yeniden dene", "Retry")}
           onPress={onRetry}
-          style={{ alignSelf: "flex-start" }}
+          style={{ marginStart: space.lg, paddingHorizontal: space.sm }}
         />
       ) : null}
       {children}

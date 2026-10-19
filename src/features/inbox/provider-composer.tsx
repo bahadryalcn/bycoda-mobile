@@ -73,7 +73,8 @@ export function ProviderInboxComposer({
         style={{ minHeight: 140 }}
         maxLength={30_000}
       />
-      <MutationState
+      <FormActions
+        feedback={<><MutationState
         mutation={submission}
         pending={copy("Bilgisayar sonucu doğruluyor…", "Waiting for the computer to confirm…")}
         success={
@@ -90,8 +91,7 @@ export function ProviderInboxComposer({
             "The send result is uncertain. Check the provider conversation before sending again.",
           )}
         />
-      ) : null}
-      <FormActions
+      ) : null}</>}
         submitLabel={copy("Yorumu gönder", "Send comment")}
         disabled={!body.trim() || uncertain || !canSend}
         busy={busy}

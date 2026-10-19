@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { memo, useState } from "react";
 import { View } from "react-native";
 import Terminal from "lucide-react-native/icons/terminal";
@@ -15,6 +16,7 @@ export const ActivityGroup = memo(function ActivityGroup({
   blocks,
   ...props
 }: Omit<TranscriptBlockProps, "block"> & { blocks: Block[] }) {
+  useMobileTheme();
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   const summary = activitySummary(blocks);

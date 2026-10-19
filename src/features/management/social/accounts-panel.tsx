@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, Disclosure, Sheet, Row } from "@/ui/primitives";
+import { ActionMenu, Button, Row, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 
@@ -12,31 +12,33 @@ export function AccountsPanel({ state, projectId, action, run }: AccountsPanelPr
   const [adding, setAdding] = useState(false);
   return (
     <>
-      <Button label={copy("Hesap ekle", "Add account")} tone="primary" onPress={() => setAdding(true)} />
-      <Disclosure label={copy("Gönderim ve tarama", "Sending & polling")}>
-        <Row>
-          <Button
-            label={
-              state.stopped
+      <Row>
+        <Button label={copy("Hesap ekle", "Add account")} tone="secondary" onPress={() => setAdding(true)} />
+        {/* Host-wide execution and polling switches are administrative, so they stay out of the primary row. */}
+        <ActionMenu
+          label={copy("Gönderim ve tarama", "Sending & polling")}
+          actions={[
+            {
+              key: "execution",
+              label: state.stopped
                 ? copy("Yürütmeyi sürdür", "Resume execution")
-                : copy("Tüm sosyal işleri durdur", "Stop all social work")
-            }
-            busy={action.isPending}
-            onPress={() => run("execution.stop", { stopped: !state.stopped })}
-          />
-          <Button
-            label={
-              state.pollingEnabled
+                : copy("Tüm sosyal işleri durdur", "Stop all social work"),
+              destructive: !state.stopped,
+              disabled: action.isPending,
+              onPress: () => run("execution.stop", { stopped: !state.stopped }),
+            },
+            {
+              key: "polling",
+              label: state.pollingEnabled
                 ? copy("Gelen kutusu taramasını durdur", "Pause inbox polling")
-                : copy("Gelen kutusunu tara", "Enable inbox polling")
-            }
-            busy={action.isPending}
-            onPress={() => run("inbox.polling", { enabled: !state.pollingEnabled })}
-          />
-          {!state.sendingEnabled && (
-            <Button
-              label={copy("Dış gönderimlere izin ver", "Authorize external sends")}
-              onPress={() =>
+                : copy("Gelen kutusunu tara", "Enable inbox polling"),
+              disabled: action.isPending,
+              onPress: () => run("inbox.polling", { enabled: !state.pollingEnabled }),
+            },
+            !state.sendingEnabled && {
+              key: "authorize",
+              label: copy("Dış gönderimlere izin ver", "Authorize external sends"),
+              onPress: () =>
                 confirmAction(
                   copy("Dış gönderimleri aç", "Enable external sends"),
                   copy(
@@ -45,12 +47,11 @@ export function AccountsPanel({ state, projectId, action, run }: AccountsPanelPr
                   ),
                   copy("İzin ver", "Authorize"),
                   () => run("execution.enable", { confirm: "ENABLE_EXTERNAL_SENDS" }),
-                )
-              }
-            />
-          )}
-        </Row>
-      </Disclosure>
+                ),
+            },
+          ]}
+        />
+      </Row>
       {state.accounts.map((account) => (
         <AccountCard key={account.id} account={account} state={state} projectId={projectId} />
       ))}

@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
@@ -10,17 +11,19 @@ import {
   Disclosure,
   IconButton,
   IdentifierField,
-  Input,
   MutationState,
   ScreenList,
   NavigationRow,
   QueryState,
   Row,
+  SearchField,
   SelectField,
   Sheet,
 } from "@/ui/primitives";
 import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
+import { IconTile } from "@/ui/icon-tile";
+import { GroupedListRow, rowInset } from "./shared";
 import type { ProjectDirectories } from "./projects-screen-types";
 
 type Location = { value: string; label: string; detail?: string };
@@ -41,6 +44,7 @@ export function ProjectFolderBrowser({
   onOpen: (path: string) => void;
   mutation: { isPending: boolean; isError: boolean; isSuccess: boolean; error: unknown };
 }) {
+  useMobileTheme();
   const copy = useCopy();
   const [path, setPath] = useState<string>();
   const [manual, setManual] = useState("");
@@ -146,12 +150,11 @@ export function ProjectFolderBrowser({
               ) : null}
             </Row>
             {(folders.data?.entries.length ?? 0) > 12 ? (
-              <Input
+              <SearchField
                 label={copy("Klasör ara", "Find a folder")}
                 placeholder={copy("Klasör ara", "Find a folder")}
                 value={search}
                 onChangeText={setSearch}
-                autoCorrect={false}
               />
             ) : null}
             <QueryState
@@ -165,13 +168,25 @@ export function ProjectFolderBrowser({
             />
           </>
         }
-        renderItem={({ item: entry }) => (
-          <NavigationRow
-            label={entry.name}
-            icon={<Folder size={18} color={colors.accent} />}
-            disabled={folders.isFetching || !!folders.error || mutation.isPending}
-            onPress={() => navigate(entry.path)}
-          />
+        contentContainerStyle={{ gap: 0 }}
+        renderItem={({ item: entry, index }) => (
+          <GroupedListRow
+            first={index === 0}
+            last={index === entries.length - 1}
+            inset={rowInset}
+          >
+            <NavigationRow
+              variant="plain"
+              label={entry.name}
+              icon={
+                <IconTile color={colors.accent}>
+                  <Folder size={18} strokeWidth={2} color={colors.accent} />
+                </IconTile>
+              }
+              disabled={folders.isFetching || !!folders.error || mutation.isPending}
+              onPress={() => navigate(entry.path)}
+            />
+          </GroupedListRow>
         )}
         footer={
           <Disclosure label={copy("Yol gir", "Enter path")}>

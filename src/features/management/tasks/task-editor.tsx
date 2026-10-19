@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Body, Disclosure, Field, FormActions, MutationState, Stack, ToggleField } from "@/ui/primitives";
+import { Body, Disclosure, Field, FormActions, MutationState, NavigationGroup, Stack, ToggleField } from "@/ui/primitives";
+import { haptic } from "@/ui/motion";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useCopy } from "@/ui/copy";
 import { useFormDraft } from "@/state/form-draft";
@@ -47,24 +48,26 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
         <Field label={copy("Başlangıç ve teslim dalı (isteğe bağlı)", "Base and delivery branch (optional)")} value={draft.workspace?.baseBranch ?? ""} editable={!busy} autoCapitalize="none" autoCorrect={false} onChangeText={(baseBranch) => set({ workspace: { ...draft.workspace, baseBranch } })} />
         <Body muted>{copy("Boş bırakırsanız projenin mevcut klasörü ve dalı kullanılır. Bilgisayar seçilen çalışma alanını doğrular.", "Leave blank to use the project's current checkout and branch. The computer validates the selected workspace.")}</Body>
       </>}
-      <ToggleField
-        disabled={busy}
-        label={copy("Ayrı çalışma dalı", "Isolated branch")}
-        value={draft.isolate !== false}
-        onChange={(isolate) => set({ isolate, autoMerge: false })}
-      />
-      <ToggleField
-        disabled={busy}
-        label={copy("Ajan incelemesi", "Agent review")}
-        value={draft.review !== false}
-        onChange={(review) => set({ review })}
-      />
-      <ToggleField
-        disabled={busy}
-        label={copy("Tamamlayana kadar devam et", "Continue until done")}
-        value={!!draft.continueUntilDone}
-        onChange={(continueUntilDone) => set({ continueUntilDone })}
-      />
+      <NavigationGroup>
+        <ToggleField
+          disabled={busy}
+          label={copy("Ayrı çalışma dalı", "Isolated branch")}
+          value={draft.isolate !== false}
+          onChange={(isolate) => set({ isolate, autoMerge: false })}
+        />
+        <ToggleField
+          disabled={busy}
+          label={copy("Ajan incelemesi", "Agent review")}
+          value={draft.review !== false}
+          onChange={(review) => set({ review })}
+        />
+        <ToggleField
+          disabled={busy}
+          label={copy("Tamamlayana kadar devam et", "Continue until done")}
+          value={!!draft.continueUntilDone}
+          onChange={(continueUntilDone) => set({ continueUntilDone })}
+        />
+      </NavigationGroup>
       <Field
         editable={!busy}
         label={copy("Doğrulama komutu (isteğe bağlı)", "Verification command (optional)")}
@@ -80,12 +83,12 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
         </Body>
       )}
       </Disclosure>
-      <MutationState mutation={save} />
       <FormActions
+        feedback={<MutationState mutation={save} />}
         submitLabel={copy("Kaydet", "Save")}
         disabled={!agentValid || busy || !draft.title.trim() || !normalized.model.trim()}
         busy={save.isPending}
-        onSubmit={() => save.mutate({ task: normalized }, { onSuccess: () => onClose() })}
+        onSubmit={() => save.mutate({ task: normalized }, { onSuccess: () => { haptic.success(); onClose(); } })}
         cancelDisabled={busy}
         cancelLabel={copy("Vazgeç", "Cancel")}
         onCancel={requestClose}

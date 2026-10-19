@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { Fragment } from "react";
 import { View } from "react-native";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
@@ -5,9 +6,11 @@ import MonitorSmartphone from "lucide-react-native/icons/monitor-smartphone";
 import { Body } from "./typography";
 import { useCopy } from "./copy";
 import { colors, fontSize, radii, space } from "./tokens";
+import { decorativeSvgProps } from "./accessibility";
 
 /** A diagram of the companion workflow, with no sample account or live status. */
 export function WorkspacePreview() {
+  useMobileTheme();
   const copy = useCopy();
   return (
     <View
@@ -37,7 +40,7 @@ export function WorkspacePreview() {
         width="100%"
         viewBox="0 0 340 190"
         style={{ width: "100%", aspectRatio: 340 / 190 }}
-        accessible={false}
+        {...decorativeSvgProps}
       >
         <Rect
           x="4"

@@ -1,6 +1,7 @@
+import { RecordCard } from "@/ui/record-card";
+import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
-import { uiStyles } from "@/ui/styles";
-import { Body, Button, Card, Disclosure, ErrorText, Heading, Row } from "@/ui/primitives";
+import { ActionMenu, Body, Button, ErrorText, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
@@ -21,25 +22,62 @@ export function AutomationCard({
   run,
   remove,
 }: AutomationCardProps) {
+  useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
+  // Edit, history, last session and delete are secondary; they live in the overflow menu.
+  const menu = [
+    {
+      key: "edit",
+      label: copy("Düzenle", "Edit"),
+      disabled: busy || editorOpen,
+      onPress: () => onEdit(item.id),
+    },
+    {
+      key: "history",
+      label: copy("Geçmiş", "History"),
+      onPress: () => onHistory(historyId === item.id ? null : item.id),
+    },
+    !!item.lastSessionId && {
+      key: "session",
+      label: copy("Son oturum", "Last session"),
+      onPress: () => {
+        if (machine && item.lastSessionId)
+          router.push({
+            pathname: "/session/[id]",
+            params: {
+              id: item.lastSessionId,
+              machineId: machine.id,
+              projectId: item.projectId,
+            },
+          });
+      },
+    },
+    {
+      key: "delete",
+      label: copy("Sil", "Delete"),
+      destructive: true,
+      disabled: busy,
+      onPress: () =>
+        confirmAction(
+          copy("Otomasyonu sil", "Delete automation"),
+          copy(
+            "Zamanlanmış iş ve çalıştırma geçmişi silinecek.",
+            "The schedule and run history will be deleted.",
+          ),
+          copy("Sil", "Delete"),
+          () => remove.mutate({ automationId: item.id }),
+        ),
+    },
+  ];
   return (
-    <Card key={item.id}>
-      <Heading numberOfLines={2} style={uiStyles.title}>
-        {item.name}
-      </Heading>
-      <Body muted numberOfLines={2} style={uiStyles.caption}>
-        {scheduleLabel(item, copy)}{" "}
-        · {copy("Sonraki", "Next")}: {stamp(item.nextRunAt)}
-      </Body>
-      {item.lastRunStatus && <Status value={item.lastRunStatus} />}
-      <ErrorText error={item.lastRunError} />
+    <RecordCard
+      title={item.name}
+      status={<Status value={item.enabled ? item.lastRunStatus ?? "idle" : "paused"} />}
+      metadata={scheduleLabel(item, copy) + " · " + copy("Sonraki", "Next") + ": " + stamp(item.nextRunAt)}
+      menu={<ActionMenu label={copy("Otomasyon işlemleri", "Automation actions")} actions={menu} />}
+      footer={
       <Row>
-        <Button
-          label={item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable")}
-          disabled={busy}
-          onPress={() => save.mutate({ automation: { ...item, enabled: !item.enabled } })}
-        />
         <Button
           label={copy("Şimdi çalıştır", "Run now")}
           tone="primary"
@@ -56,56 +94,23 @@ export function AutomationCard({
             )
           }
         />
+        <Button
+          label={item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable")}
+          tone="quiet"
+          disabled={busy}
+          onPress={() => save.mutate({ automation: { ...item, enabled: !item.enabled } })}
+        />
       </Row>
-      <Disclosure label={copy("Otomasyon ayrıntıları", "Automation details")}>
+      }
+      details={<>
         <Body>{item.prompt}</Body>
-        <Row>
-          <Button
-            label={copy("Düzenle", "Edit")}
-            disabled={busy || editorOpen}
-            onPress={() => onEdit(item.id)}
-          />
-          <Button
-            label={copy("Geçmiş", "History")}
-            onPress={() => onHistory(historyId === item.id ? null : item.id)}
-          />
-          {item.lastSessionId && (
-            <Button
-              label={copy("Son oturum", "Last session")}
-              onPress={() => {
-                if (machine && item.lastSessionId)
-                  router.push({
-                    pathname: "/session/[id]",
-                    params: {
-                      id: item.lastSessionId,
-                      machineId: machine.id,
-                      projectId: item.projectId,
-                    },
-                  });
-              }}
-            />
-          )}
-          <Button
-            label={copy("Sil", "Delete")}
-            tone="danger"
-            disabled={busy}
-            onPress={() =>
-              confirmAction(
-                copy("Otomasyonu sil", "Delete automation"),
-                copy(
-                  "Zamanlanmış iş ve çalıştırma geçmişi silinecek.",
-                  "The schedule and run history will be deleted.",
-                ),
-                copy("Sil", "Delete"),
-                () => remove.mutate({ automationId: item.id }),
-              )
-            }
-          />
-        </Row>
-      </Disclosure>
+      </>}
+    >
+      <ErrorText error={item.lastRunError} />
+
       {historyId === item.id && (
         <AutomationHistory automationId={item.id} projectId={item.projectId} />
       )}
-    </Card>
+    </RecordCard>
   );
 }

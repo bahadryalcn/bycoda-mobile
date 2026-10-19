@@ -1,16 +1,41 @@
 import { useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQueryClient } from "@tanstack/react-query";
+import Animated from "react-native-reanimated";
+import ShieldOff from "lucide-react-native/icons/shield-off";
+import UserX from "lucide-react-native/icons/user-x";
+import Trash2 from "lucide-react-native/icons/trash";
+import type { ReactNode } from "react";
+import { IconTile } from "../../ui/icon-tile";
+import { enterItem } from "../../ui/motion";
+import { colors, space } from "../../ui/tokens";
 import { useMachines } from "../../state/machines";
 import { assertAppAccess } from "../../state/security";
 import { useAsyncAction } from "../../state/actions";
-import { Body, Button, ConfirmationCard, MutationState, Stack, Sheet, Disclosure } from "../../ui/primitives";
+import {
+  Body,
+  ConfirmationCard,
+  Disclosure,
+  MutationState,
+  NavigationGroup,
+  NavigationRow,
+  Sheet,
+  Stack,
+} from "../../ui/primitives";
 import { useCopy } from "../../ui/copy";
 import { flushWorkspaceDrafts } from "../workspace/draft-guard";
 import { revokeProviderConsent } from "../privacy/provider-consent";
 import { deleteSavedDrafts, disconnectSavedComputers } from "./local-data";
 import { clearAttachmentDraftFiles } from "../workspace/attachment-files";
 import { clearMediaCache } from "@/ui/media-loader";
+
+function tile(Glyph: typeof Trash2, color: string): ReactNode {
+  return (
+    <IconTile color={color}>
+      <Glyph size={18} strokeWidth={2} color={color} />
+    </IconTile>
+  );
+}
 
 export function LocalDataControls() {
   const copy = useCopy();
@@ -71,47 +96,58 @@ export function LocalDataControls() {
     });
   }
   return (
-    <Stack>
+    <Stack style={{ gap: space.lg }}>
+      <Animated.View entering={enterItem(0)}>
+        <NavigationGroup>
+          <NavigationRow
+            label={copy("Veri paylaşımı iznini geri çek", "Withdraw data sharing permission")}
+            icon={tile(ShieldOff, colors.warning)}
+            disabled={unavailable}
+            onPress={() => {
+              action.reset();
+              setConfirmation("consent");
+            }}
+          />
+        </NavigationGroup>
+      </Animated.View>
+      <Animated.View entering={enterItem(1)}>
+        <NavigationGroup>
+          <NavigationRow
+            label={copy("Kaydedilmiş bilgisayarları kaldır", "Remove saved computers")}
+            tone="danger"
+            icon={tile(UserX, colors.danger)}
+            disabled={unavailable || !state.machines.length}
+            onPress={() => {
+              action.reset();
+              setConfirmation("connections");
+            }}
+          />
+          <NavigationRow
+            label={copy("Kaydedilmiş taslakları sil", "Delete saved drafts")}
+            tone="danger"
+            icon={tile(Trash2, colors.danger)}
+            disabled={unavailable || state.machines.length > 0}
+            onPress={() => {
+              action.reset();
+              setConfirmation("drafts");
+            }}
+          />
+        </NavigationGroup>
+      </Animated.View>
       <Disclosure label={copy("Bu telefondaki veriler", "Data on this phone")}>
-      <Body muted>
-        {copy(
-          "bycoda hesabı açılmaz. Bilgisayar bağlantılarını ve telefonda saklanan taslaklarını buradan yönetebilirsin. Bilgisayarındaki dosyalar, oturumlar, çalışan işler ve sağlayıcı hesapları ayrı yönetilir.",
-          "There is no bycoda account. Manage your saved computer connections and drafts on this phone here. Computer files, sessions, running work and provider accounts are managed separately.",
-        )}
-      </Body>
+        <Body muted>
+          {copy(
+            "bycoda hesabı açılmaz. Bilgisayar bağlantılarını ve telefonda saklanan taslaklarını buradan yönetebilirsin. Bilgisayarındaki dosyalar, oturumlar, çalışan işler ve sağlayıcı hesapları ayrı yönetilir.",
+            "There is no bycoda account. Manage your saved computer connections and drafts on this phone here. Computer files, sessions, running work and provider accounts are managed separately.",
+          )}
+        </Body>
+        <Body muted>
+          {copy(
+            "Taslakları silmeden önce tüm bilgisayar bağlantılarını kaldır. Bir bağlantıyı telefondan kaldırmak host üzerindeki erişim iznini iptal etmez; kayıp telefon için bilgisayardaki cihaz yetkisini ayrıca iptal et.",
+            "Remove all saved computers before deleting drafts. Removing a phone connection does not revoke its host authorization; revoke the device on your computer separately if your phone is lost.",
+          )}
+        </Body>
       </Disclosure>
-      <Button
-        label={copy("Veri paylaşımı iznini geri çek", "Withdraw data sharing permission")}
-        disabled={unavailable}
-        onPress={() => {
-          action.reset();
-          setConfirmation("consent");
-        }}
-      />
-      <Button
-        label={copy("Kaydedilmiş bilgisayarları kaldır", "Remove saved computers")}
-        tone="danger"
-        disabled={unavailable || !state.machines.length}
-        onPress={() => {
-          action.reset();
-          setConfirmation("connections");
-        }}
-      />
-      <Button
-        label={copy("Kaydedilmiş taslakları sil", "Delete saved drafts")}
-        tone="danger"
-        disabled={unavailable || state.machines.length > 0}
-        onPress={() => {
-          action.reset();
-          setConfirmation("drafts");
-        }}
-      />
-      <Body muted>
-        {copy(
-          "Taslakları silmeden önce tüm bilgisayar bağlantılarını kaldır. Bir bağlantıyı telefondan kaldırmak host üzerindeki erişim iznini iptal etmez; kayıp telefon için bilgisayardaki cihaz yetkisini ayrıca iptal et.",
-          "Remove all saved computers before deleting drafts. Removing a phone connection does not revoke its host authorization; revoke the device on your computer separately if your phone is lost.",
-        )}
-      </Body>
       {confirmation ? (
         <Sheet visible size="compact" dismissible={!action.isPending} title={copy("Yerel verileri yönet", "Manage local data")} onClose={() => { if (!action.isPending) setConfirmation(null); }}>
         <ConfirmationCard

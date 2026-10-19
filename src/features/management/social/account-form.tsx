@@ -15,6 +15,7 @@ import { useFormDraft } from "@/state/form-draft";
 import { useAsyncAction } from "@/state/actions";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { socialRequest as request } from "./request";
+import { SOCIAL_ACCOUNT_TYPES, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_NAMES } from "../../../../../src/features/social/model/social";
 import type { AccountDraft, AccountFormProps } from "./types";
 
 export function AccountForm({ projectId, onClose }: AccountFormProps) {
@@ -37,13 +38,7 @@ export function AccountForm({ projectId, onClose }: AccountFormProps) {
         request("accounts.create", {
           name: submitted.name,
           platform: submitted.platform,
-          accountType: {
-            x: "member",
-            instagram: "professional",
-            facebook: "page",
-            linkedin: "member",
-            youtube: "channel",
-          }[submitted.platform],
+          accountType: SOCIAL_ACCOUNT_TYPES[submitted.platform][0],
           projectIds: projectId ? [projectId] : [],
         }),
       );
@@ -69,17 +64,15 @@ export function AccountForm({ projectId, onClose }: AccountFormProps) {
         <SelectField
           label={copy("Platform", "Platform")}
           value={platform}
-          options={[
-            { value: "x", label: "X" },
-            { value: "instagram", label: "Instagram" },
-            { value: "facebook", label: "Facebook" },
-            { value: "linkedin", label: "LinkedIn" },
-            { value: "youtube", label: "YouTube" },
-          ]}
+          options={SOCIAL_PLATFORMS.map((value) => ({ value, label: SOCIAL_PLATFORM_NAMES[value] }))}
           disabled={busy}
           onChange={(value) => change("platform", value)}
         />
         <FormActions
+          feedback={<MutationState
+        mutation={submission}
+        success={copy("Hesap kaydı oluşturuldu.", "Account record created.")}
+      />}
           submitLabel={copy("Hesap kaydı oluştur", "Create account record")}
           busy={busy}
           disabled={!accountName.trim() || busy}
@@ -94,10 +87,7 @@ export function AccountForm({ projectId, onClose }: AccountFormProps) {
             "Connection and publishing permissions are approved separately.",
           )}
         </Body>
-      <MutationState
-        mutation={submission}
-        success={copy("Hesap kaydı oluşturuldu.", "Account record created.")}
-      />
+
     </>
   );
 }

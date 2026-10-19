@@ -1,5 +1,7 @@
+import { ScheduleFields } from "../shared/schedule-fields";
 import { useState } from "react";
-import { Body, ErrorText, Stack, SelectField, Field, FormActions, MutationState, ToggleField } from "@/ui/primitives";
+import { Body, ErrorText, Stack, Field, FormActions, MutationState, NavigationGroup, ToggleField } from "@/ui/primitives";
+import { haptic } from "@/ui/motion";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { integerInRange, validScheduleTime } from "./schedule-model";
 import { useCopy } from "@/ui/copy";
@@ -47,60 +49,7 @@ export function AutomationEditor({ initial, save, busy, onClose }: AutomationEdi
         projectId={draft.projectId}
         onChange={(agent) => update(agent)}
       />
-      <SelectField
-        label={copy("Zamanlama", "Schedule")}
-        value={draft.scheduleKind}
-        options={[
-          { value: "hourly", label: copy("Saatlik", "Hourly") },
-          { value: "daily", label: copy("Günlük", "Daily") },
-          { value: "weekdays", label: copy("Hafta içi", "Weekdays") },
-          { value: "weekly", label: copy("Haftalık", "Weekly") },
-        ]}
-        disabled={busy}
-        onChange={(scheduleKind) => update({ scheduleKind })}
-      />
-      {draft.scheduleKind === "hourly" ? (
-        <>
-        <Field
-          editable={!busy}
-          label={copy("Her saatin dakikası (0–59)", "Minute of each hour (0–59)")}
-          value={minute}
-          keyboardType="number-pad"
-          onChangeText={setMinute}
-        />
-        {!minuteValid && <ErrorText error={copy("0 ile 59 arasında bir dakika girin.", "Enter a minute from 0 to 59.")} />}
-        </>
-      ) : (
-        <>
-        <Field
-          editable={!busy}
-          label={copy("Saat (SS:DD)", "Time (HH:MM)")}
-          value={draft.time}
-          onChangeText={(time) => update({ time })}
-          placeholder="09:00"
-          keyboardType="numbers-and-punctuation"
-        />
-        {!timeValid && <ErrorText error={copy("Saati SS:DD biçiminde girin (00:00–23:59).", "Use HH:MM time (00:00–23:59).")} />}
-        </>
-      )}
-      <Body muted>{copy("Bilgisayarın yerel saati kullanılır; sonraki çalışma telefondaki saatle gösterilir.", "Schedules use computer local time; the next run is shown in phone time.")}</Body>
-      {draft.scheduleKind === "weekly" ? (
-        <SelectField
-          label={copy("Gün", "Day")}
-          value={String(draft.dayOfWeek)}
-          options={[
-            { value: "0", label: copy("Pazar", "Sunday") },
-            { value: "1", label: copy("Pazartesi", "Monday") },
-            { value: "2", label: copy("Salı", "Tuesday") },
-            { value: "3", label: copy("Çarşamba", "Wednesday") },
-            { value: "4", label: copy("Perşembe", "Thursday") },
-            { value: "5", label: copy("Cuma", "Friday") },
-            { value: "6", label: copy("Cumartesi", "Saturday") },
-          ]}
-          disabled={busy}
-          onChange={(day) => update({ dayOfWeek: Number(day) })}
-        />
-      ) : null}
+      <ScheduleFields value={draft} minute={minute} onMinuteChange={setMinute} onChange={update} disabled={busy} />
       <Field
         editable={!busy}
         label={copy("Günlük çalıştırma sınırı (0 = sınırsız)", "Daily run limit (0 = unlimited)")}
@@ -109,18 +58,20 @@ export function AutomationEditor({ initial, save, busy, onClose }: AutomationEdi
         onChangeText={setLimit}
       />
       {!limitValid && <ErrorText error={copy("0 ile 1000 arasında bir sınır girin.", "Enter a limit from 0 to 1000.")} />}
-      <ToggleField
-        disabled={busy}
-        label={copy("Etkin", "Enabled")}
-        value={draft.enabled}
-        onChange={(enabled) => update({ enabled })}
-      />
-      <MutationState mutation={save} />
+      <NavigationGroup>
+        <ToggleField
+          disabled={busy}
+          label={copy("Etkin", "Enabled")}
+          value={draft.enabled}
+          onChange={(enabled) => update({ enabled })}
+        />
+      </NavigationGroup>
       <FormActions
+        feedback={<><MutationState mutation={save} /></>}
         submitLabel={copy("Kaydet", "Save")}
         busy={save.isPending}
         disabled={!agentValid || !draft.name.trim() || !draft.prompt.trim() || !normalized.model.trim() || !scheduleValid || busy}
-        onSubmit={() => save.mutate({ automation: { ...normalized, minute: Number(minute), maxRunsPerDay: Number(limit) } }, { onSuccess: () => onClose() })}
+        onSubmit={() => save.mutate({ automation: { ...normalized, minute: Number(minute), maxRunsPerDay: Number(limit) } }, { onSuccess: () => { haptic.success(); onClose(); } })}
         cancelDisabled={busy}
         cancelLabel={copy("Vazgeç", "Cancel")}
         onCancel={requestClose}

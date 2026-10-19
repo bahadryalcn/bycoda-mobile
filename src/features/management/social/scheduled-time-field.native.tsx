@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Body, Button, Row, ToggleField } from "@/ui/primitives";
+import { Body, Button, NavigationGroup, Row, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
 import { nextPublishTime, type ScheduledTimeProps } from "./scheduled-time-types";
@@ -13,7 +13,9 @@ export function ScheduledTimeField({ value, onChange, disabled, onValidityChange
   const date = Number.isFinite(parsed.getTime()) ? parsed : nextPublishTime();
   useEffect(() => { onValidityChange?.(true); }, [onValidityChange]);
   return <>
-    <ToggleField label={copy("Yayın zamanı seç", "Choose a publish time")} value={!!value} disabled={disabled} onChange={(enabled) => { setMode(null); onChange(enabled ? nextPublishTime().toISOString() : ""); }} />
+    <NavigationGroup>
+      <ToggleField label={copy("Yayın zamanı seç", "Choose a publish time")} value={!!value} disabled={disabled} onChange={(enabled) => { setMode(null); onChange(enabled ? nextPublishTime().toISOString() : ""); }} />
+    </NavigationGroup>
     {value && <>
       <Row>
         <Button label={date.toLocaleDateString(locale, { dateStyle: "medium" })} disabled={disabled} onPress={() => setMode("date")} />

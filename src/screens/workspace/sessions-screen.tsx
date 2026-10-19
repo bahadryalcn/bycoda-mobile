@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +16,7 @@ export function SessionsScreen({
   projectId,
   onOpenSession,
 }: ProjectScreenProps & { onOpenSession: (id: string) => void }) {
+  useMobileTheme();
   const client = useHostClient(machineId);
   const machine = useConnectionStore((s) => s.machines.find((m) => m.id === machineId));
   const cache = useQueryClient();

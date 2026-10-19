@@ -11,10 +11,13 @@ const pureContracts = new Set([
   "integrations/mobile-pairing",
   "integrations/mobile-lan",
   "features/connections/model/protocol",
+  "features/connections/model/sharedQueue",
+  "features/sessions/model/queuePersistence",
   "features/inbox/model/remoteInbox",
   "features/tasks/model/taskRules",
   "features/skills/model/cliCommands",
   "features/social/model/socialLimits",
+  "features/social/model/social",
   "integrations/mobile-pairing",
 ]);
 const errors = [];

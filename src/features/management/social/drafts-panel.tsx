@@ -1,7 +1,8 @@
-import { ContentExcerpt } from "./content-excerpt";
+import { RecordCard } from "@/ui/record-card";
+import { MessageText } from "@/ui/message-text";
 import { socialLabel } from "./labels";
 import { PagedRows } from "../shared/paged-rows";
-import { Sheet, Disclosure, Body, Button, Card, Row } from "@/ui/primitives";
+import { ActionMenu, Sheet, Body, Button, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 
@@ -36,26 +37,20 @@ export function DraftsPanel({
       )}
       <PagedRows key={projectId ?? "all"} items={state.drafts
         .filter((draft) => !projectId || draft.projectId === projectId)} renderItem={(draft) => (
-          <Card key={draft.id}>
-            <Body muted>
-              {state.accounts.find((account) => account.id === draft.accountId)?.name} ·{" "}
-              {socialLabel(draft.kind, copy)}
-            </Body>
-            <ContentExcerpt text={draft.text} />
-            {draft.reviewReason && <Body>{draft.reviewReason}</Body>}
-            {draft.generation && <Status value={draft.generation.status} />}
+          <RecordCard key={draft.id}
+            title={state.accounts.find((account) => account.id === draft.accountId)?.name ?? copy("Taslak", "Draft")}
+            status={draft.generation ? <Status value={draft.generation.status} /> : undefined}
+            metadata={socialLabel(draft.kind, copy)}
+            preview={<Body numberOfLines={2}>{draft.text.replace(/\s+/g, " ").trim()}</Body>}
+      footer={
             <Row>
-              <Button
-                label={copy("Düzenle", "Edit")}
-                disabled={action.isPending || !canEditSocialDraft(draft, state.jobs)}
-                onPress={() => dispatch({ type: "open", editor: { kind: "draft", id: draft.id } })}
-              />
               <Button
                 label={
                   draft.approvedAt
                     ? copy("Yeniden onayla", "Approve again")
                     : copy("Taslağı onayla", "Approve draft")
                 }
+                tone={draft.approvedAt ? "quiet" : "primary"}
                 disabled={
                   action.isPending ||
                   !!draft.reviewReason ||
@@ -75,6 +70,7 @@ export function DraftsPanel({
               />
               <Button
                 label={copy("Gönder", "Send")}
+                tone={draft.approvedAt ? "primary" : "quiet"}
                 disabled={
                   !draft.approvedAt || !state.sendingEnabled || state.stopped || action.isPending
                 }
@@ -92,7 +88,17 @@ export function DraftsPanel({
                 }
               />
             </Row>
-          </Card>
+      }
+            details={<MessageText text={draft.text} role="assistant" />}
+            menu={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[{
+              key: "edit", label: copy("Düzenle", "Edit"),
+              disabled: action.isPending || !canEditSocialDraft(draft, state.jobs),
+              onPress: () => dispatch({ type: "open", editor: { kind: "draft", id: draft.id } }),
+            }]} />}
+          >
+            {draft.reviewReason && <Body>{draft.reviewReason}</Body>}
+
+          </RecordCard>
         )} />
     </>
   );

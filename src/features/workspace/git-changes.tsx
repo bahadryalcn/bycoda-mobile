@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
 import CheckCircle from "lucide-react-native/icons/circle-check";
 import Download from "lucide-react-native/icons/download";
@@ -12,6 +13,7 @@ import { GitFileRow } from "./git-file-row";
 import type { GitChangesPanelProps, GitCommitPanelProps } from "./git-types";
 
 export function GitChangesPanel({ files, busy, onSelect, onAction }: GitChangesPanelProps) {
+  useMobileTheme();
   const copy = useCopy();
   if (!files.some((file) => file.staged || file.unstaged)) {
     return (
@@ -94,6 +96,7 @@ export function GitCommitPanel({
   children,
   busy,
 }: GitCommitPanelProps) {
+  useMobileTheme();
   const copy = useCopy();
   const stagedCount = index.files.filter((file) => file.staged).length;
   const commitDisabled =

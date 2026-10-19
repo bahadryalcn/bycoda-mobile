@@ -4,6 +4,7 @@ export type OverlayEntry = {
   children: ReactNode;
   onClose(): void;
   priority: number;
+  label?: string;
 };
 
 export type OverlayRegistry = {

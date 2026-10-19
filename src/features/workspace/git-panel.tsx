@@ -1,8 +1,10 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { BackHandler, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
 import {
+  ActionMenu,
   Body,
   Badge,
   Button,
@@ -12,8 +14,10 @@ import {
   Row,
   Screen,
   ScreenList,
+  SearchField,
   Sheet,
 } from "@/ui/primitives";
+import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { useActiveMachine } from "@/state/machines";
 import { useGitActions } from "./git-actions";
@@ -28,18 +32,18 @@ import {
   GitConflictsPanel,
   GitHeader,
   GitOperationPanel,
-  GitSummary,
 } from "./git-status";
-import { workspaceStyles } from "./shared";
+import { GroupedListRow, rowInset, workspaceStyles } from "./shared";
 import { gitReducer, initialGitState, type GitConfirmation } from "./workspace-state";
 import type { GitFileAction, GitScope, ProjectGitProps } from "./git-types";
-import type { GitChangedFile } from "./wire";
+import { gitListRows, type GitListFilter, type GitListRow } from "./git-list-model";
 import { registerWorkspaceDraft } from "./draft-guard";
 import { useLocalDraft } from "./use-local-draft";
 import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import GitCommitHorizontal from "lucide-react-native/icons/git-commit-horizontal";
 import FileDiff from "lucide-react-native/icons/file-diff";
+import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 
 type GitDraft = { message: string; branchName: string };
 function decodeDraft(value: string): GitDraft {
@@ -54,11 +58,8 @@ function decodeDraft(value: string): GitDraft {
 }
 const encodeDraft = (value: GitDraft | null) =>
   value && (value.message || value.branchName) ? JSON.stringify(value) : null;
-type GitRow =
-  | { kind: "group"; key: string; staged: boolean; count: number }
-  | { kind: "file"; key: string; staged: boolean; file: GitChangedFile };
-
 export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: ProjectGitProps) {
+  useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const navigation = useNavigation();
@@ -67,6 +68,9 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
   const actions = useGitActions(scope);
   const [state, dispatch] = useReducer(gitReducer, initialGitState);
   const [confirmationError, setConfirmationError] = useState<Error | null>(null);
+  const [fileQuery, setFileQuery] = useState("");
+  const [fileFilter, setFileFilter] = useState<GitListFilter>("all");
+  const [actionsOpen, setActionsOpen] = useState(false);
   const draftKey = "bycoda.mobile.git-draft.v1:" + JSON.stringify([machine?.id, projectId, cwd]);
   const draft = useLocalDraft<GitDraft>(draftKey, decodeDraft, encodeDraft);
   const { message = "", branchName = "" } = draft.value ?? {};
@@ -155,12 +159,13 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
     const submitted = branchName;
     void actions
       .createNamedBranch(submitted.trim())
-      .then(() =>
+      .then(() => {
+        haptic.success();
         draft.setValue((current) => ({
           message: current?.message ?? "",
           branchName: current?.branchName === submitted ? "" : (current?.branchName ?? ""),
-        })),
-      )
+        }));
+      })
       .catch(() => {});
   };
   const confirm = () => {
@@ -193,6 +198,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
       .executeConfirmation(confirmation, context?.message ?? message)
       .then(() => {
         dispatch({ type: "completed", confirmation });
+        if (confirmation.kind === "commit") haptic.success();
         if (confirmation.kind === "commit")
           draft.setValue((current) => ({
             branchName: current?.branchName ?? "",
@@ -227,27 +233,11 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
       ) : null}
     </>
   );
-  const rows: GitRow[] = !selection
-    ? (["unstaged", "staged"] as const).flatMap((group) => {
-        const files = (data?.files ?? []).filter((file) => file[group]);
-        return files.length
-          ? [
-              {
-                kind: "group" as const,
-                key: group,
-                staged: group === "staged",
-                count: files.length,
-              },
-              ...files.map((file) => ({
-                kind: "file" as const,
-                key: group + ":" + file.relative,
-                staged: group === "staged",
-                file,
-              })),
-            ]
-          : [];
-      })
-    : [];
+  const filtered = !!fileQuery.trim() || fileFilter !== "all";
+  const rows = useMemo(
+    () => (selection ? [] : gitListRows(data?.files ?? [], fileQuery, fileFilter)),
+    [data?.files, fileQuery, fileFilter, selection],
+  );
   if (!data || data.repository === false)
     return (
       <Screen>
@@ -269,7 +259,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
     );
   return (
     <>
-      <ScreenList<GitRow>
+      <ScreenList<GitListRow>
         data={rows}
         keyExtractor={(row) => row.key}
         query={index}
@@ -277,17 +267,69 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
           <View style={workspaceStyles.stack}>
             <GitHeader
               index={data}
-              busy={busy}
+              busy={busy || !draft.ready}
               refreshing={index.isFetching}
               onRefresh={() => {
                 void index.refetch();
               }}
               onToggleBranches={() => dispatch({ type: "view", view: { kind: "branches" } })}
+              onOpenActions={() => setActionsOpen(true)}
             />
             <QueryState query={index} />
             {draftStatus}
             {!state.confirmation && !branchPicker ? feedback : null}
-            <GitSummary index={data} />
+            {!selection ? (
+              <Row style={{ flexWrap: "nowrap" }}>
+                <View style={uiStyles.grow}>
+                  <SearchField
+                    label={copy("Değişen dosyalarda ara", "Search changed files")}
+                    value={fileQuery}
+                    maxLength={200}
+                    onChangeText={setFileQuery}
+                  />
+                </View>
+                <ActionMenu
+                  label={copy("Değişiklik filtreleri", "Change filters")}
+                  active={fileFilter !== "all"}
+                  trigger={
+                    <SlidersHorizontal
+                      size={21}
+                      strokeWidth={2}
+                      color={fileFilter !== "all" ? colors.accent : colors.muted}
+                    />
+                  }
+                  actions={[
+                    {
+                      key: "all",
+                      label: copy("Tümü", "All"),
+                      selected: fileFilter === "all",
+                      onPress: () => setFileFilter("all"),
+                    },
+                    {
+                      key: "unstaged",
+                      label: copy("Stage dışında", "Unstaged"),
+                      selected: fileFilter === "unstaged",
+                      onPress: () => setFileFilter("unstaged"),
+                    },
+                    {
+                      key: "staged",
+                      label: copy("Stage’de", "Staged"),
+                      selected: fileFilter === "staged",
+                      onPress: () => setFileFilter("staged"),
+                    },
+                    {
+                      key: "reset",
+                      label: copy("Sıfırla", "Reset"),
+                      disabled: !filtered,
+                      onPress: () => {
+                        setFileQuery("");
+                        setFileFilter("all");
+                      },
+                    },
+                  ]}
+                />
+              </Row>
+            ) : null}
             {data.operation && root ? (
               <GitOperationPanel
                 operation={data.operation}
@@ -318,6 +360,17 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
                 }
                 onDiscard={(path) => choose({ kind: "discard", path })}
               />
+            ) : !rows.length && filtered ? (
+              <Empty
+                title={copy("Filtrelere uyan değişiklik yok", "No changes match the filters")}
+                action={{
+                  label: copy("Sıfırla", "Reset"),
+                  onPress: () => {
+                    setFileQuery("");
+                    setFileFilter("all");
+                  },
+                }}
+              />
             ) : !rows.length && !data.conflicts?.length ? (
               <Empty
                 title={copy("Çalışma klasörü temiz", "Working folder is clean")}
@@ -326,7 +379,8 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
             ) : null}
           </View>
         }
-        renderItem={({ item }) =>
+        contentContainerStyle={{ gap: 0 }}
+        renderItem={({ item, index }) =>
           item.kind === "group" ? (
             <Row style={{ paddingTop: space.md, paddingBottom: space.xs, flexWrap: "nowrap" }}>
               {item.staged ? (
@@ -340,54 +394,78 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
                   : copy("Değişen dosyalar", "Changed files")}
               </Body>
               <Badge label={String(item.count)} tone={item.staged ? "success" : "default"} />
-              <Button
-                tone="quiet"
-                density="compact"
-                label={
-                  item.staged
-                    ? copy("Tümünü çıkar", "Unstage all")
-                    : copy("Tümünü stage’e al", "Stage all")
-                }
-                disabled={busy}
-                onPress={() => runFileAction(item.staged ? "unstageAll" : "stageAll")}
-              />
+              {!filtered ? (
+                <Button
+                  tone="quiet"
+                  density="compact"
+                  label={
+                    item.staged
+                      ? copy("Tümünü çıkar", "Unstage all")
+                      : copy("Tümünü stage’e al", "Stage all")
+                  }
+                  disabled={busy}
+                  onPress={() => runFileAction(item.staged ? "unstageAll" : "stageAll")}
+                />
+              ) : null}
             </Row>
           ) : (
-            <GitFileRow
-              file={item.file}
-              staged={item.staged}
-              busy={busy}
-              onPreview={() => {
-                if (!busy)
-                  dispatch({
-                    type: "view",
-                    view: {
-                      kind: "diff",
-                      selection: { path: item.file.relative, staged: item.staged },
-                    },
-                  });
-              }}
-              onStage={() => runFileAction(item.staged ? "unstage" : "stage", item.file.relative)}
-            />
+            <GroupedListRow
+              first={index === 0 || rows[index - 1]?.kind === "group"}
+              last={index === rows.length - 1 || rows[index + 1]?.kind === "group"}
+              inset={rowInset}
+            >
+              <GitFileRow
+                file={item.file}
+                staged={item.staged}
+                busy={busy}
+                onPreview={() => {
+                  if (!busy)
+                    dispatch({
+                      type: "view",
+                      view: {
+                        kind: "diff",
+                        selection: { path: item.file.relative, staged: item.staged },
+                      },
+                    });
+                }}
+                onStage={() => runFileAction(item.staged ? "unstage" : "stage", item.file.relative)}
+              />
+            </GroupedListRow>
           )
         }
-        footer={
-          !selection ? (
-            <GitCommitPanel
-              index={data}
-              canRunWorkspace={!!root}
-              message={message}
-              onMessageChange={(value) => patchDraft({ message: value })}
-              busy={busy || !draft.ready}
-              fetching={actions.extended.isPending}
-              onFetch={() => {
-                void actions.fetch().catch(() => {});
-              }}
-              onChoose={choose}
-            />
-          ) : null
-        }
       />
+      <Sheet
+        visible={actionsOpen && !state.confirmation}
+        size="form"
+        title={copy("Commit ve eşitleme", "Commit and sync")}
+        dismissible={!busy}
+        onClose={() => {
+          void persist()
+            .then(() => setActionsOpen(false))
+            .catch(() => {});
+        }}
+      >
+        {draftStatus}
+        {feedback}
+        <Body muted style={uiStyles.caption}>
+          {copy(
+            "Commit, stage’deki tüm dosyaları içerir. Listedeki filtreler yalnızca görünümü etkiler.",
+            "A commit includes every staged file. List filters only change what you see.",
+          )}
+        </Body>
+        <GitCommitPanel
+          index={data}
+          canRunWorkspace={!!root}
+          message={message}
+          onMessageChange={(value) => patchDraft({ message: value })}
+          busy={busy || !draft.ready}
+          fetching={actions.extended.isPending}
+          onFetch={() => {
+            void actions.fetch().catch(() => {});
+          }}
+          onChoose={choose}
+        />
+      </Sheet>
       {branchPicker ? (
         <GitBranchesPanel
           scope={scope}

@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useEffect } from "react";
 import { AppState, View } from "react-native";
 import { focusManager, onlineManager } from "@tanstack/react-query";
@@ -6,9 +7,12 @@ import { useMachines } from "./state/machines";
 import { uiStyles } from "./ui/styles";
 import { Loading } from "./ui/primitives";
 import { useSecurity } from "./state/security";
+import { useAttachmentReleaseRetry } from "./state/queries";
 import type { LifecycleProps } from "./app-types";
 
 export function AppLifecycle({ children, cache }: LifecycleProps) {
+  useMobileTheme();
+  useAttachmentReleaseRetry();
   const hydrate = useMachines((s) => s.hydrate);
   const hydrated = useMachines((s) => s.hydrated);
   const activeId = useMachines((s) => s.activeId);

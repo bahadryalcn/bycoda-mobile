@@ -1,6 +1,7 @@
+import { useMobileTheme } from "./theme";
 import { useState, type PropsWithChildren } from "react";
 import { View } from "react-native";
-import { Pressable } from "./gluestack/pressable";
+import { Pressable } from "react-native";
 import { Body } from "./typography";
 import { colors, metrics, opacity, space } from "./tokens";
 import { uiStyles } from "./styles";
@@ -14,6 +15,7 @@ export function Disclosure({
   detail,
   defaultExpanded = false,
 }: PropsWithChildren<{ label: string; detail?: string; defaultExpanded?: boolean }>) {
+  useMobileTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [visited, setVisited] = useState(defaultExpanded);
   return (
@@ -37,19 +39,17 @@ export function Disclosure({
           opacity: pressed ? opacity.pressed : 1,
         })}
       >
-        <DisclosureChevron
-          expanded={expanded}
-          size={16}
-          color={expanded ? colors.text : colors.muted}
-        />
         <View style={[uiStyles.grow, { gap: 2 }]}>
-          <Body style={uiStyles.buttonLabel}>{label}</Body>
+          <Body style={[uiStyles.buttonLabel, { fontWeight: "500" }]}>
+            {label}
+          </Body>
           {detail && !expanded ? (
-            <Body muted numberOfLines={1} style={uiStyles.caption}>
+            <Body muted style={uiStyles.caption}>
               {detail}
             </Body>
           ) : null}
         </View>
+        <DisclosureChevron expanded={expanded} size={16} color={colors.muted} />
       </Pressable>
       {visited ? <DisclosureBody expanded={expanded}>{children}</DisclosureBody> : null}
     </Animated.View>

@@ -1,3 +1,4 @@
+import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { ScrollView, View, useWindowDimensions } from "react-native";
 import { Body, Button, CodeText } from "@/ui/primitives";
@@ -8,6 +9,7 @@ import type { DiffLine } from "./wire-types";
 
 /** A bounded two-axis diff viewport keeps file actions reachable on a phone. */
 export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
+  useMobileTheme();
   const copy = useCopy();
   const { height } = useWindowDimensions();
   const [limit, setLimit] = useState(200);
@@ -34,6 +36,13 @@ export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
                 style={{
                   flexDirection: "row",
                   minHeight: 24,
+                  borderStartWidth: 3,
+                  borderStartColor:
+                    line.kind === "add"
+                      ? colors.success
+                      : line.kind === "remove"
+                        ? colors.danger
+                        : "transparent",
                   backgroundColor:
                     line.kind === "add"
                       ? semanticColors.success.surface
@@ -75,12 +84,7 @@ export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
                     fontSize: fontSize.caption,
                     lineHeight: 24,
                     paddingEnd: space.md,
-                    color:
-                      line.kind === "add"
-                        ? colors.success
-                        : line.kind === "remove"
-                          ? colors.danger
-                          : colors.muted,
+                    color: line.kind === "context" ? colors.muted : colors.text,
                   }}
                 >
                   {`${line.kind === "add" ? "+ " : line.kind === "remove" ? "− " : "  "}${line.text}`}

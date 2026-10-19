@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Linking } from "react-native";
-import { Body, Button, Card, ErrorText, Heading, Section, Stack, NavigationGroup, NavigationRow } from "@/ui/primitives";
+import { Body, ErrorText, Section, Stack, NavigationGroup, NavigationRow } from "@/ui/primitives";
+import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { uiStyles } from "@/ui/styles";
 import {
   legalSections,
   legalUpdatedDate,
@@ -19,21 +21,25 @@ export type { LegalDocumentId } from "./legal-content";
 export function LegalDocument({ document }: { document: LegalDocumentId }) {
   const copy = useCopy();
   return (
-    <Stack>
+    <Stack style={{ gap: space.xl }}>
       <Body muted>
         {copy("Son güncelleme: ", "Last updated: ")}
         {copy(...legalUpdatedDate)}
       </Body>
       {legalSections[document].map((section, index) => (
         <Section key={index} title={copy(...section.title)}>
-          {section.paragraphs.map((paragraph, paragraphIndex) => (
-            <Body key={paragraphIndex}>{copy(...paragraph)}</Body>
-          ))}
+          <Stack style={{ gap: space.md }}>
+            {section.paragraphs.map((paragraph, paragraphIndex) => (
+              <Body key={paragraphIndex} selectable style={{ lineHeight: 24 }}>
+                {copy(...paragraph)}
+              </Body>
+            ))}
+          </Stack>
         </Section>
       ))}
       {document === "terms" ? (
         <Section title={copy("MIT lisansı", "MIT license")}>
-          <Body>{mitLicense}</Body>
+          <Body selectable style={{ lineHeight: 24 }}>{mitLicense}</Body>
         </Section>
       ) : null}
       <DocumentLinks key={document} document={document} />
@@ -113,23 +119,16 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
           ];
   return (
     <Section title={copy("İletişim ve bağlantılar", "Contact & links")}>
-      <Card>
-        <Body muted>
-          {copy(
-            "Dokunduğun bağlantı başka bir uygulamada açılır.",
-            "Links open in another app when you tap them.",
-          )}
-        </Body>
-        <Body>{supportEmail}</Body>
-        <Button
+      <NavigationGroup>
+        <NavigationRow
           label={copy("E-posta uygulamasını aç", "Open email app")}
-          busy={opening === `mailto:${supportEmail}`}
+          detail={supportEmail}
           disabled={opening !== null}
           onPress={() => {
             void open(`mailto:${supportEmail}`);
           }}
         />
-        <NavigationGroup>{links.map(({ label, url }) => (
+        {links.map(({ label, url }) => (
           <NavigationRow
             key={url}
             label={label}
@@ -138,9 +137,15 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
               void open(url);
             }}
           />
-        ))}</NavigationGroup>
-        <ErrorText error={error} />
-      </Card>
+        ))}
+      </NavigationGroup>
+      <Body muted style={uiStyles.caption}>
+        {copy(
+          "Dokunduğun bağlantı başka bir uygulamada açılır.",
+          "Links open in another app when you tap them.",
+        )}
+      </Body>
+      <ErrorText error={error} />
     </Section>
   );
 }
