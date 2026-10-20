@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { RemoteInboxAvailability } from "../../../../src/features/inbox/model/remoteInbox";
 import { useActiveMachine } from "@/state/machines";
-import { hostKey, useHostClient, useHostQuery } from "@/state/queries";
+import { hostKey, useHostClient, useHostQuery, useHostReadActive } from "@/state/queries";
 import { InboxJobError, runInboxJob } from "./provider-jobs";
 import type { InboxJobRequest, InboxJobResults, InboxReadAction } from "./provider-protocol";
 
@@ -20,6 +20,7 @@ export function useInboxRead<Action extends InboxReadAction>(
   enabled = true,
 ) {
   const client = useHostClient();
+  const active = useHostReadActive();
   const machine = useActiveMachine();
   return useQuery<InboxJobResults[Action]>({
     queryKey: hostKey(machine?.id ?? null, ["provider-inbox", request.action, request.input]),
@@ -27,7 +28,7 @@ export function useInboxRead<Action extends InboxReadAction>(
       if (!client) throw new InboxJobError("Choose a computer first.");
       return runInboxJob<Action>(client, request, signal);
     },
-    enabled: !!client && enabled,
+    enabled: !!client && active && enabled,
     retry: false,
     staleTime: 20_000,
   });

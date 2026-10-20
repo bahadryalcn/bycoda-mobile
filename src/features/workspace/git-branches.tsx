@@ -86,6 +86,7 @@ export function GitBranchesPanel({
       }
     >
       <ScreenList
+        grouped
         data={rows}
         keyExtractor={(row) => row.key}
         query={branches}

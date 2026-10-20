@@ -20,7 +20,7 @@ import { Body } from "./primitives";
 import { useCopy } from "./copy";
 import { connectionPhase } from "./connection-presentation";
 import { Menu } from "panelui-native/components/menu";
-import { Spinner } from "panelui-native/components/spinner";
+import { BusyIndicator as Spinner } from "./busy-indicator";
 
 /** Connection state for the active computer; mounting it also keeps the descriptor fresh. */
 function useMachineStatus() {

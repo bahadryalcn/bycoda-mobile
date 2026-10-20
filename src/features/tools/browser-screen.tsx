@@ -4,7 +4,7 @@ import ArrowDown from "lucide-react-native/icons/arrow-down";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { uiStyles } from "@/ui/styles";
-import { useHostClient } from "@/state/queries";
+import { useHostClient, useHostReadActive } from "@/state/queries";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import type { HostProject } from "@/domain/types";
@@ -46,6 +46,7 @@ export function BrowserScreen({ project }: { project: HostProject }) {
   useMobileTheme();
   const copy = useCopy();
   const client = useHostClient();
+  const active = useHostReadActive();
   const machine = useActiveMachine();
   const action = useAsyncAction<BrowserState>();
   const [browserState, setState] = useState<BrowserState>();
@@ -136,11 +137,16 @@ export function BrowserScreen({ project }: { project: HostProject }) {
     };
   }, [client, project.id]);
   useEffect(() => {
-    if (!state?.controlling) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [state?.controlling]);
-  const controlling = !!state?.controlling && !!state.leaseId && (state.leaseExpiresAt ?? 0) > now;
+    if (!active || !state?.controlling) return;
+    const currentTime = Date.now();
+    setNow(currentTime);
+    const remaining = (state.leaseExpiresAt ?? 0) - currentTime;
+    if (remaining <= 0) return;
+    // Only the expiry changes the controls; no countdown is rendered.
+    const timer = setTimeout(() => setNow(Date.now()), remaining);
+    return () => clearTimeout(timer);
+  }, [active, state?.controlling, state?.leaseExpiresAt]);
+  const controlling = active && !!state?.controlling && !!state.leaseId && (state.leaseExpiresAt ?? 0) > Math.max(now, Date.now());
   const busy = action.isPending;
   const input = (params: Record<string, unknown>) => {
     if (controlling && !busy) request("browser.input", params, true);

@@ -21,7 +21,7 @@ export const uiStyles = createThemedStyles(() => ({
     alignItems: "center",
     gap: space.sm,
   },
-  titleText: { flexGrow: 1, flexShrink: 1, flexBasis: 180, minWidth: 0 },
+  titleText: { flexGrow: 1, flexShrink: 0, flexBasis: "auto", maxWidth: "100%", minWidth: 0 },
   titleActions: {
     flexDirection: "row",
     flexWrap: "wrap",

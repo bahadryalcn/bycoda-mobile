@@ -6,6 +6,7 @@ import ListChecks from "lucide-react-native/icons/list-checks";
 import { Badge, Body, Button, CodePanel, CodeText, QueryState, Row, Sheet } from "@/ui/primitives";
 import { ChatAction, ChatSummary } from "@/ui/chat-controls";
 import { ChatMessage } from "@/ui/chat";
+import { ChatActivity, ChatPlan, ChatStreaming } from "@/ui/chat-activity";
 import { MessageText } from "@/ui/message-text";
 import { chatTextStyles } from "@/ui/chat-styles";
 import { useChatAppearance } from "@/state/chat-appearance";
@@ -20,7 +21,7 @@ import { TranscriptStructured } from "./transcript-structured";
 import { TranscriptActions } from "./transcript-actions";
 import { SessionArtifacts } from "./session-artifacts";
 import { AgentAvatar } from "@/ui/agent-avatar";
-import { activityState } from "./transcript-model";
+import { activityState, canCollapseToolFailure, toolResultTexts } from "./transcript-model";
 import { useMobileTheme } from "@/ui/theme";
 
 export const TranscriptBlock = memo(function TranscriptBlock({
@@ -45,7 +46,9 @@ export const TranscriptBlock = memo(function TranscriptBlock({
     scope,
     blockId: block.id,
     revision,
-    enabled: (requested || open || activityDetail) && !!block.remoteContent,
+    enabled:
+      (requested || open || activityDetail || !!block.plan || !!block.taskList) &&
+      !!block.remoteContent,
   });
   const value = detail.data ?? block;
   const conversational = value.role === "user" || value.role === "assistant";
@@ -59,7 +62,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   const warning = needsApproval || value.notice === "interrupt";
   const semantic = isError ? semanticColors.danger : warning ? semanticColors.warning : undefined;
   const foldable =
-    !activityDetail && !conversational && !semantic && !value.approval && !value.interjection;
+    !activityDetail && !conversational && (!semantic || canCollapseToolFailure(value)) && !value.approval && !value.interjection;
   const title =
     value.role === "reasoning"
       ? copy("Düşünce", "Reasoning")
@@ -79,6 +82,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                     ? copy("Agent devri", "Agent handoff")
                     : value.role;
   const text = value.text || value.tool?.detail || value.tool?.output || "";
+  const toolResults = toolResultTexts(value);
   const label =
     value.agentRun?.name ||
     value.tool?.title ||
@@ -90,6 +94,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
     !value.streaming && (!!text.trim() || !!value.attachments?.length || !!value.image);
   const actionText = [
     text,
+    ...toolResults,
     value.image?.name,
     ...(value.attachments ?? []).map((file) => `[${file.name}]`),
   ]
@@ -147,10 +152,11 @@ export const TranscriptBlock = memo(function TranscriptBlock({
 
   const contents = (
     <View style={{ gap: space.sm }}>
-      {(open || activityDetail || requested) && value.remoteContent ? (
+      {(open || activityDetail || requested || value.plan || value.taskList) &&
+      value.remoteContent ? (
         <QueryState query={detail} />
       ) : null}
-      {(open || activityDetail || requested) && detail.error ? (
+      {(open || activityDetail || requested || value.plan || value.taskList) && detail.error ? (
         <Button
           label={copy("İçeriği yeniden yükle", "Retry loading content")}
           tone="quiet"
@@ -174,6 +180,13 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           }
         />
       ) : null}
+      {toolResults.length ? <View style={{ gap: space.sm }}>
+        <Body muted style={uiStyles.label}>{copy("Çıktı", "Output")}</Body>
+        {toolResults.map((output, index) => <CodePanel key={index}>
+          <CodeText style={[typography.code, isError && { color: colors.danger }]}>{output}</CodeText>
+        </CodePanel>)}
+      </View> : null}
+      {value.tool?.outputTruncated ? <Body muted>{copy("Çıktı kısaltıldı.", "Output was truncated.")}</Body> : null}
       <TranscriptStructured block={value} context={context} />
       <TranscriptAttachments block={value} context={context} />
       {context?.sessionId && value.role === "assistant" ? (
@@ -282,7 +295,26 @@ export const TranscriptBlock = memo(function TranscriptBlock({
 
   return (
     <>
-      {foldable ? (
+      {foldable && (value.plan || value.taskList) ? (
+        <ChatPlan
+          title={label}
+          status={status}
+          action={planAction}
+          onOpenChange={(next) => {
+            if (next) setRequested(true);
+          }}
+        >
+          {contents}
+        </ChatPlan>
+      ) : foldable && (value.role === "reasoning" || value.role === "tool") ? (
+        <ChatActivity
+          title={label}
+          detail={isError ? copy("Başarısız", "Failed") : status}
+          reasoning={value.role === "reasoning"}
+          onInspect={() => setOpen(true)}
+          status={isError ? "error" : state === "running" ? "running" : state === "completed" ? "complete" : "pending"}
+        />
+      ) : foldable ? (
         <View style={{ gap: space.xs }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -322,98 +354,107 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             gap: space.xxs,
           }}
         >
-        <ChatMessage
-          role={
-            value.role === "user" ? "user" : value.role === "assistant" ? "assistant" : "system"
-          }
-          style={{
-            alignSelf: "stretch",
-            backgroundColor:
-              semantic?.surface ?? (value.role === "user" ? colors.userMessage : "transparent"),
-            borderColor: semantic?.border ?? colors.separator,
-            borderWidth: semantic ? 1 : 0,
-            paddingHorizontal:
-              activityDetail || (!semantic && value.role !== "user")
-                ? 0
-                : value.role === "user"
-                  ? space.lg
-                  : space.md,
-            paddingVertical:
-              activityDetail || (!semantic && value.role !== "user") ? 0 : value.role === "user" ? space.sm : space.md,
-            borderRadius: semantic || value.role === "user" ? radii.card : 0,
-            gap: space.xs,
-          }}
-        >
-          {value.role !== "user" ? (
-          <Row style={{ flexWrap: "nowrap", gap: space.sm, minHeight: 32 }}>
-            {value.role === "assistant" ? (
-              <AgentAvatar author={author} size={22} />
-            ) : (
-              <Terminal size={15} color={semantic?.text ?? colors.muted} />
-            )}
-            <Body
-              numberOfLines={1}
-              style={[typography.author, uiStyles.grow, { color: semantic?.text ?? colors.muted }]}
-            >
-              {value.role === "assistant" ? author || "bycoda" : label}
-            </Body>
-            {value.startedAt ? (
+          <ChatMessage
+            role={
+              value.role === "user" ? "user" : value.role === "assistant" ? "assistant" : "system"
+            }
+            style={{
+              alignSelf: "stretch",
+              backgroundColor:
+                semantic?.surface ?? (value.role === "user" ? colors.userMessage : "transparent"),
+              borderColor: semantic?.border ?? colors.separator,
+              borderWidth: semantic ? 1 : 0,
+              paddingHorizontal:
+                activityDetail || (!semantic && value.role !== "user")
+                  ? 0
+                  : value.role === "user"
+                    ? space.lg
+                    : space.md,
+              paddingVertical:
+                activityDetail || (!semantic && value.role !== "user")
+                  ? 0
+                  : value.role === "user"
+                    ? space.sm
+                    : space.md,
+              borderRadius: semantic || value.role === "user" ? radii.card : 0,
+              gap: space.xs,
+            }}
+          >
+            {value.role !== "user" ? (
+              <Row style={{ flexWrap: "nowrap", gap: space.sm, minHeight: 32 }}>
+                {value.role === "assistant" ? (
+                  <AgentAvatar author={author} size={22} />
+                ) : (
+                  <Terminal size={15} color={semantic?.text ?? colors.muted} />
+                )}
+                <Body
+                  numberOfLines={1}
+                  style={[
+                    typography.author,
+                    uiStyles.grow,
+                    { color: semantic?.text ?? colors.muted },
+                  ]}
+                >
+                  {value.role === "assistant" ? author || "bycoda" : label}
+                </Body>
+                {value.startedAt ? (
+                  <Body muted style={typography.metadata}>
+                    {new Date(value.startedAt).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Body>
+                ) : null}
+                {canAct ? (
+                  <ChatAction
+                    label={copy("Mesaj seçenekleri", "Message options")}
+                    onPress={() => setActions(true)}
+                  >
+                    <Ellipsis size={16} color={colors.subtle} />
+                  </ChatAction>
+                ) : null}
+              </Row>
+            ) : null}
+            {value.streaming ? <ChatStreaming label={copy("Yazıyor…", "Writing…")} /> : null}
+            {isError ? <Badge label={copy("Başarısız", "Failed")} tone="danger" /> : null}
+            {value.notice === "interrupt" ? (
+              <Badge label={copy("Durduruldu", "Interrupted")} tone="warning" />
+            ) : null}
+            {activityDetail && status ? (
               <Body muted style={typography.metadata}>
-                {new Date(value.startedAt).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {status}
               </Body>
             ) : null}
-            {canAct ? (
-              <ChatAction
-                label={copy("Mesaj seçenekleri", "Message options")}
-                onPress={() => setActions(true)}
-              >
-                <Ellipsis size={16} color={colors.subtle} />
-              </ChatAction>
-            ) : null}
-          </Row>
+            {contents}
+            {planAction}
+          </ChatMessage>
+          {value.role === "user" && (value.startedAt || canAct) ? (
+            <Row style={{ justifyContent: "flex-end", flexWrap: "nowrap", gap: space.xxs }}>
+              {value.startedAt ? (
+                <Body muted style={typography.metadata}>
+                  {new Date(value.startedAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Body>
+              ) : null}
+              {canAct ? (
+                <ChatAction
+                  label={copy("Mesaj seçenekleri", "Message options")}
+                  onPress={() => setActions(true)}
+                >
+                  <Ellipsis size={16} color={colors.subtle} />
+                </ChatAction>
+              ) : null}
+            </Row>
           ) : null}
-          {value.streaming ? (
-            <Body style={[typography.metadata, { color: colors.live }]}>
-              {copy("Yazıyor…", "Writing…")}
-            </Body>
-          ) : null}
-          {isError ? <Badge label={copy("Başarısız", "Failed")} tone="danger" /> : null}
-          {value.notice === "interrupt" ? (
-            <Badge label={copy("Durduruldu", "Interrupted")} tone="warning" />
-          ) : null}
-          {activityDetail && status ? (
-            <Body muted style={typography.metadata}>
-              {status}
-            </Body>
-          ) : null}
-          {contents}
-          {planAction}
-        </ChatMessage>
-        {value.role === "user" && (value.startedAt || canAct) ? (
-          <Row style={{ justifyContent: "flex-end", flexWrap: "nowrap", gap: space.xxs }}>
-            {value.startedAt ? (
-              <Body muted style={typography.metadata}>
-                {new Date(value.startedAt).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </Body>
-            ) : null}
-            {canAct ? (
-              <ChatAction
-                label={copy("Mesaj seçenekleri", "Message options")}
-                onPress={() => setActions(true)}
-              >
-                <Ellipsis size={16} color={colors.subtle} />
-              </ChatAction>
-            ) : null}
-          </Row>
-        ) : null}
         </View>
       )}
+      {foldable && !value.plan && !value.taskList && (value.role === "reasoning" || value.role === "tool") ? (
+        <Sheet visible={open} title={label} size="full" onClose={() => setOpen(false)}>
+          {open ? <TranscriptBlock {...{ block, author, scope, revision, runId, disabled, onCommand, context }} activityDetail /> : null}
+        </Sheet>
+      ) : null}
       {actions ? (
         <TranscriptActions
           text={actionText}

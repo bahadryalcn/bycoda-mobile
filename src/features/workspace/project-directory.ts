@@ -1,4 +1,5 @@
 import type { HostProjectDirectory, HostProjectGroup } from "@/domain/types";
+import type { ProjectDirectoryPreferences } from "@/state/project-directory-preferences";
 
 export type DirectoryProject = HostProjectDirectory["projects"][number];
 export type DirectorySection = {
@@ -9,6 +10,36 @@ export type DirectorySection = {
   expanded: boolean;
   data: DirectoryProject[];
 };
+
+export function projectPathLabel(path: string, full = false) {
+  if (full) return path;
+  const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
+  return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : path;
+}
+
+export function sortDirectoryProjects<T extends { id: string; name: string }>(
+  projects: readonly T[], preferences: Pick<ProjectDirectoryPreferences, "sort" | "recent">,
+): T[] {
+  if (preferences.sort === "desktop") return [...projects];
+  return [...projects].sort((a, b) =>
+    (preferences.sort === "recent" ? (preferences.recent[b.id] ?? 0) - (preferences.recent[a.id] ?? 0) : 0) ||
+    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+}
+
+export type DirectoryRow =
+  | { kind: "group"; key: string; section: DirectorySection }
+  | { kind: "project"; key: string; project: DirectoryProject; group?: HostProjectGroup; first: boolean; last: boolean };
+
+/** Individual projects, not whole groups, are virtualization units. */
+export function directoryRows(sections: readonly DirectorySection[], grouped: boolean): DirectoryRow[] {
+  return sections.flatMap((section): DirectoryRow[] => [
+    ...(grouped ? [{ kind: "group" as const, key: `group:${section.key}`, section }] : []),
+    ...section.data.map((project, index) => ({
+      kind: "project" as const, key: `project:${project.id}`, project, group: section.group,
+      first: index === 0, last: index === section.data.length - 1,
+    })),
+  ]);
+}
 
 /** Folder aliases remain distinct: navigation and sessions belong to the host ID. */
 export function distinctDirectoryProjects(

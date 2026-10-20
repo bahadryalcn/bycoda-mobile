@@ -4,13 +4,40 @@ import { View } from "react-native";
 import { Pressable } from "react-native";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import { Body } from "./typography";
-import { colors, fontSize, metrics, radii, space } from "./tokens";
+import { colors, fontSize, metrics, opacity, radii, space } from "./tokens";
 import { IconButton } from "./buttons";
 import Animated from "react-native-reanimated";
-import { Spinner } from "panelui-native/components/spinner";
+import { BusyIndicator as Spinner } from "./busy-indicator";
 import { usePressMotion } from "./motion";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/** Quiet chat chrome: a small label/icon inside a full, non-overlapping touch target. */
+export function ChatToolbarAction({ label, accessibilityLabel, onPress, disabled, busy, tone = "muted", children }: PropsWithChildren<{
+  label: string;
+  accessibilityLabel?: string;
+  onPress: () => void;
+  disabled?: boolean;
+  busy?: boolean;
+  tone?: "muted" | "accent" | "danger";
+}>) {
+  useMobileTheme();
+  const color = colors[tone];
+  const off = !!(disabled || busy);
+  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label}
+    accessibilityState={{ disabled: off, busy: !!busy }} disabled={off} onPress={onPress}
+    aria-disabled={off} aria-busy={busy || undefined}
+    style={({ pressed }) => ({ minHeight: metrics.touchTarget, minWidth: metrics.touchTarget,
+      maxWidth: "100%", flexShrink: 1, paddingHorizontal: space.xs, gap: space.xs,
+      flexDirection: "row", alignItems: "center", justifyContent: "center",
+      borderRadius: radii.control, opacity: off ? opacity.disabled : 1,
+      backgroundColor: pressed ? colors.raised : "transparent" })}>
+    {busy ? <Spinner size="sm" color={color} /> : children}
+    <Body selectable={false} style={{ color, fontSize: fontSize.small, lineHeight: 18, fontWeight: "500", flexShrink: 1 }}>
+      {label}
+    </Body>
+  </Pressable>;
+}
 
 /** Compact visuals retain a 48dp tap area through hit slop. */
 export function ChatAction({
@@ -43,8 +70,8 @@ export function ChatAction({
 }
 
 /**
- * Circular composer action: a 34pt disc (filled accent when active, gray otherwise) inside a
- * 44pt touch area, with a spring press and busy spinner.
+ * Circular composer action: a 30dp visual (filled accent only when active) inside a
+ * 48dp touch area, with a spring press and busy spinner.
  */
 export function ChatCircleAction({
   label,
@@ -52,6 +79,7 @@ export function ChatCircleAction({
   disabled,
   busy,
   active,
+  surface = false,
   children,
 }: PropsWithChildren<{
   label: string;
@@ -60,6 +88,7 @@ export function ChatCircleAction({
   busy?: boolean;
   /** Filled accent when the action can be performed; gray otherwise. */
   active?: boolean;
+  surface?: boolean;
 }>) {
   useMobileTheme();
   const press = usePressMotion(0.88);
@@ -75,18 +104,19 @@ export function ChatCircleAction({
       onPress={onPress}
       onPressIn={press.onPressIn}
       onPressOut={press.onPressOut}
-      hitSlop={6}
       style={[
-        { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+        { width: metrics.touchTarget, height: metrics.touchTarget, alignItems: "center", justifyContent: "center" },
         press.animatedStyle,
       ]}
     >
       <View
         style={{
-          width: 34,
-          height: 34,
+          width: 30,
+          height: 30,
           borderRadius: radii.pill,
-          backgroundColor: active ? colors.accentSolid : colors.fill,
+          backgroundColor: active ? colors.accentSolid : surface ? colors.panel : "transparent",
+          borderWidth: surface ? 1 : 0,
+          borderColor: colors.separator,
           alignItems: "center",
           justifyContent: "center",
           opacity: disabled && !busy ? 0.6 : 1,

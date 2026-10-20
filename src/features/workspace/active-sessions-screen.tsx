@@ -35,6 +35,9 @@ import {
   sessionStatus,
   StatusDot,
 } from "./shared";
+import { sessionDirectoryRows, toggleSessionDirectoryFolder, type SessionDirectoryRow } from "./session-directory";
+import { SessionFolderRow } from "./session-folder-row";
+import type { HostProject } from "@/domain/types";
 
 type StatusFilter = "all" | "running" | "reply";
 
@@ -51,6 +54,7 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
   const [filterDraft, setFilterDraft] = useState<{ filter: StatusFilter; archived: boolean; projectId: string } | null>(null);
   const [creating, setCreating] = useState(false);
   const [newProjectId, setNewProjectId] = useState("");
+  const [collapsed, setCollapsed] = useState<Record<string, Record<string, boolean>>>({});
   const selectedProjectId = useMachines((state) => state.selectedProjectId);
   const projectOptions = (activity.projects.data ?? []).map((project) => ({
     value: project.id,
@@ -71,6 +75,14 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
         .toLocaleLowerCase()
         .includes(search.trim().toLocaleLowerCase()),
   );
+  type DirectoryItem = SessionDirectoryRow & { project: HostProject };
+  const rows: DirectoryItem[] = overview
+    ? (activity.projects.data ?? []).flatMap((project) => {
+        const scope = `${machine?.id}:${project.id}`;
+        return sessionDirectoryRows(visible.filter((item) => item.project.id === project.id).map((item) => item.session),
+          project.sessionLayout, collapsed[scope], !!search.trim()).map((row) => ({ ...row, project, key: `${project.id}:${row.key}` }));
+      })
+    : visible.map(({ project, session }) => ({ kind: "session", key: `${project.id}:${session.id}`, project, session, depth: 0 }));
   const title = overview ? copy("Oturumlar", "Sessions") : copy("Aktif oturumlar", "Active sessions");
   const newSessionButton = overview ? (
     <IconButton
@@ -108,8 +120,9 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
     );
   return (
     <ScreenList
-      data={visible}
-      keyExtractor={({ project, session }) => `${project.id}:${session.id}`}
+      data={rows}
+      grouped
+      keyExtractor={(row) => row.key}
       title={title}
       actions={actions}
       refresh={activity.refetch}
@@ -207,6 +220,7 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
               label={copy("Proje", "Project")}
               value={creationProject ?? undefined}
               options={projectOptions}
+              searchable
               onChange={setNewProjectId}
             />
             <Button
@@ -226,14 +240,23 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
           </Sheet>
         </>
       }
-      renderItem={({ item: { project, session }, index }) => {
+      renderItem={({ item, index }) => {
+        const project = item.project;
+        if (item.kind === "folder") {
+          const scope = `${machine.id}:${project.id}`;
+          return <SessionFolderRow row={{ ...item, folder: { ...item.folder, name: `${project.name} / ${item.folder.name}` } }}
+            onToggle={() => setCollapsed((current) => ({ ...current,
+              [scope]: toggleSessionDirectoryFolder(current[scope] ?? {}, item, !!search.trim()) }))} />;
+        }
+        const session = item.session;
         const status = sessionStatus(session, copy);
         return (
           <GroupedListRow
-            first={index === 0}
-            last={index === visible.length - 1}
+            first={index === 0 || rows[index - 1]?.kind === "folder"}
+            last={index === rows.length - 1 || rows[index + 1]?.kind === "folder"}
             inset={rowInset}
           >
+            <View style={{ paddingStart: item.depth * space.md }}>
             <NavigationRow
               variant="plain"
               label={session.title || copy("Yeni oturum", "New session")}
@@ -259,6 +282,7 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
                   });
               }}
             />
+            </View>
           </GroupedListRow>
         );
       }}

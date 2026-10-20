@@ -4,7 +4,7 @@ import Check from "lucide-react-native/icons/check";
 import { Body } from "./typography";
 import { colors, metrics, opacity, semanticColors, space } from "./tokens";
 import { uiStyles } from "./styles";
-import { Button as PanelButton } from "panelui-native/components/button";
+import { LifecycleButton as PanelButton } from "./busy-indicator";
 import { controlClasses } from "./design-system";
 import { useReducedMotionPreference } from "./use-reduced-motion";
 import Animated from "react-native-reanimated";
@@ -83,7 +83,7 @@ export function Button({
         style,
       ]}
     >
-      <Body style={[uiStyles.buttonLabel, { color: foreground, textAlign: "center" }]}>
+      <Body selectable={false} style={[uiStyles.buttonLabel, { color: foreground, textAlign: "center" }]}>
         {label}
       </Body>
     </PanelButton>

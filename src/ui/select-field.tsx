@@ -118,10 +118,10 @@ function SelectionField<T extends string>({
           })}
         >
           {icon}
-          <Body numberOfLines={1} style={[uiStyles.label, uiStyles.grow]}>
+          <Body selectable={false} numberOfLines={1} style={[uiStyles.label, uiStyles.grow]}>
             {label}
           </Body>
-          <Body numberOfLines={1} muted style={{ flexShrink: 1, maxWidth: "55%" }}>
+          <Body selectable={false} numberOfLines={1} muted style={{ flexShrink: 1, maxWidth: "55%" }}>
             {summary}
           </Body>
           <ChevronsUpDown size={15} strokeWidth={2.2} color={colors.tertiary} />
@@ -158,7 +158,7 @@ function SelectionField<T extends string>({
           },
         ]}
       >
-        <Body numberOfLines={1} muted={!labels.length} style={uiStyles.grow}>
+        <Body selectable={false} muted={!labels.length} style={uiStyles.grow}>
           {summary}
         </Body>
         {multiple && values.length ? (
@@ -197,7 +197,7 @@ function SelectionField<T extends string>({
         visible={open}
         onClose={() => setOpen(false)}
         title={label}
-        size={searchEnabled ? "form" : "compact"}
+        size={searchEnabled ? "full" : "compact"}
         scroll={false}
         returnFocusRef={trigger}
         headerAction={
@@ -206,9 +206,10 @@ function SelectionField<T extends string>({
           ) : undefined
         }
       >
-        <View style={{ flexShrink: 1, flexGrow: searchEnabled ? 1 : 0 }}>
-          {searchEnabled || multiple ? (
-            <View style={uiStyles.header}>
+        <View style={{ flexShrink: 1, flexGrow: searchEnabled ? 1 : 0, minHeight: 0 }}>
+          <FlatList
+            ListHeaderComponent={searchEnabled || multiple ? (
+            <View style={[uiStyles.header, { paddingHorizontal: 0 }]}>
               {searchEnabled ? (
                 <View
                   style={[
@@ -242,6 +243,7 @@ function SelectionField<T extends string>({
                 <View
                   style={{
                     flexDirection: "row",
+                    flexWrap: "wrap",
                     alignItems: "center",
                     gap: space.row,
                     minHeight: 34,
@@ -267,14 +269,15 @@ function SelectionField<T extends string>({
               ) : null}
             </View>
           ) : null}
-          <FlatList
             data={filtered}
             extraData={values}
             style={{ flexGrow: searchEnabled ? 1 : 0, flexShrink: 1 }}
+            removeClippedSubviews={false}
             keyExtractor={(option) => option.value}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            contentInsetAdjustmentBehavior="automatic"
+            keyboardDismissMode={searchEnabled ? "none" : "on-drag"}
+            automaticallyAdjustKeyboardInsets={false}
+            contentInsetAdjustmentBehavior="never"
             contentContainerStyle={{ paddingHorizontal: space.screen, paddingBottom: space.lg }}
             ItemSeparatorComponent={() => (
               <View style={[uiStyles.separator, { marginHorizontal: space.sm }]} />

@@ -8,6 +8,7 @@ import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { TranscriptToolPreview } from "./transcript-tool-preview";
 import type { Block } from "./wire";
+import { PlanSteps } from "@/ui/plan-steps";
 
 export function TranscriptStructured({
   block,
@@ -44,30 +45,28 @@ export function TranscriptStructured({
           {list.explanation ? (
             <MessageText text={list.explanation} context={context} compactMedia />
           ) : null}
-          {list.items.map((item, index) => (
-            <Body
-              key={item.id ?? index}
-              accessibilityLabel={`${item.text}: ${item.status}`}
-              style={{
-                color:
-                  item.status === "completed"
-                    ? colors.success
-                    : item.status === "in_progress"
-                      ? colors.info
-                      : colors.muted,
-                textDecorationLine: item.status === "cancelled" ? "line-through" : "none",
-              }}
-            >
-              {item.status === "completed"
-                ? "✓"
-                : item.status === "in_progress"
-                  ? "●"
-                  : item.status === "cancelled"
-                    ? "−"
-                    : "○"}{" "}
-              {item.text}
-            </Body>
-          ))}
+          <PlanSteps
+            steps={list.items.map((item, index) => ({
+              id: item.id ?? String(index),
+              title: item.text,
+              status:
+                item.status === "completed"
+                  ? "done"
+                  : item.status === "in_progress"
+                    ? "active"
+                    : item.status === "cancelled"
+                      ? "skipped"
+                      : "pending",
+              metadata:
+                item.status === "completed"
+                  ? copy("Tamamlandı", "Completed")
+                  : item.status === "in_progress"
+                    ? copy("Çalışıyor", "Running")
+                    : item.status === "cancelled"
+                      ? copy("İptal edildi", "Cancelled")
+                      : copy("Bekliyor", "Pending"),
+            }))}
+          />
         </>
       ) : null}
       {block.tool?.preview ? (

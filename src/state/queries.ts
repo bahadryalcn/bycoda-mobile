@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { useIsFocused } from "expo-router/react-navigation";
 import { focusManager, onlineManager, useMutation, useQuery, useQueryClient, type MutateOptions } from "@tanstack/react-query";
 import { HostTransport } from "../remote/transport";
 import { credentials, useActiveMachine, useMachines } from "./machines";
@@ -19,6 +20,15 @@ import {
 import { attachmentReleases } from "../features/workspace/attachment-ownership";
 
 export { hostKey } from "./host-request";
+/** Stack routes stay mounted. Only the visible foreground route should refresh host data. */
+export function useHostReadActive() {
+  const focused = useIsFocused();
+  const available = useSecurity((state) =>
+    state.status === "unlocked" && state.appState === "active" && state.windowFocused,
+  );
+  return focused && available;
+}
+
 export function useHostClient() {
   const machine = useActiveMachine();
   const unlocked = useSecurity((s) => s.status === "unlocked");
@@ -77,13 +87,14 @@ export function useHostQuery<T>(
 ) {
   const machine = useActiveMachine();
   const client = useHostClient();
+  const active = useHostReadActive();
   const query = useQuery<T>({
     queryKey: hostKey(machine?.id ?? null, [...key, { method, params }]),
     queryFn: ({ signal }) => {
       if (!client) throw new Error("Choose a computer first.");
       return options.queryFn ? options.queryFn(client, signal) : client.request<T>(method, params, { signal });
     },
-    enabled: !!client && options.enabled !== false,
+    enabled: !!client && active && options.enabled !== false,
     staleTime: 4000,
     retry: false,
     // Hosts can be reachable on a LAN without internet connectivity.

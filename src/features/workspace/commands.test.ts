@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { dispatchCommand, UncertainCommand } from "./commands";
 import type { HostTransport } from "@/remote/transport";
+import { createSingleFlight } from "@/state/single-flight";
 
 const mockClient = (request: ReturnType<typeof vi.fn>) => ({
   machine: {
@@ -13,6 +14,24 @@ const mockClient = (request: ReturnType<typeof vi.fn>) => ({
 });
 
 describe("mobile command recovery", () => {
+  it("dispatches one create and opens once for same-turn submits; a definite failure can retry the same draft", async () => {
+    const flight = createSingleFlight<void>();
+    const request = vi.fn().mockRejectedValueOnce(Object.assign(new Error("Provider unavailable"), { kind: "host", uncertain: false }))
+      .mockResolvedValue({ commandId: "create", sessionId: "new", revision: 1 });
+    const client = mockClient(request);
+    const draft = { type: "create", projectId: "p", harness: "codex", model: "current" };
+    const open = vi.fn();
+    const submit = () => flight.run(async () => { const receipt = await dispatchCommand(client, "create", draft); open(receipt.sessionId); });
+    const first = submit(); const duplicate = submit();
+    expect(duplicate).toBe(first);
+    await expect(first).rejects.toThrow("Provider unavailable");
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(open).not.toHaveBeenCalled();
+    await submit();
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[1][1]).toMatchObject(draft);
+    expect(open).toHaveBeenCalledExactlyOnceWith("new");
+  });
   it("reconciles an accepted timed-out send through its receipt without dispatching again", async () => {
     const receipt = { commandId: "command", sessionId: "session", revision: 2 };
     const request = vi

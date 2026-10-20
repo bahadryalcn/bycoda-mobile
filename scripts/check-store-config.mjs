@@ -86,6 +86,12 @@ const plugins = new Map(
 const camera = plugins.get("expo-camera");
 const authentication = plugins.get("expo-local-authentication");
 requireValue(
+  typeof plugins.get("expo-image-picker")?.cameraPermission === "string" &&
+    !app.android?.blockedPermissions?.includes("android.permission.CAMERA"),
+  "Image picker must not block the QR scanner's Android camera permission.",
+);
+requireValue(plugins.has("expo-notifications"), "Configure native notification permissions and channel.");
+requireValue(
   plugins.has("expo-secure-store"),
   "Keep the native protected credential store enabled.",
 );

@@ -46,6 +46,11 @@ and keeps one upstream portal context. Remove each patch part when upstream
 exposes the portal subpath or declares the corresponding web state. The
 upstream MIT license is retained alongside the patch.
 
+The pinned patch also makes scrollable Tabs.List reveal its selected tab without
+animation when the existing `disable-all` animation mode is active. Both its
+source and compiled module use the same motion gate. SegmentedControl uses this
+intrinsic-width list so translated and system-scaled labels can scroll intact.
+
 The previous gluestack source remains under `ui/gluestack` as compatibility
 source. Its retained license belongs to that source, and its namespaces in
 `library.ts` are compatibility exports. Production screens and their shared
@@ -57,6 +62,46 @@ explicit preview coverage, individual import paths and upstream documentation.
 Optional native or service requirements remain visible; the tour does not connect
 to a host, configure a service or send messages. Do not import the full upstream
 barrel to render the gallery or add it to normal workspace startup.
+
+## AI conversation presentation
+
+`chat-controls.tsx` owns quiet chat chrome through `ChatToolbarAction`: small
+semantic labels/icons, no persistent filled capsule, and a minimum 48dp target.
+`ChatCircleAction` uses a 30dp visual within a separate 48dp target; the latest-message
+shortcut uses its bordered surface variant and a full accessibility label.
+Queue count and queued-draft access share a wrapping metadata row above the composer.
+The existing queue/editor hooks retain their state, guards and transport callbacks.
+
+`chat-composer.tsx` adapts PanelUI AIInput for the workspace composer and offline
+tour. It uses a growing field in one wrapping action row, 48dp product actions and
+`avoidKeyboard={false}`; `SessionKeyboardFrame` remains the keyboard owner.
+Drafts, selection, suggestions, attachments, queue/steer and dispatch stay in
+their existing feature owners. Native field sizing replaces the content-size
+measurement feedback loop.
+
+`chat-activity.tsx` adapts Reasoning, Task, Plan and Shimmer. The session header's
+view filter defaults to messages and results: only active actions in the latest
+provider turn remain transiently visible while the session is running. Detailed
+view restores the original chronological history without changing stored blocks.
+Quiet activity opens a virtualized list in a full-height sheet. Timeline rows
+never expand tool output inside the inverted list, avoiding animation/row-height conflicts.
+Selecting one action mounts only that record's output in a full-height inspector,
+owned by the transcript so completion cannot dismiss an open inspector. Session
+error/interruption notices and approval actions retain their visible presentation;
+settled tool failures remain inspectable in Detailed view. Plan build actions keep
+their remote-content and access guards. Structured task progress uses PlanSteps.
+Only actual running/streaming states shimmer, with reduced motion respected.
+
+`message-code.tsx` uses CodeBlock for the compact text preset. The larger presets
+retain the existing renderer because the pinned upstream code text is fixed at
+`text-xs`. Full-source copy, HTML/Mermaid preview, incomplete fences and explicit
+file/media opening retain the product contracts. MessageText remains the rich
+response owner because upstream Response does not cover scoped file citations or
+the existing reader preferences. Sources needs a real source collection;
+ImageGeneration needs generation lifecycle data. Soundwave needs an actual
+recorder/meter. These are not inferred from ordinary links, images or busy state.
+Panelside would replace navigation ownership and ThinkingOrb adds continuous
+graphics work; neither is part of this transcript integration.
 
 ## Record and collection controls
 
@@ -105,6 +150,13 @@ security visibility. A library component never grants permission to send,
 approve, upload or publish. Native map rendering requires the optional MapLibre
 integration and a compatible development build. PanelUI Support/Feedback need an
 explicit service setup; installing the library does not configure them.
+
+Sheet measures the frame remaining after its keyboard owner applies padding and
+the rendered header height. It reserves an input-sized body viewport and bounds
+the separate action scroller to the remaining space. When scaled labels or errors
+make actions taller, that scroller owns feedback and controls together; feedback
+does not add a nested vertical scroller inside the action area. Editor state and
+callbacks remain in their original owners.
 
 Type checks, catalog/theme tests and web export validate source integration.
 Keyboard, gestures, text scaling, reduced motion, lock transitions and both

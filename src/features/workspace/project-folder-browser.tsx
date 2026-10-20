@@ -1,6 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
+import { BusyIndicator } from "@/ui/busy-indicator";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Folder from "lucide-react-native/icons/folder";
 import { useHostQuery } from "@/state/queries";
@@ -107,6 +108,7 @@ export function ProjectFolderBrowser({
       }
     >
       <ScreenList
+        grouped
         data={entries}
         keyExtractor={(entry) => entry.path}
         header={
@@ -146,7 +148,7 @@ export function ProjectFolderBrowser({
                 {current ?? path ?? copy("Bir klasör seç", "Choose a folder")}
               </Body>
               {folders.isFetching && folders.data ? (
-                <ActivityIndicator size="small" color={colors.accent} />
+                <BusyIndicator size="sm" color={colors.accent} />
               ) : null}
             </Row>
             {(folders.data?.entries.length ?? 0) > 12 ? (

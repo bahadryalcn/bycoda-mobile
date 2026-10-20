@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogModel, catalogProviders, modelDefaults } from "./catalog";
+import { catalogModel, catalogProvider, catalogProviders, modelDefaults } from "./catalog";
 import type { HostModelCatalog } from "./wire";
 
 const catalog: HostModelCatalog = {
@@ -26,6 +26,12 @@ const catalog: HostModelCatalog = {
 };
 
 describe("host model selection", () => {
+  it("starts on an available provider while preserving an explicit unavailable choice", () => {
+    expect(catalogProvider(["claude", "codex"], catalog)).toBe("codex");
+    expect(catalogProvider(["claude", "codex"], catalog, "claude")).toBe("claude");
+    expect(catalogProvider([], catalog)).toBeUndefined();
+    expect(catalogProvider(["codex"], catalog, "gemini")).toBe("codex");
+  });
   it("infers provider choices from the real catalog when an older connection has no descriptor", () => {
     expect(catalogProviders(undefined, catalog)).toEqual(["codex", "claude", "gemini"]);
     expect(catalogProviders([], catalog)).toEqual(["codex", "claude", "gemini"]);

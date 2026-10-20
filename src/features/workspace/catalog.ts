@@ -25,6 +25,14 @@ export function catalogModel(
   return models.find((model) => model.id === requested) ?? models[0];
 }
 
+/** First-time creation should start on a usable provider; explicit choices stay visible even on error. */
+export function catalogProvider(
+  providers: readonly RemoteProvider[], catalog: HostModelCatalog | undefined, requested?: RemoteProvider,
+): RemoteProvider | undefined {
+  return requested && providers.includes(requested) ? requested
+    : providers.find((provider) => !!catalog?.models[provider]?.length) ?? providers[0];
+}
+
 export function modelDefaults(model: ReturnType<typeof catalogModel>): Record<string, string> {
   return Object.fromEntries((model?.settings ?? []).map((setting) => [setting.id, setting.value]));
 }

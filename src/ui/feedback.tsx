@@ -13,7 +13,8 @@ import CircleAlert from "lucide-react-native/icons/circle-alert";
 import { Body } from "./typography";
 import { Row } from "./layout";
 import { Button } from "./buttons";
-import { colors, semanticColors, space } from "./tokens";
+import { colors, radii, semanticColors, space } from "./tokens";
+import { useFeedbackAnimation } from "./use-feedback-animation";
 import { uiStyles } from "./styles";
 import { useCopy } from "./copy";
 import { errorMessage } from "./error-message";
@@ -35,21 +36,21 @@ export function Badge({ label, tone = "default" }: BadgeProps) {
   return (
     <PanelBadge
       variant="outline"
-      className="self-start rounded-full px-ui-sm py-0 border-0 bg-fill"
+      className="self-start rounded-control border-0 bg-fill"
       style={StyleSheet.flatten([
-        { backgroundColor: colors.fill, borderColor: colors.border, borderWidth: 0 },
+        { alignSelf: "flex-start", maxWidth: "100%", flexDirection: "column", alignItems: "stretch", paddingHorizontal: space.sm, paddingVertical: space.xxs, backgroundColor: colors.fill, borderColor: colors.border, borderWidth: 0 },
         semantic && { backgroundColor: semantic.surface, borderColor: semantic.border },
       ])}
     >
       <Text
         selectable
         style={StyleSheet.flatten([
-          uiStyles.badge,
           {
-            paddingHorizontal: 0,
-            paddingVertical: 0,
-            borderWidth: 0,
-            backgroundColor: "transparent",
+            fontSize: uiStyles.badge.fontSize,
+            lineHeight: 18,
+            fontWeight: "600",
+            fontVariant: ["tabular-nums"],
+            flexShrink: 1,
             color: semantic?.text ?? colors.muted,
           },
         ])}
@@ -95,9 +96,12 @@ export function Empty({ title, detail, compact = true, action }: EmptyProps) {
 export function Loading({ label, centered = false, showLabel = !!label }: LoadingProps) {
   useMobileTheme();
   const copy = useCopy();
+  const animate = useFeedbackAnimation();
   const content = (
     <>
-      <Spinner size="sm" color={colors.accent} />
+      {animate ? <Spinner size="sm" color={colors.accent} /> : (
+        <View accessible={false} style={{ width: 16, height: 16, borderRadius: radii.pill, borderWidth: 2, borderColor: colors.border, borderTopColor: colors.accent }} />
+      )}
       {showLabel ? (
         <Body muted style={uiStyles.caption}>
           {label ?? copy("Yükleniyor…", "Loading…")}
@@ -126,6 +130,9 @@ export function Loading({ label, centered = false, showLabel = !!label }: Loadin
 export function Skeleton({ variant = "list" }: { variant?: "list" | "content" }) {
   useMobileTheme();
   const copy = useCopy();
+  const animate = useFeedbackAnimation();
+  // Upstream has no pause prop. Unmount its loops and preserve the same shapes.
+  const Placeholder = animate ? PanelSkeleton : View;
   return (
     <Animated.View
       entering={reveal}
@@ -142,8 +149,7 @@ export function Skeleton({ variant = "list" }: { variant?: "list" | "content" })
           importantForAccessibility="no-hide-descendants"
           style={{ gap: space.sm, paddingVertical: space.sm }}
         >
-          <PanelSkeleton
-            className="motion-reduce:animate-none"
+          <Placeholder
             style={{
               height: 14,
               width: key ? "52%" : "67%",
@@ -151,8 +157,7 @@ export function Skeleton({ variant = "list" }: { variant?: "list" | "content" })
               borderRadius: 4,
             }}
           />
-          <PanelSkeleton
-            className="motion-reduce:animate-none"
+          <Placeholder
             style={{
               height: variant === "content" ? 52 : 10,
               width: key ? "76%" : "91%",

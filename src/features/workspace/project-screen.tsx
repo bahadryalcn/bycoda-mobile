@@ -1,5 +1,6 @@
 import type { ProjectScreenProps, ProjectWorktrees } from "./project-screen-types";
-import { useCallback, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { rememberOpenedProject } from "@/state/project-directory-preferences";
 import { View } from "react-native";
 import Grid2x2 from "lucide-react-native/icons/grid-2x2";
 import GitBranch from "lucide-react-native/icons/git-branch";
@@ -45,6 +46,9 @@ export function ProjectScreen({
   const machine = useActiveMachine();
   const projects = useProjectList();
   const project = projects.data?.find((value) => value.id === id);
+  useEffect(() => {
+    if (machine?.id && project?.id) void rememberOpenedProject(machine.id, project.id);
+  }, [machine?.id, project?.id]);
   const [view, dispatch] = useReducer(projectViewReducer, {
     segment: initialSegment,
     cwd: initialCwd,
@@ -193,6 +197,7 @@ export function ProjectScreen({
               projectId={id}
               cwd={cwd}
               initialCreating={createSessionInitially.current}
+              sessionLayout={project.sessionLayout}
             />
           ) : segment === "files" ? (
             <ProjectFiles

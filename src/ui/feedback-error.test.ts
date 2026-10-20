@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("./use-feedback-animation", () => ({ useFeedbackAnimation: () => false }));
 const locale = vi.hoisted(() => ({ value: "tr" }));
 vi.mock("./copy", () => ({
   useCopy: () => (tr: string, en: string) => (locale.value === "tr" ? tr : en),

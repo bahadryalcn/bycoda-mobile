@@ -71,11 +71,12 @@
         }
       ],
       "expo-secure-store",
+      ["expo-notifications", { "defaultChannel": "bycoda" }],
       [
         "expo-image-picker",
         {
           "photosPermission": "Choose photos to attach to your Bycoda messages.",
-          "cameraPermission": false,
+          "cameraPermission": "Allow Bycoda to scan the pairing QR code on your computer.",
           "microphonePermission": false
         }
       ],

@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { Image as NativeImage } from "react-native";
 import { Checkbox } from "panelui-native/components/checkbox";
 import { RadioGroup } from "panelui-native/components/radio-group";
 import { Slider } from "panelui-native/components/slider";
 import { Avatar } from "panelui-native/components/avatar";
 import { Accordion } from "panelui-native/components/accordion";
-import { Button } from "./buttons";
+import { Button, IconButton } from "./buttons";
 import { Card, Row, Stack } from "./layout";
 import { Body, Heading } from "./typography";
 import { Field, ToggleField } from "./fields";
@@ -14,6 +15,8 @@ import { metrics } from "./tokens";
 import { useSheetGuard } from "./sheet-guard";
 import { useCopy } from "./copy";
 import { GalleryLayout } from "./component-gallery-layout";
+import { MediaViewer } from "./media-viewer";
+import { MultiSelectField } from "./select-field";
 
 function GallerySheetActions({ onSubmit, onClose, error }: { onSubmit: () => void; onClose: () => void; error?: string }) {
   const copy = useCopy();
@@ -31,9 +34,12 @@ export function GalleryControls() {
   const [density, setDensity] = useState("compact");
   const [range, setRange] = useState(40);
   const [sheet, setSheet] = useState(false);
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [selectedTools, setSelectedTools] = useState(["notes", "tasks"]);
   const [saved, setSaved] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const required = submitted && !title.trim();
+  const mediaUri = NativeImage.resolveAssetSource(require("../../../public/brand/bycoda/logo-horizontal-white.png")).uri;
   return (
     <Stack>
       <Card>
@@ -68,7 +74,25 @@ export function GalleryControls() {
             onPress={() => setSheet(true)}
           />
           <Button label={copy("Devre dışı", "Disabled")} disabled onPress={() => {}} />
+          <Button label={copy("Çalışıyor…", "Working…")} tone="primary" busy onPress={() => {}} />
+          <IconButton label={copy("Çalışıyor…", "Working…")} busy onPress={() => {}} />
+          <Button label={copy("Resmi aç", "Open image")} onPress={() => setMediaOpen(true)} />
         </Row>
+        <MultiSelectField label={copy("Araçlar", "Tools")} values={selectedTools}
+          onChange={setSelectedTools} searchable max={3} options={[
+            { value: "notes", label: copy("Notlar", "Notes") },
+            { value: "tasks", label: copy("Görevler", "Tasks") },
+            { value: "goals", label: copy("Hedefler", "Goals") },
+            { value: "automations", label: copy("Otomasyonlar", "Automations") },
+            { value: "inbox", label: copy("Gelen kutusu", "Inbox") },
+            { value: "projects", label: copy("Projeler", "Projects") },
+            { value: "sessions", label: copy("Oturumlar", "Sessions") },
+            { value: "tools", label: copy("Araçlar", "Tools") },
+            { value: "computers", label: copy("Bilgisayarlar", "Computers") },
+            { value: "settings", label: copy("Ayarlar", "Settings") },
+            { value: "files", label: copy("Dosyalar", "Files") },
+            { value: "logs", label: copy("Çalışma günlükleri", "Runtime logs") },
+          ]} />
         {saved ? (
           <Notice tone="success" message={copy("Örnek kaydedildi.", "Sample saved.")} />
         ) : null}
@@ -133,6 +157,7 @@ export function GalleryControls() {
         </Accordion>
       </Card>
       <GalleryLayout />
+      <MediaViewer uri={mediaUri} name={copy("Resmi aç", "Open image")} visible={mediaOpen} onClose={() => setMediaOpen(false)} />
       <Sheet
         visible={sheet}
         title={copy("Örnek sayfa", "Sample sheet")}

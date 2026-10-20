@@ -66,17 +66,21 @@ export function Input({
     : tone === "default"
       ? undefined
       : semanticColors[tone];
-  const layout = StyleSheet.flatten(style);
+  // Layout belongs to the outer field, not the TextInput inside PanelUI's own
+  // container. In particular, ActionField relies on flexBasis to wrap its action.
+  const { flex, flexGrow, flexShrink, flexBasis, alignSelf, width, minWidth, maxWidth, ...fieldStyle } =
+    StyleSheet.flatten(style) ?? {};
   return (
     <View
       style={{
-        minWidth: 0,
-        flex: layout?.flex,
-        flexGrow: layout?.flexGrow,
-        flexShrink: layout?.flexShrink,
-        alignSelf: layout?.alignSelf ?? "stretch",
-        width: layout?.width,
-        maxWidth: layout?.maxWidth,
+        minWidth: minWidth ?? 0,
+        flex,
+        flexGrow,
+        flexShrink,
+        flexBasis,
+        alignSelf: alignSelf ?? "stretch",
+        width,
+        maxWidth,
       }}
     >
       <PanelInput
@@ -90,7 +94,7 @@ export function Input({
         placeholderTextColor={colors.muted}
         selectionColor={colors.accent}
         cursorColor={colors.accent}
-        className="text-foreground bg-fill rounded-control border-transparent"
+        className="h-auto text-foreground bg-fill rounded-control border-transparent"
         containerClassName="gap-0"
         onFocus={(event: Parameters<NonNullable<TextInputProps["onFocus"]>>[0]) => {
           setFocused(true);
@@ -107,7 +111,7 @@ export function Input({
           semantic && { borderColor: semantic.border },
           focused && { borderColor: semantic?.text ?? colors.accent },
           props.editable === false && { color: colors.muted },
-          style,
+          fieldStyle,
           // Focus is drawn by the accent border (or the composer capsule), not the browser ring.
           process.env.EXPO_OS === "web" && ({ outlineStyle: "none", resize: "none" } as object),
         ])}

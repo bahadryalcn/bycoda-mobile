@@ -7,19 +7,21 @@ import Plus from "lucide-react-native/icons/plus";
 import Check from "lucide-react-native/icons/check";
 import ListOrdered from "lucide-react-native/icons/list-ordered";
 import { Attachment } from "panelui-native/components/attachment";
-import { Plan } from "panelui-native/components/plan";
-import { Reasoning } from "panelui-native/components/reasoning";
-import { ChatMessage, ChatMessageContent, ChatComposerSurface, chatUserBubbleStyle } from "./chat";
-import { ChatCircleAction } from "./chat-controls";
+import { ChatMessage, ChatMessageContent, chatUserBubbleStyle } from "./chat";
+import { ChatComposer } from "./chat-composer";
+import { ChatActivity, ChatPlan } from "./chat-activity";
+import { PlanSteps } from "./plan-steps";
+import { MessageText } from "./message-text";
+import { ChatCircleAction, ChatToolbarAction } from "./chat-controls";
+import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { Button } from "./buttons";
 import { Card, Row, Stack } from "./layout";
 import { Body, Heading, CodeText } from "./typography";
 import { NavigationGroup, NavigationRow } from "./navigation-row";
-import { Input } from "./fields";
 import { Sheet } from "./dialogs";
 import { Notice, Badge } from "./feedback";
-import { colors, radii, space } from "./tokens";
-import { haptic, resize } from "./motion";
+import { colors } from "./tokens";
+import { haptic } from "./motion";
 import { useCopy } from "./copy";
 
 type Mode = "send" | "queue" | "steer";
@@ -87,27 +89,25 @@ export function GalleryChat() {
             </Attachment.Description>
           </Attachment.Content>
         </Attachment>
-        <Reasoning>
-          <Reasoning.Trigger
-            label={() => <Body muted>{copy("Örnek gerekçe", "Sample rationale")}</Body>}
-          />
-          <Reasoning.Content>
+        <ChatActivity title={copy("Örnek gerekçe", "Sample rationale")} reasoning status="complete">
+          <Body>
             {copy(
               "Mesajlar, dosyalar ve kuyruk aynı ortak bileşenlerle gösterilir.",
               "Messages, files and the queue use the same shared components.",
             )}
-          </Reasoning.Content>
-        </Reasoning>
+          </Body>
+        </ChatActivity>
+        <ChatActivity title={copy("Çalışma ayrıntıları", "Work details")} status="complete">
+          <MessageText text={"```tsx\nconst ready = true;\n```"} />
+        </ChatActivity>
         {queue.length ? (
           <View style={{ flexDirection: "row" }}>
-            <Button
+            <ChatToolbarAction
               label={copy("{p0} sırada", "{p0} queued", { p0: queue.length })}
-              density="compact"
-              tone="secondary"
               onPress={() => setQueueOpen(true)}
             >
               <ListOrdered size={15} strokeWidth={2.2} color={colors.accent} />
-            </Button>
+            </ChatToolbarAction>
           </View>
         ) : null}
         {attached ? (
@@ -137,63 +137,42 @@ export function GalleryChat() {
             />
           </View>
         )}
-        <View style={{ flexDirection: "row" }}>
-          <Button
-            label={modeLabel}
-            density="compact"
-            tone="secondary"
-            onPress={() => setModePicker(true)}
-          />
-        </View>
-        <ChatComposerSurface
-          layout={resize}
-          style={{
-            flexDirection: "row",
-            alignItems: "flex-end",
-            gap: space.xs,
-            backgroundColor: colors.panel,
-            borderWidth: 1,
-            borderColor: colors.separator,
-            borderRadius: radii.preview,
-            padding: space.xxs,
+        <ChatComposer
+          value={prompt}
+          onValueChange={setPrompt}
+          mode={
+            <ChatToolbarAction
+              label={modeLabel}
+              onPress={() => setModePicker(true)}
+            ><ChevronDown size={12} color={colors.muted} /></ChatToolbarAction>
+          }
+          leading={
+            <ChatCircleAction
+              label={copy("Dosya ekle", "Attach file")}
+              onPress={() => setAttached(true)}
+            >
+              <Plus size={19} strokeWidth={2.4} color={colors.text} />
+            </ChatCircleAction>
+          }
+          field={{
+            accessibilityLabel: copy("Mesaj", "Message"),
+            placeholder: copy("Bir mesaj yaz", "Write a message"),
           }}
-        >
-          <ChatCircleAction
-            label={copy("Dosya ekle", "Attach file")}
-            onPress={() => setAttached(true)}
-          >
-            <Plus size={19} strokeWidth={2.4} color={colors.text} />
-          </ChatCircleAction>
-          <Input
-            label={copy("Mesaj", "Message")}
-            value={prompt}
-            onChangeText={setPrompt}
-            placeholder={copy("Bir mesaj yaz", "Write a message")}
-            multiline
-            style={{
-              flex: 1,
-              minWidth: 0,
-              minHeight: 44,
-              maxHeight: 140,
-              borderWidth: 0,
-              backgroundColor: "transparent",
-              paddingVertical: space.sm + 2,
-              paddingHorizontal: space.xs,
-            }}
-          />
-          <ChatCircleAction
-            label={modeLabel}
-            active={!sendDisabled}
-            disabled={sendDisabled}
-            onPress={() => submitSample(prompt)}
-          >
-            <ArrowUp
-              size={20}
-              strokeWidth={2.4}
-              color={sendDisabled ? colors.muted : colors.primaryText}
-            />
-          </ChatCircleAction>
-        </ChatComposerSurface>
+          submit={
+            <ChatCircleAction
+              label={modeLabel}
+              active={!sendDisabled}
+              disabled={sendDisabled}
+              onPress={() => submitSample(prompt)}
+            >
+              <ArrowUp
+                size={20}
+                strokeWidth={2.4}
+                color={sendDisabled ? colors.muted : colors.primaryText}
+              />
+            </ChatCircleAction>
+          }
+        />
         {result ? (
           <Notice
             tone="success"
@@ -201,27 +180,22 @@ export function GalleryChat() {
           />
         ) : null}
       </Card>
-      <Plan defaultOpen>
-        <Plan.Header>
-          <Plan.Title>{copy("Örnek uygulama planı", "Sample implementation plan")}</Plan.Title>
-          <Plan.Action>
-            <Body muted accessibilityLabel={copy("Örnek ilerleme", "Sample progress")}>
-              1 / 2
-            </Body>
-            <Plan.Trigger accessibilityLabel={copy("Plan ayrıntıları", "Plan details")} />
-          </Plan.Action>
-        </Plan.Header>
-        <Plan.Content>
-          <Plan.Steps>
-            <Plan.Step status="done">
-              {copy("Ortak bileşenleri kur", "Set up shared components")}
-            </Plan.Step>
-            <Plan.Step status="pending">
-              {copy("Konuşmayı cihazda doğrula", "Verify the conversation on a device")}
-            </Plan.Step>
-          </Plan.Steps>
-        </Plan.Content>
-      </Plan>
+      <ChatPlan title={copy("Örnek uygulama planı", "Sample implementation plan")} status="1 / 2">
+        <PlanSteps
+          steps={[
+            {
+              id: "shared",
+              title: copy("Ortak bileşenleri kur", "Set up shared components"),
+              status: "done",
+            },
+            {
+              id: "device",
+              title: copy("Konuşmayı cihazda doğrula", "Verify the conversation on a device"),
+              status: "pending",
+            },
+          ]}
+        />
+      </ChatPlan>
       <Sheet
         visible={modePicker}
         title={copy("Gönderme biçimi", "Delivery mode")}
@@ -234,7 +208,9 @@ export function GalleryChat() {
               key={option.value}
               label={option.label}
               trailing={
-                option.value === mode ? <Check size={18} strokeWidth={2.4} color={colors.accent} /> : undefined
+                option.value === mode ? (
+                  <Check size={18} strokeWidth={2.4} color={colors.accent} />
+                ) : undefined
               }
               onPress={() => {
                 setMode(option.value);

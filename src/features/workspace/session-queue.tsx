@@ -7,7 +7,7 @@ import ArrowDown from "lucide-react-native/icons/arrow-down";
 import Trash2 from "lucide-react-native/icons/trash";
 import Pencil from "lucide-react-native/icons/pencil";
 import { Body, Button, Empty, ErrorText, Row, Sheet } from "@/ui/primitives";
-import { ChatAction } from "@/ui/chat-controls";
+import { ChatAction, ChatToolbarAction } from "@/ui/chat-controls";
 import { useHostClient } from "@/state/queries";
 import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
@@ -139,25 +139,23 @@ export function SessionQueue({
   const disabled = blocked || queue.changing || sending;
   return (
     <>
-      {rows.length || queue.error || error ? (
-        <>
-          <View style={{ flexDirection: "row" }}>
-            <Button
+      {rows.length || queue.error || error || editor.value || editor.error || editor.visible ? (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: space.xs }}>
+            {rows.length || queue.error || error ? <ChatToolbarAction
               label={
                 queue.error
                   ? copy("Sıra yüklenemedi", "Queue unavailable")
                   : copy("{p0} sırada", "{p0} queued", { p0: rows.length })
               }
-              density="compact"
-              tone="secondary"
+              tone={queue.error || error ? "danger" : "muted"}
               onPress={() => setOpen(true)}
             >
-              <ListOrdered size={15} strokeWidth={2.2} color={colors.accent} />
-            </Button>
+              <ListOrdered size={14} color={queue.error || error ? colors.danger : colors.muted} />
+            </ChatToolbarAction> : null}
+            <SessionQueueEditor editor={editor} blocked={blocked || sending || queue.changing} />
           </View>
-          <ErrorText error={error} message={composerDeliveryError(error, copy)} />
-        </>
       ) : null}
+      <ErrorText error={error} message={composerDeliveryError(error, copy)} />
       <Sheet
         visible={open && !editor.visible}
         title={copy("Mesaj sırası", "Message queue")}
@@ -304,7 +302,6 @@ export function SessionQueue({
           </View>
         ))}
       </Sheet>
-      <SessionQueueEditor editor={editor} blocked={blocked || sending || queue.changing} />
     </>
   );
 }

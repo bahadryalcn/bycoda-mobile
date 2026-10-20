@@ -1,7 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
 import { useFormDraft } from "@/state/form-draft";
-import { Badge, Button, Card, Field, MultiSelectField, SelectField, Row } from "@/ui/primitives";
+import { Badge, Button, Card, Disclosure, Field, MultiSelectField, SelectField, Row } from "@/ui/primitives";
 import { colors } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { workspaceStyles } from "./shared";
@@ -30,6 +30,15 @@ export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps
     }
     void onAnswer({ kind: "answered", answers, custom: normalized }).catch(() => {});
   };
+  const customField = (item: QuestionCardProps["question"]["questions"][number]) => (
+    <Field
+      label={copy("Kendi yanıtın", "Your own answer")}
+      value={custom[item.id] ?? ""}
+      editable={!disabled}
+      onChangeText={(text) => form.patch((current) => ({ custom: { ...current.custom, [item.id]: text } }))}
+      multiline
+    />
+  );
 
   return (
     <Card
@@ -72,16 +81,11 @@ export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps
               />
             )}
             {item.allowCustom ? (
-              <Field
-                label={copy("Kendi yanıtın", "Your own answer")}
-                value={custom[item.id] ?? ""}
-                onChangeText={(text) =>
-                  form.patch((current) => ({
-                    custom: { ...current.custom, [item.id]: text },
-                  }))
-                }
-                multiline
-              />
+              !item.options.length || answers[item.id]?.includes("__custom__")
+                ? customField(item)
+                : <Disclosure label={copy("Kendi yanıtın", "Your own answer")} defaultExpanded={!!custom[item.id]}>
+                    {customField(item)}
+                  </Disclosure>
             ) : null}
           </View>
         ))}

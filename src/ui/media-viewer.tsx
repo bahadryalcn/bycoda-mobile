@@ -20,12 +20,14 @@ export function MediaViewer({ uri, name, visible, onClose }: { uri: string; name
   const pan = Gesture.Pan().onUpdate((event) => { if (scale.value > 1) { x.value = originX.value + event.translationX; y.value = originY.value + event.translationY; } }).onEnd(() => { originX.value = x.value; originY.value = y.value; });
   const tap = Gesture.Tap().numberOfTaps(2).onEnd(() => { scale.value = scale.value > 1 ? 1 : 2.5; saved.value = scale.value; x.value = 0; y.value = 0; originX.value = 0; originY.value = 0; });
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }, { translateY: y.value }, { scale: scale.value }] }));
-  return <Sheet visible={visible} title={name} size="full" scroll={false} onClose={onClose}>
-    <View style={{ flex: 1, minHeight: 300, overflow: "hidden", backgroundColor: colors.background }}>
-      <GestureDetector gesture={Gesture.Simultaneous(pinch, pan, tap)}><Animated.View style={[{ flex: 1 }, style]}><Image source={{ uri }} accessibilityLabel={name} contentFit="contain" style={{ flex: 1 }} /></Animated.View></GestureDetector>
-    </View>
+  const footer = <>
     <Row style={{ gap: space.sm }}><Button label={copy("Yakınlaştırmayı sıfırla", "Reset zoom")} tone="quiet" onPress={() => { scale.value = 1; saved.value = 1; x.value = 0; y.value = 0; originX.value = 0; originY.value = 0; }} />
       {uri.startsWith("file:") ? <Button label={copy("Paylaş / kaydet", "Share / save")} tone="quiet" onPress={() => { void Sharing.isAvailableAsync().then((available) => { if (!available) throw new Error(copy("Bu cihazda paylaşım kullanılamıyor.", "Sharing is unavailable on this device.")); return Sharing.shareAsync(uri, { dialogTitle: name }); }).catch(setError); }} /> : null}</Row>
     <ErrorText error={error} />
+  </>;
+  return <Sheet visible={visible} title={name} size="full" scroll={false} onClose={onClose} footer={footer}>
+    <View style={{ flex: 1, minHeight: 0, overflow: "hidden", backgroundColor: colors.background }}>
+      <GestureDetector gesture={Gesture.Simultaneous(pinch, pan, tap)}><Animated.View style={[{ flex: 1 }, style]}><Image source={{ uri }} accessibilityLabel={name} contentFit="contain" onError={() => setError(new Error(copy("Önizleme açılamadı.", "Preview could not be opened.")))} style={{ flex: 1 }} /></Animated.View></GestureDetector>
+    </View>
   </Sheet>;
 }

@@ -68,6 +68,39 @@ Android passcode authentication can be exercised in Expo Go. Face ID on iOS
 requires a development build with the configured native permission; Expo Go
 does not provide that acceptance path.
 
+## Project list preferences
+
+On **Projects**, open **View** to choose grouped or flat presentation, computer
+order, natural name order or recently opened projects. Compact folder paths keep
+the last two path components; **Full folder paths** restores the complete path.
+Search always matches full paths and group names. Grouped view offers expand and
+collapse controls, and searching temporarily opens matching groups. These choices
+are saved on the phone separately for each computer and do not reorder the desktop.
+The project picker shares sorting and path display preferences. Projects with
+different host IDs remain distinct even when names or folders match.
+
+## Phone permissions
+
+Open **Settings → Phone permissions** to inspect camera and notification access.
+Opening **Scan QR code** requests camera access the first time. A denied request
+can be retried; a permanent denial offers phone settings. Returning from phone
+settings refreshes permission state without restarting the app. Photo and document
+attachments use system pickers with access limited to the selected items.
+
+Tap **Notifications** to request system notification access, then **Test
+notification** to verify a local notification. Android creates its notification
+channel before requesting permission. This does not register a push token or
+enable delivery of computer/session alerts while the application is closed.
+Camera, microphone and storage access are not requested together on startup;
+microphone recording is not used by the QR scanner.
+
+Native configuration must be regenerated after plugin changes before building
+an APK. `expo-image-picker.cameraPermission: false` blocks CAMERA globally,
+including `expo-camera`; use the scanner's camera explanation for both plugins.
+Inspect the final merged manifest for CAMERA and POST_NOTIFICATIONS before device
+acceptance. Configuration checks alone do not prove the installed APK contains
+these permissions.
+
 ## Sharing, reviews and reports
 
 **Settings → About bycoda** shows the app version and, in a native standalone

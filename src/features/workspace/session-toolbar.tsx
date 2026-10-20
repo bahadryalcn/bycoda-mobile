@@ -4,13 +4,13 @@ import { useState } from "react";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import Square from "lucide-react-native/icons/square";
 import { router } from "expo-router";
-import { Body, Button, NavigationGroup, NavigationRow, Row, Sheet } from "@/ui/primitives";
+import { Body, NavigationGroup, NavigationRow, Row, Sheet } from "@/ui/primitives";
 import { colors, radii, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import type { SessionToolbarProps } from "./session-types";
 import { SessionArtifacts } from "./session-artifacts";
-import { ChatAction } from "@/ui/chat-controls";
+import { ChatAction, ChatToolbarAction } from "@/ui/chat-controls";
 import { SessionFiles } from "./session-files";
 import { useSessionQueue } from "./use-session-queue";
 
@@ -64,7 +64,8 @@ export function SessionToolbar({
   return (
     <View style={{ paddingBottom: space.xs }}>
       <Row style={{ flexWrap: "nowrap", gap: space.sm }}>
-        <Row style={{ flex: 1, minWidth: 0, gap: space.xs, flexWrap: "nowrap" }}>
+        <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
+          <Row style={{ flexWrap: "nowrap", gap: space.xs }}>
           <View
             accessible
             accessibilityLabel={status}
@@ -75,20 +76,20 @@ export function SessionToolbar({
               backgroundColor: dotColor,
             }}
           />
-          <Body numberOfLines={1} style={[uiStyles.caption, { color: colors.text, fontWeight: "600", flexShrink: 0 }]}>
+          <Body style={[uiStyles.caption, { color: colors.text, fontWeight: "600", flexShrink: 1 }]}>
             {status}
           </Body>
+          </Row>
           <Body muted numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1 }]}>
             {session
               ? [session.session.harness, session.session.model.replace(/^[^:]+:/, "")].join(" · ")
               : ""}
           </Body>
-        </Row>
+        </View>
         {session?.status === "running" && session.runId ? (
-          <Button
+          <ChatToolbarAction
             label={copy("Durdur", "Stop")}
             tone="danger"
-            density="compact"
             busy={command.isPending}
             disabled={blocked}
             onPress={() => {
@@ -105,7 +106,7 @@ export function SessionToolbar({
             }}
           >
             <Square size={14} strokeWidth={2.4} color={colors.danger} />
-          </Button>
+          </ChatToolbarAction>
         ) : null}
         {session ? <SessionFiles scope={scope} session={session} /> : null}
         <ChatAction

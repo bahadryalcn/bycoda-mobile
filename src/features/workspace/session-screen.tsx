@@ -11,6 +11,8 @@ import { useSessionSnapshot } from "./session-queries";
 import { SessionSettings } from "./session-settings";
 import { SessionToolbar } from "./session-toolbar";
 import { SessionTranscript } from "./session-transcript";
+import { TranscriptViewFilter } from "./transcript-view-filter";
+import type { TranscriptView } from "./transcript-model";
 import { UncertainCommand, useCommands } from "./shared";
 import type { SessionScope, SessionScreenProps, SessionWorkspaceProps } from "./session-types";
 
@@ -43,6 +45,7 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId }: SessionW
   const projectId = session?.projectId ?? routeProjectId;
   const command = useCommands();
   const [settings, setSettings] = useState(false);
+  const [transcriptView, setTranscriptView] = useState<TranscriptView>("messages");
   const blocked = command.isPending || command.error instanceof UncertainCommand;
   const sendCommand = command.mutateAsync;
   const refetchSnapshot = snapshot.refetch;
@@ -65,7 +68,9 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId }: SessionW
 
   return (
     <Screen scroll={false}>
-      <Stack.Screen options={{ title: session?.session.title || copy("Oturum", "Session") }} />
+      <Stack.Screen options={{ title: session?.session.title || copy("Oturum", "Session"),
+        headerRight: () => <TranscriptViewFilter value={transcriptView} onChange={setTranscriptView} />,
+      }} />
       <SessionKeyboardFrame
         composer={
           <SessionComposer
@@ -98,6 +103,7 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId }: SessionW
         />
         <QueryState query={snapshot} />
         <SessionTranscript
+          view={transcriptView}
           scope={scope}
           session={session}
           blocked={blocked}

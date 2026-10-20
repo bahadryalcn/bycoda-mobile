@@ -22,7 +22,7 @@ export function useProjectDirectory() {
     { interval: 15_000, enabled: grouped },
   );
   const query = grouped ? directory : legacy;
-  const projects = useMemo(
+  const projects = useMemo<HostProjectDirectory["projects"]>(
     () =>
       grouped
         ? distinctDirectoryProjects(directory.data?.privacyReady ? directory.data.projects : [])

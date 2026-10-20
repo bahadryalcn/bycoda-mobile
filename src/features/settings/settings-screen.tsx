@@ -32,6 +32,7 @@ import { EngagementSettings } from "../engagement/engagement-settings";
 import { HostSettingsEditor } from "./host-settings-editor";
 import { LocalDataControls } from "./local-data-controls";
 import { ChatAppearanceSettings } from "./chat-appearance-settings";
+import { DevicePermissionSettings } from "../permissions/device-permission-settings";
 
 export function SettingsScreen() {
   useMobileTheme();
@@ -44,9 +45,10 @@ export function SettingsScreen() {
   const appearanceHydrated = useAppearance((s) => s.hydrated);
   const appearanceError = useAppearance((s) => s.storageError);
   const [panel, setPanel] = useState<
-    "security" | "host" | "privacy" | "about" | "appearance" | null
+    "security" | "host" | "privacy" | "about" | "appearance" | "permissions" | null
   >(null);
   const titles = {
+    permissions: copy("Telefon izinleri", "Phone permissions"),
     security: copy("Güvenli erişim", "Secure access"),
     host: copy("Bilgisayardaki görevler", "Tasks on your computer"),
     privacy: copy("Gizlilik ve veriler", "Privacy & data"),
@@ -115,6 +117,8 @@ export function SettingsScreen() {
           icon={tile(ShieldCheck, colors.success)}
           onPress={() => setPanel("security")}
         />
+        <NavigationRow label={titles.permissions} icon={tile(ShieldCheck, colors.info)}
+          onPress={() => setPanel("permissions")} />
         <NavigationRow
           label={titles.privacy}
           icon={tile(LockKeyhole, colors.accent)}
@@ -147,7 +151,9 @@ export function SettingsScreen() {
       </NavigationGroup>
       {panel ? (
         <Sheet visible size={panel === "appearance" ? "compact" : "form"} title={titles[panel]} onClose={() => setPanel(null)}>
-          {panel === "appearance" ? (
+          {panel === "permissions" ? (
+            <DevicePermissionSettings />
+          ) : panel === "appearance" ? (
             <ChatAppearanceSettings />
           ) : panel === "security" ? (
             <SecuritySettings />

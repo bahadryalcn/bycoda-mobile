@@ -1,6 +1,6 @@
 # Customized ChatAI
 
-Use product facades from `@/ui/chat`. Production already uses ChatConversation, ChatMessage and ChatComposerSurface while its feature owns virtual scrolling, keyboard anchoring, persisted drafts, attachments and host RPC.
+Use product facades from `@/ui/chat`, `@/ui/chat-composer` and `@/ui/chat-activity`. Production uses ChatConversation, ChatMessage, ChatComposer (PanelUI AIInput) and structured activity facades while its feature owns virtual scrolling, keyboard anchoring, persisted drafts, attachments and host RPC. ChatComposerSurface is retained for compatibility.
 
 For reusable UI composition, import named parts from `@/ui/gluestack/chat-ai` inside the UI layer. PromptInput supports controlled `value`, `onChangeText`, `onSubmit` and `isDisabled`. Its managed mode provides context without adding another surface around the application's composer. File selection, upload, network and export operations require explicit caller callbacks.
 

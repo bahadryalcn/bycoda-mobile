@@ -1,6 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Text, View } from "react-native";
+import { CodeBlock } from "panelui-native/components/code-block";
 import * as Clipboard from "expo-clipboard";
 import { Body, Button, CodePanel, CodeText, ErrorText, Loading, Row, Sheet } from "./primitives";
 import { HtmlDocument } from "./html-document";
@@ -14,7 +15,9 @@ import Code from "lucide-react-native/icons/code";
 import { ChatSummary } from "./chat-controls";
 
 // The embedded diagram runtime is large; load it only when a complete diagram is opened.
-const MessageDiagram = lazy(() => import("./message-diagram").then((module) => ({ default: module.MessageDiagram })));
+const MessageDiagram = lazy(() =>
+  import("./message-diagram").then((module) => ({ default: module.MessageDiagram })),
+);
 
 export function MessageCode({
   compact = false,
@@ -62,13 +65,19 @@ function ExpandedMessageCode({
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [copied, setCopied] = useState(false);
-  const styles = chatTextStyles(useChatAppearance((state) => state.textSize));
+  const textSize = useChatAppearance((state) => state.textSize);
+  const styles = chatTextStyles(textSize);
   const html = /^(?:html|htm)$/i.test(language) && complete && code.length <= 2 * 1024 * 1024;
   const diagram = language.toLowerCase() === "mermaid" && complete;
   const lines = code.split("\n");
   const long = !allLines && lines.length > 24;
   const shown = long && !expanded ? lines.slice(0, 24).join("\n") : code;
-  const tokens = useMemo(() => highlightCode(shown, language), [shown, language]);
+  // Upstream fixes code at text-xs. Retain the reader's larger presets until it
+  // exposes a code-text style, rather than silently dropping the setting.
+  const tokens = useMemo(
+    () => (textSize === "compact" ? [] : highlightCode(shown, language)),
+    [shown, language, textSize],
+  );
   return (
     <View style={{ gap: space.xs }}>
       <Row style={{ justifyContent: "space-between" }}>
@@ -96,30 +105,38 @@ function ExpandedMessageCode({
           ) : null}
         </Row>
       </Row>
-      {diagram ? <Suspense fallback={<Loading />}><MessageDiagram source={code} /></Suspense> : null}
-      <CodePanel>
-        <CodeText style={styles.code}>
-          {tokens.map((token, index) => (
-            <Text
-              key={index}
-              style={{
-                color:
-                  token.kind === "string"
-                    ? colors.success
-                    : token.kind === "comment"
-                      ? colors.subtle
-                      : token.kind === "keyword"
-                        ? colors.accent
-                        : token.kind === "number"
-                          ? colors.warning
-                          : colors.text,
-              }}
-            >
-              {token.text}
-            </Text>
-          ))}
-        </CodeText>
-      </CodePanel>
+      {diagram ? (
+        <Suspense fallback={<Loading />}>
+          <MessageDiagram source={code} />
+        </Suspense>
+      ) : null}
+      {textSize === "compact" ? (
+        <CodeBlock code={shown} language={language} className="min-w-0" />
+      ) : (
+        <CodePanel>
+          <CodeText style={styles.code}>
+            {tokens.map((token, index) => (
+              <Text
+                key={index}
+                style={{
+                  color:
+                    token.kind === "string"
+                      ? colors.success
+                      : token.kind === "comment"
+                        ? colors.subtle
+                        : token.kind === "keyword"
+                          ? colors.accent
+                          : token.kind === "number"
+                            ? colors.warning
+                            : colors.text,
+                }}
+              >
+                {token.text}
+              </Text>
+            ))}
+          </CodeText>
+        </CodePanel>
+      )}
       {long ? (
         <Button
           density="compact"

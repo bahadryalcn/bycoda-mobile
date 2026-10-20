@@ -10,7 +10,7 @@ import {
   Row,
   Sheet,
 } from "@/ui/primitives";
-import { ChatSummary } from "@/ui/chat-controls";
+import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
 import { uiStyles } from "@/ui/styles";
 import { useMobileTheme } from "@/ui/theme";
@@ -192,12 +192,10 @@ export function SessionQueueEditor({
   return (
     <>
       {edit || editor.error ? (
-        <ChatSummary
+        <ChatToolbarAction
           label={copy("Sıradaki mesajın taslağı", "Queued message draft")}
-          detail={copy("Düzenlemeye devam et", "Continue editing")}
-          icon={<Pencil size={18} color={colors.accent} />}
           onPress={() => editor.open()}
-        />
+        ><Pencil size={14} color={colors.muted} /></ChatToolbarAction>
       ) : null}
       <Sheet
         visible={editor.visible}

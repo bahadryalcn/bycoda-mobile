@@ -54,6 +54,7 @@ export type SessionToolbarProps = {
 export type SessionWorkspaceProps = SessionScreenProps & { machineId: string };
 
 export type SessionTranscriptProps = {
+  view: import("./transcript-model").TranscriptView;
   scope: SessionScope;
   session?: HostSession;
   blocked: boolean;

@@ -16,14 +16,17 @@ import { TranscriptBlock } from "./transcript-block";
 import { useInvertedInputVisibility } from "./use-inverted-input-visibility";
 import { transcriptEntries, type TranscriptEntry } from "./transcript-model";
 import { ActivityGroup } from "./activity-group";
+import { ActivityInspector, type ActivityInspection } from "./activity-inspector";
 import type { SessionTranscriptProps } from "./session-types";
 import { TranscriptScrollPosition } from "./transcript-scroll";
 import { useReducedMotion } from "react-native-reanimated";
 import Animated from "react-native-reanimated";
 import { reveal } from "@/ui/motion";
 import { ChatConversation } from "@/ui/chat";
+import { ChatCircleAction } from "@/ui/chat-controls";
 
 export function SessionTranscript({
+  view,
   scope,
   session,
   blocked,
@@ -80,6 +83,11 @@ export function SessionTranscript({
   const [anchored, setAnchored] = useState(false);
   const reduceMotion = useReducedMotion();
   const [awayFromLatest, setAwayFromLatest] = useState(false);
+  const [inspection, setInspection] = useState<ActivityInspection | null>(null);
+  const inspectedBlocks = useMemo(() => {
+    const ids = new Set(inspection?.ids);
+    return (session?.session.blocks ?? []).filter((block) => ids.has(block.id));
+  }, [inspection?.ids, session?.session.blocks]);
   const awayRef = useRef(false);
   const trackInputScroll = inputVisibility.onScroll;
   const onScroll = useCallback(
@@ -96,8 +104,10 @@ export function SessionTranscript({
     [trackInputScroll],
   );
   const visibleBlocks = useMemo(
-    () => transcriptEntries(session?.session.blocks ?? [], session?.session.harness).reverse(),
-    [session?.session.blocks, session?.session.harness],
+    () => transcriptEntries(session?.session.blocks ?? [], session?.session.harness, {
+      view, running: session?.status === "running",
+    }).reverse(),
+    [session?.session.blocks, session?.session.harness, session?.status, view],
   );
   const pending = session?.session.pendingQuestion;
   const anchorLatest = useCallback(() => {
@@ -167,14 +177,11 @@ export function SessionTranscript({
         renderItem={({ item }) =>
           item.kind === "activity" ? (
             <ActivityGroup
-              context={context}
+              live={session?.status === "running"}
               blocks={item.blocks}
-              author={item.author}
-              scope={scope}
-              revision={session?.revision ?? 0}
-              runId={session?.runId}
-              disabled={blocked}
-              onCommand={onCommand}
+              onInspect={(selectedId) => setInspection({
+                ids: item.blocks.map((block) => block.id), selectedId, author: item.author,
+              })}
             />
           ) : (
             <TranscriptBlock
@@ -250,6 +257,10 @@ export function SessionTranscript({
           </View>
         }
       />
+      {inspection ? <ActivityInspector blocks={inspectedBlocks} inspection={inspection} onChange={setInspection}
+        live={session?.status === "running"}
+        context={context} author={inspection.author} scope={scope} revision={session?.revision ?? 0}
+        runId={session?.runId} disabled={blocked} onCommand={onCommand} /> : null}
       {awayFromLatest ? (
         <Animated.View
           entering={reveal}
@@ -260,10 +271,9 @@ export function SessionTranscript({
             alignItems: "center",
           }}
         >
-          <Button
+          <ChatCircleAction
             label={copy("Son mesaja git", "Jump to latest")}
-            density="compact"
-            tone="secondary"
+            surface
             onPress={() => {
               scrollPosition.current.jumpToLatest();
               inputVisibility.listRef.current?.scrollToOffset({
@@ -275,7 +285,7 @@ export function SessionTranscript({
             }}
           >
             <ArrowDown size={14} color={colors.accent} />
-          </Button>
+          </ChatCircleAction>
         </Animated.View>
       ) : null}
     </ChatConversation>

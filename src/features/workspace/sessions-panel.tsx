@@ -8,6 +8,7 @@ import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { router } from "expo-router";
 import { useFormDraft } from "@/state/form-draft";
+import { createSingleFlight } from "@/state/single-flight";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
 import { haptic } from "@/ui/motion";
@@ -15,6 +16,7 @@ import {
   ActionMenu,
   Body,
   Button,
+  FormActions,
   SelectField,
   Sheet,
   SearchField,
@@ -37,10 +39,12 @@ import {
   useCommands,
   workspaceStyles,
 } from "./shared";
-import { catalogModel, catalogProviders, modelDefaults } from "./catalog";
+import { catalogModel, catalogProvider, catalogProviders, modelDefaults } from "./catalog";
 import type { HostSessionSummary, HostModelCatalog } from "./wire";
+import { sessionDirectoryRows, toggleSessionDirectoryFolder, type SessionDirectoryRow } from "./session-directory";
+import { SessionFolderRow } from "./session-folder-row";
 
-export function ProjectSessions({ projectId, cwd, initialCreating = false }: ProjectSessionsProps) {
+export function ProjectSessions({ projectId, cwd, initialCreating = false, sessionLayout }: ProjectSessionsProps) {
   useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
@@ -61,7 +65,9 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false }: Pro
   };
   const [search, setSearch] = useState("");
   const [archived, setArchived] = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [creating, setCreating] = useState(initialCreating);
+  const [creation] = useState(() => createSingleFlight<void>());
   const form = useFormDraft<SessionCreationDraft>({ provider: undefined, model: "" });
   const { provider, model } = form.values;
   const sessions = useHostQuery<HostSessionSummary[]>(
@@ -80,7 +86,7 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false }: Pro
   const uncertain = command.error instanceof Error && command.error.name === "UncertainCommand";
   const locked = command.isPending || uncertain;
   const providers = catalogProviders(machine?.providers, catalog.data);
-  const selectedProvider = provider && providers.includes(provider) ? provider : providers[0];
+  const selectedProvider = catalogProvider(providers, catalog.data, provider);
   const models = selectedProvider ? (catalog.data?.models[selectedProvider] ?? []) : [];
   const selectedModelValue = catalogModel(catalog.data, selectedProvider, model);
   const selectedModel = selectedModelValue?.id ?? "";
@@ -99,10 +105,12 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false }: Pro
         Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
         b.updatedAt - a.updatedAt,
     );
+  const rows = sessionDirectoryRows(visible, sessionLayout, collapsed, !!search.trim());
   return (
-    <ScreenList<HostSessionSummary>
-      data={visible}
-      keyExtractor={(session) => session.id}
+    <ScreenList<SessionDirectoryRow>
+      grouped
+      data={rows}
+      keyExtractor={(row) => row.key}
       query={sessions}
       contentContainerStyle={{ gap: 0 }}
       header={
@@ -217,14 +225,16 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false }: Pro
                     openSession(receipt.sessionId);
                   }}
                 />
-                <Button
-                  label={copy("Oturumu başlat", "Start session")}
+                <FormActions
+                  submitLabel={copy("Oturumu başlat", "Start session")}
                   tone="primary"
-                  disabled={!selectedModel || !selectedProvider || locked}
+                  disabled={!selectedModel || !selectedProvider || locked || catalog.isPending || !!catalog.error}
                   busy={command.isPending}
-                  onPress={() => {
-                    void command
-                      .mutateAsync({
+                  onSubmit={() => {
+                    if (!selectedModel || !selectedProvider || locked || catalog.isPending || catalog.error ||
+                      !machine || useMachines.getState().activeId !== machine.id) return;
+                    void creation.run(async () => {
+                      const receipt = await command.mutateAsync({
                         type: "create",
                         projectId,
                         ...(cwd ? { worktreeCwd: cwd } : {}),
@@ -232,12 +242,10 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false }: Pro
                         model: selectedModel,
                         modelSettings: modelDefaults(selectedModelValue),
                         runtimeMode: "supervised",
-                      })
-                      .then((receipt) => {
-                        haptic.success();
-                        openSession(receipt.sessionId);
-                      })
-                      .catch(() => {});
+                      });
+                      haptic.success();
+                      openSession(receipt.sessionId);
+                    }).catch(() => {});
                   }}
                 />
               </View>
@@ -257,10 +265,15 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false }: Pro
           />
         </View>
       }
-      renderItem={({ item: session, index }) => {
+      renderItem={({ item, index }) => {
+        if (item.kind === "folder") return <SessionFolderRow row={item}
+          onToggle={() => setCollapsed((current) => toggleSessionDirectoryFolder(current, item, !!search.trim()))} />;
+        const session = item.session;
         const status = sessionStatus(session, copy);
         return (
-          <GroupedListRow first={index === 0} last={index === visible.length - 1} inset={rowInset}>
+          <GroupedListRow first={index === 0 || rows[index - 1]?.kind === "folder"}
+            last={index === rows.length - 1 || rows[index + 1]?.kind === "folder"} inset={rowInset}>
+            <View style={{ paddingStart: item.depth * space.md }}>
             <NavigationRow
               variant="plain"
               label={session.title || copy("Yeni oturum", "New session")}
@@ -282,6 +295,7 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false }: Pro
               }
               onPress={() => openSession(session.id)}
             />
+            </View>
           </GroupedListRow>
         );
       }}

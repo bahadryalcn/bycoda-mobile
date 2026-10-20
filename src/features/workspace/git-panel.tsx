@@ -260,6 +260,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
   return (
     <>
       <ScreenList<GitListRow>
+        grouped
         data={rows}
         keyExtractor={(row) => row.key}
         query={index}

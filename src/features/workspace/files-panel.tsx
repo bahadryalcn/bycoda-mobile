@@ -136,6 +136,7 @@ export function ProjectFiles({
   return (
     <>
       <ScreenList<FileRow>
+        grouped
         data={rows}
         keyExtractor={(row) => row.key}
         contentContainerStyle={{ gap: 0 }}

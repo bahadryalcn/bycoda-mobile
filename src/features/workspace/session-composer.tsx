@@ -1,11 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  View,
-  useWindowDimensions,
-  type NativeSyntheticEvent,
-  type TextInputContentSizeChangeEventData,
-} from "react-native";
+import { use, useEffect, useMemo, useRef, useState } from "react";
+import { View, useWindowDimensions } from "react-native";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Plus from "lucide-react-native/icons/plus";
 import Check from "lucide-react-native/icons/check";
@@ -14,24 +9,23 @@ import ImageIcon from "lucide-react-native/icons/image";
 import File from "lucide-react-native/icons/file";
 import { useHostClient } from "@/state/queries";
 import { useMachines } from "@/state/machines";
-import {
-  Body,
-  Button,
-  Input,
-  Loading,
-  NavigationGroup,
-  NavigationRow,
-  Sheet,
-} from "@/ui/primitives";
+import { Body, Button, Loading, NavigationGroup, NavigationRow, Sheet } from "@/ui/primitives";
 import { uiStyles } from "@/ui/styles";
-import { colors, metrics, radii, space } from "@/ui/tokens";
+import { colors, metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { registerWorkspaceDraft } from "./draft-guard";
 import { ErrorText } from "./shared";
 import { useLocalDraft } from "./use-local-draft";
 import type { SessionComposerProps } from "./session-types";
 import { SessionKeyboardSpace } from "./session-keyboard-frame";
-import { decodeComposerDraft, emptyComposerDraft, encodeComposerDraft, sameComposerContent, queuedComposerDraft, type QueuedComposerDraft } from "./composer-draft";
+import {
+  decodeComposerDraft,
+  emptyComposerDraft,
+  encodeComposerDraft,
+  sameComposerContent,
+  queuedComposerDraft,
+  type QueuedComposerDraft,
+} from "./composer-draft";
 import { composerTokenAt, replaceComposerToken } from "./composer-tokens";
 import { useComposerCatalog, type ComposerSuggestion } from "./use-composer-catalog";
 import { ComposerSuggestions } from "./composer-suggestions";
@@ -39,10 +33,15 @@ import { ComposerAttachments } from "./composer-attachments";
 import { pickAttachments, removeStagedFile } from "./attachment-files";
 import { ATTACHMENT_COUNT, type StagedAttachment, type TransferState } from "./attachment-model";
 import { uploadAttachment } from "./attachment-transfer";
-import { attachmentReleases, composerDraftKey, supportsAttachmentOwnership } from "./attachment-ownership";
-import { ChatCircleAction } from "@/ui/chat-controls";
-import { ChatComposerSurface } from "@/ui/chat";
-import { haptic, resize } from "@/ui/motion";
+import {
+  attachmentReleases,
+  composerDraftKey,
+  supportsAttachmentOwnership,
+} from "./attachment-ownership";
+import { ChatCircleAction, ChatToolbarAction } from "@/ui/chat-controls";
+import ChevronDown from "lucide-react-native/icons/chevron-down";
+import { ChatComposer } from "@/ui/chat-composer";
+import { haptic } from "@/ui/motion";
 import { composerCommand, queuedComposerMessage, type ComposerDelivery } from "./composer-delivery";
 import { useSessionQueue } from "./use-session-queue";
 import { SessionQueue } from "./session-queue";
@@ -65,8 +64,6 @@ export function SessionComposer({
   const queuedDraft = useRef<QueuedComposerDraft | null>(null);
   const { height: windowHeight, fontScale } = useWindowDimensions();
   const availableHeight = use(SessionKeyboardSpace);
-  const [contentHeight, setContentHeight] = useState(metrics.inputHeight);
-  const [inputFocused, setInputFocused] = useState(false);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [selected, setSelected] = useState(-1);
@@ -86,7 +83,7 @@ export function SessionComposer({
       transfer.current?.abort();
     };
   }, []);
-  const minimumInputHeight = Math.max(40, Math.ceil(22 * fontScale + space.sm * 2));
+  const minimumInputHeight = Math.max(metrics.touchTarget, Math.ceil(22 * fontScale + space.sm * 2));
   const maximumInputHeight = Math.max(
     minimumInputHeight,
     Math.min(
@@ -94,15 +91,6 @@ export function SessionComposer({
       Math.floor(windowHeight / 4),
       Math.floor((availableHeight ?? windowHeight) * 0.45),
     ),
-  );
-  const inputHeight = Math.max(minimumInputHeight, Math.min(maximumInputHeight, contentHeight));
-  const onContentSizeChange = useCallback(
-    (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
-      const next = Math.ceil(event.nativeEvent.contentSize.height);
-      if (Number.isFinite(next) && next > 0)
-        setContentHeight((previous) => (previous === next ? previous : next));
-    },
-    [],
   );
   const draftKey = composerDraftKey(scope.machineId, scope.sessionId);
   const draft = useLocalDraft(draftKey, decodeComposerDraft, encodeComposerDraft);
@@ -200,9 +188,21 @@ export function SessionComposer({
         await attachmentReleases.flush(client).catch(() => {});
         const claimId = await attachmentReleases.prepare(client, scope.sessionId, file);
         prepared = { ...file, claimId };
-        if (!mounted.current || !valueRef.current?.attachments.some((entry) => entry.id === file.id))
+        if (
+          !mounted.current ||
+          !valueRef.current?.attachments.some((entry) => entry.id === file.id)
+        )
           throw new Error("Attachment upload cancelled.");
-        setValue((current) => current ? { ...current, attachments: current.attachments.map((entry) => entry.id === file.id ? { ...entry, claimId } : entry) } : current);
+        setValue((current) =>
+          current
+            ? {
+                ...current,
+                attachments: current.attachments.map((entry) =>
+                  entry.id === file.id ? { ...entry, claimId } : entry,
+                ),
+              }
+            : current,
+        );
       }
       // Claim only after the private file reference and generation are durable.
       await persist();
@@ -274,7 +274,11 @@ export function SessionComposer({
       if (controller.signal.aborted || !mounted.current) return;
       // Stage before delivery: a later storage failure cannot mask an accepted send.
       // Until draft removal is durable, the saved draft blocks this tombstone.
-      await attachmentReleases.stage(client, scope.sessionId, submitted.attachments.map((file) => claimedFiles.current.get(file.id) ?? file));
+      await attachmentReleases.stage(
+        client,
+        scope.sessionId,
+        submitted.attachments.map((file) => claimedFiles.current.get(file.id) ?? file),
+      );
       if (mode === "queue") {
         queuedDraft.current = queuedComposerDraft(queuedDraft.current, submitted, randomUUID);
         await queue.enqueue(
@@ -297,7 +301,10 @@ export function SessionComposer({
             : current,
         );
       await persist();
-      submitted.attachments.forEach((file) => { removeStagedFile(file); claimedFiles.current.delete(file.id); });
+      submitted.attachments.forEach((file) => {
+        removeStagedFile(file);
+        claimedFiles.current.delete(file.id);
+      });
       // Remote release failure must not turn an accepted send into a send retry.
       void attachmentReleases.flush(client).catch(() => {});
       haptic.success();
@@ -350,8 +357,13 @@ export function SessionComposer({
           }}
           onRemove={(file) => {
             void (async () => {
-              const machine = client?.machine ?? useMachines.getState().machines.find((entry) => entry.id === scope.machineId);
-              const latest = valueRef.current?.attachments.find((entry) => entry.id === file.id) ?? claimedFiles.current.get(file.id) ?? file;
+              const machine =
+                client?.machine ??
+                useMachines.getState().machines.find((entry) => entry.id === scope.machineId);
+              const latest =
+                valueRef.current?.attachments.find((entry) => entry.id === file.id) ??
+                claimedFiles.current.get(file.id) ??
+                file;
               if (machine) await attachmentReleases.stage({ machine }, scope.sessionId, [latest]);
               setValue((current) => ({
                 ...(current ?? emptyComposerDraft()),
@@ -361,7 +373,9 @@ export function SessionComposer({
               removeStagedFile(file);
               claimedFiles.current.delete(file.id);
               if (client) void attachmentReleases.flush(client).catch(() => {});
-            })().catch((cause) => { if (mounted.current) setLocalError(cause); });
+            })().catch((cause) => {
+              if (mounted.current) setLocalError(cause);
+            });
           }}
         />
       ) : null}
@@ -371,48 +385,37 @@ export function SessionComposer({
         blocked={blocked || unavailable}
         onCommand={onCommand}
       />
-      {showModeChip ? (
-        <View style={{ flexDirection: "row" }}>
-          <Button
-            label={modeLabel}
-            density="compact"
-            tone="secondary"
-            disabled={unavailable}
-            onPress={() => setModePicker(true)}
-          />
-        </View>
-      ) : null}
-      <ChatComposerSurface
-        layout={resize}
-        style={{
-          flexDirection: "row",
-          alignItems: "flex-end",
-          gap: space.xs,
-          backgroundColor: colors.panel,
-          borderWidth: 1,
-          borderColor: inputFocused ? colors.accent : colors.separator,
-          borderRadius: radii.preview,
-          padding: space.xxs,
+      <ChatComposer
+        value={prompt}
+        onValueChange={(text) => {
+          setValue((current) => ({ ...(current ?? emptyComposerDraft()), text }));
+          setDismissed(null);
         }}
-      >
-        <ChatCircleAction
-          label={copy("Dosya ekle", "Attach file")}
-          disabled={unavailable}
-          busy={picking}
-          onPress={() => setPicker(true)}
-        >
-          <Plus size={19} strokeWidth={2.4} color={colors.text} />
-        </ChatCircleAction>
-        <Input
-          label={copy("Mesaj", "Message")}
-          value={prompt}
-          onChangeText={(text) => {
-            setValue((current) => ({ ...(current ?? emptyComposerDraft()), text }));
-            setDismissed(null);
-          }}
-          selection={selection}
-          onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
-          onKeyPress={(event) => {
+        disabled={!ready}
+        mode={
+          showModeChip ? (
+            <ChatToolbarAction
+              label={modeLabel}
+              disabled={unavailable}
+              onPress={() => setModePicker(true)}
+            ><ChevronDown size={12} color={colors.muted} /></ChatToolbarAction>
+          ) : undefined
+        }
+        leading={
+          <ChatCircleAction
+            label={copy("Dosya ekle", "Attach file")}
+            disabled={unavailable}
+            busy={picking}
+            onPress={() => setPicker(true)}
+          >
+            <Plus size={19} strokeWidth={2.4} color={colors.text} />
+          </ChatCircleAction>
+        }
+        field={{
+          accessibilityLabel: copy("Mesaj", "Message"),
+          selection,
+          onSelectionChange: (event) => setSelection(event.nativeEvent.selection),
+          onKeyPress: (event) => {
             if (!token) return;
             if (event.nativeEvent.key === "Escape") {
               event.preventDefault();
@@ -434,25 +437,13 @@ export function SessionComposer({
               event.preventDefault();
               choose(items[Math.max(0, selected)]!);
             }
-          }}
-          multiline
-          disableFullscreenUI
-          submitBehavior="newline"
-          onContentSizeChange={onContentSizeChange}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-          scrollEnabled={contentHeight > maximumInputHeight}
-          maxLength={256_000}
-          editable={ready}
-          placeholder={
-            running
-              ? copy("Sonraki mesajını hazırla…", "Prepare your next message…")
-              : copy("Mesaj yaz…", "Write a message…")
-          }
-          style={{
-            flex: 1,
+          },
+          disableFullscreenUI: true,
+          submitBehavior: "newline",
+          maxLength: 256_000,
+          placeholder: copy("Mesaj yaz…", "Write a message…"),
+          style: {
             minWidth: 0,
-            height: inputHeight,
             minHeight: minimumInputHeight,
             maxHeight: maximumInputHeight,
             borderWidth: 0,
@@ -461,26 +452,32 @@ export function SessionComposer({
             includeFontPadding: false,
             paddingVertical: space.sm,
             paddingHorizontal: space.sm,
-          }}
-        />
-        <ChatCircleAction
-          label={
-            mode === "queue"
-              ? copy("Sıraya al", "Queue")
-              : mode === "steer"
-                ? copy("Yönlendir", "Steer")
-                : copy("Gönder", "Send")
-          }
-          active={!sendDisabled}
-          disabled={sendDisabled}
-          busy={busy || uploading}
-          onPress={() => {
-            void submit();
-          }}
-        >
-          <ArrowUp size={18} strokeWidth={2.6} color={sendDisabled ? colors.muted : colors.primaryText} />
-        </ChatCircleAction>
-      </ChatComposerSurface>
+          },
+        }}
+        submit={
+          <ChatCircleAction
+            label={
+              mode === "queue"
+                ? copy("Sıraya al", "Queue")
+                : mode === "steer"
+                  ? copy("Yönlendir", "Steer")
+                  : copy("Gönder", "Send")
+            }
+            active={!sendDisabled}
+            disabled={sendDisabled}
+            busy={busy || uploading}
+            onPress={() => {
+              void submit();
+            }}
+          >
+            <ArrowUp
+              size={18}
+              strokeWidth={2.6}
+              color={sendDisabled ? colors.muted : colors.primaryText}
+            />
+          </ChatCircleAction>
+        }
+      />
       {uploading && !busy ? (
         <Button
           tone="quiet"
@@ -505,29 +502,11 @@ export function SessionComposer({
           }}
         />
       ) : null}
-      {mode !== "send" || running ? (
+      {(mode === "steer" && !running) || (mode === "queue" && !queue.supported) ? (
         <Body muted style={uiStyles.caption}>
-          {mode === "send"
-            ? copy("Çalışıyor · sıraya al veya yönlendir.", "Running · choose Queue or Steer.")
-            : mode === "steer"
-              ? running
-                ? copy(
-                    "Aktif çalışmayı bu mesajla yönlendirir.",
-                    "Redirects the active turn with this message.",
-                  )
-                : copy(
-                    "Yönlendirmek için çalışan bir tur gerekiyor.",
-                    "Steering requires a running turn.",
-                  )
-              : queue.supported
-                ? copy(
-                    "Bilgisayardaki sıraya kaydedilir. Sıradan başlatabilirsin.",
-                    "Saved to the computer’s queue. Start it from the queue.",
-                  )
-                : copy(
-                    "Bu bilgisayarda sıra desteklenmiyor. Çalışmanın bitmesini bekle.",
-                    "This computer does not support queuing. Wait for the turn to finish.",
-                  )}
+          {mode === "steer"
+            ? copy("Yönlendirmek için çalışan bir tur gerekiyor.", "Steering requires a running turn.")
+            : copy("Bu bilgisayarda sıra desteklenmiyor. Çalışmanın bitmesini bekle.", "This computer does not support queuing. Wait for the turn to finish.")}
         </Body>
       ) : null}
       <Sheet
@@ -541,8 +520,15 @@ export function SessionComposer({
             <NavigationRow
               key={option.value}
               label={option.label}
+              detail={option.value === "steer"
+                ? copy("Aktif çalışmayı bu mesajla yönlendirir.", "Redirects the active turn with this message.")
+                : option.value === "queue"
+                  ? copy("Bilgisayardaki sıraya kaydedilir. Sıradan başlatabilirsin.", "Saved to the computer’s queue. Start it from the queue.")
+                  : undefined}
               trailing={
-                option.value === mode ? <Check size={18} strokeWidth={2.4} color={colors.accent} /> : undefined
+                option.value === mode ? (
+                  <Check size={18} strokeWidth={2.4} color={colors.accent} />
+                ) : undefined
               }
               onPress={() => {
                 setDelivery(option.value);

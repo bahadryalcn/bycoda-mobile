@@ -225,3 +225,54 @@ index 858f513305c93790ad6bc61c76d69f19b23a8d5a..3f1c6c5ad45d31b98bee18be5ecbe92f
        // The label may be closed to nothing, and a tab announced as an unlabelled
        // icon is a tab nobody can choose.
        accessibilityLabel={typeof children === 'string' ? children : undefined}
+diff --git a/src/components/tabs/index.tsx b/src/components/tabs/index.tsx
+--- a/src/components/tabs/index.tsx
++++ b/src/components/tabs/index.tsx
+@@ -863,7 +863,7 @@
+ }
+
+ function TabsList({ className, scrollable = false, children, ...props }: TabsListProps) {
+-  const { variant, value, layouts } = useTabs('Tabs.List');
++  const { variant, value, layouts, animationDisabled } = useTabs('Tabs.List');
+   const { list } = tabsVariants({ variant });
+   const scroller = useRef<ScrollView>(null);
+
+@@ -889,10 +889,10 @@
+       x: target,
+       // The first measurement has nowhere to travel from: animating it is a
+       // row that visibly slides into place as the screen appears.
+-      animated: settled.current,
++      animated: settled.current && !animationDisabled,
+     });
+     settled.current = true;
+-  }, [scrollable, value, target]);
++  }, [scrollable, value, target, animationDisabled]);
+
+   const restore = useCallback(() => {
+     if (!scrollable || targetRef.current === null) return;
+diff --git a/lib/module/components/tabs/index.js b/lib/module/components/tabs/index.js
+--- a/lib/module/components/tabs/index.js
++++ b/lib/module/components/tabs/index.js
+@@ -819,7 +819,8 @@
+   const {
+     variant,
+     value,
+-    layouts
++    layouts,
++    animationDisabled
+   } = useTabs('Tabs.List');
+   const {
+     list
+@@ -850,10 +851,10 @@
+       x: target,
+       // The first measurement has nowhere to travel from: animating it is a
+       // row that visibly slides into place as the screen appears.
+-      animated: settled.current
++      animated: settled.current && !animationDisabled
+     });
+     settled.current = true;
+-  }, [scrollable, value, target]);
++  }, [scrollable, value, target, animationDisabled]);
+   const restore = useCallback(() => {
+     if (!scrollable || targetRef.current === null) return;
+     scroller.current?.scrollTo({

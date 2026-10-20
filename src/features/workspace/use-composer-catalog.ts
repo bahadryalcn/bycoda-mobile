@@ -1,7 +1,7 @@
 import { visibleMediaData } from "@/ui/media-policy";
 import { hostKey } from "@/state/host-request";
 import { useQuery } from "@tanstack/react-query";
-import { useHostClient } from "@/state/queries";
+import { useHostClient, useHostReadActive } from "@/state/queries";
 import { mergeCliCommands } from "../../../../src/features/skills/model/cliCommands";
 import type { HostSession } from "@/remote/types";
 import type { DiscoveredSkill, ClaudeCommandEntry } from "../../../../src/platform/tauri/fs";
@@ -9,6 +9,7 @@ import { mentionLabel, type ComposerToken } from "./composer-tokens";
 
 export type ComposerSuggestion = { id: string; name: string; label: string; detail: string; kind: "file" | "folder" | "skill" | "command"; path?: string; action?: "compact" | "plan" };
 export function useComposerCatalog(session: HostSession | undefined, token: ComposerToken | null) {
+  const active = useHostReadActive();
   const client = useHostClient(); const cwd = session?.session.worktreeCwd || session?.session.cwd; const harness = session?.session.harness;
   const query = useQuery({ queryKey: hostKey(client?.machine.id ?? null, ["composer-catalog", client?.machine.environmentId, client?.machine.endpoint, session?.projectId, session?.session.id, cwd, harness, token?.trigger]), queryFn: async ({ signal }): Promise<ComposerSuggestion[]> => {
     if (!client || !session || !cwd) return [];
@@ -30,6 +31,6 @@ export function useComposerCatalog(session: HostSession | undefined, token: Comp
       ...(harness === "claude" ? skills : []),
       ...native.map((command) => ({ id: `command:${command.name}`, name: command.name, label: command.invocation, detail: command.description, kind: "command" as const })),
     ];
-  }, enabled: !!client && !!session && !!token, staleTime: 60_000, retry: false, networkMode: "always" });
+  }, enabled: !!client && active && !!session && !!token, staleTime: 60_000, retry: false, networkMode: "always" });
   return { ...query, data: visibleMediaData(query) };
 }

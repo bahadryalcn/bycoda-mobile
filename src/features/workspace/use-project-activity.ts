@@ -1,5 +1,5 @@
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { hostKey, useHostClient } from "@/state/queries";
+import { hostKey, useHostClient, useHostReadActive } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { readProjectSummaries, type ProjectSummaries } from "./project-summaries";
 import { projectSessionDirectory } from "./activity-model";
@@ -8,6 +8,7 @@ import { useProjectList } from "./use-project-directory";
 export function useProjectActivity() {
   const machine = useActiveMachine();
   const client = useHostClient();
+  const active = useHostReadActive();
   const cache = useQueryClient();
   const projects = useProjectList();
   const ids = (projects.data ?? []).map((project) => project.id).sort();
@@ -18,7 +19,7 @@ export function useProjectActivity() {
       const queryKey = hostKey(machine?.id ?? null, ["project-summaries", projectIds]);
       return {
         queryKey,
-        enabled: !!client,
+        enabled: !!client && active,
         retry: false,
         staleTime: 5_000,
         refetchInterval: 10_000,

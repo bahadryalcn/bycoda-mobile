@@ -1,5 +1,5 @@
 import { useMobileTheme } from "./theme";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body, Heading } from "./typography";
 import {
@@ -36,30 +36,36 @@ export function FormActions(props: FormActionsProps) {
   return store ? null : <FormActionRow {...props} />;
 }
 
-function SheetActionArea({ store, footer, bottom }: {
+function SheetActionArea({ store, footer, bottom, maxHeight }: {
   store: ReturnType<typeof createSheetActionsStore>;
   footer: import("react").ReactNode;
   bottom: number;
+  maxHeight: number;
 }) {
   useMobileTheme();
   const insets = useSafeAreaInsets();
+  const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const entries = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const content = !!footer || entries.length > 0;
   return (
-    <View style={{
-      flexShrink: 0,
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
+      automaticallyAdjustKeyboardInsets={false}
+      contentInsetAdjustmentBehavior="never"
+      style={{ flexGrow: 0, flexShrink: 0, minHeight: content ? Math.min(maxHeight, metrics.touchTarget) : 0,
+        maxHeight, borderTopWidth: content ? 1 : 0,
+        borderTopColor: colors.separator, backgroundColor: colors.panel }}
+      contentContainerStyle={{
       paddingStart: Math.max(space.screen, insets.left),
       paddingEnd: Math.max(space.screen, insets.right),
       paddingTop: content ? space.md : 0,
-      paddingBottom: bottom + (content ? space.md : 0),
+      paddingBottom: (keyboardVisible ? 0 : bottom) + (content ? space.md : 0),
       gap: space.sm,
-      borderTopWidth: content ? 1 : 0,
-      borderTopColor: colors.separator,
-      backgroundColor: colors.panel,
     }}>
       {footer}
-      {entries.map(([id, actions]) => <FormActionRow key={id} {...actions} />)}
-    </View>
+      {entries.map(([id, actions]) => <FormActionRow key={id} {...actions} scrollFeedback={false} />)}
+    </ScrollView>
   );
 }
 
@@ -90,26 +96,27 @@ function FormActionRow({
   busy,
   disabled,
   tone = "primary",
-}: FormActionsProps) {
+  scrollFeedback = true,
+}: FormActionsProps & { scrollFeedback?: boolean }) {
   useMobileTheme();
   const copy = useCopy();
   const { height } = useWindowDimensions();
   return (
     <View style={{ gap: space.sm }}>
-    {feedback ? <ScrollView
+    {feedback ? scrollFeedback ? <ScrollView
       style={{ maxHeight: Math.max(metrics.touchTarget, height * 0.25), flexShrink: 1 }}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ gap: space.sm }}
-    >{feedback}</ScrollView> : null}
+    >{feedback}</ScrollView> : <View>{feedback}</View> : null}
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-      <Button label={submitLabel} onPress={onSubmit} busy={busy} disabled={disabled} tone={tone} style={{ flexGrow: 1, flexBasis: 160, minWidth: 0 }} />
+      <Button label={submitLabel} onPress={onSubmit} busy={busy} disabled={disabled} tone={tone} style={{ flexGrow: 1, flexShrink: 0, flexBasis: "auto" }} />
       {onCancel ? (
         <Button
           label={cancelLabel ?? copy("Vazgeç", "Cancel")}
           onPress={onCancel}
           disabled={cancelDisabled || busy}
           tone="quiet"
-          style={{ flexGrow: 1, flexBasis: 96, minWidth: 0 }}
+          style={{ flexGrow: 1, flexShrink: 0, flexBasis: "auto" }}
         />
       ) : null}
     </View>
@@ -165,7 +172,9 @@ export function Sheet({
   useMobileTheme();
   const insets = useSafeAreaInsets();
   const copy = useCopy();
-  const { height } = useWindowDimensions();
+  const { height, fontScale } = useWindowDimensions();
+  const [frameHeight, setFrameHeight] = useState(height);
+  const [headerHeight, setHeaderHeight] = useState(metrics.touchTarget);
   const heading = useRef<View>(null);
   const guards = useSheetGuards();
   const [confirming, setConfirming] = useState(false);
@@ -181,6 +190,14 @@ export function Sheet({
     [guards.register, requestClose],
   );
   const full = size === "full";
+  // The inner frame is measured after the existing keyboard owner applies its
+  // padding. Reserve an input-sized body, sharing space when both regions need
+  // to scroll, rather than allowing a tall footer to collapse the editor.
+  const sheetHeight = Math.min(frameHeight, !full && size === "form" ? height * 0.9 : frameHeight);
+  const topChrome = full ? insets.top : space.sm + 5 + space.xs;
+  const usableHeight = Math.max(0, sheetHeight - topChrome - headerHeight);
+  const bodyMinimum = Math.min(usableHeight / 2, metrics.inputHeight * Math.max(1, fontScale) + space.sm + space.lg);
+  const actionsMaximum = Math.max(0, usableHeight - bodyMinimum);
   useEffect(() => {
     if (!visible) setConfirming(false);
   }, [visible]);
@@ -222,6 +239,9 @@ export function Sheet({
           backgroundColor: full ? colors.background : colors.scrim,
         }}
       >
+        <View style={{ flex: 1, justifyContent: "flex-end" }}
+          onLayout={({ nativeEvent: { layout } }) => setFrameHeight((current) =>
+            Math.abs(current - layout.height) < 1 ? current : layout.height)}>
         {!full ? (
           <Pressable
             accessible={false}
@@ -238,10 +258,8 @@ export function Sheet({
             borderTopStartRadius: full ? 0 : radii.sheet,
             borderTopEndRadius: full ? 0 : radii.sheet,
             overflow: "hidden",
-            maxHeight: full
-              ? height
-              : Math.min(height - insets.top - space.lg, size === "form" ? height * 0.9 : height),
-            height: full ? "100%" : size === "form" && !scroll ? height * 0.9 : undefined,
+            maxHeight: sheetHeight,
+            height: full ? "100%" : size === "form" ? sheetHeight : undefined,
             flexShrink: 1,
             width: "100%",
             maxWidth: full ? undefined : metrics.contentWidth,
@@ -264,6 +282,8 @@ export function Sheet({
           <SheetActionsContext.Provider value={actionsStore}>
           <SheetGuardContext.Provider value={guardContext}>
             <View
+              onLayout={({ nativeEvent: { layout } }) => setHeaderHeight((current) =>
+                Math.abs(current - layout.height) < 1 ? current : layout.height)}
               style={[
                 uiStyles.header,
                 {
@@ -310,7 +330,8 @@ export function Sheet({
               // The outer frame owns keyboard geometry. A second keyboard-aware
               // scroller would add the IME height again and scroll short forms away.
               <ScrollView
-                style={{ flexShrink: 1, flexGrow: full ? 1 : 0, minHeight: 0 }}
+                style={{ flexShrink: 1, flexGrow: size === "compact" ? 0 : 1,
+                  flexBasis: size === "compact" ? undefined : 0, minHeight: bodyMinimum }}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode={process.env.EXPO_OS === "ios" ? "interactive" : "on-drag"}
                 automaticallyAdjustKeyboardInsets={false}
@@ -324,16 +345,18 @@ export function Sheet({
                 style={{
                   flexShrink: 1,
                   flexGrow: size === "compact" ? 0 : 1,
-                  minHeight: 0,
+                  flexBasis: size === "compact" ? undefined : 0,
+                  minHeight: bodyMinimum,
                 }}
               >
                 {children}
               </View>
             )}
-            <SheetActionArea store={actionsStore} footer={footer} bottom={insets.bottom} />
+            <SheetActionArea store={actionsStore} footer={footer} bottom={insets.bottom} maxHeight={actionsMaximum} />
           </SheetGuardContext.Provider>
           </SheetActionsContext.Provider>
         </SheetSurface>
+        </View>
       </KeyboardAvoidingView>
       {confirming ? (
         <Sheet

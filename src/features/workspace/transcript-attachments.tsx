@@ -11,6 +11,7 @@ import { DocumentPreview } from "@/ui/document-preview";
 import { loadSessionMedia } from "@/ui/media-loader";
 import type { MessageContext } from "@/ui/media-policy";
 import { useCopy } from "@/ui/copy";
+import { useHostReadActive } from "@/state/queries";
 import { colors, space } from "@/ui/tokens";
 import type { Block } from "./wire";
 
@@ -32,11 +33,12 @@ export function AttachmentFile({
   useMobileTheme();
   const copy = useCopy();
   const [open, setOpen] = useState(false);
+  const active = useHostReadActive();
   const query = useQuery({
     queryKey: mediaQueryKey(context, ["session-file", context.machineId, context.sessionId, id]),
     queryFn: ({ signal }) =>
       loadSessionMedia(context, id, name, mimeType || "application/octet-stream", signal),
-    enabled: open,
+    enabled: open && active,
     retry: false,
     staleTime: Infinity,
     gcTime: 60_000,

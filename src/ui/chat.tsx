@@ -55,7 +55,8 @@ export const ChatConversation = React.forwardRef<View, ViewProps>(
 /**
  * Plain capsule row for the composer: the owning feature supplies the leading action,
  * field and trailing action, so drafts, uploads and dispatch stay in one place.
- * PanelUI's AIInput is deliberately not used here because it injects its own toolbar chrome.
+ * Legacy inline consumers retain this surface. Session composers use ChatComposer,
+ * backed by PanelUI AIInput with the application's existing keyboard owner.
  */
 export const ChatComposerSurface = Animated.View;
 

@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Stack } from "expo-router";
 import { AppState, BackHandler, Linking, StyleSheet, View } from "react-native";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
@@ -30,9 +30,20 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
   const unlocked = useSecurity((state) => state.status === "unlocked");
   const [foreground, setForeground] = useState(AppState.currentState === "active");
   const [cameraFailed, setCameraFailed] = useState(false);
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission, refreshPermission] = useCameraPermissions();
+  const requested = useRef(false);
   const permissionAction = useAsyncAction();
   const scan = useAsyncAction();
+  useEffect(() => {
+    if (!focused || !foreground || !unlocked) return;
+    void permissionAction.run(async () => {
+      const current = await refreshPermission();
+      if (!requested.current && current.status === "undetermined" && current.canAskAgain) {
+        requested.current = true;
+        await requestPermission();
+      }
+    });
+  }, [focused, foreground, unlocked, refreshPermission, requestPermission, permissionAction.run]);
   useEffect(() => {
     if (!focused) return;
     const listener = BackHandler.addEventListener("hardwareBackPress", () => { onClose(); return true; });

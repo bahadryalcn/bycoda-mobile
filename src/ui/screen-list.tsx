@@ -16,6 +16,8 @@ export type ScreenListProps<T> = FlatListProps<T> & {
   refresh?: () => unknown;
   /** Trailing large-title actions (e.g. a "+" IconButton or ActionMenu). */
   actions?: ReactNode;
+  /** Adjacent rows own their shared surface and separators. */
+  grouped?: boolean;
 };
 
 /** The page owns one vertical list; headers/forms live in list slots, never another ScrollView. */
@@ -27,6 +29,7 @@ export function ScreenList<T>({
   query,
   refresh,
   actions,
+  grouped = false,
   style,
   contentContainerStyle,
   ListHeaderComponent,
@@ -53,7 +56,7 @@ export function ScreenList<T>({
           width: "100%",
           maxWidth: metrics.contentWidth,
           alignSelf: "center",
-          gap: space.sm,
+          gap: grouped ? 0 : space.sm,
           paddingStart: Math.max(insets.left, space.screen),
           paddingEnd: Math.max(insets.right, space.screen),
           paddingTop: space.sm,

@@ -1,11 +1,12 @@
 import { useMobileTheme } from "./theme";
-import { useEffect, useState, type ComponentProps } from "react";
-import { Keyboard, Pressable, Text, View } from "react-native";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { Keyboard, Pressable, ScrollView, Text, View, type LayoutChangeEvent } from "react-native";
 import type { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { colors, fontSize, metrics, radii, space } from "./tokens";
 import { haptic, indicatorSpring, usePressMotion } from "./motion";
+import { useReducedMotionPreference } from "./use-reduced-motion";
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
@@ -36,6 +37,7 @@ function TabItem({
   icon,
   onPress,
   onLongPress,
+  onLayout,
 }: {
   label: string;
   focused: boolean;
@@ -43,6 +45,7 @@ function TabItem({
   icon: React.ReactNode;
   onPress: () => void;
   onLongPress: () => void;
+  onLayout: (event: LayoutChangeEvent) => void;
 }) {
   const press = usePressMotion(0.9);
   return (
@@ -53,17 +56,19 @@ function TabItem({
       aria-selected={focused}
       onPress={onPress}
       onLongPress={onLongPress}
+      onLayout={onLayout}
       onPressIn={press.onPressIn}
       onPressOut={press.onPressOut}
       style={[
         {
-          flex: 1,
-          minWidth: 0,
+          flexGrow: 1,
+          flexShrink: 0,
+          minWidth: metrics.touchTarget,
           minHeight: metrics.touchTarget,
           alignItems: "center",
           justifyContent: "center",
           gap: 2,
-          paddingHorizontal: 0,
+          paddingHorizontal: space.sm,
           paddingVertical: space.xs,
         },
         press.animatedStyle,
@@ -119,21 +124,27 @@ function TabItem({
   );
 }
 
-/** iOS-style floating capsule tab bar with one spring indicator that travels between tabs. */
+/** Intrinsic labels share available room, then scroll instead of compressing scaled text. */
 export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) {
   const { mode } = useMobileTheme();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardVisible();
+  const reducedMotion = useReducedMotionPreference();
   const [width, setWidth] = useState(0);
-  const count = state.routes.length;
-  const itemWidth = count ? (width - 8) / count : 0;
-  const position = useSharedValue(state.index);
+  const scroller = useRef<ScrollView>(null);
+  const [items, setItems] = useState<Record<string, { x: number; width: number }>>({});
+  const selected = items[state.routes[state.index]!.key];
+  const position = useSharedValue(0);
+  const indicatorWidth = useSharedValue(0);
   useEffect(() => {
-    position.value = withSpring(state.index, indicatorSpring);
-  }, [state.index, position]);
+    if (!selected) return;
+    position.value = reducedMotion ? selected.x : withSpring(selected.x, indicatorSpring);
+    indicatorWidth.value = reducedMotion ? selected.width : withSpring(selected.width, indicatorSpring);
+    scroller.current?.scrollTo({ x: Math.max(0, selected.x - (width - selected.width) / 2), animated: !reducedMotion });
+  }, [selected, width, keyboard, position, indicatorWidth, reducedMotion]);
   const indicator = useAnimatedStyle(() => ({
-    width: itemWidth,
-    transform: [{ translateX: position.value * itemWidth }],
+    width: indicatorWidth.value,
+    transform: [{ translateX: position.value }],
   }));
   if (keyboard) return null;
   return (
@@ -151,11 +162,9 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
         accessibilityRole="tablist"
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         style={{
-          flexDirection: "row",
           width: "100%",
           maxWidth: metrics.entryWidth,
           minHeight: metrics.tabBarHeight,
-          padding: 4,
           borderRadius: radii.pill,
           borderCurve: "continuous",
           backgroundColor: colors.panel,
@@ -164,7 +173,15 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
           boxShadow: mode === "dark" ? undefined : `0px 6px 24px -6px ${colors.scrim}`,
         }}
       >
-        {itemWidth > 0 ? (
+        <ScrollView
+          ref={scroller}
+          horizontal
+          showsHorizontalScrollIndicator
+          keyboardShouldPersistTaps="handled"
+          style={{ flexGrow: 0, flexShrink: 0, width: "100%" }}
+          contentContainerStyle={{ flexDirection: "row", flexGrow: 1, padding: 4 }}
+        >
+        {selected ? (
           <Animated.View
             pointerEvents="none"
             style={[
@@ -172,7 +189,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
                 position: "absolute",
                 top: 4,
                 bottom: 4,
-                start: 4,
+                start: 0,
                 borderRadius: radii.pill,
                 borderCurve: "continuous",
                 backgroundColor: colors.fill,
@@ -191,6 +208,11 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
               key={route.key}
               label={label}
               focused={focused}
+              onLayout={({ nativeEvent: { layout } }) => setItems((current) => {
+                const previous = current[route.key];
+                if (previous?.x === layout.x && previous.width === layout.width) return current;
+                return { ...current, [route.key]: { x: layout.x, width: layout.width } };
+              })}
               badge={options.tabBarBadge as string | number | undefined}
               icon={options.tabBarIcon?.({ focused, color, size: 22 })}
               onPress={() => {
@@ -208,6 +230,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
             />
           );
         })}
+        </ScrollView>
       </View>
     </View>
   );
