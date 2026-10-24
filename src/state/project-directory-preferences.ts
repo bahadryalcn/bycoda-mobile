@@ -28,29 +28,32 @@ export function normalizeProjectDirectoryPreferences(value: unknown): ProjectDir
 export function createProjectDirectoryPreferenceStore(storage: Pick<typeof AsyncStorage, "getItem" | "setItem">) {
   let loading: Promise<void> | undefined;
   let writes = Promise.resolve();
+  let loaded = false;
   return create<{
     machines: Record<string, ProjectDirectoryPreferences>;
     hydrated: boolean;
     error: boolean;
     hydrate(): Promise<void>;
-    update(machineId: string, patch: Partial<ProjectDirectoryPreferences>): Promise<void>;
+    update(machineId: string, patch: Partial<ProjectDirectoryPreferences> | ((current: ProjectDirectoryPreferences) => Partial<ProjectDirectoryPreferences>)): Promise<void>;
   }>((set, get) => ({
     machines: {}, hydrated: false, error: false,
     hydrate() {
-      if (get().hydrated) return Promise.resolve();
+      if (loaded) return Promise.resolve();
       if (loading) return loading;
       loading = storage.getItem(storageKey).then((raw) => {
         let data: unknown;
         try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
+        loaded = true;
         set({ machines: Object.fromEntries(Object.entries(data && typeof data === "object" ? data : {})
           .map(([id, value]) => [id, normalizeProjectDirectoryPreferences(value)])), error: false });
-      }).catch(() => { set({ error: true }); }).finally(() => { set({ hydrated: true }); });
+      }).catch(() => { set({ error: true }); }).finally(() => { loading = undefined; set({ hydrated: true }); });
       return loading;
     },
     async update(machineId, patch) {
       await get().hydrate();
+      if (!loaded) return;
       const current = get().machines[machineId] ?? defaultProjectDirectoryPreferences;
-      const next = normalizeProjectDirectoryPreferences({ ...current, ...patch });
+      const next = normalizeProjectDirectoryPreferences({ ...current, ...(typeof patch === "function" ? patch(current) : patch) });
       const machines = { ...get().machines, [machineId]: next };
       set({ machines, error: false });
       const snapshot = JSON.stringify(machines);
@@ -69,7 +72,5 @@ export function useProjectDirectoryPreferences(machineId: string | undefined) {
   return { preferences, hydrated, error };
 }
 export async function rememberOpenedProject(machineId: string, projectId: string) {
-  await projectDirectoryPreferences.getState().hydrate();
-  const previous = projectDirectoryPreferences.getState().machines[machineId] ?? defaultProjectDirectoryPreferences;
-  await projectDirectoryPreferences.getState().update(machineId, { recent: { ...previous.recent, [projectId]: Date.now() } });
+  await projectDirectoryPreferences.getState().update(machineId, (previous) => ({ recent: { ...previous.recent, [projectId]: Date.now() } }));
 }

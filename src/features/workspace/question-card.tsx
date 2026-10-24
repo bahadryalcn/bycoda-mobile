@@ -89,12 +89,12 @@ export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps
             ) : null}
           </View>
         ))}
-        <Row style={{ flexWrap: "nowrap" }}>
+        <Row style={{ justifyContent: "flex-end" }}>
           <Button
             label={copy("Atla", "Skip")}
             disabled={disabled}
-            style={{ flex: 1 }}
-            fullWidth
+            tone="quiet"
+            density="compact"
             onPress={() => {
               void onAnswer({ kind: "skipped" }).catch(() => {});
             }}
@@ -103,8 +103,7 @@ export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps
             label={copy("Yanıtla", "Answer")}
             tone="primary"
             disabled={disabled || !complete}
-            style={{ flex: 1 }}
-            fullWidth
+            density="compact"
             onPress={answer}
           />
         </Row>

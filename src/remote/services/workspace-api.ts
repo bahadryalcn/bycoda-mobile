@@ -10,6 +10,7 @@ import type {
   HostProject,
   HostProjectDirectory,
   HostWorktrees,
+  HostWorktree,
   ProjectSearchResult,
   RemoteRequestOptions,
   WorkspaceTarget,
@@ -84,6 +85,8 @@ export function createWorkspaceApi(request: HostRequest) {
         request<HostBranches>("git.createBranch", { ...target, branch }, options),
       worktrees: (projectId: string, options?: RemoteRequestOptions) =>
         request<HostWorktrees>("git.worktrees", { projectId }, options),
+      createWorktree: (target: WorkspaceTarget, branch: string, base: string, existing: boolean, options?: RemoteRequestOptions) =>
+        request<HostWorktree>("git.worktreeCreate", { ...target, branch, base, existing }, { ...options, retry: false }),
     },
   };
 }

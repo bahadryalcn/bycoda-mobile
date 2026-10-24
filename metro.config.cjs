@@ -20,6 +20,8 @@ const excludedTree = (...segments) =>
 config.resolver.blockList = [
   ...[config.resolver.blockList].flat().filter(Boolean),
   excludedTree("temp"),
+  excludedTree("build"),
+  excludedTree("target"),
   excludedTree("src-tauri", "target"),
   excludedTree(".git"),
 ];

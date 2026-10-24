@@ -9,7 +9,7 @@ import ImageIcon from "lucide-react-native/icons/image";
 import File from "lucide-react-native/icons/file";
 import { useHostClient } from "@/state/queries";
 import { useMachines } from "@/state/machines";
-import { Body, Button, Loading, NavigationGroup, NavigationRow, Sheet } from "@/ui/primitives";
+import { Body, Button, Row, Stack, NavigationGroup, NavigationRow, Sheet } from "@/ui/primitives";
 import { uiStyles } from "@/ui/styles";
 import { colors, metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
@@ -26,11 +26,11 @@ import {
   queuedComposerDraft,
   type QueuedComposerDraft,
 } from "./composer-draft";
-import { composerTokenAt, replaceComposerToken } from "./composer-tokens";
+import { composerTokenAt, replaceComposerToken, moveSuggestionSelection } from "./composer-tokens";
 import { useComposerCatalog, type ComposerSuggestion } from "./use-composer-catalog";
 import { ComposerSuggestions } from "./composer-suggestions";
 import { ComposerAttachments } from "./composer-attachments";
-import { pickAttachments, removeStagedFile } from "./attachment-files";
+import { pickAttachments, removeStagedFile, stageBrowserCapture } from "./attachment-files";
 import { ATTACHMENT_COUNT, type StagedAttachment, type TransferState } from "./attachment-model";
 import { uploadAttachment } from "./attachment-transfer";
 import {
@@ -42,10 +42,15 @@ import { ChatCircleAction, ChatToolbarAction } from "@/ui/chat-controls";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { ChatComposer } from "@/ui/chat-composer";
 import { haptic } from "@/ui/motion";
-import { composerCommand, queuedComposerMessage, type ComposerDelivery } from "./composer-delivery";
+import { composerCommand, queuedComposerMessage, validateNoteDelivery, type ComposerDelivery } from "./composer-delivery";
 import { useSessionQueue } from "./use-session-queue";
 import { SessionQueue } from "./session-queue";
 import { composerDeliveryError } from "./composer-delivery-copy";
+import { TemplateLibrary } from "@/features/management/templates/template-library";
+import { expandTemplateTrigger, insertTemplate } from "@/features/management/templates/template-model";
+import { useTemplateHydration, useTemplates } from "@/features/management/templates/template-store";
+import { useComposerTransfer } from "./composer-transfer";
+import { appendComposerTransfer } from "./composer-transfer-model";
 
 export function SessionComposer({
   scope,
@@ -55,6 +60,7 @@ export function SessionComposer({
   onCommand,
 }: SessionComposerProps) {
   useMobileTheme();
+  useTemplateHydration();
   const copy = useCopy();
   const client = useHostClient();
   const queue = useSessionQueue(scope);
@@ -68,6 +74,8 @@ export function SessionComposer({
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [selected, setSelected] = useState(-1);
   const [picker, setPicker] = useState(false);
+  const [templatePicker, setTemplatePicker] = useState(false);
+  const templateDestination = useRef<{ machineId: string; sessionId: string } | null>(null);
   const [picking, setPicking] = useState(false);
   const [modePicker, setModePicker] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -95,12 +103,17 @@ export function SessionComposer({
   const draftKey = composerDraftKey(scope.machineId, scope.sessionId);
   const draft = useLocalDraft(draftKey, decodeComposerDraft, encodeComposerDraft);
   const { ready, isStored, persist, load, setValue, valueRef, error } = draft;
+  const composerTransfer = useComposerTransfer();
   const value = draft.value ?? emptyComposerDraft();
   const prompt = value.text;
   const running = session?.status === "running";
   const supportsSteer = !!client?.machine.capabilities?.includes("sessions.steer");
   const canSteer = supportsSteer && running && !!session?.runId;
   const mode = delivery;
+  const noteContextSupported = client?.machine.id === scope.machineId && !!client.machine.capabilities?.includes("sessions.noteContext.v1");
+  let noteError: Error | undefined;
+  try { validateNoteDelivery(value.noteCard, mode, prompt, noteContextSupported); }
+  catch (cause) { noteError = cause as Error; }
   useEffect(() => {
     if (!session || initializedDelivery.current) return;
     initializedDelivery.current = true;
@@ -240,7 +253,11 @@ export function SessionComposer({
     if (!ready || blocked || busy || uploading || submission.current || !client || !session) return;
     if (mode === "queue" && (!queue.supported || !!queue.error || queue.changing)) return;
     const submitted = valueRef.current;
-    if (!submitted || (!submitted.text.trim() && !submitted.attachments.length)) return;
+    if (!submitted || (!submitted.text.trim() && !submitted.attachments.length && !submitted.noteCard)) return;
+    try {
+      if (client.machine.id !== scope.machineId || useMachines.getState().activeId !== scope.machineId) return;
+      validateNoteDelivery(submitted.noteCard, mode, submitted.text, noteContextSupported);
+    } catch (cause) { setLocalError(cause); return; }
     if (
       /^\s*\/compact\s*$/.test(submitted.text) &&
       (mode === "steer" || submitted.attachments.length)
@@ -282,9 +299,9 @@ export function SessionComposer({
       if (mode === "queue") {
         queuedDraft.current = queuedComposerDraft(queuedDraft.current, submitted, randomUUID);
         await queue.enqueue(
-          queuedComposerMessage(queuedDraft.current.id, session, submitted.text, attachments),
+          queuedComposerMessage(queuedDraft.current.id, session, submitted.text, attachments, submitted.noteCard),
         );
-      } else await onCommand(composerCommand(session, mode, submitted.text, attachments));
+      } else await onCommand(composerCommand(session, mode, submitted.text, attachments, submitted.noteCard));
       if (!mounted.current) return;
       if (sameComposerContent(valueRef.current, submitted)) {
         setValue(emptyComposerDraft());
@@ -294,6 +311,7 @@ export function SessionComposer({
           current
             ? {
                 ...current,
+                ...(current.noteCard === submitted.noteCard ? { noteCard: undefined } : {}),
                 attachments: current.attachments.filter(
                   (file) => !submitted.attachments.some((sent) => sent.id === file.id),
                 ),
@@ -317,10 +335,31 @@ export function SessionComposer({
     }
   };
   const unavailable = blocked || busy || uploading || picking || !ready || queue.changing;
+  useEffect(() => composerTransfer?.register((request) => {
+    if (request.noteCard && !noteContextSupported) throw new Error("Update bycoda on this computer to send note context. Your draft is preserved.");
+    const current = valueRef.current ?? emptyComposerDraft();
+    const next = appendComposerTransfer(current, request, scope, useMachines.getState().activeId,
+      !unavailable && !submission.current && !transfer.current && !!client && !!session && mounted.current);
+    // Keep selection, attachments, delivery mode and ownership metadata in their existing owners.
+    if (!request.browserCapture) { setValue(next); return; }
+    const browser = request.browserCapture;
+    if (!client || !session || !client.machine.capabilities?.includes("browser.annotation") || !supportsAttachmentOwnership(client) ||
+      !browser.isCurrent() || browser.capture.projectId !== session.projectId || browser.capture.sessionId !== scope.sessionId || current.attachments.length >= ATTACHMENT_COUNT ||
+      current.attachments.some((file) => file.browserAnnotation?.id === browser.capture.id)) throw new Error("The browser selection cannot be added to this draft.");
+    let staged: StagedAttachment | undefined;
+    try {
+      staged = stageBrowserCapture(browser.capture, browser.comment, { machineId: scope.machineId, projectId: session.projectId,
+        sessionId: scope.sessionId, navigationId: browser.capture.navigationId });
+      if (!browser.isCurrent() || !mounted.current || useMachines.getState().activeId !== scope.machineId || submission.current || transfer.current)
+        throw new Error("The browser selection changed before it could be added.");
+      setValue({ ...next, attachments: [...current.attachments, staged] });
+    } catch (error) { if (staged) removeStagedFile(staged); throw error; }
+  }), [composerTransfer, scope, unavailable, client, session, setValue, valueRef, noteContextSupported]);
   const sendDisabled =
     !client ||
     !session ||
-    (!prompt.trim() && !value.attachments.length) ||
+    (!prompt.trim() && !value.attachments.length && !value.noteCard) ||
+    !!noteError ||
     unavailable ||
     (mode === "queue" && (!queue.supported || !!queue.error)) ||
     (mode === "send" && running) ||
@@ -347,6 +386,13 @@ export function SessionComposer({
           onClose={() => setDismissed(tokenId)}
         />
       ) : null}
+      {value.noteCard ? <Stack>
+        <Row><Stack style={{ flex: 1, minWidth: 0 }}><Body>{value.noteCard.title || copy("Başlıksız", "Untitled")}</Body>
+          <Body muted>{copy("Not bağlamı · incelenen kopya", "Note context · reviewed copy")}</Body></Stack>
+          <Button tone="quiet" label={copy("Not bağlamını kaldır", "Remove note context")} disabled={unavailable}
+            onPress={() => setValue((current) => current ? { ...current, noteCard: undefined } : current)} /></Row>
+        {noteError ? <Body muted>{composerDeliveryError(noteError, copy) ?? noteError.message}</Body> : null}
+      </Stack> : null}
       {value.attachments.length ? (
         <ComposerAttachments
           files={value.attachments}
@@ -388,7 +434,10 @@ export function SessionComposer({
       <ChatComposer
         value={prompt}
         onValueChange={(text) => {
-          setValue((current) => ({ ...(current ?? emptyComposerDraft()), text }));
+          const templates = useTemplates.getState();
+          const expanded = templates.hydrated && !templates.error ? expandTemplateTrigger(prompt, text, selection, templates.rows) : null;
+          setValue((current) => ({ ...(current ?? emptyComposerDraft()), text: expanded?.text ?? text }));
+          if (expanded) setSelection(expanded.selection);
           setDismissed(null);
         }}
         disabled={!ready}
@@ -403,7 +452,7 @@ export function SessionComposer({
         }
         leading={
           <ChatCircleAction
-            label={copy("Dosya ekle", "Attach file")}
+            label={copy("Mesaja ekle", "Add to message")}
             disabled={unavailable}
             busy={picking}
             onPress={() => setPicker(true)}
@@ -423,11 +472,11 @@ export function SessionComposer({
             }
             if (event.nativeEvent.key === "ArrowDown" && items.length) {
               event.preventDefault();
-              setSelected((index) => (index + 1) % items.length);
+              setSelected((index) => moveSuggestionSelection(index, items.length, 1));
             }
             if (event.nativeEvent.key === "ArrowUp" && items.length) {
               event.preventDefault();
-              setSelected((index) => (index + items.length - 1) % items.length);
+              setSelected((index) => moveSuggestionSelection(index, items.length, -1));
             }
             if (
               (event.nativeEvent.key === "Tab" ||
@@ -465,7 +514,7 @@ export function SessionComposer({
             }
             active={!sendDisabled}
             disabled={sendDisabled}
-            busy={busy || uploading}
+            busy={uploading || (!ready && !!session && !error)}
             onPress={() => {
               void submit();
             }}
@@ -478,9 +527,10 @@ export function SessionComposer({
           </ChatCircleAction>
         }
       />
-      {uploading && !busy ? (
+      {uploading && Object.values(transfers).some((state) => state.status === "uploading") ? (
         <Button
           tone="quiet"
+          density="compact"
           label={copy("Yüklemeyi iptal et", "Cancel upload")}
           onPress={() => transfer.current?.abort()}
         />
@@ -489,7 +539,6 @@ export function SessionComposer({
         error={error || localError}
         message={composerDeliveryError(error || localError, copy)}
       />
-      {!ready && !error ? <Loading /> : null}
       {error ? (
         <Button
           label={
@@ -539,12 +588,34 @@ export function SessionComposer({
         </NavigationGroup>
       </Sheet>
       <Sheet
+        visible={templatePicker}
+        title={copy("Telefon şablonları", "Phone templates")}
+        size="full"
+        scroll={false}
+        onClose={() => setTemplatePicker(false)}
+      >
+          {templatePicker ? <TemplateLibrary scope={scope} projectId={session?.projectId} onClose={() => setTemplatePicker(false)} onInsert={(body) => {
+          if (!ready || uploading || submission.current || useMachines.getState().activeId !== scope.machineId ||
+            templateDestination.current?.machineId !== scope.machineId || templateDestination.current?.sessionId !== scope.sessionId) return;
+          const current = valueRef.current ?? emptyComposerDraft();
+          const result = insertTemplate(current.text, selection, body);
+          if (result.text.length > 256_000) {
+            setLocalError(new Error(copy("Mesaj çok uzun.", "The message is too long.")));
+            return;
+          }
+          setValue({ ...current, text: result.text });
+          setSelection(result.selection);
+          setDismissed(null);
+        }} /> : null}
+      </Sheet>
+      <Sheet
         visible={picker}
-        title={copy("Dosya ekle", "Attach file")}
+        title={copy("Mesaja ekle", "Add to message")}
         size="compact"
         onClose={() => setPicker(false)}
       >
         <NavigationGroup>
+          <NavigationRow label={copy("Telefon şablonları", "Phone templates")} onPress={() => { templateDestination.current = { ...scope }; setPicker(false); setTemplatePicker(true); }} />
           <NavigationRow
             label={copy("Fotoğraflar", "Photos")}
             icon={<ImageIcon size={22} color={colors.text} />}

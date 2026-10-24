@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HostSessionSummary } from "@/domain/types";
-import { sessionDirectoryRows, toggleSessionDirectoryFolder, type SessionLayout } from "./session-directory";
+import { filterSessionDirectory, sessionDirectoryRows, toggleSessionDirectoryFolder, type SessionLayout } from "./session-directory";
 
 const session = (id: string, updatedAt: number, extra: Partial<HostSessionSummary> = {}): HostSessionSummary =>
   ({ id, updatedAt, projectId: "p", revision: 1, status: "idle", title: id, harness: "codex", ...extra });
@@ -12,6 +12,37 @@ const layout: SessionLayout = {
 };
 
 describe("mobile session organization", () => {
+  it("finds every visible descendant of a folder name and preserves its expanded search ancestry", () => {
+    const before = JSON.stringify(layout);
+    const visible = filterSessionDirectory(sessions, layout, "  parent  ");
+    expect(visible.map((value) => value.id)).toEqual(["one", "two"]);
+    expect(sessionDirectoryRows(visible, layout, {}, true).map((row) => row.key))
+      .toEqual(["folder:parent", "folder:child", "session:two", "session:one"]);
+    expect(filterSessionDirectory(sessions, layout, "Parent / Child").map((value) => value.id)).toEqual(["two"]);
+    expect(JSON.stringify(layout)).toBe(before);
+  });
+  it("searches models, trims blank queries and never reintroduces sessions excluded by archive/status filters", () => {
+    const values = [...sessions, session("model", 1, { model: "gpt-6" })];
+    expect(filterSessionDirectory(values, layout, " gpt-6 ").map((value) => value.id)).toEqual(["model"]);
+    expect(filterSessionDirectory(values, layout, "   ")).toEqual(values);
+    expect(filterSessionDirectory([sessions[0]!], layout, "parent").map((value) => value.id)).toEqual(["one"]);
+    expect(filterSessionDirectory(values, layout, "unmatched", "Unmatched project")).toEqual(values);
+  });
+  it("bounds folder search when host metadata contains a parent cycle", () => {
+    const cyclic: SessionLayout = { order: {}, folders: [
+      { id: "a", name: "Release", parentId: "b", sessionIds: ["one"], collapsed: true },
+      { id: "b", name: "Child", parentId: "a", sessionIds: ["two"], collapsed: true },
+    ] };
+    expect(filterSessionDirectory(sessions, cyclic, "release").map((value) => value.id)).toEqual(["one", "two"]);
+  });
+  it("promotes running sessions out of collapsed folders without duplicates or changing saved layout", () => {
+    const before = JSON.stringify(layout);
+    const values = [session("one", 1, { status: "running" }), session("three", 999, { pinned: true, needsInput: true })];
+    const rows = sessionDirectoryRows(values, layout);
+    expect(rows.map((row) => row.key)).toEqual(["session:one", "session:three"]);
+    expect(JSON.stringify(layout)).toBe(before);
+    expect(sessionDirectoryRows([session("one", 1, { status: "idle" }), values[1]!], layout)[0]?.key).toBe("folder:parent");
+  });
   it("retains offscreen folder membership and applies new manual metadata without rewriting filtered order", () => {
     const many = Array.from({ length: 90 }, (_, index) => session(`s${index}`, index));
     const ids = many.slice(0, 60).map((value) => value.id);

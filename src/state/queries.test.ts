@@ -9,10 +9,12 @@ const fixture = vi.hoisted(() => ({
   focused: true,
   request: vi.fn(),
   machine: { id: "pc", endpoint: "https://pc.example", environmentId: "env", capabilities: [], providers: [] },
+  guard: undefined as undefined | (() => void),
 }));
 vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => fixture.focused }));
 vi.mock("../remote/transport", () => ({
   HostTransport: class {
+    constructor(_machine: unknown, _credential: unknown, _fetcher: unknown, guard: () => void) { fixture.guard = guard; }
     machine = fixture.machine;
     request = fixture.request;
   },
@@ -35,7 +37,9 @@ vi.mock("../features/privacy/consent-store", () => ({ consentScope: () => "scope
 vi.mock("../features/workspace/attachment-ownership", () => ({ attachmentReleases: { flush: vi.fn() } }));
 
 import { useSecurity } from "./security";
-import { hostKey, useHostQuery } from "./queries";
+import { hostKey, useHostClient, useHostQuery } from "./queries";
+import { PrivateContentAccessProvider } from "../ui/private-access";
+import { useModelCatalog } from "./model-catalog";
 
 let root: Root;
 let element: HTMLDivElement;
@@ -54,6 +58,7 @@ beforeEach(() => {
   fixture.focused = true;
   enabled = true;
   visibleData = undefined;
+  fixture.guard = undefined;
   fixture.request.mockReset().mockResolvedValue(["saved"]);
   useSecurity.setState({ status: "unlocked", appState: "active", windowFocused: true });
   focusManager.setFocused(true);
@@ -110,4 +115,41 @@ it("preserves explicit disabled queries and LAN reads while internet connectivit
   enabled = true;
   await act(async () => { render(); await vi.advanceTimersByTimeAsync(1); });
   expect(fixture.request).toHaveBeenCalledTimes(1);
+});
+
+
+it("polls progressive model discovery only while providers remain pending and preserves ready models", async () => {
+  const ready = { models: { codex: [{ id: "ready-model", name: "Ready" }] }, errors: {}, pending: ["claude"] };
+  fixture.request.mockResolvedValueOnce(ready).mockResolvedValue({ ...ready, pending: [] });
+  function ModelProbe() { visibleData = useModelCatalog("project").data; return null; }
+  await act(async () => {
+    root.render(createElement(QueryClientProvider, { client: cache }, createElement(ModelProbe)));
+    await vi.advanceTimersByTimeAsync(1);
+  });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(visibleData).toEqual(ready);
+  expect(fixture.request).toHaveBeenCalledWith("models.list", { projectId: "project", progressive: true }, expect.anything());
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(fixture.request).toHaveBeenCalledTimes(2);
+  await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+  expect(fixture.request).toHaveBeenCalledTimes(2);
+});
+
+it("stops progressive catalog polling on failure instead of hammering a disconnected host", async () => {
+  fixture.request.mockResolvedValueOnce({ models: {}, errors: {}, pending: ["codex"] }).mockRejectedValue(new Error("offline"));
+  function ModelProbe() { useModelCatalog("project"); return null; }
+  await act(async () => {
+    root.render(createElement(QueryClientProvider, { client: cache }, createElement(ModelProbe)));
+    await vi.advanceTimersByTimeAsync(1);
+  });
+  await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+  expect(fixture.request).toHaveBeenCalledTimes(2);
+});
+it("a previously captured transport access guard refuses a revoked private workspace before reading credentials", async () => {
+  let allowed = true;
+  function ClientProbe() { useHostClient(); return null; }
+  await act(async () => root.render(createElement(QueryClientProvider, { client: cache },
+    createElement(PrivateContentAccessProvider, { value: { allowed: true, check: () => allowed } }, createElement(ClientProbe)))));
+  const guard = fixture.guard; expect(guard).toBeTypeOf("function"); allowed = false;
+  expect(() => guard!()).toThrow("private workspace is no longer available");
 });

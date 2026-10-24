@@ -10,8 +10,8 @@ const sizes = {
     userLine: 20,
     code: 12,
     codeLine: 18,
-    heading: 15,
-    headingLine: 21,
+    heading: 16,
+    headingLine: 22,
   },
   standard: {
     assistant: 15,
@@ -20,8 +20,8 @@ const sizes = {
     userLine: 23,
     code: 13,
     codeLine: 20,
-    heading: 16,
-    headingLine: 23,
+    heading: 18,
+    headingLine: 25,
   },
   large: {
     assistant: 17,
@@ -30,8 +30,8 @@ const sizes = {
     userLine: 26,
     code: 15,
     codeLine: 23,
-    heading: 18,
-    headingLine: 26,
+    heading: 20,
+    headingLine: 28,
   },
 } as const;
 
@@ -45,11 +45,16 @@ function createTextStyles(size: (typeof sizes)[ChatTextSize]) {
       lineHeight: size.codeLine,
       fontFamily: monoFont,
     },
+    inlineCode: {
+      color: colors.accent,
+      backgroundColor: colors.fill,
+      fontWeight: "500",
+    },
     heading: {
       color: colors.text,
       fontSize: size.heading,
       lineHeight: size.headingLine,
-      fontWeight: "600",
+      fontWeight: "700",
     },
     author: { fontSize: 12, lineHeight: 16, fontWeight: "600" },
     metadata: { color: colors.muted, fontSize: 12, lineHeight: 16 },

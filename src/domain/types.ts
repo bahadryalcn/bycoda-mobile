@@ -15,6 +15,8 @@ export type {
   MachineChanges,
   MachineChangesRequest,
   RemoteProvider,
+  ContextualSessionInput,
+  ContextualSessionPreview,
 } from "../../../src/features/connections/model/protocol";
 export type { Session, Block, RuntimeMode } from "../../../src/features/sessions/model/session";
 export type { UserQuestionReply } from "../../../src/features/sessions/model/userQuestion";
@@ -31,7 +33,7 @@ export type {
   TaskStatus,
   TaskReviewNote,
 } from "../../../src/features/tasks/model/hostTasks";
-export type { HostGoal, HostGoalInput } from "../../../src/features/tasks/model/hostGoals";
+export type { HostGoal, HostGoalInput, GoalSettings } from "../../../src/features/tasks/model/hostGoals";
 export type {
   HostAutomation,
   HostAutomationInput,

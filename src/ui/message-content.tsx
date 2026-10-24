@@ -1,11 +1,20 @@
 import { useMobileTheme } from "@/ui/theme";
-import { Fragment, memo, useMemo, type ReactNode } from "react";
+import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
 import { Linking, ScrollView, Text, View } from "react-native";
-import { Body } from "./primitives";
+import Square from "lucide-react-native/icons/square";
+import SquareCheck from "lucide-react-native/icons/square-check";
+import { decorativeSvgProps } from "./accessibility";
+import { Body, ErrorText } from "./primitives";
 import { colors, space } from "./tokens";
 import { useCopy } from "./copy";
 import { markdownTarget } from "./message-inline";
-import { parseMessage, messageNodeText, type MessageNode } from "./message-model";
+import {
+  parseMessage,
+  messageNodeText,
+  MESSAGE_RENDER_LIMIT,
+  type MessageNode,
+} from "./message-model";
+import { MessageReader } from "./message-reader";
 import { MessageCode } from "./message-code";
 import { MessageImage } from "./message-image";
 import { chatTextStyles } from "./chat-styles";
@@ -29,7 +38,11 @@ function FileLink({
   return (
     <Text
       accessibilityRole={context && onOpenFile ? "link" : undefined}
-      style={{ color: colors.accent }}
+      style={
+        context && onOpenFile
+          ? { color: colors.accent, textDecorationLine: "underline" }
+          : undefined
+      }
       onPress={context && onOpenFile ? () => onOpenFile(path, context) : undefined}
     >
       {children}
@@ -59,9 +72,10 @@ export const MessageContent = memo(function MessageContent({
   const typography = chatTextStyles(textSize ?? preference);
   const bodyStyle = role === "user" ? typography.user : typography.assistant;
   const copy = useCopy();
+  const [linkError, setLinkError] = useState<unknown>(null);
   const nodes = useMemo(
-    () => scopedMessageReferences(parseMessage(text), context),
-    [text, context?.cwd, context?.basePath],
+    () => scopedMessageReferences(parseMessage(text, role === "assistant"), context),
+    [text, role, context?.cwd, context?.basePath],
   );
   const inline = (nodes: MessageNode[]): ReactNode =>
     nodes.map((node, index) => {
@@ -78,7 +92,8 @@ export const MessageContent = memo(function MessageContent({
               accessibilityRole="link"
               style={{ color: colors.accent, textDecorationLine: "underline" }}
               onPress={() => {
-                void Linking.openURL(target.href).catch(() => {});
+                setLinkError(null);
+                void Linking.openURL(target.href).catch(setLinkError);
               }}
             >
               {child}
@@ -120,7 +135,7 @@ export const MessageContent = memo(function MessageContent({
                 : node.type === "s"
                   ? { textDecorationLine: "line-through" }
                   : node.type === "code_inline"
-                    ? typography.code
+                    ? [typography.code, typography.inlineCode]
                     : undefined
           }
         >
@@ -144,11 +159,12 @@ export const MessageContent = memo(function MessageContent({
         return (
           <MessageCode
             key={key}
-            code={node.text.trimEnd()}
+            code={node.text}
             language={node.attrs.language}
             complete={node.complete}
             context={context}
             compact={compactMedia}
+            textSize={textSize ?? preference}
           />
         );
       if (node.type === "hr")
@@ -175,7 +191,20 @@ export const MessageContent = memo(function MessageContent({
                 >
                   {row.children.map((cell, cellIndex) => (
                     <View key={cellIndex} style={{ width: 170, padding: space.sm }}>
-                      <Body style={[bodyStyle, cell.type === "th" && { fontWeight: "700" }]}>
+                      <Body
+                        accessibilityRole={cell.type === "th" ? "header" : undefined}
+                        style={[
+                          bodyStyle,
+                          {
+                            textAlign: cell.attrs.style?.includes("right")
+                              ? "right"
+                              : cell.attrs.style?.includes("center")
+                                ? "center"
+                                : "left",
+                          },
+                          cell.type === "th" && { fontWeight: "700" },
+                        ]}
+                      >
                         {inline(
                           cell.children.flatMap((entry) =>
                             entry.type === "inline" ? entry.children : [entry],
@@ -224,30 +253,46 @@ export const MessageContent = memo(function MessageContent({
                   key={itemIndex}
                   style={{ flexDirection: "row", alignItems: "flex-start", gap: space.sm }}
                 >
-                  <Body
-                    accessibilityLabel={
-                      task
-                        ? task[1] === " "
+                  {task ? (
+                    <View
+                      accessible
+                      accessibilityRole="text"
+                      accessibilityLabel={
+                        task[1] === " "
                           ? copy("Tamamlanmadı", "Incomplete")
                           : copy("Tamamlandı", "Completed")
-                        : undefined
-                    }
-                    style={[
-                      bodyStyle,
-                      {
-                        width: 25,
-                        color: task?.[1] !== " " && task ? colors.success : colors.muted,
-                      },
-                    ]}
-                  >
-                    {task
-                      ? task[1] === " "
-                        ? "☐"
-                        : "☑"
-                      : node.type === "ordered_list"
+                      }
+                      style={{
+                        minWidth: 25,
+                        minHeight: bodyStyle.lineHeight,
+                        flexShrink: 0,
+                        justifyContent: "center",
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      {task[1] === " " ? (
+                        <Square
+                          {...decorativeSvgProps}
+                          size={18}
+                          color={colors.muted}
+                          strokeWidth={1.75}
+                        />
+                      ) : (
+                        <SquareCheck
+                          {...decorativeSvgProps}
+                          size={18}
+                          color={colors.success}
+                          strokeWidth={1.75}
+                        />
+                      )}
+                    </View>
+                  ) : (
+                    <Body style={[bodyStyle, { minWidth: 25, flexShrink: 0, color: colors.muted }]}>
+                      {node.type === "ordered_list"
                         ? `${Number(node.attrs.start ?? 1) + itemIndex}.`
                         : "•"}
-                  </Body>
+                    </Body>
+                  )}
                   <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
                     {render(children, depth + 1)}
                   </View>
@@ -262,8 +307,9 @@ export const MessageContent = memo(function MessageContent({
             key={key}
             style={{
               borderStartWidth: 2,
-              borderStartColor: colors.border,
+              borderStartColor: colors.info,
               paddingStart: space.md,
+              paddingVertical: space.xs,
               gap: space.sm,
             }}
           >
@@ -275,7 +321,13 @@ export const MessageContent = memo(function MessageContent({
           entry.type === "inline" ? entry.children : [entry],
         );
         return (
-          <View key={key} style={{ gap: space.sm }}>
+          <View
+            key={key}
+            style={{
+              gap: space.sm,
+              marginTop: node.type === "heading" && depth === 0 && index > 0 ? space.sm : 0,
+            }}
+          >
             {!compactMedia || hasInlineText(all) ? (
               <Body
                 accessibilityRole={node.type === "heading" ? "header" : undefined}
@@ -286,6 +338,9 @@ export const MessageContent = memo(function MessageContent({
                     fontSize:
                       typography.heading.fontSize +
                       (node.tag === "h1" ? 5 : node.tag === "h2" ? 2 : 0),
+                    lineHeight:
+                      typography.heading.lineHeight +
+                      (node.tag === "h1" ? 8 : node.tag === "h2" ? 3 : 0),
                   },
                   error && { color: colors.danger },
                 ]}
@@ -315,5 +370,17 @@ export const MessageContent = memo(function MessageContent({
         </View>
       );
     });
-  return <View style={{ gap: space.sm }}>{render(nodes)}</View>;
+  return (
+    <View style={{ minWidth: 0, width: "100%", gap: space.md }}>
+      {render(nodes)}
+      <ErrorText error={linkError} />
+      {text.length > MESSAGE_RENDER_LIMIT ? (
+        <MessageReader
+          text={text}
+          textStyle={bodyStyle}
+          hideInternalMetadata={role === "assistant"}
+        />
+      ) : null}
+    </View>
+  );
 });

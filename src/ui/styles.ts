@@ -1,5 +1,5 @@
 import { StyleSheet } from "react-native";
-import { colors, fontSize, metrics, monoFont, radii, semanticColors, space } from "./tokens";
+import { colors, fontSize, metrics, monoFont, radii, space } from "./tokens";
 import { createThemedStyles } from "./themed-styles";
 
 /** Shared visual rules. Feature styles should only describe their own layout. */
@@ -102,9 +102,9 @@ export const uiStyles = createThemedStyles(() => ({
   button: {
     minHeight: metrics.controlHeight,
     minWidth: metrics.touchTarget,
-    paddingHorizontal: space.lg,
+    paddingHorizontal: space.md,
     paddingVertical: 6,
-    borderRadius: radii.pill,
+    borderRadius: radii.control,
     borderCurve: "continuous",
     gap: 6,
     flexDirection: "row",
@@ -118,14 +118,14 @@ export const uiStyles = createThemedStyles(() => ({
   buttonLabel: {
     color: colors.text,
     fontSize: fontSize.control,
-    lineHeight: 21,
-    fontWeight: "600",
+    lineHeight: 20,
+    fontWeight: "500",
     letterSpacing: -0.2,
     flexShrink: 1,
   },
   primaryButton: { backgroundColor: colors.accentSolid, borderColor: colors.accentSolid },
   primaryLabel: { color: colors.primaryText },
-  secondaryButton: { backgroundColor: colors.selected, borderColor: semanticColors.info.border },
+  secondaryButton: { backgroundColor: "transparent", borderColor: "transparent" },
   secondaryLabel: { color: colors.accent },
   dangerBorder: { borderColor: colors.danger },
   dangerText: { color: colors.danger },
@@ -167,13 +167,16 @@ export const uiStyles = createThemedStyles(() => ({
   loading: { padding: space.xl, gap: space.md, alignItems: "center", justifyContent: "center" },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   notice: {
-    padding: space.lg,
-    gap: space.sm,
+    paddingHorizontal: 0,
+    paddingVertical: space.xs,
+    gap: space.xs,
+    backgroundColor: "transparent",
     borderWidth: 0,
-    borderStartWidth: 0,
-    borderRadius: radii.card,
-    borderCurve: "continuous",
+    borderRadius: 0,
   },
+  noticeRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.sm, rowGap: 0 },
+  noticeMessage: { flexDirection: "row", alignItems: "flex-start", gap: space.sm,
+    flexGrow: 1, flexShrink: 1, flexBasis: 128, minWidth: 0 },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
   codePanel: {
     backgroundColor: colors.panel,

@@ -8,6 +8,8 @@ import { isScopedStagedFile } from "./attachment-files";
 
 export async function uploadAttachment(client: HostTransport, file: StagedAttachment, sessionId: string, signal: AbortSignal, progress: (value: number) => void) {
   validateAttachment(file);
+  if (file.browserAnnotation && (file.browserAnnotation.sessionId !== sessionId || !client.machine.capabilities?.includes("browser.annotation")))
+    throw new Error("Browser attachment belongs to another conversation or is unsupported");
   if (!isScopedStagedFile(file, `${client.machine.id}:${sessionId}`)) throw new Error("This attachment belongs to another conversation. Choose it again.");
   const local = new File(file.uri);
   if (!local.exists || local.size !== file.size) throw new Error("The selected file is no longer available. Remove it and choose it again.");

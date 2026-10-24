@@ -225,6 +225,7 @@ export function GalleryCatalog({ onExample }: { onExample: (example: GalleryExam
               label={copy("PanelUI belgelerini aç", "Open PanelUI documentation")}
               tone="secondary"
               onPress={() => {
+                setLinkFailed(false);
                 void Linking.openURL(selected.docs).catch(() => setLinkFailed(true));
               }}
             />

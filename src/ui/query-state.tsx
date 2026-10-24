@@ -1,6 +1,5 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Button } from "./buttons";
 import { Empty, ErrorNotice, Loading, Notice, Skeleton } from "./feedback";
 import { useCopy } from "./copy";
 import { remoteErrorKind } from "./error-message";
@@ -14,14 +13,15 @@ export function QueryState({
   emptyDetail,
   emptyAction,
   loading = "list",
+  loadingLabel,
 }: QueryStateProps) {
   const copy = useCopy();
   const presentation = getQueryPresentation(query, !!empty);
   if (presentation === "loading")
     return loading === "none" ? null : loading === "inline" ? (
-      <Loading />
+      <Loading label={loadingLabel} />
     ) : (
-      <Skeleton variant={loading} />
+      <Skeleton variant={loading} label={loadingLabel} />
     );
   if (presentation === "paused")
     return (
@@ -70,14 +70,11 @@ export function QueryState({
               }
             : undefined
         }
-      >
-        {repair ? (
-          <Button
-            label={copy("Bağlantıları yönet", "Manage connections")}
-            onPress={() => router.push("/machines")}
-          />
-        ) : null}
-      </ErrorNotice>
+        action={repair ? {
+          label: copy("Bağlantıları yönet", "Manage connections"),
+          onPress: () => router.push("/machines"),
+        } : undefined}
+      />
     );
   }
   return presentation === "empty" ? (

@@ -1,5 +1,5 @@
 import type { HostSession, SessionSyncResponse } from "./host";
-/** Legacy hosts still expose these transcript attachments. Keep their wire shape local. */
+/** Optional html.artifacts wire shape. Current hosts do not advertise stored HTML artifacts. */
 export interface HtmlArtifactSummary {
   id: string;
   sessionId: string;
@@ -36,5 +36,6 @@ export type {
   RuntimeMode,
   LinkedWorkItem,
 } from "../../../../src/features/sessions/model/session";
+export type { ContextualSessionInput, ContextualSessionPreview } from "../../../../src/features/connections/model/protocol";
 export type { UserQuestionReply } from "../../../../src/features/sessions/model/userQuestion";
 export type { AgentModel } from "../../../../src/features/sessions/model/models";

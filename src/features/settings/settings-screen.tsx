@@ -2,6 +2,7 @@ import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { router } from "expo-router";
 import Laptop from "lucide-react-native/icons/laptop";
+import Server from "lucide-react-native/icons/server";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
@@ -24,6 +25,7 @@ import {
   Section,
   SelectField,
   Sheet,
+  Button,
 } from "../../ui/primitives";
 import { colors } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
@@ -40,6 +42,8 @@ export function SettingsScreen() {
   const machine = useActiveMachine();
   const language = useMachines((s) => s.language);
   const setLanguage = useMachines((s) => s.setLanguage);
+  const storageError = useMachines((s) => s.storageError);
+  const storageHydrated = useMachines((s) => s.hydrated);
   const themeMode = useAppearance((s) => s.themeMode);
   const setThemeMode = useAppearance((s) => s.setThemeMode);
   const appearanceHydrated = useAppearance((s) => s.hydrated);
@@ -92,6 +96,7 @@ export function SettingsScreen() {
             icon={tile(Globe, colors.info)}
             label={copy("Dil", "Language")}
             value={language}
+            disabled={!storageHydrated || !!storageError}
             options={[{ value: "system" as const, label: copy("Sistem", "System") }, ...LANGUAGES]}
             onChange={setLanguage}
           />
@@ -101,6 +106,10 @@ export function SettingsScreen() {
             onPress={() => setPanel("appearance")}
           />
         </NavigationGroup>
+        {storageError ? <>
+          <Notice tone="warning" message={storageError} />
+          <Button tone="quiet" label={copy("Depolamayı kurtar", "Recover saved connections")} onPress={() => router.push("/machines")} />
+        </> : null}
         {appearanceError ? (
           <Notice
             tone="warning"
@@ -124,6 +133,14 @@ export function SettingsScreen() {
           icon={tile(LockKeyhole, colors.accent)}
           onPress={() => setPanel("privacy")}
         />
+        {machine ? (
+          <NavigationRow label={copy("Bilgisayar erişimi", "Host access")} icon={tile(ShieldCheck, colors.info)}
+            onPress={() => router.push({ pathname: "/tools/[tool]", params: { tool: "access", machineId: machine.id } })} />
+        ) : null}
+        {machine ? (
+          <NavigationRow label={copy("Sağlayıcı merkezi", "Provider center")} icon={tile(Server, colors.info)}
+            onPress={() => router.push({ pathname: "/tools/[tool]", params: { tool: "providers", machineId: machine.id } })} />
+        ) : null}
         {machine ? (
           <NavigationRow
             label={titles.host}

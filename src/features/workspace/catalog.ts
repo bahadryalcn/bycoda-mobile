@@ -11,7 +11,8 @@ export function catalogProviders(
     : REMOTE_PROVIDERS.filter(
         (provider) =>
           Object.prototype.hasOwnProperty.call(catalog?.models ?? {}, provider) ||
-          Object.prototype.hasOwnProperty.call(catalog?.errors ?? {}, provider),
+          Object.prototype.hasOwnProperty.call(catalog?.errors ?? {}, provider) ||
+          !!catalog?.pending?.includes(provider),
       );
   return [...new Set(providers)].filter((provider) => REMOTE_PROVIDERS.includes(provider));
 }

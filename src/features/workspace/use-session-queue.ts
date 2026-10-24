@@ -6,6 +6,7 @@ import { hostKey, useHostClient, useHostQuery } from "@/state/queries";
 import type { SharedQueue } from "../../../../src/features/connections/model/sharedQueue";
 import type { QueuedMessage } from "../../../../src/features/sessions/model/session";
 import type { SessionScope } from "./session-types";
+import { queuedDeliveryUnknown } from "./composer-delivery";
 
 // One consumer identity per app process. Restarting never resumes an unattended queue.
 const mobileQueueClient = `mobile:${randomUUID()}`;
@@ -109,6 +110,9 @@ export function useSessionQueue(scope: SessionScope) {
     },
     pause: () =>
       mutate((queue) => ({ ...queue, status: queue.messages.length ? "paused" : undefined })),
-    activate: () => mutate((queue) => ({ ...queue, status: "active", editingId: undefined }), true),
+    activate: () => mutate((queue) => {
+      if (queue.messages.some((row) => row.deliveryUnknown)) throw new Error(queuedDeliveryUnknown);
+      return { ...queue, status: "active", editingId: undefined };
+    }, true),
   };
 }

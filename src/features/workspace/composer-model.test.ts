@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { composerTokenAt, mentionLabel, replaceComposerToken } from "./composer-tokens";
+import { composerTokenAt, mentionLabel, replaceComposerToken, moveSuggestionSelection } from "./composer-tokens";
 import { decodeComposerDraft, emptyComposerDraft, encodeComposerDraft } from "./composer-draft";
 import { base64ToBytes, bytesToBase64, validateAttachment } from "./attachment-model";
 const token = (text: string, cursor = text.length) => composerTokenAt(text, { start: cursor, end: cursor });
 describe("scoped composer intent", () => {
+  it.each([1, 2, 4])("starts upward selection at the final suggestion and wraps all %s rows", (count) => {
+    expect(moveSuggestionSelection(-1, count, -1)).toBe(count - 1);
+    expect(moveSuggestionSelection(-1, count, 1)).toBe(0);
+    expect(moveSuggestionSelection(0, count, -1)).toBe(count - 1);
+    expect(moveSuggestionSelection(count - 1, count, 1)).toBe(0);
+    const visited = new Set<number>();
+    let selected = -1;
+    for (let index = 0; index < count; index++) { selected = moveSuggestionSelection(selected, count, -1); visited.add(selected); }
+    expect(visited.size).toBe(count);
+    expect(moveSuggestionSelection(selected, 0, -1)).toBe(-1);
+  });
   it("replaces the entire caret token while preserving suffix text", () => {
     const text = "Check @src/appl.ts then continue";
     const picked = token(text, 13)!;

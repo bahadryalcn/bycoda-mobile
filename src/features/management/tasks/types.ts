@@ -1,6 +1,6 @@
 import type { useHostMutation } from "@/state/queries";
 import type { HostTask, HostTaskInput, TaskStatus, TaskReviewNote } from "@/domain/types";
-export type TaskDraft = HostTaskInput & { status?: TaskStatus };
+export type TaskDraft = HostTaskInput & { status?: TaskStatus; updatedAt?: number };
 export type TaskEditorFlow =
   | { kind: "new"; initial: TaskDraft }
   | { kind: "edit"; id: string; projectId: string }
@@ -21,6 +21,7 @@ export type TaskCardProps = {
   onDelivery: (task: HostTask) => void;
   move: ReturnType<typeof useHostMutation<HostTask>>;
   remove: ReturnType<typeof useHostMutation>;
+  decline: ReturnType<typeof useHostMutation>;
   recheck: ReturnType<typeof useHostMutation>;
   start: ReturnType<typeof useHostMutation<HostTask>>;
   reorder: ReturnType<typeof useHostMutation>;

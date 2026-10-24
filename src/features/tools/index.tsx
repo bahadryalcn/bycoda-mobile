@@ -1,4 +1,7 @@
 import { router } from "expo-router";
+import { useRef } from "react";
+import { View } from "react-native";
+import type { HostProject } from "@/domain/types";
 import { useProjectList } from "../workspace/use-project-directory";
 import { useActiveMachine } from "@/state/machines";
 import { Button, Empty, Notice, QueryState, Screen } from "@/ui/primitives";
@@ -8,27 +11,66 @@ import { RuntimeLogsScreen } from "./runtime-logs-screen";
 import { DevicesScreen } from "./devices-screen";
 import { BrowserScreen } from "./browser-screen";
 import { TerminalScreen } from "./terminal-screen";
+import { DiagnosticsScreen } from "./diagnostics-screen";
+import { UsageScreen } from "./usage-screen";
+import { ProviderCenter } from "./provider-center";
+import { AccessCenter } from "./access-center";
+import { PrivateContentBoundary } from "@/ui/private-content";
 
 export function HostToolScreen({ tool, projectId }: { tool: string; projectId?: string }) {
+  if (tool === "providers") return <ProviderCenter />;
+  if (tool === "access") return <AccessCenter />;
+  return <ProjectHostToolScreen tool={tool} projectId={projectId} />;
+}
+function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: string }) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const projects = useProjectList();
-  const project = !projects.privacyPending && projects.data?.find((entry) => entry.id === projectId);
-  const capability = tool === "servers" ? "dev.servers" : tool === "devices" ? "device.host" : tool === "browser" ? "browser.shared" : tool === "terminals" ? "terminals.v1" : "runtime.logs";
-  const supported = machine?.capabilities?.includes(capability);
-  if (machine && project && supported) {
-    if (tool === "servers") return <DevServersScreen project={project} />;
-    if (tool === "logs") return <RuntimeLogsScreen project={project} />;
-    if (tool === "devices") return <DevicesScreen project={project} />;
-    if (tool === "browser") return <BrowserScreen project={project} />;
-    if (tool === "terminals") return <TerminalScreen key={`${machine.id}:${project.id}`} project={project} />;
-  }
-  return (
+  const visibleProject = projects.directoryReady ? projects.data?.find((entry) => entry.id === projectId) : undefined;
+  const retained = useRef<{ machineId: string; projectId: string; project: HostProject } | undefined>(undefined);
+  if (machine && visibleProject) retained.current = { machineId: machine.id, projectId: visibleProject.id, project: visibleProject };
+  const remembered = retained.current;
+  const project = visibleProject ?? (remembered?.machineId === machine?.id && remembered?.projectId === projectId ? remembered?.project : undefined);
+  const capability = tool === "servers" ? "dev.servers" : tool === "devices" ? "device.host" : tool === "browser" ? "browser.shared" : tool === "terminals" ? "terminals.v1" : tool === "logs" ? "runtime.logs" : tool === "diagnostics" ? "resources.diagnostics" : tool === "usage" ? "usage.sessions.read" : null;
+  const supported = !!capability && machine?.capabilities?.includes(capability);
+  if (!capability) return (
     <Screen title={copy("Araçlar", "Tools")}>
-      <QueryState query={projects} />
-      {machine && !supported ? <Notice message={copy("Bu araç için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on your computer to use this tool.")} /> : null}
-      {!projects.isPending && !project ? <Empty title={copy("Proje seçin", "Choose a project")} /> : null}
-      <Button label={copy("Projelere dön", "Back to projects")} onPress={() => router.replace("/")} />
+      <Empty title={copy("Araç bulunamadı", "Tool not found")} />
+      <Button tone="quiet" label={copy("Projelere dön", "Back to projects")} onPress={() => router.replace("/")} />
     </Screen>
   );
+  return (
+    <View style={{ flex: 1 }}>
+      {!visibleProject || !supported ? <Screen title={copy("Araçlar", "Tools")}>
+        <QueryState query={projects} loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
+        {projects.privacyUnavailable ? <Notice message={copy(
+          "Proje listesini eşitlemek için bu bilgisayarda bycoda’yı aç. Korunan gruplar gizli kalır.",
+          "Open bycoda on this computer to sync the project directory. Protected groups stay hidden.",
+        )} /> : null}
+        {projects.readiness === "waiting" ? <Notice
+          message={copy("Bağlantı bekleniyor.", "Waiting for a connection.")}
+          action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: () => router.push("/machines") }}
+        /> : null}
+        {projects.directoryReady && machine?.capabilities && !supported ? <Notice message={copy("Bu araç için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on your computer to use this tool.")} /> : null}
+        {projects.directoryReady && !visibleProject ? <Empty title={projectId
+          ? copy("Bu bilgisayarda proje bulunamadı.", "Project not found on this computer.")
+          : copy("Proje seçin", "Choose a project")} /> : null}
+        <Button tone="quiet" label={copy("Projelere dön", "Back to projects")} onPress={() => router.replace("/")} />
+      </Screen> : null}
+      <PrivateContentBoundary visible={!!visibleProject && !!supported} isAllowed={() => !!project && projects.isProjectVisible(project.id)}>
+        {machine && project && supported ? <ProjectToolContent key={`${machine.id}:${project.id}:${tool}`} tool={tool} project={project} /> : null}
+      </PrivateContentBoundary>
+    </View>
+  );
+}
+
+function ProjectToolContent({ tool, project }: { tool: string; project: HostProject }) {
+  if (tool === "servers") return <DevServersScreen project={project} />;
+  if (tool === "logs") return <RuntimeLogsScreen project={project} />;
+  if (tool === "diagnostics") return <DiagnosticsScreen project={project} />;
+  if (tool === "usage") return <UsageScreen project={project} />;
+  if (tool === "devices") return <DevicesScreen project={project} />;
+  if (tool === "browser") return <BrowserScreen project={project} />;
+  if (tool === "terminals") return <TerminalScreen project={project} />;
+  return null;
 }

@@ -3,6 +3,7 @@ import { useProjectList } from "../workspace/use-project-directory";
 import { useReducer } from "react";
 import {
   Body,
+  Badge,
   Button,
   NavigationGroup,
   SelectField,
@@ -18,7 +19,6 @@ import { useMachines } from "@/state/machines";
 import type { SocialSnapshot } from "@/domain/types";
 import { initialSocialFlow, socialFlowReducer, type SocialTab } from "./social-flow";
 import { Scope } from "./shared/scope";
-import { Status } from "./shared/status";
 import { socialRequest as request } from "./social/request";
 import { AccountsPanel } from "./social/accounts-panel";
 import { ThreadsPanel } from "./social/threads-panel";
@@ -44,22 +44,34 @@ export function SocialScreen() {
     editor.kind === "thread"
       ? query.data?.threads.find((thread) => thread.id === editor.id)
       : undefined;
-  const selectedThread = useEditorRecord(editor.kind === "thread" ? editor.id : null, fetchedSelectedThread);
+  const selectedThread = useEditorRecord(
+    editor.kind === "thread" ? editor.id : null,
+    fetchedSelectedThread,
+  );
   const fetchedSelectedDraft =
     editor.kind === "draft"
       ? query.data?.drafts.find((draft) => draft.id === editor.id)
       : undefined;
-  const selectedDraft = useEditorRecord(editor.kind === "draft" ? editor.id : null, fetchedSelectedDraft);
+  const selectedDraft = useEditorRecord(
+    editor.kind === "draft" ? editor.id : null,
+    fetchedSelectedDraft,
+  );
   const fetchedCampaignAccount =
     editor.kind === "campaign"
       ? query.data?.accounts.find((account) => account.id === editor.accountId)
       : undefined;
-  const campaignAccount = useEditorRecord(editor.kind === "campaign" ? editor.accountId : null, fetchedCampaignAccount);
+  const campaignAccount = useEditorRecord(
+    editor.kind === "campaign" ? editor.accountId : null,
+    fetchedCampaignAccount,
+  );
   const fetchedRuleAccount =
     editor.kind === "rule"
       ? query.data?.accounts.find((account) => account.id === editor.accountId)
       : undefined;
-  const ruleAccount = useEditorRecord(editor.kind === "rule" ? editor.accountId : null, fetchedRuleAccount);
+  const ruleAccount = useEditorRecord(
+    editor.kind === "rule" ? editor.accountId : null,
+    fetchedRuleAccount,
+  );
   const closeEditor = () => dispatch({ type: "close", editor });
   const run = (name: string, input: Record<string, unknown> = {}) =>
     action.mutate(request(name, input));
@@ -110,7 +122,17 @@ export function SocialScreen() {
       {state && (
         <>
           <Row>
-            <Status value={state.stopped ? "blocked" : state.hostOnline ? "running" : "blocked"} />
+            <Badge
+              label={
+                state.hostOnline
+                  ? copy("Bilgisayar çevrimiçi", "Computer online")
+                  : copy("Bilgisayar çevrimdışı", "Computer offline")
+              }
+              tone={state.hostOnline ? "default" : "warning"}
+            />
+            {state.stopped ? (
+              <Badge label={copy("Gönderim durduruldu", "Sending stopped")} tone="warning" />
+            ) : null}
             <Body muted>
               {state.sendingEnabled
                 ? copy("Gönderimler yetkili", "Sending authorized")

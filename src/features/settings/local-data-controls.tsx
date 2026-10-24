@@ -40,6 +40,14 @@ function tile(Glyph: typeof Trash2, color: string): ReactNode {
 export function LocalDataControls() {
   const copy = useCopy();
   const state = useMachines();
+  const deleteDraftsLabel = copy("Kaydedilmiş taslakları sil", "Delete saved drafts");
+  const draftDeletionReason =
+    state.machines.length > 0
+      ? copy(
+          "Taslakları silmeden önce bilgisayar bağlantılarını kaldırın.",
+          "Disconnect computers before deleting saved drafts.",
+        )
+      : undefined;
   const cache = useQueryClient();
   const action = useAsyncAction<{ message: string }>();
   const [confirmation, setConfirmation] = useState<"connections" | "drafts" | "consent" | null>(
@@ -69,7 +77,13 @@ export function LocalDataControls() {
         assertAppAccess();
         await deleteSavedDrafts(AsyncStorage, () => useMachines.getState().machines.length > 0);
         assertAppAccess();
-        if (useMachines.getState().machines.length > 0) throw new Error(copy("Taslakları silmeden önce bilgisayar bağlantılarını kaldırın.", "Disconnect computers before deleting saved drafts."));
+        if (useMachines.getState().machines.length > 0)
+          throw new Error(
+            copy(
+              "Taslakları silmeden önce bilgisayar bağlantılarını kaldırın.",
+              "Disconnect computers before deleting saved drafts.",
+            ),
+          );
         clearAttachmentDraftFiles();
         clearMediaCache();
       } else if (target === "consent") {
@@ -110,7 +124,7 @@ export function LocalDataControls() {
           />
         </NavigationGroup>
       </Animated.View>
-      <Animated.View entering={enterItem(1)}>
+      <Animated.View entering={enterItem(1)} style={{ gap: space.sm }}>
         <NavigationGroup>
           <NavigationRow
             label={copy("Kaydedilmiş bilgisayarları kaldır", "Remove saved computers")}
@@ -123,7 +137,8 @@ export function LocalDataControls() {
             }}
           />
           <NavigationRow
-            label={copy("Kaydedilmiş taslakları sil", "Delete saved drafts")}
+            label={deleteDraftsLabel}
+            accessibilityLabel={[deleteDraftsLabel, draftDeletionReason].filter(Boolean).join(". ")}
             tone="danger"
             icon={tile(Trash2, colors.danger)}
             disabled={unavailable || state.machines.length > 0}
@@ -133,6 +148,7 @@ export function LocalDataControls() {
             }}
           />
         </NavigationGroup>
+        {draftDeletionReason ? <Body muted>{draftDeletionReason}</Body> : null}
       </Animated.View>
       <Disclosure label={copy("Bu telefondaki veriler", "Data on this phone")}>
         <Body muted>
@@ -149,49 +165,53 @@ export function LocalDataControls() {
         </Body>
       </Disclosure>
       {confirmation ? (
-        <Sheet visible size="compact" dismissible={!action.isPending} title={copy("Yerel verileri yönet", "Manage local data")} onClose={() => { if (!action.isPending) setConfirmation(null); }}>
-        <ConfirmationCard
-          message={
-            confirmation === "connections"
-              ? copy(
-                  "Tüm kayıtlı bilgisayarlar ve bağlantı anahtarları yalnız bu telefondan kaldırılacak. Yeniden bağlanman gerekecek. Kaydedilmiş taslaklar kalır.",
-                  "All saved computers and connection keys will be removed from this phone. You will need to connect again. Saved drafts remain.",
-                )
-              : confirmation === "drafts"
-                ? copy(
-                    "Telefonda kaydedilmiş mesaj, dosya ve not taslakları kalıcı silinecek. Gönderilmeyen değişiklikleri önce yedekle.",
-                    "Saved message, file and note drafts on this phone will be permanently deleted. Back up unsent changes first.",
-                  )
-                : copy(
-                    "Bu telefondan çalışma alanına erişim, tekrar izin verene kadar kapanacak. Bilgisayarında zaten çalışan işler ve sağlayıcıya daha önce gönderilen veriler bundan etkilenmez.",
-                    "Workspace access from this phone will pause until you grant permission again. Work already running on your computer and data already sent to providers are unaffected.",
-                  )
-          }
-          cancelLabel={copy("Vazgeç", "Cancel")}
-          confirmLabel={
-            confirmation === "consent"
-              ? copy("İzni geri çek", "Withdraw permission")
-              : confirmation === "drafts"
-                ? copy("Taslakları sil", "Delete drafts")
-                : copy("Bilgisayarları kaldır", "Remove computers")
-          }
-          busy={action.isPending}
-          disabled={unavailable}
-          onCancel={() => {
+        <Sheet
+          visible
+          size="compact"
+          dismissible={!action.isPending}
+          title={copy("Yerel verileri yönet", "Manage local data")}
+          onClose={() => {
             if (!action.isPending) setConfirmation(null);
           }}
-          onConfirm={() => {
-            void perform();
-          }}
-        />
-        <MutationState mutation={action} />
+        >
+          <ConfirmationCard
+            message={
+              confirmation === "connections"
+                ? copy(
+                    "Tüm kayıtlı bilgisayarlar ve bağlantı anahtarları yalnız bu telefondan kaldırılacak. Yeniden bağlanman gerekecek. Kaydedilmiş taslaklar kalır.",
+                    "All saved computers and connection keys will be removed from this phone. You will need to connect again. Saved drafts remain.",
+                  )
+                : confirmation === "drafts"
+                  ? copy(
+                      "Telefonda kaydedilmiş mesaj, dosya ve not taslakları kalıcı silinecek. Gönderilmeyen değişiklikleri önce yedekle.",
+                      "Saved message, file and note drafts on this phone will be permanently deleted. Back up unsent changes first.",
+                    )
+                  : copy(
+                      "Bu telefondan çalışma alanına erişim, tekrar izin verene kadar kapanacak. Bilgisayarında zaten çalışan işler ve sağlayıcıya daha önce gönderilen veriler bundan etkilenmez.",
+                      "Workspace access from this phone will pause until you grant permission again. Work already running on your computer and data already sent to providers are unaffected.",
+                    )
+            }
+            cancelLabel={copy("Vazgeç", "Cancel")}
+            confirmLabel={
+              confirmation === "consent"
+                ? copy("İzni geri çek", "Withdraw permission")
+                : confirmation === "drafts"
+                  ? copy("Taslakları sil", "Delete drafts")
+                  : copy("Bilgisayarları kaldır", "Remove computers")
+            }
+            busy={action.isPending}
+            disabled={unavailable}
+            onCancel={() => {
+              if (!action.isPending) setConfirmation(null);
+            }}
+            onConfirm={() => {
+              void perform();
+            }}
+          />
+          <MutationState mutation={action} />
         </Sheet>
       ) : null}
-      <MutationState
-        mutation={action}
-        pending={copy("Yerel veriler güncelleniyor…", "Updating local data…")}
-        success={action.data?.message}
-      />
+      <MutationState mutation={action} success={action.data?.message} />
     </Stack>
   );
 }

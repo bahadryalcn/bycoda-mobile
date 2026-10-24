@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Sparkles from "lucide-react-native/icons/sparkles";
@@ -12,9 +12,12 @@ import { Plan } from "panelui-native/components/plan";
 import { useHostReadActive } from "@/state/queries";
 import { useReducedMotionPreference } from "./use-reduced-motion";
 import { Body } from "./typography";
-import { colors, space } from "./tokens";
+import { colors, metrics, radii, space } from "./tokens";
 import { uiStyles } from "./styles";
 import { useMobileTheme } from "./theme";
+import { useCopy } from "./copy";
+
+export type ChatActivityStatus = TaskStatus | "stopped" | "record";
 
 /** Localized status, natural wrapping and one shared 48dp disclosure target. */
 export function ChatActivity({
@@ -27,36 +30,73 @@ export function ChatActivity({
 }: {
   title: string;
   detail?: string;
-  status?: TaskStatus;
+  status?: ChatActivityStatus;
   reasoning?: boolean;
   children?: ReactNode;
   /** In virtualized timelines, inspect in the feature-owned sheet instead of expanding. */
   onInspect?: () => void;
 }) {
   useMobileTheme();
+  const copy = useCopy();
   const reduceMotion = useReducedMotionPreference();
   const active = useHostReadActive();
   const [open, setOpen] = useState(false);
   const [visited, setVisited] = useState(false);
   const onOpenChange = (next: boolean) => {
-    if (onInspect) { if (next) onInspect(); return; }
+    if (onInspect) {
+      if (next) onInspect();
+      return;
+    }
     setOpen(next);
     if (next) setVisited(true);
   };
   const Icon = reasoning ? Sparkles : status === "complete" ? CircleCheck : Terminal;
+  const statusColor =
+    status === "error"
+      ? colors.danger
+      : status === "stopped"
+        ? colors.warning
+        : status === "running"
+          ? colors.info
+          : status === "complete"
+            ? colors.success
+            : colors.muted;
+  const statusLabel =
+    status === "error"
+      ? copy("Başarısız", "Failed")
+      : status === "stopped"
+        ? copy("Durduruldu", "Interrupted")
+        : status === "running"
+          ? copy("Çalışıyor", "Running")
+          : status === "complete"
+            ? copy("Tamamlandı", "Completed")
+            : status === "record"
+              ? copy("İşlem kaydı", "Action record")
+              : copy("Bekliyor", "Pending");
+  const detailLabel = [...new Set([statusLabel, detail].filter(Boolean))].join(" · ");
+  const accessibleLabel = [...new Set([title, statusLabel, detail].filter(Boolean))].join(". ");
+  const titleStyle = {
+    ...uiStyles.caption,
+    fontWeight: "600" as const,
+    color: status === "error" ? colors.danger : colors.text,
+  };
   const Chevron = onInspect ? ChevronRight : ChevronDown;
   const header = (
     <>
-      <Icon size={18} color={status === "error" ? colors.danger : colors.muted} />
+      <Icon size={18} color={statusColor} />
       <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
         {status === "running" && !reduceMotion && title.length < 60 ? (
-          <Shimmer enabled={active} textStyle={uiStyles.label}>{title}</Shimmer>
+          <Shimmer enabled={active} textStyle={titleStyle}>
+            {title}
+          </Shimmer>
         ) : (
-          <Body numberOfLines={open ? undefined : 2} style={[uiStyles.caption, { fontWeight: "600", color: status === "error" ? colors.danger : colors.text }]}>{title}</Body>
+          <Body numberOfLines={open ? undefined : 2} style={titleStyle}>
+            {title}
+          </Body>
         )}
-        {detail ? (
-          <Body muted numberOfLines={open ? undefined : 1} style={uiStyles.caption}>
-            {detail}
+        {detailLabel ? (
+          <Body muted numberOfLines={open ? undefined : 2} style={uiStyles.caption}>
+            {detailLabel}
           </Body>
         ) : null}
       </View>
@@ -67,6 +107,27 @@ export function ChatActivity({
       />
     </>
   );
+  // An inspector opens a separate Sheet, not this row's inline disclosure.
+  if (onInspect)
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibleLabel}
+        onPress={onInspect}
+        style={({ pressed }) => ({
+          minHeight: metrics.touchTarget,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: space.sm,
+          paddingHorizontal: space.sm,
+          paddingVertical: space.xs,
+          borderRadius: radii.control,
+          backgroundColor: pressed ? colors.raised : "transparent",
+        })}
+      >
+        {header}
+      </Pressable>
+    );
   if (reasoning)
     return (
       <Reasoning
@@ -75,18 +136,28 @@ export function ChatActivity({
         isStreaming={status === "running"}
         defaultOpen={false}
       >
-        <Reasoning.Trigger className="min-h-12" accessibilityLabel={title} aria-expanded={open}>
+        <Reasoning.Trigger
+          className="min-h-12"
+          accessibilityLabel={accessibleLabel}
+          aria-expanded={open}
+        >
           {header}
         </Reasoning.Trigger>
         {!onInspect ? <Reasoning.Content>{visited ? children : null}</Reasoning.Content> : null}
       </Reasoning>
     );
   return (
-    <Task status={status} open={open} onOpenChange={onOpenChange}>
-      <Task.Trigger className="min-h-12" accessibilityLabel={title} aria-expanded={open}>
+    <Task
+      status={status === "stopped" || status === "record" ? "pending" : status}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      <Task.Trigger className="min-h-12" accessibilityLabel={accessibleLabel} aria-expanded={open}>
         {header}
       </Task.Trigger>
-      {!onInspect ? <Task.Content style={{ minWidth: 0 }}>{visited ? children : null}</Task.Content> : null}
+      {!onInspect ? (
+        <Task.Content style={{ minWidth: 0 }}>{visited ? children : null}</Task.Content>
+      ) : null}
     </Task>
   );
 }
@@ -96,7 +167,11 @@ export function ChatStreaming({ label }: { label: string }) {
   const reducedMotion = useReducedMotionPreference();
   const active = useHostReadActive();
   return (
-    <Shimmer enabled={active && !reducedMotion} accessibilityLabel={label} textStyle={uiStyles.caption}>
+    <Shimmer
+      enabled={active && !reducedMotion}
+      accessibilityLabel={label}
+      textStyle={uiStyles.caption}
+    >
       {label}
     </Shimmer>
   );

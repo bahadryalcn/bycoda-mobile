@@ -1,4 +1,5 @@
 import { haptic } from "@/ui/motion";
+import { useState } from "react";
 import { Stack } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import {
@@ -24,6 +25,7 @@ import type { DraftEditorProps, ReplyFormDraft } from "./types";
 
 export function DraftEditor({ draft, thread, profile, onClose }: DraftEditorProps) {
   const copy = useCopy();
+  const [expectedDraft] = useState(() => JSON.parse(JSON.stringify(draft)) as typeof draft);
   const policy = usePolicy(draft.accountId);
   const form = useFormDraft<ReplyFormDraft>({ text: draft.text, facts: draft.factIds });
   const { text, facts } = form.values;
@@ -46,9 +48,15 @@ export function DraftEditor({ draft, thread, profile, onClose }: DraftEditorProp
             "Use at most " + limit + " characters.",
           ),
         );
-      await action.mutateAsync(request("drafts.update", { id: draft.id, text, factIds: facts }), {
-        onSuccess: () => { haptic.success(); onClose(); },
-      });
+      await action.mutateAsync(
+        request("drafts.update", { id: draft.id, text, factIds: facts, expectedDraft }),
+        {
+          onSuccess: () => {
+            haptic.success();
+            onClose();
+          },
+        },
+      );
     });
   return (
     <Stack>
@@ -61,7 +69,11 @@ export function DraftEditor({ draft, thread, profile, onClose }: DraftEditorProp
         multiline
         editable={!busy}
       />
-      <PolicyCounter policy={policy.data?.effective} kind={draft.kind === "message" || thread?.kind === "message" ? "message" : "comment"} text={text} />
+      <PolicyCounter
+        policy={policy.data?.effective}
+        kind={draft.kind === "message" || thread?.kind === "message" ? "message" : "comment"}
+        text={text}
+      />
       <FactChoices
         profile={profile}
         selected={facts}
@@ -75,7 +87,11 @@ export function DraftEditor({ draft, thread, profile, onClose }: DraftEditorProp
         )}
       </Body>
       <FormActions
-        feedback={<><MutationState mutation={submission} /></>}
+        feedback={
+          <>
+            <MutationState mutation={submission} />
+          </>
+        }
         submitLabel={copy("Kaydet", "Save")}
         busy={busy}
         disabled={

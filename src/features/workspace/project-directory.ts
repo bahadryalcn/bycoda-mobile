@@ -7,6 +7,7 @@ export type DirectorySection = {
   group?: HostProjectGroup;
   count: number;
   total: number;
+  running: number;
   expanded: boolean;
   data: DirectoryProject[];
 };
@@ -19,11 +20,13 @@ export function projectPathLabel(path: string, full = false) {
 
 export function sortDirectoryProjects<T extends { id: string; name: string }>(
   projects: readonly T[], preferences: Pick<ProjectDirectoryPreferences, "sort" | "recent">,
+  running: Readonly<Record<string, number>> = {},
 ): T[] {
-  if (preferences.sort === "desktop") return [...projects];
   return [...projects].sort((a, b) =>
+    Number(!!running[b.id]) - Number(!!running[a.id]) ||
+    (preferences.sort === "desktop" ? 0 :
     (preferences.sort === "recent" ? (preferences.recent[b.id] ?? 0) - (preferences.recent[a.id] ?? 0) : 0) ||
-    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })));
 }
 
 export type DirectoryRow =
@@ -53,6 +56,7 @@ export function directorySections(
   groups: readonly HostProjectGroup[],
   search: string,
   collapsed: Readonly<Record<string, boolean>>,
+  running: Readonly<Record<string, number>> = {},
 ): DirectorySection[] {
   const query = search.trim().toLocaleLowerCase();
   const groupIds = new Set(groups.map((group) => group.id));
@@ -81,10 +85,11 @@ export function directorySections(
       key,
       group,
       total: all.length,
+      running: matching.reduce((sum, project) => sum + (running[project.id] ?? 0), 0),
       count: matching.length,
       expanded,
       data: expanded ? matching : [],
     });
   }
-  return sections;
+  return sections.sort((a, b) => Number(b.running > 0) - Number(a.running > 0));
 }

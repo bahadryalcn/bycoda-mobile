@@ -1,4 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
+import { useActiveMachine } from "@/state/machines";
+import { ProviderJiraBoards } from "./jira-board-screen";
 import { FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import { SearchField } from "@/ui/search-field";
 import { useEffect, useReducer, useState } from "react";
@@ -30,6 +32,8 @@ export { type ProviderInboxBrowseProps } from "./provider-component-types";
 export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxBrowseProps) {
   useMobileTheme();
   const copy = useCopy();
+  const machine=useActiveMachine();
+  const [jiraBoards,setJiraBoards]=useState(false);
   const [filterDraft, setFilterDraft] = useState<{ assigned: boolean; all: boolean } | null>(null);
   const [browse, dispatch] = useReducer(inboxBrowseReducer, initialInboxBrowseState);
   const { assigned, all, search, committedSearch, selected, limit, notice } = browse;
@@ -53,11 +57,10 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
   );
 
   function refresh() {
-    void availability.refetch();
-    if (view.canRead) {
-      void providers.refetch();
-      void items.refetch();
-    }
+    return Promise.all([
+      availability.refetch(),
+      ...(view.canRead ? [providers.refetch(), items.refetch()] : []),
+    ]);
   }
 
   const empty = items.data?.items.length === 0 && Object.keys(items.data.errors).length === 0;
@@ -67,6 +70,8 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
         <ProviderInboxDetail key={inboxItemKey(view.item)} item={view.item} origin={origin} availability={availability} onClose={(message) => dispatch({ type: "close", notice: message })} />
       </Sheet>}
       <Scope allowAll />
+      {machine?.capabilities?.includes("inbox.jiraBoard.v1") ? <Button label={copy("Jira panoları","Jira boards")} disabled={!origin.projectId||!view.canRead} onPress={()=>setJiraBoards(true)}/> : null}
+      {jiraBoards?<ProviderJiraBoards origin={origin} canRead={view.canRead} canWrite={view.canRead} onClose={()=>setJiraBoards(false)}/>:null}
       {notice ? <Notice tone="success" message={notice} /> : null}
       <QueryState query={availability} />
       {availability.data?.available === false ? (
@@ -95,7 +100,8 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
             <FilterButton count={Number(assigned) + Number(all)} onPress={() => setFilterDraft({ assigned, all })} />
             <IconButton
               label={copy("Yenile", "Refresh")}
-              busy={items.isFetching}
+              busy={items.isFetching && items.data !== undefined}
+              disabled={items.isFetching}
               onPress={() => {
                 void items.refetch();
               }}

@@ -1,63 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  emptyReportDraft,
-  limitReportText,
-  maxReportExcerpt,
-  reportEmailUrl,
-} from "./report-model";
-import {
-  discardContentReport,
-  openContentReportEmail,
-  startContentReport,
-  updateContentReport,
-  useContentReport,
-} from "./report-store";
+import { emptyReportDraft, limitReportText, maxReportExcerpt } from "./report-model";
+import { reportPayload, createFirebaseReportSender, reportEndpoint, type ReportReceipt } from "./report-delivery";
+import { discardContentReport, sendContentReport, startContentReport, updateContentReport, useContentReport } from "./report-store";
 
-const recipient = "support@example.test";
 const ready = () => {
   updateContentReport({ reason: "privacy", description: "Please review this response." });
   updateContentReport({ consent: true });
 };
-
+const options = () => ({
+  sender: vi.fn(async (requestId: string) => ({ requestId, reportId: "receipt-1" })),
+  newRequestId: vi.fn(() => "request-1"),
+  assertAccess: vi.fn(),
+});
 beforeEach(discardContentReport);
 
-describe("content report email privacy", () => {
-  it("omits an unselected excerpt and encodes draft text without creating extra recipients or headers", () => {
-    const draft = {
-      ...emptyReportDraft(),
-      description: "A & B?\ncc=someone@example.test\nTürkçe 🙂",
-      excerpt: "private excerpt",
-      consent: true,
-    };
-    const url = new URL(reportEmailUrl(draft, recipient, true));
-    expect(url.pathname).toBe(recipient);
-    expect([...url.searchParams.keys()]).toEqual(["subject", "body"]);
-    expect(url.searchParams.get("body")).toContain(draft.description);
-    expect(url.searchParams.get("body")).not.toContain("private excerpt");
-    expect(url.searchParams.get("body")).not.toMatch(/host|session|device|project/i);
-    expect(() => reportEmailUrl(draft, "support?bcc=another@example.test", false)).toThrow(
-      "recipient",
-    );
+describe("report privacy and delivery", () => {
+  it("only serializes selected content and requires consent", () => {
+    const draft = { ...emptyReportDraft(), description: "A & B?\nTürkçe 🙂", excerpt: "private", consent: true };
+    expect(reportPayload(draft)).toEqual({ reason: "other", description: draft.description });
+    expect(reportPayload({ ...draft, excerpt: "redacted", includeExcerpt: true }).excerpt).toBe("redacted");
+    expect(() => reportPayload({ ...draft, consent: false })).toThrow();
   });
-
-  it("shares only the explicitly selected and edited excerpt", () => {
-    startContentReport("original private content");
-    updateContentReport({
-      description: "Concern",
-      excerpt: "Redacted content",
-      includeExcerpt: true,
-    });
-    updateContentReport({ consent: true });
-    const body = new URL(
-      reportEmailUrl(useContentReport.getState().draft, recipient, false),
-    ).searchParams.get("body");
-    expect(body).toContain("Redacted content");
-    expect(body).not.toContain("original private content");
-    updateContentReport({ excerpt: "Second redaction" });
-    expect(useContentReport.getState().draft.consent).toBe(false);
-  });
-
-  it("bounds emoji without cutting a surrogate pair and preserves a composed report on another entry", () => {
+  it("bounds emoji and preserves an existing composed draft", () => {
     expect(limitReportText("🙂🙂x", 1)).toBe("🙂");
     startContentReport("🙂".repeat(maxReportExcerpt + 1));
     expect(Array.from(useContentReport.getState().draft.excerpt)).toHaveLength(maxReportExcerpt);
@@ -66,107 +30,87 @@ describe("content report email privacy", () => {
     startContentReport("replacement");
     expect(useContentReport.getState().draft).toBe(previous);
   });
-});
-
-describe("email composer state", () => {
-  it("does not open email until there is a description, consent and app access", async () => {
-    const openURL = vi.fn(async () => {});
-    const assertAccess = vi.fn();
-    await openContentReportEmail({ recipient, turkish: false, assertAccess, openURL });
+  it("requires validation, consent, access and a configured service before sending", async () => {
+    const opts = options();
+    await sendContentReport(opts);
     expect(useContentReport.getState().error).toBe("description");
     updateContentReport({ description: "Concern" });
-    await openContentReportEmail({ recipient, turkish: false, assertAccess, openURL });
+    await sendContentReport(opts);
     expect(useContentReport.getState().error).toBe("consent");
     ready();
-    await expect(
-      openContentReportEmail({
-        recipient,
-        turkish: false,
-        assertAccess: () => {
-          throw new Error("locked");
-        },
-        openURL,
-      }),
-    ).rejects.toThrow("locked");
-    expect(openURL).not.toHaveBeenCalled();
+    await sendContentReport({ ...opts, sender: null });
+    expect(useContentReport.getState().error).toBe("service");
+    await expect(sendContentReport({ ...opts, assertAccess: () => { throw new Error("locked"); } })).rejects.toThrow("locked");
+    expect(opts.sender).not.toHaveBeenCalled();
   });
-
-  it("keeps the draft after failure and after email opening, without marking it sent", async () => {
+  it("retains draft and retry identity on uncertain delivery; edits reset consent and identity", async () => {
     ready();
-    const previous = useContentReport.getState().draft;
-    await openContentReportEmail({
-      recipient,
-      turkish: false,
-      assertAccess: () => {},
-      openURL: async () => {
-        throw new Error("No mail application");
-      },
-    });
-    expect(useContentReport.getState()).toMatchObject({
-      status: "idle",
-      error: "open",
-      draft: previous,
-    });
-    await openContentReportEmail({
-      recipient,
-      turkish: false,
-      assertAccess: () => {},
-      openURL: async () => {},
-    });
-    expect(useContentReport.getState()).toMatchObject({
-      status: "opened",
-      error: null,
-      draft: previous,
-    });
+    const opts = options();
+    opts.sender.mockRejectedValueOnce(new Error("network"));
+    const draft = useContentReport.getState().draft;
+    await sendContentReport(opts);
+    expect(useContentReport.getState()).toMatchObject({ status: "idle", error: "send", draft, requestId: "request-1" });
+    await sendContentReport(opts);
+    expect(opts.newRequestId).toHaveBeenCalledTimes(1);
+    expect(useContentReport.getState()).toMatchObject({ status: "sent", receiptId: "receipt-1", draft });
+    await sendContentReport(opts);
+    expect(opts.sender).toHaveBeenCalledTimes(2);
+    updateContentReport({ description: "Edited report" });
+    expect(useContentReport.getState()).toMatchObject({ status: "idle", requestId: null, receiptId: null, draft: { consent: false } });
+  });
+  it("deduplicates taps and ignores completion after discard", async () => {
+    ready();
+    let finish!: (receipt: ReportReceipt) => void;
+    const opts = { ...options(), sender: vi.fn(() => new Promise<ReportReceipt>(resolve => { finish = resolve; })) };
+    const pending = sendContentReport(opts);
+    await sendContentReport(opts);
+    expect(opts.sender).toHaveBeenCalledTimes(1);
+    updateContentReport({ description: "Cannot replace in flight" });
+    expect(useContentReport.getState().draft.description).toBe("Please review this response.");
     discardContentReport();
-    expect(useContentReport.getState().draft).toEqual(emptyReportDraft());
-  });
-
-  it("deduplicates composer taps and ignores a result arriving after explicit discard", async () => {
-    ready();
-    let finish!: () => void;
-    const openURL = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          finish = resolve;
-        }),
-    );
-    const options = { recipient, turkish: false, assertAccess: () => {}, openURL };
-    const pending = openContentReportEmail(options);
-    await openContentReportEmail(options);
-    expect(openURL).toHaveBeenCalledTimes(1);
-    discardContentReport();
-    finish();
+    finish({ requestId: "request-1", reportId: "old" });
     await pending;
-    expect(useContentReport.getState()).toMatchObject({
-      status: "idle",
-      draft: emptyReportDraft(),
-    });
+    expect(useContentReport.getState()).toMatchObject({ status: "idle", receiptId: null, draft: emptyReportDraft() });
   });
-
-  it("keeps unsent form data and suppresses a late success after access locks", async () => {
+  it("does not acknowledge a stale or mismatched receipt after lock", async () => {
     ready();
-    let unlocked = true;
-    let finish!: () => void;
-    const previous = useContentReport.getState().draft;
-    const pending = openContentReportEmail({
-      recipient,
-      turkish: false,
-      assertAccess: () => {
-        if (!unlocked) throw new Error("locked");
-      },
-      openURL: () =>
-        new Promise<void>((resolve) => {
-          finish = resolve;
-        }),
+    const opts = options();
+    opts.sender.mockResolvedValueOnce({ requestId: "different", reportId: "wrong" });
+    await sendContentReport(opts);
+    expect(useContentReport.getState().status).toBe("idle");
+    opts.sender.mockImplementationOnce(async requestId => {
+      opts.assertAccess.mockImplementation(() => { throw new Error("locked"); });
+      return { requestId, reportId: "late" };
     });
-    unlocked = false;
-    finish();
-    await pending;
-    expect(useContentReport.getState()).toMatchObject({
-      status: "idle",
-      error: null,
-      draft: previous,
-    });
+    await sendContentReport(opts);
+    expect(useContentReport.getState()).toMatchObject({ status: "idle", receiptId: null, error: null });
+  });
+});
+
+describe("Firebase HTTP adapter", () => {
+  it("stays unavailable for missing or unsafe configuration", () => {
+    for (const url of [null, "", "http://example.test", "https://u:p@example.test", "https://example.test/?key=secret", "https://example.test/#fragment"]) {
+      expect(reportEndpoint(url)).toBeNull();
+      expect(createFirebaseReportSender(url)).toBeNull();
+    }
+  });
+  it("uses the configured HTTPS destination without cookies and accepts only a matching receipt", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ requestId: "id-1", reportId: "receipt-1" })));
+    const sender = createFirebaseReportSender("https://example.test/report", request)!;
+    expect(await sender("id-1", { reason: "privacy", description: "Reviewed" })).toEqual({ requestId: "id-1", reportId: "receipt-1" });
+    expect(request).toHaveBeenCalledWith("https://example.test/report", expect.objectContaining({
+      method: "POST", credentials: "omit", redirect: "error",
+      body: JSON.stringify({ version: 1, requestId: "id-1", reason: "privacy", description: "Reviewed" }),
+    }));
+  });
+  it.each([
+    new Response("{}", { status: 200 }),
+    new Response(JSON.stringify({ requestId: "another", reportId: "receipt" })),
+    new Response(JSON.stringify({ requestId: "id", reportId: "<untrusted>" })),
+    new Response("accepted", { status: 202 }),
+    new Response("failed", { status: 500 }),
+  ])("does not mistake an HTTP response for delivery", async response => {
+    const sender = createFirebaseReportSender("https://example.test/report", vi.fn<typeof fetch>().mockResolvedValue(response))!;
+    await expect(sender("id", { reason: "other", description: "Concern" })).rejects.toThrow();
   });
 });

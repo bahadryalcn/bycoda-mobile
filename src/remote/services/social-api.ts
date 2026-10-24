@@ -87,9 +87,10 @@ export function createSocialApi(transport: HostTransport, request: HostRequest) 
         threadKind?: "comment" | "message",
         options?: RemoteRequestOptions,
       ): Promise<SocialDraft> => {
+        const expectedDraft = JSON.parse(JSON.stringify(draft)) as SocialDraft;
         const { effective } = await socialRequest<EffectiveSocialPolicy>(
           "policy.get",
-          { accountId: draft.accountId },
+          { accountId: expectedDraft.accountId },
           undefined,
           options,
         );
@@ -101,7 +102,7 @@ export function createSocialApi(transport: HostTransport, request: HostRequest) 
         );
         return socialRequest<SocialDraft>(
           "drafts.update",
-          { id: draft.id, text, factIds },
+          { id: expectedDraft.id, text, factIds, expectedDraft },
           undefined,
           options,
         );

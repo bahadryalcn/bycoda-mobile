@@ -2,10 +2,11 @@ import { useMobileTheme } from "@/ui/theme";
 import { ScreenList } from "@/ui/screen-list";
 import { Sheet } from "@/ui/primitives";
 import { useProjectList } from "../workspace/use-project-directory";
-import { useReducer, useState } from "react";
+import { useMemo, useReducer, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import History from "lucide-react-native/icons/rotate-ccw-clock";
+import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import Plus from "lucide-react-native/icons/plus";
 import {
   ActionMenu,
@@ -33,6 +34,7 @@ export type { Note } from "@/domain/types";
 import type { NoteList, StorageOperation } from "./notes/types";
 import { ExistingNote, NoteEditor } from "./notes/note-editor";
 import { NoteSummaryRow } from "./notes/note-summary-row";
+import { noteDirectory, type NoteDirectoryRow, type NoteGrouping, type NoteOrdering } from "./notes/note-directory";
 
 const draftStore = createNoteDraftStore(AsyncStorage);
 
@@ -40,6 +42,8 @@ export function NotesScreen() {
   useMobileTheme();
   const copy = useCopy();
   const [search, setSearch] = useState("");
+  const [grouping, setGrouping] = useState<NoteGrouping>("none");
+  const [ordering, setOrdering] = useState<NoteOrdering>("updated");
   const machine = useActiveMachine();
   const projectId = useMachines((state) => state.selectedProjectId);
   const projects = useProjectList();
@@ -70,11 +74,19 @@ export function NotesScreen() {
   const editorProps = { save, remove, storage, onClose: close };
   const editorOpen = flow.kind !== "closed";
   const busy = save.isPending || remove.isPending || recovery.isPending;
-  const visible = query.data?.notes.filter((note) => (note.title + " " + note.tags.join(" ")).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  const visible = useMemo(() => noteDirectory(query.data?.notes ?? [], search, grouping, ordering), [query.data?.notes, search, grouping, ordering]);
   return (
-    <ScreenList<NoteList["notes"][number]> title={copy("Notlar", "Notes")} query={query} data={visible ?? []} keyExtractor={(note) => note.id}
+    <ScreenList<NoteDirectoryRow> title={copy("Notlar", "Notes")} query={query} data={visible} keyExtractor={(row) => row.key}
       actions={!editorOpen ? (
         <>
+          <ActionMenu label={copy("Not görünümü", "Note view")} trigger={<SlidersHorizontal size={22} color={colors.accent} />} actions={[
+            { key: "group-none", label: copy("Gruplama yok", "No grouping"), selected: grouping === "none", onPress: () => setGrouping("none") },
+            { key: "group-project", label: copy("Projeye göre grupla", "Group by project"), selected: grouping === "project", onPress: () => setGrouping("project") },
+            { key: "group-tag", label: copy("Etikete göre grupla", "Group by tag"), selected: grouping === "tag", onPress: () => setGrouping("tag") },
+            { key: "sort-updated", label: copy("Son düzenlenenler", "Recently edited"), selected: ordering === "updated", onPress: () => setOrdering("updated") },
+            { key: "sort-created", label: copy("Son oluşturulanlar", "Recently created"), selected: ordering === "created", onPress: () => setOrdering("created") },
+            { key: "sort-title", label: copy("Başlığa göre sırala", "Sort by title"), selected: ordering === "title", onPress: () => setOrdering("title") },
+          ]} />
           <ActionMenu
             label={copy("Diğer not işlemleri", "More note actions")}
             trigger={<History size={22} strokeWidth={2} color={colors.accent} />}
@@ -165,7 +177,8 @@ export function NotesScreen() {
       ) : null}
       {search.trim() && visible?.length === 0 ? <Button tone="quiet" label={copy("Aramayı temizle", "Clear search")} onPress={() => setSearch("")} /> : null}
     </>}
-      renderItem={({ item: note }) => <NoteSummaryRow note={note} disabled={editorOpen || busy} onPress={() => { recovery.reset(); storage.reset(); save.reset(); remove.reset(); dispatch({ type: "open", id: note.id }); }} />}
+      renderItem={({ item }) => item.kind === "heading" ? <Body>{item.group === null ? (item.grouping === "tag" ? copy("Etiketsiz", "Untagged") : copy("Projesiz notlar", "Notes without a project")) : item.grouping === "tag" ? `#${item.group}` : projects.data?.find((project) => project.cwd === item.group)?.name ?? item.group} · {item.count}</Body>
+        : <NoteSummaryRow note={item.note} disabled={editorOpen || busy} onPress={() => { recovery.reset(); storage.reset(); save.reset(); remove.reset(); dispatch({ type: "open", id: item.note.id }); }} />}
     />
   );
 }

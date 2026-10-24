@@ -1,5 +1,5 @@
 import { Tabs, usePathname } from "expo-router";
-import FolderGit2 from "lucide-react-native/icons/folder-git-2";
+import Folder from "lucide-react-native/icons/folder";
 import Inbox from "lucide-react-native/icons/inbox";
 import LayoutGrid from "lucide-react-native/icons/layout-grid";
 import Settings from "lucide-react-native/icons/settings";
@@ -50,7 +50,7 @@ export default function TabsLayout() {
         >
           <Tabs.Screen
             name="index"
-            options={{ title: copy("Projeler", "Projects"), tabBarIcon: icon(FolderGit2) }}
+            options={{ title: copy("Projeler", "Projects"), tabBarIcon: icon(Folder) }}
           />
           <Tabs.Screen
             name="chats"

@@ -3,7 +3,9 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { randomUUID } from "expo-crypto";
 import { Platform } from "react-native";
-import { ATTACHMENT_COUNT, validateAttachment, type StagedAttachment } from "./attachment-model";
+import { ATTACHMENT_COUNT, base64ToBytes, validateAttachment, type StagedAttachment } from "./attachment-model";
+import { readBrowserCapture, type BrowserCaptureScope } from "../tools/browser-annotation-model";
+import { parseBrowserAnnotation } from "../../../../src/shared/lib/browserAnnotation";
 
 export async function pickAttachments(kind: "photo" | "document", scope: string): Promise<StagedAttachment[]> {
   const picked = kind === "photo"
@@ -34,6 +36,19 @@ export function removeStagedFile(file: StagedAttachment) {
   // Persisted URI is untrusted. Only our app-owned staging directory is removable.
   const root = new Directory(Paths.document, "chat-drafts").uri + "/";
   if (file.uri.startsWith(root) && !file.uri.includes("..")) { const local = new File(file.uri); if (local.exists) local.delete(); }
+}
+export function stageBrowserCapture(value: unknown, comment: string, scope: BrowserCaptureScope & { machineId: string }): StagedAttachment {
+  const capture = readBrowserCapture(value, scope);
+  const { screenshot, ...metadata } = capture;
+  const browserAnnotation = parseBrowserAnnotation({ ...metadata, comment });
+  const bytes = base64ToBytes(screenshot.data);
+  const id = randomUUID();
+  const directory = new Directory(Paths.document, "chat-drafts", encodeURIComponent(`${scope.machineId}:${scope.sessionId}`));
+  const file: StagedAttachment = { id, name: "browser-element.jpg", kind: "image", mimeType: "image/jpeg", size: bytes.length,
+    uri: new File(directory, id).uri, browserAnnotation };
+  validateAttachment(file);
+  try { directory.create({ idempotent: true, intermediates: true }); const local = new File(file.uri); local.create(); local.write(bytes); return file; }
+  catch (error) { removeStagedFile(file); throw error; }
 }
 export function isScopedStagedFile(file: StagedAttachment, scope: string) {
   return file.uri === new File(Paths.document, "chat-drafts", encodeURIComponent(scope), file.id).uri;

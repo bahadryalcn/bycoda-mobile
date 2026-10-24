@@ -4,6 +4,7 @@ import {
   moveQueuedMessage,
   queuedCommand,
   queuedComposerMessage,
+  validateNoteDelivery,
 } from "./composer-delivery";
 import type { HostSession } from "./wire";
 import type { SharedQueue } from "../../../../src/features/connections/model/sharedQueue";
@@ -40,6 +41,19 @@ const queue = (): SharedQueue => ({
 });
 
 describe("mobile composer delivery", () => {
+  it("carries reviewed note content only on explicit supported sends; special modes never drop it", () => {
+    const note = { id: "note-1", slug: "note", title: "Reviewed", body: "Full private body" };
+    const command = composerCommand(session(), "send", "Owner prose", [attachment], note);
+    expect(command).toEqual({ type: "send", sessionId: "s", text: "Owner prose", attachments: [attachment], noteCard: note });
+    expect(command.text).not.toContain(note.body);
+    expect(composerCommand(session(), "send", "", [], note)).toMatchObject({ text: "", noteCard: note });
+    expect(() => composerCommand(session("running"), "steer", "Next", [], note)).toThrow(/requires Send/);
+    expect(() => queuedComposerMessage("queued", session(), "Next", [], note)).toThrow(/requires Send/);
+    for (const text of ["/compact", " /plan Investigate", "/build", "/clear", "/new project"])
+      expect(() => composerCommand(session(), "send", text, [], note)).toThrow(/requires Send/);
+    expect(() => validateNoteDelivery(note, "send", "Original prose", false)).toThrow(/draft is preserved/);
+    expect(composerCommand(session(), "send", "/goal Complete work", [], note)).toMatchObject({ text: "/goal Complete work", noteCard: note });
+  });
   it("sends an idle turn with attachments and never turns a running send into a draft", () => {
     expect(composerCommand(session(), "send", "Hello", [attachment])).toEqual({
       type: "send",
@@ -96,6 +110,14 @@ describe("mobile composer delivery", () => {
     expect(() => queuedCommand(queue(), value, "mobile:test")).toThrow(/model settings/);
     value.session.model = "codex:other";
     expect(() => queuedCommand(queue(), value, "mobile:test")).toThrow(/model settings/);
+  });
+  it("never dispatches a row with unconfirmed delivery, including compact commands", () => {
+    for (const text of ["Next", "/compact"]) {
+      const value = queue();
+      value.messages = [{ ...queuedComposerMessage("q", session(), text, []), deliveryUnknown: true }];
+      expect(() => queuedCommand(value, session(), "mobile:test")).toThrow(/Delivery is unconfirmed/);
+      expect(value.messages[0]?.deliveryUnknown).toBe(true);
+    }
   });
   it("preserves explicit queued plan intent without reinterpreting prose", () => {
     const value = queue();

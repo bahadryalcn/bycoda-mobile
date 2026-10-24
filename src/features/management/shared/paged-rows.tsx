@@ -8,6 +8,6 @@ export function PagedRows<T>({ items, renderItem }: { items: readonly T[]; rende
   const [limit, setLimit] = useState(20);
   return <>
     {items.slice(0, limit).map(renderItem)}
-    {items.length > limit && <Button label={copy("Daha fazla göster", "Show more")} onPress={() => setLimit((value) => value + 20)} />}
+    {items.length > limit && <Button tone="quiet" label={copy("Daha fazla göster", "Show more")} onPress={() => setLimit((value) => value + 20)} />}
   </>;
 }

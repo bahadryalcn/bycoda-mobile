@@ -24,6 +24,7 @@ import { goalFlowReducer } from "./goals/flow";
 import { GoalEditor } from "./goals/goal-editor";
 import { ReplanEditor } from "./goals/replan-editor";
 import { GoalCard } from "./goals/goal-card";
+import { GoalSettingsEditor } from "./goals/settings-editor";
 
 export function GoalsScreen() {
   const copy = useCopy();
@@ -91,6 +92,9 @@ export function GoalsScreen() {
           />
         </Sheet>
       )}
+      {flow.kind === "settings" && <Sheet visible size="form" title={copy("Hedef ayarları", "Goal settings")} onClose={close}>
+        <GoalSettingsEditor key={flow.goal.id} initial={flow.goal} onClose={close} />
+      </Sheet>}
       {replanGoal && (
         <Sheet
           visible
@@ -135,6 +139,7 @@ export function GoalsScreen() {
           cancel={cancel}
           remove={remove}
           onReplan={(goalId) => { replan.reset(); dispatch({ type: "replan", goalId }); }}
+          onSettings={(goal) => dispatch({ type: "settings", goal })}
         />
       )}
     />

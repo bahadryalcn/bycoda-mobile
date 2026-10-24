@@ -152,6 +152,11 @@ export function DocumentContent({
         />
       ) : null}
       <ErrorText error={query.error || error} />
+      {(query.error || error) && onReload ? <Button
+        tone="quiet"
+        label={copy("Dosyayı yeniden yükle", "Reload file")}
+        onPress={() => { setError(null); onReload(); }}
+      /> : null}
     </View>
   );
 }

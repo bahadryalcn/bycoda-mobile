@@ -24,6 +24,13 @@ adapters retain application callbacks, native refs, accessibility labels,
 validation, loading protection and existing state ownership. Use the same
 adapters for new screens; do not create a second button or field system.
 
+`ui/project-icon` owns project identity: the saved desktop color, symbol and
+custom logo from the privacy-filtered directory. Local logos arrive as bounded
+PNG thumbnails, never desktop file URLs. Missing metadata uses a neutral folder;
+groups use a layers fallback. Identity color denotes saved identity only. Running activity belongs to the
+session's labelled status, never the project icon. The Projects navigation tab
+uses the same folder shape with the standard selected-navigation treatment.
+
 The full upstream public API is exposed as `ui/panelui` and as the `PanelUI`
 namespace in `ui/library`. `catalog.ts` indexes all **140 installed component
 modules**, their roles, core bycoda use cases and optional capabilities.
@@ -65,6 +72,11 @@ barrel to render the gallery or add it to normal workspace startup.
 
 ## AI conversation presentation
 
+New or invalid chat-reader preferences default to Standard. Explicitly saved
+Compact, Standard and Large preferences remain intact. The message-content
+facade stretches within its bubble; code and tables own horizontal scrolling
+without increasing the width of the conversation.
+
 `chat-controls.tsx` owns quiet chat chrome through `ChatToolbarAction`: small
 semantic labels/icons, no persistent filled capsule, and a minimum 48dp target.
 `ChatCircleAction` uses a 30dp visual within a separate 48dp target; the latest-message
@@ -92,10 +104,14 @@ settled tool failures remain inspectable in Detailed view. Plan build actions ke
 their remote-content and access guards. Structured task progress uses PlanSteps.
 Only actual running/streaming states shimmer, with reduced motion respected.
 
-`message-code.tsx` uses CodeBlock for the compact text preset. The larger presets
-retain the existing renderer because the pinned upstream code text is fixed at
-`text-xs`. Full-source copy, HTML/Mermaid preview, incomplete fences and explicit
-file/media opening retain the product contracts. MessageText remains the rich
+`message-code.tsx` uses one native CodePanel/CodeText surface for every reader
+preset because upstream CodeBlock fixes its code text at `text-xs`. Transcript
+code has a bounded, syntax-colored preview with full-source copy and a separate
+full-height reader; expansion does not change the inverted transcript row.
+HTML/Mermaid previews mount only after an explicit action on a complete fence.
+Incomplete fences and explicit file/media opening retain the product contracts.
+Messages above the Markdown rendering budget disclose the preview limit and
+provide a paginated plain-source reader and full-message copy. MessageText remains the rich
 response owner because upstream Response does not cover scoped file citations or
 the existing reader preferences. Sources needs a real source collection;
 ImageGeneration needs generation lifecycle data. Soundwave needs an actual
@@ -134,6 +150,19 @@ existing screens without remounting them or clearing drafts and form state.
 The dark theme uses black/graphite; the light theme uses neutral white surfaces.
 Both share the same blue action role and semantic status roles. Controls retain
 48dp touch targets, dynamic text and the system reduced-motion preference.
+Action labels use the compact control type token and control radius, not pill
+shapes. Secondary actions are unfilled; reserve filled emphasis for the primary
+action or an explicit selected state. Do not shrink touch targets for density.
+`Screen` and `ScreenList` show pull-to-refresh feedback only for a user pull,
+not polling. Custom `refresh` callbacks must return the complete refresh promise.
+An action owns its pending indicator; do not repeat it in adjacent mutation copy
+or animate unrelated actions that happen to share a mutation object.
+`Notice`/`ErrorNotice` use compact inline feedback: semantic icon, readable text,
+and a trailing recovery action on the same wrapping row. No large tinted card
+or separate retry row. Short notices without actions have no control-height
+minimum; recovery buttons still own 48dp targets. Text and extra required content
+remain visible and can grow. Use `action` for connection repair and other
+non-retry recovery; preserve `onRetry` for query retries.
 Contrast tests cover text, metadata, actions and feedback in both palettes.
 
 ## Providers and private overlays

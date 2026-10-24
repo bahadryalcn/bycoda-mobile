@@ -29,6 +29,7 @@ function useMachineStatus() {
   const network = useNetInfo();
   const cache = useQueryClient();
   const client = useHostClient();
+  const storageError = useMachines((state) => state.storageError);
   const unlocked = useSecurity((state) => state.status === "unlocked");
   const subscribe = useCallback(
     (callback: () => void) => cache.getQueryCache().subscribe(notifyManager.batchCalls(callback)),
@@ -62,6 +63,7 @@ function useMachineStatus() {
     networkConnected: network.isConnected,
     unlocked,
     permitted: !!client,
+    storageError,
     successAt,
     errorAt: health.errorUpdatedAt,
     now: Date.now(),
@@ -71,6 +73,7 @@ function useMachineStatus() {
     offline: copy("Ağ bağlantısı yok", "No network connection"),
     locked: copy("Kilitli", "Locked"),
     permission: copy("İzin gerekiyor", "Permission required"),
+    storage: copy("Yerel depolama hatası", "Local storage error"),
     checking: copy("Bağlantı kontrol ediliyor…", "Checking connection…"),
     connected: copy("Bağlı", "Connected"),
     disconnected: copy("Bağlantı kesildi", "Disconnected"),
@@ -83,10 +86,10 @@ function useMachineStatus() {
         ? semanticColors.info.text
         : phase === "offline" || phase === "disconnected"
           ? semanticColors.danger.text
-          : phase === "permission" || phase === "locked"
+          : phase === "permission" || phase === "locked" || phase === "storage"
             ? semanticColors.warning.text
             : colors.muted;
-  return { machine, copy, health, successAt, unlocked, status, statusColor };
+  return { machine, copy, health, successAt, unlocked, status, statusColor, storageError };
 }
 
 /** Headless owner of the periodic connection check while the tab shell is mounted. */
@@ -100,7 +103,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function MachinePill() {
   useMobileTheme();
-  const { machine, copy, health, successAt, unlocked, status, statusColor } = useMachineStatus();
+  const { machine, copy, health, successAt, unlocked, status, statusColor, storageError } = useMachineStatus();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   useEffect(closeMenu, [machine?.id, closeMenu]);
@@ -156,7 +159,7 @@ export function MachinePill() {
               <Laptop size={15} strokeWidth={2} color={colors.muted} />
             )}
             <Text numberOfLines={1} style={[uiStyles.caption, { color: colors.text, fontWeight: "600", flexShrink: 1 }]}>
-              {name}
+              {storageError && unlocked ? status : name}
             </Text>
             <ChevronDown size={14} strokeWidth={2.6} color={colors.muted} />
           </AnimatedPressable>
@@ -168,6 +171,12 @@ export function MachinePill() {
           width={280}
           className="rounded-card bg-popover border-0 p-ui-xs shadow-lg"
         >
+          {storageError ? <Menu.Item key="storage-recovery" onPress={() => { closeMenu(); router.push("/machines"); }} className="gap-ui-sm">
+            <View style={{ flex: 1, gap: space.xs }}>
+              <Body>{storageError}</Body>
+              <Body>{copy("Depolamayı kurtar", "Recover saved connections")}</Body>
+            </View>
+          </Menu.Item> : null}
           <Menu.Item
             key="computer"
             accessibilityLabel={[machine?.name, status, copy("Bilgisayar seç", "Choose computer")]

@@ -41,8 +41,8 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
       title: ["bycoda hesabı ve takip", "bycoda accounts & tracking"],
       paragraphs: [
         [
-          "bycoda hesabı oluşturman gerekmez. Mobil uygulama projelerini, konuşmalarını, bağlantı anahtarlarını veya kullanım geçmişini geliştiriciye göndermez. Geliştirici tarafından işletilen reklam, davranış takibi, analitik veya otomatik çökme raporu gönderimi içermez. Geliştirici etkinliğini izlemez, verilerini satmaz ve içeriğini model eğitimi için kullanmaz.",
-          "You do not create a bycoda account. The mobile app does not send your projects, conversations, connection keys or usage history to the maintainer. It includes no maintainer-operated advertising, behavioral tracking, analytics or automatic crash-report uploads. The maintainer does not monitor your activity, sell your data or use your content to train models.",
+          "bycoda projelerini, konuşmalarını veya bağlantı anahtarlarını otomatik yüklemez. Bildirimler yalnızca inceleyip gönderdiğinde iletilir.",
+          "bycoda does not automatically upload your projects, conversations or connection keys. Reports are sent only when you review and submit them.",
         ],
         [
           "Bu, hiçbir veri saklanmadığı veya ağ kullanılmadığı anlamına gelmez. Veriler telefonunda, bağlandığın bilgisayarda ve seçtiğin servislerde işlenir.",
@@ -117,8 +117,8 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
           "These documents are bundled with the app and can be read offline. External links open in your browser or email app only when you tap them. Those services may process connection information under their own policies.",
         ],
         [
-          "Uygulamayı paylaş yalnızca herkese açık ürün veya mağaza bağlantısını hazırlar; bilgisayar adresini, eşleştirme kodunu, erişim anahtarlarını veya çalışma alanını eklemez. Geri bildirim ve içerik bildirimi destek e-postası taslağı açar. Açıklama ve isteğe bağlı düzenlenebilir alıntı yalnızca uygulama belleğinde tutulur; alıntı varsayılan olarak eklenmez. Taslağı silebilirsin; uygulama işlemi sonlandırılırsa taslak kaybolur. E-posta uygulamanda içeriği kontrol edip kendin gönderdiğinde seçtiğin bilgiler destek alıcısına ve e-posta servisine iletilir. bycoda gönderimi veya teslimatı doğrulamaz, host ve oturum günlüklerini otomatik yüklemez. Göndermeden önce özel bilgileri kaldır.",
-          "Share app prepares only a public product or store link; it does not include computer addresses, pairing codes, access keys or workspace content. Feedback and content reports open a support email draft. The description and optional editable excerpt stay only in app memory; excerpts are excluded by default. You can discard the draft, and it is lost when the app process ends. When you review and send the message in your email app, your chosen information is shared with the support recipient and email service. bycoda does not verify sending or delivery or automatically upload host/session logs. Remove private information before sending.",
+          "Paylaşım yalnızca herkese açık uygulama bağlantısını içerir. İçerik bildirimleri etkinleştirildiğinde açıklamanı ve seçtiğin alıntıyı Firebase üzerinden bycoda’ya iletir. Alıntı varsayılan olarak eklenmez. Taslak bellekte tutulur; uygulama kapanırsa kaybolur. Günlükler otomatik yüklenmez.",
+          "Sharing includes only the public app link. When enabled, content reports send your description and selected excerpt to bycoda through Firebase. Excerpts are excluded by default. Drafts stay in memory and are lost when the app closes. Logs are not uploaded automatically.",
         ],
       ],
     },

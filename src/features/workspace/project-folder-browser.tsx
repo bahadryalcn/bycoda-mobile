@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { BusyIndicator } from "@/ui/busy-indicator";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
-import Folder from "lucide-react-native/icons/folder";
 import { useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import {
@@ -23,7 +22,7 @@ import {
 } from "@/ui/primitives";
 import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
-import { IconTile } from "@/ui/icon-tile";
+import { ProjectIcon } from "@/ui/project-icon";
 import { GroupedListRow, rowInset } from "./shared";
 import type { ProjectDirectories } from "./projects-screen-types";
 
@@ -180,11 +179,7 @@ export function ProjectFolderBrowser({
             <NavigationRow
               variant="plain"
               label={entry.name}
-              icon={
-                <IconTile color={colors.accent}>
-                  <Folder size={18} strokeWidth={2} color={colors.accent} />
-                </IconTile>
-              }
+              icon={<ProjectIcon />}
               disabled={folders.isFetching || !!folders.error || mutation.isPending}
               onPress={() => navigate(entry.path)}
             />
@@ -204,6 +199,8 @@ export function ProjectFolderBrowser({
             />
             <Button
               label={copy("Bu yola göz at", "Browse this path")}
+              tone="quiet"
+              density="compact"
               disabled={!manual.trim() || mutation.isPending}
               onPress={() => navigate(manual.trim())}
             />

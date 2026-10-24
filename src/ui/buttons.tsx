@@ -2,7 +2,7 @@ import { useMobileTheme } from "./theme";
 import { Pressable, StyleSheet, View } from "react-native";
 import Check from "lucide-react-native/icons/check";
 import { Body } from "./typography";
-import { colors, metrics, opacity, semanticColors, space } from "./tokens";
+import { colors, metrics, opacity, radii, semanticColors, space } from "./tokens";
 import { uiStyles } from "./styles";
 import { LifecycleButton as PanelButton } from "./busy-indicator";
 import { controlClasses } from "./design-system";
@@ -78,7 +78,8 @@ export function Button({
       }
       startContent={children}
       style={[
-        { alignSelf: fullWidth ? "stretch" : "flex-start", maxWidth: "100%", flexShrink: 1, opacity: off ? opacity.disabled : 1 },
+        { alignSelf: fullWidth ? "stretch" : "flex-start", maxWidth: "100%", flexShrink: 1,
+          borderRadius: radii.control, opacity: off ? opacity.disabled : 1 },
         fullWidth && { width: "100%" },
         style,
       ]}

@@ -1,7 +1,7 @@
 import type { HostTaskInput } from "@/domain/types";
 export type AgentDraft = Pick<
   HostTaskInput,
-  "harness" | "model" | "runtimeMode" | "maxRunMinutes" | "modelSettings"
+  "harness" | "model" | "runtimeMode" | "maxRunMinutes" | "modelSettings" | "providerAccountId"
 >;
 export type AgentFieldsProps = {
   value: AgentDraft;

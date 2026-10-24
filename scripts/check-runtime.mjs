@@ -15,9 +15,16 @@ const pureContracts = new Set([
   "features/sessions/model/queuePersistence",
   "features/inbox/model/remoteInbox",
   "features/tasks/model/taskRules",
-  "features/skills/model/cliCommands",
+  "features/tasks/model/taskBulkActions",
+  "features/crews/model/crew",
+  "features/sessions/model/conversationRewind",
+  "features/skills/model/cliCommandCatalog",
   "features/social/model/socialLimits",
   "features/social/model/social",
+  "features/social/model/socialPolicy",
+  "features/source-control/model/selectiveStage",
+  "features/notes/noteContext",
+  "shared/lib/browserAnnotation",
   "integrations/mobile-pairing",
 ]);
 const errors = [];

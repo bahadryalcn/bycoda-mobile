@@ -5,6 +5,11 @@ export type SelectionOption<T extends string = string> = {
   disabled?: boolean;
 };
 
+/** An empty unselected value needs the placeholder; named default choices retain their label. */
+export function selectionLabels<T extends string>(values: readonly T[], labels: ReadonlyMap<T, string>): string[] {
+  return values.map((value) => labels.get(value) ?? value).filter((label) => label !== "");
+}
+
 export function filterSelection<T extends string>(
   options: readonly SelectionOption<T>[],
   search: string,

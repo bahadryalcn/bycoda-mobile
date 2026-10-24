@@ -12,6 +12,15 @@ const [{ expo: app }, eas, pkg] = await Promise.all([
 ]);
 const errors = [];
 const pending = [];
+const reporting = app.extra?.reporting;
+if (!reporting?.endpoint) pending.push("Firebase report delivery is not configured; reporting remains unavailable.");
+else {
+  try {
+    const endpoint = new URL(reporting.endpoint);
+    if (reporting.provider !== "firebase" || endpoint.protocol !== "https:" || endpoint.username || endpoint.password || endpoint.search || endpoint.hash)
+      errors.push("Reporting requires a Firebase HTTPS endpoint without credentials, query or fragment.");
+  } catch { errors.push("Reporting endpoint must be a valid HTTPS URL."); }
+}
 const requireValue = (valid, message) => {
   if (!valid) errors.push(message);
 };
@@ -211,7 +220,7 @@ if (errors.length) {
 process.stdout.write(
   [
     ...pending,
-    "Email reporting is a support flow; Google AI reporting still needs in-app delivery and an operational moderation process.",
+    "Verify Firebase report receipts, idempotent retries, privacy disclosures and an operational moderation process before submission.",
     "Before submission: verify public privacy/support URLs, store disclosures, reviewer access, signing, SDK/merged permissions, physical-device behavior and Apple architecture review.",
     "See docs/reference/mobile-store-release.md for the remaining release evidence.",
   ]

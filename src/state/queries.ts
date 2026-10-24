@@ -18,27 +18,31 @@ import {
 } from "./host-request";
 
 import { attachmentReleases } from "../features/workspace/attachment-ownership";
+import { usePrivateContentAccess } from "../ui/private-access";
 
 export { hostKey } from "./host-request";
 /** Stack routes stay mounted. Only the visible foreground route should refresh host data. */
 export function useHostReadActive() {
+  const privateAccess = usePrivateContentAccess();
   const focused = useIsFocused();
   const available = useSecurity((state) =>
     state.status === "unlocked" && state.appState === "active" && state.windowFocused,
   );
-  return focused && available;
+  return focused && available && privateAccess.allowed && privateAccess.check();
 }
 
 export function useHostClient() {
+  const privateAccess = usePrivateContentAccess();
   const machine = useActiveMachine();
   const unlocked = useSecurity((s) => s.status === "unlocked");
   const ready = useMachines((s) => s.hydrated && !s.storageError && !s.connectionPending);
   const scope = machine ? consentScope(machine.environmentId, machine.providers ?? []) : "";
   const consented = useProviderPermission((state) => state.scopes[scope] === true);
   const client = useMemo(() => {
-    if (!machine || !unlocked || !ready || !consented) return null;
+    if (!machine || !unlocked || !ready || !consented || !privateAccess.allowed || !privateAccess.check()) return null;
     const assertAccess = () => {
       assertAppAccess();
+      if (!privateAccess.check()) throw new Error("This private workspace is no longer available.");
       assertProviderPermission(
         useMachines.getState().machines.find((value) => value.id === machine.id),
       );
@@ -58,6 +62,7 @@ export function useHostClient() {
     ready,
     consented,
     scope,
+    privateAccess,
     machine?.capabilities,
   ]);
   return client;
@@ -83,11 +88,12 @@ export function useHostQuery<T>(
   key: readonly unknown[],
   method: string,
   params: Record<string, unknown> = {},
-  options: { enabled?: boolean; interval?: number; queryFn?: (client: HostTransport, signal: AbortSignal) => Promise<T> } = {},
+  options: { enabled?: boolean; interval?: number | ((data: T | undefined) => number | false); queryFn?: (client: HostTransport, signal: AbortSignal) => Promise<T> } = {},
 ) {
   const machine = useActiveMachine();
   const client = useHostClient();
   const active = useHostReadActive();
+  const interval = options.interval;
   const query = useQuery<T>({
     queryKey: hostKey(machine?.id ?? null, [...key, { method, params }]),
     queryFn: ({ signal }) => {
@@ -99,7 +105,9 @@ export function useHostQuery<T>(
     retry: false,
     // Hosts can be reachable on a LAN without internet connectivity.
     networkMode: "always",
-    refetchInterval: options.interval ?? false,
+    refetchInterval: typeof interval === "function"
+      ? (query) => query.state.status === "error" ? false : interval(query.state.data)
+      : interval ?? false,
     refetchIntervalInBackground: false,
   });
   const kind = (query.error as { kind?: string } | null)?.kind;

@@ -4,8 +4,21 @@ import type {
 } from "../../../../src/features/connections/model/protocol";
 import type { QueuedMessage } from "../../../../src/features/sessions/model/session";
 import type { SharedQueue } from "../../../../src/features/connections/model/sharedQueue";
+import type { NoteComposerCard } from "../../../../src/features/notes/notes";
+import { readNoteContext } from "../../../../src/features/notes/noteContext";
 
 export type ComposerDelivery = "send" | "queue" | "steer";
+
+export const queuedDeliveryUnknown =
+  "Delivery is unconfirmed. Review this message on the sending computer before resuming the queue.";
+
+export function validateNoteDelivery(noteCard: NoteComposerCard | undefined, mode: ComposerDelivery, text: string, supported: boolean) {
+  if (!noteCard) return;
+  if (!supported) throw new Error("Update bycoda on this computer to send note context. Your draft is preserved.");
+  if (mode !== "send" || /^\s*\/(?:plan|compact|build|clear|new)(?:\s|$)/i.test(text))
+    throw new Error("Note context requires Send without plan, compact or session commands. Change the delivery mode or remove the note.");
+  readNoteContext(noteCard);
+}
 
 /** The selected delivery mode never silently changes into a different action. */
 export function composerCommand(
@@ -13,7 +26,9 @@ export function composerCommand(
   mode: Exclude<ComposerDelivery, "queue">,
   text: string,
   attachments: RemoteAttachment[],
+  noteCard?: NoteComposerCard,
 ): Record<string, unknown> {
+  validateNoteDelivery(noteCard, mode, text, true);
   if (mode === "steer") {
     if (session.status !== "running" || !session.runId)
       throw new Error("Refresh the running turn before steering it.");
@@ -38,6 +53,7 @@ export function composerCommand(
     text: plan ? text.replace(/^\s*\/plan\s+/, "") : text,
     ...(plan ? { intent: "plan" } : {}),
     attachments,
+    ...(noteCard ? { noteCard: readNoteContext(noteCard) } : {}),
   };
 }
 
@@ -46,7 +62,9 @@ export function queuedComposerMessage(
   session: HostSession,
   text: string,
   attachments: RemoteAttachment[],
+  noteCard?: NoteComposerCard,
 ): QueuedMessage {
+  validateNoteDelivery(noteCard, "queue", text, true);
   const plan = /^\s*\/plan\s+\S/.test(text);
   return {
     id,
@@ -63,6 +81,7 @@ export function queuedComposerMessage(
 
 export function queuedCommand(queue: SharedQueue, session: HostSession, clientId: string) {
   const row = queue.messages[0];
+  if (row?.deliveryUnknown) throw new Error(queuedDeliveryUnknown);
   if (
     !row ||
     queue.claim ||

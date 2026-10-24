@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { repositoryUrl, supportEmail } from "../legal/legal-content";
+import { repositoryUrl } from "../legal/legal-content";
 import {
   appIdentity,
   appShareContent,
   engagementLinks,
-  feedbackUrl,
   publicAppUrl,
 } from "./engagement-model";
 import { openPublicLink, sharePublicApp } from "./engagement-actions";
@@ -191,30 +190,7 @@ describe("mobile app identity and feedback", () => {
     expect(appIdentity({ expoConfig: config }, "web").preview).toBe(true);
   });
 
-  it("creates a reviewable email draft with public app metadata only", () => {
-    const url = feedbackUrl(
-      appIdentity({ expoConfig: config }, "android"),
-      "android",
-      english,
-    );
-    expect(url).toMatch(
-      new RegExp(`^mailto:${supportEmail.replaceAll(".", "\\.")}`),
-    );
-    const body = decodeURIComponent(url.split("&body=")[1]!);
-    expect(body).toContain("Version: 0.1.0");
-    expect(body).toContain("Platform: android");
-    expect(body).not.toContain("private-access-key");
-    expect(body).not.toContain("host.private.local");
-    expect(
-      decodeURIComponent(
-        feedbackUrl(
-          { version: null, nativeBuild: null, preview: true },
-          "ios",
-          turkish,
-        ),
-      ),
-    ).toContain("Önizleme");
-  });
+
 });
 
 describe("mobile explicit public actions", () => {

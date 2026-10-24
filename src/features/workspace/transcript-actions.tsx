@@ -8,13 +8,19 @@ import { RemoteHostError } from "@/remote/transport";
 import type { MessageContext } from "@/ui/media-policy";
 import { useCopy } from "@/ui/copy";
 import { startContentReport } from "../reporting/report-store";
+import { SelectedText } from "./selected-text";
+import { useComposerTransfer } from "./composer-transfer";
 
 export function TranscriptActions({ text, responseText, context, reportable, onClose }: { text: string; responseText?: string; context?: MessageContext; reportable: boolean; onClose: () => void }) {
   const copy = useCopy(); const [error, setError] = useState<unknown>(null); const [busy, setBusy] = useState(false); const [saved, setSaved] = useState(false);
   const noteId = useRef(randomUUID());
+  const bridge = useComposerTransfer();
+  const [selecting, setSelecting] = useState(false);
   const uncertain = error instanceof RemoteHostError && error.uncertain;
   const act = (action: () => Promise<unknown>) => { if (busy) return; setBusy(true); setError(null); void action().then(() => { setBusy(false); }).catch((cause) => { setBusy(false); setError(cause); }); };
+  if (selecting && context?.sessionId) return <SelectedText text={text} scope={{ machineId: context.machineId, sessionId: context.sessionId }} onClose={onClose} />;
   return <Sheet visible title={copy("Mesaj seçenekleri", "Message options")} size="compact" dismissible={!busy} onClose={onClose}><NavigationGroup>
+    {bridge && context?.sessionId ? <NavigationRow label={copy("Metin seç", "Select excerpt")} disabled={busy} onPress={() => setSelecting(true)} /> : null}
     <NavigationRow label={copy("Mesajı kopyala", "Copy message")} disabled={busy} onPress={() => act(async () => { await Clipboard.setStringAsync(text); onClose(); })} />
     {responseText && responseText !== text ? <NavigationRow label={copy("Yanıtın tamamını kopyala", "Copy complete response")} disabled={busy} onPress={() => act(async () => { await Clipboard.setStringAsync(responseText); onClose(); })} /> : null}
     <NavigationRow label={copy("Paylaş", "Share")} disabled={busy} onPress={() => act(() => Share.share({ message: text }))} />

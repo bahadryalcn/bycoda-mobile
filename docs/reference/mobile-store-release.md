@@ -43,9 +43,9 @@ the actual release binary; a source check or browser preview is insufficient.
       leave rating unavailable rather than substituting an invented App Store ID.
 - [ ] Version/build details describe the installed binary, and Expo Go/browser
       previews are identified accurately.
-- [ ] Email feedback/reporting previews its recipient and selected content,
-      omits transcripts by default, retains unsent drafts and never labels an
-      opened email composer as successful report delivery.
+- [ ] Firebase feedback/reporting sends only reviewed fields, omits transcripts
+      by default, retains failed drafts and requires a matching durable receipt.
+      Unconfigured delivery remains unavailable; there is no email fallback.
 
 ### Source configuration check and build profiles
 
@@ -193,13 +193,13 @@ moderation process, document submitted data and verify the end-to-end flow. See
 [Google AI-generated content policy](https://support.google.com/googleplay/android-developer/answer/13985936)
 and [its scope](https://support.google.com/googleplay/android-developer/answer/14094294).
 
-The current implementation deliberately uses the requested email support flow:
-**Report** on an AI answer or **Settings → Help & support → Report AI content**
-opens a form with an optional, editable excerpt. Its email action hands a
-reviewable draft to the user's mail app; it does not automatically transmit a
-report or verify delivery. This is useful support functionality, but Google's
-requirement above remains unresolved until actual in-app delivery and moderation
-are available.
+The client now prepares in-app Firebase reporting as documented in
+[Firebase reporting](../integrations/firebase-reporting.md). **Report** on an
+AI answer and Settings reporting open a form with an optional, editable excerpt.
+The receiver is not yet configured or deployed. The client only confirms a
+matching server receipt and retains a stable request ID for manual retries.
+Actual service delivery and the operational moderation process remain release
+work; passing client tests does not establish either.
 
 Social/inbox features can also display third-party user content. Assess reporting,
 blocking and moderation requirements for the actual experience, including client

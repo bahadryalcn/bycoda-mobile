@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import {
   decodeChatTextSize,
+  DEFAULT_CHAT_TEXT_SIZE,
   encodeChatTextSize,
   normalizeChatTextSize,
 } from "./chat-appearance-model";
@@ -28,7 +29,7 @@ export function createChatAppearanceStore(storage: PreferenceStorage) {
   let persistence = Promise.resolve();
   let selectionVersion = 0;
   return create<ChatAppearanceState>((set, get) => ({
-    textSize: "compact",
+    textSize: DEFAULT_CHAT_TEXT_SIZE,
     hydrated: false,
     storageError: null,
     hydrate: () => {

@@ -28,6 +28,13 @@ const client = (request: ReturnType<typeof vi.fn>) => ({
 });
 
 describe("mobile transcript wire", () => {
+  it("waits on a known revision with the same abort signal and loaded window", async () => {
+    const signal = new AbortController().signal;
+    const request = vi.fn().mockResolvedValue({ kind: "unchanged", revision: 1 });
+    const known = snapshot();
+    await expect(readSession(client(request), "session", known, { signal, waitMs: 20_000 })).resolves.toBe(known);
+    expect(request).toHaveBeenCalledWith("sessions.sync", { sessionId: "session", revision: 1, preview: true, partial: true, loadedBlockIds: ["tail"], waitMs: 20_000 }, { signal });
+  });
   it("loads a bounded tail rather than requesting the complete transcript", async () => {
     const value = snapshot();
     const request = vi.fn().mockResolvedValue({ sync: { kind: "snapshot", value } });

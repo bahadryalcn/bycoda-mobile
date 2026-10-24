@@ -5,14 +5,14 @@ import Animated from "react-native-reanimated";
 import Star from "lucide-react-native/icons/star";
 import Share2 from "lucide-react-native/icons/share-2";
 import Globe from "lucide-react-native/icons/globe";
-import Mail from "lucide-react-native/icons/mail";
+import MessageSquare from "lucide-react-native/icons/message-square";
+import { router } from "expo-router";
 import { Body, ErrorText, Stack, Disclosure, NavigationGroup, NavigationRow } from "../../ui/primitives";
 import { IconTile } from "../../ui/icon-tile";
 import { enterItem } from "../../ui/motion";
 import { colors, space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
-import { supportEmail } from "../legal/legal-content";
-import { appIdentity, engagementLinks, feedbackUrl } from "./engagement-model";
+import { appIdentity, engagementLinks } from "./engagement-model";
 import { openPublicLink, sharePublicApp } from "./engagement-actions";
 
 function tile(Glyph: typeof Star, color: string) {
@@ -32,7 +32,7 @@ export function EngagementSettings() {
   const shareAnchor = useRef<View>(null);
   const pending = useRef(false);
   const [busy, setBusy] = useState<
-    "review" | "share" | "public" | "feedback" | null
+    "review" | "share" | "public" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -73,26 +73,16 @@ export function EngagementSettings() {
           );
         }
       } else {
-        const url =
-          action === "review"
-            ? links.reviewUrl
-            : action === "feedback"
-              ? feedbackUrl(identity, platform, copy)
-              : links.shareUrl;
+        const url = action === "review" ? links.reviewUrl : links.shareUrl;
         const result = await openPublicLink(url, (target) =>
           Linking.openURL(target),
         );
         if (result !== "opened") {
           setError(
-            action === "feedback"
-              ? copy(
-                  "E-posta uygulaması açılamadı. Destek adresini kopyalayıp kendi e-posta uygulamanda kullanabilirsin.",
-                  "The email app could not be opened. Copy the support address into your email app.",
-                )
-              : copy(
-                  "Bağlantı açılamadı. İnternet bağlantını ve tarayıcını kontrol et.",
-                  "The link could not be opened. Check your internet connection and browser.",
-                ),
+            copy(
+              "Bağlantı açılamadı. İnternet bağlantını ve tarayıcını kontrol et.",
+              "The link could not be opened. Check your internet connection and browser.",
+            ),
           );
         }
       }
@@ -129,10 +119,9 @@ export function EngagementSettings() {
           />
           <NavigationRow
             label={copy("Geri bildirim gönder", "Send feedback")}
-            detail={supportEmail}
             disabled={!!busy}
-            icon={tile(Mail, colors.muted)}
-            onPress={() => { void perform("feedback"); }}
+            icon={tile(MessageSquare, colors.muted)}
+            onPress={() => router.push("/report")}
           />
         </NavigationGroup>
       </Animated.View>
@@ -150,12 +139,6 @@ export function EngagementSettings() {
               : `${copy("Derleme: ", "Build: ")}${identity.nativeBuild ?? copy("Bilinmiyor", "Unknown")}`}
           </Body>
           <Body muted selectable>{links.shareUrl}</Body>
-          <Body muted>
-            {copy(
-              "E-posta uygulaman sürüm bilgisiyle açılır. Mesajını inceleyip kendin gönderirsin.",
-              "Your email app opens with version details. Review and send the message yourself.",
-            )}
-          </Body>
         </Disclosure>
       </NavigationGroup>
     </Stack>

@@ -3,6 +3,7 @@ export const managementSections = {
   inbox: ["Gelen kutusu", "Inbox"],
   tasks: ["Görevler", "Tasks"],
   goals: ["Hedefler", "Goals"],
+  crews: ["Ekipler", "Crews"],
   automations: ["Otomasyonlar", "Automations"],
   notes: ["Notlar", "Notes"],
   social: ["Sosyal medya", "Social media"],

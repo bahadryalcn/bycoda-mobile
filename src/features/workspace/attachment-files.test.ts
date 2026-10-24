@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
-  picker: vi.fn(), photos: vi.fn(), copy: vi.fn(), deleted: vi.fn(), id: 0,
+  picker: vi.fn(), photos: vi.fn(), copy: vi.fn(), deleted: vi.fn(), write: vi.fn(), id: 0,
   platform: { OS: "android" },
 }));
 vi.mock("react-native", () => ({ Platform: fixture.platform }));
@@ -18,17 +18,19 @@ vi.mock("expo-file-system", () => {
     size = 95;
     name = "native-attachment.md";
     create() {}
+    write(bytes: Uint8Array) { fixture.write(this.uri, bytes); }
     delete() { fixture.deleted(this.uri); }
     copy(destination: { uri: string }) { return fixture.copy(this.uri, destination.uri); }
   }
   return { File: Path, Directory: Path, Paths: { document: { uri: "file:///private" } } };
 });
 
-import { pickAttachments } from "./attachment-files";
+import { pickAttachments, stageBrowserCapture } from "./attachment-files";
 
 beforeEach(() => {
   vi.clearAllMocks();
   fixture.id = 0;
+  fixture.write.mockReset();
   fixture.platform.OS = "android";
   fixture.copy.mockResolvedValue(undefined);
   fixture.picker.mockResolvedValue({ canceled: false, assets: [
@@ -67,4 +69,20 @@ it("leaves the current draft alone after native picker cancellation", async () =
   expect(await pickAttachments("document", "machine:session")).toEqual([]);
   expect(fixture.copy).not.toHaveBeenCalled();
   expect(fixture.deleted).not.toHaveBeenCalled();
+});
+const capture = () => ({ id: "capture", projectId: "project", sessionId: "session", navigationId: "nav", capturedAt: "2026-10-22T00:00:00Z", pageUrl: "https://fixture.invalid",
+  viewport: { width: 1280, height: 720, scrollX: 0, scrollY: 0 }, devicePixelRatio: 1, trust: "untrusted-page-data" as const, limitations: ["Masked"],
+  element: { tag: "button", text: "Page text", selector: "#fixture", path: "body > button", bounds: { x: 1, y: 2, width: 20, height: 30 }, center: { x: 11, y: 17 }, ancestry: [], computedStyle: {} },
+  screenshot: { mimeType: "image/jpeg" as const, data: "YWJj", width: 1280, height: 720 } });
+it("stages canonical browser metadata and decoded JPEG bytes only in the originating private draft directory", () => {
+  const file = stageBrowserCapture(capture(), "Owner comment", { machineId: "machine", projectId: "project", sessionId: "session", navigationId: "nav" });
+  expect(file).toMatchObject({ uri: "file:///private/chat-drafts/machine%3Asession/file-1", size: 3, kind: "image", mimeType: "image/jpeg", browserAnnotation: { comment: "Owner comment", trust: "untrusted-page-data", sessionId: "session" } });
+  expect(fixture.write).toHaveBeenCalledWith(file.uri, new Uint8Array([97, 98, 99]));
+  expect(() => stageBrowserCapture(capture(), "", { machineId: "machine", projectId: "other", sessionId: "session", navigationId: "nav" })).toThrow();
+  expect(fixture.write).toHaveBeenCalledOnce();
+});
+it("removes a partial staged browser file after write failure", () => {
+  fixture.write.mockImplementation(() => { throw new Error("Disk full"); });
+  expect(() => stageBrowserCapture(capture(), "", { machineId: "machine", projectId: "project", sessionId: "session", navigationId: "nav" })).toThrow("Disk full");
+  expect(fixture.deleted).toHaveBeenCalledExactlyOnceWith("file:///private/chat-drafts/machine%3Asession/file-1");
 });

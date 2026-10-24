@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import type { PropsWithChildren } from "react";
+import { useEffect, type PropsWithChildren } from "react";
 import { View } from "react-native";
 import { Pressable } from "react-native";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
@@ -9,11 +9,18 @@ import { IconButton } from "./buttons";
 import Animated from "react-native-reanimated";
 import { BusyIndicator as Spinner } from "./busy-indicator";
 import { usePressMotion } from "./motion";
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+import { useReducedMotionPreference } from "./use-reduced-motion";
 
 /** Quiet chat chrome: a small label/icon inside a full, non-overlapping touch target. */
-export function ChatToolbarAction({ label, accessibilityLabel, onPress, disabled, busy, tone = "muted", children }: PropsWithChildren<{
+export function ChatToolbarAction({
+  label,
+  accessibilityLabel,
+  onPress,
+  disabled,
+  busy,
+  tone = "muted",
+  children,
+}: PropsWithChildren<{
   label: string;
   accessibilityLabel?: string;
   onPress: () => void;
@@ -22,21 +29,68 @@ export function ChatToolbarAction({ label, accessibilityLabel, onPress, disabled
   tone?: "muted" | "accent" | "danger";
 }>) {
   useMobileTheme();
+  const reducedMotion = useReducedMotionPreference();
+  const press = usePressMotion(0.97);
   const color = colors[tone];
   const off = !!(disabled || busy);
-  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label}
-    accessibilityState={{ disabled: off, busy: !!busy }} disabled={off} onPress={onPress}
-    aria-disabled={off} aria-busy={busy || undefined}
-    style={({ pressed }) => ({ minHeight: metrics.touchTarget, minWidth: metrics.touchTarget,
-      maxWidth: "100%", flexShrink: 1, paddingHorizontal: space.xs, gap: space.xs,
-      flexDirection: "row", alignItems: "center", justifyContent: "center",
-      borderRadius: radii.control, opacity: off ? opacity.disabled : 1,
-      backgroundColor: pressed ? colors.raised : "transparent" })}>
-    {busy ? <Spinner size="sm" color={color} /> : children}
-    <Body selectable={false} style={{ color, fontSize: fontSize.small, lineHeight: 18, fontWeight: "500", flexShrink: 1 }}>
-      {label}
-    </Body>
-  </Pressable>;
+  useEffect(() => {
+    if (reducedMotion || off) press.onPressOut();
+  }, [reducedMotion, off]);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ disabled: off, busy: !!busy }}
+      disabled={off}
+      onPress={onPress}
+      aria-disabled={off}
+      aria-busy={busy || undefined}
+      onPressIn={!off && !reducedMotion ? press.onPressIn : undefined}
+      onPressOut={press.onPressOut}
+      style={({ pressed }) => ({
+        minHeight: metrics.touchTarget,
+        minWidth: metrics.touchTarget,
+        maxWidth: "100%",
+        flexShrink: 1,
+        paddingHorizontal: space.xs,
+        gap: space.xs,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: radii.control,
+        opacity: off ? opacity.disabled : 1,
+        backgroundColor: pressed ? colors.raised : "transparent",
+      })}
+    >
+      <Animated.View
+        style={[
+          {
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: space.xs,
+            flexShrink: 1,
+            maxWidth: "100%",
+          },
+          !off && !reducedMotion && press.animatedStyle,
+        ]}
+      >
+        {busy ? <Spinner size="sm" color={color} /> : children}
+        <Body
+          selectable={false}
+          style={{
+            color,
+            fontSize: fontSize.small,
+            lineHeight: 18,
+            fontWeight: "500",
+            flexShrink: 1,
+          }}
+        >
+          {label}
+        </Body>
+      </Animated.View>
+    </Pressable>
+  );
 }
 
 /** Compact visuals retain a 48dp tap area through hit slop. */
@@ -91,10 +145,14 @@ export function ChatCircleAction({
   surface?: boolean;
 }>) {
   useMobileTheme();
-  const press = usePressMotion(0.88);
+  const press = usePressMotion(0.97);
+  const reducedMotion = useReducedMotionPreference();
   const off = !!(disabled || busy);
+  useEffect(() => {
+    if (reducedMotion || off) press.onPressOut();
+  }, [reducedMotion, off]);
   return (
-    <AnimatedPressable
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: off, busy: !!busy }}
@@ -102,33 +160,38 @@ export function ChatCircleAction({
       aria-busy={busy || undefined}
       disabled={off}
       onPress={onPress}
-      onPressIn={press.onPressIn}
+      onPressIn={!off && !reducedMotion ? press.onPressIn : undefined}
       onPressOut={press.onPressOut}
-      style={[
-        { width: metrics.touchTarget, height: metrics.touchTarget, alignItems: "center", justifyContent: "center" },
-        press.animatedStyle,
-      ]}
+      style={{
+        width: metrics.touchTarget,
+        height: metrics.touchTarget,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
     >
-      <View
-        style={{
-          width: 30,
-          height: 30,
-          borderRadius: radii.pill,
-          backgroundColor: active ? colors.accentSolid : surface ? colors.panel : "transparent",
-          borderWidth: surface ? 1 : 0,
-          borderColor: colors.separator,
-          alignItems: "center",
-          justifyContent: "center",
-          opacity: disabled && !busy ? 0.6 : 1,
-        }}
+      <Animated.View
+        style={[
+          {
+            width: 30,
+            height: 30,
+            borderRadius: radii.pill,
+            backgroundColor: active ? colors.accentSolid : surface ? colors.panel : "transparent",
+            borderWidth: surface ? 1 : 0,
+            borderColor: colors.separator,
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: disabled && !busy ? 0.6 : 1,
+          },
+          !off && !reducedMotion && press.animatedStyle,
+        ]}
       >
         {busy ? <Spinner size="sm" color={active ? colors.primaryText : colors.muted} /> : children}
-      </View>
-    </AnimatedPressable>
+      </Animated.View>
+    </Pressable>
   );
 }
 
-/** A quiet, borderless row for one-line activity, tools and code (icon, summary, chevron). */
+/** A quiet, borderless row; essential file identity and status can wrap at large text sizes. */
 export function ChatSummary({
   label,
   detail,
@@ -165,12 +228,7 @@ export function ChatSummary({
         {icon}
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Body
-          numberOfLines={1}
-          style={{ fontSize: fontSize.small, lineHeight: 18, fontWeight: "500" }}
-        >
-          {label}
-        </Body>
+        <Body style={{ fontSize: fontSize.small, lineHeight: 18, fontWeight: "500" }}>{label}</Body>
         {detail ? (
           <Body muted numberOfLines={1} style={{ fontSize: fontSize.caption, lineHeight: 16 }}>
             {detail}
@@ -178,10 +236,7 @@ export function ChatSummary({
         ) : null}
       </View>
       {status ? (
-        <Body
-          numberOfLines={1}
-          style={{ fontSize: fontSize.caption, lineHeight: 16, color, maxWidth: "35%" }}
-        >
+        <Body style={{ fontSize: fontSize.caption, lineHeight: 16, color, maxWidth: "35%" }}>
           {status}
         </Body>
       ) : null}

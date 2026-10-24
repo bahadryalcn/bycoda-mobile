@@ -17,6 +17,15 @@ describe("complete project directory", () => {
     ...(index < 40 ? { groupId: "work" } : {}),
   }));
   const groups = [{ id: "work", name: "Work", collapsed: false }];
+  it("promotes active projects and groups while retaining counts inside collapsed groups", () => {
+    const counts = { p60: 2 };
+    for (const sort of ["desktop", "name", "recent"] as const) {
+      expect(sortDirectoryProjects(projects, { sort, recent: { p0: 100 } }, counts)[0]?.id).toBe("p60");
+    }
+    const sections = directorySections(projects, groups, "", { "": true }, counts);
+    expect(sections[0]).toMatchObject({ key: "", running: 2, expanded: false, data: [] });
+    expect(directorySections(projects, groups, "Project 0", {}, counts).every((section) => section.running === 0)).toBe(true);
+  });
   it("keeps every distinct host ID, including aliases and projects beyond32", () => {
     expect(distinctDirectoryProjects([...projects, projects[0]!])).toHaveLength(80);
     expect(

@@ -83,7 +83,10 @@ looks good at one size is insufficient acceptance.
 Use the [UX acceptance matrix](docs/reference/ux-quality.md#acceptance-matrix).
 Run focused checks appropriate to changed code, then inspect the real rendered
 screens. `pnpm typecheck` includes theme/UI/runtime/locale checks. Do not repeat
-them after success without a relevant change. Documentation-only work requires
+them after success without a relevant change. Type checking uses `tsc-rs` in
+normal mode by default. When speed is requested or appropriate for a quick local
+iteration, use `pnpm typecheck:fast` for `tsc-rs --fast` with the same preceding
+checks. State when fast mode was used. Documentation-only work requires
 link/path/contract checks, not a full application build.
 
 Report files, actual checks and remaining device/host blockers. Never claim all

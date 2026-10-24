@@ -186,6 +186,7 @@ export function GitConflictsPanel({
   onOpenFile,
   onStageFile,
   onChoose,
+  onReview,
   children,
 }: GitConflictsPanelProps) {
   useMobileTheme();
@@ -203,8 +204,9 @@ export function GitConflictsPanel({
         <View key={file.relative} style={workspaceStyles.stack}>
           <Body mono>{file.relative}</Body>
           <Row>
+            {onReview ? <Button label={copy("Sürümleri incele", "Review versions")} disabled={busy} onPress={() => onReview(file.relative)} /> : null}
             <Button
-              label={copy("Dosyayı düzenle", "Edit file")}
+              label={copy("Dosyayı incele", "Review file")}
               disabled={busy}
               onPress={() => onOpenFile(file.relative)}
             />

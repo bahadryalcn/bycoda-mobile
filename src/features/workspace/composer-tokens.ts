@@ -1,4 +1,9 @@
 export type ComposerToken = { trigger: "/" | "$" | "@"; start: number; end: number; query: string };
+export function moveSuggestionSelection(selected: number, count: number, direction: -1 | 1): number {
+  if (count <= 0) return -1;
+  if (selected < 0) return direction === -1 ? count - 1 : 0;
+  return (selected + count + direction) % count;
+}
 export function composerTokenAt(text: string, selection: { start: number; end: number }): ComposerToken | null {
   if (selection.start !== selection.end) return null;
   const cursor = Math.max(0, Math.min(text.length, selection.start));

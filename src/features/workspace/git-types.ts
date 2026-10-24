@@ -57,6 +57,7 @@ export type GitConflictsPanelProps = {
   onOpenFile: (path: string) => void;
   onStageFile: (path: string) => void;
   onChoose: (confirmation: GitConfirmation) => void;
+  onReview?: (path: string) => void;
   children?: ReactNode;
 };
 
@@ -98,6 +99,8 @@ export type GitDiffPanelProps = {
   onOpenFile: (path: string) => void;
   onStage: (selection: GitSelection) => void;
   onDiscard: (path: string) => void;
+  onReviewBusy?: (busy: boolean) => void;
+  onReviewExit?: (exit: (() => void) | null) => void;
   children?: ReactNode;
 };
 

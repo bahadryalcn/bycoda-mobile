@@ -18,7 +18,7 @@ const machine = {
   name: "Work",
   endpoint: "https://work.example",
   environmentId: "env-a",
-  providers: ["gemini"] as const,
+  providers: ["cursor"] as const,
 };
 const token = "a".repeat(43);
 const replacement = "b".repeat(43);
@@ -125,7 +125,7 @@ describe("connection persistence", () => {
     expect(useMachines.getState().hydrated).toBe(false);
     await expect(credentials.get(machine.id, machine)).rejects.toThrow("unavailable");
     await expect(
-      useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token),
+      useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token),
     ).rejects.toThrow("unavailable");
     expect(secrets.getItemAsync).not.toHaveBeenCalled();
     finish();
@@ -164,7 +164,7 @@ describe("connection persistence", () => {
   });
   it("does not rewrite metadata already saved through the canonical schema", async () => {
     await useMachines.getState().hydrate();
-    await useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token);
+    await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
     const persisted = String(storage.setItem.mock.calls.at(-1)?.[1]);
     storage.getItem.mockResolvedValueOnce(persisted);
     storage.setItem.mockClear();
@@ -188,7 +188,7 @@ describe("connection persistence", () => {
         persisted = value;
       });
       await useMachines.getState().hydrate();
-      await useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token);
+      await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
       let finish!: () => void;
       storage.setItem.mockImplementationOnce(
         (_key, value) =>
@@ -203,7 +203,7 @@ describe("connection persistence", () => {
         operation === "save"
           ? useMachines
               .getState()
-              .saveMachine({ ...machine, name: "Updated", providers: ["gemini"] }, token)
+              .saveMachine({ ...machine, name: "Updated", providers: ["cursor"] }, token)
           : useMachines.getState().removeMachine(machine.id);
       await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
       storage.getItem.mockClear();
@@ -220,7 +220,7 @@ describe("connection persistence", () => {
   );
   it("saves credential separately and remembers project independently per machine", async () => {
     await useMachines.getState().hydrate();
-    await useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token);
+    await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
     useMachines.getState().selectProject("project-a");
     await useMachines
       .getState()
@@ -242,13 +242,13 @@ describe("connection persistence", () => {
   });
   it("restores prior credential and selected machine if metadata cannot save", async () => {
     await useMachines.getState().hydrate();
-    await useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token);
+    await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
     secrets.getItemAsync.mockResolvedValue(token);
     storage.setItem.mockRejectedValueOnce(new Error("Full disk"));
     await expect(
       useMachines
         .getState()
-        .saveMachine({ ...machine, name: "Renamed", providers: ["gemini"] }, replacement),
+        .saveMachine({ ...machine, name: "Renamed", providers: ["cursor"] }, replacement),
     ).rejects.toThrow("could not be saved");
     expect(useMachines.getState().machines[0].name).toBe("Work");
     expect(secrets.setItemAsync).toHaveBeenLastCalledWith("bycoda.remote.computer-a", token, {
@@ -259,14 +259,14 @@ describe("connection persistence", () => {
     await useMachines.getState().hydrate();
     const imported = {
       ...machine,
-      providers: ["gemini"] as ["gemini"],
+      providers: ["cursor"] as ["cursor"],
       token,
       password: replacement,
     };
     await useMachines.getState().saveMachine(imported, token);
     expect(useMachines.getState().machines[0]).not.toHaveProperty("token");
     expect(useConnectionStore.getState().tokens).toEqual({});
-    expect(useConnectionStore.getState().machines[0].providers).toEqual(["gemini"]);
+    expect(useConnectionStore.getState().machines[0].providers).toEqual(["cursor"]);
     expect(String(storage.setItem.mock.calls[0][1])).not.toContain(token);
     expect(String(storage.setItem.mock.calls[0][1])).not.toContain(replacement);
   });
@@ -276,20 +276,20 @@ describe("connection persistence", () => {
       useMachines
         .getState()
         .saveMachine(
-          { ...machine, endpoint: "http://remote.example", providers: ["gemini"] },
+          { ...machine, endpoint: "http://remote.example", providers: ["cursor"] },
           token,
         ),
     ).rejects.toThrow("Invalid");
     await expect(
-      useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, "invalid"),
+      useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, "invalid"),
     ).rejects.toThrow("credential");
     expect(secrets.setItemAsync).not.toHaveBeenCalled();
-    await useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token);
+    await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
     await expect(
       useMachines
         .getState()
         .saveMachine(
-          { ...machine, environmentId: "different", providers: ["gemini"] },
+          { ...machine, environmentId: "different", providers: ["cursor"] },
           replacement,
         ),
     ).rejects.toThrow("another computer");
@@ -298,7 +298,7 @@ describe("connection persistence", () => {
   });
   it("keeps removal retryable when the keychain fails and restores its key on metadata failure", async () => {
     await useMachines.getState().hydrate();
-    await useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token);
+    await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
     secrets.getItemAsync.mockResolvedValue(token);
     secrets.deleteItemAsync.mockRejectedValueOnce(new Error(`native error ${token}`));
     await expect(useMachines.getState().removeMachine(machine.id)).rejects.toThrow(
@@ -317,7 +317,7 @@ describe("connection persistence", () => {
   it("serializes connection mutations so one failed rollback cannot erase a later computer", async () => {
     await useMachines.getState().hydrate();
     storage.setItem.mockRejectedValueOnce(new Error("One write failed"));
-    const first = useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token);
+    const first = useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
     const second = useMachines
       .getState()
       .saveMachine(
@@ -331,7 +331,7 @@ describe("connection persistence", () => {
   });
   it("does not hand a credential to a removed or stale endpoint transport", async () => {
     await useMachines.getState().hydrate();
-    await useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token);
+    await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
     secrets.getItemAsync.mockResolvedValue(token);
     expect(await credentials.get(machine.id, machine)).toBe(token);
     secrets.getItemAsync.mockClear();
@@ -346,7 +346,7 @@ describe("connection persistence", () => {
   });
   it("checks the app lock again after an asynchronous keychain read", async () => {
     await useMachines.getState().hydrate();
-    await useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token);
+    await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
     secrets.getItemAsync.mockResolvedValue(token);
     access.assertAppAccess
       .mockImplementationOnce(() => undefined)
@@ -362,7 +362,7 @@ describe("connection persistence", () => {
     "does not return a key after storage becomes unavailable during its native read: %j",
     async (latest) => {
       await useMachines.getState().hydrate();
-      await useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token);
+      await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
       let finish!: (value: string) => void;
       secrets.getItemAsync.mockImplementationOnce(
         () =>
@@ -381,7 +381,7 @@ describe("connection persistence", () => {
     await useMachines.getState().hydrate();
     expect(useMachines.getState().storageError).toBeTruthy();
     await expect(
-      useMachines.getState().saveMachine({ ...machine, providers: ["gemini"] }, token),
+      useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token),
     ).rejects.toThrow("unavailable");
     expect(storage.setItem).not.toHaveBeenCalled();
   });

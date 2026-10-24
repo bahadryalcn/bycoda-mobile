@@ -74,7 +74,13 @@ export function ActionMenu({
         {items.map((item) => (
           <Menu.Item
             key={item.key}
-            accessibilityLabel={[item.label, item.detail].filter(Boolean).join(". ")}
+            accessibilityLabel={[
+              item.label,
+              item.detail,
+              typeof item.selected === "boolean"
+                ? item.selected ? copy("Seçili", "Selected") : copy("Seçili değil", "Not selected")
+                : undefined,
+            ].filter(Boolean).join(". ")}
             accessibilityState={{ disabled: !!item.disabled, selected: item.selected }}
             disabled={item.disabled}
             variant={item.destructive ? "destructive" : undefined}

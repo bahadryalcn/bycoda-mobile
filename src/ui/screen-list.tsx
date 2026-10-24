@@ -6,6 +6,7 @@ import { ScreenHeading, useScreenChrome } from "./layout";
 import { colors, metrics, space } from "./tokens";
 import { uiStyles } from "./styles";
 import type { QueryLike } from "./query-presentation";
+import { usePullRefresh } from "./use-pull-refresh";
 
 export type ScreenListProps<T> = FlatListProps<T> & {
   title?: string;
@@ -41,6 +42,7 @@ export function ScreenList<T>({
   const insets = useSafeAreaInsets();
   const chrome = useScreenChrome();
   const onRefresh = refresh ?? query?.refetch;
+  const pullRefresh = usePullRefresh(onRefresh);
   return (
     <FlatList
       initialNumToRender={12}
@@ -70,16 +72,14 @@ export function ScreenList<T>({
         (onRefresh ? (
           <RefreshControl
             tintColor={colors.muted}
-            refreshing={!!query?.isFetching && !query.isPending}
-            onRefresh={() => {
-              onRefresh();
-            }}
+            refreshing={pullRefresh.refreshing}
+            onRefresh={pullRefresh.onRefresh}
           />
         ) : undefined)
       }
       ListHeaderComponent={
         header !== undefined || title || subtitle || actions ? (
-          <View style={{ gap: space.lg, paddingBottom: space.sm }}>
+          <View style={{ gap: space.sm, paddingBottom: space.sm }}>
             <ScreenHeading title={title} subtitle={subtitle} actions={actions} />
             {header}
           </View>

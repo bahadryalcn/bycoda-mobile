@@ -97,7 +97,7 @@ export function ProviderInboxItems({ result, limit, onOpen, onMore }: ProviderIn
         />
       ))}
       {result.items.length > limit ? (
-        <Button label={copy("Daha fazla göster", "Show more")} onPress={onMore} />
+        <Button tone="quiet" label={copy("Daha fazla göster", "Show more")} onPress={onMore} />
       ) : null}
     </>
   );

@@ -9,6 +9,7 @@ import { Loading } from "./ui/primitives";
 import { useSecurity } from "./state/security";
 import { useAttachmentReleaseRetry } from "./state/queries";
 import type { LifecycleProps } from "./app-types";
+import { invalidateProjectPrivacy } from "./features/workspace/project-privacy-cache";
 
 export function AppLifecycle({ children, cache }: LifecycleProps) {
   useMobileTheme();
@@ -31,7 +32,7 @@ export function AppLifecycle({ children, cache }: LifecycleProps) {
     const subscription = AppState.addEventListener("change", (state) => {
       useSecurity.getState().handleAppState(state);
       focusManager.setFocused(state === "active" && useSecurity.getState().status === "unlocked");
-      if (state !== "active") void cache.cancelQueries({ queryKey: ["machine"] });
+      if (state !== "active") { void cache.cancelQueries({ queryKey: ["machine"] }); void invalidateProjectPrivacy(cache); }
     });
     const blur =
       process.env.EXPO_OS === "android"
@@ -39,6 +40,7 @@ export function AppLifecycle({ children, cache }: LifecycleProps) {
             useSecurity.getState().handleWindowFocus(false);
             focusManager.setFocused(false);
             void cache.cancelQueries({ queryKey: ["machine"] });
+            void invalidateProjectPrivacy(cache);
           })
         : null;
     const focus =
@@ -62,7 +64,7 @@ export function AppLifecycle({ children, cache }: LifecycleProps) {
         (process.env.EXPO_OS === "web" ||
           (AppState.currentState === "active" && useSecurity.getState().windowFocused)),
     );
-    if (!unlocked) void cache.cancelQueries({ queryKey: ["machine"] });
+    if (!unlocked) { void cache.cancelQueries({ queryKey: ["machine"] }); void invalidateProjectPrivacy(cache); }
   }, [unlocked, cache]);
   useEffect(
     () => () => {

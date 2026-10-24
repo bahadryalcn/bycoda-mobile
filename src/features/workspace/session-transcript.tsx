@@ -1,6 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, View } from "react-native";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { FlatList, Keyboard, View } from "react-native";
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import ArrowDown from "lucide-react-native/icons/arrow-down";
 import CircleCheck from "lucide-react-native/icons/circle-check";
@@ -14,16 +14,19 @@ import { useEarlierSession } from "./session-queries";
 import { QuestionCard } from "./question-card";
 import { TranscriptBlock } from "./transcript-block";
 import { useInvertedInputVisibility } from "./use-inverted-input-visibility";
-import { transcriptEntries, type TranscriptEntry } from "./transcript-model";
+import { completeResponseText, TranscriptPresentation, type TranscriptEntry } from "./transcript-model";
 import { ActivityGroup } from "./activity-group";
 import { ActivityInspector, type ActivityInspection } from "./activity-inspector";
 import type { SessionTranscriptProps } from "./session-types";
 import { TranscriptScrollPosition } from "./transcript-scroll";
-import { useReducedMotion } from "react-native-reanimated";
+import { useReducedMotionPreference } from "@/ui/use-reduced-motion";
 import Animated from "react-native-reanimated";
 import { reveal } from "@/ui/motion";
 import { ChatConversation } from "@/ui/chat";
 import { ChatCircleAction } from "@/ui/chat-controls";
+import { TranscriptFindControls } from "./transcript-find-controls";
+import { findTranscript, nextTranscriptResult, type TranscriptFindResult } from "./transcript-find-model";
+import { TranscriptFindScroll } from "./transcript-find-scroll";
 
 export function SessionTranscript({
   view,
@@ -57,33 +60,24 @@ export function SessionTranscript({
       session?.session.worktreeCwd,
     ],
   );
-  const responseTexts = useMemo(() => {
-    const result = new Map<string, string>();
-    let group: import("./wire").Block[] = [];
-    const flush = () => {
-      const text = group
-        .map((block) => block.text)
-        .filter(Boolean)
-        .join("\n\n");
-      group.forEach((block) => result.set(block.id, text));
-      group = [];
-    };
-    for (const block of session?.session.blocks ?? []) {
-      if (block.role === "user") flush();
-      if (block.role === "assistant") group.push(block);
-    }
-    flush();
-    return result;
-  }, [session?.session.blocks]);
+  const responseText = useCallback((id: string) => completeResponseText(session?.session.blocks ?? [], id), [session?.session.blocks]);
+  const presentation = useRef(new TranscriptPresentation());
   const earlier = useEarlierSession(scope, session);
   const inputVisibility = useInvertedInputVisibility<TranscriptEntry>();
   const scrollPosition = useRef(new TranscriptScrollPosition());
   const anchorFrame = useRef<number | null>(null);
   const initialAnchor = useRef(false);
   const [anchored, setAnchored] = useState(false);
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotionPreference();
   const [awayFromLatest, setAwayFromLatest] = useState(false);
   const [inspection, setInspection] = useState<ActivityInspection | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const deferredQuery = useDeferredValue(findQuery);
+  const [activeFindId, setActiveFindId] = useState<string | null>(null);
+  const [findScrollFailed, setFindScrollFailed] = useState(false);
+  const findScroll = useRef(new TranscriptFindScroll());
+  const findRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inspectedBlocks = useMemo(() => {
     const ids = new Set(inspection?.ids);
     return (session?.session.blocks ?? []).filter((block) => ids.has(block.id));
@@ -104,11 +98,39 @@ export function SessionTranscript({
     [trackInputScroll],
   );
   const visibleBlocks = useMemo(
-    () => transcriptEntries(session?.session.blocks ?? [], session?.session.harness, {
+    () => presentation.current.update(session?.session.blocks ?? [], session?.session.harness, {
       view, running: session?.status === "running",
-    }).reverse(),
+    }).slice().reverse(),
     [session?.session.blocks, session?.session.harness, session?.status, view],
   );
+  const findResults = useMemo(() => findOpen ? findTranscript(visibleBlocks, deferredQuery) : [], [visibleBlocks, deferredQuery, findOpen]);
+  const activeFind = findResults.find((result) => result.blockId === activeFindId);
+  const findEntriesRef = useRef(visibleBlocks);
+  findEntriesRef.current = visibleBlocks;
+  const cancelFindScroll = useCallback(() => {
+    if (findRetryTimer.current !== null) clearTimeout(findRetryTimer.current);
+    findRetryTimer.current = null;
+    findScroll.current.cancel();
+  }, []);
+  useEffect(() => cancelFindScroll, [cancelFindScroll]);
+  const scrollToFind = useCallback((result: TranscriptFindResult) => {
+    cancelFindScroll();
+    Keyboard.dismiss();
+    setFindScrollFailed(false);
+    setActiveFindId(result.blockId);
+    // Searching owns the scroll until Jump to latest or an explicit user scroll.
+    scrollPosition.current.beginDrag();
+    if (anchorFrame.current !== null) {
+      cancelAnimationFrame(anchorFrame.current);
+      anchorFrame.current = null;
+    }
+    findScroll.current.select(result.entryId);
+    inputVisibility.listRef.current?.scrollToIndex({ index: result.index, viewPosition: 0.5, animated: !reduceMotion });
+  }, [cancelFindScroll, inputVisibility.listRef, reduceMotion]);
+  const navigateFind = (direction: 1 | -1) => {
+    const result = nextTranscriptResult(findResults, activeFindId, direction);
+    if (result) scrollToFind(result);
+  };
   const pending = session?.session.pendingQuestion;
   const anchorLatest = useCallback(() => {
     if (!scrollPosition.current.shouldAnchor(visibleBlocks.length > 0 || !!pending)) return;
@@ -134,12 +156,44 @@ export function SessionTranscript({
   }, [command.isSuccess, onReceiptHandled]);
 
   return (
-    <ChatConversation
-      ref={inputVisibility.viewportRef}
-      onLayout={inputVisibility.onViewportLayout}
-      style={{ flex: 1, minHeight: 0 }}
-      collapsable={false}
-    >
+    <View style={{ flex: 1, minHeight: 0 }}>
+      <TranscriptFindControls
+        open={findOpen}
+        onToggle={() => {
+          cancelFindScroll();
+          if (findOpen) Keyboard.dismiss();
+          setFindOpen((current) => !current);
+          setActiveFindId(null);
+          setFindScrollFailed(false);
+        }}
+        query={findQuery}
+        onQuery={(value) => {
+          cancelFindScroll();
+          setFindQuery(value);
+          setActiveFindId(null);
+          setFindScrollFailed(false);
+        }}
+        count={findQuery === deferredQuery ? findResults.length : 0}
+        active={activeFind}
+        activeIndex={findResults.findIndex((result) => result.blockId === activeFindId)}
+        hasEarlier={session?.history?.before !== undefined}
+        busy={earlier.isPending}
+        onEarlier={() => { void earlier.mutateAsync().catch(() => {}); }}
+        onNavigate={navigateFind}
+        failed={findScrollFailed}
+        onRetry={() => { if (activeFind) scrollToFind(activeFind); }}
+        onInspect={activeFind && visibleBlocks[activeFind.index]?.kind === "activity" ? () => {
+          const entry = visibleBlocks[activeFind.index];
+          if (entry?.kind === "activity") setInspection({ ids: entry.blocks.map((block) => block.id), selectedId: activeFind.blockId, author: entry.author });
+        } : undefined}
+      />
+      {findOpen ? <MutationState mutation={earlier} /> : null}
+      <ChatConversation
+        ref={inputVisibility.viewportRef}
+        onLayout={inputVisibility.onViewportLayout}
+        style={{ flex: 1, minHeight: 0 }}
+        collapsable={false}
+      >
       <FlatList<TranscriptEntry>
         ref={inputVisibility.listRef}
         style={{ flex: 1, minHeight: 0 }}
@@ -150,10 +204,24 @@ export function SessionTranscript({
         keyboardDismissMode={process.env.EXPO_OS === "ios" ? "interactive" : "on-drag"}
         contentInsetAdjustmentBehavior="never"
         maintainVisibleContentPosition={
-          anchored ? { minIndexForVisible: 0, autoscrollToTopThreshold: 32 } : undefined
+          anchored ? { minIndexForVisible: 0 } : undefined
         }
         contentContainerStyle={{ gap: space.row, paddingVertical: space.sm }}
         onScroll={onScroll}
+        onScrollToIndexFailed={({ averageItemLength }) => {
+          const index = findScroll.current.retry(findEntriesRef.current);
+          if (index === undefined) {
+            setFindScrollFailed(true);
+            return;
+          }
+          inputVisibility.listRef.current?.scrollToOffset({ offset: Math.max(0, averageItemLength * index), animated: false });
+          if (findRetryTimer.current !== null) clearTimeout(findRetryTimer.current);
+          findRetryTimer.current = setTimeout(() => {
+            findRetryTimer.current = null;
+            const currentIndex = findScroll.current.index(findEntriesRef.current);
+            if (currentIndex >= 0) inputVisibility.listRef.current?.scrollToIndex({ index: currentIndex, viewPosition: 0.5, animated: false });
+          }, 150);
+        }}
         scrollEventThrottle={16}
         onLayout={anchorLatest}
         onContentSizeChange={(width, height) => {
@@ -161,21 +229,31 @@ export function SessionTranscript({
           anchorLatest();
         }}
         onScrollBeginDrag={() => {
+          cancelFindScroll();
           scrollPosition.current.beginDrag();
           inputVisibility.onScrollBeginDrag();
         }}
-        onScrollEndDrag={() => {
-          scrollPosition.current.endDrag();
+        onScrollEndDrag={(event) => {
+          const { contentOffset, velocity } = event.nativeEvent;
+          scrollPosition.current.endDrag(contentOffset.y, velocity?.y);
+          inputVisibility.onScroll(event);
+          if (!velocity?.y) inputVisibility.onScrollEndDrag();
+        }}
+        onMomentumScrollBegin={() => {
+          scrollPosition.current.beginMomentum();
+          inputVisibility.onScrollBeginDrag();
+        }}
+        onMomentumScrollEnd={(event) => {
+          scrollPosition.current.endMomentum(event.nativeEvent.contentOffset.y);
+          inputVisibility.onScroll(event);
           inputVisibility.onScrollEndDrag();
         }}
-        onMomentumScrollEnd={(event) =>
-          scrollPosition.current.onScroll(event.nativeEvent.contentOffset.y)
-        }
         initialNumToRender={16}
         maxToRenderPerBatch={12}
         windowSize={9}
-        renderItem={({ item }) =>
-          item.kind === "activity" ? (
+        extraData={activeFind?.entryId}
+        renderItem={({ item }) => <View style={item.id === activeFind?.entryId ? { backgroundColor: colors.selected } : undefined}>
+          {item.kind === "activity" ? (
             <ActivityGroup
               live={session?.status === "running"}
               blocks={item.blocks}
@@ -185,8 +263,9 @@ export function SessionTranscript({
             />
           ) : (
             <TranscriptBlock
+              parentProvider={session?.session.harness}
               context={context}
-              responseText={responseTexts.get(item.block.id)}
+              responseText={responseText}
               block={item.block}
               author={item.author}
               scope={scope}
@@ -195,8 +274,8 @@ export function SessionTranscript({
               disabled={blocked}
               onCommand={onCommand}
             />
-          )
-        }
+          )}
+        </View>}
         ListHeaderComponent={
           <View style={workspaceStyles.stack}>
             {pending && session?.runId ? (
@@ -235,23 +314,18 @@ export function SessionTranscript({
             {session?.history?.before !== undefined ? (
               <Button
                 label={copy("Önceki mesajları yükle", "Load earlier messages")}
+                tone="quiet"
+                density="compact"
                 busy={earlier.isPending}
                 onPress={() => {
                   void earlier.mutateAsync().catch(() => {});
                 }}
               />
             ) : null}
-            <MutationState
-              mutation={earlier}
-              success={copy("Önceki mesajlar yüklendi.", "Earlier messages loaded.")}
-            />
+            <MutationState mutation={earlier} />
             {!visibleBlocks.length && !!session ? (
               <Empty
                 title={copy("Ne yapmak istersin?", "What would you like to do?")}
-                detail={copy(
-                  "Mesajını yaz. Çalışma seçtiğin bilgisayarda devam eder.",
-                  "Write a message. Work continues on your selected computer.",
-                )}
               />
             ) : null}
           </View>
@@ -260,7 +334,7 @@ export function SessionTranscript({
       {inspection ? <ActivityInspector blocks={inspectedBlocks} inspection={inspection} onChange={setInspection}
         live={session?.status === "running"}
         context={context} author={inspection.author} scope={scope} revision={session?.revision ?? 0}
-        runId={session?.runId} disabled={blocked} onCommand={onCommand} /> : null}
+        runId={session?.runId} parentProvider={session?.session.harness} disabled={blocked} onCommand={onCommand} /> : null}
       {awayFromLatest ? (
         <Animated.View
           entering={reveal}
@@ -275,6 +349,7 @@ export function SessionTranscript({
             label={copy("Son mesaja git", "Jump to latest")}
             surface
             onPress={() => {
+              cancelFindScroll();
               scrollPosition.current.jumpToLatest();
               inputVisibility.listRef.current?.scrollToOffset({
                 offset: 0,
@@ -288,6 +363,7 @@ export function SessionTranscript({
           </ChatCircleAction>
         </Animated.View>
       ) : null}
-    </ChatConversation>
+      </ChatConversation>
+    </View>
   );
 }

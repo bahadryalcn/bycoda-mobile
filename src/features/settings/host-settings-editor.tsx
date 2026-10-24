@@ -27,6 +27,7 @@ import {
   type SettingsDraft,
 } from "./settings-draft";
 import type { HostSettingsEditorProps } from "./settings-types";
+import { ShellProfileSettings } from "./shell-profile-settings";
 
 export function HostSettingsEditor({ machineId }: HostSettingsEditorProps) {
   const copy = useCopy();
@@ -106,7 +107,6 @@ export function HostSettingsEditor({ machineId }: HostSettingsEditorProps) {
           ) : null}
           <MutationState
             mutation={action}
-            pending={copy("Ayarlar kaydediliyor…", "Saving settings…")}
             success={
               dirty
                 ? copy(
@@ -126,6 +126,7 @@ export function HostSettingsEditor({ machineId }: HostSettingsEditorProps) {
           />
         </>
       ) : null}
+      <ShellProfileSettings />
     </Stack>
   );
 }

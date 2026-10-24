@@ -7,6 +7,7 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { Scope } from "./shared/scope";
 import { TasksScreen } from "./tasks-screen";
 import { GoalsScreen } from "./goals-screen";
+import { CrewsScreen } from "./crews-screen";
 import { AutomationsScreen } from "./automations-screen";
 import { NotesScreen } from "./notes-screen";
 import { InboxScreen } from "./inbox-screen";
@@ -22,7 +23,7 @@ export function ManagementHome() {
   const selectedProjectId = useMachines((state) => state.selectedProjectId);
   const projects = useProjectList();
   const [search, setSearch] = useState("");
-  const projectId = !projects.privacyPending && projects.data?.some((project) => project.id === selectedProjectId)
+  const projectId = projects.directoryReady && projects.data?.some((project) => project.id === selectedProjectId)
     ? selectedProjectId : null;
   return (
     <Screen title={copy("Araçlar", "Tools")}>
@@ -66,6 +67,7 @@ export function ManagementScreen({ section }: ManagementScreenProps) {
   const screens: Record<ManagementSection, ComponentType> = {
     tasks: TasksScreen,
     goals: GoalsScreen,
+    crews: CrewsScreen,
     automations: AutomationsScreen,
     notes: NotesScreen,
     inbox: InboxScreen,

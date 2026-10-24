@@ -31,6 +31,23 @@ afterEach(() => {
 });
 
 describe("durable provider inbox RPC adapter", () => {
+  it("uses a previously persisted attempt ID without changing existing callers and marks known failed receipts terminal", async () => {
+    const { client, request } = fixture();
+    request.mockResolvedValueOnce({ id: "known-job", state: "failed", error: "Owner rejected" });
+    await expect(runInboxJob(client, comment, undefined, "persisted-attempt")).rejects.toMatchObject({ terminal: true, uncertain: false });
+    expect(request).toHaveBeenLastCalledWith("inbox.provider.request", { requestId: "persisted-attempt", action: "comment", ...comment.input }, { signal: undefined, retry: false });
+    await expect(runInboxJob(client, comment, undefined, "bad/id")).rejects.toThrow(/request ID/);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+  it("routes exact review payloads as writes and validates read context before returning it", async () => {
+    const { client, request } = fixture();
+    const review: InboxJobRequest<"review"> = { action: "review", input: { item: comment.input.item, projectId: "project-a", commitId: "a".repeat(40), event: "APPROVE", body: "", comments: [], confirm: "SUBMIT_PR_REVIEW" } };
+    request.mockResolvedValueOnce({ id: "review-job", state: "completed", result: "approved" });
+    await expect(runInboxJob(client, review)).resolves.toBe("approved");
+    expect(request).toHaveBeenLastCalledWith("inbox.provider.request", { requestId: "inbox-request-fixture", action: "review", ...review.input }, { signal: undefined, retry: false });
+    request.mockResolvedValueOnce({ id: "context-job", state: "completed", result: { commitId: "HEAD", patch: "unsafe" } });
+    await expect(runInboxJob(client, { action: "review-context", input: { item: comment.input.item } })).rejects.toThrow(/Invalid reviewed/);
+  });
   it("sends only the confirmed target and text with automatic write retries disabled", async () => {
     const { client, request } = fixture();
     request.mockResolvedValue({ id: "job-1", state: "completed", result: { sent: true } });

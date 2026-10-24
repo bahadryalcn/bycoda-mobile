@@ -25,5 +25,7 @@ export type BrowserState = {
   width?: number;
   height?: number;
   navigationId?: string;
+  annotationId?: string;
+  selection?: import("../../../../src/shared/lib/browserAnnotation").BrowserAnnotationCapture;
   runtime?: { installed: boolean; installing: boolean; version: string };
 };

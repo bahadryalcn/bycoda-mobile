@@ -52,7 +52,7 @@ function RootNavigation() {
             <Stack.Screen name="session/[id]" options={{ title: copy("Oturum", "Session") }} />
             <Stack.Screen
               name="sessions"
-              options={{ title: copy("Aktif oturumlar", "Active sessions") }}
+              options={{ title: copy("Oturumlar", "Sessions") }}
             />
             <Stack.Screen name="manage/[section]" options={{ title: copy("Yönet", "Manage") }} />
             <Stack.Screen name="tools/[tool]" options={{ title: copy("Araçlar", "Tools") }} />

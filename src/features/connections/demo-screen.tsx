@@ -1,7 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { lazy, Suspense, useState } from "react";
 import { Stack, router } from "expo-router";
-import FolderGit2 from "lucide-react-native/icons/folder-git-2";
+import { ProjectIcon } from "../../ui/project-icon";
 import Laptop from "lucide-react-native/icons/laptop";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
 import { View } from "react-native";
@@ -87,9 +87,7 @@ export function DemoScreen() {
                 )}
                 detailLines={2}
                 icon={
-                  <IconTile color={colors.info}>
-                    <FolderGit2 size={18} strokeWidth={2} color={colors.info} />
-                  </IconTile>
+                  <ProjectIcon />
                 }
                 onPress={() => setPage("session")}
               />

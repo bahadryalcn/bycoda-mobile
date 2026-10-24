@@ -1,0 +1,56 @@
+import { defaultCrewPolicy, parseCrewAgent, parseCrewDefinition } from "../../../../../src/features/crews/model/crew";
+import type { CrewAgent, CrewDefinition, CrewDirectory, CrewRole, SavedCrewAgent } from "@/remote/contracts/crews";
+import type { HostModelCatalog } from "@/domain/types";
+
+export function newMember(id: string, role: CrewRole, name: string): CrewAgent {
+  return { id, role, name, instructions: "", selection: "fixed", candidates: [] };
+}
+export function newDefinition(id: string, projectId: string): CrewDefinition {
+  return { id, name: "", projectId, updatedAt: 0, policy: { ...defaultCrewPolicy },
+    agents: [newMember(`${id}-lead`, "coordinator", ""), newMember(`${id}-worker`, "specialist", ""), newMember(`${id}-review`, "reviewer", "")] };
+}
+export function copyLibraryMember(profile: SavedCrewAgent, id: string, groupsSupported: boolean): CrewAgent {
+  const { projectId: _projectId, updatedAt, ...member } = structuredClone(profile);
+  return { ...member, id, ...(groupsSupported ? { source: { id: profile.id, updatedAt } } : { groups: undefined, source: undefined }) };
+}
+export function candidateFromCatalog(catalog: HostModelCatalog, key: string) {
+  const model = Object.values(catalog.models).flatMap((rows) => rows ?? []).find((row) => `${row.harness}/${row.id}` === key);
+  return model ? { id: key, harness: model.harness, model: model.id,
+    modelSettings: Object.fromEntries((model.settings ?? []).map((setting) => [setting.id, setting.value])), capabilities: {} } : undefined;
+}
+export function crewValidation(value: CrewDefinition): string | undefined {
+  try { parseCrewDefinition(value); return undefined; } catch (error) { return error instanceof Error ? error.message : "Invalid crew"; }
+}
+export function memberValidation(value: CrewAgent): string | undefined {
+  try { parseCrewAgent(value); return undefined; } catch (error) { return error instanceof Error ? error.message : "Invalid crew member"; }
+}
+/** Bound collections before rendering. Nested definitions still use canonical host parsing. */
+export function validateCrewDirectory(value: unknown, projectId?: string): CrewDirectory {
+  if (!value || typeof value !== "object") throw new Error("Invalid crew directory");
+  const data = value as Record<string, unknown>;
+  if (![data.definitions, data.agents, data.runs].every((rows) => Array.isArray(rows) && rows.length <= 10000)) throw new Error("Invalid crew directory");
+  for (const definition of data.definitions as unknown[]) {
+    const parsed = parseCrewDefinition(definition);
+    if (projectId && parsed.projectId && parsed.projectId !== projectId) throw new Error("Crew definition belongs to another project");
+  }
+  for (const agent of data.agents as Array<Record<string, unknown>>) {
+    parseCrewAgent(agent);
+    if (!Number.isSafeInteger(agent.updatedAt) || Number(agent.updatedAt) < 0 || (agent.projectId !== undefined && typeof agent.projectId !== "string")) throw new Error("Invalid saved crew member");
+    if (projectId && agent.projectId && agent.projectId !== projectId) throw new Error("Crew member belongs to another project");
+  }
+  for (const run of data.runs as Array<Record<string, unknown>>) {
+    if (!run || typeof run.id !== "string" || typeof run.projectId !== "string" || !["active", "paused", "finished"].includes(String(run.status)) ||
+      !Array.isArray(run.tasks) || !Array.isArray(run.assignments) || !Array.isArray(run.messages)) throw new Error("Invalid crew run");
+    parseCrewDefinition(run.definition);
+    if (projectId && run.projectId !== projectId) throw new Error("Crew run belongs to another project");
+    if (run.tasks.length > 1000 || run.assignments.length > 500 || run.messages.length > 500) throw new Error("Invalid crew run size");
+    for (const task of run.tasks as Array<Record<string, unknown>>) {
+      if (!task || typeof task.id !== "string" || typeof task.title !== "string" || typeof task.status !== "string" ||
+        (task.sessionId !== undefined && typeof task.sessionId !== "string") || (task.error !== undefined && typeof task.error !== "string")) throw new Error("Invalid crew task");
+    }
+    for (const assignment of run.assignments as Array<Record<string, unknown>>) {
+      if (!assignment || typeof assignment.taskId !== "string" || !assignment.candidate || typeof assignment.candidate !== "object" || typeof (assignment.candidate as Record<string, unknown>).model !== "string") throw new Error("Invalid crew assignment");
+    }
+  }
+  return value as CrewDirectory;
+}

@@ -225,6 +225,27 @@ Use shared motion helpers and system reduced motion. Keep transitions brief;
 avoid permanent decorative animation. Private content must disappear immediately
 on lock; security visibility takes priority over exit animation.
 
+## Conversation presentation
+
+Use the shared message renderer and chat facades for transcripts and appearance
+previews. Keep prose, bold emphasis and headings neutral; use hierarchy and
+spacing for reading order. Inline code uses the existing accent on a code fill
+with monospace type, while links retain their link affordance. Quote rails may
+use the informational tone. Do not recolor arbitrary words or infer sentiment.
+
+Activity color must accompany a truthful localized status. Terminal canonical
+states take precedence over stale streaming flags; a settled record must not
+keep announcing that it is writing. A Sheet inspection trigger is a button,
+whereas an inline disclosure owns its actual expanded state. Preserve bounded
+source inspection, raw copy behavior and the selected reading size in the full
+reader. Task-list marks in assistant content describe source text; they are not
+new mutation controls.
+
+Keep the outer touch target stable during press feedback. Animate only the
+inner visual, and stop spatial feedback when busy, disabled or reduced motion
+changes. Use the reactive reduced-motion owner; do not animate virtualized
+message entrances or remount a transcript to restyle it.
+
 ## Acceptance
 
 Review narrow/wide layouts, long content, supported languages, both themes,

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { filterSelection, toggleSelection } from "./selection-model";
+import { filterSelection, selectionLabels, toggleSelection } from "./selection-model";
 
 describe("searchable selection", () => {
+  it("shows a placeholder for an unselected empty value but retains named defaults and missing saved choices", () => {
+    expect(selectionLabels([""], new Map([["ours", "Our version"]]))).toEqual([]);
+    expect(selectionLabels([""], new Map([["", "System default"]]))).toEqual(["System default"]);
+    expect(selectionLabels(["removed-shell"], new Map())).toEqual(["removed-shell"]);
+  });
   it("searches labels and paths, preserving duplicate display names", () => {
     const options = [
       { value: "a", label: "monocode", detail: "G:/Projects/a" },

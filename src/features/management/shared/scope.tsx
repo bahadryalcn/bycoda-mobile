@@ -1,4 +1,5 @@
 import { useCopy } from "@/ui/copy";
+import { router } from "expo-router";
 import { Notice, QueryState, SelectField } from "@/ui/primitives";
 import { useProjectList } from "../../workspace/use-project-directory";
 import { useMachines } from "@/state/machines";
@@ -21,7 +22,7 @@ export function Scope({ allowAll = false }: ScopeProps) {
         label={copy("Proje", "Project")}
         compact
         hideLabel
-        disabled={projects.privacyPending}
+        disabled={!projects.directoryReady}
         value={
           projectId && options.some((option) => option.value === projectId)
             ? projectId
@@ -35,10 +36,17 @@ export function Scope({ allowAll = false }: ScopeProps) {
             ? [{ value: "", label: copy("Tüm projeler", "All projects") }, ...options]
             : options
         }
-        onChange={(id) => selectProject(id || null)}
+        onChange={(id) => {
+          if (!projects.directoryReady || id && !projects.isProjectVisible(id)) return;
+          selectProject(id || null);
+        }}
       />
-      <QueryState query={projects} loading="none" />
-      {projects.privacyPending ? (
+      <QueryState query={projects} loading="inline" loadingLabel={copy("Projeler yükleniyor…", "Loading projects…")} />
+      {projects.readiness === "waiting" ? <Notice
+        message={copy("Bağlantı bekleniyor.", "Waiting for a connection.")}
+        action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: () => router.push("/machines") }}
+      /> : null}
+      {projects.privacyUnavailable ? (
         <Notice
           tone="info"
           message={copy(

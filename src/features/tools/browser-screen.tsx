@@ -8,7 +8,7 @@ import { useHostClient, useHostReadActive } from "@/state/queries";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import type { HostProject } from "@/domain/types";
-import { Body, Button, Disclosure, Field, IconButton, MutationState, Notice, Row, Screen } from "@/ui/primitives";
+import { Body, Button, ConfirmationCard, Disclosure, ErrorText, Field, IconButton, MutationState, Notice, Row, Screen } from "@/ui/primitives";
 import { RemoteFrame } from "@/ui/remote-frame";
 import { ActionField } from "@/ui/action-field";
 import { ActionMenu } from "@/ui/overflow-menu";
@@ -17,10 +17,14 @@ import { useCopy } from "@/ui/copy";
 import { colors } from "@/ui/tokens";
 import { useMobileTheme } from "@/ui/theme";
 import type { BrowserState } from "./types";
+import { readBrowserCapture } from "./browser-annotation-model";
+import { useComposerTransfer } from "../workspace/composer-transfer";
 
 type BrowserScope = {
   client: NonNullable<ReturnType<typeof useHostClient>>;
   projectId: string;
+  sessionId?: string;
+  consumedSelections: Set<string>;
   active: boolean;
   latest?: BrowserState;
   releasedLeaseId?: string;
@@ -42,12 +46,15 @@ function releaseBrowserLease(scope: BrowserScope): Promise<void> {
 }
 
 /** One serialized request path preserves the shared browser's control lease. */
-export function BrowserScreen({ project }: { project: HostProject }) {
+export function BrowserScreen({ project, initialUrl = "", sessionId }: { project: HostProject; initialUrl?: string; sessionId?: string }) {
   useMobileTheme();
   const copy = useCopy();
   const client = useHostClient();
   const active = useHostReadActive();
   const machine = useActiveMachine();
+  const composerTransfer = useComposerTransfer();
+  const [comment, setComment] = useState(""); const [drafting, setDrafting] = useState(false);
+  const [selectionError, setSelectionError] = useState<unknown>(); const [preparedSelection, setPreparedSelection] = useState<string>();
   const action = useAsyncAction<BrowserState>();
   const [browserState, setState] = useState<BrowserState>();
   const [browserFrame, setFrame] = useState<BrowserState>();
@@ -58,15 +65,17 @@ export function BrowserScreen({ project }: { project: HostProject }) {
   const pending = useRef<Promise<BrowserState | undefined> | undefined>(undefined);
   const cleanup = useRef(Promise.resolve());
   const [actionScope, setActionScope] = useState<BrowserScope>();
+  const [review, setReview] = useState<{ scope: BrowserScope; method: "browser.setup" | "browser.close" }>();
   const current = (scope: BrowserScope) => scope.active && scopeRef.current === scope &&
     useMachines.getState().activeId === scope.client.machine.id;
   // Hide previous-host data on the render that changes scope, before effects run.
   const activeScope = scopeRef.current;
-  const visibleScope = activeScope?.client === client && activeScope?.projectId === project.id
+  const visibleScope = activeScope?.client === client && activeScope?.projectId === project.id && activeScope?.sessionId === sessionId
     ? activeScope : undefined;
   const state = visibleScope ? browserState : undefined;
   const frame = visibleScope ? browserFrame : undefined;
   const apply = (scope: BrowserScope, value: BrowserState) => {
+    if (value.selection) value = { ...value, selection: readBrowserCapture(value.selection, { projectId: scope.projectId, sessionId: scope.sessionId ?? "", navigationId: value.navigationId ?? "" }) };
     const previousNavigation = scope.latest?.navigationId;
     scope.latest = value;
     if (!current(scope)) return;
@@ -81,7 +90,8 @@ export function BrowserScreen({ project }: { project: HostProject }) {
     const execution = action.run(async () => {
       try {
         const result = await scope.client.request<BrowserState>(method, {
-          projectId: scope.projectId, leaseId: scope.latest?.leaseId, ...params,
+          projectId: scope.projectId, ...(scope.sessionId ? { sessionId: scope.sessionId } : {}), leaseId: scope.latest?.leaseId,
+          ...(method.startsWith("browser.annotation.") ? { navigationId: scope.latest?.navigationId, annotationId: scope.latest?.annotationId } : {}), ...params,
         }, { retry: false });
         apply(scope, result);
         if (capture && result.open && current(scope)) {
@@ -90,6 +100,10 @@ export function BrowserScreen({ project }: { project: HostProject }) {
         }
         return result;
       } catch (error) {
+        if (current(scope) && method.startsWith("browser.annotation.")) {
+          scope.latest = scope.latest ? { ...scope.latest, selection: undefined } : undefined;
+          setState(scope.latest); setFrame(undefined);
+        }
         if (current(scope) && ["auth", "identity"].includes((error as { kind?: string })?.kind ?? "")) {
           scope.latest = undefined;
           setState(undefined);
@@ -104,21 +118,24 @@ export function BrowserScreen({ project }: { project: HostProject }) {
     void execution.finally(() => {
       if (pending.current === execution) pending.current = undefined;
     });
+    return execution;
   };
   const request = (method: string, params: Record<string, unknown> = {}, capture = false) => {
     const scope = scopeRef.current;
-    if (scope?.client === client && scope?.projectId === project.id) requestForScope(scope, method, params, capture);
+    if (scope?.client === client && scope?.projectId === project.id && scope.sessionId === sessionId) requestForScope(scope, method, params, capture);
   };
   useEffect(() => {
     setState(undefined);
     setFrame(undefined);
-    setUrl("");
+    setUrl(initialUrl);
     setText("");
+    setComment(""); setSelectionError(undefined); setPreparedSelection(undefined); setDrafting(false);
+    setReview(undefined);
     if (!client) {
       scopeRef.current = undefined;
       return;
     }
-    const scope: BrowserScope = { client, projectId: project.id, active: true };
+    const scope: BrowserScope = { client, projectId: project.id, sessionId, consumedSelections: new Set(), active: true };
     const hostKey = client.machine.environmentId || client.endpoint;
     scopeRef.current = scope;
     // A replaced screen releases its lease before this scope reads or claims it.
@@ -135,7 +152,7 @@ export function BrowserScreen({ project }: { project: HostProject }) {
         if (browserCleanupByHost.get(hostKey) === released) browserCleanupByHost.delete(hostKey);
       });
     };
-  }, [client, project.id]);
+  }, [client, project.id, initialUrl, sessionId]);
   useEffect(() => {
     if (!active || !state?.controlling) return;
     const currentTime = Date.now();
@@ -151,6 +168,22 @@ export function BrowserScreen({ project }: { project: HostProject }) {
   const input = (params: Record<string, unknown>) => {
     if (controlling && !busy) request("browser.input", params, true);
   };
+  const prepareSelection = async () => {
+    const scope = visibleScope; const selection = state?.selection;
+    if (!scope || !current(scope) || !scope.sessionId || !selection || !composerTransfer || !controlling || busy || drafting || scope.consumedSelections.has(selection.id)) return;
+    setDrafting(true); setSelectionError(undefined);
+    try {
+      const checked = await requestForScope(scope, "browser.annotation.read");
+      if (!checked?.selection) return;
+      const capture = readBrowserCapture(checked.selection, { projectId: scope.projectId, sessionId: scope.sessionId, navigationId: selection.navigationId });
+      const isCurrent = () => current(scope) && scope.latest?.navigationId === capture.navigationId && scope.latest.selection?.id === capture.id && capture.id === selection.id &&
+        !!scope.latest.controlling && (scope.latest.leaseExpiresAt ?? 0) > Date.now() && !scope.consumedSelections.has(capture.id);
+      if (!isCurrent()) throw new Error("The browser selection changed. Select the element again.");
+      composerTransfer.transfer({ machineId: scope.client.machine.id, sessionId: scope.sessionId, text: "", browserCapture: { capture, comment, isCurrent } });
+      scope.consumedSelections.add(capture.id); setPreparedSelection(capture.id); setComment("");
+    } catch (error) { if (current(scope)) setSelectionError(error); }
+    finally { if (current(scope)) setDrafting(false); }
+  };
   return (
     <Screen
       title={copy("Tarayıcı", "Browser")}
@@ -164,6 +197,19 @@ export function BrowserScreen({ project }: { project: HostProject }) {
       <Stack.Screen options={{ title: copy("Tarayıcı", "Browser") }} />
       <Body muted style={uiStyles.caption}>{copy("Bu tarayıcı seçili bilgisayarda paylaşılır.", "This browser is shared on the selected computer.")}</Body>
       {state?.runtime && !state.runtime.installed ? <Notice message={copy("Tarayıcıyı önce bilgisayardaki bycoda’dan kur.", "Set up the browser in bycoda on your computer first.")} /> : null}
+      {state?.runtime && !state.runtime.installed && machine?.capabilities?.includes("browser.shared.setup") ? <Button
+        label={copy("Tarayıcı araçlarını kur", "Set up browser tools")} disabled={busy || state.runtime.installing}
+        onPress={() => { if (visibleScope && current(visibleScope)) setReview({ scope: visibleScope, method: "browser.setup" }); }} /> : null}
+      {review && review.scope === visibleScope ? <><Notice tone="warning" message={review.method === "browser.setup"
+        ? copy("Bu işlem seçili bilgisayara tarayıcı araçlarını indirip kurar.", "This downloads and installs browser tools on the selected computer.")
+        : copy("Bu bilgisayardaki ortak tarayıcı kapanır; diğer kullanıcıların görünümü de etkilenir.", "The shared browser on this computer will close, affecting other viewers.")} />
+        <ConfirmationCard message={copy("Seçili bilgisayarda incelenen işlemi uygula?", "Apply the reviewed action on the selected computer?")}
+          confirmLabel={copy("Onayla", "Confirm")} cancelLabel={copy("Vazgeç", "Cancel")} busy={busy}
+          disabled={!current(review.scope) || (review.method === "browser.close" && !controlling)}
+          onCancel={() => setReview(undefined)} onConfirm={() => {
+            if (!current(review.scope) || busy || (review.method === "browser.close" && !controlling)) return;
+            requestForScope(review.scope, review.method); setReview(undefined);
+          }} /></> : null}
       <Row>
         <Button label={controlling ? copy("Kontrolü bırak", "Release control") : copy("Kontrolü al", "Take control")} tone={controlling ? "quiet" : "primary"} disabled={busy || !state || state.runtime?.installed === false} onPress={() => request(controlling ? "browser.release" : "browser.claim")} />
       </Row>
@@ -179,9 +225,26 @@ export function BrowserScreen({ project }: { project: HostProject }) {
         width={frame.width ?? 1280}
         height={frame.height ?? 720}
         disabled={!controlling || busy}
-        onPress={(point) => input({ kind: "click", ...point })}
+        onPress={(point) => state?.annotationId && sessionId && machine?.capabilities?.includes("browser.annotation") ? request("browser.annotation.select", point) : input({ kind: "click", ...point })}
       /> : null}
+      {sessionId && machine?.capabilities?.includes("browser.annotation") && state?.open ? <Button label={state.annotationId ? copy("Seçimi iptal et", "Cancel selection") : copy("Öğe seç", "Select element")}
+        disabled={!controlling || busy || !frame?.navigationId || frame.navigationId !== state.navigationId}
+        onPress={() => request(state.annotationId ? "browser.annotation.cancel" : "browser.annotation.start")} /> : null}
+      {sessionId && state?.selection ? <Disclosure label={copy("Seçilen öğe", "Selected element")}>
+        <Notice message={copy("Sayfa verileri güvenilmeyen içeriktir; seçmek veya okumak mesaj göndermez.", "Page data is untrusted content; selecting or reading it does not send a message.")} />
+        <Body mono>{state.selection.element.tag} · {state.selection.element.selector}</Body>
+        <Body>{state.selection.element.text}</Body><Body mono>{state.selection.pageUrl}</Body>
+        {state.selection.limitations.map((limitation, index) => <Body muted key={index}>{limitation}</Body>)}
+        <Field label={copy("Yorum", "Comment")} value={comment} onChangeText={setComment} multiline maxLength={4000} editable={!drafting && !busy} />
+        <Button tone="quiet" label={copy("Seçimi doğrula", "Verify selection")} disabled={!controlling || busy} onPress={() => request("browser.annotation.read")} />
+        <Button label={copy("Seçimi taslağa ekle", "Add selection to draft")} disabled={!composerTransfer || !controlling || busy || drafting || preparedSelection === state.selection.id || !machine?.capabilities?.includes("attachments.ownership.v1")}
+          onPress={() => { void prepareSelection(); }} />
+        {preparedSelection === state.selection.id ? <Notice message={copy("Seçim taslağa eklendi.", "Selection added to draft.")} /> : null}
+        <ErrorText error={selectionError} />
+      </Disclosure> : null}
       {state?.open ? <>
+        <Button tone="quiet" label={copy("Tarayıcıyı kapat", "Close browser")} disabled={!controlling || busy}
+          onPress={() => { if (visibleScope && current(visibleScope)) setReview({ scope: visibleScope, method: "browser.close" }); }} />
         <Row>
           <IconButton label={copy("Yukarı kaydır", "Scroll up")} disabled={!controlling || busy} onPress={() => input({ kind: "scroll", y: -500 })}><ArrowUp size={20} color={colors.muted} /></IconButton>
           <IconButton label={copy("Aşağı kaydır", "Scroll down")} disabled={!controlling || busy} onPress={() => input({ kind: "scroll", y: 500 })}><ArrowDown size={20} color={colors.muted} /></IconButton>

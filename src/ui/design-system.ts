@@ -5,7 +5,7 @@ import type { ButtonProps } from "./component-props";
 const toneClasses = {
   default: "border-transparent bg-fill",
   primary: "border-transparent bg-primary",
-  secondary: "border-transparent bg-info-surface",
+  secondary: "border-transparent bg-transparent active:bg-fill",
   quiet: "border-transparent bg-transparent",
   info: "border-transparent bg-info-surface",
   success: "border-transparent bg-success-surface",
@@ -19,9 +19,9 @@ export function controlClasses({
   selected,
 }: Pick<ButtonProps, "tone" | "density" | "selected"> = {}) {
   return cn(
-    "min-h-control min-w-touch flex-row items-center justify-center gap-ui-sm rounded-full border-0 shadow-none px-ui-lg py-ui-sm web:focus-visible:outline-2 web:focus-visible:outline-ring",
+    "min-h-control min-w-touch flex-row items-center justify-center gap-ui-xs rounded-control border-0 shadow-none px-ui-md py-ui-xs web:focus-visible:outline-2 web:focus-visible:outline-ring",
     toneClasses[tone],
-    density === "compact" && "px-ui-md",
+    density === "compact" && "px-ui-sm",
     selected && "bg-info-surface",
   );
 }

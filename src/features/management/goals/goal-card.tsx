@@ -16,6 +16,7 @@ export function GoalCard({
   busy,
   editorOpen,
   onReplan,
+  onSettings,
   approve,
   cancel,
   remove,
@@ -27,6 +28,12 @@ export function GoalCard({
   const canDelete = ["done", "cancelled"].includes(goal.status);
   // Revise and cancel are secondary to approval, so they move into the overflow menu.
   const menu = [
+    canCancel && {
+      key: "settings",
+      label: copy("Hedef ayarları", "Goal settings"),
+      disabled: busy || editorOpen,
+      onPress: () => onSettings(goal),
+    },
     ["awaiting-approval", "blocked"].includes(goal.status) && {
       key: "revise",
       label: copy("Planı değiştir", "Revise plan"),

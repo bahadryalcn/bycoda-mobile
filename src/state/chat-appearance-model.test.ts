@@ -22,7 +22,7 @@ describe("chat text preference normalization", () => {
     expect(decodeChatTextSize("small")).toBe("compact");
   });
 
-  it("falls back to compact for missing, malformed or invalid stored data", () => {
+  it("defaults to standard for missing, malformed or invalid stored data", () => {
     for (const raw of [
       null,
       "",
@@ -33,7 +33,7 @@ describe("chat text preference normalization", () => {
       '{"textSize":99}',
       '{"textSize":"huge"}',
     ]) {
-      expect(decodeChatTextSize(raw)).toBe("compact");
+      expect(decodeChatTextSize(raw)).toBe("standard");
     }
   });
 

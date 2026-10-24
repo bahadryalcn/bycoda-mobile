@@ -6,7 +6,7 @@
     "version": "0.1.0",
     "icon": "../public/brand/bycoda/mobile-icon.png",
     "orientation": "default",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#000000",
     "ios": {
       "supportsTablet": true,
@@ -109,6 +109,10 @@
       "typedRoutes": true
     },
     "extra": {
+      "reporting": {
+        "provider": "firebase",
+        "endpoint": null
+      },
       "engagement": {
         "iosAppStoreUrl": null,
         "androidPlayStoreUrl": null,

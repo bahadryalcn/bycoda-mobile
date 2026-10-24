@@ -14,24 +14,15 @@ import { Scope } from "./shared/scope";
 import { Status } from "./shared/status";
 import { ProviderInboxScreen } from "../inbox/provider-inbox-screen";
 import { View } from "react-native";
+import { inboxRelativeTime } from "./inbox-time";
 
 const attentionStatuses = ["review", "awaiting-approval", "blocked", "failed"];
 
 /** Mail-style relative time ("5 dk", "2 sa", "dün") in the app language. */
-function relativeTime(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return "";
+function relativeTime(value: number, copy: ReturnType<typeof useCopy>) {
   const language = useMachines.getState().language;
   const locale = language === "system" ? resolveLocale(getLocales().map((entry) => entry.languageTag)) : language;
-  const seconds = Math.round((value - Date.now()) / 1000);
-  const units: [Intl.RelativeTimeFormatUnit, number][] = [
-    ["day", 86400],
-    ["hour", 3600],
-    ["minute", 60],
-  ];
-  const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto", style: "narrow" });
-  for (const [unit, size] of units)
-    if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit);
-  return format.format(0, "minute");
+  return inboxRelativeTime(value, locale, copy);
 }
 
 export function InboxScreen() {
@@ -129,7 +120,7 @@ function AttentionInboxScreen() {
             trailing={
               <View style={{ alignItems: "flex-end", gap: space.xxs }}>
                 <Body muted style={uiStyles.caption}>
-                  {relativeTime(item.updatedAt)}
+                  {relativeTime(item.updatedAt, copy)}
                 </Body>
                 {item.status ? <Status value={item.status} /> : null}
               </View>

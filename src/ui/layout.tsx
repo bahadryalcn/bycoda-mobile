@@ -10,6 +10,7 @@ import { colors, metrics, space } from "./tokens";
 import { uiStyles } from "./styles";
 import { Card as PanelCard } from "panelui-native/components/card";
 import { surfaceClasses } from "./design-system";
+import { usePullRefresh } from "./use-pull-refresh";
 import type { PropsWithChildren, ReactNode } from "react";
 import type { ScreenProps, ContainerProps, SectionProps, CodePanelProps } from "./component-props";
 
@@ -115,6 +116,8 @@ export function Screen({
   const insets = useSafeAreaInsets();
   const chrome = use(ScreenChrome);
   const heading = <ScreenHeading title={title} subtitle={subtitle} actions={actions} />;
+  const onRefresh = refresh ?? query?.refetch;
+  const pullRefresh = usePullRefresh(onRefresh);
   if (!scroll)
     return (
       <View style={uiStyles.screen}>
@@ -122,7 +125,6 @@ export function Screen({
         {children}
       </View>
     );
-  const onRefresh = refresh ?? query?.refetch;
   return (
     <KeyboardAwareScrollView
       bottomOffset={space.lg}
@@ -135,10 +137,8 @@ export function Screen({
         onRefresh ? (
           <RefreshControl
             tintColor={colors.muted}
-            refreshing={!!query?.isFetching && !query.isPending}
-            onRefresh={() => {
-              onRefresh();
-            }}
+            refreshing={pullRefresh.refreshing}
+            onRefresh={pullRefresh.onRefresh}
           />
         ) : undefined
       }

@@ -71,28 +71,30 @@ export async function readSession(
   client: Requester,
   sessionId: string,
   known?: HostSession,
-  options: RequestOptions = {},
+  options: RequestOptions & { waitMs?: number } = {},
 ): Promise<HostSession> {
-  if (!known) return readTail(client, sessionId, options);
+  const { waitMs, ...requestOptions } = options;
+  if (!known) return readTail(client, sessionId, requestOptions);
   const response = await client.request<SessionSyncResponse>(
     "sessions.sync",
     {
       sessionId,
       revision: known.revision,
       preview: true,
+      ...(waitMs ? { waitMs } : {}),
       ...(known.history
         ? { partial: true, loadedBlockIds: known.session.blocks.map((block) => block.id) }
         : {}),
     },
-    options,
+    requestOptions,
   );
-  const sync = await resolveSync(client, sessionId, response, options);
+  const sync = await resolveSync(client, sessionId, response, requestOptions);
   if (sync.kind !== "unchanged" && sync.value.session.id !== sessionId)
     throw new Error("Transcript identity changed.");
   try {
     return applySessionSync(known, sync);
   } catch {
-    return readTail(client, sessionId, options);
+    return readTail(client, sessionId, requestOptions);
   }
 }
 

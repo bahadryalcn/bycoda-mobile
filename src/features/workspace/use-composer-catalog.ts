@@ -2,7 +2,7 @@ import { visibleMediaData } from "@/ui/media-policy";
 import { hostKey } from "@/state/host-request";
 import { useQuery } from "@tanstack/react-query";
 import { useHostClient, useHostReadActive } from "@/state/queries";
-import { mergeCliCommands } from "../../../../src/features/skills/model/cliCommands";
+import { mergeCliCommands } from "../../../../src/features/skills/model/cliCommandCatalog";
 import type { HostSession } from "@/remote/types";
 import type { DiscoveredSkill, ClaudeCommandEntry } from "../../../../src/platform/tauri/fs";
 import { mentionLabel, type ComposerToken } from "./composer-tokens";

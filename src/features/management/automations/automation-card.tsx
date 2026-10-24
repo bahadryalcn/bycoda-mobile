@@ -28,6 +28,15 @@ export function AutomationCard({
   // Edit, history, last session and delete are secondary; they live in the overflow menu.
   const menu = [
     {
+      key: "toggle",
+      label: item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable"),
+      disabled: busy || editorOpen,
+      onPress: () =>
+        save.mutate({
+          automation: { ...item, enabled: !item.enabled, expectedConfiguration: item },
+        }),
+    },
+    {
       key: "edit",
       label: copy("Düzenle", "Edit"),
       disabled: busy || editorOpen,
@@ -73,38 +82,36 @@ export function AutomationCard({
   return (
     <RecordCard
       title={item.name}
-      status={<Status value={item.enabled ? item.lastRunStatus ?? "idle" : "paused"} />}
-      metadata={scheduleLabel(item, copy) + " · " + copy("Sonraki", "Next") + ": " + stamp(item.nextRunAt)}
+      status={<Status value={item.enabled ? (item.lastRunStatus ?? "idle") : "paused"} />}
+      metadata={
+        scheduleLabel(item, copy) + " · " + copy("Sonraki", "Next") + ": " + stamp(item.nextRunAt)
+      }
       menu={<ActionMenu label={copy("Otomasyon işlemleri", "Automation actions")} actions={menu} />}
       footer={
-      <Row>
-        <Button
-          label={copy("Şimdi çalıştır", "Run now")}
-          tone="primary"
-          disabled={busy}
-          onPress={() =>
-            confirmAction(
-              copy("Şimdi çalıştır", "Run now"),
-              copy(
-                "Ajan bu bilgisayarda otomasyon talimatlarını çalıştıracak.",
-                "The agent will run this automation on the computer.",
-              ),
-              copy("Çalıştır", "Run"),
-              () => run.mutate({ automationId: item.id }),
-            )
-          }
-        />
-        <Button
-          label={item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable")}
-          tone="quiet"
-          disabled={busy}
-          onPress={() => save.mutate({ automation: { ...item, enabled: !item.enabled } })}
-        />
-      </Row>
+        <Row>
+          <Button
+            label={copy("Şimdi çalıştır", "Run now")}
+            tone="quiet"
+            disabled={busy}
+            onPress={() =>
+              confirmAction(
+                copy("Şimdi çalıştır", "Run now"),
+                copy(
+                  "Ajan bu bilgisayarda otomasyon talimatlarını çalıştıracak.",
+                  "The agent will run this automation on the computer.",
+                ),
+                copy("Çalıştır", "Run"),
+                () => run.mutate({ automationId: item.id }),
+              )
+            }
+          />
+        </Row>
       }
-      details={<>
-        <Body>{item.prompt}</Body>
-      </>}
+      details={
+        <>
+          <Body>{item.prompt}</Body>
+        </>
+      }
     >
       <ErrorText error={item.lastRunError} />
 

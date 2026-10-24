@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Linking } from "react-native";
+import { randomUUID } from "expo-crypto";
+import { reportSender } from "./report-config";
 import { Stack as RouterStack, router } from "expo-router";
 import { assertAppAccess } from "@/state/security";
 import { useCopy } from "@/ui/copy";
@@ -23,7 +24,6 @@ import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
 import { uiStyles } from "@/ui/styles";
 import { colors, space } from "@/ui/tokens";
-import { supportEmail } from "../legal/legal-content";
 import {
   maxReportDescription,
   maxReportExcerpt,
@@ -32,7 +32,7 @@ import {
 } from "./report-model";
 import {
   discardContentReport,
-  openContentReportEmail,
+  sendContentReport,
   updateContentReport,
   useContentReport,
 } from "./report-store";
@@ -47,9 +47,9 @@ function tile(Glyph: typeof Flag, color: string) {
 
 export function ContentReportScreen() {
   const copy = useCopy();
-  const { draft, status, error } = useContentReport();
+  const { draft, status, error, receiptId } = useContentReport();
   const [discarding, setDiscarding] = useState(false);
-  const busy = status === "opening";
+  const busy = status === "sending";
   const validation = reportDraftError(draft);
   const visibleError = error ?? ((draft.description.length > 0 || draft.consent) ? validation : null);
   const reasonLabels = {
@@ -65,16 +65,16 @@ export function ContentReportScreen() {
       "Write a description and check the text limits.",
     ),
     consent: copy(
-      "E-posta taslağına hangi bilgilerin ekleneceğini onayla.",
-      "Confirm which information will be added to the email draft.",
+      "Gönderilecek bilgileri onayla.",
+      "Confirm the information to send.",
     ),
-    recipient: copy(
-      "Destek e-posta adresi kullanılamıyor.",
-      "The support email address is unavailable.",
+    service: copy(
+      "Bildirim hizmeti henüz kullanılamıyor. Taslağın uygulama açıkken korunur.",
+      "Reporting is not available yet. Your draft is kept while this app remains running.",
     ),
-    open: copy(
-      "E-posta uygulaması açılamadı. Destek adresini kopyalayabilirsin; taslağın bu uygulama açıkken korunur.",
-      "The email app could not be opened. You can copy the support address; your draft is kept while this app remains running.",
+    send: copy(
+      "Teslim doğrulanamadı. Taslağın korundu; yeniden deneyebilirsin.",
+      "Delivery could not be confirmed. Your draft is kept; you can retry.",
     ),
   };
   return (
@@ -116,8 +116,8 @@ export function ContentReportScreen() {
         />
         <ToggleField
           label={copy(
-            "Yukarıda seçtiğim bilgilerin destek e-posta taslağına eklenmesini onaylıyorum.",
-            "I agree to add the information I selected above to the support email draft.",
+            "Seçtiğim bilgilerin incelenmek üzere bycoda’ya gönderilmesini onaylıyorum.",
+            "I agree to send the selected information to bycoda for review.",
           )}
           value={draft.consent}
           disabled={busy}
@@ -144,11 +144,10 @@ export function ContentReportScreen() {
       <Disclosure label={copy("Bildirim ve gizlilik", "Reporting & privacy")}>
         <Body>
           {copy(
-            "Bildirimi destek e-postası olarak hazırlayabilirsin. E-posta uygulamanda alıcıyı ve içeriği kontrol edip kendin gönder. bycoda otomatik mesaj veya günlük göndermez.",
-            "Prepare a report as a support email. Review its recipient and content in your email app and send it yourself. bycoda does not automatically send messages or logs.",
+            "Yalnızca açıklaman ve eklemeyi seçtiğin alıntı incelenmek üzere bycoda’ya gönderilir.",
+            "Only your description and any excerpt you choose are sent to bycoda for review.",
           )}
         </Body>
-        <Body selectable>{supportEmail}</Body>
         <Body muted>
           {copy(
             "Erişim anahtarlarını, eşleştirme kodlarını, özel proje dosyalarını veya kişisel bilgileri ekleme. Bu taslak yalnızca bellekte tutulur; uygulama sonlandırılırsa kaybolur.",
@@ -162,26 +161,27 @@ export function ContentReportScreen() {
         />
       </Disclosure>
       <ErrorText error={visibleError} message={visibleError ? errorLabels[visibleError] : undefined} />
-      {status === "opened" ? (
+      {!reportSender ? <Body accessibilityLiveRegion="polite">{errorLabels.service}</Body> : null}
+      {status === "sent" ? (
         <Body accessibilityLiveRegion="polite">
           {copy(
-            "E-posta uygulaması açıldı; bildirimi orada inceleyip gönder. bycoda gönderildiğini veya teslim edildiğini doğrulamaz.",
-            "The email app opened; review and send your report there. bycoda cannot confirm sending or delivery.",
+            "Bildirim alındı.",
+            "Report received.",
           )}
         </Body>
       ) : null}
+      {receiptId ? <Body selectable muted>{receiptId}</Body> : null}
       <Button
-        label={copy("E-posta ile bildir", "Report by email")}
+        label={status === "sent" ? copy("Gönderildi", "Sent") : copy("Gönder", "Send")}
         tone="primary"
         fullWidth
         busy={busy}
-        disabled={!!reportDraftError(draft)}
+        disabled={!reportSender || status === "sent" || !!reportDraftError(draft)}
         onPress={() => {
-          void openContentReportEmail({
-            recipient: supportEmail,
-            turkish: copy("tr", "en") === "tr",
+          void sendContentReport({
+            sender: reportSender,
+            newRequestId: randomUUID,
             assertAccess: assertAppAccess,
-            openURL: (url) => Linking.openURL(url),
           }).catch(() => {});
         }}
       />

@@ -108,6 +108,7 @@ export type ErrorNoticeProps = PropsWithChildren<{
   onRetry?: () => void;
   retryLabel?: string;
   message?: string;
+  action?: { label: string; onPress: () => void };
 }>;
 
 export type NoticeProps = PropsWithChildren<{
@@ -115,6 +116,7 @@ export type NoticeProps = PropsWithChildren<{
   message: string;
   onRetry?: () => void;
   retryLabel?: string;
+  action?: { label: string; onPress: () => void };
 }>;
 
 export type QueryStateProps = {
@@ -124,6 +126,7 @@ export type QueryStateProps = {
   emptyDetail?: string;
   emptyAction?: EmptyProps["action"];
   loading?: "list" | "content" | "inline" | "none";
+  loadingLabel?: string;
 };
 
 export type MutationStateProps = {

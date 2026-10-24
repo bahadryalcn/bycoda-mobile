@@ -7,7 +7,6 @@ import { colors, radii } from "./tokens";
 const providers = {
   codex: require("../../../src/assets/providers/codex.svg"),
   claude: require("../../../src/assets/providers/claude.svg"),
-  gemini: require("../../../src/assets/providers/gemini.svg"),
 };
 const mark = require("../../../public/brand/bycoda/mark-white.png");
 

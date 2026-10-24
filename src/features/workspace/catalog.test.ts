@@ -22,7 +22,7 @@ const catalog: HostModelCatalog = {
     ],
     claude: [],
   },
-  errors: { gemini: "Sign in required" },
+  errors: { cursor: "Sign in required" },
 };
 
 describe("host model selection", () => {
@@ -30,11 +30,11 @@ describe("host model selection", () => {
     expect(catalogProvider(["claude", "codex"], catalog)).toBe("codex");
     expect(catalogProvider(["claude", "codex"], catalog, "claude")).toBe("claude");
     expect(catalogProvider([], catalog)).toBeUndefined();
-    expect(catalogProvider(["codex"], catalog, "gemini")).toBe("codex");
+    expect(catalogProvider(["codex"], catalog, "cursor")).toBe("codex");
   });
   it("infers provider choices from the real catalog when an older connection has no descriptor", () => {
-    expect(catalogProviders(undefined, catalog)).toEqual(["codex", "claude", "gemini"]);
-    expect(catalogProviders([], catalog)).toEqual(["codex", "claude", "gemini"]);
+    expect(catalogProviders(undefined, catalog)).toEqual(["codex", "claude", "cursor"]);
+    expect(catalogProviders([], catalog)).toEqual(["codex", "claude", "cursor"]);
     expect(catalogProviders(undefined, undefined)).toEqual([]);
   });
 
@@ -47,4 +47,9 @@ describe("host model selection", () => {
     expect(modelDefaults(catalogModel(catalog, "codex", "removed"))).toEqual({ effort: "high" });
     expect(catalogModel(catalog, "claude", "current")).toBeUndefined();
   });
+});
+
+
+it("keeps advertised pending discovery providers available before their model result arrives", () => {
+  expect(catalogProviders(undefined, { models: {}, errors: {}, pending: ["codex"] })).toEqual(["codex"]);
 });

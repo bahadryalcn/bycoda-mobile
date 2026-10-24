@@ -1,9 +1,48 @@
 import type { HostProjectDirectory, HostSessionSummary } from "@/domain/types";
+import { isRunningSession } from "./activity-model";
 
 export type SessionLayout = NonNullable<HostProjectDirectory["projects"][number]["sessionLayout"]>;
 export type SessionDirectoryRow =
   | { kind: "folder"; key: string; folder: SessionLayout["folders"][number]; depth: number; count: number; expanded: boolean }
   | { kind: "session"; key: string; session: HostSessionSummary; depth: number };
+
+/** Searching an organization label includes its descendants without rewriting membership. */
+export function filterSessionDirectory(
+  sessions: readonly HostSessionSummary[],
+  layout: SessionLayout | undefined,
+  search: string,
+  projectLabel = "",
+): HostSessionSummary[] {
+  const query = search.trim().toLocaleLowerCase();
+  if (!query || projectLabel.toLocaleLowerCase().includes(query)) return [...sessions];
+  const matching = new Set<string>();
+  const folders = new Map(layout?.folders.map((folder) => [folder.id, folder]));
+  const children = new Map<string, SessionLayout["folders"]>();
+  for (const folder of folders.values()) {
+    if (folder.parentId) children.set(folder.parentId, [...(children.get(folder.parentId) ?? []), folder]);
+  }
+  const visited = new Set<string>();
+  const include = (folder: SessionLayout["folders"][number]) => {
+    if (visited.has(folder.id)) return;
+    visited.add(folder.id);
+    for (const id of folder.sessionIds) matching.add(id);
+    for (const child of children.get(folder.id) ?? []) include(child);
+  };
+  for (const folder of folders.values()) {
+    const path: string[] = [];
+    const ancestors = new Set<string>();
+    let current: typeof folder | undefined = folder;
+    while (current && !ancestors.has(current.id)) {
+      ancestors.add(current.id);
+      path.unshift(current.name);
+      current = current.parentId ? folders.get(current.parentId) : undefined;
+    }
+    if (path.join(" / ").toLocaleLowerCase().includes(query)) include(folder);
+  }
+  return sessions.filter((session) => matching.has(session.id) ||
+    `${session.title} ${session.harness} ${session.branch ?? ""} ${session.model ?? ""}`
+      .toLocaleLowerCase().includes(query));
+}
 
 export function toggleSessionDirectoryFolder(
   collapsed: Readonly<Record<string, boolean>>,
@@ -17,7 +56,7 @@ export function toggleSessionDirectoryFolder(
 }
 
 function status(a: HostSessionSummary, b: HostSessionSummary) {
-  return Number(!!b.needsInput) - Number(!!a.needsInput) || Number(b.status === "running") - Number(a.status === "running");
+  return Number(isRunningSession(b)) - Number(isRunningSession(a)) || Number(!!b.needsInput) - Number(!!a.needsInput);
 }
 function recency(a: HostSessionSummary, b: HostSessionSummary) {
   return Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
@@ -34,6 +73,12 @@ export function sessionDirectoryRows(
   sessions: readonly HostSessionSummary[], layout?: SessionLayout,
   collapsed: Readonly<Record<string, boolean>> = {}, searching = false,
 ): SessionDirectoryRow[] {
+  // Active work stays visible above manual folders, including collapsed ones.
+  const running = sessions.filter(isRunningSession);
+  if (running.length && layout) return [
+    ...ordered(running).map((session): SessionDirectoryRow => ({ kind: "session", key: `session:${session.id}`, session, depth: 0 })),
+    ...sessionDirectoryRows(sessions.filter((session) => !isRunningSession(session)), layout, collapsed, searching),
+  ];
   if (!layout) return [...sessions].sort(recency).sort(status).map((session) => ({ kind: "session", key: `session:${session.id}`, session, depth: 0 }));
   const byId = new Map(sessions.map((session) => [session.id, session]));
   const folders = new Map(layout.folders.map((folder) => [folder.id, folder]));

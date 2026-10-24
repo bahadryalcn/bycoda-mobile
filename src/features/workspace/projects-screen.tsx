@@ -3,7 +3,6 @@ import { useMemo, useState } from "react";
 import { FlatList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, Stack } from "expo-router";
-import FolderGit2 from "lucide-react-native/icons/folder-git-2";
 import Plus from "lucide-react-native/icons/plus";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import { useHostMutation } from "@/state/queries";
@@ -44,9 +43,16 @@ import { useProjectDirectory } from "./use-project-directory";
 import { ProjectFolderBrowser } from "./project-folder-browser";
 import { WelcomeScreen } from "../connections/welcome-screen";
 import { DisclosureChevron } from "@/ui/disclosure-motion";
-import { IconTile } from "@/ui/icon-tile";
-import { GroupedListRow, rowInset, StatusDot } from "./shared";
-import { projectDirectoryPreferences, useProjectDirectoryPreferences, type ProjectDirectoryPreferences } from "@/state/project-directory-preferences";
+import { ProjectIcon } from "@/ui/project-icon";
+import { ActivityBadge } from "@/ui/activity-badge";
+import { useProjectActivity } from "./use-project-activity";
+import { runningProjectCounts } from "./activity-model";
+import { GroupedListRow, rowInset } from "./shared";
+import {
+  projectDirectoryPreferences,
+  useProjectDirectoryPreferences,
+  type ProjectDirectoryPreferences,
+} from "@/state/project-directory-preferences";
 
 export function ProjectsScreen() {
   useMobileTheme();
@@ -57,19 +63,39 @@ export function ProjectsScreen() {
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
-  const { preferences, hydrated, error: preferencesError } = useProjectDirectoryPreferences(machine?.id);
+  const [refreshing, setRefreshing] = useState(false);
+  const {
+    preferences,
+    hydrated,
+    error: preferencesError,
+  } = useProjectDirectoryPreferences(machine?.id);
   const [openingId, setOpeningId] = useState<string>();
-  const { query, projects, groups, grouped, privacyPending } = useProjectDirectory();
+  const { query, projects, groups, grouped, directoryReady, privacyUnavailable, readiness, isProjectVisible } = useProjectDirectory();
+  const activity = useProjectActivity();
+  const running = useMemo(
+    () => runningProjectCounts(activity.directory),
+    [activity.directory],
+  );
   const open = useHostMutation<HostProject>("projects.open", ["projects"]);
   const showGroups = preferences.view === "grouped" && groups.length > 0;
   const sections = useMemo(() => {
-    const ordered = sortDirectoryProjects(projects, preferences);
-    const sections = directorySections(ordered, groups, search, showGroups ? preferences.collapsed : Object.fromEntries(groups.map((group) => [group.id, false])));
+    const ordered = sortDirectoryProjects(projects, preferences, running);
+    const sections = directorySections(
+      ordered,
+      groups,
+      search,
+      showGroups
+        ? preferences.collapsed
+        : Object.fromEntries(groups.map((group) => [group.id, false])),
+      running,
+    );
     if (showGroups) return sections;
-    const matchingIds = new Set(sections.flatMap((section) => section.data.map((project) => project.id)));
+    const matchingIds = new Set(
+      sections.flatMap((section) => section.data.map((project) => project.id)),
+    );
     const data = ordered.filter((project) => matchingIds.has(project.id));
-    return [{ key: "", count: data.length, total: data.length, expanded: true, data }];
-  }, [projects, groups, search, preferences, showGroups]);
+    return [{ key: "", count: data.length, total: data.length, running: 0, expanded: true, data }];
+  }, [projects, groups, search, preferences, showGroups, running]);
   const rows = useMemo(() => directoryRows(sections, showGroups), [sections, showGroups]);
   const updatePreferences = (patch: Partial<ProjectDirectoryPreferences>) => {
     if (machine) void projectDirectoryPreferences.getState().update(machine.id, patch);
@@ -81,8 +107,9 @@ export function ProjectsScreen() {
     router.push({ pathname: "/project/[id]", params: { id: project.id, machineId: machine.id } });
   };
   const choose = (project: DirectoryProject) => {
-    if (open.isPending) return;
+    if (open.isPending || !directoryReady) return;
     if (project.registered) {
+      if (!isProjectVisible(project.id)) return;
       go(project);
       return;
     }
@@ -101,23 +128,31 @@ export function ProjectsScreen() {
     <View style={{ gap: space.md, paddingBottom: space.xs }}>
       <LargeTitle
         title={copy("Projeler", "Projects")}
-        subtitle={search.trim() ? copy("{p0} sonuç", "{p0} results", { p0: matching }) : copy("{p0} proje", "{p0} projects", { p0: projects.length })}
+        subtitle={
+          !directoryReady ? undefined : search.trim()
+            ? copy("{p0} sonuç", "{p0} results", { p0: matching })
+            : copy("{p0} proje", "{p0} projects", { p0: projects.length })
+        }
         actions={
           <>
-          <Button label={copy("Görünüm", "View")} tone="quiet" density="compact" onPress={() => setOptionsOpen(true)}>
-            <SlidersHorizontal size={16} color={colors.accent} />
-          </Button>
-          <IconButton
-            label={copy("Proje ekle", "Add project")}
-            tone="primary"
-            disabled={open.isPending}
-            onPress={() => {
-              open.reset();
-              setAdding(true);
-            }}
-          >
-            <Plus size={20} strokeWidth={2.4} color={colors.primaryText} />
-          </IconButton>
+            <IconButton
+              label={copy("Proje görünümü", "Project view")}
+              tone="default"
+              onPress={() => setOptionsOpen(true)}
+            >
+              <SlidersHorizontal size={20} color={colors.muted} />
+            </IconButton>
+            <IconButton
+              label={copy("Proje ekle", "Add project")}
+              tone="default"
+              disabled={open.isPending || !directoryReady}
+              onPress={() => {
+                open.reset();
+                setAdding(true);
+              }}
+            >
+              <Plus size={20} strokeWidth={2} color={colors.accent} />
+            </IconButton>
           </>
         }
       />
@@ -127,8 +162,16 @@ export function ProjectsScreen() {
         onChangeText={setSearch}
         placeholder={copy("Proje veya grup ara", "Search project or group")}
       />
-      {preferencesError ? <Notice tone="warning" message={copy("Liste tercihi kaydedilemedi. Yeniden seçerek dene.", "The list preference could not be saved. Select it again to retry.")} /> : null}
-      {!grouped ? (
+      {preferencesError ? (
+        <Notice
+          tone="warning"
+          message={copy(
+            "Liste tercihi kaydedilemedi. Yeniden seçerek dene.",
+            "The list preference could not be saved. Select it again to retry.",
+          )}
+        />
+      ) : null}
+      {!grouped && machine.capabilities && directoryReady ? (
         <Notice
           tone="info"
           message={copy(
@@ -139,7 +182,15 @@ export function ProjectsScreen() {
           retryLabel={copy("Bilgisayarlar", "Computers")}
         />
       ) : null}
-      {privacyPending ? (
+      {readiness === "waiting" ? (
+        <Notice
+          tone="info"
+          message={copy("Bağlantı bekleniyor. Bağlantı geri geldiğinde yeniden denenecek.", "Waiting for a connection. Loading will resume when it returns.")}
+          onRetry={() => router.push("/machines")}
+          retryLabel={copy("Bağlantıları yönet", "Manage connections")}
+        />
+      ) : null}
+      {privacyUnavailable ? (
         <Notice
           tone="info"
           message={copy(
@@ -152,10 +203,11 @@ export function ProjectsScreen() {
           retryLabel={copy("Yenile", "Refresh")}
         />
       ) : null}
-      <MutationState mutation={open} />
+      {!adding ? <MutationState mutation={open} /> : null}
       <QueryState
         query={query}
-        empty={!privacyPending && !matching}
+        loadingLabel={copy("Projeler yükleniyor…", "Loading projects…")}
+        empty={directoryReady && !matching}
         emptyTitle={
           search
             ? copy("Aramana uyan proje yok.", "No projects match your search.")
@@ -184,65 +236,106 @@ export function ProjectsScreen() {
             const expanded = section.expanded;
             const name = section.group?.name ?? copy("Grupsuz", "Ungrouped");
             const count = section.count;
-            return (
-                <PressableCard
-                  label={`${name}. ${count}`}
-                  expanded={expanded}
-                  onPress={() => {
-                    if (search.trim()) return;
-                    updatePreferences({ collapsed: { ...preferences.collapsed, [section.key]: expanded } });
-                  }}
+            if (search.trim())
+              return (
+                <View
+                  accessible
+                  accessibilityRole="header"
+                  accessibilityLabel={`${name}. ${count}${section.running ? `. ${section.running} ${copy("Çalışıyor", "Running")}` : ""}`}
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    borderWidth: 0,
-                    borderTopStartRadius: 0,
-                    borderTopEndRadius: 0,
-                    borderBottomStartRadius: 0,
-                    borderBottomEndRadius: 0,
-                    backgroundColor: colors.background,
                     paddingHorizontal: space.lg,
                     paddingVertical: space.sm,
                     marginTop: space.sm,
                     gap: space.sm,
                   }}
                 >
-                  <StatusDot color={section.group?.color ?? colors.accent} size={8} />
-                  <Body
-                    style={[uiStyles.grow, uiStyles.sectionLabel, { paddingHorizontal: 0 }]}
-                  >
+                  <ProjectIcon
+                    group
+                    size={16}
+                    appearance={section.group?.appearance ?? { color: section.group?.color }}
+                  />
+                  <Body style={[uiStyles.grow, uiStyles.sectionLabel, { paddingHorizontal: 0 }]}>
                     {name}
                   </Body>
-                  <Body muted style={uiStyles.caption}>{count}</Body>
-                  <DisclosureChevron expanded={expanded} color={colors.tertiary} size={14} />
-                </PressableCard>
+                  <Body muted style={uiStyles.caption}>
+                    {count}
+                  </Body>
+                  {section.running > 0 ? <ActivityBadge count={section.running} /> : null}
+                </View>
+              );
+            return (
+              <PressableCard
+                label={`${name}. ${count}${section.running ? `. ${section.running} ${copy("Çalışıyor", "Running")}` : ""}`}
+                expanded={expanded}
+                onPress={() => {
+                  updatePreferences({
+                    collapsed: { ...preferences.collapsed, [section.key]: expanded },
+                  });
+                }}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  borderWidth: 0,
+                  borderTopStartRadius: 0,
+                  borderTopEndRadius: 0,
+                  borderBottomStartRadius: 0,
+                  borderBottomEndRadius: 0,
+                  backgroundColor: colors.background,
+                  paddingHorizontal: space.lg,
+                  paddingVertical: space.sm,
+                  marginTop: space.sm,
+                  gap: space.sm,
+                }}
+              >
+                <ProjectIcon
+                  group
+                  size={16}
+                  appearance={section.group?.appearance ?? { color: section.group?.color }}
+                />
+                <Body style={[uiStyles.grow, uiStyles.sectionLabel, { paddingHorizontal: 0 }]}>
+                  {name}
+                </Body>
+                <Body muted style={uiStyles.caption}>
+                  {count}
+                </Body>
+                {section.running > 0 ? <ActivityBadge count={section.running} /> : null}
+                <DisclosureChevron expanded={expanded} color={colors.tertiary} size={14} />
+              </PressableCard>
             );
           }
           const project = item.project;
-          const color = item.group?.color ?? colors.accent;
           return (
             <View style={{ marginBottom: item.last ? space.sm : 0 }}>
               <GroupedListRow first={item.first} last={item.last} inset={rowInset}>
-                    <NavigationRow
-                      variant="plain"
-                      label={project.name}
-                      detail={projectPathLabel(project.cwd, preferences.fullPaths)}
-                      detailLines={preferences.fullPaths ? 0 : 1}
-                      detailSelectable={false}
-                      detailEllipsizeMode="middle"
-                      disabled={open.isPending}
-                      icon={
-                        <IconTile color={color}>
-                          <FolderGit2 size={18} strokeWidth={2} color={color} />
-                        </IconTile>
-                      }
-                      trailing={
-                        openingId === project.id ? (
-                          <Badge label={copy("Açılıyor…", "Opening…")} tone="info" />
-                        ) : undefined
-                      }
-                      onPress={() => choose(project)}
-                    />
+                <NavigationRow
+                  variant="plain"
+                  label={project.name}
+                  accessibilityLabel={[
+                    project.name,
+                    projectPathLabel(project.cwd, preferences.fullPaths),
+                    running[project.id]
+                      ? `${running[project.id]} ${copy("Çalışıyor", "Running")}`
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(". ")}
+                  detail={projectPathLabel(project.cwd, preferences.fullPaths)}
+                  detailLines={preferences.fullPaths ? 0 : 1}
+                  detailSelectable={false}
+                  detailEllipsizeMode="middle"
+                  disabled={open.isPending}
+                  icon={<ProjectIcon appearance={project.appearance} />}
+                  trailing={
+                    openingId === project.id ? (
+                      <Badge label={copy("Açılıyor…", "Opening…")} tone="info" />
+                    ) : running[project.id] ? (
+                      <ActivityBadge count={running[project.id]} />
+                    ) : undefined
+                  }
+                  onPress={() => choose(project)}
+                />
               </GroupedListRow>
             </View>
           );
@@ -251,31 +344,78 @@ export function ProjectsScreen() {
         maxToRenderPerBatch={12}
         windowSize={7}
         removeClippedSubviews={false}
-        refreshing={!!query.isFetching && !query.isPending}
+        refreshing={refreshing}
         onRefresh={() => {
-          void query.refetch();
+          if (refreshing) return;
+          setRefreshing(true);
+          return activity.refetch().finally(() => setRefreshing(false));
         }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         automaticallyAdjustKeyboardInsets={false}
         contentInsetAdjustmentBehavior="never"
       />
-      <Sheet visible={optionsOpen} title={copy("Proje görünümü", "Project view")} size="compact" onClose={() => setOptionsOpen(false)}>
-        <SegmentedControl label={copy("Görünüm", "View")} value={preferences.view} disabled={!hydrated}
-          options={[{ value: "grouped", label: copy("Gruplar", "Groups") }, { value: "list", label: copy("Liste", "List") }]}
-          onChange={(view) => updatePreferences({ view })} />
-        <SelectField label={copy("Sıralama", "Sort order")} value={preferences.sort} disabled={!hydrated}
+      <Sheet
+        visible={optionsOpen}
+        title={copy("Proje görünümü", "Project view")}
+        size="compact"
+        onClose={() => setOptionsOpen(false)}
+      >
+        <SegmentedControl
+          label={copy("Görünüm", "View")}
+          value={preferences.view}
+          disabled={!hydrated}
+          options={[
+            { value: "grouped", label: copy("Gruplar", "Groups") },
+            { value: "list", label: copy("Liste", "List") },
+          ]}
+          onChange={(view) => updatePreferences({ view })}
+        />
+        <SelectField
+          label={copy("Sıralama", "Sort order")}
+          value={preferences.sort}
+          disabled={!hydrated}
           options={[
             { value: "desktop", label: copy("Bilgisayardaki sıra", "Computer order") },
             { value: "name", label: copy("Ada göre", "Name") },
             { value: "recent", label: copy("Son açılan", "Recently opened") },
-          ]} onChange={(sort) => updatePreferences({ sort })} />
-        <ToggleField label={copy("Tam klasör yolları", "Full folder paths")} value={preferences.fullPaths} disabled={!hydrated}
-          onChange={(fullPaths) => updatePreferences({ fullPaths })} />
-        {showGroups ? <Row>
-          <Button label={copy("Tümünü aç", "Expand all")} tone="quiet" onPress={() => updatePreferences({ collapsed: Object.fromEntries([...groups.map((group) => [group.id, false]), ["", false]]) })} />
-          <Button label={copy("Tümünü daralt", "Collapse all")} tone="quiet" onPress={() => updatePreferences({ collapsed: Object.fromEntries([...groups.map((group) => [group.id, true]), ["", true]]) })} />
-        </Row> : null}
+          ]}
+          onChange={(sort) => updatePreferences({ sort })}
+        />
+        <ToggleField
+          label={copy("Tam klasör yolları", "Full folder paths")}
+          value={preferences.fullPaths}
+          disabled={!hydrated}
+          onChange={(fullPaths) => updatePreferences({ fullPaths })}
+        />
+        {showGroups ? (
+          <Row>
+            <Button
+              label={copy("Tümünü aç", "Expand all")}
+              tone="quiet"
+              onPress={() =>
+                updatePreferences({
+                  collapsed: Object.fromEntries([
+                    ...groups.map((group) => [group.id, false]),
+                    ["", false],
+                  ]),
+                })
+              }
+            />
+            <Button
+              label={copy("Tümünü daralt", "Collapse all")}
+              tone="quiet"
+              onPress={() =>
+                updatePreferences({
+                  collapsed: Object.fromEntries([
+                    ...groups.map((group) => [group.id, true]),
+                    ["", true],
+                  ]),
+                })
+              }
+            />
+          </Row>
+        ) : null}
       </Sheet>
       {adding ? (
         <ProjectFolderBrowser

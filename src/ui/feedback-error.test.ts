@@ -22,15 +22,16 @@ vi.mock("panelui-native/components/spinner", () => ({ Spinner: "Spinner" }));
 vi.mock("panelui-native/components/alert", () => ({ Alert: "Alert" }));
 vi.mock("panelui-native/components/skeleton", () => ({ Skeleton: "Skeleton" }));
 vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark" }) }));
-vi.mock("./tokens", () => ({ colors: {}, semanticColors: {}, space: {} }));
+vi.mock("./tokens", () => ({ colors: {}, semanticColors: {}, space: {}, radii: {} }));
 vi.mock("lucide-react-native/icons/info", () => ({ default: "Info" }));
 vi.mock("lucide-react-native/icons/circle-check", () => ({ default: "CircleCheck" }));
 vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: "TriangleAlert" }));
 vi.mock("lucide-react-native/icons/circle-alert", () => ({ default: "CircleAlert" }));
 
 import { RemoteHostError } from "../remote/host-error";
-import { ErrorText, ErrorNotice } from "./feedback";
+import { ErrorText, ErrorNotice, Skeleton, Loading } from "./feedback";
 import { QueryState } from "./query-state";
+import { router } from "expo-router";
 
 describe("shared feedback error rendering", () => {
   beforeEach(() => {
@@ -75,19 +76,33 @@ describe("shared feedback error rendering", () => {
     const error = new RemoteHostError("machine", "identity", "Identity changed.");
     const query = QueryState({ query: { error, status: "error", refetch: vi.fn() } });
     expect(query?.props.onRetry).toBeUndefined();
-    expect(query?.props.children).toBeTruthy();
+    const notice = ErrorNotice(query!.props);
+    expect(notice?.props.action.label).toBe("Bağlantıları yönet");
+    notice?.props.action.onPress();
+    expect(router.push).toHaveBeenCalledWith("/machines");
   });
 
   it("does not turn a local validation kind into a connection-repair action", () => {
     const error = Object.assign(new Error("Name is not allowed."), { kind: "auth" });
     const query = QueryState({ query: { error, status: "error", refetch: vi.fn() } });
     expect(query?.props.onRetry).toBeTypeOf("function");
-    expect(query?.props.children).toBeNull();
+    expect(query?.props.action).toBeUndefined();
     expect(ErrorNotice(query!.props)?.props.message).toBe(error.message);
   });
 
   it("renders no alert without an error", () => {
     expect(ErrorText({ error: null })).toBeNull();
     expect(ErrorNotice({ error: undefined })).toBeNull();
+  });
+
+  it("announces the actual loading dependency with the shared skeleton or inline loader", () => {
+    const query = { status: "pending" as const, fetchStatus: "fetching" as const, isPending: true };
+    const skeleton = QueryState({ query, loadingLabel: "Verifying project…" });
+    expect(skeleton?.type).toBe(Skeleton);
+    expect(skeleton?.props.label).toBe("Verifying project…");
+    expect(Skeleton(skeleton!.props).props.accessibilityLabel).toBe("Verifying project…");
+    const inline = QueryState({ query, loading: "inline", loadingLabel: "Loading sessions…" });
+    expect(inline?.type).toBe(Loading);
+    expect(Loading(inline!.props).props.accessibilityLabel).toBe("Loading sessions…");
   });
 });

@@ -43,10 +43,29 @@ export async function loadProjectMedia(context: MessageContext, rawPath: string,
   const path = resolveMediaPath(context, rawPath);
   if (!path) throw new Error("This file is outside the selected project.");
   const name = path.split("/").pop() || "file";
-  const encoded = await context.client.request<string>("workspace.run", { command: "read_binary_file", args: { path } }, { signal });
-  if (typeof encoded !== "string" || encoded.length > Math.ceil(MAX_MEDIA_BYTES / 3) * 4) throw new Error("File exceeds the preview limit.");
+  const info = await context.client.request<{ size: number; version: string }>("workspace.run", { command: "read_file_info", args: { path } }, { signal });
+  if (!Number.isSafeInteger(info?.size) || info.size < 0 || info.size > MAX_MEDIA_BYTES || typeof info.version !== "string" || !info.version || info.version.length > 256) throw new Error("File exceeds the preview limit.");
   const file = destination(context, name);
   file.create();
-  file.write(base64ToBytes(encoded));
-  return { uri: file.uri, name, mimeType: mediaMime(name) };
+  const handle = file.open();
+  try {
+    let offset = 0;
+    while (offset < info.size) {
+      if (signal?.aborted) throw new Error("Preview cancelled.");
+      const length = Math.min(256 * 1024, info.size - offset);
+      const chunk = await context.client.request<{ data: string; offset: number; length: number }>("workspace.run", {
+        command: "read_file_chunk", args: { path, version: info.version, offset, length },
+      }, { signal });
+      if (signal?.aborted) throw new Error("Preview cancelled.");
+      if (!chunk || typeof chunk.data !== "string" || chunk.data.length > Math.ceil(length / 3) * 4 || chunk.offset !== offset || !Number.isSafeInteger(chunk.length) || chunk.length < 1 || chunk.length > length) throw new Error("Invalid file chunk.");
+      const bytes = base64ToBytes(chunk.data);
+      if (bytes.length !== chunk.length) throw new Error("Incomplete file chunk.");
+      handle.writeBytes(bytes);
+      offset += bytes.length;
+    }
+    const final = await context.client.request<{ size: number; version: string }>("workspace.run", { command: "read_file_info", args: { path } }, { signal });
+    if (signal?.aborted || final?.size !== info.size || final.version !== info.version) throw new Error("The file changed while downloading. Try again.");
+    return { uri: file.uri, name, mimeType: mediaMime(name) };
+  } catch (error) { handle.close(); if (file.exists) file.delete(); throw error; }
+  finally { try { handle.close(); } catch {} }
 }

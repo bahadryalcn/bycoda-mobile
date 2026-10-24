@@ -34,7 +34,7 @@ import { useCopy } from "@/ui/copy";
 import { haptic } from "@/ui/motion";
 import { IconTile } from "@/ui/icon-tile";
 import type { FileEntry } from "./wire";
-import { FileEditor } from "./file-editor";
+import { FileReview } from "./file-review";
 import { FileActions } from "./file-actions";
 import { filesReducer } from "./workspace-state";
 import { defaultFileListOptions, fileParentPath, visibleFileEntries } from "./file-list-model";
@@ -86,7 +86,11 @@ export function ProjectFiles({
   const create = useHostMutation<string>("files.create", ["files", projectId]);
   const fileAction = useHostMutation<unknown>("workspace.run", ["files", projectId]);
   const browse = () => dispatch({ type: "view", view: { kind: "browse" } });
-  const openFile = (file: string) => dispatch({ type: "view", view: { kind: "edit", path: file } });
+  const openFile = (file: string, line?: number) =>
+    dispatch({
+      type: "view",
+      view: { kind: "edit", path: file, ...(line !== undefined ? { line } : {}) },
+    });
   const navigate = useCallback((nextPath: string) => {
     setQuery("");
     dispatch({ type: "search-mode", mode: "names" });
@@ -112,12 +116,13 @@ export function ProjectFiles({
   );
   if (selected)
     return (
-      <FileEditor
+      <FileReview
         key={selected}
         projectId={projectId}
         cwd={cwd}
         root={root}
         path={selected}
+        initialLine={state.view.kind === "edit" ? state.view.line : undefined}
         onBack={() => {
           browse();
           onClearInitialPath?.();
@@ -346,7 +351,7 @@ export function ProjectFiles({
                       <FileText size={18} strokeWidth={2} color={colors.muted} />
                     </IconTile>
                   }
-                  onPress={() => openFile(item.match.relative)}
+                  onPress={() => openFile(item.match.relative, item.match.line)}
                 />
               </GroupedListRow>
             );
@@ -360,8 +365,8 @@ export function ProjectFiles({
                     label={entry.name}
                     icon={
                       entry.isDir ? (
-                        <IconTile color={colors.accent}>
-                          <Folder size={18} strokeWidth={2} color={colors.accent} />
+                        <IconTile>
+                          <Folder size={18} strokeWidth={2} color={colors.muted} />
                         </IconTile>
                       ) : (
                         <IconTile>

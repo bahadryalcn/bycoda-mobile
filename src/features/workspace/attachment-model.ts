@@ -1,10 +1,15 @@
 export const ATTACHMENT_LIMIT = 20 * 1024 * 1024;
 export const ATTACHMENT_COUNT = 20;
-export type StagedAttachment = { id: string; name: string; mimeType: string; kind: "image" | "audio" | "file"; size: number; uri: string; claimId?: string };
+import { parseBrowserAnnotation, type BrowserAnnotationAttachment } from "../../../../src/shared/lib/browserAnnotation";
+export type StagedAttachment = { id: string; name: string; mimeType: string; kind: "image" | "audio" | "file"; size: number; uri: string; claimId?: string; browserAnnotation?: BrowserAnnotationAttachment };
 export type TransferState = { status: "uploading" | "ready" | "error"; progress: number; error?: unknown };
-export function validateAttachment(file: Pick<StagedAttachment, "size" | "name">) {
+export function validateAttachment(file: Pick<StagedAttachment, "size" | "name"> & Partial<Pick<StagedAttachment, "browserAnnotation" | "kind" | "mimeType">>) {
   if (!Number.isSafeInteger(file.size) || file.size < 0 || file.size > ATTACHMENT_LIMIT) throw new Error("Each attachment must be at most 20 MiB.");
   if (!file.name.trim() || file.name.length > 255) throw new Error("The attachment name is invalid.");
+  if (file.browserAnnotation !== undefined) {
+    if (file.kind !== "image" || file.mimeType !== "image/jpeg" || file.size > 2 * 1024 * 1024) throw new Error("Invalid browser attachment");
+    parseBrowserAnnotation(file.browserAnnotation);
+  }
 }
 export function bytesToBase64(bytes: Uint8Array): string {
   let text = "";
@@ -14,5 +19,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
 export function base64ToBytes(text: string): Uint8Array {
   if (text.length % 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(text)) throw new Error("Invalid attachment data.");
   const decoded = atob(text);
-  return Uint8Array.from(decoded, (value) => value.charCodeAt(0));
+  const bytes = new Uint8Array(decoded.length);
+  for (let index = 0; index < decoded.length; index++) bytes[index] = decoded.charCodeAt(index);
+  return bytes;
 }

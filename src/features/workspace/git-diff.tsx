@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useMemo } from "react";
+import { useState } from "react";
 import { View } from "react-native";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import { Body, Button, Card, IconButton, QueryState, Row, Separator } from "@/ui/primitives";
@@ -7,10 +7,11 @@ import { colors, space, fontSize } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { workspaceStyles } from "./shared";
-import { diffLines } from "./wire";
+import { useDiffPreview } from "./use-diff-preview";
 import { useGitDiff } from "./git-queries";
 import type { GitDiffPanelProps } from "./git-types";
 import { GitDiffViewer } from "./git-diff-viewer";
+import { GitSelective } from "./git-selective";
 
 export function GitDiffPanel({
   scope,
@@ -20,15 +21,16 @@ export function GitDiffPanel({
   onOpenFile,
   onStage,
   onDiscard,
+  onReviewBusy,
+  onReviewExit,
   children,
 }: GitDiffPanelProps) {
   useMobileTheme();
   const copy = useCopy();
   const diff = useGitDiff(scope, selection);
-  const preview = useMemo(
-    () => (diff.data ? diffLines(diff.data.original, diff.data.current) : null),
-    [diff.data],
-  );
+  const [selecting, setSelecting] = useState(false);
+  const textDiff = diff.data && !diff.data.binary && !diff.data.tooLarge ? diff.data : undefined;
+  const preview = useDiffPreview(textDiff?.original, textDiff?.current);
   return (
     <Card>
       <View style={workspaceStyles.stack}>
@@ -69,7 +71,9 @@ export function GitDiffPanel({
           />
         </Row>
         <Separator />
+        {!selection.staged && diff.data && preview && !diff.data.binary && !diff.data.tooLarge && !preview.tooLarge && !preview.truncated && !preview.unchanged ? <Button tone="quiet" label={copy("Değişiklikleri seç", "Select changes")} disabled={busy} onPress={() => setSelecting(true)} /> : null}
         <QueryState query={diff} />
+        {textDiff && !preview ? <Body muted>{copy("Diff hesaplanıyor…", "Computing diff…")}</Body> : null}
         {!diff.data ? null : diff.data.binary || diff.data.tooLarge || preview?.tooLarge ? (
           <Body muted>
             {copy(
@@ -106,6 +110,7 @@ export function GitDiffPanel({
           />
         ) : null}
         {children}
+        <GitSelective key={`${scope.projectId}:${scope.cwd}:${scope.root}:${selection.path}`} scope={scope} path={selection.path} visible={selecting} busy={busy} onBusyChange={onReviewBusy ?? (() => {})} onClose={() => setSelecting(false)} onChanged={() => { void diff.refetch(); }} registerExit={onReviewExit} />
       </View>
     </Card>
   );

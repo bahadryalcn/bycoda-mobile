@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { BackHandler, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
@@ -25,6 +25,10 @@ import { GitBranchesPanel } from "./git-branches";
 import { GitCommitPanel } from "./git-changes";
 import { GitConfirmationCard } from "./git-confirmation";
 import { GitDiffPanel } from "./git-diff";
+import { GitHistoryPanel } from "./git-history";
+import { GitStashes } from "./git-stashes";
+import { GitManagement } from "./git-management";
+import { ConflictReview } from "./conflict-review";
 import { GitFileRow } from "./git-file-row";
 import { useGitIndex } from "./git-queries";
 import {
@@ -71,11 +75,20 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
   const [fileQuery, setFileQuery] = useState("");
   const [fileFilter, setFileFilter] = useState<GitListFilter>("all");
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [stashesOpen, setStashesOpen] = useState(false);
+  const [managementOpen, setManagementOpen] = useState(false);
+  const [conflictReview, setConflictReview] = useState<string | null>(null);
+  const gitReviewExit = useRef<(() => void) | null>(null);
+  const managementExit = useRef<(() => void) | null>(null);
+  const [stashWrite, setStashWrite] = useState<{ scope: string; busy: boolean } | null>(null);
+  const stashExit = useRef<(() => void) | null>(null);
+  const stashScope = JSON.stringify([machine?.id, projectId, cwd, root]);
   const draftKey = "bycoda.mobile.git-draft.v1:" + JSON.stringify([machine?.id, projectId, cwd]);
   const draft = useLocalDraft<GitDraft>(draftKey, decodeDraft, encodeDraft);
   const { message = "", branchName = "" } = draft.value ?? {};
   const hasDraft = !!(message || branchName);
-  const busy = actions.busy;
+  const busy = actions.busy || (stashWrite?.scope === stashScope && stashWrite.busy);
   const data = index.data;
   const branchPicker = state.view.kind === "branches";
   const selection = state.view.kind === "diff" ? state.view.selection : null;
@@ -103,8 +116,24 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
       unregister?.();
     };
   }, [busy, hasDraft, draft.ready, draft.error, persist, draftKey, onDraftGuard, copy]);
-  usePreventRemove(busy || hasDraft || !!selection, ({ data: event }) => {
+  usePreventRemove(busy || hasDraft || !!selection || historyOpen || stashesOpen || managementOpen || !!conflictReview, ({ data: event }) => {
     if (busy) return;
+    if (historyOpen) {
+      setHistoryOpen(false);
+      return;
+    }
+    if (stashesOpen) {
+      stashExit.current?.();
+      return;
+    }
+    if (managementOpen) {
+      managementExit.current?.();
+      return;
+    }
+    if (gitReviewExit.current) {
+      gitReviewExit.current();
+      return;
+    }
     if (selection) {
       showFiles();
       return;
@@ -117,7 +146,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
     useCallback(() => {
       if (!selection || state.confirmation) return;
       const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-        if (!busy) showFiles();
+        if (!busy) { if (gitReviewExit.current) gitReviewExit.current(); else showFiles(); }
         return true;
       });
       return () => subscription.remove();
@@ -228,7 +257,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
           void (draft.ready ? persist() : draft.load()).catch(() => {});
         }}
       />
-      {!draft.ready && !draft.error ? (
+      {!draft.ready && !draft.error && !index.isPending ? (
         <QueryState query={{ isPending: true }} loading="inline" />
       ) : null}
     </>
@@ -238,6 +267,18 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
     () => (selection ? [] : gitListRows(data?.files ?? [], fileQuery, fileFilter)),
     [data?.files, fileQuery, fileFilter, selection],
   );
+  if (historyOpen && root)
+    return <GitHistoryPanel key={JSON.stringify([machine?.id, projectId, cwd, root])} scope={scope} onClose={() => setHistoryOpen(false)} />;
+  if (stashesOpen && root)
+    return <GitStashes key={stashScope} scope={scope} onClose={() => setStashesOpen(false)}
+      onBusyChange={(value) => setStashWrite((current) => !value && current?.scope !== stashScope ? current : { scope: stashScope, busy: value })}
+      registerExit={(exit) => { stashExit.current = exit; }} />;
+  if (managementOpen && root)
+    return <GitManagement key={stashScope} scope={scope} onClose={() => setManagementOpen(false)}
+      onBusyChange={(value) => setStashWrite((current) => !value && current?.scope !== stashScope ? current : { scope: stashScope, busy: value })}
+      registerExit={(exit) => { managementExit.current = exit; }} />;
+  if (conflictReview && root)
+    return <ConflictReview key={`${stashScope}:${conflictReview}`} scope={scope} path={conflictReview} onClose={() => setConflictReview(null)} onChanged={() => { void index.refetch(); }} onBusyChange={(value) => setStashWrite((current) => !value && current?.scope !== stashScope ? current : { scope: stashScope, busy: value })} registerExit={(exit) => { gitReviewExit.current = exit; }} />;
   if (!data || data.repository === false)
     return (
       <Screen>
@@ -250,10 +291,12 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
         {draftStatus}
         <Button
           label={copy("Yenile", "Refresh")}
+          tone="quiet"
+          disabled={index.isFetching}
           onPress={() => {
             void index.refetch();
           }}
-          busy={index.isFetching}
+          busy={index.isFetching && index.data !== undefined}
         />
       </Screen>
     );
@@ -277,6 +320,14 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
               onOpenActions={() => setActionsOpen(true)}
             />
             <QueryState query={index} />
+            <Button
+              label={copy("Commit geçmişi", "Commit history")}
+              tone="quiet"
+              disabled={busy || !root}
+              onPress={() => setHistoryOpen(true)}
+            />
+            <Button label={copy("Stash’ler", "Stashes")} tone="quiet" disabled={busy || !root} onPress={() => setStashesOpen(true)} />
+            <Button label={copy("Git yönetimi", "Git management")} tone="quiet" disabled={busy || !root} onPress={() => setManagementOpen(true)} />
             {draftStatus}
             {!state.confirmation && !branchPicker ? feedback : null}
             {!selection ? (
@@ -346,6 +397,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
                 busy={busy}
                 onOpenFile={onOpenFile}
                 onStageFile={(path) => runFileAction("stage", path)}
+                onReview={(path) => setConflictReview(path)}
                 onChoose={choose}
               />
             ) : null}
@@ -360,6 +412,8 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
                   runFileAction(selected.staged ? "unstage" : "stage", selected.path)
                 }
                 onDiscard={(path) => choose({ kind: "discard", path })}
+                onReviewBusy={(value) => setStashWrite((current) => !value && current?.scope !== stashScope ? current : { scope: stashScope, busy: value })}
+                onReviewExit={(exit) => { gitReviewExit.current = exit; }}
               />
             ) : !rows.length && filtered ? (
               <Empty

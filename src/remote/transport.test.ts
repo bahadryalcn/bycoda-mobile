@@ -238,6 +238,36 @@ describe("mobile host transport", () => {
     expect(writeFetcher).toHaveBeenCalledTimes(1);
   });
 
+  it.each([502, 503, 504])("retries a non-host HTTP %i response only for a known read", async (status) => {
+    const read = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("<html>unavailable</html>", { status }))
+      .mockResolvedValueOnce(result([]));
+    await expect(new HostTransport(machine, async () => credential, read).request("projects.list"))
+      .resolves.toEqual([]);
+    expect(read).toHaveBeenCalledTimes(2);
+    const write = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("<html>unavailable</html>", { status }));
+    await expect(new HostTransport(machine, async () => credential, write).request("commands.dispatch", {}, { retry: true }))
+      .rejects.toMatchObject({ kind: "network", uncertain: true });
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([200, 400, 403, 500])("does not disguise a malformed HTTP %i response as a transient gateway", async (status) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response("invalid", { status }));
+    await expect(new HostTransport(machine, async () => credential, fetcher).request("projects.list"))
+      .rejects.toMatchObject({ kind: "protocol", uncertain: false });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves structured host errors even when the HTTP status is transient", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(
+      JSON.stringify({ error: "Host identity changed" }), { status: 503 },
+    ));
+    await expect(new HostTransport(machine, async () => credential, fetcher).request("projects.list"))
+      .rejects.toMatchObject({ kind: "identity" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("does not retry revoked credentials and stops before sending missing credentials", async () => {
     const fetcher = vi
       .fn<typeof fetch>()

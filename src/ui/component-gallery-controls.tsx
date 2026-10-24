@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Image as NativeImage } from "react-native";
+import { Image as NativeImage, Platform } from "react-native";
 import { Checkbox } from "panelui-native/components/checkbox";
 import { RadioGroup } from "panelui-native/components/radio-group";
 import { Slider } from "panelui-native/components/slider";
@@ -37,9 +37,13 @@ export function GalleryControls() {
   const [mediaOpen, setMediaOpen] = useState(false);
   const [selectedTools, setSelectedTools] = useState(["notes", "tasks"]);
   const [saved, setSaved] = useState(false);
+  const [noticeRecovered, setNoticeRecovered] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const required = submitted && !title.trim();
-  const mediaUri = NativeImage.resolveAssetSource(require("../../../public/brand/bycoda/logo-horizontal-white.png")).uri;
+  const mediaAsset = require("../../../public/brand/bycoda/logo-horizontal-white.png");
+  const mediaUri = Platform.OS === "web"
+    ? (typeof mediaAsset === "string" ? mediaAsset : mediaAsset.uri)
+    : NativeImage.resolveAssetSource(mediaAsset).uri;
   return (
     <Stack>
       <Card>
@@ -137,6 +141,16 @@ export function GalleryControls() {
           <Badge label={copy("Başarısız", "Failed")} tone="danger" />
         </Row>
         <Notice tone="warning" message={copy("Onay gerekiyor.", "Approval is required.")} />
+        <Notice tone={noticeRecovered ? "success" : "danger"}
+          message={noticeRecovered ? copy("Hazır", "Ready") : copy(
+            "Bilgiler yenilenemedi. Son alınan bilgiler gösteriliyor.",
+            "Could not refresh. Showing the last received information.",
+          )}
+          onRetry={noticeRecovered ? undefined : () => setNoticeRecovered(true)} />
+        <Notice message={copy(
+          "Bağlantı bekleniyor. Bağlantı geri geldiğinde yeniden denenecek.",
+          "Waiting for a connection. Loading will resume when it returns.",
+        )} />
         <Loading label={copy("Yükleniyor…", "Loading…")} />
         <Skeleton variant="content" />
         <Accordion>

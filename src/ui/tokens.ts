@@ -110,7 +110,7 @@ export const fontSize = {
   caption: 12,
   badge: 12,
   small: 13,
-  control: 16,
+  control: 14,
   body: 16,
   input: 17,
   title: 17,

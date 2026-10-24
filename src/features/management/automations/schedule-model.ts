@@ -1,4 +1,14 @@
 import type { HostAutomationInput } from "@/domain/types";
+import type { AutomationSchedulePreview } from "@/remote/types";
+
+export function validSchedulePreview(value: unknown): value is AutomationSchedulePreview {
+  if (!value || typeof value !== "object") return false;
+  const { nextRunAt, timeZone } = value as Record<string, unknown>;
+  return typeof nextRunAt === "number" && Number.isFinite(nextRunAt) && nextRunAt > 0 &&
+    Number.isFinite(new Date(nextRunAt).getTime()) &&
+    typeof timeZone === "string" && timeZone.length > 0 && timeZone.length <= 100 &&
+    !/[\u0000-\u001f\u007f]/.test(timeZone);
+}
 
 export function integerInRange(value: string, min: number, max: number) {
   return /^\d+$/.test(value) && Number(value) >= min && Number(value) <= max;

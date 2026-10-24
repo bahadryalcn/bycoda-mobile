@@ -19,12 +19,15 @@ export const ChatMessage = React.memo(function ChatMessage({
     <Message
       {...props}
       align={role === "user" ? "end" : "start"}
-      style={[{ flexDirection: "column", alignItems: "stretch", width: role === "user" ? "auto" : "100%" }, style]}
+      style={[{ flexDirection: "column", alignItems: "stretch", minWidth: 0, maxWidth: "100%", width: role === "user" ? "auto" : "100%" }, style]}
     />
   );
 });
 
-export const ChatMessageContent = Message.Content;
+/** Bubble width belongs to ChatMessage; rich content must stretch within that budget. */
+export function ChatMessageContent({ style, ...props }: React.ComponentProps<typeof Message.Content>) {
+  return <Message.Content {...props} style={[{ minWidth: 0, maxWidth: "100%", width: "100%", alignItems: "stretch" }, style]} />;
+}
 export function ChatResponse({
   message,
   context,

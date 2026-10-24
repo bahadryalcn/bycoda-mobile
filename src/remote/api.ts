@@ -8,6 +8,7 @@ import { HostTransport } from "./transport";
 import { createWorkspaceApi } from "./services/workspace-api";
 import { createSessionsApi } from "./services/sessions-api";
 import { createWorkApi } from "./services/work-api";
+import { createCrewsApi } from "./services/crews-api";
 import { createContentApi } from "./services/content-api";
 import { createSocialApi } from "./services/social-api";
 import { createTerminalApi } from "./services/terminal-api";
@@ -25,6 +26,7 @@ export function createRemoteApi(transport: HostTransport) {
     ...createWorkspaceApi(request),
     ...createSessionsApi(transport, request),
     ...createWorkApi(request),
+    ...createCrewsApi(request),
     ...createContentApi(request),
     ...createSocialApi(transport, request),
     ...createTerminalApi(request),

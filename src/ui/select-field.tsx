@@ -15,7 +15,7 @@ import { Input } from "./fields";
 import { useCopy } from "./copy";
 import { colors, metrics, opacity, radii, semanticColors, space } from "./tokens";
 import { uiStyles } from "./styles";
-import { filterSelection, toggleSelection, type SelectionOption } from "./selection-model";
+import { filterSelection, selectionLabels, toggleSelection, type SelectionOption } from "./selection-model";
 
 type CommonProps<T extends string> = {
   label: string;
@@ -81,7 +81,7 @@ function SelectionField<T extends string>({
     () => new Map(options.map((option) => [option.value, option.label])),
     [options],
   );
-  const labels = values.map((value) => optionLabels.get(value) ?? value);
+  const labels = selectionLabels(values, optionLabels);
   const limit = Math.max(1, summaryLimit);
   const summary = labels.length
     ? `${labels.slice(0, limit).join(", ")}${labels.length > limit ? ` +${labels.length - limit}` : ""}`

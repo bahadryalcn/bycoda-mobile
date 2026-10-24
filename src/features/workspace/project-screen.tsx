@@ -1,7 +1,7 @@
 import type { ProjectScreenProps, ProjectWorktrees } from "./project-screen-types";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { rememberOpenedProject } from "@/state/project-directory-preferences";
-import { View } from "react-native";
+import { ScrollView, View } from "react-native";
 import Grid2x2 from "lucide-react-native/icons/grid-2x2";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import { router, Stack } from "expo-router";
@@ -34,6 +34,10 @@ import { projectViewReducer } from "./workspace-state";
 import { useProjectList } from "./use-project-directory";
 import { ToolDirectory } from "../management/tool-directory";
 import { useMobileTheme } from "@/ui/theme";
+import { ProjectIcon } from "@/ui/project-icon";
+import { WorktreeCreate } from "./worktree-create";
+import { SubmoduleView } from "./submodule-view";
+import { PrivateContentBoundary } from "@/ui/private-content";
 
 export function ProjectScreen({
   id,
@@ -45,7 +49,11 @@ export function ProjectScreen({
   const copy = useCopy();
   const machine = useActiveMachine();
   const projects = useProjectList();
-  const project = projects.data?.find((value) => value.id === id);
+  const visibleProject = projects.data?.find((value) => value.id === id);
+  const retainedProject = useRef<{ machineId: string; id: string; value: NonNullable<typeof visibleProject> } | undefined>(undefined);
+  if (machine && visibleProject) retainedProject.current = { machineId: machine.id, id, value: visibleProject };
+  const rememberedProject = retainedProject.current;
+  const project = visibleProject ?? (rememberedProject && rememberedProject.machineId === machine?.id && rememberedProject.id === id ? rememberedProject.value : undefined);
   useEffect(() => {
     if (machine?.id && project?.id) void rememberOpenedProject(machine.id, project.id);
   }, [machine?.id, project?.id]);
@@ -57,6 +65,8 @@ export function ProjectScreen({
   const { segment, cwd, file: fileToOpen } = view;
   const [toolsOpen, setToolsOpen] = useState(false);
   const [worktreeOpen, setWorktreeOpen] = useState(false);
+  const [createWorktreeOpen, setCreateWorktreeOpen] = useState(false);
+  const [submodulesOpen, setSubmodulesOpen] = useState(false);
   const [toolSearch, setToolSearch] = useState("");
   const createSessionInitially = useRef(initialCreateSession);
   const changeAction = useAsyncAction<void>();
@@ -68,6 +78,7 @@ export function ProjectScreen({
   const changeWorkspace = (change: () => void) => {
     void changeAction.run(async () => {
       await beforeChange.current?.();
+      if (!projects.isProjectVisible(id)) throw new Error("The selected project is no longer available.");
       createSessionInitially.current = false;
       change();
     });
@@ -76,7 +87,12 @@ export function ProjectScreen({
     ["worktrees", id],
     "git.worktrees",
     { projectId: id },
-    { enabled: segment !== "sessions" },
+    { enabled: !!visibleProject && (segment !== "sessions" || createWorktreeOpen || worktreeOpen), queryFn: async (client, signal) => {
+      if (!projects.isProjectVisible(id)) throw new Error("The selected project is no longer available.");
+      const value = await client.request<ProjectWorktrees>("git.worktrees", { projectId: id }, { signal });
+      if (!projects.isProjectVisible(id)) throw new Error("The selected project is no longer available.");
+      return value;
+    } },
   );
   const worktreeOptions = [
     {
@@ -94,36 +110,57 @@ export function ProjectScreen({
   ];
   const canPickWorktree =
     segment !== "sessions" &&
-    (!!cwd || (worktrees.data?.worktrees ?? []).some((tree) => !tree.missing && !tree.isMain));
+    (!!cwd || machine?.capabilities?.includes("git.worktreeCreate") || (worktrees.data?.worktrees ?? []).some((tree) => !tree.missing && !tree.isMain));
+  const projectFeedback = (
+    <>
+      {projects.readiness === "waiting" ? (
+        <Notice
+          tone="info"
+          message={copy("Bağlantı bekleniyor. Bağlantı geri geldiğinde yeniden denenecek.", "Waiting for a connection. Loading will resume when it returns.")}
+          onRetry={() => router.push("/machines")}
+          retryLabel={copy("Bağlantıları yönet", "Manage connections")}
+        />
+      ) : null}
+      {projects.privacyUnavailable ? (
+        <Notice
+          tone="info"
+          message={copy(
+            "Proje listesini eşitlemek için bu bilgisayarda bycoda’yı aç. Korunan gruplar gizli kalır.",
+            "Open bycoda on this computer to sync the project directory. Protected groups stay hidden.",
+          )}
+          onRetry={() => { void projects.refetch(); }}
+          retryLabel={copy("Yenile", "Refresh")}
+        />
+      ) : null}
+      <QueryState
+        query={projects}
+        loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")}
+        empty={projects.directoryReady
+          ? copy("Bu bilgisayarda proje bulunamadı.", "Project not found on this computer.")
+          : undefined}
+      />
+      <Button
+        label={copy("Projelere dön", "Back to projects")}
+        tone="quiet"
+        density="compact"
+        onPress={() => router.replace("/")}
+      />
+    </>
+  );
   return (
     <Screen scroll={!project}>
-      <Stack.Screen options={{ title: project?.name || copy("Proje", "Project") }} />
+      <Stack.Screen options={{ title: visibleProject?.name || copy("Proje", "Project") }} />
+      {project && !visibleProject ? (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: space.screen,
+          gap: space.md, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}>
+          {projectFeedback}
+        </ScrollView>
+      ) : null}
+      <PrivateContentBoundary visible={!project || !!visibleProject} isAllowed={() => !project || projects.isProjectVisible(id)}>
       {!machine ? (
         <Empty title={copy("Bilgisayara bağlan", "Connect to a computer")} />
       ) : !project ? (
-        <>
-          {projects.privacyPending ? (
-            <Notice
-              tone="info"
-              message={copy(
-                "Proje listesini eşitlemek için bu bilgisayarda bycoda’yı aç. Korunan gruplar gizli kalır.",
-                "Open bycoda on this computer to sync the project directory. Protected groups stay hidden.",
-              )}
-            />
-          ) : null}
-          <QueryState
-            query={projects}
-            empty={
-              !projects.isPending && !projects.error && !projects.privacyPending
-                ? copy("Bu bilgisayarda proje bulunamadı.", "Project not found on this computer.")
-                : undefined
-            }
-          />
-          <Button
-            label={copy("Projelere dön", "Back to projects")}
-            onPress={() => router.replace("/")}
-          />
-        </>
+        projectFeedback
       ) : (
         <>
           <View
@@ -133,12 +170,13 @@ export function ProjectScreen({
               alignSelf: "center",
               paddingHorizontal: space.screen,
               paddingTop: space.xs,
-              paddingBottom: space.md,
-              gap: space.md,
+              paddingBottom: space.sm,
+              gap: space.xs,
             }}
           >
             {projects.error ? <QueryState query={projects} /> : null}
             <Row style={{ flexWrap: "nowrap" }}>
+              <ProjectIcon appearance={project.appearance} />
               <Body
                 muted
                 selectable={false}
@@ -152,6 +190,7 @@ export function ProjectScreen({
                 label={copy("Proje seçenekleri", "Project options")}
                 active={!!cwd}
                 actions={[
+                  { key: "submodules", label: copy("Başlatılmış submodule’ler", "Initialized submodules"), disabled: changingWorkspace, onPress: () => setSubmodulesOpen(true) },
                   {
                     key: "tools",
                     label: copy("Proje araçları", "Project tools"),
@@ -186,14 +225,14 @@ export function ProjectScreen({
                   changeWorkspace(() => dispatch({ type: "segment", segment: value }));
               }}
             />
-            <MutationState mutation={changeAction} />
+            {!worktreeOpen && !toolsOpen ? <MutationState mutation={changeAction} /> : null}
             {segment !== "sessions" && worktrees.error ? (
               <QueryState query={worktrees} loading="none" />
             ) : null}
           </View>
           {segment === "sessions" ? (
             <ProjectSessions
-              key={`${machine.id}:${id}:${cwd ?? ""}`}
+              key={`sessions:${machine.id}:${id}:${cwd ?? ""}`}
               projectId={id}
               cwd={cwd}
               initialCreating={createSessionInitially.current}
@@ -201,7 +240,7 @@ export function ProjectScreen({
             />
           ) : segment === "files" ? (
             <ProjectFiles
-              key={`${machine.id}:${id}:${cwd ?? ""}`}
+              key={`files:${machine.id}:${id}:${cwd ?? ""}`}
               projectId={id}
               cwd={cwd}
               root={cwd ?? project?.cwd}
@@ -211,7 +250,7 @@ export function ProjectScreen({
             />
           ) : (
             <ProjectGit
-              key={`${machine.id}:${id}:${cwd ?? ""}`}
+              key={`git:${machine.id}:${id}:${cwd ?? ""}`}
               projectId={id}
               cwd={cwd}
               root={cwd ?? project?.cwd}
@@ -240,7 +279,13 @@ export function ProjectScreen({
               }}
             />
             <MutationState mutation={changeAction} />
+            <Button tone="quiet" label={copy("Worktree oluştur", "Create worktree")} disabled={changingWorkspace || !machine.capabilities?.includes("git.worktreeCreate")}
+              onPress={() => { setWorktreeOpen(false); setCreateWorktreeOpen(true); }} />
           </Sheet>
+          <WorktreeCreate key={`worktree-create:${machine.id}:${id}:${cwd ?? ""}`} scope={{ machineId: machine.id, projectId: id, ...(cwd ? { cwd } : {}) }} visible={createWorktreeOpen} blocked={changingWorkspace}
+            beforeChange={async () => { await beforeChange.current?.(); }}
+            onSelect={(path) => { createSessionInitially.current = false; dispatch({ type: "worktree", cwd: path }); }} onClose={() => setCreateWorktreeOpen(false)} />
+          {submodulesOpen ? <SubmoduleView key={`submodules:${machine.id}:${id}:${cwd ?? ""}`} machineId={machine.id} projectId={id} cwd={cwd ?? project.cwd} onClose={() => setSubmodulesOpen(false)} /> : null}
           <Sheet
             visible={toolsOpen}
             title={copy("Proje araçları", "Project tools")}
@@ -273,6 +318,7 @@ export function ProjectScreen({
           </Sheet>
         </>
       )}
+      </PrivateContentBoundary>
     </Screen>
   );
 }

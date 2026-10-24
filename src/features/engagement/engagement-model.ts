@@ -1,4 +1,4 @@
-import { repositoryUrl, supportEmail } from "../legal/legal-content";
+import { repositoryUrl } from "../legal/legal-content";
 
 export type EngagementPlatform = "ios" | "android" | "web" | string;
 export type EngagementCopy = (tr: string, en: string) => string;
@@ -163,25 +163,4 @@ export function appShareContent(
   return platform === "ios"
     ? { title: "bycoda", message, url: links.shareUrl }
     : { title: "bycoda", message: `${message}\n${links.shareUrl}` };
-}
-
-export function feedbackUrl(
-  identity: AppIdentity,
-  platform: EngagementPlatform,
-  copy: EngagementCopy,
-) {
-  const subject = copy("bycoda mobil geri bildirim", "bycoda mobile feedback");
-  const body = [
-    copy("Geri bildirimim:", "My feedback:"),
-    "",
-    "",
-    `${copy("Sürüm", "Version")}: ${identity.version ?? copy("Bilinmiyor", "Unknown")}`,
-    `${copy("Derleme", "Build")}: ${
-      identity.preview
-        ? copy("Önizleme", "Preview")
-        : (identity.nativeBuild ?? copy("Bilinmiyor", "Unknown"))
-    }`,
-    `${copy("Platform", "Platform")}: ${platform}`,
-  ].join("\n");
-  return `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }

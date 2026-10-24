@@ -34,6 +34,7 @@ export function TranscriptViewFilter({ value, onChange }: {
       <NavigationGroup>
         {options.map((option) => <NavigationRow key={option.value} label={option.label}
           detail={option.detail} detailLines={0} detailSelectable={false}
+          selected={value === option.value}
           trailing={value === option.value ? <Check size={20} color={colors.accent} /> : undefined}
           onPress={() => { onChange(option.value); setOpen(false); }} />)}
       </NavigationGroup>

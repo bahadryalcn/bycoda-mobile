@@ -32,7 +32,7 @@ export type FilesView =
   | { kind: "browse" }
   | { kind: "create" }
   | { kind: "actions"; entry: FileEntry }
-  | { kind: "edit"; path: string };
+  | { kind: "edit"; path: string; line?: number };
 export type FilesState = {
   path: string;
   search: string;

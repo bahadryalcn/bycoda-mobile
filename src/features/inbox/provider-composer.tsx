@@ -3,6 +3,7 @@ import {
   Body,
   Button,
   Card,
+  Disclosure,
   Field,
   FormActions,
   Heading,
@@ -76,7 +77,6 @@ export function ProviderInboxComposer({
       <FormActions
         feedback={<><MutationState
         mutation={submission}
-        pending={copy("Bilgisayar sonucu doğruluyor…", "Waiting for the computer to confirm…")}
         success={
           submission.data?.action === "comment"
             ? copy("Yorum gönderildi.", "Comment sent.")
@@ -97,7 +97,9 @@ export function ProviderInboxComposer({
         busy={busy}
         onSubmit={send}
       />
-      <Body muted>{copy("Taslak bu kayıt açık kaldığı sürece korunur.", "Your draft is retained while this item stays open.")}</Body>
+      <Disclosure label={copy("Yardım", "Help")}>
+        <Body muted>{copy("Taslak bu kayıt açık kaldığı sürece korunur.", "Your draft is retained while this item stays open.")}</Body>
+      </Disclosure>
     </Stack>
   );
 }

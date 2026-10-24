@@ -4,6 +4,7 @@ import { useActiveMachine } from "@/state/machines";
 import { readProjectSummaries, type ProjectSummaries } from "./project-summaries";
 import { projectSessionDirectory } from "./activity-model";
 import { useProjectList } from "./use-project-directory";
+import { remoteErrorKind } from "@/ui/error-message";
 
 export function useProjectActivity() {
   const machine = useActiveMachine();
@@ -19,10 +20,11 @@ export function useProjectActivity() {
       const queryKey = hostKey(machine?.id ?? null, ["project-summaries", projectIds]);
       return {
         queryKey,
-        enabled: !!client && active,
+        enabled: !!client && active && projects.directoryReady,
         retry: false,
         staleTime: 5_000,
-        refetchInterval: 10_000,
+        refetchInterval: (query: { state: { error: unknown } }) =>
+          ["auth", "identity", "unsupported"].includes(remoteErrorKind(query.state.error) ?? "") ? false : 5_000,
         networkMode: "always" as const,
         queryFn: ({ signal }: { signal: AbortSignal }) =>
           readProjectSummaries(
@@ -35,9 +37,10 @@ export function useProjectActivity() {
       };
     }),
   });
+  const accessError = queries.find((query) => ["auth", "identity"].includes(remoteErrorKind(query.error) ?? ""))?.error;
   const directory = projectSessionDirectory(
     projects.data ?? [],
-    queries.map((query) => query.data),
+    accessError ? [] : queries.map((query) => query.data),
   );
   return {
     projects,
@@ -46,17 +49,21 @@ export function useProjectActivity() {
       ({ session }) => !session.archived && (session.status === "running" || session.needsInput),
     ),
     complete:
-      projects.isSuccess &&
+      projects.directoryReady &&
       queries.every(
         (query, index) =>
           query.isSuccess &&
           !query.data?.limited &&
           groups[index]!.every((id) => query.data?.projects[id]),
       ),
-    pending: projects.isPending || queries.some((query) => query.isPending),
+    pending: projects.verifying || queries.some((query) => query.isLoading),
     refreshing: projects.isFetching || queries.some((query) => query.isFetching),
     privacyPending: projects.privacyPending,
-    error: projects.error ?? queries.find((query) => query.error)?.error,
+    privacyUnavailable: projects.privacyUnavailable,
+    directoryReady: projects.directoryReady,
+    verifying: projects.verifying,
+    readiness: projects.readiness,
+    error: projects.error ?? accessError ?? queries.find((query) => query.error)?.error,
     refetch: async () => {
       await projects.refetch();
       await Promise.all(queries.map((query) => query.refetch()));

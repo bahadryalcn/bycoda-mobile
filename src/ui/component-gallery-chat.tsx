@@ -12,6 +12,7 @@ import { ChatComposer } from "./chat-composer";
 import { ChatActivity, ChatPlan } from "./chat-activity";
 import { PlanSteps } from "./plan-steps";
 import { MessageText } from "./message-text";
+import { messageExample } from "./message-example";
 import { ChatCircleAction, ChatToolbarAction } from "./chat-controls";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { Button } from "./buttons";
@@ -66,12 +67,7 @@ export function GalleryChat() {
         </ChatMessage>
         <ChatMessage role="assistant" style={{ backgroundColor: "transparent", padding: 0 }}>
           <ChatMessageContent>
-            <Body>
-              {copy(
-                "Dosyaları konuşmadan açabilir ve sonraki mesajını sıraya alabilirsin.",
-                "Open files from the conversation and queue your next message.",
-              )}
-            </Body>
+            <MessageText text={messageExample} compactMedia />
           </ChatMessageContent>
         </ChatMessage>
         <Attachment

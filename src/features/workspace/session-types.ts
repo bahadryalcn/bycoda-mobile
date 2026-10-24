@@ -64,8 +64,9 @@ export type SessionTranscriptProps = {
 };
 
 export type TranscriptBlockProps = {
+  parentProvider?: HostSession["session"]["harness"];
   context?: import("@/ui/media-policy").MessageContext;
-  responseText?: string;
+  responseText?: (id: string) => string | undefined;
   block: Block;
   author?: string;
   scope: SessionScope;

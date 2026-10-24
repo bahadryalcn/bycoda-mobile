@@ -14,6 +14,7 @@ import { useFormDraft } from "@/state/form-draft";
 import type { Note } from "@/domain/types";
 import type { LocalNoteDraft } from "../note-drafts";
 import type { ExistingNoteProps, NoteEditorProps } from "./types";
+import { noteTags, noteTagIssue, noteTitleTooLong } from "./note-tags";
 
 export function ExistingNote({ id, ...props }: ExistingNoteProps) {
   useMobileTheme();
@@ -57,6 +58,9 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
   const base = useRef(initial).current;
   const form = useFormDraft(base);
   const draft = form.values;
+  const tags = noteTags(draft.tags);
+  const tagIssue = noteTagIssue(tags);
+  const titleTooLong = noteTitleTooLong(draft.title);
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const busy = save.isPending || remove.isPending;
   const changed =
@@ -95,6 +99,10 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
         editable={!busy}
       />
       </>}
+      {titleTooLong ? <Body>{copy("Başlık en fazla 200 karakter olmalı. Kaydetmeden önce kısaltın.", "The title must be at most 200 characters. Shorten it before saving.")}</Body> : null}
+      {tagIssue ? <Body>{tagIssue === "count"
+        ? copy("En fazla 20 etiket ekleyin. Hiçbir etiket kaydedilmedi veya kısaltılmadı.", "Use at most 20 tags. No tags have been saved or shortened.")
+        : copy("Her etiket en fazla 48 karakter olmalı. Etiketinizi kısaltın.", "Each tag must be at most 48 characters. Shorten your tag before saving.")}</Body> : null}
       <FormActions
         feedback={<><MutationState mutation={save} />
       <MutationState mutation={remove} />
@@ -107,22 +115,24 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
       )}</>}
         submitLabel={copy("Bilgisayara kaydet", "Save to computer")}
         busy={busy}
-        onSubmit={() =>
+        disabled={!!tagIssue || titleTooLong}
+        onSubmit={() => {
+          if (tagIssue || titleTooLong) return;
           save.mutate(
             {
               note: {
                 id: draft.id,
                 title: draft.title,
                 body: draft.body,
-                tags: draft.tags.split(","),
+                tags,
                 ...(draft.sourceCwd ? { sourceCwd: draft.sourceCwd } : {}),
                 finalizeSlug: true,
               },
               expectedUpdatedAt: draft.expectedUpdatedAt,
             },
             { onSuccess: () => { haptic.success(); finish(); } },
-          )
-        }
+          );
+        }}
         cancelDisabled={busy || storage.isPending}
         cancelLabel={copy("Kapat", "Close")}
         onCancel={requestClose}

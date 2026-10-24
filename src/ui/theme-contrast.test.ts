@@ -24,6 +24,7 @@ describe.each(["light", "dark"] as const)("mobile %s reading contrast", (mode) =
       colors.selected,
       colors.userMessage,
       colors.elevated,
+      colors.fill,
     ]) {
       for (const foreground of [colors.text, colors.muted, colors.subtle, colors.accent]) {
         expect(

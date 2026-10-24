@@ -8,6 +8,24 @@ import {
 } from "./workspace-state";
 
 describe("workspace view transitions", () => {
+  it("retains the selected search line and exact browse context when returning from read-only inspection", () => {
+    const previous = {
+      path: "src",
+      search: "needle",
+      searchMode: "content",
+      view: { kind: "browse" },
+    } as const;
+    const selected = filesReducer(previous, {
+      type: "view",
+      view: { kind: "edit", path: "src/a.ts", line: 450 },
+    });
+    expect(selected.view).toEqual({ kind: "edit", path: "src/a.ts", line: 450 });
+    expect(filesReducer(selected, { type: "view", view: { kind: "browse" } })).toEqual(previous);
+    expect(filesReducer(selected, { type: "navigate", path: "other" }).view).toEqual({
+      kind: "browse",
+    });
+  });
+
   it("replaces a file operation when opening an editor and clears search on folder navigation", () => {
     const editing = filesReducer(
       { path: "docs", search: "old", searchMode: "names", view: { kind: "create" } },

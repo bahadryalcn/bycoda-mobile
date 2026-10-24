@@ -1,5 +1,5 @@
 import { useMobileTheme } from "./theme";
-import { StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { Badge as PanelBadge } from "panelui-native/components/badge";
 import { Spinner } from "panelui-native/components/spinner";
 import { Alert } from "panelui-native/components/alert";
@@ -127,7 +127,7 @@ export function Loading({ label, centered = false, showLabel = !!label }: Loadin
   );
 }
 
-export function Skeleton({ variant = "list" }: { variant?: "list" | "content" }) {
+export function Skeleton({ variant = "list", label }: { variant?: "list" | "content"; label?: string }) {
   useMobileTheme();
   const copy = useCopy();
   const animate = useFeedbackAnimation();
@@ -138,11 +138,12 @@ export function Skeleton({ variant = "list" }: { variant?: "list" | "content" })
       entering={reveal}
       accessible
       accessibilityRole="progressbar"
-      accessibilityLabel={copy("Yükleniyor…", "Loading…")}
+      accessibilityLabel={label ?? copy("Yükleniyor…", "Loading…")}
       accessibilityState={{ busy: true }}
       aria-busy
       style={{ gap: space.lg, paddingVertical: space.sm }}
     >
+      {label ? <Body muted style={uiStyles.caption}>{label}</Body> : null}
       {(variant === "list" ? [0, 1, 2] : [0, 1]).map((key) => (
         <View
           key={key}
@@ -182,7 +183,7 @@ export function ErrorText({ error, message }: ErrorTextProps) {
   );
 }
 
-export function ErrorNotice({ error, onRetry, retryLabel, message, children }: ErrorNoticeProps) {
+export function ErrorNotice({ error, onRetry, retryLabel, message, action, children }: ErrorNoticeProps) {
   useMobileTheme();
   const copy = useCopy();
   if (!error) return null;
@@ -192,13 +193,14 @@ export function ErrorNotice({ error, onRetry, retryLabel, message, children }: E
       message={errorMessage(error, copy, message)}
       onRetry={onRetry}
       retryLabel={retryLabel ?? copy("Yeniden dene", "Retry")}
+      action={action}
     >
       {children}
     </Notice>
   );
 }
 
-export function Notice({ tone = "info", message, children, onRetry, retryLabel }: NoticeProps) {
+export function Notice({ tone = "info", message, children, onRetry, retryLabel, action }: NoticeProps) {
   useMobileTheme();
   const copy = useCopy();
   const semantic = semanticColors[tone];
@@ -211,39 +213,24 @@ export function Notice({ tone = "info", message, children, onRetry, retryLabel }
           ? CircleCheck
           : Info;
   const quiet = tone === "info" || tone === "success";
+  const recovery = action ?? (onRetry ? { label: retryLabel ?? copy("Yeniden dene", "Retry"), onPress: onRetry } : undefined);
   return (
     <Alert
       variant={tone === "danger" ? "destructive" : "default"}
-      className={
-        quiet
-          ? "flex-col bg-transparent border-0 px-0 py-ui-xs gap-ui-xs"
-          : "flex-col p-ui-md gap-ui-xs rounded-card border-0"
-      }
-      style={StyleSheet.flatten<ViewStyle>(
-        quiet
-          ? { gap: space.sm, paddingVertical: space.xs }
-          : [uiStyles.notice, { backgroundColor: semantic.surface, borderColor: semantic.border }],
-      )}
+      accessibilityLiveRegion="polite"
+      className="flex-col bg-transparent border-0 rounded-none p-0 gap-ui-xs"
+      style={uiStyles.notice}
     >
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.sm }}>
-        <Icon size={17} strokeWidth={2} color={semantic.text} style={{ marginTop: 1 }} />
-        <Body
-          accessibilityRole={tone === "danger" ? "alert" : "text"}
-          accessibilityLiveRegion="polite"
-          style={[uiStyles.grow, uiStyles.caption, { color: quiet ? colors.muted : semantic.text }]}
-        >
-          {message}
-        </Body>
+      <View style={uiStyles.noticeRow}>
+        <View style={uiStyles.noticeMessage}>
+          <Icon size={16} strokeWidth={2} color={semantic.text} style={{ marginTop: 1 }} />
+          <Body style={[uiStyles.grow, uiStyles.caption, { color: quiet ? colors.muted : colors.text }]}>
+            {message}
+          </Body>
+        </View>
+        {recovery ? <Button density="compact" tone="quiet" label={recovery.label}
+          onPress={recovery.onPress} style={{ marginStart: "auto" }} /> : null}
       </View>
-      {onRetry ? (
-        <Button
-          density="compact"
-          tone="quiet"
-          label={retryLabel ?? copy("Yeniden dene", "Retry")}
-          onPress={onRetry}
-          style={{ marginStart: space.lg, paddingHorizontal: space.sm }}
-        />
-      ) : null}
       {children}
     </Alert>
   );

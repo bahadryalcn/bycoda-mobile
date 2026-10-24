@@ -13,7 +13,9 @@ export type {
   HostAutomationInput,
   HostAutomationRun,
 } from "../../../../src/features/automations/model/hostAutomations";
-export type { HostGoal, HostGoalInput } from "../../../../src/features/tasks/model/hostGoals";
+export type { HostGoal, HostGoalInput, GoalSettings } from "../../../../src/features/tasks/model/hostGoals";
+
+export type AutomationSchedulePreview = { timeZone: string; nextRunAt: number };
 export type {
   HostSteward,
   HostStewardInput,

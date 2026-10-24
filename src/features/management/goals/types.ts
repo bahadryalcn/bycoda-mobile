@@ -3,9 +3,11 @@ import type { HostGoal, HostProject } from "@/domain/types";
 export type GoalFlow =
   | { kind: "closed" }
   | { kind: "new"; projectId: string }
+  | { kind: "settings"; goal: HostGoal }
   | { kind: "replan"; goalId: string };
 export type GoalFlowEvent =
   | { type: "new"; projectId: string }
+  | { type: "settings"; goal: HostGoal }
   | { type: "replan"; goalId: string }
   | { type: "close" };
 export type GoalEditorProps = {
@@ -27,6 +29,7 @@ export type GoalCardProps = {
   busy: boolean;
   editorOpen: boolean;
   onReplan: (goalId: string) => void;
+  onSettings: (goal: HostGoal) => void;
   approve: ReturnType<typeof useHostMutation<HostGoal>>;
   cancel: ReturnType<typeof useHostMutation<HostGoal>>;
   remove: ReturnType<typeof useHostMutation>;

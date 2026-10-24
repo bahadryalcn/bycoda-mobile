@@ -27,6 +27,7 @@ import { MessageText } from "@/ui/message-text";
 import { providerActionLabel } from "./provider-labels";
 import { providerPrActions } from "./provider-actions";
 import { ProviderInboxComposer } from "./provider-composer";
+import { ProviderPrReview } from "./provider-pr-review";
 import type {
   ConfirmedInboxComment,
   ProviderInboxDetailProps,
@@ -69,6 +70,7 @@ export function ProviderInboxDetail({
 
   const form = useFormDraft<InboxCommentDraft>(emptyInboxCommentDraft);
   const [composing, setComposing] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const submission = useAsyncAction<InboxWriteResult>();
   const openProvider = useAsyncAction<void>();
   const access = providerInboxAccess(availability);
@@ -130,11 +132,10 @@ export function ProviderInboxDetail({
   }
 
   function refreshConversation() {
-    void availability.refetch();
-    if (access.canRead) {
-      void details.refetch();
-      void thread.refetch();
-    }
+    return Promise.all([
+      availability.refetch(),
+      ...(access.canRead ? [details.refetch(), thread.refetch()] : []),
+    ]);
   }
 
   function openProviderLink() {
@@ -201,6 +202,9 @@ export function ProviderInboxDetail({
         </Section>
       ) : null}
       <Button label={form.values.body.trim() ? copy("Yorum taslağına dön", "Continue comment draft") : copy("Yorum ekle", "Add a comment")} disabled={busy || !access.canWrite} onPress={() => setComposing(true)} />
+      {item.kind === "pr" && item.provider === "github" && client?.machine.capabilities?.includes("inbox.review.v1") ? <Button
+        label={copy("Pull request incelemesi", "Pull request review")} disabled={busy || uncertain || !access.canRead} onPress={() => setReviewing(true)} /> : null}
+      {reviewing ? <ProviderPrReview item={item} origin={origin} canRead={access.canRead} canWrite={access.canWrite} onClose={() => setReviewing(false)} /> : null}
       <ProviderInboxConversation
         provider={item.provider}
         thread={thread}

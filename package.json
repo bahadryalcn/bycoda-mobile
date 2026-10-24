@@ -14,7 +14,8 @@
     "check:runtime": "node scripts/check-runtime.mjs",
     "check:locales": "node scripts/check-locales.mjs",
     "check:release": "node scripts/check-store-config.mjs",
-    "typecheck": "node scripts/build-ui-theme.mjs --check && node scripts/check-ui.mjs && node scripts/check-runtime.mjs && node scripts/check-locales.mjs && tsc --noEmit",
+    "typecheck": "node scripts/build-ui-theme.mjs --check && node scripts/check-ui.mjs && node scripts/check-runtime.mjs && node scripts/check-locales.mjs && tsc-rs --noEmit",
+    "typecheck:fast": "node scripts/build-ui-theme.mjs --check && node scripts/check-ui.mjs && node scripts/check-runtime.mjs && node scripts/check-locales.mjs && tsc-rs --noEmit --fast",
     "test": "vitest run --config vitest.config.ts",
     "export:web": "expo export --platform web --output-dir ../temp/build/bycoda-mobile-web",
     "theme:build": "node scripts/build-ui-theme.mjs",
@@ -88,6 +89,7 @@
     "esbuild": "0.28.2",
     "mermaid": "11.16.1",
     "tailwindcss": "4.3.3",
+    "tsc-rs": "0.7.0",
     "typescript": "~6.0.3",
     "vitest": "^5.0.3"
   }

@@ -27,6 +27,7 @@ import { canRemoveOverlay, closeOverlay, showOverlay, type OverlayState } from "
 import { motionTiming } from "./motion";
 import { motion } from "./tokens";
 import { asWebElement, createOverlayWebFocus } from "./overlay-web-focus";
+import { PrivateContentAccessProvider, usePrivateContentAccess } from "./private-content";
 
 const Context = createContext<OverlayRegistry | null>(null);
 const LayerPriority = createContext(0);
@@ -68,18 +69,19 @@ function OverlayLayer({
     );
   }, [id, entry.visible, entry.generation, progress, onHidden]);
   const style = useAnimatedStyle(() => ({ opacity: progress.value }));
+  const permitted = entry.value.privateAccess?.check() ?? true;
   return (
     <Animated.View
       ref={(element: unknown) => onElement(id, element)}
-      style={[StyleSheet.absoluteFill, { flex: 1 }, style]}
-      accessibilityViewIsModal={active}
-      accessibilityElementsHidden={!active}
-      aria-hidden={process.env.EXPO_OS === "web" ? undefined : !active}
-      importantForAccessibility={active ? "auto" : "no-hide-descendants"}
-      pointerEvents={active && entry.visible ? "auto" : "none"}
+      style={[StyleSheet.absoluteFill, { flex: 1 }, style, !permitted ? { display: "none" } : undefined]}
+      accessibilityViewIsModal={active && permitted}
+      accessibilityElementsHidden={!active || !permitted}
+      aria-hidden={!active || !permitted}
+      importantForAccessibility={active && permitted ? "auto" : "no-hide-descendants"}
+      pointerEvents={active && permitted && entry.visible ? "auto" : "none"}
     >
       <LayerPriority.Provider value={entry.value.priority}>
-        <LayerProgress.Provider value={progress}>{entry.value.children}</LayerProgress.Provider>
+        <LayerProgress.Provider value={progress}>{entry.value.privateAccess ? <PrivateContentAccessProvider value={entry.value.privateAccess}>{entry.value.children}</PrivateContentAccessProvider> : entry.value.children}</LayerProgress.Provider>
       </LayerPriority.Provider>
     </Animated.View>
   );
@@ -121,7 +123,8 @@ export function OverlayProvider({ children }: PropsWithChildren) {
   const layers = unlocked
     ? [...entries.entries()].sort((a, b) => a[1].value.priority - b[1].value.priority)
     : [];
-  const active = layers.at(-1)?.[1];
+  const accessibleLayers = layers.filter(([, entry]) => entry.value.privateAccess?.check() ?? true);
+  const active = accessibleLayers.at(-1)?.[1];
   useLayoutEffect(() => {
     if (process.env.EXPO_OS !== "web" || typeof document === "undefined") return;
     const controller = createOverlayWebFocus(document);
@@ -135,7 +138,7 @@ export function OverlayProvider({ children }: PropsWithChildren) {
     webFocus.current?.sync({
       background: asWebElement(background.current),
       unlocked,
-      layers: layers.flatMap(([id, entry]) => {
+      layers: accessibleLayers.flatMap(([id, entry]) => {
         const element = elements.current.get(id);
         return element ? [{ id, element, ...entry.value, visible: entry.visible }] : [];
       }),
@@ -162,12 +165,12 @@ export function OverlayProvider({ children }: PropsWithChildren) {
         >
           {children}
         </View>
-        {layers.map(([id, entry], index) => (
+        {layers.map(([id, entry]) => (
           <OverlayLayer
             key={id}
             id={id}
             entry={entry}
-            active={index === layers.length - 1}
+            active={entry === active}
             onHidden={finishClose}
             onElement={captureElement}
           />
@@ -181,13 +184,14 @@ export function ScreenOverlay({ visible, priority, label, onClose, children }: S
   useMobileTheme();
   const registry = useContext(Context);
   const parentPriority = useContext(LayerPriority);
+  const privateAccess = usePrivateContentAccess();
   const layerPriority = priority ?? Math.max(20, parentPriority + 1);
   const id = useId();
   if (!registry) throw new Error("ScreenOverlay requires OverlayProvider.");
   useLayoutEffect(() => {
-    if (visible) registry.update(id, { children, onClose, label, priority: layerPriority });
+    if (visible) registry.update(id, { children, onClose, label, priority: layerPriority, privateAccess });
     else registry.remove(id);
-  }, [registry, id, visible, children, label, onClose, layerPriority]);
+  }, [registry, id, visible, children, label, onClose, layerPriority, privateAccess]);
   useLayoutEffect(() => () => registry.remove(id), [registry, id]);
   return null;
 }

@@ -1,13 +1,14 @@
 import { useMobileTheme } from "@/ui/theme";
-import { View } from "react-native";
 import Animated from "react-native-reanimated";
 import { Body, Card, Notice, Section, SegmentedControl } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
-import { colors, radii, space } from "@/ui/tokens";
+import { colors, space } from "@/ui/tokens";
 import { chatTextStyles } from "@/ui/chat-styles";
 import { uiStyles } from "@/ui/styles";
 import { useChatAppearance } from "@/state/chat-appearance";
+import { ChatMessage, ChatResponse, chatUserBubbleStyle } from "@/ui/chat";
+import type { UIMessage } from "ai";
 
 export function ChatAppearanceSettings() {
   useMobileTheme();
@@ -17,6 +18,44 @@ export function ChatAppearanceSettings() {
   const setTextSize = useChatAppearance((state) => state.setTextSize);
   const storageError = useChatAppearance((state) => state.storageError);
   const text = chatTextStyles(size);
+  const messages = [
+    {
+      id: "appearance-preview-user",
+      role: "user",
+      parts: [
+        {
+          type: "text",
+          text: copy(
+            "Bu projedeki değişiklikleri özetle.",
+            "Summarize the changes in this project.",
+          ),
+        },
+      ],
+    },
+    {
+      id: "appearance-preview-assistant",
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: [
+            copy(
+              "Değişiklikleri inceledim. Dosya listesi ve sonraki adımlar aşağıda.",
+              "I reviewed the changes. The file list and next steps are below.",
+            ),
+            "",
+            "`session.status`",
+            "",
+            "```typescript",
+            "const status = 'ready';",
+            "```",
+            "",
+            "[Markdown](https://commonmark.org/help/)",
+          ].join("\n"),
+        },
+      ],
+    },
+  ] satisfies UIMessage[];
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <Section title={copy("Mesaj yazı boyutu", "Message text size")}>
@@ -45,32 +84,20 @@ export function ChatAppearanceSettings() {
       ) : null}
       <Section title={copy("Önizleme", "Preview")}>
         <Card style={{ backgroundColor: colors.background, gap: space.md }}>
-          <View
-            style={{
-              alignSelf: "flex-end",
-              maxWidth: "88%",
-              gap: space.xs,
-              padding: space.md,
-              backgroundColor: colors.userMessage,
-              borderRadius: radii.card,
-              borderCurve: "continuous",
-              borderBottomEndRadius: radii.control,
-            }}
+          <ChatMessage
+            role="user"
+            message={messages[0]}
+            style={{ ...chatUserBubbleStyle(), gap: space.xs }}
           >
             <Body style={[text.author, { color: colors.muted }]}>{copy("Sen", "You")}</Body>
-            <Body style={text.user}>
-              {copy("Bu projedeki değişiklikleri özetle.", "Summarize the changes in this project.")}
+            <ChatResponse message={messages[0]} />
+          </ChatMessage>
+          <ChatMessage role="assistant" message={messages[1]} style={{ gap: space.xs }}>
+            <Body style={[text.author, { color: colors.muted }]}>
+              {copy("Asistan", "Assistant")}
             </Body>
-          </View>
-          <View style={{ alignSelf: "stretch", gap: space.xs, padding: space.xs }}>
-            <Body style={[text.author, { color: colors.muted }]}>{copy("Asistan", "Assistant")}</Body>
-            <Body style={text.assistant}>
-              {copy(
-                "Değişiklikleri inceledim. Dosya listesi ve sonraki adımlar aşağıda.",
-                "I reviewed the changes. The file list and next steps are below.",
-              )}
-            </Body>
-          </View>
+            <ChatResponse message={messages[1]} />
+          </ChatMessage>
         </Card>
       </Section>
     </Animated.View>

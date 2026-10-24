@@ -35,7 +35,7 @@ export function NoteSummaryRow({
     .join(" · ");
   return (
     <PressableCard
-      label={title}
+      label={[title, metadata, note.sourceCwd].filter(Boolean).join(". ")}
       disabled={disabled}
       onPress={onPress}
       style={[

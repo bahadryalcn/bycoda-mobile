@@ -91,7 +91,7 @@ export function MachinesScreen() {
         {state.machines.map((machine) => {
           const active = machine.id === state.activeId;
           return <NavigationRow
-            key={machine.id} label={machine.name} detail={machine.endpoint}
+            key={machine.id} label={machine.name} detail={machine.endpoint} selected={active}
             icon={<IconTile color={active ? colors.success : colors.muted}><Laptop size={18} strokeWidth={2} color={active ? colors.success : colors.muted} /></IconTile>}
             trailing={active ? <Check size={18} strokeWidth={2.4} color={colors.success} /> : undefined}
             disabled={unavailable || busy} onPress={() => setManaging(machine.id)}

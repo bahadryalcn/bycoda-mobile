@@ -9,7 +9,11 @@ export const ActivityGroup = memo(function ActivityGroup({
   blocks,
   live = true,
   onInspect,
-}: { blocks: Block[]; live?: boolean; onInspect: (blockId?: string) => void }) {
+}: {
+  blocks: Block[];
+  live?: boolean;
+  onInspect: (blockId?: string) => void;
+}) {
   useMobileTheme();
   const copy = useCopy();
   const summary = activitySummary(blocks);
@@ -24,7 +28,17 @@ export const ActivityGroup = memo(function ActivityGroup({
       }
       reasoning={blocks.every((block) => block.role === "reasoning")}
       detail={summary.title || title}
-      status={running ? "running" : summary.completed ? "complete" : "pending"}
+      status={
+        running
+          ? "running"
+          : summary.state === "failed"
+            ? "error"
+            : summary.state === "stopped"
+              ? "stopped"
+              : summary.state === "completed"
+                ? "complete"
+                : "record"
+      }
       onInspect={() => onInspect()}
     />
   );

@@ -11,6 +11,11 @@ const state = {
   now: 100_000,
 };
 describe("connection presentation", () => {
+  it("identifies local storage failures before permission or cached successful traffic", () => {
+    expect(connectionPhase({ ...state, permitted: false, storageError: "Connection preference could not be saved." })).toBe("storage");
+    expect(connectionPhase({ ...state, storageError: "Language preference could not be saved." })).toBe("storage");
+    expect(connectionPhase({ ...state, unlocked: false, storageError: "Storage failure" })).toBe("locked");
+  });
   it("uses recent successful host traffic even before the health query finishes", () => {
     expect(connectionPhase(state)).toBe("connected");
     expect(connectionPhase({ ...state, successAt: 0 })).toBe("checking");

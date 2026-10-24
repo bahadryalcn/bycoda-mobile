@@ -25,17 +25,20 @@ import type { HostTask } from "@/domain/types";
 import { identifier } from "./shared/format";
 import { initialAgent } from "./shared/agent";
 import { Scope } from "./shared/scope";
+import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite";
 import { taskMatchesFilter } from "./task-actions";
 import { colors } from "@/ui/tokens";
 
 import { TaskEditor } from "./tasks/task-editor";
 import { DeliveryEditor } from "./tasks/delivery-editor";
 import { TaskCard } from "./tasks/task-card";
+import { TaskBulkActions } from "./tasks/bulk-actions";
 import type { TaskEditorFlow } from "./tasks/types";
 
 export function TasksScreen() {
   const copy = useCopy();
   const [search, setSearch] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
   const machine = useActiveMachine();
   const projectId = useMachines((state) => state.selectedProjectId);
   const query = useHostQuery<HostTask[]>(
@@ -45,10 +48,16 @@ export function TasksScreen() {
     { interval: 5000 },
   );
   const lifecycleSupported = !!machine?.capabilities?.includes("tasks.workspaces");
-  const allTasks = useHostQuery<HostTask[]>(["tasks", null], "tasks.list", {}, { enabled: lifecycleSupported && !!projectId, interval: 5000 });
+  const allTasks = useHostQuery<HostTask[]>(
+    ["tasks", null],
+    "tasks.list",
+    {},
+    { enabled: lifecycleSupported && !!projectId, interval: 5000 },
+  );
   const save = useHostMutation<HostTask>("tasks.save", ["tasks"]);
   const move = useHostMutation<HostTask>("tasks.move", ["tasks"]);
   const remove = useHostMutation("tasks.delete", ["tasks"]);
+  const decline = useHostMutation("stewards.decline", ["tasks"]);
   const recheck = useHostMutation("tasks.review.recheck", ["tasks"]);
   const manualStart = useHostMutation<HostTask>("tasks.start", ["tasks"]);
   const reorder = useHostMutation("tasks.reorder", ["tasks"]);
@@ -67,7 +76,10 @@ export function TasksScreen() {
       : editor?.kind === "edit"
         ? editQuery.data?.find((task) => task.id === editor.id)
         : undefined;
-  const draft = useEditorRecord(editor?.kind === "new" ? editor.initial.id : editor?.id ?? null, fetchedDraft);
+  const draft = useEditorRecord(
+    editor?.kind === "new" ? editor.initial.id : (editor?.id ?? null),
+    fetchedDraft,
+  );
   const [filter, setFilter] = useState<string>("active");
   const [filterDraft, setFilterDraft] = useState<string | null>(null);
   const start = () => {
@@ -100,15 +112,34 @@ export function TasksScreen() {
     { value: "done", label: copy("Tamamlandı", "Done") },
     { value: "all", label: copy("Tümü", "All") },
   ];
-  const busy = save.isPending || move.isPending || remove.isPending || recheck.isPending || manualStart.isPending || reorder.isPending;
-  const visible = query.data?.filter((task) => taskMatchesFilter(task, filter) && (task.title + " " + task.prompt).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  const busy =
+    bulkBusy ||
+    save.isPending ||
+    move.isPending ||
+    remove.isPending ||
+    decline.isPending ||
+    recheck.isPending ||
+    manualStart.isPending ||
+    reorder.isPending;
+  const visible = query.data?.filter(
+    (task) =>
+      taskMatchesFilter(task, filter) &&
+      (task.title + " " + task.prompt)
+        .toLocaleLowerCase()
+        .includes(search.trim().toLocaleLowerCase()),
+  );
   return (
-    <ScreenList<HostTask> title={copy("Görevler", "Tasks")} query={query}
+    <ScreenList<HostTask>
+      title={copy("Görevler", "Tasks")}
+      query={query}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
       actions={
         <>
-          <FilterButton count={filter !== "active" ? 1 : 0} onPress={() => setFilterDraft(filter)} />
+          <FilterButton
+            count={filter !== "active" ? 1 : 0}
+            onPress={() => setFilterDraft(filter)}
+          />
           <IconButton
             label={copy("Yeni görev", "New task")}
             disabled={!projectId || !machine?.providers?.length || busy || !!editor}
@@ -118,70 +149,115 @@ export function TasksScreen() {
           </IconButton>
         </>
       }
-      header={<>
-      <FilterSheet visible={filterDraft !== null} onClose={() => setFilterDraft(null)}
-        onReset={() => setFilterDraft("active")}
-        onApply={() => { if (filterDraft !== null) setFilter(filterDraft); setFilterDraft(null); }}>
-        <SelectField label={copy("Duruma göre filtrele", "Filter by status")} value={filterDraft ?? filter}
-          options={filterOptions} onChange={setFilterDraft} />
-      </FilterSheet>
-      <Scope allowAll />
-      <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
-      {!projectId && (
-        <Body muted>
-          {copy("Görev eklemek için projesini seçin.", "Select a project to add a task.")}
-        </Body>
-      )}
-      {!editor && <MutationState mutation={save} success={copy("Görev kaydedildi.", "Task saved.")} />}
-      <MutationState mutation={move} />
-      <MutationState mutation={remove} success={copy("Görev silindi.", "Task deleted.")} />
-      <MutationState mutation={recheck} />
-      <MutationState mutation={manualStart} />
-      <MutationState mutation={reorder} />
-      {lifecycleSupported && projectId && <QueryState query={allTasks} loading="none" />}
-      {editor?.kind === "edit" && !draft && (
-        <Card>
-          <QueryState query={editQuery} empty={editQuery.data?.length === 0} />
-          <Button
-            label={copy("Düzenlemeyi kapat", "Close editor")}
-            onPress={() => setEditor(null)}
-          />
-          {editQuery.isSuccess && (
-            <Notice
-              tone="warning"
-              message={copy("Görev artık bulunamadı.", "The task is no longer available.")}
+      header={
+        <>
+          <FilterSheet
+            visible={filterDraft !== null}
+            onClose={() => setFilterDraft(null)}
+            onReset={() => setFilterDraft("active")}
+            onApply={() => {
+              if (filterDraft !== null) setFilter(filterDraft);
+              setFilterDraft(null);
+            }}
+          >
+            <SelectField
+              label={copy("Duruma göre filtrele", "Filter by status")}
+              value={filterDraft ?? filter}
+              options={filterOptions}
+              onChange={setFilterDraft}
             />
+          </FilterSheet>
+          <Scope allowAll />
+          <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
+          {machine ? <TaskBulkActions key={`${machine.id}:${projectId ?? "all"}`} tasks={visible ?? []} machineId={machine.id} disabled={busy && !bulkBusy || !!editor || !!deliveryTask}
+            onBusy={setBulkBusy} onComplete={async () => { await query.refetch(); if (projectId) await allTasks.refetch(); }} /> : null}
+          {!projectId && (
+            <Body muted>
+              {copy("Görev eklemek için projesini seçin.", "Select a project to add a task.")}
+            </Body>
           )}
-        </Card>
-      )}
-      {draft && (
-        <Sheet
-          visible
-          size="form"
-          title={copy("Görev ayrıntıları", "Task details")}
-          onClose={() => {
-            if (!busy) setEditor(null);
-          }}
-        >
-          <TaskEditor
-            key={draft.id}
-            initial={draft}
-            save={save}
-            busy={busy}
-            onClose={() => setEditor(null)}
+          {projectId && !machine?.providers?.length ? <AgentProviderPrerequisite /> : null}
+          {!editor && (
+            <MutationState mutation={save} success={copy("Görev kaydedildi.", "Task saved.")} />
+          )}
+          <MutationState mutation={move} />
+          <MutationState mutation={remove} success={copy("Görev silindi.", "Task deleted.")} />
+          <MutationState mutation={recheck} />
+          {decline.error?.message.includes("Unsupported host method") ? (
+            <Notice
+              tone="info"
+              message={copy(
+                "Önerileri reddetmek için bilgisayardaki bycoda uygulamasını güncelleyin.",
+                "Update bycoda on this computer to decline suggestions.",
+              )}
+            />
+          ) : (
+            <MutationState mutation={decline} />
+          )}
+          <MutationState mutation={manualStart} />
+          <MutationState mutation={reorder} />
+          {lifecycleSupported && projectId && <QueryState query={allTasks} loading="none" />}
+          {editor?.kind === "edit" && !draft && (
+            <Card>
+              <QueryState query={editQuery} empty={editQuery.data?.length === 0} />
+              <Button
+                label={copy("Düzenlemeyi kapat", "Close editor")}
+                onPress={() => setEditor(null)}
+              />
+              {editQuery.isSuccess && (
+                <Notice
+                  tone="warning"
+                  message={copy("Görev artık bulunamadı.", "The task is no longer available.")}
+                />
+              )}
+            </Card>
+          )}
+          {draft && (
+            <Sheet
+              visible
+              size="form"
+              title={copy("Görev ayrıntıları", "Task details")}
+              onClose={() => {
+                if (!busy) setEditor(null);
+              }}
+            >
+              <TaskEditor
+                key={draft.id}
+                initial={draft}
+                save={save}
+                busy={busy}
+                onClose={() => setEditor(null)}
+              />
+            </Sheet>
+          )}
+          <Sheet
+            visible={!!deliveryTask}
+            size="form"
+            title={copy("Teslim hedefi", "Delivery target")}
+            onClose={() => setDeliveryTask(null)}
+          >
+            {deliveryTask && (
+              <DeliveryEditor
+                key={deliveryTask.id}
+                task={deliveryTask}
+                onClose={() => setDeliveryTask(null)}
+              />
+            )}
+          </Sheet>
+          <QueryState
+            query={query}
+            empty={visible?.length === 0}
+            emptyTitle={copy("Bu görünümde görev yok", "No tasks in this view")}
           />
-        </Sheet>
-      )}
-      <Sheet visible={!!deliveryTask} size="form" title={copy("Teslim hedefi", "Delivery target")} onClose={() => setDeliveryTask(null)}>
-        {deliveryTask && <DeliveryEditor key={deliveryTask.id} task={deliveryTask} onClose={() => setDeliveryTask(null)} />}
-      </Sheet>
-      <QueryState
-        query={query}
-        empty={visible?.length === 0}
-        emptyTitle={copy("Bu görünümde görev yok", "No tasks in this view")}
-      />
-      {search.trim() && visible?.length === 0 ? <Button tone="quiet" label={copy("Aramayı temizle", "Clear search")} onPress={() => setSearch("")} /> : null}
-      </>}
+          {search.trim() && visible?.length === 0 ? (
+            <Button
+              tone="quiet"
+              label={copy("Aramayı temizle", "Clear search")}
+              onPress={() => setSearch("")}
+            />
+          ) : null}
+        </>
+      }
       renderItem={({ item: task }) => (
         <TaskCard
           task={task}
@@ -189,16 +265,19 @@ export function TasksScreen() {
           editorOpen={!!draft || !!deliveryTask}
           move={move}
           remove={remove}
+          decline={decline}
           recheck={recheck}
           start={manualStart}
           reorder={reorder}
           tasks={(projectId ? allTasks.data : query.data) ?? []}
           lifecycleReady={!projectId || !!allTasks.data}
           onDelivery={setDeliveryTask}
-          onEdit={(task) => { save.reset(); setEditor({ kind: "edit", id: task.id, projectId: task.projectId }); }}
+          onEdit={(task) => {
+            save.reset();
+            setEditor({ kind: "edit", id: task.id, projectId: task.projectId });
+          }}
         />
       )}
     />
-
   );
 }

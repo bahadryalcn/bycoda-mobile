@@ -115,13 +115,12 @@ are intentionally unset until registrations exist. iOS requires the assigned
 numeric App Store ID; the Android listing must match `com.bycoda.mobile`. This
 explicit action does not schedule review prompts or claim that a rating occurred.
 
-Use **Report** on a completed AI response, or **Settings → Help & support →
-Report AI content**, to prepare an email. The description and optional, editable
-excerpt are previewed before opening the email app. No excerpt is included
-without choosing it. Review and send the message in your email app; opening a
-composer does not deliver a report. The draft stays in memory while the app runs
-and is not a host/session log upload. Email support is available now, but does
-not satisfy Google's requirement for AI reports without leaving the app.
+Use **Report** on an AI answer, or **Settings → Help & support → Report AI
+content**, to review a description and an optional excerpt. Reports use the
+Firebase HTTP adapter described in [Firebase reporting](../integrations/firebase-reporting.md).
+The service is unavailable until a verified endpoint is configured. No mail app
+is opened. Only a matching server receipt confirms delivery; failures preserve
+the in-memory draft and retry identity. No excerpt is included without choosing it.
 
 ## Prepare a native release
 

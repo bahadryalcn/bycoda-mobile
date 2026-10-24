@@ -34,11 +34,22 @@ export function GitFileRow({
   const status = gitFilePresentation(file.status);
   const tone = semanticColors[status.tone];
   const stageLabel = staged ? copy("Stage’den çıkar", "Unstage") : copy("Stage’e al", "Stage");
+  const changeLabel =
+    status.kind === "added"
+      ? copy("Eklendi", "Added")
+      : status.kind === "deleted"
+        ? copy("Silindi", "Deleted")
+        : status.kind === "renamed"
+          ? copy("Yeniden adlandırıldı", "Renamed")
+          : copy("Değiştirildi", "Modified");
+  const stageState = staged ? copy("Stage’de", "Staged") : copy("Stage’de değil", "Unstaged");
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", minHeight: 60, paddingEnd: space.xs }}>
+    <View
+      style={{ flexDirection: "row", alignItems: "center", minHeight: 60, paddingEnd: space.xs }}
+    >
       <PressableCard
         disabled={busy}
-        label={`${file.relative}. ${copy("Değişiklikleri göster", "View changes")}`}
+        label={`${file.relative}. ${changeLabel}. ${stageState}. ${copy("Değişiklikleri göster", "View changes")}`}
         onPress={onPreview}
         style={{
           flex: 1,

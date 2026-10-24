@@ -5,7 +5,7 @@ export type AutomationEditorFlow =
   | { kind: "edit"; id: string }
   | null;
 export type AutomationEditorProps = {
-  initial: HostAutomationInput;
+  initial: HostAutomationInput & { updatedAt?: number };
   save: ReturnType<typeof useHostMutation<HostAutomation>>;
   busy: boolean;
   onClose: () => void;

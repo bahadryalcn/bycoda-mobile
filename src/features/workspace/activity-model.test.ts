@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeProjectSessions, deduplicateProjects, projectSessionDirectory } from "./activity-model";
+import { activeProjectSessions, deduplicateProjects, projectSessionDirectory, runningProjectCounts } from "./activity-model";
 import type { HostProject, HostSessionSummary } from "./wire";
 
 const project = (id: string, cwd = id): HostProject => ({ id, cwd, name: "monocode" });
@@ -24,7 +24,7 @@ describe("workspace activity", () => {
     ];
     expect(deduplicateProjects(rows, "b").map((row) => row.id)).toEqual(["a", "b", "c", "d"]);
   });
-  it("collects all batches, deduplicates sessions and prioritizes answers", () => {
+  it("collects all batches, deduplicates sessions and prioritizes running work", () => {
     const projects = [project("a"), project("b")];
     const rows = activeProjectSessions(projects, [
       {
@@ -51,8 +51,9 @@ describe("workspace activity", () => {
         },
       },
     ]);
-    expect(rows.map((row) => row.session.id)).toEqual(["waiting", "running"]);
-    expect(rows[1]!.project.id).toBe("b");
+    expect(rows.map((row) => row.session.id)).toEqual(["running", "waiting"]);
+    expect(rows[0]!.project.id).toBe("b");
+    expect(runningProjectCounts(rows)).toEqual({ b: 1 });
   });
   it("keeps ready and archived history discoverable without marking it active", () => {
     const projects = [project("a")];

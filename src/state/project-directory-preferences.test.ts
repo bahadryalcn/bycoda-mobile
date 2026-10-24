@@ -3,6 +3,25 @@ vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 import { createProjectDirectoryPreferenceStore, normalizeProjectDirectoryPreferences } from "./project-directory-preferences";
 
 describe("phone project directory preferences", () => {
+  it("refuses writes after failed reads and merges recovered history before a later update", async () => {
+    const saved = {a: {view: "list", sort: "name", fullPaths: true, collapsed: {work: true}, recent: {old: 12}}, b: {view: "list", sort: "recent"}};
+    const storage = {
+      getItem: vi.fn().mockRejectedValueOnce(new Error("read failed")).mockRejectedValueOnce(new Error("still unavailable")).mockResolvedValue(JSON.stringify(saved)),
+      setItem: vi.fn().mockResolvedValue(undefined),
+    };
+    const store = createProjectDirectoryPreferenceStore(storage);
+    await store.getState().hydrate();
+    expect(store.getState().error).toBe(true);
+    await store.getState().update("a", {sort: "desktop"});
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(store.getState().error).toBe(true);
+    await store.getState().update("a", (current) => ({recent: {...current.recent, new: 42}}));
+    expect(storage.getItem).toHaveBeenCalledTimes(3);
+    expect(store.getState().machines.a).toMatchObject({...saved.a, recent: {old: 12, new: 42}});
+    expect(store.getState().machines.b).toMatchObject(saved.b);
+    expect(store.getState().error).toBe(false);
+    expect(JSON.parse(storage.setItem.mock.calls[0]![1])).toMatchObject({a: {...saved.a, recent: {old: 12, new: 42}}, b: saved.b});
+  });
   it("hydrates before merging a change and preserves each computer's choices", async () => {
     const saved = { a: { view: "list", sort: "name", fullPaths: true, collapsed: { work: true }, recent: { p: 12 } }, b: { view: "grouped", sort: "desktop" } };
     const storage = { getItem: vi.fn().mockResolvedValue(JSON.stringify(saved)), setItem: vi.fn().mockResolvedValue(undefined) };

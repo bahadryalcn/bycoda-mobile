@@ -5,6 +5,8 @@ import type {
   HostAutomationRun,
   HostGoal,
   HostGoalInput,
+  GoalSettings,
+  AutomationSchedulePreview,
   HostSettings,
   HostSettingsState,
   HostSteward,
@@ -18,6 +20,8 @@ import type {
 export function createWorkApi(request: HostRequest) {
   return {
     automations: {
+      preview: (schedule: Pick<HostAutomationInput, "scheduleKind" | "minute" | "time" | "dayOfWeek">, options?: RemoteRequestOptions) =>
+        request<AutomationSchedulePreview>("automations.preview", { schedule }, options),
       list: (options?: RemoteRequestOptions) =>
         request<HostAutomation[]>("automations.list", {}, options),
       save: (automation: HostAutomationInput, options?: RemoteRequestOptions) =>
@@ -50,6 +54,8 @@ export function createWorkApi(request: HostRequest) {
         request<{ deleted: true }>("tasks.delete", { taskId, discard }, options),
     },
     goals: {
+      update: (goalId: string, settings: GoalSettings, expectedUpdatedAt: number, options?: RemoteRequestOptions) =>
+        request<HostGoal>("goals.update", { goalId, settings, expectedUpdatedAt }, options),
       list: (options?: RemoteRequestOptions) => request<HostGoal[]>("goals.list", {}, options),
       create: (goal: HostGoalInput, options?: RemoteRequestOptions) =>
         request<HostGoal>("goals.create", { goal }, options),
@@ -61,6 +67,8 @@ export function createWorkApi(request: HostRequest) {
         request<HostGoal>("goals.cancel", { goalId }, options),
     },
     stewards: {
+      decline: (taskId: string, options?: RemoteRequestOptions) =>
+        request<{ declined: true }>("stewards.decline", { taskId }, options),
       list: (options?: RemoteRequestOptions) =>
         request<HostSteward[]>("stewards.list", {}, options),
       save: (steward: HostStewardInput, options?: RemoteRequestOptions) =>

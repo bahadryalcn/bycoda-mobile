@@ -4,14 +4,14 @@ import { Stack } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import {
   Body,
-  Button,
   Card,
   Field,
   FormActions,
   Heading,
   MutationState,
   QueryState,
-  Row,
+  SelectField,
+  Button,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useHostMutation, useHostQuery } from "@/state/queries";
@@ -27,10 +27,15 @@ import type { ThreadEditorProps, ReplyFormDraft } from "./types";
 
 export function ThreadEditor({ thread, accounts, projects, profiles, onClose }: ThreadEditorProps) {
   const copy = useCopy();
-  const query = useHostQuery<SocialThread>(["social", "thread", thread.id], "social.request", {
-    action: "thread.read",
-    input: { id: thread.id },
-  });
+  const query = useHostQuery<SocialThread>(
+    ["social", "thread", thread.id],
+    "social.request",
+    {
+      action: "thread.read",
+      input: { id: thread.id },
+    },
+    { interval: 8000 },
+  );
   const policy = usePolicy(thread.accountId);
   const form = useFormDraft<ReplyFormDraft>({ text: "", facts: [] });
   const { text, facts } = form.values;
@@ -60,13 +65,24 @@ export function ThreadEditor({ thread, accounts, projects, profiles, onClose }: 
         );
       await action.mutateAsync(
         request("replies.draft", { threadId: current.id, text, factIds: facts }),
-        { onSuccess: () => { haptic.success(); onClose(); } },
+        {
+          onSuccess: () => {
+            haptic.success();
+            onClose();
+          },
+        },
       );
     });
   return (
     <Stack>
       <Heading>{account?.name}</Heading>
       <QueryState query={query} />
+      <Button
+        label={copy("Yenile", "Refresh")}
+        tone="quiet"
+        busy={query.isFetching}
+        onPress={() => void query.refetch()}
+      />
       {query.data?.events.map((event) => (
         <Card key={event.id}>
           <Body muted>
@@ -84,21 +100,27 @@ export function ThreadEditor({ thread, accounts, projects, profiles, onClose }: 
               "Assign the conversation to a project before replying.",
             )}
           </Body>
-          <Row>
-            {assignable.map((project) => (
-              <Button
-                key={project.id}
-                label={project.name}
-                disabled={busy}
-                onPress={() =>
-                  assign.mutate(
-                    request("thread.assign", { id: current.id, projectId: project.id }),
-                    { onSuccess: () => { haptic.success(); onClose(); } },
-                  )
-                }
-              />
-            ))}
-          </Row>
+          {assignable.length ? (
+            <SelectField
+              label={copy("Proje", "Project")}
+              placeholder={copy("Proje seçin", "Choose a project")}
+              searchable
+              disabled={busy}
+              options={assignable.map((project) => ({
+                value: project.id,
+                label: project.name,
+                detail: project.cwd,
+              }))}
+              onChange={(projectId) =>
+                assign.mutate(request("thread.assign", { id: current.id, projectId }), {
+                  onSuccess: () => {
+                    haptic.success();
+                    onClose();
+                  },
+                })
+              }
+            />
+          ) : null}
           {!assignable.length && (
             <Body muted>
               {copy(
@@ -110,7 +132,7 @@ export function ThreadEditor({ thread, accounts, projects, profiles, onClose }: 
         </>
       )}
       {current.reviewReason && <Body>{current.reviewReason}</Body>}
-      <QueryState query={policy} loading="inline" />
+      <QueryState query={policy} loading={query.isPending ? "none" : "inline"} />
       <PolicyInfo policy={policy.data?.effective} />
       <Field
         label={copy("Yanıt taslağı", "Reply draft")}
@@ -119,7 +141,11 @@ export function ThreadEditor({ thread, accounts, projects, profiles, onClose }: 
         multiline
         editable={!busy}
       />
-      <PolicyCounter policy={policy.data?.effective} kind={current.kind === "message" ? "message" : "comment"} text={text} />
+      <PolicyCounter
+        policy={policy.data?.effective}
+        kind={current.kind === "message" ? "message" : "comment"}
+        text={text}
+      />
       <FactChoices
         profile={profile}
         selected={facts}
@@ -127,8 +153,12 @@ export function ThreadEditor({ thread, accounts, projects, profiles, onClose }: 
         disabled={busy}
       />
       <FormActions
-        feedback={<><MutationState mutation={submission} />
-      <MutationState mutation={assign} /></>}
+        feedback={
+          <>
+            <MutationState mutation={submission} />
+            <MutationState mutation={assign} />
+          </>
+        }
         submitLabel={copy("Taslağı kaydet", "Save draft")}
         busy={busy}
         disabled={

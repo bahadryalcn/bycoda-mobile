@@ -117,7 +117,7 @@ export function TerminalScreen({ project }: { project: HostProject }) {
       }
     >
       <Stack.Screen options={{ title: copy("Terminaller", "Terminals") }} />
-      <QueryState query={list} />
+      <QueryState query={list} loading={selected ? "none" : "list"} />
       {list.data?.writable === false ? <Notice message={copy("Bu bağlantıda terminaller salt okunur.", "Terminals are read-only on this connection.")} /> : null}
       {terminals.length ? <SelectField label={copy("Terminal", "Terminal")} value={selectedId} disabled={busy} placeholder={copy("Terminal seç", "Choose a terminal")} options={terminals.map((entry) => ({ value: entry.id, label: entry.name, detail: entry.cwd }))} onChange={setSelectedId} /> : !list.isPending && !list.isError ? <Empty title={copy("Bu projede terminal yok.", "No terminals in this project.")} /> : null}
       {selected ? <>
@@ -136,7 +136,7 @@ export function TerminalScreen({ project }: { project: HostProject }) {
         <QueryState query={output} loading="inline" />
         {output.data?.truncated ? <Notice message={copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")} /> : null}
         {output.data ? <ScrollView style={{ maxHeight: 360 }} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentInsetAdjustmentBehavior="never"><CodePanel horizontal={false}><CodeText>{terminalDisplayOutput(output.data.output) || copy("Henüz çıktı yok.", "No output yet.")}</CodeText></CodePanel></ScrollView> : null}
-        {output.data?.hasMore ? <Button label={copy("Daha fazla çıktı yükle", "Load more output")} busy={output.isFetching} onPress={() => { void output.refetch(); }} /> : null}
+        {output.data?.hasMore ? <Button tone="quiet" label={copy("Daha fazla çıktı yükle", "Load more output")} busy={output.isFetching} onPress={() => { void output.refetch(); }} /> : null}
         {terminal?.exitCode != null ? <Body muted>{copy("Çıkış kodu: {p0}", "Exit code: {p0}", { p0: terminal.exitCode })}</Body> : null}
         <Field label={copy("Komut", "Command")} value={command} multiline mono autoCapitalize="none" autoCorrect={false} maxLength={TERMINAL_COMMAND_LIMIT} editable={!busy && writable && terminal?.state === "running" && !uncertain} error={command.trim() && !terminalCommandInput(command) ? copy("En fazla 16384 UTF-8 baytı kullan ve terminal kontrol karakterlerini kaldır.", "Use at most 16384 UTF-8 bytes and remove terminal control characters.") : undefined} onChangeText={(value) => setDrafts((previous) => ({ ...previous, [selected.id]: value }))} />
         <Button label={copy("Komutu gönder", "Send command")} tone="primary" busy={busy} disabled={!writable || uncertain || terminal?.state !== "running" || !terminalCommandInput(command)} onPress={send} />

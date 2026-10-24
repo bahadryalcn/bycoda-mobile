@@ -13,7 +13,10 @@ export function LegalScreen() {
         <Stack.Screen options={{ title: copy("Belge bulunamadı", "Document not found") }} />
         <Card>
           <Body>{copy("Bu belge mevcut değil.", "This document is unavailable.")}</Body>
-          <Button label={copy("Geri dön", "Go back")} onPress={() => router.back()} />
+          <Button label={copy("Geri dön", "Go back")} onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace("/");
+          }} />
         </Card>
       </Screen>
     );

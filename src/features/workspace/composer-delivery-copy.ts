@@ -1,6 +1,18 @@
 /** Local validation is translated; detailed host errors retain their original evidence. */
 export function composerDeliveryError(error: unknown, copy: (tr: string, en: string) => string) {
   const messages = {
+    "Update bycoda on this computer to send note context. Your draft is preserved.": [
+      "Not bağlamını göndermek için bilgisayardaki bycoda’yı güncelle. Taslağın korunuyor.",
+      "Update bycoda on this computer to send note context. Your draft is preserved.",
+    ],
+    "Note context requires Send without plan, compact or session commands. Change the delivery mode or remove the note.": [
+      "Not bağlamı için Gönder’i kullan; plan, sıkıştırma veya oturum komutlarını kaldır. Gönderme biçimini değiştir veya notu kaldır.",
+      "Note context requires Send without plan, compact or session commands. Change the delivery mode or remove the note.",
+    ],
+    "Delivery is unconfirmed. Review this message on the sending computer before resuming the queue.": [
+      "Teslimat doğrulanamadı. Sırayı sürdürmeden önce mesajı gönderen bilgisayarda kontrol et.",
+      "Delivery is unconfirmed. Review this message on the sending computer before resuming the queue.",
+    ],
     "This queued message has missing files. Repair its attachments on your computer before sending.":
       [
         "Sıradaki mesajın dosyaları eksik. Göndermeden önce bilgisayarda eklerini düzelt.",

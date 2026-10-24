@@ -124,6 +124,22 @@ describe("typed remote API", () => {
     expect(calls[1].params.requestId).toBe("operation-1");
   });
 
+  it("sends the opening draft snapshot after checking policy without authorizing delivery", async () => {
+    const draft = { id: "draft-1", accountId: "account-1", kind: "reply", text: "Original" } as SocialDraft;
+    const { api, calls } = client((_method, params) => {
+      if (params.action === "policy.get") {
+        draft.text = "Changed while policy loads";
+        return { effective: { maxCommentCharacters: 100 } };
+      }
+      return { ...draft, text: "Revised" };
+    });
+    await api.social.updateDraft(draft, "Revised", []);
+    expect(calls.map((call) => call.params.action)).toEqual(["policy.get", "drafts.update"]);
+    expect(calls[1].params.input).toMatchObject({
+      id: "draft-1", text: "Revised", expectedDraft: { text: "Original" },
+    });
+  });
+
   it("preserves file optimistic concurrency and nested PR-watch contracts", async () => {
     const { api, calls } = client(() => null);
     await api.files.write({ projectId: "project-1", cwd: "/worktree" }, "src/app.ts", "old", "new");

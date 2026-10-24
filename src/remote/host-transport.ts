@@ -195,22 +195,30 @@ export class HostTransport {
         controller.abort();
         return new RemoteHostError(this.machine.id, "protocol", "The host response exceeds the transfer limit.", !read);
       });
+      // A proxy may return HTML while the host restarts. Only these explicit
+      // transient HTTP statuses qualify for the existing bounded read retry;
+      // a malformed successful response remains a protocol failure.
+      const invalidKind = [502, 503, 504].includes(response.status) ? "network" : "protocol";
       let value: unknown;
       try {
         value = JSON.parse(raw);
       } catch {
         throw new RemoteHostError(
           this.machine.id,
-          "protocol",
-          "The computer returned an invalid host response.",
+          invalidKind,
+          invalidKind === "network"
+            ? `The computer is temporarily unavailable (HTTP ${response.status}).`
+            : "The computer returned an invalid host response.",
           !read,
         );
       }
       if (!value || typeof value !== "object" || Array.isArray(value))
         throw new RemoteHostError(
           this.machine.id,
-          "protocol",
-          "The computer returned an invalid host response.",
+          invalidKind,
+          invalidKind === "network"
+            ? `The computer is temporarily unavailable (HTTP ${response.status}).`
+            : "The computer returned an invalid host response.",
           !read,
         );
       const envelope = value as Record<string, unknown>;
@@ -226,7 +234,7 @@ export class HostTransport {
       if (!response.ok || !Object.prototype.hasOwnProperty.call(envelope, "result"))
         throw new RemoteHostError(
           this.machine.id,
-          "protocol",
+          invalidKind,
           `The computer returned an unexpected response (HTTP ${response.status}).`,
           !read,
         );

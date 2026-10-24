@@ -90,7 +90,7 @@ describe("local chat appearance persistence", () => {
     adapter.getItem.mockRejectedValueOnce(new Error("Storage unavailable"));
     const store = createChatAppearanceStore(adapter);
     await store.getState().hydrate();
-    expect(store.getState()).toMatchObject({ hydrated: true, textSize: "compact" });
+    expect(store.getState()).toMatchObject({ hydrated: true, textSize: "standard" });
     expect(store.getState().storageError).toBeInstanceOf(Error);
   });
 });

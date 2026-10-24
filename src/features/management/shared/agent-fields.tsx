@@ -34,7 +34,7 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
         disabled={disabled}
         onChange={(harness) => {
           if (harness !== value.harness)
-            onChange({ ...value, harness, model: models.data?.models[harness]?.[0]?.id ?? "" });
+            onChange({ ...value, harness, providerAccountId: undefined, model: models.data?.models[harness]?.[0]?.id ?? "" });
         }}
       />
       {!machine?.providers?.length && (

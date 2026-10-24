@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import House from "lucide-react-native/icons/house";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { useMachines } from "@/state/machines";
+import { useActiveMachine, useMachines } from "@/state/machines";
 import {
   Badge, Body, Button, Disclosure, Field, IconButton, MutationState, Notice, QueryState, Row, Sheet, ToggleField, NavigationGroup,
 } from "@/ui/primitives";
@@ -11,6 +11,8 @@ import { useCopy } from "@/ui/copy";
 import { colors } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import type { DeviceAction, DeviceFrame, DeviceSummary } from "./types";
+import { DeviceRuntime } from "./device-runtime";
+import { DevicePreviewSheet } from "./device-preview";
 
 export function DeviceViewer({ projectId, device, canControl, onDevice, onClose }: {
   projectId: string;
@@ -21,6 +23,11 @@ export function DeviceViewer({ projectId, device, canControl, onDevice, onClose 
 }) {
   const copy = useCopy();
   const machineId = useMachines((state) => state.activeId);
+  const machine = useActiveMachine();
+  const [opening] = useState(() => ({ machineId, environmentId: machine?.environmentId, projectId, deviceId: device.id }));
+  const current = () => !!opening.machineId && !!opening.environmentId && machine?.environmentId === opening.environmentId && useMachines.getState().activeId === opening.machineId && machineId === opening.machineId && projectId === opening.projectId && device.id === opening.deviceId;
+  const [runtime, setRuntime] = useState(false);
+  const [preview, setPreview] = useState(false);
   const [control, setControl] = useState(false);
   const [live, setLive] = useState(false);
   const [app, setApp] = useState("");
@@ -31,15 +38,15 @@ export function DeviceViewer({ projectId, device, canControl, onDevice, onClose 
   const action = useHostMutation<string>("devices.action", ["devices", "capture", projectId, device.id]);
   const frame = useHostQuery<DeviceFrame>(
     ["devices", "capture", projectId, device.id], "devices.capture", { projectId, deviceId: device.id },
-    { enabled: device.booted && !action.isPending, interval: live ? 3_000 : undefined },
+    { enabled: current() && device.booted && !action.isPending, interval: live ? 3_000 : undefined },
   );
   const busy = boot.isPending || action.isPending;
-  const enabled = control && canControl && device.booted && !busy;
+  const enabled = current() && control && canControl && device.booted && !busy;
   const send = (input: DeviceAction) => {
-    if (!enabled || pending.current) return;
+    if (!current() || !enabled || pending.current) return;
     pending.current = true;
     void action.mutateAsync({ projectId, deviceId: device.id, action: input }).then(() => {
-      if (input.type === "type" && useMachines.getState().activeId === machineId) setText("");
+      if (input.type === "type" && current()) setText("");
     }).catch(() => {}).finally(() => { pending.current = false; });
   };
   return (
@@ -48,11 +55,15 @@ export function DeviceViewer({ projectId, device, canControl, onDevice, onClose 
         <Body muted style={[uiStyles.caption, uiStyles.grow]}>{`${device.platform} ${device.version}`}</Body>
         <Badge label={device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off")} tone={device.booted ? "active" : "default"} />
       </Row>
-      {!device.booted ? <Button label={copy("Cihazı başlat", "Boot device")} tone="primary" busy={boot.isPending} onPress={() => {
-        if (pending.current) return;
+      <Button label={copy("Cihaz servisi", "Device service")} tone="quiet" disabled={!current() || busy} onPress={() => setRuntime(true)} />
+      {runtime ? <DeviceRuntime projectId={opening.projectId} deviceId={opening.deviceId} onClose={() => setRuntime(false)} /> : null}
+      <Button label={copy("Expo önizlemesi", "Expo preview")} tone="quiet" disabled={!current() || busy} onPress={() => setPreview(true)} />
+      {preview ? <DevicePreviewSheet projectId={opening.projectId} device={device} onClose={() => setPreview(false)} /> : null}
+      {!device.booted ? <Button label={copy("Cihazı başlat", "Boot device")} tone="primary" disabled={!current()} busy={boot.isPending} onPress={() => {
+        if (!current() || pending.current) return;
         pending.current = true;
         void boot.mutateAsync({ projectId, deviceId: device.id }).then((result) => {
-          if (useMachines.getState().activeId === machineId) onDevice(result);
+          if (current()) onDevice(result);
         }).catch(() => {}).finally(() => { pending.current = false; });
       }} /> : null}
       <MutationState mutation={boot} />
@@ -61,7 +72,7 @@ export function DeviceViewer({ projectId, device, canControl, onDevice, onClose 
           <IconButton label={copy("Ana ekran", "Home")} disabled={!enabled} onPress={() => send({ type: "home" })}>
             <House size={22} strokeWidth={2} color={colors.accent} />
           </IconButton>
-          <IconButton label={copy("Ekranı yenile", "Refresh screen")} busy={frame.isFetching} disabled={busy} onPress={() => { void frame.refetch(); }}>
+          <IconButton label={copy("Ekranı yenile", "Refresh screen")} busy={frame.isFetching} disabled={!current() || busy} onPress={() => { if (current()) void frame.refetch(); }}>
             <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
           </IconButton>
         </Row>
@@ -71,7 +82,7 @@ export function DeviceViewer({ projectId, device, canControl, onDevice, onClose 
         </NavigationGroup>
         {!canControl ? <Notice message={copy("Cihaz kontrolünü önce bilgisayardaki bycoda’dan etkinleştir.", "Enable device control in bycoda on your computer first.")} /> : null}
         <QueryState query={frame} />
-        {frame.data ? <RemoteFrame
+        {current() && frame.data ? <RemoteFrame
           uri={`data:${frame.data.mime};base64,${frame.data.base64}`}
           label={copy("Cihaz ekranı", "Device screen")}
           disabled={!enabled}

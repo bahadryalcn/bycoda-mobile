@@ -53,21 +53,26 @@ export function NavigationRow({
   trailing,
   onPress,
   disabled,
+  selected,
   tone,
   variant,
   detailLines = 1,
   detailSelectable = true,
   detailEllipsizeMode,
   emphasized,
+  accessibilityLabel,
 }: {
   /** Bold label, e.g. an unread inbox item. */
   emphasized?: boolean;
   label: string;
+  accessibilityLabel?: string;
   detail?: string;
   icon?: ReactNode;
   trailing?: ReactNode;
   onPress: () => void;
   disabled?: boolean;
+  /** Selection for a visible exclusive choice, independent of disabled state. */
+  selected?: boolean;
   tone?: SemanticTone;
   variant?: "card" | "plain";
   detailLines?: number;
@@ -81,8 +86,9 @@ export function NavigationRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={[label, detail].filter(Boolean).join(". ")}
-      accessibilityState={{ disabled: !!disabled }}
+      accessibilityLabel={accessibilityLabel ?? [label, detail].filter(Boolean).join(". ")}
+      accessibilityState={{ disabled: !!disabled, ...(selected === undefined ? {} : { selected }) }}
+      aria-pressed={selected}
       aria-disabled={!!disabled}
       disabled={disabled}
       onPress={onPress}

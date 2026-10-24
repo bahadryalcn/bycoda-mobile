@@ -13,12 +13,22 @@ import { SessionArtifacts } from "./session-artifacts";
 import { ChatAction, ChatToolbarAction } from "@/ui/chat-controls";
 import { SessionFiles } from "./session-files";
 import { useSessionQueue } from "./use-session-queue";
+import { SessionCheckpoints } from "./session-checkpoints";
+import { SessionNotes } from "./session-notes";
+import { HandoffSession } from "./handoff-session";
+import { SessionBrowser } from "./session-browser";
+import { WorktreeRemoval } from "./worktree-removal";
+import { SshWorkspace } from "../tools/ssh-workspace";
+import { HistoryImport } from "./history-import";
+import { ProjectOrganization } from "./project-organization";
+import { DesktopPreferences } from "./desktop-preferences";
+import { MobilePty } from "../tools/mobile-pty";
+import { ProviderDesktop } from "../tools/provider-desktop";
 
 export function SessionToolbar({
   scope,
   projectId,
   query,
-  command,
   blocked,
   onSettings,
   onRefresh,
@@ -28,6 +38,18 @@ export function SessionToolbar({
   const copy = useCopy();
   const session = query.data;
   const [menu, setMenu] = useState(false);
+  const [review, setReview] = useState(false);
+  const [notes, setNotes] = useState(false);
+  const [browser, setBrowser] = useState(false);
+  const [worktreeRemoval, setWorktreeRemoval] = useState(false);
+  const [sshWorkspace, setSshWorkspace] = useState(false);
+  const [historyImport, setHistoryImport] = useState(false);
+  const [organization, setOrganization] = useState(false);
+  const [desktopPreferences, setDesktopPreferences] = useState(false);
+  const [mobilePty,setMobilePty]=useState(false);
+  const [providerDesktop, setProviderDesktop] = useState(false);
+  const [contextual, setContextual] = useState<"handoff" | "secondOpinion" | null>(null);
+  const [stopping, setStopping] = useState(false);
   const queue = useSessionQueue(scope);
   const status = !session
     ? query.error
@@ -90,18 +112,23 @@ export function SessionToolbar({
           <ChatToolbarAction
             label={copy("Durdur", "Stop")}
             tone="danger"
-            busy={command.isPending}
+            busy={stopping}
             disabled={blocked}
             onPress={() => {
               // Pause durable follow-ups before stopping the exact active run.
               // A pause failure must not hide the session's primary Stop action.
               void (async () => {
-                if (queue.supported) await queue.pause().catch(() => {});
-                await onCommand({
-                  type: "cancel",
-                  sessionId: scope.sessionId,
-                  runId: session.runId,
-                });
+                setStopping(true);
+                try {
+                  if (queue.supported) await queue.pause().catch(() => {});
+                  await onCommand({
+                    type: "cancel",
+                    sessionId: scope.sessionId,
+                    runId: session.runId,
+                  });
+                } finally {
+                  setStopping(false);
+                }
               })().catch(() => {});
             }}
           >
@@ -123,6 +150,28 @@ export function SessionToolbar({
         onClose={() => setMenu(false)}
       >
         <NavigationGroup>
+          {session ? <NavigationRow label={copy("Bağlamlı agent devri", "Contextual handoff")} disabled={blocked || session.status === "running"}
+            onPress={() => { setMenu(false); setContextual("handoff"); }} /> : null}
+          {session ? <NavigationRow label={copy("İkinci görüş", "Second opinion")} disabled={blocked || session.status === "running"}
+            onPress={() => { setMenu(false); setContextual("secondOpinion"); }} /> : null}
+          {projectId && session ? <NavigationRow label={copy("Oturum notları", "Session notes")} disabled={blocked}
+            onPress={() => { setMenu(false); setNotes(true); }} /> : null}
+          {projectId && session ? <NavigationRow label={copy("Konuşma geçmişini içe aktar", "Import conversation history")} disabled={blocked}
+            onPress={() => { setMenu(false); setHistoryImport(true); }} /> : null}
+          {projectId && session ? <NavigationRow label={copy("Etkileşimli terminal", "Interactive terminal")} disabled={blocked} onPress={()=>{setMenu(false);setMobilePty(true);}}/>:null}
+          {projectId && session ? <NavigationRow label={copy("Bilgisayar tercihleri", "Computer preferences")} disabled={blocked} onPress={() => { setMenu(false); setDesktopPreferences(true); }} /> : null}
+          {projectId && session ? <NavigationRow label={copy("Proje organizasyonu", "Project organization")} disabled={blocked}
+            onPress={() => { setMenu(false); setOrganization(true); }} /> : null}
+          {projectId && session ? <NavigationRow label={copy("Hesaplar ve MCP", "Accounts and MCP")} disabled={blocked}
+            onPress={() => { setMenu(false); setProviderDesktop(true); }} /> : null}
+          {projectId && session ? <NavigationRow label={copy("Tarayıcı", "Browser")} disabled={blocked}
+            onPress={() => { setMenu(false); setBrowser(true); }} /> : null}
+          {projectId && session ? <NavigationRow label={copy("Çalışma klasörü kaldırma", "Worktree removal")} disabled={blocked}
+            onPress={() => { setMenu(false); setWorktreeRemoval(true); }} /> : null}
+          {projectId && session ? <NavigationRow label={copy("Bilgisayarda SSH", "SSH on the computer")} disabled={blocked}
+            onPress={() => { setMenu(false); setSshWorkspace(true); }} /> : null}
+          <NavigationRow label={copy("Oturum incelemesi", "Session review")} disabled={blocked}
+            onPress={() => { setMenu(false); setReview(true); }} />
           <NavigationRow
             label={copy("Oturum ayarları", "Session settings")}
             onPress={() => {
@@ -149,6 +198,19 @@ export function SessionToolbar({
           ) : null}
         </NavigationGroup>
         {projectId ? <SessionArtifacts projectId={projectId} sessionId={scope.sessionId} /> : null}
+      </Sheet>
+      {review && session ? <SessionCheckpoints scope={scope} session={session} blocked={blocked} onCommand={onCommand} onRefresh={onRefresh} onClose={() => setReview(false)} /> : null}
+      {notes && projectId ? <SessionNotes key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setNotes(false)} /> : null}
+      {browser && projectId ? <SessionBrowser key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setBrowser(false)} /> : null}
+      {worktreeRemoval && projectId ? <WorktreeRemoval key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setWorktreeRemoval(false)} /> : null}
+      {sshWorkspace && projectId ? <SshWorkspace key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setSshWorkspace(false)} /> : null}
+      {historyImport && projectId ? <HistoryImport key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setHistoryImport(false)} /> : null}
+      {mobilePty&&projectId?<MobilePty key={JSON.stringify([scope.machineId,projectId,scope.sessionId])} scope={scope} projectId={projectId} onClose={()=>setMobilePty(false)}/>:null}
+      {desktopPreferences && projectId ? <DesktopPreferences key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setDesktopPreferences(false)} /> : null}
+      {organization && projectId ? <ProjectOrganization key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setOrganization(false)} /> : null}
+      {providerDesktop && projectId ? <ProviderDesktop key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setProviderDesktop(false)} /> : null}
+      <Sheet visible={!!contextual} title={contextual === "handoff" ? copy("Bağlamlı agent devri", "Contextual handoff") : copy("İkinci görüş", "Second opinion")} onClose={() => setContextual(null)}>
+        {contextual && session ? <HandoffSession key={JSON.stringify([scope.machineId, scope.sessionId, contextual])} scope={scope} source={session} mode={contextual} blocked={blocked} onClose={() => setContextual(null)} /> : null}
       </Sheet>
     </View>
   );

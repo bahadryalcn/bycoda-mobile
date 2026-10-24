@@ -3,6 +3,7 @@ export type ConnectionPhase =
   | "offline"
   | "locked"
   | "permission"
+  | "storage"
   | "checking"
   | "connected"
   | "disconnected";
@@ -12,6 +13,7 @@ export function connectionPhase(input: {
   networkConnected: boolean | null;
   unlocked: boolean;
   permitted: boolean;
+  storageError?: string | null;
   successAt: number;
   errorAt: number;
   now: number;
@@ -19,6 +21,7 @@ export function connectionPhase(input: {
   if (!input.paired) return "unpaired";
   if (input.networkConnected === false) return "offline";
   if (!input.unlocked) return "locked";
+  if (input.storageError) return "storage";
   if (!input.permitted) return "permission";
   if (input.errorAt && input.errorAt >= input.successAt) return "disconnected";
   if (input.successAt > 0 && input.now - input.successAt < 45_000) return "connected";

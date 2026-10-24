@@ -8,6 +8,7 @@ export type FileEditorConfirmation =
 export type FileEditorMode = "default" | "edit" | "preview";
 export type FileEditorProps = WorkspaceTarget & {
   path: string;
+  initialLine?: number;
   root?: string;
   onBack: () => void;
   onDraftGuard?: (guard: DraftGuard) => void;

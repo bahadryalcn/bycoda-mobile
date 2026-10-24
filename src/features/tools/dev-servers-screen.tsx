@@ -91,7 +91,7 @@ export function DevServersScreen({ project }: { project: HostProject }) {
             <MutationState mutation={start} />
             <Button label={copy("Sunucu başlat", "Start server")} tone="primary" busy={start.isPending} disabled={!form.values.command.trim()} onPress={submit} />
           </Sheet>
-          {selected ? <DevServerDetail key={selected.id} projectId={project.id} server={selected} onClose={() => setSelected(undefined)} /> : null}
+          {selected ? <DevServerDetail key={selected.id} projectId={project.id} project={project} server={selected} onClose={() => setSelected(undefined)} /> : null}
         </>
       }
       renderItem={({ item: server }) => (

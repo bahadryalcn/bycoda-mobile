@@ -1,3 +1,5 @@
+import { ActivityBadge } from "@/ui/activity-badge";
+import { isRunningSession } from "./activity-model";
 import { useMobileTheme } from "@/ui/theme";
 import type { ProjectSessionsProps, SessionCreationDraft } from "./sessions-panel-types";
 import { useEffect, useRef, useState } from "react";
@@ -11,23 +13,24 @@ import { useFormDraft } from "@/state/form-draft";
 import { createSingleFlight } from "@/state/single-flight";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
+import { useModelCatalog } from "@/state/model-catalog";
 import { haptic } from "@/ui/motion";
 import {
   ActionMenu,
   Body,
-  Button,
   FormActions,
+  IconButton,
   SelectField,
   Sheet,
   SearchField,
   Notice,
+  Loading,
   NavigationRow,
   ScreenList,
   QueryState,
   Row,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { IconTile } from "@/ui/icon-tile";
 import {
   CommandError,
   ErrorText,
@@ -35,13 +38,12 @@ import {
   relativeTime,
   rowInset,
   sessionStatus,
-  StatusDot,
   useCommands,
   workspaceStyles,
 } from "./shared";
 import { catalogModel, catalogProvider, catalogProviders, modelDefaults } from "./catalog";
-import type { HostSessionSummary, HostModelCatalog } from "./wire";
-import { sessionDirectoryRows, toggleSessionDirectoryFolder, type SessionDirectoryRow } from "./session-directory";
+import type { HostSessionSummary } from "./wire";
+import { filterSessionDirectory, sessionDirectoryRows, toggleSessionDirectoryFolder, type SessionDirectoryRow } from "./session-directory";
 import { SessionFolderRow } from "./session-folder-row";
 
 export function ProjectSessions({ projectId, cwd, initialCreating = false, sessionLayout }: ProjectSessionsProps) {
@@ -76,35 +78,21 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
     { projectId },
     { interval: 5_000 },
   );
-  const catalog = useHostQuery<HostModelCatalog>(
-    ["models", projectId],
-    "models.list",
-    { projectId },
-    { enabled: creating },
-  );
+  const catalog = useModelCatalog(projectId, creating);
   const command = useCommands(["sessions", projectId]);
   const uncertain = command.error instanceof Error && command.error.name === "UncertainCommand";
   const locked = command.isPending || uncertain;
   const providers = catalogProviders(machine?.providers, catalog.data);
   const selectedProvider = catalogProvider(providers, catalog.data, provider);
   const models = selectedProvider ? (catalog.data?.models[selectedProvider] ?? []) : [];
+  const modelPending = !!selectedProvider && !!catalog.data?.pending?.includes(selectedProvider);
   const selectedModelValue = catalogModel(catalog.data, selectedProvider, model);
   const selectedModel = selectedModelValue?.id ?? "";
-  const visible = (sessions.data ?? [])
-    .filter(
-      (session) =>
-        Boolean(session.archived) === archived &&
-        `${session.title} ${session.harness} ${session.branch ?? ""}`
-          .toLocaleLowerCase()
-          .includes(search.toLocaleLowerCase()),
-    )
-    .sort(
-      (a, b) =>
-        Number(Boolean(b.needsInput)) - Number(Boolean(a.needsInput)) ||
-        Number(b.status === "running") - Number(a.status === "running") ||
-        Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
-        b.updatedAt - a.updatedAt,
-    );
+  const visible = filterSessionDirectory(
+    (sessions.data ?? []).filter((session) => Boolean(session.archived) === archived),
+    sessionLayout,
+    search,
+  );
   const rows = sessionDirectoryRows(visible, sessionLayout, collapsed, !!search.trim());
   return (
     <ScreenList<SessionDirectoryRow>
@@ -115,16 +103,22 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
       contentContainerStyle={{ gap: 0 }}
       header={
         <View style={[workspaceStyles.stack, { paddingBottom: space.md }]}>
-          <Row style={{ flexWrap: "nowrap" }}>
-            <Button
-              label={creating ? copy("Kapat", "Close") : copy("Yeni oturum", "New session")}
+          <Row style={{ flexWrap: "nowrap", gap: space.xs }}>
+            <View style={uiStyles.grow}>
+              <SearchField
+                label={copy("Oturum ara", "Search sessions")}
+                value={search}
+                onChangeText={setSearch}
+              />
+            </View>
+            <IconButton
+              label={copy("Yeni oturum", "New session")}
               disabled={locked}
-              tone="primary"
-              onPress={() => setCreating((value) => !value)}
+              tone="default"
+              onPress={() => setCreating(true)}
             >
-              {creating ? null : <Plus size={17} strokeWidth={2.4} color={colors.primaryText} />}
-            </Button>
-            <View style={uiStyles.grow} />
+              <Plus size={20} strokeWidth={2} color={colors.accent} />
+            </IconButton>
             <ActionMenu
               label={copy("Oturum seçenekleri", "Session options")}
               active={archived}
@@ -146,11 +140,6 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
               ]}
             />
           </Row>
-          <SearchField
-            label={copy("Oturum ara", "Search sessions")}
-            value={search}
-            onChangeText={setSearch}
-          />
           {creating ? (
             <Sheet
               visible
@@ -166,12 +155,6 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
               }}
             >
               <View style={workspaceStyles.stack}>
-                <Body muted style={uiStyles.caption}>
-                  {copy(
-                    "Agent seçtiğin bilgisayarda çalışır.",
-                    "The agent runs on your selected computer.",
-                  )}
-                </Body>
                 {cwd ? (
                   <Body
                     mono
@@ -192,7 +175,9 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
                 {selectedProvider && catalog.data?.errors[selectedProvider] ? (
                   <ErrorText error={catalog.data.errors[selectedProvider]} />
                 ) : null}
+                {modelPending && !catalog.isError && !models.length ? <Loading /> : null}
                 {!catalog.isPending &&
+                !modelPending &&
                 !catalog.error &&
                 !models.length &&
                 !catalog.data?.errors[selectedProvider!] ? (
@@ -253,15 +238,21 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
           ) : null}
           <QueryState
             query={sessions}
+            loading="list"
+            loadingLabel={copy("Oturumlar yükleniyor…", "Loading sessions…")}
             empty={
               !visible.length
-                ? search
+                ? search.trim()
                   ? copy("Aramana uyan oturum yok.", "No sessions match your search.")
                   : archived
                     ? copy("Arşivlenmiş oturum yok.", "No archived sessions.")
                     : copy("Henüz oturum yok.", "No sessions yet.")
                 : undefined
             }
+            emptyAction={search.trim() ? {
+              label: copy("Aramayı temizle", "Clear search"),
+              onPress: () => setSearch(""),
+            } : undefined}
           />
         </View>
       }
@@ -281,13 +272,13 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
                 .filter(Boolean)
                 .join(" · ")}
               icon={
-                <IconTile color={status.color}>
-                  <MessageSquare size={18} strokeWidth={2} color={status.color} />
-                </IconTile>
+                <View accessible={false} style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}>
+                  <MessageSquare size={20} strokeWidth={1.8} color={colors.muted} />
+                </View>
               }
               trailing={
-                <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-                  <StatusDot color={status.color} />
+                <View style={{ alignItems: "flex-end", gap: space.xs }}>
+                  {isRunningSession(session) ? <ActivityBadge /> : null}
                   <Body muted style={uiStyles.caption}>
                     {relativeTime(session.updatedAt, copy)}
                   </Body>

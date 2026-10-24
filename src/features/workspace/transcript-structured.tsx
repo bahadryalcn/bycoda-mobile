@@ -13,9 +13,13 @@ import { PlanSteps } from "@/ui/plan-steps";
 export function TranscriptStructured({
   block,
   context,
+  compactAgent = false,
+  compactOrchestration = false,
 }: {
   block: Block;
   context?: MessageContext;
+  compactAgent?: boolean;
+  compactOrchestration?: boolean;
 }) {
   useMobileTheme();
   const copy = useCopy();
@@ -113,7 +117,7 @@ export function TranscriptStructured({
               </Body>
             ) : null}
           </Row>
-          {block.agentRun.prompt ? (
+          {!compactAgent && block.agentRun.prompt ? (
             <>
               <Body muted style={uiStyles.caption}>
                 {copy("Görev", "Assignment")}
@@ -121,7 +125,8 @@ export function TranscriptStructured({
               <MessageText text={block.agentRun.prompt} context={context} compactMedia />
             </>
           ) : null}
-          {block.agentRun.steps.map((step) => (
+          {compactAgent ? <Body muted>{copy("{p0} adım", "{p0} steps", { p0: block.agentRun.steps.length })}</Body> : null}
+          {(compactAgent ? [] : block.agentRun.steps).map((step) => (
             <View
               key={step.id}
               style={{
@@ -240,7 +245,8 @@ export function TranscriptStructured({
           {block.orchestration.error ? (
             <Body style={{ color: colors.danger }}>{block.orchestration.error}</Body>
           ) : null}
-          {block.orchestration.tasks.map((task) => (
+          {compactOrchestration ? <Body muted>{copy("{p0} görev", "{p0} tasks", { p0: block.orchestration.tasks.length })}</Body> : null}
+          {(compactOrchestration ? [] : block.orchestration.tasks).map((task) => (
             <View key={task.id} style={{ gap: space.xs }}>
               <Body style={uiStyles.label}>{task.title}</Body>
               <Body muted style={uiStyles.caption}>

@@ -18,6 +18,30 @@ const task = (patch: Partial<HostTask>): HostTask => ({
   ...patch,
 });
 describe("mobile task actions follow the host", () => {
+  it("leaves crew task delivery acceptance to the crew review owner", () => {
+    expect(taskActions(task({ status: "review", crewRunId: "crew-run" })).complete).toBe(false);
+    expect(taskActions(task({ status: "review" })).complete).toBe(true);
+  });
+  it("offers review-only recheck for eligible blocked failures and retains host guards", () => {
+    const failed = task({
+      status: "blocked",
+      sessionId: "worker",
+      verification: {
+        review: { verdict: "fail", note: "Needs another check", sessionId: "reviewer" },
+      },
+    });
+    expect(taskActions(failed).recheck).toBe(true);
+    expect(taskActions({ ...failed, status: "review" }).recheck).toBe(false);
+    expect(taskActions({ ...failed, sessionId: undefined }).recheck).toBe(false);
+    expect(taskActions({ ...failed, verification: undefined }).recheck).toBe(false);
+    expect(
+      taskActions({ ...failed, repairStop: { reason: "external", message: "Needs input" } })
+        .recheck,
+    ).toBe(false);
+    expect(taskActions({ ...failed, error: "Review failed: Needs another check" }).recheck).toBe(
+      false,
+    );
+  });
   it("includes verification in Running and keeps reviewed/done work out of Edit", () => {
     expect(taskMatchesFilter(task({ status: "verifying" }), "running")).toBe(true);
     expect(taskActions(task({ status: "review" })).edit).toBe(false);

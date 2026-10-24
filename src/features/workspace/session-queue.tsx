@@ -6,13 +6,13 @@ import ArrowUp from "lucide-react-native/icons/arrow-up";
 import ArrowDown from "lucide-react-native/icons/arrow-down";
 import Trash2 from "lucide-react-native/icons/trash";
 import Pencil from "lucide-react-native/icons/pencil";
-import { Body, Button, Empty, ErrorText, Row, Sheet } from "@/ui/primitives";
+import { Body, Button, Empty, ErrorText, Notice, Row, Sheet } from "@/ui/primitives";
 import { ChatAction, ChatToolbarAction } from "@/ui/chat-controls";
 import { useHostClient } from "@/state/queries";
 import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
-import { moveQueuedMessage, queuedCommand } from "./composer-delivery";
+import { moveQueuedMessage, queuedCommand, queuedDeliveryUnknown } from "./composer-delivery";
 import { readSession } from "./session-wire";
 import type { SessionCommand, SessionScope } from "./session-types";
 import type { useSessionQueue } from "./use-session-queue";
@@ -60,6 +60,7 @@ export function SessionQueue({
     };
   }, []);
   const rows = queue.data?.messages ?? [];
+  const unconfirmed = rows.some((row) => row.deliveryUnknown);
   const act = async (action: () => Promise<unknown>) => {
     setError(null);
     try {
@@ -155,7 +156,7 @@ export function SessionQueue({
             <SessionQueueEditor editor={editor} blocked={blocked || sending || queue.changing} />
           </View>
       ) : null}
-      <ErrorText error={error} message={composerDeliveryError(error, copy)} />
+      {!open ? <ErrorText error={error} message={composerDeliveryError(error, copy)} /> : null}
       <Sheet
         visible={open && !editor.visible}
         title={copy("Mesaj sırası", "Message queue")}
@@ -176,6 +177,7 @@ export function SessionQueue({
           error={queue.error || queue.changeError || error}
           message={composerDeliveryError(queue.error || queue.changeError || error, copy)}
         />
+        {unconfirmed ? <Notice tone="warning" message={composerDeliveryError(new Error(queuedDeliveryUnknown), copy)!} /> : null}
         {queue.error ? (
           <Button
             label={copy("Sırayı yeniden yükle", "Reload queue")}
@@ -195,19 +197,23 @@ export function SessionQueue({
           <Row>
             <Button
               label={copy("Sonrakini gönder", "Send next")}
-              disabled={disabled || !!queue.error || !!editor.value}
+              tone="primary"
+              density="compact"
+              disabled={disabled || unconfirmed || !!queue.error || !!editor.value}
               busy={sending}
               onPress={() => {
                 void sendNext();
               }}
             />
             <Button
+              tone="quiet"
+              density="compact"
               label={
                 automatic || queue.data?.status === "active"
                   ? copy("Sırayı duraklat", "Pause queue")
                   : copy("Sırayı başlat", "Start queue")
               }
-              disabled={disabled || !!queue.error || !!editor.value}
+              disabled={disabled || !!queue.error || !!editor.value || (unconfirmed && !automatic && queue.data?.status !== "active")}
               onPress={() => {
                 void act(async () => {
                   if (automatic || queue.data?.status === "active") {

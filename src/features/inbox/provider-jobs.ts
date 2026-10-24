@@ -2,6 +2,8 @@ import * as Crypto from "expo-crypto";
 import type { RemoteInboxReceipt } from "../../../../src/features/inbox/model/remoteInbox";
 import { RemoteHostError, type HostTransport } from "@/remote/transport";
 import type { InboxJobAction, InboxJobRequest, InboxJobResults } from "./provider-protocol";
+import { readPrReviewContext } from "./provider-review-model";
+import { readJiraBoards,readJiraBoardSnapshot,readJiraTransitions,readJiraWriteOutcome } from "./jira-board-model";
 
 export type InboxRpcClient = Pick<HostTransport, "request">;
 
@@ -9,6 +11,7 @@ export class InboxJobError extends Error {
   constructor(
     message: string,
     readonly uncertain = false,
+    readonly terminal = false,
   ) {
     super(message);
     this.name = "InboxJobError";
@@ -49,9 +52,10 @@ export async function runInboxJob<Action extends InboxJobAction>(
   client: InboxRpcClient,
   request: InboxJobRequest<Action>,
   signal?: AbortSignal,
+  requestId = Crypto.randomUUID(),
 ): Promise<InboxJobResults[Action]> {
-  const requestId = Crypto.randomUUID();
-  const writes = request.action === "comment" || request.action === "pr-action";
+  if (!/^[A-Za-z0-9_-]{1,200}$/.test(requestId)) throw new InboxJobError("Invalid inbox request ID.");
+  const writes = request.action === "comment" || request.action === "pr-action" || request.action === "review" || request.action === "jira-board-transition" || request.action === "jira-board-move";
   let receipt: RemoteInboxReceipt;
   try {
     receipt = await client.request<RemoteInboxReceipt>(
@@ -104,7 +108,8 @@ export async function runInboxJob<Action extends InboxJobAction>(
     throw new InboxJobError(
       receipt.error ?? "The desktop inbox request could not complete.",
       receipt.state === "uncertain",
+      receipt.state === "failed",
     );
   }
-  return receipt.result as InboxJobResults[Action];
+  return (request.action === "review-context" ? readPrReviewContext(receipt.result) : request.action === "jira-boards" ? readJiraBoards(receipt.result) : request.action === "jira-board-read" ? readJiraBoardSnapshot(receipt.result) : request.action === "jira-issue-transitions" ? readJiraTransitions(receipt.result) : request.action === "jira-board-transition" || request.action === "jira-board-move" ? readJiraWriteOutcome(receipt.result) : receipt.result) as InboxJobResults[Action];
 }

@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { ActionMenu, Button, Row, Sheet } from "@/ui/primitives";
+import { ActionMenu, Button, Disclosure, Row, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 
 import { AccountCard } from "./account-card";
 import { AccountForm } from "./account-form";
+import { SocialPolicySettings } from "./policy-settings";
 import type { AccountsPanelProps } from "./types";
 
 export function AccountsPanel({ state, projectId, action, run }: AccountsPanelProps) {
@@ -12,6 +13,7 @@ export function AccountsPanel({ state, projectId, action, run }: AccountsPanelPr
   const [adding, setAdding] = useState(false);
   return (
     <>
+      <Disclosure label={copy("Sosyal politika", "Social policy")}><SocialPolicySettings /></Disclosure>
       <Row>
         <Button label={copy("Hesap ekle", "Add account")} tone="secondary" onPress={() => setAdding(true)} />
         {/* Host-wide execution and polling switches are administrative, so they stay out of the primary row. */}

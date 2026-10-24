@@ -17,6 +17,18 @@ it("resumes only after the host prefix hash matches local bytes", async () => {
   expect(await uploadAttachment(client, file, "s", new AbortController().signal, () => {})).toEqual({ id: file.id, name: file.name, size: 6, mimeType: file.mimeType, kind: "file" });
   expect(request.mock.calls[1]![1]).toMatchObject({ offset: 3, data: "ZGVm" }); expect(fixture.close).toHaveBeenCalledOnce();
 });
+it("retains canonical browser snapshot metadata after upload and rejects a different conversation before transport", async () => {
+  const browserAnnotation = { id: "capture", projectId: "project", sessionId: "s", navigationId: "nav", capturedAt: "2026-10-22T00:00:00Z", pageUrl: "https://fixture.invalid", trust: "untrusted-page-data" as const, limitations: [], comment: "Owner comment",
+    viewport: { width: 1280, height: 720, scrollX: 0, scrollY: 0 }, devicePixelRatio: 1,
+    element: { tag: "button", text: "Page text", selector: "#fixture", path: "body > button", bounds: { x: 1, y: 2, width: 20, height: 30 }, center: { x: 11, y: 17 }, ancestry: [], computedStyle: {} } };
+  const annotated = { ...file, kind: "image" as const, mimeType: "image/jpeg", browserAnnotation };
+  const request = vi.fn().mockResolvedValueOnce({ offset: 0 }).mockResolvedValueOnce({ offset: file.size });
+  const client = { machine: { id: "m", capabilities: ["browser.annotation"] }, request } as unknown as HostTransport;
+  const result = await uploadAttachment(client, annotated, "s", new AbortController().signal, () => {});
+  expect(result.browserAnnotation).toEqual(browserAnnotation); expect(result).not.toHaveProperty("uri"); expect(result).not.toHaveProperty("claimId");
+  request.mockClear();
+  await expect(uploadAttachment(client, annotated, "other", new AbortController().signal, () => {})).rejects.toThrow("another conversation"); expect(request).not.toHaveBeenCalled();
+});
 it("never appends after mismatched host data or invalid offsets", async () => {
   for (const status of [{ offset: 3, hash: "mismatch" }, { offset: 7 }]) {
     const request = vi.fn().mockResolvedValue(status); const client = { machine: { id: "m" }, request } as unknown as HostTransport;

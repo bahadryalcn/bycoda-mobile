@@ -21,8 +21,11 @@ import { TranscriptStructured } from "./transcript-structured";
 import { TranscriptActions } from "./transcript-actions";
 import { SessionArtifacts } from "./session-artifacts";
 import { AgentAvatar } from "@/ui/agent-avatar";
-import { activityState, canCollapseToolFailure, toolResultTexts } from "./transcript-model";
+import { activityState, canCollapseToolFailure, isBlockStreaming, toolResultTexts } from "./transcript-model";
 import { useMobileTheme } from "@/ui/theme";
+import { PlanReview } from "@/features/management/plans/plan-review";
+import { SubagentDetails } from "./subagent-details";
+import { OrchestrationDetails } from "./orchestration-details";
 
 export const TranscriptBlock = memo(function TranscriptBlock({
   block,
@@ -35,9 +38,13 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   activityDetail = false,
   context,
   responseText,
+  parentProvider,
 }: TranscriptBlockProps) {
   const copy = useCopy();
   useMobileTheme();
+  const [reviewPlan, setReviewPlan] = useState(false);
+  const [subagentOpen, setSubagentOpen] = useState(false);
+  const [orchestrationOpen, setOrchestrationOpen] = useState(false);
   const typography = chatTextStyles(useChatAppearance((state) => state.textSize));
   const [open, setOpen] = useState(false);
   const [actions, setActions] = useState(false);
@@ -133,25 +140,22 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   const planAction =
     value.plan?.status === "ready" ? (
       <Button
-        label={copy("Planı uygula", "Build this plan")}
+        label={copy("Planı incele", "Review plan")}
         density="compact"
         tone="quiet"
         disabled={disabled || (!!value.remoteContent && !detail.data)}
         style={{ alignSelf: "flex-start" }}
         onPress={() => {
-          void onCommand({
-            type: "send",
-            sessionId: scope.sessionId,
-            text: value.plan?.approvedText || value.text,
-            intent: "build",
-            planBlockId: value.id,
-          }).catch(() => {});
+          setReviewPlan(true);
         }}
       />
     ) : null;
 
   const contents = (
     <View style={{ gap: space.sm }}>
+      <Sheet visible={reviewPlan} title={copy("Planı incele", "Review plan")} onClose={() => setReviewPlan(false)}>
+        {reviewPlan ? <PlanReview block={value} scope={scope} disabled={disabled} onCommand={onCommand} onClose={() => setReviewPlan(false)} /> : null}
+      </Sheet>
       {(open || activityDetail || requested || value.plan || value.taskList) &&
       value.remoteContent ? (
         <QueryState query={detail} />
@@ -187,7 +191,17 @@ export const TranscriptBlock = memo(function TranscriptBlock({
         </CodePanel>)}
       </View> : null}
       {value.tool?.outputTruncated ? <Body muted>{copy("Çıktı kısaltıldı.", "Output was truncated.")}</Body> : null}
-      <TranscriptStructured block={value} context={context} />
+      {value.agentRun ? <Button label={copy("Alt ajan ayrıntıları", "Subagent details")} tone="quiet" disabled={!!value.remoteContent && !detail.data}
+        onPress={() => setSubagentOpen(true)} /> : null}
+      <Sheet visible={subagentOpen} title={value.agentRun?.name || copy("Alt ajan ayrıntıları", "Subagent details")} size="full" scroll={false} onClose={() => setSubagentOpen(false)}>
+        {subagentOpen && value.agentRun ? <SubagentDetails block={value} scope={scope} runId={runId} parentProvider={parentProvider} disabled={disabled} onCommand={onCommand} context={context} /> : null}
+      </Sheet>
+      {value.orchestration ? <Button label={copy("Koordinasyon ayrıntıları", "Coordination details")} tone="quiet" disabled={!!value.remoteContent && !detail.data}
+        onPress={() => setOrchestrationOpen(true)} /> : null}
+      <Sheet visible={orchestrationOpen} title={value.orchestration?.title || copy("Koordinasyon ayrıntıları", "Coordination details")} size="full" scroll={false} onClose={() => setOrchestrationOpen(false)}>
+        {orchestrationOpen && value.orchestration ? <OrchestrationDetails block={value} scope={scope} context={context} /> : null}
+      </Sheet>
+      <TranscriptStructured block={value} context={context} compactAgent compactOrchestration />
       <TranscriptAttachments block={value} context={context} />
       {context?.sessionId && value.role === "assistant" ? (
         <SessionArtifacts
@@ -212,12 +226,14 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             <Row>
               <Button
                 label={copy("İzin ver", "Allow")}
+                density="compact"
                 tone="success"
                 disabled={disabled}
                 onPress={() => approve("allow")}
               />
               <Button
                 label={copy("Reddet", "Deny")}
+                density="compact"
                 tone="danger"
                 disabled={disabled}
                 onPress={() => approve("deny")}
@@ -261,6 +277,8 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           <Row>
             <Button
               label={copy("Taslağı gönder", "Send draft")}
+              density="compact"
+              tone="primary"
               disabled={
                 disabled ||
                 !!runId ||
@@ -278,6 +296,8 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             />
             <Button
               label={copy("Taslağı kaldır", "Remove draft")}
+              density="compact"
+              tone="quiet"
               disabled={disabled || value.followUpDelivery === "pending"}
               onPress={() => {
                 void onCommand({
@@ -312,7 +332,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           detail={isError ? copy("Başarısız", "Failed") : status}
           reasoning={value.role === "reasoning"}
           onInspect={() => setOpen(true)}
-          status={isError ? "error" : state === "running" ? "running" : state === "completed" ? "complete" : "pending"}
+          status={isError ? "error" : state === "running" ? "running" : state === "completed" ? "complete" : state === "stopped" ? "stopped" : "record"}
         />
       ) : foldable ? (
         <View style={{ gap: space.xs }}>
@@ -415,7 +435,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                 ) : null}
               </Row>
             ) : null}
-            {value.streaming ? <ChatStreaming label={copy("Yazıyor…", "Writing…")} /> : null}
+            {isBlockStreaming(value) ? <ChatStreaming label={copy("Yazıyor…", "Writing…")} /> : null}
             {isError ? <Badge label={copy("Başarısız", "Failed")} tone="danger" /> : null}
             {value.notice === "interrupt" ? (
               <Badge label={copy("Durduruldu", "Interrupted")} tone="warning" />
@@ -452,13 +472,13 @@ export const TranscriptBlock = memo(function TranscriptBlock({
       )}
       {foldable && !value.plan && !value.taskList && (value.role === "reasoning" || value.role === "tool") ? (
         <Sheet visible={open} title={label} size="full" onClose={() => setOpen(false)}>
-          {open ? <TranscriptBlock {...{ block, author, scope, revision, runId, disabled, onCommand, context }} activityDetail /> : null}
+          {open ? <TranscriptBlock {...{ block, author, scope, revision, runId, disabled, onCommand, context, parentProvider }} activityDetail /> : null}
         </Sheet>
       ) : null}
       {actions ? (
         <TranscriptActions
           text={actionText}
-          responseText={responseText}
+          responseText={responseText?.(block.id)}
           context={context}
           reportable={canReport}
           onClose={() => setActions(false)}

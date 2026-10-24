@@ -1,9 +1,11 @@
 import type { SessionSettingsProps, SessionSettingsDraft } from "./session-settings-types";
 import { View } from "react-native";
+import { useState } from "react";
 import { useFormDraft } from "@/state/form-draft";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine } from "@/state/machines";
-import { useHostMutation, useHostQuery } from "@/state/queries";
+import { useHostMutation } from "@/state/queries";
+import { useModelCatalog } from "@/state/model-catalog";
 import {
   Button,
   Card,
@@ -11,6 +13,7 @@ import {
   Field,
   MutationState,
   Notice,
+  Loading,
   QueryState,
   Row,
   Section,
@@ -18,7 +21,7 @@ import {
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { catalogModel, catalogProviders, modelDefaults } from "./catalog";
-import type { HostModelCatalog, HostSession } from "./wire";
+import type { HostSession } from "./wire";
 import { SelectRow, workspaceStyles } from "./shared";
 
 export function SessionSettings({
@@ -40,17 +43,18 @@ export function SessionSettings({
   }));
   const { title, provider, model, mode, modelSettings } = form.values;
   const configure = useAsyncAction();
-  const catalog = useHostQuery<HostModelCatalog>(["models", projectId], "models.list", {
-    projectId,
-  });
+  const [configurationAction, setConfigurationAction] = useState<"configure" | "compact">("configure");
+  const catalog = useModelCatalog(projectId);
   const update = useHostMutation<HostSession>("sessions.update", ["sessions", projectId]);
   const models = catalog.data?.models[provider] ?? [];
+  const modelPending = !!catalog.data?.pending?.includes(provider);
   const selectedModel = models.find((item) => item.id === model);
   const providers = [
     ...new Set([value.session.harness, ...catalogProviders(machine?.providers, catalog.data)]),
   ];
   const switchAllowed = machine?.capabilities?.includes("sessions.harnessSwitch");
   const running = value.status === "running";
+  const pending = disabled || configure.isPending || update.isPending;
   return (
     <Sheet visible onClose={onClose} title={copy("Oturum ayarları", "Session settings")} size="form" dirty={form.dirty} dismissible={!configure.isPending && !update.isPending && !disabled}>
       <Card>
@@ -62,8 +66,10 @@ export function SessionSettings({
           />
           <Button
             label={copy("Başlığı kaydet", "Save title")}
-            disabled={!title.trim() || disabled}
-            busy={update.isPending}
+            density="compact"
+            tone="quiet"
+            disabled={!title.trim() || pending || title.trim() === value.session.title}
+            busy={update.isPending && update.variables?.title !== undefined}
             onPress={() => {
               void update
                 .mutateAsync({ projectId, sessionId: value.session.id, title: title.trim() })
@@ -74,8 +80,10 @@ export function SessionSettings({
           <Row>
             <Button
               label={value.pinned ? copy("Sabitlemeyi kaldır", "Unpin") : copy("Sabitle", "Pin")}
-              disabled={disabled}
-              busy={update.isPending}
+              density="compact"
+              tone="quiet"
+              disabled={pending}
+              busy={update.isPending && update.variables?.pinned !== undefined}
               onPress={() => {
                 void update
                   .mutateAsync({ projectId, sessionId: value.session.id, pinned: !value.pinned })
@@ -87,8 +95,10 @@ export function SessionSettings({
               label={
                 value.archived ? copy("Arşivden çıkar", "Unarchive") : copy("Arşivle", "Archive")
               }
-              disabled={disabled}
-              busy={update.isPending}
+              density="compact"
+              tone="quiet"
+              disabled={pending}
+              busy={update.isPending && update.variables?.archived !== undefined}
               onPress={() => {
                 void update
                   .mutateAsync({
@@ -128,7 +138,8 @@ export function SessionSettings({
         {catalog.data?.errors[provider] ? (
           <Notice tone="danger" message={catalog.data.errors[provider]} />
         ) : null}
-        {catalog.isSuccess && !models.length && !catalog.data.errors[provider] ? (
+        {modelPending && !catalog.isError && !models.length ? <Loading /> : null}
+        {catalog.isSuccess && !modelPending && !models.length && !catalog.data.errors[provider] ? (
           <Notice
             tone="warning"
             message={copy(
@@ -187,9 +198,12 @@ export function SessionSettings({
       <MutationState mutation={configure} />
       <Button
         label={copy("Agent ayarlarını kaydet", "Save agent settings")}
-        disabled={disabled || !model || running}
-        busy={configure.isPending}
+        tone="primary"
+        density="compact"
+        disabled={pending || !model || running}
+        busy={configure.isPending && configurationAction === "configure"}
         onPress={() => {
+          setConfigurationAction("configure");
           void configure.run(async () => {
             const receipt = await onCommand({
               type: "configure",
@@ -215,9 +229,12 @@ export function SessionSettings({
       ) : null}
       <Button
         label={copy("Bağlamı sıkıştır", "Compact context")}
-        disabled={disabled || running}
-        busy={configure.isPending}
+        tone="quiet"
+        density="compact"
+        disabled={pending || running}
+        busy={configure.isPending && configurationAction === "compact"}
         onPress={() => {
+          setConfigurationAction("compact");
           void configure.run(async () => {
             const receipt = await onCommand({ type: "compact", sessionId: value.session.id });
             onClose();
