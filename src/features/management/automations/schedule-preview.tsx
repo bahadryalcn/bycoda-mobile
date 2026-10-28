@@ -13,7 +13,7 @@ type Schedule = Pick<HostAutomationInput, "scheduleKind" | "minute" | "time" | "
 export function SchedulePreview({ schedule, valid, disabled }: { schedule: Schedule; valid: boolean; disabled: boolean }) {
   const copy = useCopy();
   const machine = useActiveMachine();
-  const preview = useHostMutation<AutomationSchedulePreview>("automations.preview");
+  const preview = useHostMutation<AutomationSchedulePreview>("automations.preview", null);
   const [requested, setRequested] = useState("");
   const identity = JSON.stringify([machine?.id, schedule]);
   const current = requested === identity;

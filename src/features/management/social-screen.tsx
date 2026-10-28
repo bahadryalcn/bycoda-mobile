@@ -14,9 +14,8 @@ import {
   Screen,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { useHostMutation, useHostQuery } from "@/state/queries";
+import { useHostMutation } from "@/state/queries";
 import { useMachines } from "@/state/machines";
-import type { SocialSnapshot } from "@/domain/types";
 import { initialSocialFlow, socialFlowReducer, type SocialTab } from "./social-flow";
 import { Scope } from "./shared/scope";
 import { socialRequest as request } from "./social/request";
@@ -26,23 +25,20 @@ import { DraftsPanel } from "./social/drafts-panel";
 import { CampaignsPanel } from "./social/campaigns-panel";
 import { RulesPanel } from "./social/rules-panel";
 import { JobsPanel } from "./social/jobs-panel";
+import { useSocialWorkspace } from "./social/use-workspace-query";
+import { campaignApprovalError } from "./social/review-presentation";
 
 export function SocialScreen() {
   const copy = useCopy();
   const projectId = useMachines((state) => state.selectedProjectId);
-  const query = useHostQuery<SocialSnapshot>(
-    ["social"],
-    "social.request",
-    { action: "snapshot", input: {} },
-    { interval: 8000 },
-  );
   const projects = useProjectList();
   const action = useHostMutation("social.request", ["social"]);
   const [flow, dispatch] = useReducer(socialFlowReducer, initialSocialFlow);
   const { tab, editor } = flow;
+  const { query, state, page, collection, missingEnvironment } = useSocialWorkspace(tab, projectId);
   const fetchedSelectedThread =
     editor.kind === "thread"
-      ? query.data?.threads.find((thread) => thread.id === editor.id)
+      ? state?.threads.find((thread) => thread.id === editor.id)
       : undefined;
   const selectedThread = useEditorRecord(
     editor.kind === "thread" ? editor.id : null,
@@ -50,7 +46,7 @@ export function SocialScreen() {
   );
   const fetchedSelectedDraft =
     editor.kind === "draft"
-      ? query.data?.drafts.find((draft) => draft.id === editor.id)
+      ? state?.drafts.find((draft) => draft.id === editor.id)
       : undefined;
   const selectedDraft = useEditorRecord(
     editor.kind === "draft" ? editor.id : null,
@@ -58,7 +54,7 @@ export function SocialScreen() {
   );
   const fetchedCampaignAccount =
     editor.kind === "campaign"
-      ? query.data?.accounts.find((account) => account.id === editor.accountId)
+      ? state?.accounts.find((account) => account.id === editor.accountId)
       : undefined;
   const campaignAccount = useEditorRecord(
     editor.kind === "campaign" ? editor.accountId : null,
@@ -66,7 +62,7 @@ export function SocialScreen() {
   );
   const fetchedRuleAccount =
     editor.kind === "rule"
-      ? query.data?.accounts.find((account) => account.id === editor.accountId)
+      ? state?.accounts.find((account) => account.id === editor.accountId)
       : undefined;
   const ruleAccount = useEditorRecord(
     editor.kind === "rule" ? editor.accountId : null,
@@ -75,21 +71,7 @@ export function SocialScreen() {
   const closeEditor = () => dispatch({ type: "close", editor });
   const run = (name: string, input: Record<string, unknown> = {}) =>
     action.mutate(request(name, input));
-  const state = query.data;
-  const itemCount = state
-    ? {
-        inbox: state.threads.filter((value) => !projectId || value.projectId === projectId).length,
-        drafts: state.drafts.filter((value) => !projectId || value.projectId === projectId).length,
-        accounts: state.accounts.length,
-        campaigns: state.campaigns.filter(
-          (value) => !projectId || value.projectIds.includes(projectId),
-        ).length,
-        automations: state.rules.filter((value) => !projectId || value.projectId === projectId)
-          .length,
-        jobs: state.jobs.filter((value) => !projectId || value.projectIds.includes(projectId))
-          .length,
-      }[tab]
-    : undefined;
+  const itemCount = state ? collection ? state.pages?.[collection]?.total : state.accounts.length : undefined;
   const emptyTitles: Record<SocialTab, string> = {
     inbox: copy("Henüz konuşma yok", "No conversations yet"),
     drafts: copy("Henüz taslak yok", "No drafts yet"),
@@ -97,6 +79,19 @@ export function SocialScreen() {
     campaigns: copy("Henüz içerik yok", "No content yet"),
     automations: copy("Henüz yanıt kuralı yok", "No reply rules yet"),
     jobs: copy("Henüz gönderim işi yok", "No sending jobs yet"),
+  };
+  // Navigation only: an empty collection never grants or starts social work.
+  const emptyDestination: "accounts" | "inbox" | "drafts" | undefined = !state || tab === "accounts" ? undefined
+    : !state.accounts.length ? "accounts"
+    : tab === "inbox" ? "accounts"
+    : tab === "drafts" ? "inbox"
+    : tab === "jobs" ? "drafts"
+    : tab === "automations" && (!projectId || !state.accounts.some((account) => account.grants[projectId]?.includes("draft"))) ? "accounts"
+    : undefined;
+  const destinationLabels = {
+    accounts: copy("Hesaplar", "Accounts"),
+    inbox: copy("Gelen kutusu", "Inbox"),
+    drafts: copy("Taslaklar", "Drafts"),
   };
   return (
     <Screen title={copy("Sosyal medya", "Social media")} query={query}>
@@ -117,8 +112,15 @@ export function SocialScreen() {
           onChange={(tab) => dispatch({ type: "tab", tab })}
         />
       </NavigationGroup>
-      <QueryState query={query} empty={itemCount === 0} emptyTitle={emptyTitles[tab]} />
-      <MutationState mutation={action} />
+      {missingEnvironment ? <Notice tone="warning" message={copy(
+        "Sosyal medya geçmişini görüntülemek için bilgisayardaki bycoda’yı güncelleyin.",
+        "Update bycoda on the computer to view social history.",
+      )} /> : <QueryState query={query} empty={!page?.loading && !page?.search.trim() && itemCount === 0} emptyTitle={emptyTitles[tab]} />}
+      {editor.kind === "closed" && !page?.loading && !page?.search.trim() && itemCount === 0 && emptyDestination && <Button tone="secondary"
+        label={destinationLabels[emptyDestination]}
+        onPress={() => dispatch({ type: "tab", tab: emptyDestination })} />}
+      <MutationState mutation={action.variables?.action === "campaigns.approveReviewed"
+        ? { ...action, error: campaignApprovalError(action.error, copy) } : action} />
       {state && (
         <>
           <Row>
@@ -159,6 +161,7 @@ export function SocialScreen() {
           )}
           {tab === "inbox" && (
             <ThreadsPanel
+              page={page}
               state={state}
               projectId={projectId}
               selectedThread={selectedThread}
@@ -169,6 +172,7 @@ export function SocialScreen() {
           )}
           {tab === "drafts" && (
             <DraftsPanel
+              page={page}
               state={state}
               projectId={projectId}
               selectedDraft={selectedDraft}
@@ -180,6 +184,7 @@ export function SocialScreen() {
           )}
           {tab === "campaigns" && (
             <CampaignsPanel
+              page={page}
               state={state}
               projectId={projectId}
               campaignAccount={campaignAccount}
@@ -192,6 +197,7 @@ export function SocialScreen() {
           )}
           {tab === "automations" && (
             <RulesPanel
+              page={page}
               state={state}
               projectId={projectId}
               ruleAccount={ruleAccount}
@@ -203,7 +209,7 @@ export function SocialScreen() {
             />
           )}
           {tab === "jobs" && (
-            <JobsPanel state={state} projectId={projectId} action={action} run={run} />
+            <JobsPanel page={page} state={state} projectId={projectId} action={action} run={run} />
           )}
         </>
       )}

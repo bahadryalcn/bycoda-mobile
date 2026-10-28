@@ -1,4 +1,9 @@
 import { useMobileTheme } from "@/ui/theme";
+import {
+  captureSessionAuthority,
+  retainSessionAuthority,
+  type SessionAuthority,
+} from "@/domain/session-authority";
 import { useEffect, useRef, useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -181,6 +186,8 @@ export function SessionScreen({
   });
   const value = session.data;
   const dispatch = useMutation({
+    retry: false,
+    networkMode: "always",
     mutationFn: (command: HostCommand) => client!.sessions.dispatch(command),
     onSuccess: () => {
       void session.refetch();
@@ -188,8 +195,16 @@ export function SessionScreen({
     },
   });
   const send = useMutation({
-    mutationFn: (message: string) => client!.sessions.send(sessionId, message, commandId()),
-    onSuccess: (_receipt, message) => {
+    retry: false,
+    networkMode: "always",
+    mutationFn: (intent: { message: string; commandId: string } & SessionAuthority) =>
+      client!.sessions.send(
+        sessionId,
+        intent.message,
+        intent.commandId,
+        intent.authorityGeneration,
+      ),
+    onSuccess: (_receipt, { message }) => {
       setText((current) => (current === message ? "" : current));
       setNotice(null);
       void session.refetch();
@@ -210,6 +225,7 @@ export function SessionScreen({
         const ids = new Set(snapshot.session.blocks.map((block) => block.id));
         return {
           ...current,
+          authorityGeneration: retainSessionAuthority(current, snapshot).authorityGeneration,
           history: { revision: page.revision, totalBlocks: page.totalBlocks, before: page.before },
           session: {
             ...current.session,
@@ -238,6 +254,7 @@ export function SessionScreen({
     if (!value?.runId) return;
     dispatch.mutate({
       type: "approve",
+      ...captureSessionAuthority(value),
       commandId: commandId(),
       sessionId,
       runId: value.runId,
@@ -289,6 +306,7 @@ export function SessionScreen({
                       onPress: () =>
                         dispatch.mutate({
                           type: "cancel",
+                          ...captureSessionAuthority(value),
                           commandId: commandId(),
                           sessionId,
                           runId: value.runId!,
@@ -336,6 +354,7 @@ export function SessionScreen({
               onReply={(reply) =>
                 dispatch.mutate({
                   type: "answer",
+                  ...captureSessionAuthority(value),
                   commandId: commandId(),
                   sessionId,
                   runId: value.runId!,
@@ -375,7 +394,14 @@ export function SessionScreen({
             title={value?.status === "running" ? "Sıraya ekle" : "Gönder"}
             disabled={!text.trim() || !value || busy}
             busy={send.isPending}
-            onPress={() => send.mutate(text)}
+            onPress={() => {
+              if (!value) return;
+              send.mutate({
+                message: text,
+                commandId: commandId(),
+                ...captureSessionAuthority(value),
+              });
+            }}
           />
         </View>
       </KeyboardAvoidingView>

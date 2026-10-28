@@ -5,6 +5,13 @@ export class TranscriptScrollPosition {
   private momentum = false;
   private offset = 0;
 
+  /** Lightweight route state; contains no messages or render objects. */
+  restoreOffset() {
+    this.dragging = false;
+    this.momentum = false;
+    return this.following ? 0 : this.offset;
+  }
+
   onScroll(offset: number) {
     this.offset = Math.max(0, offset);
     if (!this.dragging && !this.momentum) this.following = this.offset <= 32;

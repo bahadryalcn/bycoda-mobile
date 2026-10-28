@@ -40,7 +40,7 @@ export function Button({
       ? undefined
       : semanticColors[tone];
   const foreground =
-    tone === "primary"
+    disabled && !busy ? colors.muted : tone === "primary"
       ? colors.primaryText
       : tone === "secondary" || tone === "quiet" || selected
         ? colors.accent
@@ -79,9 +79,10 @@ export function Button({
       startContent={children}
       style={[
         { alignSelf: fullWidth ? "stretch" : "flex-start", maxWidth: "100%", flexShrink: 1,
-          borderRadius: radii.control, opacity: off ? opacity.disabled : 1 },
+          borderRadius: radii.control, opacity: disabled && !busy ? opacity.disabled : 1 },
         fullWidth && { width: "100%" },
         style,
+        disabled && !busy && tone === "primary" && { backgroundColor: colors.fill },
       ]}
     >
       <Body selectable={false} style={[uiStyles.buttonLabel, { color: foreground, textAlign: "center" }]}>
@@ -210,7 +211,7 @@ export function IconButton({
           minHeight: metrics.touchTarget,
           padding: space.xxs,
         },
-        { opacity: off ? opacity.disabled : 1 },
+        { opacity: disabled && !busy ? opacity.disabled : 1 },
       ]}
     />
   );

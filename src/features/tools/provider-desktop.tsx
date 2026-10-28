@@ -106,7 +106,7 @@ export function ProviderDesktop({
             ) : (
               <QueryState query={query} />
             )}
-            <Button
+            <Button busy={query.isFetching}
               tone="quiet"
               label={copy("Yenile", "Refresh")}
               disabled={!supported || query.isFetching}

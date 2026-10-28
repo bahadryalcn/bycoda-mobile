@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["BycodaHostSocketModule"] },
+  "android": { "modules": ["expo.modules.bycodahostsocket.BycodaHostSocketModule"] }
+}

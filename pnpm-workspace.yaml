@@ -12,4 +12,5 @@ minimumReleaseAgeExclude:
   - ai@7.0.138
   - panelui-native@0.112.0
 patchedDependencies:
+  expo-secure-store@57.0.4: modules/bycoda-host-socket/patches/expo-secure-store@57.0.4.patch
   panelui-native@0.112.0: vendor/patches/panelui-native@0.112.0.patch

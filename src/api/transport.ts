@@ -32,6 +32,7 @@ export class HostTransport {
   private active = new Set<AbortController>();
   private closed = false;
   private identity?: string;
+  private capabilities: string[] = [];
   private remote: RemoteTransport;
   readonly endpoint: string;
   readonly connection: HostConnection;
@@ -62,6 +63,7 @@ export class HostTransport {
         endpoint: this.endpoint,
         lanKey: this.connection.lanKey,
         environmentId: this.identity ?? "",
+        capabilities: this.capabilities,
       },
       this.credentialReader ?? (async () => this.connection.token),
       this.fetcher,
@@ -76,15 +78,34 @@ export class HostTransport {
         this.connection.id,
       );
     this.identity = identity;
+    this.remote.dispose();
     this.remote = this.createRemote();
   }
   disconnect() {
     this.closed = true;
+    this.remote.dispose();
     for (const controller of this.active) controller.abort();
     this.active.clear();
   }
   reconnect() {
     this.closed = false;
+    this.remote = this.createRemote();
+  }
+  /** Compatibility reads retain the canonical guard during cooperative decoding. */
+  assertCurrentAccess(): void {
+    if (this.closed)
+      throw new HostError("disconnected", "This computer is disconnected.", this.connection.id);
+    try {
+      this.remote.assertCurrentAccess();
+    } catch (error) {
+      throw new HostError(
+        "authentication",
+        error instanceof RemoteHostError
+          ? error.message
+          : "Unlock the app before connecting to this computer.",
+        this.connection.id,
+      );
+    }
   }
   async request<T>(method: string, params: object = {}, options: RequestOptions = {}): Promise<T> {
     const id = this.connection.id;
@@ -95,12 +116,23 @@ export class HostTransport {
     options.signal?.addEventListener("abort", cancel, { once: true });
     if (options.signal?.aborted) controller.abort();
     try {
-      return await this.remote.request<T>(method, params as Record<string, unknown>, {
+      const result = await this.remote.request<T>(method, params as Record<string, unknown>, {
         ...options,
         signal: controller.signal,
         timeoutMs: options.timeoutMs ?? 30_000,
         retry: false,
       });
+      if (
+        method === "environment.describe" &&
+        result &&
+        typeof result === "object" &&
+        "capabilities" in result &&
+        Array.isArray(result.capabilities)
+      )
+        this.capabilities = result.capabilities.filter(
+          (capability): capability is string => typeof capability === "string",
+        );
+      return result;
     } catch (error) {
       if (!(error instanceof RemoteHostError))
         throw new HostError("disconnected", "Cannot reach this computer.", id);

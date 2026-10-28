@@ -1,10 +1,41 @@
 import { expect, it } from "vitest";
 import type { CrewRunView } from "@/remote/contracts/crews";
-import { canAcceptCrewTask, canFinishCrewRun, crewInputDefinitelyRejected } from "./runtime-model";
+import { canAcceptCrewTask, canDeleteCrewRun, canFinishCrewRun, canStopCrewRun, crewActivityKnown, crewHasRunningWork, crewInputDefinitelyRejected, crewTaskSessions } from "./runtime-model";
 import { RemoteHostError } from "@/remote/host-error";
 
 const run = (): CrewRunView => ({ id: "run", projectId: "project", status: "active", assignments: [{ taskId: "task" }],
   messages: [], tasks: [{ id: "task", status: "review", verification: { review: { verdict: "pass" } } }] } as unknown as CrewRunView);
+
+it("removes redundant Stop for paused idle work while preserving cancellation for live and queued work", () => {
+  const value = { ...run(), status: "paused", coordinatorStatus: "idle", tasks: [] } as CrewRunView;
+  expect(canStopCrewRun(value)).toBe(false);
+  expect(canDeleteCrewRun(value)).toBe(true);
+  value.coordinatorStatus = "running";
+  expect(crewHasRunningWork(value)).toBe(true);
+  expect(canStopCrewRun(value)).toBe(true);
+  expect(canDeleteCrewRun(value)).toBe(false);
+  value.coordinatorStatus = "idle";
+  for (const status of ["queued", "running", "verifying"] as const) {
+    value.tasks = [{ status } as CrewRunView["tasks"][number]];
+    expect(canStopCrewRun(value)).toBe(true);
+    expect(canDeleteCrewRun(value)).toBe(false);
+  }
+  value.status = "finished";
+  expect(canStopCrewRun(value)).toBe(false);
+});
+
+it("does not infer inactivity when an older host omits coordinator status", () => {
+  const value = { ...run(), status: "paused", coordinatorSessionId: "lead", tasks: [] } as CrewRunView;
+  expect(crewActivityKnown(value)).toBe(false);
+  expect(canStopCrewRun(value)).toBe(true);
+  expect(canDeleteCrewRun(value)).toBe(false);
+});
+
+it("opens the current reviewer instead of an earlier review and retains historical worker navigation", () => {
+  const task = { status: "verifying", reviewer: { sessionId: "current" }, verification: { review: { sessionId: "previous" } },
+    attemptHistory: [{ workerSessionId: "worker", reviewerSessionId: "historical" }] } as CrewRunView["tasks"][number];
+  expect(crewTaskSessions(task)).toEqual({ worker: "worker", review: "current" });
+});
 
 it("only offers acceptance for assigned tasks with passing independent review and resolved directives", () => {
   const value = run();

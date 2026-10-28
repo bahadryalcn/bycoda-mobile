@@ -144,7 +144,7 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
         {source === "computer" && !media ? <QueryState query={file} loading="inline" /> : null}
         <ErrorText error={active ? draft.error : null} />
         {draft.isError && active ? (
-          <Button
+          <Button busy={draft.isFetching}
             tone="quiet"
             label={copy("Dosya taslağını yeniden yükle", "Retry loading file draft")}
             onPress={() => void draft.refetch()}
@@ -200,6 +200,7 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
   const copy = useCopy();
   const { width } = useWindowDimensions();
   const [atResult, setAtResult] = useState(true);
+  const [selecting, setSelecting] = useState(false);
   const source = useMemo(
     () => reviewSource(text, atResult ? initialLine : undefined),
     [text, initialLine, atResult],
@@ -247,7 +248,21 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
           )}
         </Body>
       ) : null}
-      <ScrollView horizontal style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+      <Button
+        tone="quiet"
+        label={selecting ? copy("Satır görünümü", "Line view") : copy("Metin seç", "Select text")}
+        onPress={() => setSelecting(!selecting)}
+      />
+      {selecting ? (
+        <ScrollView key={atResult ? "selection-result" : "selection-beginning"} style={{ flex: 1 }}>
+          {/* One native text owner lets selection handles cross newlines. Keep line
+              numbers out of copied text and retain the same bounded source window. */}
+          <CodeText selectable style={{ paddingHorizontal: space.screen }}>
+            {source.lines.map((line) => line.text).join("\n")}
+          </CodeText>
+        </ScrollView>
+      ) : null}
+      <ScrollView horizontal style={{ flex: 1, display: selecting ? "none" : "flex" }} contentContainerStyle={{ flexGrow: 1 }}>
         <FlatList
           key={atResult ? "result" : "beginning"}
           data={source.lines}

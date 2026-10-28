@@ -13,6 +13,7 @@ import {
 import { reviewedOperationStore } from "@/state/reviewed-operation-store";
 import {
   Body,
+  Disclosure,
   Button,
   ErrorText,
   NavigationRow,
@@ -35,6 +36,7 @@ import {
   type MobilePtyLease,
   type MobilePtyTerminal,
 } from "./mobile-pty-model";
+import { ptyRecoveryMessage } from "./mobile-pty-error";
 export function MobilePty({
   scope,
   projectId,
@@ -170,9 +172,11 @@ export function MobilePty({
     if (!current()) throw new Error("Mobile PTY source changed; never replay input");
     return result;
   };
-  const run = async (action: () => Promise<void>) => {
+  const [pendingAction, setPendingAction] = useState("primary");
+  const run = async (action: () => Promise<void>, actionKey = "primary") => {
     if (pending.current || !available) return;
     pending.current = true;
+    setPendingAction(actionKey);
     setBusy(true);
     setError(null);
     try {
@@ -249,7 +253,7 @@ export function MobilePty({
       );
     });
   };
-  const attach = (terminal: MobilePtyTerminal) => {
+  const attach = (terminal: MobilePtyTerminal, actionKey = `attach:${terminal.terminalId}`) => {
     void run(async () => {
       const retained = lease?.terminal.terminalId === terminal.terminalId && !lost && ready;
       const after = retained ? cursor.current : 0;
@@ -263,7 +267,7 @@ export function MobilePty({
           freshRenderer: !retained,
         }),
       );
-    });
+    }, actionKey);
   };
   const input = (dataBase64: string) => {
     if (!allowed.current || !current() || !lease || !client) return;
@@ -431,6 +435,8 @@ export function MobilePty({
     };
   }, [available, list.isError, lease, ready, paused, gap, lost, client]);
   const controlsDisabled = !available || list.isError || busy || !hydrated || !targetMatches;
+  const terminalError = error ?? list.error;
+  const recovery = ptyRecoveryMessage(terminalError, copy);
   return (
     <Sheet
       visible
@@ -460,13 +466,28 @@ export function MobilePty({
               {!supported ? (
                 <Notice
                   tone="warning"
-                  message={copy(
+                  message={!opening.review ? copy(
+                    "Önce bir bilgisayara bağlanın, ardından terminali yeniden açın.",
+                    "Connect a computer first, then reopen the terminal.",
+                  ) : !current() ? copy(
+                    "Bilgisayar bağlantısı değişti. Doğru bilgisayarı seçip terminali yeniden açın.",
+                    "The computer connection changed. Select the correct computer and reopen the terminal.",
+                  ) : !opening.review.environmentId ? copy(
+                    "Bilgisayar kimliği alınamadı. Bilgisayar bağlantısını yenileyip terminali yeniden açın.",
+                    "The computer identity is unavailable. Refresh the computer connection and reopen the terminal.",
+                  ) : copy(
                     "Bu bilgisayar etkileşimli masaüstü terminalini desteklemiyor.",
                     "This computer does not support the interactive desktop terminal.",
                   )}
                 />
               ) : null}
-              <ErrorText error={error ?? list.error} />
+              <ErrorText error={terminalError} message={recovery ?? copy(
+                "Terminal işlemi tamamlanamadı. Bağlantıyı kontrol edin; ayrıntıları aşağıda görebilirsiniz.",
+                "The terminal action could not complete. Check the connection; details are available below.",
+              )} />
+              {terminalError && !recovery ? <Disclosure label={copy("Hata ayrıntıları", "Error details")}>
+                <ErrorText error={terminalError} />
+              </Disclosure> : null}
               {gap || lost ? (
                 <Notice
                   tone="warning"
@@ -479,14 +500,16 @@ export function MobilePty({
               <Row>
                 <Button
                   label={copy("Yeni etkileşimli terminal", "New interactive terminal")}
+                  busy={busy && pendingAction === "primary"}
                   disabled={controlsDisabled || !!attempt}
                   onPress={create}
                 />
                 {lease ? (
                   <Button
                     label={copy("Sürdür", "Resume")}
+                    busy={busy && pendingAction === "resume"}
                     disabled={controlsDisabled || !paused}
-                    onPress={() => attach(lease.terminal)}
+                    onPress={() => attach(lease.terminal, "resume")}
                   />
                 ) : null}
                 {lease ? (
@@ -498,7 +521,7 @@ export function MobilePty({
                 ) : null}
               </Row>
               {attempt ? (
-                <Button
+                <Button busy={busy && pendingAction === "secondary-1"}
                   label={copy("Oluşturma durumunu kontrol et", "Check creation status")}
                   disabled={controlsDisabled}
                   onPress={() => {
@@ -507,12 +530,12 @@ export function MobilePty({
                         requestId: attempt.operationId,
                       });
                       await confirmed(result, attempt.operationId);
-                    });
+                    }, "secondary-1");
                   }}
                 />
               ) : null}
               {lease ? (
-                <Button
+                <Button busy={busy && pendingAction === "secondary-2"}
                   label={copy("Terminali kapat", "Close terminal")}
                   tone="danger"
                   disabled={controlsDisabled}
@@ -528,12 +551,12 @@ export function MobilePty({
                       setPaused(true);
                       fresh();
                       void list.refetch();
-                    });
+                    }, "secondary-2");
                   }}
                 />
               ) : null}
               {createFailed && attempt ? (
-                <Button
+                <Button busy={busy && pendingAction === "secondary-3"}
                   label={copy(
                     "Başarısız oluşturma kaydını temizle",
                     "Clear failed creation receipt",
@@ -544,7 +567,7 @@ export function MobilePty({
                       await store.clear(attempt.operationId);
                       setAttempt(null);
                       setCreateFailed(false);
-                    });
+                    }, "secondary-3");
                   }}
                 />
               ) : null}
@@ -553,6 +576,7 @@ export function MobilePty({
           renderItem={({ item: terminal }) => (
             <NavigationRow
               label={terminal.name}
+              busy={busy && pendingAction === `attach:${terminal.terminalId}`}
               detail={terminal.state}
               disabled={controlsDisabled || terminal.state !== "running"}
               onPress={() => attach(terminal)}

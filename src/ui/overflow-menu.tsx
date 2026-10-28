@@ -30,12 +30,15 @@ export function ActionMenu({
   actions,
   trigger,
   active,
+  busy,
 }: {
   label: string;
   actions: readonly (MenuAction | false | null | undefined)[];
   trigger?: ReactNode;
   /** Marks the trigger as having an active filter. */
   active?: boolean;
+  /** Pending work initiated by a menu item stays visible after the menu closes. */
+  busy?: boolean;
 }) {
   useMobileTheme();
   const copy = useCopy();
@@ -45,7 +48,7 @@ export function ActionMenu({
   return (
     <Menu open={open} onOpenChange={setOpen}>
       <Menu.Trigger>
-        <IconButton label={label || copy("Diğer işlemler", "More actions")} expanded={open} onPress={() => haptic.select()}>
+        <IconButton label={label || copy("Diğer işlemler", "More actions")} busy={busy} expanded={open} onPress={() => haptic.select()}>
           <View>
             {trigger ?? <MoreHorizontal size={22} strokeWidth={2} color={colors.accent} />}
             {active ? (

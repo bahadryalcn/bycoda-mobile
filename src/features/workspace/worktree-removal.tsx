@@ -29,36 +29,49 @@ export function WorktreeRemoval({ scope, projectId, onClose }: { scope: SessionS
   const occupied = useRef(false);
   useEffect(() => { let live = true; void store.load().then((value) => { if (live) setAttempt(value); }, (cause) => { if (live) setError(cause); }).finally(() => { if (live) setLoading(false); }); return () => { live = false; }; }, [store]);
   const trees = useHostQuery<HostWorktrees>(["worktrees", opening.projectId], "git.worktrees", { projectId: opening.projectId }, { enabled: !!supported && !attempt });
-  const run = async (action: () => Promise<void>) => {
+  const [pendingAction, setPendingAction] = useState("primary");
+  const run = async (action: () => Promise<void>, actionKey = "primary") => {
     if (occupied.current || !supported || !current()) return;
-    occupied.current = true; setBusy(true); setError(undefined);
+    occupied.current = true; setPendingAction(actionKey);
+    setBusy(true); setError(undefined);
     try { await action(); } catch (cause) { setError(cause); } finally { occupied.current = false; setBusy(false); }
   };
   const disabled = busy || loading || !supported || !!error;
+  const unavailableMessage = !client || !machine
+    ? copy("Bilgisayar bağlantısını yeniden kurun ve bu oturumu tekrar açın.", "Reconnect the computer and reopen this session.")
+    : !current()
+      ? copy("Bu işlemin bilgisayarını ve kaynak oturumunu yeniden açın. Mevcut seçim korunur.", "Reopen this operation's computer and source session. The current selection is retained.")
+      : copy("Bu bilgisayar güvenli çalışma klasörü kaldırmayı desteklemiyor. Bilgisayardaki bycoda uygulamasını güncelleyin.", "This computer does not support reviewed worktree removal. Update bycoda on the computer.");
+  const initialUnavailable = !supported && !loading && !attempt && !receipt && !path && !review && !busy && !error;
+  if (initialUnavailable) return <Sheet visible title={copy("Çalışma klasörü kaldırma", "Worktree removal")} size="compact" onClose={onClose}>
+    <Body mono>{`${opening.machineId} · ${opening.projectId}`}</Body>
+    <Notice message={unavailableMessage} />
+    <Button tone="quiet" label={copy("Kapat", "Close")} onPress={onClose} />
+  </Sheet>;
   return <Sheet visible title={copy("Çalışma klasörü kaldırma", "Worktree removal")} onClose={onClose} dismissible={!busy}>
     <Notice message={copy("Dal ve konuşmalar korunur. Kaldırma için bilgisayarda yeni onay gerekir. Ana çalışma kopyasındaki bir konuşmadan açın.", "The branch and conversations are retained. Removal requires fresh approval on the computer. Open this from a conversation in the base working copy.")} />
-    {!supported ? <Notice message={copy("Bu bilgisayar güvenli çalışma klasörü kaldırmayı desteklemiyor.", "This computer does not support reviewed worktree removal.")} /> : null}
+    {!supported ? <Notice message={unavailableMessage} /> : null}
     <ErrorText error={error} />
     {attempt ? <>
       <Notice message={copy("Kaydedilmiş istek tekrar gönderilmez. Sonuç bilinmiyorsa bilgisayardaki çalışma klasörünü inceleyin.", "The saved request is never resent. If its result is unknown, inspect the worktree on the computer.")} />
       {receipt ? <Body>{receipt.state === "applied" ? copy("Tamamlandı", "Completed") : receipt.state === "failed" ? copy("Tamamlanmadı", "Not completed") : receipt.state === "pending" ? copy("Bilgisayarda onay bekleniyor", "Awaiting approval on the computer") : copy("Sonuç bilinmiyor", "Result unknown")}</Body> : null}{receipt?.path ? <Body mono>{receipt.path}</Body> : null}
-      <Button label={copy("Sonucu oku", "Read result")} disabled={busy || !supported} onPress={() => { void run(async () => { const value = readWorktreeRemovalStatus(await client!.request("worktrees.removal.status", { ...params, requestId: attempt.operationId })); if (current()) setReceipt(value); }); }} />
-      <Button tone="quiet" label={copy("Yerel takibi temizle", "Clear local tracking")} disabled={busy || !supported || !receipt || receipt.state === "pending"} onPress={() => confirmAction(copy("Yerel takibi temizle", "Clear local tracking"), copy("Bu işlem bilgisayardaki isteği iptal etmez. Bilinmeyen sonuç için önce bilgisayarı inceleyin. Yeni bir işlem yeni inceleme ve bilgisayar onayı gerektirir.", "This does not cancel the request on the computer. Inspect the computer first for an unknown result. A new operation requires a new review and computer approval."), copy("Yerel takibi temizle", "Clear local tracking"), () => { void run(async () => { await store.clear(attempt.operationId); setAttempt(null); setReceipt(undefined); setReview(undefined); await trees.refetch(); }); }, copy("Vazgeç", "Cancel"))} />
+      <Button busy={busy && pendingAction === "secondary-1"} label={copy("Sonucu oku", "Read result")} disabled={busy || !supported} onPress={() => { void run(async () => { const value = readWorktreeRemovalStatus(await client!.request("worktrees.removal.status", { ...params, requestId: attempt.operationId })); if (current()) setReceipt(value); }, "secondary-1"); }} />
+      <Button busy={busy && pendingAction === "secondary-2"} tone="quiet" label={copy("Yerel takibi temizle", "Clear local tracking")} disabled={busy || !supported || !receipt || receipt.state === "pending"} onPress={() => confirmAction(copy("Yerel takibi temizle", "Clear local tracking"), copy("Bu işlem bilgisayardaki isteği iptal etmez. Bilinmeyen sonuç için önce bilgisayarı inceleyin. Yeni bir işlem yeni inceleme ve bilgisayar onayı gerektirir.", "This does not cancel the request on the computer. Inspect the computer first for an unknown result. A new operation requires a new review and computer approval."), copy("Yerel takibi temizle", "Clear local tracking"), () => { void run(async () => { await store.clear(attempt.operationId); setAttempt(null); setReceipt(undefined); setReview(undefined); await trees.refetch(); }, "secondary-2"); }, copy("Vazgeç", "Cancel"))} />
     </> : <>
       <QueryState query={trees} />
       <SelectField label={copy("Çalışma klasörü", "Working folder")} value={path} disabled={disabled} options={(trees.data?.worktrees ?? []).filter((tree) => !tree.isMain && !tree.missing).map((tree) => ({ value: tree.path, label: tree.branch || tree.path, detail: tree.path }))} onChange={(value) => { setPath(value); setReview(undefined); }} />
-      <Button label={copy("Kaldırmayı incele", "Review removal")} disabled={disabled || !path || !trees.isSuccess} onPress={() => { void run(async () => { const value = readWorktreeRemoval(await client!.request("worktrees.removal.review", { ...params, path }), path); if (current()) setReview(value); }); }} />
+      <Button busy={busy && pendingAction === "secondary-3"} label={copy("Kaldırmayı incele", "Review removal")} disabled={disabled || !path || !trees.isSuccess} onPress={() => { void run(async () => { const value = readWorktreeRemoval(await client!.request("worktrees.removal.review", { ...params, path }), path); if (current()) setReview(value); }, "secondary-3"); }} />
       {review ? <><Body mono>{`${review.path}\n${review.branch}\n${review.head}`}</Body><Body>{`${copy("Bağlı konuşmalar", "Linked conversations")}: ${review.sessionIds.length}`}</Body>
         <Notice message={copy("Harici Git ve dosya sistemi değişiklikleri atomik olarak kilitlenemez. Bilgisayar işlemden önce yeniden denetler.", "External Git and filesystem changes cannot be locked atomically. The computer checks again before removal.")} />
         {review.reasons.map((reason) => <Notice key={reason} message={reason} />)}
-        <Button tone="danger" label={copy("Bilgisayar onayı iste", "Request computer approval")} disabled={disabled || !review.canRemove || review.expiresAt <= Date.now()} onPress={() => { void run(async () => {
+        <Button busy={busy && pendingAction === "secondary-4"} tone="danger" label={copy("Bilgisayar onayı iste", "Request computer approval")} disabled={disabled || !review.canRemove || review.expiresAt <= Date.now()} onPress={() => { void run(async () => {
           if (!current() || review.expiresAt <= Date.now()) throw new Error("Removal review expired");
           const value = { operationId: randomUUID(), environmentId: opening.environmentId!, digest: await digestStringAsync(CryptoDigestAlgorithm.SHA256, review.reviewId) };
           const claimed = await store.claim(value); setAttempt(claimed.attempt);
           if (!claimed.claimed || !current()) return;
           const result = readWorktreeRemovalStatus(await client!.request("worktrees.removal.approve", { ...params, reviewId: review.reviewId, requestId: value.operationId }, { timeoutMs: 115000 }));
           if (current()) setReceipt(result);
-        }); }} />
+        }, "secondary-4"); }} />
       </> : null}
     </>}
     {error ? <Button tone="quiet" label={copy("Hatayı temizle", "Clear error")} disabled={busy || !supported} onPress={() => setError(undefined)} /> : null}

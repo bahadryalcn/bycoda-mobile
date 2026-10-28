@@ -3,7 +3,29 @@
   "compilerOptions": {
     "strict": true,
     "noEmit": true,
-    "paths": { "@/*": ["./src/*"] }
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@bycoda/core": ["../packages/core/src/index.ts"],
+      "@bycoda/core/json-text": ["../packages/core/src/jsonText.ts"],
+      "@bycoda/core/concurrent": ["../packages/core/src/concurrent.ts"],
+      "@bycoda/core/session-title": ["../packages/core/src/sessionTitle.ts"]
+    }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "../src/vite-env.d.ts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "../src/vite-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js",
+    "jest.config.js",
+    "android",
+    "ios",
+    "temp/**"
+  ]
 }

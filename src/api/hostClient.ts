@@ -1,3 +1,5 @@
+import { parseJsonParts } from "@/state/cooperative-json";
+import { retainSessionAuthority } from "@/domain/session-authority";
 import type {
   HostConnection,
   HostDescriptor,
@@ -47,6 +49,7 @@ export type SessionPage = {
 };
 export class HostClient {
   readonly transport: HostTransport;
+  private readonly decoders = new Set<AbortController>();
   constructor(
     connection: HostConnection,
     fetcher?: FetchLike,
@@ -71,7 +74,10 @@ export class HostClient {
     this.transport.acceptIdentity(value.environmentId);
     return value;
   }
-  disconnect = () => this.transport.disconnect();
+  disconnect = () => {
+    for (const decoder of this.decoders) decoder.abort();
+    this.transport.disconnect();
+  };
   reconnect = () => this.transport.reconnect();
   projects = {
     list: () => this.request<HostProject[]>("projects.list"),
@@ -120,7 +126,10 @@ export class HostClient {
         },
         { signal, timeoutMs: 30_000 },
       );
-      return applySessionSync(known, await this.resolveSync(sessionId, reply, signal));
+      return retainSessionAuthority(
+        known,
+        applySessionSync(known, await this.resolveSync(sessionId, reply, signal)),
+      );
     },
     block: async (sessionId: string, blockId: string, revision: number) =>
       this.resolveSync(
@@ -134,22 +143,22 @@ export class HostClient {
     dispatch: (command: HostCommand) => this.request<CommandReceipt>("commands.dispatch", command),
     create: (input: Omit<Extract<HostCommand, { type: "create" }>, "type">) =>
       this.sessions.dispatch({ ...input, type: "create" }),
-    send: (sessionId: string, text: string, commandId: string) =>
-      this.sessions.dispatch({ type: "send", sessionId, text, commandId }),
-    cancel: (sessionId: string, runId: string, commandId: string) =>
-      this.sessions.dispatch({ type: "cancel", sessionId, runId, commandId }),
+    send: (sessionId: string, text: string, commandId: string, authorityGeneration?: number) =>
+      this.sessions.dispatch({ type: "send", sessionId, text, commandId, authorityGeneration }),
+    cancel: (sessionId: string, runId: string, commandId: string, authorityGeneration?: number) =>
+      this.sessions.dispatch({ type: "cancel", sessionId, runId, commandId, authorityGeneration }),
     update: (
       projectId: string,
       sessionId: string,
-      patch: { title?: string; archived?: boolean; pinned?: boolean },
+      patch: { title?: string; archived?: boolean; pinned?: boolean; authorityGeneration?: number },
     ) =>
       this.request<HostSessionSummary>("sessions.update", {
         projectId,
         sessionId,
         ...patch,
       }),
-    delete: (projectId: string, sessionId: string) =>
-      this.request("sessions.delete", { projectId, sessionId }),
+    delete: (projectId: string, sessionId: string, authorityGeneration?: number) =>
+      this.request("sessions.delete", { projectId, sessionId, authorityGeneration }),
     commandStatus: (commandId: string) =>
       this.request<CommandReceipt | null>("commands.status", { commandId }),
   };
@@ -190,9 +199,38 @@ export class HostClient {
       pieces.push(chunk.data);
       offset += chunk.data.length;
     }
-    const sync = JSON.parse(pieces.join("")) as SessionSync;
+    const decoder = new AbortController();
+    const cancel = () => decoder.abort();
+    signal?.addEventListener("abort", cancel, { once: true });
+    if (signal?.aborted) cancel();
+    this.decoders.add(decoder);
+    let sync: SessionSync;
+    try {
+      sync = (await parseJsonParts(pieces, {
+        signal: decoder.signal,
+        assertCurrent: () => this.transport.assertCurrentAccess(),
+      })) as SessionSync;
+    } catch (error) {
+      if (decoder.signal.aborted)
+        throw new HostError(
+          signal?.aborted ? "cancelled" : "disconnected",
+          "Transcript decoding was cancelled.",
+          this.transport.connection.id,
+        );
+      throw error;
+    } finally {
+      signal?.removeEventListener("abort", cancel);
+      this.decoders.delete(decoder);
+    }
     if (!["snapshot", "delta", "unchanged"].includes(sync.kind))
       throw new HostError("protocol", "Invalid transcript transfer.", this.transport.connection.id);
+    this.transport.assertCurrentAccess();
+    if (signal?.aborted)
+      throw new HostError(
+        "cancelled",
+        "Transcript decoding was cancelled.",
+        this.transport.connection.id,
+      );
     return sync;
   }
   files = {

@@ -107,7 +107,8 @@ export function Input({
         style={StyleSheet.flatten([
           uiStyles.input,
           props.multiline ? uiStyles.multiline : { textAlignVertical: "center" },
-          mono && uiStyles.mono,
+          // Monospace is a font choice, not a smaller editable text size.
+          mono && { fontFamily: uiStyles.mono.fontFamily },
           semantic && { borderColor: semantic.border },
           focused && { borderColor: semantic?.text ?? colors.accent },
           props.editable === false && { color: colors.muted },

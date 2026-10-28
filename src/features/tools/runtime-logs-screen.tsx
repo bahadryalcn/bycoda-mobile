@@ -11,6 +11,7 @@ import {
   CodePanel,
   CodeText,
   Empty,
+  ErrorText,
   IconButton,
   NavigationGroup,
   NavigationRow,
@@ -24,6 +25,7 @@ import {
   ToggleField,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { colors } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { useMobileTheme } from "@/ui/theme";
@@ -78,6 +80,7 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
     },
     { interval: autoRefresh ? 5_000 : undefined, enabled: !searchInput.tooLong },
   );
+  const refresh = usePullRefresh(() => Promise.all([logs.refetch(), sources.refetch()]));
   // Validate host scope before displaying data, including cached or stale responses.
   const entries = (searchInput.tooLong ? [] : (logs.data?.entries ?? []))
     .filter((entry) => entry.projectId === project.id)
@@ -96,13 +99,10 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
             count={Number(!!source) + Number(!!level) + Number(!autoRefresh)}
             onPress={() => setFilterDraft({ source, level, autoRefresh })}
           />
-          <IconButton
+          <IconButton busy={refresh.refreshing}
             label={copy("Yenile", "Refresh")}
             disabled={logs.isFetching}
-            onPress={() => {
-              void logs.refetch();
-              void sources.refetch();
-            }}
+            onPress={() => { void refresh.onRefresh(); }}
           >
             <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
           </IconButton>
@@ -173,12 +173,15 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
             maxLength={LOG_SEARCH_LIMIT}
             onChangeText={setSearch}
           />
-          <Body muted style={uiStyles.caption}>
+          {searchInput.tooLong ? <ErrorText error={copy(
+            "Aramayı 512 karakter veya daha az olacak şekilde kısaltın.",
+            "Shorten the search to 512 characters or fewer.",
+          )} /> : searchInput.query.length >= LOG_SEARCH_LIMIT - 64 ? <Body muted style={uiStyles.caption}>
             {copy(
               "Günlük araması en fazla 512 karakter olabilir.",
               "Log search supports up to 512 characters.",
             )}
-          </Body>
+          </Body> : null}
           {!searchInput.tooLong ? (
             <QueryState
               query={logs}

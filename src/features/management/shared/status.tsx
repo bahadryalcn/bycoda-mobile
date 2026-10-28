@@ -2,8 +2,7 @@ import { Badge } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import type { StatusProps } from "./types";
 
-export function Status({ value }: StatusProps) {
-  const copy = useCopy();
+export function statusLabel(value: string, copy: (tr: string, en: string) => string): string {
   const translated: Record<string, readonly [string, string]> = {
     idle: ["Hazır", "Ready"],
     todo: ["Yapılacak", "To do"],
@@ -26,6 +25,11 @@ export function Status({ value }: StatusProps) {
     pending: ["Bekliyor", "Pending"],
     paused: ["Duraklatıldı", "Paused"],
   };
+  return translated[value] ? copy(...translated[value]) : value.replaceAll("-", " ");
+}
+
+export function Status({ value }: StatusProps) {
+  const copy = useCopy();
   const tone = ["failed", "blocked"].includes(value)
     ? "danger"
     : ["done", "succeeded", "completed"].includes(value)
@@ -37,7 +41,7 @@ export function Status({ value }: StatusProps) {
           : "default";
   return (
     <Badge
-      label={translated[value] ? copy(...translated[value]) : value.replaceAll("-", " ")}
+      label={statusLabel(value, copy)}
       tone={tone}
     />
   );

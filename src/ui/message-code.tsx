@@ -91,7 +91,7 @@ function CodeDocument({ code, language = "", complete = true, context, textSize,
           {html || diagram ? <ChatToolbarAction label={copy("Önizle", "Preview")} onPress={() => setPreview(true)} /> : null}
         </Row>
         <CodeSource code={shown} language={language} textSize={size} />
-        {!allLines && (summary.truncated || compact) ? (
+        {!allLines && summary.truncated ? (
           <View style={{ paddingHorizontal: space.sm }}>
             <ChatToolbarAction label={copy("Tüm kodu göster ({p0} satır)", "Show all code ({p0} lines)", { p0: summary.lineCount })} onPress={() => onOpen?.()} />
           </View>

@@ -46,7 +46,7 @@ export function DeviceRuntime({ projectId, deviceId, onClose }: { projectId: str
       <Body>{copy("Cihazlar", "Devices")}: {checks.device ? copy("Hazır", "Ready") : copy("Kullanılamıyor", "Unavailable")}</Body>
       <Body>{copy("Araçlar", "Tools")}: {checks.tools ? copy("Hazır", "Ready") : copy("Kurulum gerekli", "Setup required")}</Body>
       <Body>{copy("Ajan kontrolü", "Agent control")}: {checks.agentControl ? copy("Etkin", "Enabled") : copy("Kapalı", "Off")}</Body></> : null}
-    <Button tone="quiet" label={copy("Yenile", "Refresh")} disabled={!supported || busy || preflight.isFetching} onPress={() => { void preflight.refetch(); void status.refetch(); if (impactSupported) void impact.refetch(); }} />
+    <Button busy={preflight.isFetching || status.isFetching || (impactSupported && impact.isFetching)} tone="quiet" label={copy("Yenile", "Refresh")} disabled={!supported || busy || preflight.isFetching} onPress={() => { void preflight.refetch(); void status.refetch(); if (impactSupported) void impact.refetch(); }} />
     {impactSupported ? <><QueryState query={impact} loading="none" />{impact.data ? <>
       <Body>{copy("Etkin önizleme işleri", "Active preview jobs")}: {impact.data.activeCount}</Body>
       {impact.data.owned.map((job) => <Body key={job.id} mono>{job.deviceId} · {job.state}</Body>)}

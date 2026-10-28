@@ -61,6 +61,10 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
   const tags = noteTags(draft.tags);
   const tagIssue = noteTagIssue(tags);
   const titleTooLong = noteTitleTooLong(draft.title);
+  const titleError = titleTooLong ? copy("Başlık en fazla 200 karakter olmalı. Kaydetmeden önce kısaltın.", "The title must be at most 200 characters. Shorten it before saving.") : undefined;
+  const tagError = tagIssue ? tagIssue === "count"
+    ? copy("En fazla 20 etiket ekleyin. Hiçbir etiket kaydedilmedi veya kısaltılmadı.", "Use at most 20 tags. No tags have been saved or shortened.")
+    : copy("Her etiket en fazla 48 karakter olmalı. Etiketinizi kısaltın.", "Each tag must be at most 48 characters. Shorten your tag before saving.") : undefined;
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const busy = save.isPending || remove.isPending;
   const changed =
@@ -80,6 +84,7 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
       {mode === "preview" ? <MessageText text={draft.body || copy("Not henüz boş.", "The note is empty.")} role="assistant" /> : <>
       <Field
         label={copy("Başlık", "Title")}
+        error={titleError}
         value={draft.title}
         onChangeText={(title) => update({ title })}
         editable={!busy}
@@ -94,15 +99,14 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
       />
       <Field
         label={copy("Etiketler (virgülle ayırın)", "Tags (comma separated)")}
+        error={tagError}
         value={draft.tags}
         onChangeText={(tags) => update({ tags })}
         editable={!busy}
       />
       </>}
-      {titleTooLong ? <Body>{copy("Başlık en fazla 200 karakter olmalı. Kaydetmeden önce kısaltın.", "The title must be at most 200 characters. Shorten it before saving.")}</Body> : null}
-      {tagIssue ? <Body>{tagIssue === "count"
-        ? copy("En fazla 20 etiket ekleyin. Hiçbir etiket kaydedilmedi veya kısaltılmadı.", "Use at most 20 tags. No tags have been saved or shortened.")
-        : copy("Her etiket en fazla 48 karakter olmalı. Etiketinizi kısaltın.", "Each tag must be at most 48 characters. Shorten your tag before saving.")}</Body> : null}
+      {mode === "preview" && titleError ? <Body accessibilityRole="alert" style={uiStyles.error}>{titleError}</Body> : null}
+      {mode === "preview" && tagError ? <Body accessibilityRole="alert" style={uiStyles.error}>{tagError}</Body> : null}
       <FormActions
         feedback={<><MutationState mutation={save} />
       <MutationState mutation={remove} />

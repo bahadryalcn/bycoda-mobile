@@ -17,6 +17,7 @@ import {
   Notice, QueryState, Row, Screen, SelectField, Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useMobileTheme } from "@/ui/theme";
 import { colors } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
@@ -42,6 +43,7 @@ export function TerminalScreen({ project }: { project: HostProject }) {
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const output = useTerminalOutput(client, project.id, selected?.id ?? "", autoRefresh, focused);
   const terminal = output.data?.terminal ?? selected;
+  const refresh = usePullRefresh(() => Promise.all([list.refetch(), output.refetch()]));
   const action = useAsyncAction();
   const pending = useRef(false);
   const [uncertain, setUncertain] = useState(false);
@@ -111,7 +113,7 @@ export function TerminalScreen({ project }: { project: HostProject }) {
       subtitle={[machine?.name, project.name].filter(Boolean).join(" · ")}
       actions={
         <>
-          <IconButton label={copy("Yenile", "Refresh")} disabled={list.isFetching || output.isFetching} onPress={() => { void list.refetch(); void output.refetch(); }}><RefreshCw size={22} strokeWidth={2} color={colors.accent} /></IconButton>
+          <IconButton busy={refresh.refreshing} label={copy("Yenile", "Refresh")} disabled={list.isFetching || output.isFetching} onPress={() => { void refresh.onRefresh(); }}><RefreshCw size={22} strokeWidth={2} color={colors.accent} /></IconButton>
           <IconButton label={copy("Terminal oluştur", "Create terminal")} disabled={!writable || busy || uncertain} onPress={() => { action.reset(); setCreating(true); }}><Plus size={22} strokeWidth={2.2} color={colors.accent} /></IconButton>
         </>
       }

@@ -102,10 +102,10 @@ export function ScopedFilePreview({
         <Body>{copy("Dosya bu projenin dışında.", "This file is outside this project.")}</Body>
       ) : folder ? (
         <>
-          {directory.isFetching ? <Loading /> : null}
+          {directory.isFetching && !directory.error ? <Loading /> : null}
           <ErrorText error={directory.error} />
           {directory.error ? (
-            <Button
+            <Button busy={directory.isFetching}
               label={copy("Yeniden dene", "Retry")}
               onPress={() => {
                 void directory.refetch();
@@ -134,10 +134,10 @@ export function ScopedFilePreview({
         <ProjectMediaContent onOpenFile={openChild} path={path} context={context} />
       ) : (
         <>
-          {query.isFetching ? <Loading /> : null}
+          {query.isFetching && !query.error ? <Loading /> : null}
           <ErrorText error={query.error} />
           {query.error ? (
-            <Button
+            <Button busy={query.isFetching}
               label={copy("Yeniden dene", "Retry")}
               onPress={() => {
                 void query.refetch();

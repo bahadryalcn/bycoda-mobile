@@ -16,7 +16,7 @@ export function SubmoduleView({ machineId, projectId, cwd, onClose }: { machineI
     <ScreenList data={supported ? query.data ?? [] : []} keyExtractor={(path) => path}
       header={<View style={{ gap: space.sm }}><Body mono>{cwd}</Body>
         <Body muted>{copy("Yalnız bu çalışma klasöründeki başlatılmış iç depolar listelenir. Başlatılmamış submodule’ler dahil değildir.", "Lists initialized nested repositories in this checkout only. Uninitialized submodules are excluded.")}</Body>
-        {!supported ? <Notice message={copy("Submodule incelemesi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer to review submodules.")} /> : <><QueryState query={query} empty={query.isSuccess && !query.data?.length} emptyTitle={copy("Başlatılmış submodule yok.", "No initialized submodules.")} /><Button tone="quiet" label={copy("Yenile", "Refresh")} disabled={query.isFetching} onPress={() => { void query.refetch(); }} /></>}
+        {!supported ? <Notice message={copy("Submodule incelemesi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer to review submodules.")} /> : <><QueryState query={query} empty={query.isSuccess && !query.data?.length} emptyTitle={copy("Başlatılmış submodule yok.", "No initialized submodules.")} /><Button busy={query.isFetching} tone="quiet" label={copy("Yenile", "Refresh")} disabled={query.isFetching} onPress={() => { void query.refetch(); }} /></>}
       </View>} renderItem={({ item }) => <Body mono>{item}</Body>} />
   </Sheet>;
 }

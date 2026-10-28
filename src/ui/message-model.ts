@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import { inlineRaster } from "./inline-raster";
+import { readLink } from "./message-inline";
 
 export type MessageNode = {
   type: string;
@@ -26,6 +27,20 @@ const parser = new MarkdownIt({
   breaks: true,
   typographer: false,
   maxNesting: 24,
+});
+// Local file references often contain unescaped spaces or balanced parentheses.
+// Parse them only in prose; the renderer still owns project-scope/access checks.
+parser.inline.ruler.before("link", "scoped_file_link", (state, silent) => {
+  if (state.src[state.pos] !== "[" || state.linkLevel > 0) return false;
+  const link = readLink(state.src, state.pos);
+  if (!link || link.target.kind !== "file") return false;
+  if (!silent) {
+    state.push("link_open", "a", 1).attrs = [["href", link.target.context]];
+    state.push("text", "", 0).content = link.text;
+    state.push("link_close", "a", -1);
+  }
+  state.pos = link.end;
+  return true;
 });
 // Provider memory citations are transport metadata, not conversation prose.
 // Run after Markdown's fence/code rules so literal examples remain untouched.

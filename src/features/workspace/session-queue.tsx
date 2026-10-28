@@ -23,11 +23,13 @@ export function SessionQueue({
   scope,
   queue,
   blocked,
+  running,
   onCommand,
 }: {
   scope: SessionScope;
   queue: ReturnType<typeof useSessionQueue>;
   blocked: boolean;
+  running: boolean;
   onCommand: SessionCommand;
 }) {
   useMobileTheme();
@@ -36,6 +38,8 @@ export function SessionQueue({
   const [open, setOpen] = useState(false);
   const [automatic, setAutomatic] = useState(false);
   const [sending, setSending] = useState(false);
+  const [controlling, setControlling] = useState(false);
+  const controlPending = useRef(false);
   const [error, setError] = useState<unknown>(null);
   const sendingRef = useRef(false);
   const autoRef = useRef(false);
@@ -61,6 +65,9 @@ export function SessionQueue({
   }, []);
   const rows = queue.data?.messages ?? [];
   const unconfirmed = rows.some((row) => row.deliveryUnknown);
+  useEffect(() => {
+    if (queue.autoStart) setAutomatic(true);
+  }, [queue.autoStart]);
   const act = async (action: () => Promise<unknown>) => {
     setError(null);
     try {
@@ -109,7 +116,7 @@ export function SessionQueue({
         setAutomatic(false);
         return;
       }
-      const ready = automaticAttempt ? before.data : await queue.activate();
+      const ready = automaticAttempt ? before.data : await queue.activateForSend();
       if (!active.current || (automaticAttempt && !autoRef.current)) return;
       await onCommand(queuedCommand(ready, session, queue.clientId));
       if (!automaticAttempt) await queue.pause();
@@ -138,23 +145,53 @@ export function SessionQueue({
   }, [automatic]);
   if (!queue.supported) return null;
   const disabled = blocked || queue.changing || sending;
+  const queueState = unconfirmed
+    ? copy("Kontrol gerekiyor", "Needs review")
+    : sending || queue.changing || queue.data?.claim
+      ? copy("Bilgisayarın onayı bekleniyor…", "Waiting for the computer to confirm…")
+      : queue.data?.status !== "active" || queue.data?.editingId
+        ? copy("Duraklatıldı", "Paused")
+        : running
+          ? copy("Turun bitmesini bekliyor", "Waiting for this turn to finish")
+          : (queue.data?.consumer && queue.data.consumer !== queue.clientId) ||
+              (queue.data?.drain && queue.data.drain.holder !== queue.clientId)
+            ? copy(
+                "Başka bir istemci sırayı sürdürebilir",
+                "Another client may continue this queue",
+              )
+            : queue.leaseAware || automatic
+              ? copy("Etkin", "Active")
+              : copy(
+                  "Başka bir istemci sırayı sürdürebilir",
+                  "Another client may continue this queue",
+                );
   return (
     <>
       {rows.length || queue.error || error || editor.value || editor.error || editor.visible ? (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: space.xs }}>
-            {rows.length || queue.error || error ? <ChatToolbarAction
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: space.xs,
+          }}
+        >
+          {rows.length || queue.error || error ? (
+            <ChatToolbarAction
               label={
                 queue.error
                   ? copy("Sıra yüklenemedi", "Queue unavailable")
-                  : copy("{p0} sırada", "{p0} queued", { p0: rows.length })
+                  : `${copy("{p0} sırada", "{p0} queued", { p0: rows.length })} · ${queueState}`
               }
-              tone={queue.error || error ? "danger" : "muted"}
+              tone={queue.error || error || unconfirmed ? "danger" : "muted"}
               onPress={() => setOpen(true)}
             >
               <ListOrdered size={14} color={queue.error || error ? colors.danger : colors.muted} />
-            </ChatToolbarAction> : null}
-            <SessionQueueEditor editor={editor} blocked={blocked || sending || queue.changing} />
-          </View>
+            </ChatToolbarAction>
+          ) : null}
+          <SessionQueueEditor editor={editor} blocked={blocked || sending || queue.changing} />
+        </View>
       ) : null}
       {!open ? <ErrorText error={error} message={composerDeliveryError(error, copy)} /> : null}
       <Sheet
@@ -164,22 +201,32 @@ export function SessionQueue({
         onClose={() => setOpen(false)}
       >
         <Body muted style={uiStyles.caption}>
-          {automatic
-            ? copy("Bu ekran açıkken sırayla gönderilir", "Sends in order while this screen is open")
-            : queue.data?.status === "active"
+          {queue.leaseAware
+            ? queueState
+            : automatic
               ? copy(
-                  "Başka bir istemci sırayı sürdürebilir",
-                  "Another client may continue this queue",
+                  "Bu ekran açıkken sırayla gönderilir",
+                  "Sends in order while this screen is open",
                 )
-              : copy("Duraklatıldı · göndermek için aç", "Paused · open to send")}
+              : queue.data?.status === "active"
+                ? copy(
+                    "Başka bir istemci sırayı sürdürebilir",
+                    "Another client may continue this queue",
+                  )
+                : copy("Duraklatıldı · göndermek için aç", "Paused · open to send")}
         </Body>
         <ErrorText
           error={queue.error || queue.changeError || error}
           message={composerDeliveryError(queue.error || queue.changeError || error, copy)}
         />
-        {unconfirmed ? <Notice tone="warning" message={composerDeliveryError(new Error(queuedDeliveryUnknown), copy)!} /> : null}
+        {unconfirmed ? (
+          <Notice
+            tone="warning"
+            message={composerDeliveryError(new Error(queuedDeliveryUnknown), copy)!}
+          />
+        ) : null}
         {queue.error ? (
-          <Button
+          <Button busy={queue.isFetching}
             label={copy("Sırayı yeniden yükle", "Reload queue")}
             onPress={() => {
               void queue.refetch();
@@ -208,13 +255,22 @@ export function SessionQueue({
             <Button
               tone="quiet"
               density="compact"
+              busy={controlling}
               label={
                 automatic || queue.data?.status === "active"
                   ? copy("Sırayı duraklat", "Pause queue")
                   : copy("Sırayı başlat", "Start queue")
               }
-              disabled={disabled || !!queue.error || !!editor.value || (unconfirmed && !automatic && queue.data?.status !== "active")}
+              disabled={
+                disabled ||
+                !!queue.error ||
+                !!editor.value ||
+                (unconfirmed && !automatic && queue.data?.status !== "active")
+              }
               onPress={() => {
+                if (controlPending.current) return;
+                controlPending.current = true;
+                setControlling(true);
                 void act(async () => {
                   if (automatic || queue.data?.status === "active") {
                     setAutomatic(false);
@@ -222,8 +278,11 @@ export function SessionQueue({
                     await queue.pause();
                   } else {
                     await queue.activate();
-                    setAutomatic(true);
+                    if (!queue.leaseAware) setAutomatic(true);
                   }
+                }).finally(() => {
+                  controlPending.current = false;
+                  if (active.current) setControlling(false);
                 });
               }}
             />

@@ -51,7 +51,7 @@ export function markdownTarget(raw: string): MarkdownTarget {
   return { kind: "unavailable" };
 }
 
-function readLink(text: string, start: number) {
+export function readLink(text: string, start: number) {
   const relativeEnd = text.slice(start + 1, start + 1025).indexOf("](");
   if (relativeEnd < 0) return;
   const labelEnd = start + 1 + relativeEnd;

@@ -136,9 +136,11 @@ export function SshWorkspace({
       live = false;
     };
   }, [stores, opening]);
-  const run = async (work: () => Promise<void>) => {
+  const [pendingAction, setPendingAction] = useState("primary");
+  const run = async (work: () => Promise<void>, actionKey = "primary") => {
     if (occupied.current || !supported || !current()) return;
     occupied.current = true;
+    setPendingAction(actionKey);
     setBusy(true);
     setError(undefined);
     try {
@@ -159,6 +161,29 @@ export function SshWorkspace({
   const activeKind = attempts.close ? "close" : "connect",
     active = attempts[activeKind];
   const disabled = busy || loading || !storageReady || !supported || !!error;
+  // A loaded receipt or any in-progress review/draft keeps the full editor visible.
+  const initialUnavailable = !supported && !loading && storageReady && !active && !selected &&
+    !review && !receipt && !connections.length && !busy && !error;
+  const unavailableMessage = !opening.machine ? copy(
+    "Önce bir bilgisayara bağlanın, ardından SSH görünümünü yeniden açın.",
+    "Connect a computer first, then reopen SSH.",
+  ) : !isReviewedMachine(opening.machine, useMachines.getState()) || scope.machineId !== opening.machineId ||
+      scope.sessionId !== opening.sessionId || projectId !== opening.projectId ? copy(
+    "Bilgisayar veya oturum değişti. Doğru bilgisayarı ve oturumu seçip SSH görünümünü yeniden açın.",
+    "The computer or session changed. Select the correct computer and session, then reopen SSH.",
+  ) : !foregroundUnlocked || !isAppAccessAllowed() ? copy(
+    "SSH işlemlerine devam etmek için uygulamanın kilidini açın ve bu ekranı açık tutun.",
+    "Unlock the app and keep this screen active to continue with SSH.",
+  ) : !client ? copy(
+    "Bilgisayar bağlantısı kullanılamıyor. Bağlantıyı kontrol edip SSH görünümünü yeniden açın.",
+    "The computer connection is unavailable. Check the connection and reopen SSH.",
+  ) : !opening.machine.environmentId ? copy(
+    "Bilgisayar kimliği alınamadı. Bağlantıyı yenileyip SSH görünümünü yeniden açın.",
+    "The computer identity is unavailable. Refresh the connection and reopen SSH.",
+  ) : copy(
+    "Bu bilgisayar native SSH çalışma alanını desteklemiyor. Bilgisayardaki bycoda’yı güncelleyin.",
+    "This computer does not support the native SSH workspace. Update bycoda on the computer.",
+  );
   const stateLabel = (state: SshWorkspaceStatus["state"]) =>
     state === "opened-on-computer"
       ? copy("Bilgisayarda açıldı", "Opened on the computer")
@@ -175,23 +200,18 @@ export function SshWorkspace({
     <Sheet
       visible
       title={copy("Bilgisayarda SSH", "SSH on the computer")}
+      size={initialUnavailable ? "compact" : "form"}
       dismissible={!busy}
       onClose={onClose}
     >
-      <Notice
+      <Body>{machine?.name ?? opening.machineId}</Body>
+      {!supported ? <Notice tone="warning" message={unavailableMessage} /> : null}
+      {!initialUnavailable ? <Notice
         message={copy(
           "Bilgisayardaki Sunucular görünümünü açın. Oturum açma ve sunucu anahtarı onayı o bilgisayarın terminalinde yapılır. Buradan yalnızca bu isteğin oluşturduğu çalışma alanını takip edersiniz.",
           "Open Servers on the computer. Sign-in and host-key approval take place in that computer's terminal. This screen tracks only the workspace created by this request.",
         )}
-      />
-      {!supported ? (
-        <Notice
-          message={copy(
-            "Bu bilgisayar native SSH çalışma alanını desteklemiyor.",
-            "This computer does not support the native SSH workspace.",
-          )}
-        />
-      ) : null}
+      /> : null}
       <ErrorText error={error} />
       {active ? (
         <>
@@ -203,7 +223,7 @@ export function SshWorkspace({
           />
           {receipt ? <Body>{stateLabel(receipt.state)}</Body> : null}
           {receipt?.connectionId ? <Body mono>{receipt.connectionId}</Body> : null}
-          <Button
+          <Button busy={busy && pendingAction === "secondary-1"}
             label={copy("Sonucu oku", "Read result")}
             disabled={busy || !supported}
             onPress={() => {
@@ -212,14 +232,14 @@ export function SshWorkspace({
                   readSshWorkspaceStatus(
                     await request("ssh.workspace.status", { requestId: active.operationId }),
                   ),
-                ),
+                ), "secondary-1"
               );
             }}
           />
           {receipt?.workspaceId &&
           ["opened-on-computer", "exited", "failed"].includes(receipt.state) &&
           !attempts.close ? (
-            <Button
+            <Button busy={busy && pendingAction === "secondary-2"}
               label={copy("Kapatma etkisini incele", "Review close impact")}
               disabled={disabled}
               onPress={() => {
@@ -232,13 +252,13 @@ export function SshWorkspace({
                       "close",
                       receipt.workspaceId!,
                     ),
-                  ),
+                  ), "secondary-2"
                 );
               }}
             />
           ) : null}
           {receipt && !["pending", "opening"].includes(receipt.state) ? (
-            <Button
+            <Button busy={busy && pendingAction === "secondary-3"}
               tone="quiet"
               label={copy("Yerel takibi temizle", "Clear local tracking")}
               disabled={busy || !supported}
@@ -256,7 +276,7 @@ export function SshWorkspace({
                       setAttempts((value) => ({ ...value, [activeKind]: null }));
                       setReceipt(undefined);
                       setReview(undefined);
-                    });
+                    }, "secondary-3");
                   },
                   copy("Vazgeç", "Cancel"),
                 )
@@ -264,9 +284,9 @@ export function SshWorkspace({
             />
           ) : null}
         </>
-      ) : (
+      ) : initialUnavailable ? null : (
         <>
-          <Button
+          <Button busy={busy && pendingAction === "secondary-4"}
             label={copy("Görünür SSH sunucularını oku", "Read visible SSH servers")}
             disabled={disabled}
             onPress={() => {
@@ -274,7 +294,7 @@ export function SshWorkspace({
                 const rows = readSshCatalog(await request("ssh.workspace.catalog.read", {}));
                 setConnections(rows);
                 setReview(undefined);
-              });
+              }, "secondary-4");
             }}
           />
           <SelectField
@@ -292,7 +312,7 @@ export function SshWorkspace({
               setReview(undefined);
             }}
           />
-          <Button
+          <Button busy={busy && pendingAction === "secondary-5"}
             label={copy("Bağlantıyı incele", "Review connection")}
             disabled={disabled || !selected}
             onPress={() => {
@@ -303,7 +323,7 @@ export function SshWorkspace({
                     "connect",
                     selected,
                   ),
-                ),
+                ), "secondary-5"
               );
             }}
           />
@@ -330,7 +350,7 @@ export function SshWorkspace({
           {reviewExpired ? (
             <>
               <Notice tone="warning" message={expiredMessage} />
-              <Button
+              <Button busy={busy && pendingAction === "secondary-6"}
                 tone="quiet"
                 label={copy("Yeniden incele", "Review again")}
                 disabled={
@@ -355,12 +375,12 @@ export function SshWorkspace({
                         target,
                       ),
                     );
-                  });
+                  }, "secondary-6");
                 }}
               />
             </>
           ) : null}
-          <Button
+          <Button busy={busy && pendingAction === "secondary-7"}
             tone={review.operation === "close" ? "danger" : "primary"}
             label={copy("Bilgisayar onayı iste", "Request computer approval")}
             disabled={
@@ -398,7 +418,7 @@ export function SshWorkspace({
                 );
                 setReceipt(result);
                 setReview(undefined);
-              });
+              }, "secondary-7");
             }}
           />
         </>

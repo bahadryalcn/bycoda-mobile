@@ -18,7 +18,7 @@ import {
   Stack,
 } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
-import { candidateFromCatalog, memberValidation } from "./model";
+import { candidateFromCatalog, crewNameError, crewValidationMessage, memberValidation, memberValidationFeedback } from "./model";
 
 export function useRoleOptions() {
   const copy = useCopy();
@@ -55,6 +55,9 @@ export function MemberEditor({
   const draft = form.values;
   const locked = busy || disabled;
   const [groups, setGroups] = useState((initial.groups ?? []).join(", "));
+  const [nameTouched, setNameTouched] = useState(false);
+  const [modelsTouched, setModelsTouched] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const { requestClose } = useSheetGuard({
     dirty: form.dirty || extraDirty || groups !== (initial.groups ?? []).join(", "),
     pending: busy,
@@ -95,12 +98,21 @@ export function MemberEditor({
       : {}),
   };
   const error = memberValidation(normalized);
+  const nameError = nameTouched || submitted ? crewNameError(draft.name, copy, true) : undefined;
+  const modelError = (modelsTouched || submitted) && !draft.candidates.length
+    ? crewValidationMessage(error, copy, true) : undefined;
+  const visibleError = nameError || modelError ? undefined : memberValidationFeedback(normalized, copy, {
+    name: nameTouched, models: modelsTouched,
+    dirty: form.dirty || groups !== (initial.groups ?? []).join(", "), submitted,
+  });
   return (
     <Stack>
       {extraFields}
       <Field
         label={copy("Üye adı", "Member name")}
         value={draft.name}
+        error={nameError}
+        onBlur={() => setNameTouched(true)}
         editable={!locked}
         onChangeText={(name) => form.patch({ name })}
       />
@@ -134,16 +146,19 @@ export function MemberEditor({
           { value: "fixed", label: copy("Sabit model", "Fixed model") },
           { value: "automatic", label: copy("Otomatik seçim", "Automatic selection") },
         ]}
-        onChange={(selection) => form.patch({ selection })}
+        onChange={(selection) => { setModelsTouched(true); form.patch({ selection }); }}
       />
       {draft.selection === "fixed" ? (
         <SelectField
           searchable
           label={copy("Model", "Model")}
           value={draft.candidates[0]?.id}
+          error={modelError}
+          hint={!draft.candidates.length ? copy("Bu üyeye bir model seçin.", "Choose a model for this member.") : undefined}
           options={[...options.values()]}
           disabled={locked}
           onChange={(id) => {
+            setModelsTouched(true);
             const next = candidate(id);
             if (next)
               form.patch({
@@ -156,17 +171,20 @@ export function MemberEditor({
           searchable
           label={copy("İzin verilen modeller", "Allowed models")}
           values={draft.candidates.map((row) => row.id)}
+          error={modelError}
+          hint={!draft.candidates.length ? copy("Bu üyeye izin verilen modelleri seçin.", "Choose the allowed models for this member.") : undefined}
           options={[...options.values()]}
           max={20}
           disabled={locked}
-          onChange={(ids) =>
+          onChange={(ids) => {
+            setModelsTouched(true);
             form.patch({
               candidates: ids.flatMap((id) => {
                 const next = candidate(id);
                 return next ? [next] : [];
               }),
-            })
-          }
+            });
+          }}
         />
       )}
       {catalogState === "loading" ? (
@@ -240,13 +258,14 @@ export function MemberEditor({
           )}
         </Body>
       </Disclosure>
-      <ErrorText error={error} />
+      <ErrorText error={visibleError} />
       <FormActions
         feedback={feedback}
         submitLabel={copy("Kaydet", "Save")}
         busy={busy}
         disabled={locked || !!error}
         onSubmit={() => {
+          setSubmitted(true);
           if (!locked && !error) onSave(normalized);
         }}
         cancelLabel={copy("Vazgeç", "Cancel")}

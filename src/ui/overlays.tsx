@@ -12,6 +12,7 @@ import {
   type PropsWithChildren,
 } from "react";
 import { BackHandler, StyleSheet, View } from "react-native";
+import { KeyboardController } from "react-native-keyboard-controller";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -148,6 +149,10 @@ export function OverlayProvider({ children }: PropsWithChildren) {
     if (!active || process.env.EXPO_OS === "web") return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       if (useSecurity.getState().status !== "unlocked") return true;
+      if (active.visible && KeyboardController.isVisible()) {
+        void KeyboardController.dismiss();
+        return true;
+      }
       if (active.visible) active.value.onClose();
       return true;
     });

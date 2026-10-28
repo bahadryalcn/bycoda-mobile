@@ -3,7 +3,7 @@ import { readonlyRequest } from "./request-policy";
 
 describe("mobile media retry policy", () => {
   it("retries queue reads without replaying edits or queue consumption", () => {
-    expect(readonlyRequest("sessions.queue.get", {})).toBe(true);
+    expect(readonlyRequest("sessions.queue.get", {})).toBe(false);
     for (const method of ["sessions.queue.change", "sessions.queue.claim", "sessions.queue.finish"])
       expect(readonlyRequest(method, {})).toBe(false);
   });

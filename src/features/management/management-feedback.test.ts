@@ -15,6 +15,17 @@ const state = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 vi.mock("expo-router", () => ({ router: { push: state.navigate } }));
+vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
+// Screen feedback consumes a workspace snapshot; transport/crypto have their own tests.
+vi.mock("./social/use-workspace-query", () => ({
+  useSocialWorkspace: () => ({
+    query: { data: state.data, isSuccess: true, isFetching: false, error: null },
+    state: state.data,
+    page: undefined,
+    collection: "threads",
+    missingEnvironment: false,
+  }),
+}));
 vi.mock("react-native", () => ({ View: "div" }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -44,6 +55,7 @@ vi.mock("./automations/automation-editor", () => ({ AutomationEditor: () => null
 vi.mock("./tasks/task-editor", () => ({ TaskEditor: () => null }));
 vi.mock("./tasks/delivery-editor", () => ({ DeliveryEditor: () => null }));
 vi.mock("./tasks/task-card", () => ({ TaskCard: () => null }));
+vi.mock("./tasks/bulk-actions", () => ({ TaskBulkActions: () => null }));
 vi.mock("./automations/automation-card", () => ({
   AutomationCard: ({ item }: { item: { name: string } }) => createElement("span", null, item.name),
 }));

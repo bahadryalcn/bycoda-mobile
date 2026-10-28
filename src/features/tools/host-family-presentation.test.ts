@@ -97,6 +97,7 @@ vi.mock("@/ui/primitives", () => {
     CodeText: Wrapper,
     Row: Wrapper,
     NavigationGroup: Wrapper,
+    Disclosure: Wrapper,
     QueryState: () => null,
     SelectField: () => null,
     ToggleField: () => null,
@@ -122,6 +123,7 @@ vi.mock("@/ui/primitives", () => {
         footer,
       ),
     Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    ErrorText: ({ error }: { error: string }) => createElement("p", { role: "alert" }, error),
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
     NavigationRow: ({
       label,
@@ -191,6 +193,8 @@ it("discloses structured log truncation only in the selected detail and refuses 
     }),
   );
   expect(container.querySelector("input")?.maxLength).toBe(512);
+  expect(container.textContent).not.toContain("Log search supports up to 512 characters.");
+  await act(async () => f.search!("x".repeat(448)));
   expect(container.textContent).toContain("Log search supports up to 512 characters.");
   expect(container.textContent).not.toContain("Showing the first 16,000");
   await act(async () =>
@@ -201,6 +205,7 @@ it("discloses structured log truncation only in the selected detail and refuses 
   expect(container.textContent).toContain("Showing the first 16,000 characters of details.");
   f.queries = [];
   await act(async () => f.search!("x".repeat(513)));
+  expect(container.textContent).toContain("Shorten the search to 512 characters or fewer.");
   expect(f.queries.filter((value) => value.method === "runtimeLogs.read").at(-1)).toMatchObject({
     enabled: false,
   });

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useLocale } from "@/i18n";
+import { matchesSearch } from "./shared/search";
 import Plus from "lucide-react-native/icons/plus";
 import type {
   CrewDefinition,
@@ -48,6 +50,7 @@ type Editor = { projectId: string; directory: CrewDirectory } & (
 
 export function CrewsScreen() {
   const copy = useCopy();
+  const locale = useLocale();
   const roleLabels = crewRoleOptions(copy);
   const roleLabel = (role: SavedCrewAgent["role"]) =>
     roleLabels.find((option) => option.value === role)?.label ?? role;
@@ -97,9 +100,7 @@ export function CrewsScreen() {
         ? directory.runs.map((value) => ({ kind: "run", value }))
         : directory.agents.map((value) => ({ kind: "profile", value }));
   const visible = rows.filter((row) =>
-    (row.kind === "run" ? `${row.value.title ?? ""} ${row.value.definition.name}` : row.value.name)
-      .toLocaleLowerCase()
-      .includes(search.trim().toLocaleLowerCase()),
+    matchesSearch(row.kind === "run" ? `${row.value.title ?? ""} ${row.value.definition.name}` : row.value.name, search, locale),
   );
   const open = (entry: Omit<Editor, "projectId" | "directory">) => {
     if (!projectId || !directory || editor || busy) return;
@@ -119,7 +120,7 @@ export function CrewsScreen() {
       title={copy("Ekipler", "Crews")}
       query={supported && projectId ? query : undefined}
       data={visible}
-      keyExtractor={(row) => `${row.kind}:${row.value.id}`}
+      keyExtractor={(row) => `${machine?.id}:${projectId}:${row.kind}:${row.value.id}`}
       actions={
         supported && tab !== "runs" ? (
           <IconButton
@@ -172,8 +173,9 @@ export function CrewsScreen() {
               <QueryState
                 query={query}
                 empty={!visible.length}
-                emptyTitle={copy("Bu görünümde kayıt yok", "No entries in this view")}
+                emptyTitle={search.trim() && rows.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Bu görünümde kayıt yok", "No entries in this view")}
               />
+              {search.trim() && !visible.length ? <Button tone="quiet" label={copy("Aramayı temizle", "Clear search")} onPress={() => setSearch("")} /> : null}
               {tab === "runs" && !executionSupported && (
                 <Notice
                   tone="info"
@@ -284,12 +286,14 @@ export function CrewsScreen() {
                           "The saved crew definition will be deleted. The host blocks deletion while active work or tasks still use it.",
                         ),
                         copy("Sil", "Delete"),
-                        () =>
+                        () => {
+                          if (useMachines.getState().activeId !== machine?.id || useMachines.getState().selectedProjectId !== projectId) return;
                           remove.mutate({
                             projectId,
                             definitionId: item.value.id,
                             expectedUpdatedAt: item.value.updatedAt,
-                          }),
+                          });
+                        },
                       ),
                   },
                 ]}
@@ -324,7 +328,7 @@ export function CrewsScreen() {
                           "The library profile will be deleted. Copies in crews are kept.",
                         ),
                         copy("Sil", "Delete"),
-                        () => removeAgent.mutate({ projectId, agentId: item.value.id }),
+                        () => { if (useMachines.getState().activeId === machine?.id && useMachines.getState().selectedProjectId === projectId) removeAgent.mutate({ projectId, agentId: item.value.id }); },
                       ),
                   },
                 ]}

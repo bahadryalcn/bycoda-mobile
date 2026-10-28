@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { HostTransport } from "../remote/transport";
+import { isProjectPrivacyQuery } from "../features/workspace/project-privacy-cache";
 
 export const hostKey = (machineId: string | null, key: readonly unknown[]) =>
   ["machine", machineId, ...key] as const;
@@ -7,7 +8,8 @@ export type HostWrite = {
   client: HostTransport | null;
   method: string;
   params: Record<string, unknown>;
-  invalidate: readonly unknown[];
+  /** null is an explicit read-only operation; [] retains broad content refresh. */
+  invalidate: readonly unknown[] | null;
 };
 export type HostWriteContext = { machineId: string | null };
 
@@ -25,8 +27,10 @@ export function hostMutationOptions<T>(cache: QueryClient) {
       return write.client.request<T>(write.method, write.params, { retry: false });
     },
     onSuccess: (_data: T, write: HostWrite) =>
-      cache.invalidateQueries({
+      write.invalidate === null ? Promise.resolve() : cache.invalidateQueries({
         queryKey: hostKey(write.client?.machine.id ?? null, write.invalidate),
+        // Only an explicit project mutation or the privacy owner expires proof.
+        predicate: ({ queryKey }) => write.invalidate!.length > 0 || !isProjectPrivacyQuery(queryKey),
       }),
   };
 }

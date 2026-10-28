@@ -58,7 +58,7 @@ export function ChatToolbarAction({
         alignItems: "center",
         justifyContent: "center",
         borderRadius: radii.control,
-        opacity: off ? opacity.disabled : 1,
+        opacity: disabled && !busy ? opacity.disabled : 1,
         backgroundColor: pressed ? colors.raised : "transparent",
       })}
     >

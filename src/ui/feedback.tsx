@@ -183,7 +183,7 @@ export function ErrorText({ error, message }: ErrorTextProps) {
   );
 }
 
-export function ErrorNotice({ error, onRetry, retryLabel, message, action, children }: ErrorNoticeProps) {
+export function ErrorNotice({ error, onRetry, retryLabel, retrying, message, action, children }: ErrorNoticeProps) {
   useMobileTheme();
   const copy = useCopy();
   if (!error) return null;
@@ -193,6 +193,7 @@ export function ErrorNotice({ error, onRetry, retryLabel, message, action, child
       message={errorMessage(error, copy, message)}
       onRetry={onRetry}
       retryLabel={retryLabel ?? copy("Yeniden dene", "Retry")}
+      retrying={retrying}
       action={action}
     >
       {children}
@@ -200,7 +201,7 @@ export function ErrorNotice({ error, onRetry, retryLabel, message, action, child
   );
 }
 
-export function Notice({ tone = "info", message, children, onRetry, retryLabel, action }: NoticeProps) {
+export function Notice({ tone = "info", message, children, onRetry, retryLabel, retrying, action }: NoticeProps) {
   useMobileTheme();
   const copy = useCopy();
   const semantic = semanticColors[tone];
@@ -229,6 +230,7 @@ export function Notice({ tone = "info", message, children, onRetry, retryLabel, 
           </Body>
         </View>
         {recovery ? <Button density="compact" tone="quiet" label={recovery.label}
+          busy={!action && retrying}
           onPress={recovery.onPress} style={{ marginStart: "auto" }} /> : null}
       </View>
       {children}

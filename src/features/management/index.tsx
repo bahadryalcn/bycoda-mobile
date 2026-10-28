@@ -14,7 +14,7 @@ import { InboxScreen } from "./inbox-screen";
 import { SocialScreen } from "./social-screen";
 import { StewardsScreen } from "./stewards-screen";
 import { ToolDirectory } from "./tool-directory";
-import { isManagementSection, type ManagementSection } from "./sections";
+import { isManagementSection, managementSections, type ManagementSection } from "./sections";
 import { useProjectList } from "../workspace/use-project-directory";
 
 export function ManagementHome() {
@@ -52,9 +52,11 @@ export function ManagementHome() {
 export function ManagementScreen({ section }: ManagementScreenProps) {
   const machine = useActiveMachine();
   const copy = useCopy();
+  const labels = isManagementSection(section) ? managementSections[section] : undefined;
+  const title = labels ? copy(labels[0], labels[1]) : copy("Bölüm bulunamadı", "Section not found");
   if (!machine)
     return (
-      <Screen>
+      <Screen title={title}>
         <Empty
           title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
           action={{
@@ -78,7 +80,7 @@ export function ManagementScreen({ section }: ManagementScreenProps) {
   return Component ? (
     <Component key={`${machine.id}:${section}`} />
   ) : (
-    <Screen>
+    <Screen title={title}>
       <Empty title={copy("Bölüm bulunamadı", "Section not found")} />
     </Screen>
   );

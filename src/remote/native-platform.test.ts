@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFile } from "node:fs/promises";
+import { HOST_RPC_METHODS } from "../../../src/shared/model/host-contracts";
 
 const native = vi.hoisted(() => ({
   fetch: vi.fn<typeof fetch>(),
@@ -19,6 +21,51 @@ describe("native transport module boundary", () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
+
+  // Source-level ingress evidence only: this does not compile or run Kotlin/Swift.
+  it.each([
+    [
+      "Android",
+      "android/src/main/java/expo/modules/bycodahostsocket/BycodaHostSocketModule.kt",
+      "connection.socket?.send(text)",
+    ],
+    ["iOS", "ios/BycodaHostSocketModule.swift", "connection.task.send(.string(text))"],
+  ])(
+    "keeps both %s raw socket private namespace denials before the actual send",
+    async (_platform, path, sendExpression) => {
+      const source = await readFile(
+        new URL(`../../modules/bycoda-host-socket/${path}`, import.meta.url),
+        "utf8",
+      );
+      const begin = source.indexOf('AsyncFunction("send")');
+      const end = source.indexOf('AsyncFunction("acknowledge")', begin);
+      expect(begin).toBeGreaterThanOrEqual(0);
+      expect(end).toBeGreaterThan(begin);
+      const body = source.slice(begin, end);
+      const guard =
+        /method\.(?:startsWith|hasPrefix)\("([^"]+)"\)\s*\|\|\s*method\.(?:startsWith|hasPrefix)\("([^"]+)"\)[^\n]*throw[^\n]*\("native_profile_required"\)/.exec(
+          body,
+        );
+      expect(guard).not.toBeNull();
+      expect(body.indexOf('"method"')).toBeLessThan(guard!.index);
+      expect(body.indexOf(sendExpression)).toBeGreaterThan(guard!.index);
+      const prefixes = [guard![1], guard![2]];
+      const methods = Object.keys(HOST_RPC_METHODS).filter(
+        (method) => method.startsWith("native.") || method.startsWith("devServers.bridge"),
+      );
+      for (const method of [...methods, "native.future.operation", "devServers.bridgeFuture"])
+        expect(prefixes.some((prefix) => method.startsWith(prefix))).toBe(true);
+      for (const method of [
+        "workspaces.cleanup.plan",
+        "workspaces.cleanup.apply",
+        "workspaces.cleanup.status",
+        "commands.dispatch",
+        "devServers.list",
+        "devServers.start",
+      ])
+        expect(prefixes.some((prefix) => method.startsWith(prefix))).toBe(false);
+    },
+  );
 
   it("forwards redirect, credential, and cancellation options to Expo without replacing the response", async () => {
     const controller = new AbortController();

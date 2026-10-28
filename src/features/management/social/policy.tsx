@@ -6,11 +6,16 @@ import { useCopy } from "@/ui/copy";
 import { useHostQuery } from "@/state/queries";
 import type { EffectivePolicy, PolicyInfoProps } from "./types";
 
-export function usePolicy(accountId: string) {
-  return useHostQuery<EffectivePolicy>(["social", "policy", accountId], "social.request", {
+export function usePolicy(accountId: string, scope?: { key: string; enabled: boolean; assert: () => void }) {
+  return useHostQuery<EffectivePolicy>(["social", "policy", accountId, ...(scope ? [scope.key] : [])], "social.request", {
     action: "policy.get",
     input: { accountId },
-  });
+  }, scope ? { enabled: scope.enabled, queryFn: async (client, signal) => {
+    scope.assert();
+    const result = await client.request<EffectivePolicy>("social.request", { action: "policy.get", input: { accountId } }, { signal });
+    scope.assert();
+    return result;
+  } } : undefined);
 }
 
 export async function freshPolicy(

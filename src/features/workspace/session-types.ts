@@ -54,6 +54,7 @@ export type SessionToolbarProps = {
 export type SessionWorkspaceProps = SessionScreenProps & { machineId: string };
 
 export type SessionTranscriptProps = {
+  navigation?: import("./transcript-scroll").TranscriptScrollPosition;
   view: import("./transcript-model").TranscriptView;
   scope: SessionScope;
   session?: HostSession;
@@ -80,6 +81,10 @@ export type TranscriptBlockProps = {
 
 export type QuestionCardProps = {
   question: UserQuestionPrompt;
+  /** Machine/session/run identity for navigation-safe in-memory question state. */
+  draftScope?: string;
+  /** Authoritative owner revision, including delivery updates coalesced by polling. */
+  deliveryVersion?: number;
   disabled: boolean;
   onAnswer: QuestionAnswer;
 };

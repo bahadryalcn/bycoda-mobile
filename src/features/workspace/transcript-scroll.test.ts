@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { TranscriptScrollPosition } from "./transcript-scroll";
 
 describe("transcript scroll ownership", () => {
+  it("retains a lightweight history offset across route hydration", () => {
+    const position = new TranscriptScrollPosition();
+    position.beginDrag();
+    position.onScroll(420);
+    position.endDrag(420);
+    expect(position.restoreOffset()).toBe(420);
+    expect(position.shouldAnchor(true)).toBe(false);
+    position.jumpToLatest();
+    expect(position.restoreOffset()).toBe(0);
+    expect(position.shouldAnchor(true)).toBe(true);
+  });
   it("does not interrupt a fling near the newest message when streaming updates arrive", () => {
     const position = new TranscriptScrollPosition();
     position.beginDrag();

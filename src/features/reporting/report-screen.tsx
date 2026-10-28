@@ -4,6 +4,7 @@ import { reportSender } from "./report-config";
 import { Stack as RouterStack, router } from "expo-router";
 import { assertAppAccess } from "@/state/security";
 import { useCopy } from "@/ui/copy";
+import { ConsentField } from "@/ui/consent-field";
 import Animated from "react-native-reanimated";
 import Flag from "lucide-react-native/icons/flag";
 import {
@@ -114,15 +115,6 @@ export function ContentReportScreen() {
           disabled={busy}
           onChange={(includeExcerpt) => updateContentReport({ includeExcerpt, consent: false })}
         />
-        <ToggleField
-          label={copy(
-            "Seçtiğim bilgilerin incelenmek üzere bycoda’ya gönderilmesini onaylıyorum.",
-            "I agree to send the selected information to bycoda for review.",
-          )}
-          value={draft.consent}
-          disabled={busy}
-          onChange={(consent) => updateContentReport({ consent })}
-        />
       </NavigationGroup>
       {draft.includeExcerpt ? (
         <Card>
@@ -141,6 +133,13 @@ export function ContentReportScreen() {
           </Body>
         </Card>
       ) : null}
+      <ConsentField label={copy("Gönderim onayı", "Consent to send")}
+        detail={copy(
+          "Seçtiğim bilgilerin incelenmek üzere bycoda’ya gönderilmesini onaylıyorum.",
+          "I agree to send the selected information to bycoda for review.",
+        )}
+        value={draft.consent} disabled={busy}
+        onChange={(consent) => updateContentReport({ consent })} />
       <Disclosure label={copy("Bildirim ve gizlilik", "Reporting & privacy")}>
         <Body>
           {copy(

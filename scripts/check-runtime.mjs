@@ -7,6 +7,12 @@ const mobileRoot = fileURLToPath(new URL("../", import.meta.url));
 const desktopSource = path.resolve(mobileRoot, "../src");
 // These contracts are deliberately free of desktop UI, browser storage and Tauri.
 const pureContracts = new Set([
+  "shared/model/host-contracts",
+  // Portable session execution policy has no desktop runtime dependencies.
+  "shared/lib/host-runtime/session-execution",
+  "features/sessions/model/claudeAdvisor",
+  "features/sessions/model/claudeCompact",
+  "features/sessions/model/claudeSubagents",
   "shared/i18n/languages",
   "integrations/mobile-pairing",
   "integrations/mobile-lan",

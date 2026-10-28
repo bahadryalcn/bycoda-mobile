@@ -1,5 +1,6 @@
 import { RecordCard } from "@/ui/record-card";
 import { useMobileTheme } from "@/ui/theme";
+import { useEffect, useRef } from "react";
 import { router } from "expo-router";
 import { uiStyles } from "@/ui/styles";
 import { ActionMenu, Body, Button, ErrorText, Row } from "@/ui/primitives";
@@ -31,6 +32,16 @@ export function TaskCard({
   const machine = useActiveMachine();
   const moves = taskActions(task);
   const supported = !!machine?.capabilities?.includes("tasks.workspaces");
+  const moving = move.isPending && move.variables?.taskId === task.id;
+  const starting = start.isPending && start.variables?.taskId === task.id;
+  const orderedHere = useRef(false);
+  useEffect(() => { if (!reorder.isPending) orderedHere.current = false; }, [reorder.isPending]);
+  const menuBusy =
+    (remove.isPending && remove.variables?.taskId === task.id) ||
+    (decline.isPending && decline.variables?.taskId === task.id) ||
+    (recheck.isPending && recheck.variables?.taskId === task.id) ||
+    (reorder.isPending && orderedHere.current) ||
+    (moving && (move.variables?.to === "todo" || (supported && move.variables?.to === "queued")));
   const waiting = tasks.filter(
     (entry) => task.dependsOn?.includes(entry.id) && entry.status !== "done",
   );
@@ -39,6 +50,8 @@ export function TaskCard({
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   const position = ordered.findIndex((item) => item.id === task.id);
   const changeOrder = (delta: number) => {
+    if (busy || orderedHere.current) return;
+    orderedHere.current = true;
     const ids = ordered.map((item) => item.id);
     [ids[position], ids[position + delta]] = [ids[position + delta], ids[position]];
     reorder.mutate({ taskIds: ids });
@@ -130,13 +143,14 @@ export function TaskCard({
       title={task.title}
       status={<Status value={task.status} />}
       metadata={[task.harness, task.model].filter(Boolean).join(" · ")}
-      menu={<ActionMenu label={copy("Görev işlemleri", "Task actions")} actions={menu} />}
+      menu={<ActionMenu label={copy("Görev işlemleri", "Task actions")} busy={menuBusy} actions={menu} />}
       footer={
         <Row>
           {supported &&
             (task.status === "todo" || task.status === "queued" || task.status === "blocked") && (
               <Button
                 label={copy("Şimdi başlat", "Start now")}
+                busy={starting}
                 tone="quiet"
                 disabled={busy || !lifecycleReady || moves.queueBlocked || waiting.length > 0}
                 onPress={() => start.mutate({ taskId: task.id })}
@@ -162,6 +176,7 @@ export function TaskCard({
           {!supported && moves.queue && (
             <Button
               label={queueLabel}
+              busy={moving && move.variables?.to === "queued"}
               tone="quiet"
               disabled={busy || moves.queueBlocked}
               onPress={() => move.mutate({ taskId: task.id, to: "queued" })}
@@ -170,6 +185,7 @@ export function TaskCard({
           {moves.stop && (
             <Button
               label={copy("Durdur", "Stop")}
+              busy={moving && move.variables?.to === "blocked"}
               tone="danger"
               disabled={busy}
               onPress={() =>
@@ -188,6 +204,7 @@ export function TaskCard({
           {moves.complete && (
             <Button
               label={copy("Tamamla", "Complete")}
+              busy={moving && move.variables?.to === "done"}
               tone="success"
               disabled={busy}
               onPress={() =>

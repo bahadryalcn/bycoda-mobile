@@ -10,8 +10,8 @@ export function selectionLabels<T extends string>(values: readonly T[], labels: 
   return values.map((value) => labels.get(value) ?? value).filter((label) => label !== "");
 }
 
-export function filterSelection<T extends string>(
-  options: readonly SelectionOption<T>[],
+export function filterSelection<T extends SelectionOption>(
+  options: readonly T[],
   search: string,
 ) {
   const term = search.trim().toLocaleLowerCase();

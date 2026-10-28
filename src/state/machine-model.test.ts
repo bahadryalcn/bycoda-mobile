@@ -23,14 +23,14 @@ describe("saved remote computers", () => {
     name: "Work PC",
     endpoint: "https://work.example",
     environmentId: "env-one",
-    providers: ["gemini", "claude"],
+    providers: ["codex", "claude", "unsupported-provider"],
     capabilities: ["notes", "host.settings"],
     token: "must-not-persist",
     lastConnectedAt: 10,
   };
   it("restores machine discovery and excludes credential fields", () => {
     const [value] = restoreMachines([machine]);
-    expect(value.providers).toEqual(["gemini", "claude"]);
+    expect(value.providers).toEqual(["codex", "claude"]);
     expect(value.capabilities).toEqual(["notes", "host.settings"]);
     expect(value.lastConnectedAt).toBe(10);
     expect(value).not.toHaveProperty("token");

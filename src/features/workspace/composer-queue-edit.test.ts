@@ -15,6 +15,18 @@ import {
 } from "./composer-queue-edit";
 
 const clientId = "mobile:test";
+it.each([undefined, 2])(
+  "retains queued generation %s through durable edits",
+  (authorityGeneration) => {
+    const edit = makeEdit();
+    edit.original.authorityGeneration = authorityGeneration;
+    const restored = decodeQueuedMessageEdit(encodeQueuedMessageEdit(edit)!);
+    expect(editedQueuedMessage(restored).authorityGeneration).toBe(authorityGeneration);
+    expect(
+      saveQueuedMessageEdit(queue(restored), restored, clientId).messages[0]?.authorityGeneration,
+    ).toBe(authorityGeneration);
+  },
+);
 const makeEdit = (): QueuedMessageEdit => ({
   version: 1,
   original: {
@@ -45,6 +57,23 @@ const queue = (edit = makeEdit()): SharedQueue => ({
 });
 
 describe("queued message editing", () => {
+  it("preserves edit ownership across lease-aware snapshots without accepting a desktop owner", () => {
+    const edit = makeEdit();
+    const before: SharedQueue = {
+      ...queue(edit),
+      consumer: undefined,
+      leased: true,
+      drain: { holder: clientId, epoch: 4, expiresAt: Date.now() + 60_000, legacy: true },
+    };
+    expect(saveQueuedMessageEdit(before, edit, clientId).messages[0]?.text).toBe(edit.text);
+    expect(releaseQueuedMessageEdit(before, edit.original.id, clientId).editingId).toBeUndefined();
+    const foreign: SharedQueue = {
+      ...before,
+      drain: { ...before.drain!, holder: "desktop:other", legacy: undefined },
+    };
+    expect(() => saveQueuedMessageEdit(foreign, edit, clientId)).toThrow(/controlled elsewhere/);
+    expect(releaseQueuedMessageEdit(foreign, edit.original.id, clientId)).toBe(foreign);
+  });
   it("changes only text and preserves original files, model settings, intent and row id", () => {
     const edit = makeEdit();
     const before = queue(edit);

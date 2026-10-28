@@ -1,17 +1,51 @@
 import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
+import { useEffect, useRef, useState } from "react";
 import { useFormDraft } from "@/state/form-draft";
-import { Badge, Button, Card, Disclosure, Field, MultiSelectField, SelectField, Row } from "@/ui/primitives";
+import { Badge, Body, Button, Card, Disclosure, Field, MultiSelectField, SelectField, Row } from "@/ui/primitives";
 import { colors } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { workspaceStyles } from "./shared";
 import type { QuestionCardProps, QuestionDraft } from "./session-types";
+import { questionDismissLabel, questionNeedsAttention, questionStatusLabel, questionSubmissionHeld } from "./question-status";
+import { questionCardStates } from "./question-card-state";
 
-export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps) {
+export function QuestionCard({ question, draftScope, deliveryVersion, disabled, onAnswer }: QuestionCardProps) {
   useMobileTheme();
   const copy = useCopy();
-  const form = useFormDraft<QuestionDraft>({ answers: {}, custom: {} });
+  const [retained] = useState(() => questionCardStates.read(draftScope, question));
+  const form = useFormDraft<QuestionDraft>(() => retained?.draft ?? { answers: {}, custom: {} });
   const { answers, custom } = form.values;
+  const submitting = useRef(!!retained?.delivery && questionSubmissionHeld({ ...question, delivery: retained.delivery }));
+  const [localDelivery, setLocalDelivery] = useState(retained?.delivery);
+  useEffect(() => {
+    if (question.delivery) setLocalDelivery(undefined);
+    if (question.delivery === "failed") {
+      submitting.current = false;
+    }
+  }, [question.delivery, deliveryVersion]);
+  useEffect(() => {
+    questionCardStates.write(draftScope, question, {
+      draft: form.values,
+      delivery: localDelivery ?? (question.delivery === "failed" ? undefined : question.delivery),
+    });
+  }, [draftScope, question, form.values, localDelivery]);
+  const current = localDelivery ? { ...question, delivery: localDelivery } : question;
+  // A host command receipt is not provider delivery. Keep the latch until the
+  // authoritative question resolves or explicitly reports an undelivered failure.
+  const held = disabled || questionSubmissionHeld(current);
+  const submit: QuestionCardProps["onAnswer"] = async (reply) => {
+    if (held || submitting.current) return;
+    submitting.current = true;
+    setLocalDelivery("sending");
+    questionCardStates.write(draftScope, question, { draft: form.values, delivery: "sending" });
+    try {
+      await onAnswer(reply);
+    } catch {
+      setLocalDelivery("unknown");
+      questionCardStates.write(draftScope, question, { draft: form.values, delivery: "unknown" });
+    }
+  };
   const complete = question.questions.every((item) => {
     const selected = answers[item.id] ?? [];
     const text = item.preserveCustomWhitespace ? custom[item.id] : custom[item.id]?.trim();
@@ -28,13 +62,13 @@ export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps
       const text = item.preserveCustomWhitespace ? custom[item.id] : custom[item.id]?.trim();
       if (text) normalized[item.id] = text;
     }
-    void onAnswer({ kind: "answered", answers, custom: normalized }).catch(() => {});
+    void submit({ kind: "answered", answers, custom: normalized });
   };
   const customField = (item: QuestionCardProps["question"]["questions"][number]) => (
     <Field
       label={copy("Kendi yanıtın", "Your own answer")}
       value={custom[item.id] ?? ""}
-      editable={!disabled}
+      editable={!held}
       onChangeText={(text) => form.patch((current) => ({ custom: { ...current.custom, [item.id]: text } }))}
       multiline
     />
@@ -48,14 +82,18 @@ export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps
       }}
     >
       <View style={workspaceStyles.stack}>
-        <Badge label={copy("Yanıtın bekleniyor", "Waiting for your answer")} tone="warning" />
+        <Badge label={questionStatusLabel(current, copy)} tone={questionNeedsAttention(current) ? "warning" : "default"} />
+        {current.error ? <Body accessibilityRole="alert">{current.error}</Body> : null}
+        {current.delivery === "unknown" ? (
+          <Body muted>{copy("Yeniden denemeden önce konuşmayı kontrol et.", "Check the conversation before trying again.")}</Body>
+        ) : null}
         {question.questions.map((item) => (
           <View key={item.id} style={workspaceStyles.stack}>
             {item.multiSelect ? (
               <MultiSelectField
                 label={item.prompt}
                 values={answers[item.id] ?? []}
-                disabled={disabled}
+                disabled={held}
                 options={item.options.map((option) => ({
                   value: option.id,
                   label: option.label,
@@ -69,7 +107,7 @@ export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps
               <SelectField
                 label={item.prompt}
                 value={answers[item.id]?.[0]}
-                disabled={disabled}
+                disabled={held}
                 options={item.options.map((option) => ({
                   value: option.id,
                   label: option.label,
@@ -91,18 +129,19 @@ export function QuestionCard({ question, disabled, onAnswer }: QuestionCardProps
         ))}
         <Row style={{ justifyContent: "flex-end" }}>
           <Button
-            label={copy("Atla", "Skip")}
-            disabled={disabled}
+            label={questionDismissLabel(question, copy)}
+            disabled={held}
             tone="quiet"
             density="compact"
             onPress={() => {
-              void onAnswer({ kind: "skipped" }).catch(() => {});
+              void submit({ kind: "skipped" });
             }}
           />
           <Button
-            label={copy("Yanıtla", "Answer")}
+            label={copy("Yanıtı gönder", "Send answer")}
             tone="primary"
-            disabled={disabled || !complete}
+            disabled={held || !complete}
+            busy={current.delivery === "sending"}
             density="compact"
             onPress={answer}
           />

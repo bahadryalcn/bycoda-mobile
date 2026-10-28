@@ -7,6 +7,7 @@ export class UncertainCommand extends Error {
     readonly commandId: string,
     readonly machineId: string,
     readonly client: CommandClient,
+    readonly authorityGeneration?: number,
   ) {
     super(
       "Connection interrupted. Check whether the computer accepted this command before trying again.",
@@ -37,6 +38,11 @@ export async function dispatchCommand(
     } catch {
       /* Explicit recovery remains bound to the original computer. */
     }
-    throw new UncertainCommand(commandId, client.machine.id, client);
+    throw new UncertainCommand(
+      commandId,
+      client.machine.id,
+      client,
+      params.authorityGeneration as number | undefined,
+    );
   }
 }

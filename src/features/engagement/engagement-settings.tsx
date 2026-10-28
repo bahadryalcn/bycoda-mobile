@@ -94,12 +94,19 @@ export function EngagementSettings() {
 
   return (
     <Stack style={{ gap: space.lg }}>
+      <Stack>
+        <Body>bycoda · {copy("Sürüm: ", "Version: ")}{identity.version ?? copy("Bilinmiyor", "Unknown")}</Body>
+        <Body muted>{identity.preview
+          ? copy("Önizleme — mağaza derlemesi değil.", "Preview — a store build is not running.")
+          : `${copy("Derleme: ", "Build: ")}${identity.nativeBuild ?? copy("Bilinmiyor", "Unknown")}`}</Body>
+      </Stack>
       <Animated.View entering={enterItem(0)}>
         <NavigationGroup>
           <NavigationRow
             label={copy("Uygulamayı değerlendir", "Rate the app")}
             disabled={!!busy || !links.reviewUrl}
             detail={!links.reviewUrl ? copy("Mağazada yayımlandığında kullanılabilir.", "Available after the store release.") : undefined}
+            detailLines={2}
             icon={tile(Star, colors.warning)}
             onPress={() => { void perform("review"); }}
           />
@@ -128,16 +135,7 @@ export function EngagementSettings() {
       {notice ? <Body accessibilityLiveRegion="polite" muted>{notice}</Body> : null}
       <ErrorText error={error} />
       <NavigationGroup>
-        <Disclosure label={copy("Sürüm ve bağlantılar", "Version & links")}>
-          <Body>
-            {copy("Sürüm: ", "Version: ")}
-            {identity.version ?? copy("Bilinmiyor", "Unknown")}
-          </Body>
-          <Body muted>
-            {identity.preview
-              ? copy("Önizleme — mağaza derlemesi değil.", "Preview — a store build is not running.")
-              : `${copy("Derleme: ", "Build: ")}${identity.nativeBuild ?? copy("Bilinmiyor", "Unknown")}`}
-          </Body>
+        <Disclosure label={copy("Bağlantılar", "Links")}>
           <Body muted selectable>{links.shareUrl}</Body>
         </Disclosure>
       </NavigationGroup>

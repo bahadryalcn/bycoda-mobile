@@ -98,7 +98,10 @@ it("declines only a steward to-do suggestion and never invokes ordinary task del
   const remove = vi.fn();
   const props = { task: { id: "proposal", title: "Proposal", prompt: "Inspect the project", source: "steward", status: "todo", dependsOn: [] },
     busy: false, editorOpen: false, tasks: [], lifecycleReady: true,
-    decline: { mutate: decline }, remove: { mutate: remove } } as unknown as Parameters<typeof TaskCard>[0];
+    onEdit: vi.fn(), onDelivery: vi.fn(),
+    move: { ...state.mutation, mutate: vi.fn() }, start: { ...state.mutation, mutate: vi.fn() },
+    recheck: { ...state.mutation, mutate: vi.fn() }, reorder: { ...state.mutation, mutate: vi.fn() },
+    decline: { ...state.mutation, mutate: decline }, remove: { ...state.mutation, mutate: remove } } as unknown as Parameters<typeof TaskCard>[0];
   state.machine.capabilities.push("stewards");
   const render = () => root.render(createElement(TaskCard, props));
   await act(async () => render());

@@ -14,6 +14,7 @@ import type {
 import { HostTransport, RemoteHostError } from "../transport";
 import { applySessionSync } from "../../../../src/features/connections/model/protocol";
 import { resolveSessionSync } from "../session-sync";
+import { retainSessionAuthority } from "@/domain/session-authority";
 
 export function createSessionsApi(transport: HostTransport, request: HostRequest) {
   return {
@@ -69,7 +70,7 @@ export function createSessionsApi(transport: HostTransport, request: HostRequest
         );
         const sync = await resolveSessionSync(transport, sessionId, response, options);
         try {
-          return applySessionSync(known, sync);
+          return retainSessionAuthority(known, applySessionSync(known, sync));
         } catch {
           throw new RemoteHostError(
             transport.machine.id,
@@ -109,11 +110,25 @@ export function createSessionsApi(transport: HostTransport, request: HostRequest
       update: (
         projectId: string,
         sessionId: string,
-        patch: { title?: string; archived?: boolean; pinned?: boolean },
+        patch: {
+          title?: string;
+          archived?: boolean;
+          pinned?: boolean;
+          authorityGeneration?: number;
+        },
         options?: RemoteRequestOptions,
       ) => request<HostSession>("sessions.update", { projectId, sessionId, ...patch }, options),
-      delete: (projectId: string, sessionId: string, options?: RemoteRequestOptions) =>
-        request<{ deleted: true }>("sessions.delete", { projectId, sessionId }, options),
+      delete: (
+        projectId: string,
+        sessionId: string,
+        options?: RemoteRequestOptions,
+        authorityGeneration?: number,
+      ) =>
+        request<{ deleted: true }>(
+          "sessions.delete",
+          { projectId, sessionId, authorityGeneration },
+          options,
+        ),
     },
   };
 }

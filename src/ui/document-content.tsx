@@ -40,10 +40,10 @@ export function ProjectMediaContent({
   const data = visibleMediaData(query);
   return (
     <View style={{ gap: space.sm }}>
-      {query.isFetching ? <Loading /> : null}
+      {query.isFetching && !query.error ? <Loading /> : null}
       <ErrorText error={query.error} />
       {query.error ? (
-        <Button
+        <Button busy={query.isFetching}
           label={copy("Yeniden dene", "Retry")}
           onPress={() => {
             void query.refetch();

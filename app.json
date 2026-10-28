@@ -4,7 +4,7 @@
     "slug": "bycoda-mobile",
     "scheme": "bycoda",
     "version": "0.1.0",
-    "icon": "../public/brand/bycoda/mobile-icon.png",
+    "icon": "./assets/brand/mobile-icon.png",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#000000",
@@ -36,8 +36,8 @@
       "versionCode": 1,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "foregroundImage": "../public/brand/bycoda/mobile-adaptive-foreground.png",
-        "monochromeImage": "../public/brand/bycoda/mobile-adaptive-foreground.png",
+        "foregroundImage": "./assets/brand/mobile-adaptive-foreground.png",
+        "monochromeImage": "./assets/brand/mobile-adaptive-foreground.png",
         "backgroundColor": "#000000"
       },
       "blockedPermissions": [

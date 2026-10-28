@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useActiveMachine } from "@/state/machines";
 import {
   Body,
@@ -38,13 +38,30 @@ export function ProviderAccountEditor({
   const { draft, busy, receipt } = delivery;
   const value = draft.value;
   const current = delivery.current();
+  const [showSavedSettings, setShowSavedSettings] = useState(false);
+  const wasAvailable = useRef(current);
+  wasAvailable.current ||= current;
+  const showFields = current || wasAvailable.current || showSavedSettings || !!value?.pending || !!value?.finished || !!review || !!receipt;
+  const unavailableMessage = !machine ? copy(
+    "Önce bu hesabın bilgisayarına bağlanın, ardından hesap ayarlarını yeniden açın.",
+    "Connect this account's computer first, then reopen account settings.",
+  ) : machine.id !== scope.machineId || machine.environmentId !== report.environmentId ? copy(
+    "Seçili bilgisayar bu hesapla eşleşmiyor. Doğru bilgisayarı ve projeyi seçip hesap ayarlarını yeniden açın.",
+    "The selected computer does not match this account. Select the correct computer and project, then reopen account settings.",
+  ) : !machine.capabilities?.includes("providers.desktop.metadata.v1") && !machine.capabilities?.includes("providers.desktop.quotaRefresh.v1") ? copy(
+    "Bu bilgisayar hesap ayarlarını değiştirmeyi desteklemiyor. Bilgisayardaki bycoda’yı güncelleyin.",
+    "This computer does not support account settings changes. Update bycoda on the computer.",
+  ) : copy(
+    "Bu hesabın bağlantısı değişti veya kullanılamıyor. Bilgisayar bağlantısını kontrol edip hesap ayarlarını yeniden açın.",
+    "This account's connection changed or is unavailable. Check the computer connection and reopen account settings.",
+  );
   const disabled =
     !current || !draft.ready || !!draft.error || busy || !!value?.pending || !!value?.finished;
   return (
     <Sheet
       visible
       title={copy("Hesap görünen ayarları", "Account display settings")}
-      size="form"
+      size={!current && draft.ready && !showFields && !draft.error && !busy ? "compact" : "form"}
       onClose={onClose}
       dismissible={!busy}
       dirty={!!value && !value.pending && !value.finished}
@@ -96,6 +113,10 @@ export function ProviderAccountEditor({
           {machine?.name ? `${machine.name} · ` : ""}
           {account.provider} · {account.label}
         </Body>
+        {!current ? <Notice tone="warning" message={unavailableMessage} /> : null}
+        {!showFields && value ? <Button tone="quiet" label={copy("Kaydedilmiş ayarları göster", "Show saved settings")}
+          onPress={() => setShowSavedSettings(true)} /> : null}
+        {showFields ? <>
         <Notice
           message={copy(
             "Görünen ad ve renk bilgisayardaki hesap ayarlarını değiştirir. Varsayılan seçimi yalnız gelecekteki konuşmalar içindir; açık konuşmaların hesabı değişmez.",
@@ -104,18 +125,10 @@ export function ProviderAccountEditor({
         />
         <Body muted>
           {copy(
-            "Kaydetme diğer masaüstü pencereleri arasında atomik değildir; ayarlar kaydetmeden önce tekrar kontrol edilir.",
-            "Saving is not atomic across desktop windows; settings are checked again before saving.",
+            "Başka bir pencerede yapılan değişikliklerle çakışma olabilir. Kaydetmeden önce ayarlar yeniden kontrol edilir.",
+            "Changes in another window may conflict. Settings are checked again before saving.",
           )}
         </Body>
-        {!current ? (
-          <Notice
-            message={copy(
-              "Bu hesabın bilgisayarını ve projesini yeniden açın veya bycoda’yı güncelleyin.",
-              "Reopen this account's computer and project, or update bycoda.",
-            )}
-          />
-        ) : null}
         {value ? (
           <>
             <SelectField
@@ -221,6 +234,7 @@ export function ProviderAccountEditor({
             ) : null}
           </>
         ) : null}
+        </> : null}
         <ErrorText error={error ?? delivery.error ?? draft.error} />
         {review ? (
           <ConfirmationCard

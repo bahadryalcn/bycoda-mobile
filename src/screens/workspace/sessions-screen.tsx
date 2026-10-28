@@ -8,8 +8,10 @@ import type { HostModelCatalog, HostSessionSummary, RemoteProvider } from "../..
 import { REMOTE_PROVIDERS } from "../../domain/providers";
 import { Button, Card, Empty, ErrorNotice, Field, Screen, SectionTitle } from "../../ui/components";
 import { colors } from "../../ui/theme";
-import { ChoiceChip, PressableCard } from "../../ui/primitives";
+import { Body, ChoiceChip, IdentifierField, NavigationRow, PressableCard, ScreenList, SearchField, SelectField, Sheet } from "../../ui/primitives";
 import { commandId, Loading, ProjectScreenProps, styles, workspaceKey } from "./shared";
+import { modelDefaults } from "../../features/workspace/catalog";
+import { filterSelection } from "@/ui/selection-model";
 
 export function SessionsScreen({
   machineId,
@@ -24,7 +26,10 @@ export function SessionsScreen({
   const [creating, setCreating] = useState(false);
   const [provider, setProvider] = useState<RemoteProvider | null>(null);
   const [model, setModel] = useState("");
-  const [mode, setMode] = useState<"supervised" | "auto-accept-edits">("supervised");
+  const [modelSettings, setModelSettings] = useState<Record<string, string>>({});
+  const [runtimeMode, setRuntimeMode] = useState<"supervised" | "auto-accept-edits" | "auto" | "full-access">("supervised");
+  const [choosingModel, setChoosingModel] = useState(false);
+  const [modelSearch, setModelSearch] = useState("");
   const key = workspaceKey(machineId, projectId, "sessions");
   const sessions = useQuery({
     queryKey: key,
@@ -42,7 +47,16 @@ export function SessionsScreen({
   );
   const selectedProvider = provider ?? providers[0];
   const models = selectedProvider ? (catalog.data?.models[selectedProvider] ?? []) : [];
-  const selectedModel = model || models[0]?.id || "";
+  const selectedModel = model.trim() || models[0]?.id || "";
+  const exactModel = models.find((item) => item.id === model.trim());
+  const modelChoices = filterSelection(
+    models.map((item) => ({
+      value: item.id,
+      label: item.name || item.id,
+      detail: item.name && item.name !== item.id ? item.id : undefined,
+    })),
+    modelSearch,
+  );
   const create = useMutation({
     mutationFn: () => {
       if (!client || !selectedProvider || !selectedModel)
@@ -52,7 +66,8 @@ export function SessionsScreen({
         projectId,
         harness: selectedProvider,
         model: selectedModel,
-        runtimeMode: mode,
+        modelSettings: Object.keys(modelSettings).length ? modelSettings : (exactModel ? modelDefaults(exactModel) : {}),
+        runtimeMode,
       });
     },
     onSuccess: (receipt) => {
@@ -97,7 +112,17 @@ export function SessionsScreen({
         />
         <Button
           title={creating ? "Vazgeç" : "Yeni oturum"}
-          onPress={() => setCreating(!creating)}
+          onPress={() => {
+            if (creating) {
+              setProvider(null);
+              setModel("");
+              setModelSettings({});
+              setRuntimeMode("supervised");
+              setChoosingModel(false);
+              setModelSearch("");
+            }
+            setCreating(!creating);
+          }}
         />
         {creating && (
           <Card>
@@ -106,56 +131,108 @@ export function SessionsScreen({
                 title="Yeni oturum"
                 detail="Seçtiğiniz projenin bilgisayarında başlar."
               />
-              <View style={styles.row}>
-                {providers.map((p) => (
-                  <ChoiceChip
-                    key={p}
-                    label={p}
-                    selected={selectedProvider === p}
-                    onPress={() => {
-                      setProvider(p);
-                      setModel("");
-                    }}
-                  />
-                ))}
-              </View>
-              {catalog.isPending ? (
-                <Loading />
-              ) : (
-                <>
-                  {catalog.error && (
-                    <ErrorNotice
-                      error={catalog.error}
-                      onRetry={() => {
-                        void catalog.refetch();
+              <SelectField
+                label="Agent"
+                value={selectedProvider}
+                options={providers.map((value) => ({ value, label: value }))}
+                disabled={catalog.isPending}
+                onChange={(value) => {
+                  setProvider(value as RemoteProvider);
+                  setModel("");
+                  setModelSettings({});
+                  setModelSearch("");
+                }}
+              />
+              {catalog.error && (
+                <ErrorNotice
+                  error={catalog.error}
+                  onRetry={() => {
+                    void catalog.refetch();
+                  }}
+                />
+              )}
+              {catalog.isPending ? <Loading /> : null}
+              <IdentifierField
+                label="Model"
+                value={model}
+                onChangeText={(next) => {
+                  setModel(next);
+                  const target = models.find((item) => item.id === next);
+                  if (target) setModelSettings(modelDefaults(target));
+                }}
+                editable={!catalog.isPending}
+                placeholder="Bilgisayardaki model kimliği"
+                hint="Model kimliği girin veya katalogdan seçin. Özel model kimlikleri kullanılabilir."
+              />
+              <Button
+                title="Katalogdan seç"
+                disabled={!models.length}
+                onPress={() => {
+                  setModelSearch("");
+                  setChoosingModel(true);
+                }}
+              />
+              <Sheet
+                visible={choosingModel}
+                title="Model seç"
+                size="full"
+                scroll={false}
+                onClose={() => setChoosingModel(false)}
+              >
+                <ScreenList
+                  data={modelChoices}
+                  keyExtractor={(item) => item.value}
+                  header={
+                    <SearchField
+                      label="Model ara"
+                      value={modelSearch}
+                      onChangeText={setModelSearch}
+                    />
+                  }
+                  ListEmptyComponent={
+                    <Body muted>
+                      Eşleşen model yok. Model kimliğini doğrudan girmek için bu listeyi kapatın.
+                    </Body>
+                  }
+                  renderItem={({ item }) => (
+                    <NavigationRow
+                      label={item.label}
+                      detail={item.detail}
+                      selected={model === item.value}
+                      onPress={() => {
+                        setModel(item.value);
+                        const target = models.find((entry) => entry.id === item.value);
+                        if (target) setModelSettings(modelDefaults(target));
+                        setChoosingModel(false);
                       }}
                     />
                   )}
-                  <View style={styles.row}>
-                    {models.map((m) => (
-                      <ChoiceChip
-                        key={m.id}
-                        label={m.name}
-                        selected={selectedModel === m.id}
-                        onPress={() => setModel(m.id)}
-                      />
-                    ))}
-                  </View>
-                </>
-              )}
-              <Text style={styles.muted}>İzinler</Text>
-              <View style={styles.row}>
-                <ChoiceChip
-                  label="Onay iste"
-                  selected={mode === "supervised"}
-                  onPress={() => setMode("supervised")}
                 />
-                <ChoiceChip
-                  label="Düzenlemeleri kabul et"
-                  selected={mode === "auto-accept-edits"}
-                  onPress={() => setMode("auto-accept-edits")}
+              </Sheet>
+              {(exactModel?.settings ?? []).map((setting) => (
+                <SelectField
+                  key={setting.id}
+                  label={setting.label}
+                  value={modelSettings[setting.id] ?? setting.value}
+                  options={setting.options}
+                  onChange={(option) =>
+                    setModelSettings((current) => ({ ...current, [setting.id]: option }))
+                  }
                 />
-              </View>
+              ))}
+              <SelectField
+                label="İzinler"
+                value={runtimeMode}
+                options={[
+                  { value: "supervised", label: "Onay iste" },
+                  { value: "auto-accept-edits", label: "Düzenlemeleri otomatik kabul et" },
+                  { value: "auto", label: "Otomatik inceleme" },
+                  { value: "full-access", label: "Tam erişim" },
+                ]}
+                onChange={(next) =>
+                  setRuntimeMode(next as "supervised" | "auto-accept-edits" | "auto" | "full-access")
+                }
+              />
               {create.error && <ErrorNotice error={create.error} />}
               <Button
                 title="Oturumu oluştur"

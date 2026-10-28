@@ -281,7 +281,7 @@ export function ProviderPrReview({
                   />
                 ) : null}
                 <Row>
-                  <Button
+                  <Button busy={query.isFetching}
                     tone="quiet"
                     label={copy("Diff’i yenile", "Refresh diff")}
                     disabled={busy || !!value.pending || !current()}

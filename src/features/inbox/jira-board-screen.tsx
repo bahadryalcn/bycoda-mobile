@@ -182,7 +182,7 @@ export function ProviderJiraBoards({
                   />
                 ) : null}
                 <QueryState query={board} />
-                <Button
+                <Button busy={board.isFetching}
                   tone="quiet"
                   label={copy("Panoyu yenile", "Refresh board")}
                   disabled={!supported || board.isFetching || (scope === "sprint" && !sprintId)}

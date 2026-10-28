@@ -73,7 +73,7 @@ export function SessionCheckpoints({ scope, session, blocked, onCommand, onRefre
         cancelLabel={copy("Dosya değişikliklerini geri al", "Undo file changes")} cancelDisabled={disabled || !guarded || !checkpointReviewMatches(selected.status, selected.diff) || !selected.status.files.find((file) => file.relative === selected.diff.relative)?.undoable} onCancel={() => change(true)} />
     </View> : <>
       <QueryState query={query} empty={query.isSuccess && !query.data?.files.length} emptyTitle={copy("İncelenecek oturum değişikliği yok.", "No session changes to review.")} />
-      <Button tone="quiet" label={copy("Yenile", "Refresh")} disabled={busy || !supported} onPress={() => { void query.refetch(); }} />
+      <Button busy={query.isFetching} tone="quiet" label={copy("Yenile", "Refresh")} disabled={busy || !supported} onPress={() => { void query.refetch(); }} />
     </>}
     </View>} renderItem={({ item }) => item.kind === "file" ? <NavigationRow label={item.file.relative} detail={`${item.file.status} · +${item.file.additions} −${item.file.deletions}`} disabled={disabled || !item.file.exact}
         onPress={() => { const status = query.data; if (!status) return; void run(async () => {

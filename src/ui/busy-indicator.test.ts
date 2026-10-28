@@ -4,6 +4,7 @@ import { act, createContext, createElement, useEffect, useState, type PropsWithC
 import { createRoot, type Root } from "react-dom/client";
 import { create } from "zustand";
 import type { PressableProps } from "react-native";
+import { NavigationRow } from "./navigation-row";
 
 vi.mock("expo-router/react-navigation", () => ({ NavigationContext: createContext<unknown>(undefined) }));
 vi.mock("@/state/security", () => ({ useSecurity: create(() => ({ appState: "active", windowFocused: true, status: "unlocked" })) }));
@@ -26,7 +27,10 @@ vi.mock("react-native", () => ({
   },
   StyleSheet: { flatten: (style: unknown) => style },
 }));
-vi.mock("react-native-reanimated", () => ({ default: { createAnimatedComponent: (component: unknown) => component } }));
+vi.mock("react-native-reanimated", () => ({ default: {
+  View: ({ children }: PropsWithChildren) => createElement("div", null, children),
+  createAnimatedComponent: (component: unknown) => component,
+} }));
 vi.mock("./theme", () => ({ useMobileTheme: vi.fn() }));
 vi.mock("./motion", () => ({ haptic: { tap: vi.fn(), select: vi.fn() }, usePressMotion: () => ({ animatedStyle: {}, onPressIn: vi.fn(), onPressOut: vi.fn() }) }));
 vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
@@ -113,6 +117,22 @@ beforeEach(() => {
   focused = true; busy = true; ownerMounts = 0;
   loops.started = 0; loops.stopped = 0; listeners.clear(); command.mockReset();
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
+});
+
+it("keeps an action row busy and non-interactive while respecting reduced motion", async () => {
+  await act(async () => root.render(createElement(NavigationRow, { label: "Save as note", busy: true, onPress: command })));
+  const row = container.querySelector("button")!;
+  expect(row.disabled).toBe(true);
+  expect(row.getAttribute("data-native-busy")).toBe("true");
+  row.click();
+  expect(command).not.toHaveBeenCalled();
+  expect(container.querySelectorAll("[data-loop]")).toHaveLength(1);
+  await act(async () => preference.setState({ reduced: true }));
+  expect(container.querySelectorAll("[data-loop]")).toHaveLength(0);
+  expect(container.textContent).toContain("Save as note");
+  await act(async () => root.render(createElement(NavigationRow, { label: "Save as note", busy: false, onPress: command })));
+  container.querySelector("button")!.click();
+  expect(command).toHaveBeenCalledOnce();
 });
 afterEach(async () => {
   await act(async () => root.unmount());

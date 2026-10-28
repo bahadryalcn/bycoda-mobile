@@ -121,10 +121,10 @@ function InlineMessageImage({
   if (!uri)
     return (
       <View style={{ gap: space.sm }}>
-        {query.isFetching ? <Loading /> : null}
+        {query.isFetching && !query.error ? <Loading /> : null}
         <ErrorText error={query.error} />
         {query.error ? (
-          <Button
+          <Button busy={query.isFetching}
             label={copy("Resmi yeniden yükle", "Retry image")}
             onPress={() => {
               void query.refetch();
@@ -168,10 +168,11 @@ function InlineMessageImage({
           }}
         />
       </PressableCard>
-      {!loaded ? <Loading /> : null}
+      {!loaded && !query.error ? <Loading /> : null}
       <ErrorText error={query.error} />
       {failed || query.error ? (
         <Button
+          busy={!loaded || query.isFetching}
           label={copy("Resmi yeniden yükle", "Retry image")}
           onPress={() => {
             setFailed(false);

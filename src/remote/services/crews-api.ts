@@ -11,6 +11,8 @@ export function createCrewsApi(request: HostRequest) {
       request<CrewDefinition>("crews.save", { projectId, definition, expectedUpdatedAt }, options),
     delete: (projectId: string, definitionId: string, expectedUpdatedAt: number, options?: RemoteRequestOptions) =>
       request<{ deleted: true }>("crews.delete", { projectId, definitionId, expectedUpdatedAt }, options),
+    deleteRun: (projectId: string, runId: string, expectedUpdatedAt: number, options?: RemoteRequestOptions) =>
+      request<{ deleted: true }>("crews.deleteRun", { projectId, runId, expectedUpdatedAt }, options),
     saveAgent: (projectId: string, agent: Omit<SavedCrewAgent, "updatedAt">, expectedUpdatedAt?: number, options?: RemoteRequestOptions) =>
       request<SavedCrewAgent>("crews.agent.save", { projectId, agent, expectedUpdatedAt }, options),
     deleteAgent: (projectId: string, agentId: string, options?: RemoteRequestOptions) =>

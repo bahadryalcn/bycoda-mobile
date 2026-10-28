@@ -1,0 +1,43 @@
+name: Manual owned virtual-device showcase
+
+on:
+  workflow_dispatch:
+    inputs:
+      request-file:
+        description: Absolute existing request JSON on the dedicated runner; includes artifact SHA, parent/mobile source, explicit booted virtual device, theme and pixel viewport
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, bycoda-showcase]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # verified official actions/checkout commit
+        with:
+          ref: ${{ github.sha }}
+          path: showcase-source-${{ github.run_id }}-${{ github.run_attempt }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # verified official actions/setup-node commit
+        with:
+          node-version: 24
+      - name: Capture only the explicit artifact-matching foreground virtual app
+        working-directory: showcase-source-${{ github.run_id }}-${{ github.run_attempt }}
+        env:
+          BYCODA_SHOWCASE_REQUEST: ${{ inputs.request-file }}
+        run: node scripts/showcase.mjs
+      - name: Preserve captures, metadata and any honest failure receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # verified official actions/upload-artifact commit
+        with:
+          name: mobile-showcase-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            showcase-source-${{ github.run_id }}-${{ github.run_attempt }}/temp/verification/**/capture.png
+            showcase-source-${{ github.run_id }}-${{ github.run_attempt }}/temp/verification/**/capture.json
+            showcase-source-${{ github.run_id }}-${{ github.run_attempt }}/temp/verification/**/failure.json
+          if-no-files-found: error
+          retention-days: 7

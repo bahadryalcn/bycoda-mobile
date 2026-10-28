@@ -1,4 +1,6 @@
 import { ScreenList } from "@/ui/screen-list";
+import { useLocale } from "@/i18n";
+import { matchesSearch } from "./shared/search";
 import { useProjectList } from "../workspace/use-project-directory";
 import { useReducer, useState } from "react";
 import Plus from "lucide-react-native/icons/plus";
@@ -28,6 +30,7 @@ import { GoalSettingsEditor } from "./goals/settings-editor";
 
 export function GoalsScreen() {
   const copy = useCopy();
+  const locale = useLocale();
   const [search, setSearch] = useState("");
   const machine = useActiveMachine();
   const projectId = useMachines((state) => state.selectedProjectId);
@@ -46,7 +49,8 @@ export function GoalsScreen() {
     cancel.isPending ||
     remove.isPending ||
     replan.isPending;
-  const visible = query.data?.filter((goal) => (!projectId || goal.projectIds.includes(projectId)) && (goal.title + " " + goal.prompt).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  const scoped = query.data?.filter((goal) => !projectId || goal.projectIds.includes(projectId));
+  const visible = scoped?.filter((goal) => matchesSearch(goal.title + " " + goal.prompt, search, locale));
   const replanGoal =
     flow.kind === "replan" ? query.data?.find((goal) => goal.id === flow.goalId) : undefined;
   return (
@@ -125,7 +129,7 @@ export function GoalsScreen() {
       <QueryState
         query={query}
         empty={visible?.length === 0}
-        emptyTitle={copy("Henüz hedef yok", "No goals yet")}
+        emptyTitle={search.trim() && scoped?.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz hedef yok", "No goals yet")}
       />
       {search.trim() && visible?.length === 0 ? <Button tone="quiet" label={copy("Aramayı temizle", "Clear search")} onPress={() => setSearch("")} /> : null}
       </>}

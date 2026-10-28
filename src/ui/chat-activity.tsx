@@ -16,6 +16,7 @@ import { colors, metrics, radii, space } from "./tokens";
 import { uiStyles } from "./styles";
 import { useMobileTheme } from "./theme";
 import { useCopy } from "./copy";
+import { activityFileLabel } from "./activity-file-label";
 
 export type ChatActivityStatus = TaskStatus | "stopped" | "record";
 
@@ -73,7 +74,9 @@ export function ChatActivity({
             : status === "record"
               ? copy("İşlem kaydı", "Action record")
               : copy("Bekliyor", "Pending");
-  const detailLabel = [...new Set([statusLabel, detail].filter(Boolean))].join(" · ");
+  const fileLabel = reasoning ? { title, directory: undefined } : activityFileLabel(title);
+  const visibleTitle = open ? title : fileLabel.title;
+  const detailLabel = [...new Set([fileLabel.directory, statusLabel, detail].filter(Boolean))].join(" · ");
   const accessibleLabel = [...new Set([title, statusLabel, detail].filter(Boolean))].join(". ");
   const titleStyle = {
     ...uiStyles.caption,
@@ -85,13 +88,13 @@ export function ChatActivity({
     <>
       <Icon size={18} color={statusColor} />
       <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
-        {status === "running" && !reduceMotion && title.length < 60 ? (
+        {status === "running" && !reduceMotion && visibleTitle.length < 60 ? (
           <Shimmer enabled={active} textStyle={titleStyle}>
-            {title}
+            {visibleTitle}
           </Shimmer>
         ) : (
           <Body numberOfLines={open ? undefined : 2} style={titleStyle}>
-            {title}
+            {visibleTitle}
           </Body>
         )}
         {detailLabel ? (

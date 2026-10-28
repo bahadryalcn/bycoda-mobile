@@ -1,6 +1,10 @@
 /** Local validation is translated; detailed host errors retain their original evidence. */
 export function composerDeliveryError(error: unknown, copy: (tr: string, en: string) => string) {
   const messages = {
+    "This turn is running in the desktop app. Steer it there or queue your message.": [
+      "Bu tur masaüstü uygulamasında çalışıyor. Oradan yönlendir veya mesajı sıraya al.",
+      "This turn is running in the desktop app. Steer it there or queue your message.",
+    ],
     "Update bycoda on this computer to send note context. Your draft is preserved.": [
       "Not bağlamını göndermek için bilgisayardaki bycoda’yı güncelle. Taslağın korunuyor.",
       "Update bycoda on this computer to send note context. Your draft is preserved.",

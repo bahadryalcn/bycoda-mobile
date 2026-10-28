@@ -68,7 +68,7 @@ function TabItem({
           alignItems: "center",
           justifyContent: "center",
           gap: 2,
-          paddingHorizontal: space.sm,
+          paddingHorizontal: space.xs,
           paddingVertical: space.xs,
         },
         press.animatedStyle,

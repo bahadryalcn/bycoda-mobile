@@ -7,10 +7,16 @@ import { AccountCard } from "./account-card";
 import { AccountForm } from "./account-form";
 import { SocialPolicySettings } from "./policy-settings";
 import type { AccountsPanelProps } from "./types";
+import { CollectionSearch, useCollectionSearch } from "./collection-search";
+import { PagedRows } from "../shared/paged-rows";
 
 export function AccountsPanel({ state, projectId, action, run }: AccountsPanelProps) {
   const copy = useCopy();
   const [adding, setAdding] = useState(false);
+  const collection = useCollectionSearch(state.accounts, (account) => [account.name, account.platform,
+    account.connected ? copy("Bağlı", "Connected") : copy("Bağlı değil", "Disconnected"),
+    account.paused ? copy("Duraklatıldı", "Paused") : copy("Etkin", "Active"),
+  ].join(" "));
   return (
     <>
       <Disclosure label={copy("Sosyal politika", "Social policy")}><SocialPolicySettings /></Disclosure>
@@ -54,9 +60,10 @@ export function AccountsPanel({ state, projectId, action, run }: AccountsPanelPr
           ]}
         />
       </Row>
-      {state.accounts.map((account) => (
+      <CollectionSearch {...collection} />
+      <PagedRows items={collection.visible} renderItem={(account) => (
         <AccountCard key={account.id} account={account} state={state} projectId={projectId} />
-      ))}
+      )} />
       <Sheet visible={adding} size="form" title={copy("Hesap ekle", "Add account")} onClose={() => setAdding(false)}>
         {adding && <AccountForm projectId={projectId} onClose={() => setAdding(false)} />}
       </Sheet>

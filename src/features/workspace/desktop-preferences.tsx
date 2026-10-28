@@ -71,6 +71,7 @@ export function DesktopPreferences({
     !!machine?.capabilities?.includes("preferences.desktop.v1");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState("primary");
   const occupied = useRef(false);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [name, setName] = useState("");
@@ -136,7 +137,7 @@ export function DesktopPreferences({
         ),
     },
   );
-  const detail = useHostMutation("preferences.desktop.template.read");
+  const detail = useHostMutation("preferences.desktop.template.read", null);
   const mutation = useHostMutation("preferences.desktop.patch", [
     "desktop-preferences",
     opening.projectId,
@@ -163,9 +164,10 @@ export function DesktopPreferences({
   const snapshot = supported && !query.isError ? query.data : undefined;
   const status = supported ? (receipt ?? statusQuery.data) : undefined;
   const disabled = !snapshot || loading || busy || !!attempt;
-  const run = async (action: () => Promise<void>) => {
+  const run = async (action: () => Promise<void>, actionKey = "primary") => {
     if (occupied.current || !supported) return;
     occupied.current = true;
+    setPendingAction(actionKey);
     setBusy(true);
     setError(null);
     try {
@@ -177,7 +179,7 @@ export function DesktopPreferences({
       setBusy(false);
     }
   };
-  const apply = (change: Record<string, unknown>, revision: string) => {
+  const apply = (change: Record<string, unknown>, revision: string, actionKey = "primary") => {
     if (disabled || !snapshot) return;
     void run(async () => {
       if (!current()) return;
@@ -212,7 +214,7 @@ export function DesktopPreferences({
         await store.clear(claimed.attempt.operationId);
         setAttempt(null);
       }
-    });
+    }, actionKey);
   };
   const openTemplate = (id: string) => {
     if (disabled || !snapshot) return;
@@ -232,7 +234,7 @@ export function DesktopPreferences({
       setBody(template.body);
       setTrigger(template.trigger ?? "");
       setEditor({ kind: "template", revision: reviewed.revision, template, creating: false });
-    });
+    }, `template:${id}`);
   };
   const openProvider = (harness: string, scope: "project" | "global") => {
     if (disabled || !snapshot) return;
@@ -290,7 +292,7 @@ export function DesktopPreferences({
                   )
             }
           />
-          <Button
+          <Button busy={statusQuery.isFetching}
             label={copy("Durumu kontrol et", "Check status")}
             disabled={busy || !supported}
             onPress={() => {
@@ -299,7 +301,7 @@ export function DesktopPreferences({
             }}
           />
           {status?.state === "applied" || status?.state === "failed" ? (
-            <Button
+            <Button busy={busy && pendingAction === "secondary-1"}
               label={copy("Yenile ve devam et", "Refresh and continue")}
               onPress={() => {
                 void run(async () => {
@@ -308,7 +310,7 @@ export function DesktopPreferences({
                   setAttempt(null);
                   setReceipt(undefined);
                   setEditor(null);
-                });
+                }, "secondary-1");
               }}
             />
           ) : null}
@@ -355,8 +357,9 @@ export function DesktopPreferences({
               ))}
               <NavigationRow
                 label={copy("Proje varsayılanlarını sıfırla", "Restore project inheritance")}
+                busy={busy && pendingAction === "reset"}
                 disabled={disabled}
-                onPress={() => apply({ kind: "projectReset" }, snapshot.revision)}
+                onPress={() => apply({ kind: "projectReset" }, snapshot.revision, "reset")}
               />
             </NavigationGroup>
           ) : null}
@@ -376,6 +379,7 @@ export function DesktopPreferences({
       renderItem={({ item }) => (
         <NavigationRow
           label={item.name}
+          busy={busy && pendingAction === `template:${item.id}`}
           detail={item.trigger ? `;${item.trigger}` : item.preview}
           disabled={disabled}
           onPress={() => openTemplate(item.id)}
@@ -395,7 +399,7 @@ export function DesktopPreferences({
       <FormActions
         submitLabel={copy("Şablonu kaydet", "Save template")}
         disabled={disabled || !templateValid}
-        busy={busy}
+        busy={busy && pendingAction === "primary"}
         onSubmit={() =>
           apply(
             {
@@ -415,7 +419,7 @@ export function DesktopPreferences({
       <FormActions
         submitLabel={copy("Varsayılanları kaydet", "Save defaults")}
         disabled={disabled || !modelId}
-        busy={busy}
+        busy={busy && pendingAction === "primary"}
         onSubmit={() => {
           if (editor?.kind === "provider")
             apply(
@@ -485,7 +489,8 @@ export function DesktopPreferences({
             {!editor.creating ? (
               <>
                 <Button
-                  label={copy("Şablonu sil", "Delete template")}
+                  busy={busy && pendingAction === "delete-template"}
+                    label={copy("Şablonu sil", "Delete template")}
                   tone="danger"
                   disabled={disabled}
                   onPress={() =>
@@ -547,6 +552,7 @@ export function DesktopPreferences({
               disabled={disabled}
             />
             <Button
+              busy={busy && pendingAction === "default-provider"}
               label={copy("Varsayılan sağlayıcı ve model yap", "Use as default provider and model")}
               disabled={disabled || !model}
               onPress={() =>
@@ -559,7 +565,7 @@ export function DesktopPreferences({
                     harness: provider.id,
                     model: modelId,
                   },
-                  editor.revision,
+                  editor.revision, "default-provider",
                 )
               }
             />
@@ -576,7 +582,7 @@ export function DesktopPreferences({
                     harness: provider.id,
                     model: modelId,
                   },
-                  editor.revision,
+                  editor.revision, "default-model",
                 )
               }
             />

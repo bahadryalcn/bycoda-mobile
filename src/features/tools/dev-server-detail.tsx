@@ -88,7 +88,7 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
           <Body muted>{`${copy("Etkilenen portlar", "Affected ports")}: ${details.data?.affectedPorts.join(", ") || "—"}`}</Body>
           {!canReview ? <Notice message={copy("İşlem etkisini güvenle doğrulamak için bilgisayardaki bycoda'yı güncelle.", "Update bycoda on the computer to safely review process impact.")} /> : null}
           {uncertain ? <Notice tone="warning" message={copy("İşlemin sonucu bilinmiyor. Tekrar göndermeden önce güncel durumu kontrol et.", "The operation outcome is unknown. Check the current state before sending another action.")} /> : null}
-          <Button tone="quiet" label={copy("Durumu yenile", "Refresh state")} disabled={busy} onPress={() => {
+          <Button busy={details.isFetching} tone="quiet" label={copy("Durumu yenile", "Refresh state")} disabled={busy} onPress={() => {
             setIntent(undefined); void details.refetch().then((result) => { if (!result.isError && useMachines.getState().activeId === machineId) setUncertain(false); });
           }} />
           <Row>

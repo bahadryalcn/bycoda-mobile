@@ -1,4 +1,6 @@
 import { applySessionSync } from "../../../../src/features/connections/model/protocol";
+import { assertDecodeCurrent, parseJsonParts } from "@/state/cooperative-json";
+import { retainSessionAuthority } from "@/domain/session-authority";
 import type {
   HostSession,
   SessionSync,
@@ -45,9 +47,11 @@ export async function resolveSync(
     parts.push(chunk.data);
     offset += chunk.data.length;
   }
-  const sync = JSON.parse(parts.join("")) as SessionSync;
+  const decodeOptions = { ...options, assertCurrent: () => client.assertCurrentAccess?.() };
+  const sync = (await parseJsonParts(parts, decodeOptions)) as SessionSync;
   if (!sync || !["snapshot", "delta", "unchanged"].includes(sync.kind))
     throw new Error("Invalid transcript response.");
+  assertDecodeCurrent(decodeOptions);
   return sync;
 }
 
@@ -92,7 +96,7 @@ export async function readSession(
   if (sync.kind !== "unchanged" && sync.value.session.id !== sessionId)
     throw new Error("Transcript identity changed.");
   try {
-    return applySessionSync(known, sync);
+    return retainSessionAuthority(known, applySessionSync(known, sync));
   } catch {
     return readTail(client, sessionId, requestOptions);
   }
@@ -125,6 +129,7 @@ export async function readEarlier(
   const ids = new Set(known.session.blocks.map((block) => block.id));
   return {
     ...known,
+    authorityGeneration: retainSessionAuthority(known, sync.value).authorityGeneration,
     history: sync.value.history,
     session: {
       ...known.session,

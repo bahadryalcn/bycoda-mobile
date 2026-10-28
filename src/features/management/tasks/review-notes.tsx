@@ -42,7 +42,7 @@ export function ReviewNote({ task, note }: ReviewNoteProps) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const resolve = useHostMutation("tasks.notes.resolve", ["tasks"]);
-  const read = useHostMutation("tasks.notes.read", ["tasks"]);
+  const read = useHostMutation("tasks.notes.read", null);
   const resolved = note.resolvedAt !== undefined;
   const sessionId = note.sessionId ?? note.sessionIds?.at(-1);
   return (

@@ -4,6 +4,7 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { Body, Button, ConfirmationCard, ErrorText, Field, MutationState, Notice, QueryState, Sheet, ToggleField } from "@/ui/primitives";
 import { RemoteFrame } from "@/ui/remote-frame";
+import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useCopy } from "@/ui/copy";
 import { claimPreviewIntent, clearPreviewIntent, loadPreviewIntent } from "./device-preview-intent";
 import { readDevicePreview, readPreviewIntent, type DevicePreview, type PreviewIntent } from "./device-preview-model";
@@ -35,6 +36,7 @@ export function DevicePreviewSheet({ projectId, device, onClose }: { projectId: 
     enabled: !!supported && !!intent && showFrame,
     queryFn: async (client, signal) => readDevicePreview(await client.request("devices.preview.mobile.status", { projectId: opening.projectId, requestId: intent!.requestId, includeFrame: true }, { signal }), intent!, true),
   });
+  const refresh = usePullRefresh(() => status.refetch());
   const job = supported ? status.data ?? acknowledged : undefined;
   const busy = localBusy || start.isPending;
   const run = () => {
@@ -63,7 +65,7 @@ export function DevicePreviewSheet({ projectId, device, onClose }: { projectId: 
         <Body>{job.state}</Body><Body>{job.verification === "expected-text" ? copy("Beklenen metin denetimi", "Expected text verification") : copy("Yalnızca başlatma denetimi", "Launch-only verification")}</Body>
         {job.stages.map((stage, index) => <Body key={index}>{stage.name}: {stage.state}{stage.code ? ` · ${stage.code}` : ""}{stage.message ? `\n${stage.message}` : ""}</Body>)}
       </>}
-      <Button tone="quiet" label={copy("Yenile", "Refresh")} disabled={!supported || busy || status.isFetching} onPress={() => { void status.refetch(); }} />
+      <Button busy={refresh.refreshing} tone="quiet" label={copy("Yenile", "Refresh")} disabled={!supported || busy || status.isFetching} onPress={() => { void refresh.onRefresh(); }} />
       {!job && status.isError ? <>
         {forget ? <><Notice tone="warning" message={copy("Bu işlem yalnızca telefondaki takibi kaldırır; bilgisayardaki işi iptal etmez. Önce cihazı ve bilgisayarı kontrol edin. Yeni önizleme ayrıca incelenip onaylanmalıdır.", "This only removes tracking from the phone; it does not cancel the host job. Inspect the device and computer first. A new preview requires separate review and confirmation.")} />
           <ConfirmationCard message={copy("Cihazı kontrol ettikten sonra kullanılamayan takibi kaldır?", "After inspecting the device, remove unavailable tracking?")}

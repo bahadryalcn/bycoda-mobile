@@ -60,6 +60,7 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
   } | null>(null);
   const [document, setDocument] = useState<LegalDocumentId | null>(null);
   const action = useAsyncAction();
+  const [disconnecting, setDisconnecting] = useState(false);
   const cache = useQueryClient();
   const insets = useSafeAreaInsets();
   const loaded = permission?.scope === scope && permission.revision === revision;
@@ -95,7 +96,8 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
   }, [scope, revision]);
 
   async function allow() {
-    if (!scope) return;
+    if (!scope || action.isPending) return;
+    setDisconnecting(false);
     await action.run(async () => {
       assertAppAccess();
       await store.allow(scope);
@@ -205,7 +207,7 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                     )}
                     tone="primary"
                     fullWidth
-                    busy={action.isPending}
+                    busy={action.isPending && !disconnecting}
                     disabled={permission.error}
                     onPress={() => {
                       void allow();
@@ -226,9 +228,11 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                   <Button
                     tone="quiet"
                     label={copy("İzin vermeden bağlantıyı kaldır", "Disconnect without allowing")}
+                    busy={action.isPending && disconnecting}
                     disabled={action.isPending}
                     onPress={() => {
-                      if (!machine) return;
+                      if (!machine || action.isPending) return;
+                      setDisconnecting(true);
                       void action.run(async () => {
                         assertAppAccess();
                         await useMachines.getState().removeMachine(machine.id);

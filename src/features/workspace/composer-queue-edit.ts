@@ -17,6 +17,11 @@ export const queueEditConflict =
 export const queueEditOwnership =
   "The queue is controlled elsewhere. Reopen the message before editing.";
 
+// Lease-aware reads expose the same legacy editor lease through drain, rather
+// than consumer. Editing still requires that exact mobile owner on every save.
+const editorOwner = (queue: SharedQueue) =>
+  queue.consumer ?? (queue.drain?.legacy ? queue.drain.holder : undefined);
+
 export function decodeQueuedMessageEdit(raw: string): QueuedMessageEdit {
   const value = JSON.parse(raw) as QueuedMessageEdit;
   const original = restoreQueuedMessages([value?.original])[0];
@@ -60,7 +65,7 @@ export function beginQueuedMessageEdit(
   if (
     queue.editingId &&
     (queue.editingId !== row?.id ||
-      (queue.consumer !== clientId && (!edit.owner || queue.consumer !== edit.owner)))
+      (editorOwner(queue) !== clientId && (!edit.owner || editorOwner(queue) !== edit.owner)))
   )
     throw new Error(queueEditOwnership);
   return { ...queue, status: "paused", editingId: edit.original.id };
@@ -73,7 +78,7 @@ export function saveQueuedMessageEdit(
 ): SharedQueue {
   if (
     queue.claim ||
-    queue.consumer !== clientId ||
+    editorOwner(queue) !== clientId ||
     queue.editingId !== edit.original.id ||
     queue.status !== "paused"
   )
@@ -97,7 +102,7 @@ export function releaseQueuedMessageEdit(
   clientId: string,
 ): SharedQueue {
   // A deliberate takeover belongs to its new owner; cancelling cannot pause or clear it.
-  return queue.consumer === clientId && queue.editingId === id && !queue.claim
+  return editorOwner(queue) === clientId && queue.editingId === id && !queue.claim
     ? { ...queue, editingId: undefined, status: "paused" }
     : queue;
 }

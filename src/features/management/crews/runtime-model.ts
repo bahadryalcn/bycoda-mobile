@@ -6,6 +6,37 @@ export function crewInputDefinitelyRejected(error: unknown): boolean {
     && ["host", "auth", "identity", "unsupported"].includes(error.kind);
 }
 
+export function crewHasRunningWork(run: CrewRunView): boolean {
+  return run.coordinatorStatus === "running"
+    || run.tasks.some((task) => task.status === "running" || task.status === "verifying");
+}
+
+export function crewActivityKnown(run: CrewRunView): boolean {
+  return !run.coordinatorSessionId || run.coordinatorStatus !== undefined;
+}
+
+export function canStopCrewRun(run: CrewRunView): boolean {
+  return run.status !== "finished" && (run.status === "active" || !crewActivityKnown(run) || crewHasRunningWork(run)
+    || run.tasks.some((task) => task.status === "queued"));
+}
+
+export function canDeleteCrewRun(run: CrewRunView): boolean {
+  return run.status !== "active" && crewActivityKnown(run) && !crewHasRunningWork(run)
+    && !run.tasks.some((task) => task.status === "queued");
+}
+
+export function crewTaskSessions(task: CrewRunView["tasks"][number]) {
+  const available = (id: string | undefined) => id?.trim() ? id : undefined;
+  const attempts = [...(task.attemptHistory ?? [])].reverse();
+  return {
+    worker: available(task.sessionId) ?? available(task.blockedTakeover?.previousSessionId)
+      ?? attempts.map((entry) => available(entry.workerSessionId)).find(Boolean),
+    review: available(task.status === "verifying" ? task.reviewer?.sessionId : undefined)
+      ?? available(task.verification?.review?.sessionId) ?? available(task.reviewer?.sessionId)
+      ?? attempts.map((entry) => available(entry.reviewerSessionId)).find(Boolean),
+  };
+}
+
 /** Availability is advisory. The host revalidates review fingerprints and live state. */
 export function canAcceptCrewTask(run: CrewRunView, taskId: string): boolean {
   const task = run.tasks.find((entry) => entry.id === taskId);

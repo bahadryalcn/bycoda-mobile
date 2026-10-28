@@ -127,7 +127,7 @@ export function AccessCenter() {
                 ) : null}
               </>
             ) : null}
-            <Button
+            <Button busy={query.isFetching}
               tone="quiet"
               label={copy("Yenile", "Refresh")}
               disabled={!supported || query.isFetching}

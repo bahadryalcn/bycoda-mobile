@@ -29,7 +29,7 @@ vi.mock("@/ui/document-preview", () => ({
 }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Wrapper, CodeText: Wrapper, Row: Wrapper, Screen: Wrapper, ErrorText: () => null, QueryState: () => null,
+  return { Body: Wrapper, CodeText: ({ children, selectable }: PropsWithChildren<{ selectable?: boolean }>) => createElement("span", { "data-code": true, "data-selectable": selectable !== false }, children), Row: Wrapper, Screen: Wrapper, ErrorText: () => null, QueryState: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message),
     Button: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
     SegmentedControl: ({ options, onChange }: { options: { value: string; label: string }[]; onChange: (value: string) => void }) => createElement("div", null, options.map((option) => createElement("button", { key: option.value, onClick: () => onChange(option.value) }, option.label))),
@@ -81,4 +81,26 @@ it("keeps media behind the existing preview and makes bounded text explicit", as
   expect(container.querySelector("[data-media]")).not.toBeNull();
   state.text = "x".repeat(3000); await render();
   expect(container.textContent).toContain("Preview limit reached.");
+});
+
+it("offers one selectable multiline source without numbers and keeps drafts read-only", async () => {
+  root = createRoot(container);
+  state.text = "# Başlık\r\n\r\n  ikinci satır\n\t界😀\n";
+  await render("README.md");
+  const click = async (label: string) => act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === label)!.click();
+  });
+  await click("Select text");
+  const source = [...container.querySelectorAll('[data-code][data-selectable="true"]')]
+    .find((element) => element.textContent === "# Başlık\n\n  ikinci satır\n\t界😀\n");
+  expect(source).toBeDefined();
+  expect(source!.children).toHaveLength(0);
+  expect(container.querySelector("input,textarea")).toBeNull();
+  await click("Line view");
+  expect(container.textContent).toContain("Select text");
+  await click("Preserved draft");
+  await click("Select text");
+  expect(container.textContent).not.toContain("Başlık");
+  expect(container.textContent).toContain("preserved local work");
+  expect(state.methods.every((method) => method === "files.read")).toBe(true);
 });

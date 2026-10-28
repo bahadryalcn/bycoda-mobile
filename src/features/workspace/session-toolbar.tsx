@@ -1,5 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
+import { sessionIntent } from "@/domain/session-authority";
 import { useState } from "react";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import Square from "lucide-react-native/icons/square";
@@ -24,6 +25,7 @@ import { ProjectOrganization } from "./project-organization";
 import { DesktopPreferences } from "./desktop-preferences";
 import { MobilePty } from "../tools/mobile-pty";
 import { ProviderDesktop } from "../tools/provider-desktop";
+import { questionNeedsAttention, questionStatusLabel } from "./question-status";
 
 export function SessionToolbar({
   scope,
@@ -46,9 +48,10 @@ export function SessionToolbar({
   const [historyImport, setHistoryImport] = useState(false);
   const [organization, setOrganization] = useState(false);
   const [desktopPreferences, setDesktopPreferences] = useState(false);
-  const [mobilePty,setMobilePty]=useState(false);
+  const [mobilePty, setMobilePty] = useState(false);
   const [providerDesktop, setProviderDesktop] = useState(false);
   const [contextual, setContextual] = useState<"handoff" | "secondOpinion" | null>(null);
+  const [contextualCompact, setContextualCompact] = useState(false);
   const [stopping, setStopping] = useState(false);
   const queue = useSessionQueue(scope);
   const status = !session
@@ -56,7 +59,7 @@ export function SessionToolbar({
       ? copy("Durum yüklenemedi", "Status unavailable")
       : copy("Yükleniyor", "Loading")
     : session.session.pendingQuestion
-      ? copy("Yanıt bekleniyor", "Awaiting answer")
+      ? questionStatusLabel(session.session.pendingQuestion, copy)
       : session.status === "running"
         ? copy("Çalışıyor", "Running")
         : session.status === "interrupted"
@@ -78,7 +81,9 @@ export function SessionToolbar({
   const dotColor =
     !session && query.error
       ? colors.danger
-      : session?.session.pendingQuestion || session?.status === "interrupted"
+      : (session?.session.pendingQuestion &&
+            questionNeedsAttention(session.session.pendingQuestion)) ||
+          session?.status === "interrupted"
         ? colors.warning
         : session?.status === "running"
           ? colors.live
@@ -88,19 +93,21 @@ export function SessionToolbar({
       <Row style={{ flexWrap: "nowrap", gap: space.sm }}>
         <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
           <Row style={{ flexWrap: "nowrap", gap: space.xs }}>
-          <View
-            accessible
-            accessibilityLabel={status}
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: radii.pill,
-              backgroundColor: dotColor,
-            }}
-          />
-          <Body style={[uiStyles.caption, { color: colors.text, fontWeight: "600", flexShrink: 1 }]}>
-            {status}
-          </Body>
+            <View
+              accessible
+              accessibilityLabel={status}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: radii.pill,
+                backgroundColor: dotColor,
+              }}
+            />
+            <Body
+              style={[uiStyles.caption, { color: colors.text, fontWeight: "600", flexShrink: 1 }]}
+            >
+              {status}
+            </Body>
           </Row>
           <Body muted numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1 }]}>
             {session
@@ -115,17 +122,18 @@ export function SessionToolbar({
             busy={stopping}
             disabled={blocked}
             onPress={() => {
+              const intent = sessionIntent(session, {
+                type: "cancel",
+                sessionId: scope.sessionId,
+                runId: session.runId,
+              });
               // Pause durable follow-ups before stopping the exact active run.
               // A pause failure must not hide the session's primary Stop action.
               void (async () => {
                 setStopping(true);
                 try {
                   if (queue.supported) await queue.pause().catch(() => {});
-                  await onCommand({
-                    type: "cancel",
-                    sessionId: scope.sessionId,
-                    runId: session.runId,
-                  });
+                  await onCommand(intent);
                 } finally {
                   setStopping(false);
                 }
@@ -150,28 +158,126 @@ export function SessionToolbar({
         onClose={() => setMenu(false)}
       >
         <NavigationGroup>
-          {session ? <NavigationRow label={copy("Bağlamlı agent devri", "Contextual handoff")} disabled={blocked || session.status === "running"}
-            onPress={() => { setMenu(false); setContextual("handoff"); }} /> : null}
-          {session ? <NavigationRow label={copy("İkinci görüş", "Second opinion")} disabled={blocked || session.status === "running"}
-            onPress={() => { setMenu(false); setContextual("secondOpinion"); }} /> : null}
-          {projectId && session ? <NavigationRow label={copy("Oturum notları", "Session notes")} disabled={blocked}
-            onPress={() => { setMenu(false); setNotes(true); }} /> : null}
-          {projectId && session ? <NavigationRow label={copy("Konuşma geçmişini içe aktar", "Import conversation history")} disabled={blocked}
-            onPress={() => { setMenu(false); setHistoryImport(true); }} /> : null}
-          {projectId && session ? <NavigationRow label={copy("Etkileşimli terminal", "Interactive terminal")} disabled={blocked} onPress={()=>{setMenu(false);setMobilePty(true);}}/>:null}
-          {projectId && session ? <NavigationRow label={copy("Bilgisayar tercihleri", "Computer preferences")} disabled={blocked} onPress={() => { setMenu(false); setDesktopPreferences(true); }} /> : null}
-          {projectId && session ? <NavigationRow label={copy("Proje organizasyonu", "Project organization")} disabled={blocked}
-            onPress={() => { setMenu(false); setOrganization(true); }} /> : null}
-          {projectId && session ? <NavigationRow label={copy("Hesaplar ve MCP", "Accounts and MCP")} disabled={blocked}
-            onPress={() => { setMenu(false); setProviderDesktop(true); }} /> : null}
-          {projectId && session ? <NavigationRow label={copy("Tarayıcı", "Browser")} disabled={blocked}
-            onPress={() => { setMenu(false); setBrowser(true); }} /> : null}
-          {projectId && session ? <NavigationRow label={copy("Çalışma klasörü kaldırma", "Worktree removal")} disabled={blocked}
-            onPress={() => { setMenu(false); setWorktreeRemoval(true); }} /> : null}
-          {projectId && session ? <NavigationRow label={copy("Bilgisayarda SSH", "SSH on the computer")} disabled={blocked}
-            onPress={() => { setMenu(false); setSshWorkspace(true); }} /> : null}
-          <NavigationRow label={copy("Oturum incelemesi", "Session review")} disabled={blocked}
-            onPress={() => { setMenu(false); setReview(true); }} />
+          {session ? (
+            <NavigationRow
+              label={copy("Bağlamlı agent devri", "Contextual handoff")}
+              disabled={blocked || session.status === "running"}
+              onPress={() => {
+                setMenu(false);
+                setContextualCompact(false);
+                setContextual("handoff");
+              }}
+            />
+          ) : null}
+          {session ? (
+            <NavigationRow
+              label={copy("İkinci görüş", "Second opinion")}
+              disabled={blocked || session.status === "running"}
+              onPress={() => {
+                setMenu(false);
+                setContextualCompact(false);
+                setContextual("secondOpinion");
+              }}
+            />
+          ) : null}
+          {projectId && session ? (
+            <NavigationRow
+              label={copy("Oturum notları", "Session notes")}
+              disabled={blocked}
+              onPress={() => {
+                setMenu(false);
+                setNotes(true);
+              }}
+            />
+          ) : null}
+          {projectId && session ? (
+            <NavigationRow
+              label={copy("Konuşma geçmişini içe aktar", "Import conversation history")}
+              disabled={blocked}
+              onPress={() => {
+                setMenu(false);
+                setHistoryImport(true);
+              }}
+            />
+          ) : null}
+          {projectId && session ? (
+            <NavigationRow
+              label={copy("Etkileşimli terminal", "Interactive terminal")}
+              disabled={blocked}
+              onPress={() => {
+                setMenu(false);
+                setMobilePty(true);
+              }}
+            />
+          ) : null}
+          {projectId && session ? (
+            <NavigationRow
+              label={copy("Bilgisayar tercihleri", "Computer preferences")}
+              disabled={blocked}
+              onPress={() => {
+                setMenu(false);
+                setDesktopPreferences(true);
+              }}
+            />
+          ) : null}
+          {projectId && session ? (
+            <NavigationRow
+              label={copy("Proje organizasyonu", "Project organization")}
+              disabled={blocked}
+              onPress={() => {
+                setMenu(false);
+                setOrganization(true);
+              }}
+            />
+          ) : null}
+          {projectId && session ? (
+            <NavigationRow
+              label={copy("Hesaplar ve MCP", "Accounts and MCP")}
+              disabled={blocked}
+              onPress={() => {
+                setMenu(false);
+                setProviderDesktop(true);
+              }}
+            />
+          ) : null}
+          {projectId && session ? (
+            <NavigationRow
+              label={copy("Tarayıcı", "Browser")}
+              disabled={blocked}
+              onPress={() => {
+                setMenu(false);
+                setBrowser(true);
+              }}
+            />
+          ) : null}
+          {projectId && session ? (
+            <NavigationRow
+              label={copy("Çalışma klasörü kaldırma", "Worktree removal")}
+              disabled={blocked}
+              onPress={() => {
+                setMenu(false);
+                setWorktreeRemoval(true);
+              }}
+            />
+          ) : null}
+          {projectId && session ? (
+            <NavigationRow
+              label={copy("Bilgisayarda SSH", "SSH on the computer")}
+              disabled={blocked}
+              onPress={() => {
+                setMenu(false);
+                setSshWorkspace(true);
+              }}
+            />
+          ) : null}
+          <NavigationRow
+            label={copy("Oturum incelemesi", "Session review")}
+            disabled={blocked}
+            onPress={() => {
+              setMenu(false);
+              setReview(true);
+            }}
+          />
           <NavigationRow
             label={copy("Oturum ayarları", "Session settings")}
             onPress={() => {
@@ -199,18 +305,109 @@ export function SessionToolbar({
         </NavigationGroup>
         {projectId ? <SessionArtifacts projectId={projectId} sessionId={scope.sessionId} /> : null}
       </Sheet>
-      {review && session ? <SessionCheckpoints scope={scope} session={session} blocked={blocked} onCommand={onCommand} onRefresh={onRefresh} onClose={() => setReview(false)} /> : null}
-      {notes && projectId ? <SessionNotes key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setNotes(false)} /> : null}
-      {browser && projectId ? <SessionBrowser key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setBrowser(false)} /> : null}
-      {worktreeRemoval && projectId ? <WorktreeRemoval key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setWorktreeRemoval(false)} /> : null}
-      {sshWorkspace && projectId ? <SshWorkspace key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setSshWorkspace(false)} /> : null}
-      {historyImport && projectId ? <HistoryImport key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setHistoryImport(false)} /> : null}
-      {mobilePty&&projectId?<MobilePty key={JSON.stringify([scope.machineId,projectId,scope.sessionId])} scope={scope} projectId={projectId} onClose={()=>setMobilePty(false)}/>:null}
-      {desktopPreferences && projectId ? <DesktopPreferences key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setDesktopPreferences(false)} /> : null}
-      {organization && projectId ? <ProjectOrganization key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setOrganization(false)} /> : null}
-      {providerDesktop && projectId ? <ProviderDesktop key={JSON.stringify([scope.machineId, projectId, scope.sessionId])} scope={scope} projectId={projectId} onClose={() => setProviderDesktop(false)} /> : null}
-      <Sheet visible={!!contextual} title={contextual === "handoff" ? copy("Bağlamlı agent devri", "Contextual handoff") : copy("İkinci görüş", "Second opinion")} onClose={() => setContextual(null)}>
-        {contextual && session ? <HandoffSession key={JSON.stringify([scope.machineId, scope.sessionId, contextual])} scope={scope} source={session} mode={contextual} blocked={blocked} onClose={() => setContextual(null)} /> : null}
+      {review && session ? (
+        <SessionCheckpoints
+          scope={scope}
+          session={session}
+          blocked={blocked}
+          onCommand={onCommand}
+          onRefresh={onRefresh}
+          onClose={() => setReview(false)}
+        />
+      ) : null}
+      {notes && projectId ? (
+        <SessionNotes
+          key={JSON.stringify([scope.machineId, projectId, scope.sessionId])}
+          scope={scope}
+          projectId={projectId}
+          onClose={() => setNotes(false)}
+        />
+      ) : null}
+      {browser && projectId ? (
+        <SessionBrowser
+          key={JSON.stringify([scope.machineId, projectId, scope.sessionId])}
+          scope={scope}
+          projectId={projectId}
+          onClose={() => setBrowser(false)}
+        />
+      ) : null}
+      {worktreeRemoval && projectId ? (
+        <WorktreeRemoval
+          key={JSON.stringify([scope.machineId, projectId, scope.sessionId])}
+          scope={scope}
+          projectId={projectId}
+          onClose={() => setWorktreeRemoval(false)}
+        />
+      ) : null}
+      {sshWorkspace && projectId ? (
+        <SshWorkspace
+          key={JSON.stringify([scope.machineId, projectId, scope.sessionId])}
+          scope={scope}
+          projectId={projectId}
+          onClose={() => setSshWorkspace(false)}
+        />
+      ) : null}
+      {historyImport && projectId ? (
+        <HistoryImport
+          key={JSON.stringify([scope.machineId, projectId, scope.sessionId])}
+          scope={scope}
+          projectId={projectId}
+          onClose={() => setHistoryImport(false)}
+        />
+      ) : null}
+      {mobilePty && projectId ? (
+        <MobilePty
+          key={JSON.stringify([scope.machineId, projectId, scope.sessionId])}
+          scope={scope}
+          projectId={projectId}
+          onClose={() => setMobilePty(false)}
+        />
+      ) : null}
+      {desktopPreferences && projectId ? (
+        <DesktopPreferences
+          key={JSON.stringify([scope.machineId, projectId, scope.sessionId])}
+          scope={scope}
+          projectId={projectId}
+          onClose={() => setDesktopPreferences(false)}
+        />
+      ) : null}
+      {organization && projectId ? (
+        <ProjectOrganization
+          key={JSON.stringify([scope.machineId, projectId, scope.sessionId])}
+          scope={scope}
+          projectId={projectId}
+          onClose={() => setOrganization(false)}
+        />
+      ) : null}
+      {providerDesktop && projectId ? (
+        <ProviderDesktop
+          key={JSON.stringify([scope.machineId, projectId, scope.sessionId])}
+          scope={scope}
+          projectId={projectId}
+          onClose={() => setProviderDesktop(false)}
+        />
+      ) : null}
+      <Sheet
+        visible={!!contextual}
+        size={contextualCompact ? "compact" : "form"}
+        title={
+          contextual === "handoff"
+            ? copy("Bağlamlı agent devri", "Contextual handoff")
+            : copy("İkinci görüş", "Second opinion")
+        }
+        onClose={() => setContextual(null)}
+      >
+        {contextual && session ? (
+          <HandoffSession
+            key={JSON.stringify([scope.machineId, scope.sessionId, contextual])}
+            scope={scope}
+            source={session}
+            mode={contextual}
+            blocked={blocked}
+            onClose={() => setContextual(null)}
+            onCompactChange={setContextualCompact}
+          />
+        ) : null}
       </Sheet>
     </View>
   );

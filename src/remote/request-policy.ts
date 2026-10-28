@@ -31,7 +31,6 @@ const READ_METHODS = new Set([
   "terminals.pty.desktop.read",
   "terminals.pty.desktop.status",
   "sessions.adopted",
-  "sessions.queue.get",
   "machine.changes",
   "commands.status",
   "attachments.status",

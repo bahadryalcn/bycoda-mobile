@@ -28,12 +28,44 @@ const client = (request: ReturnType<typeof vi.fn>) => ({
 });
 
 describe("mobile transcript wire", () => {
+  it("updates authority metadata independently of revision and keeps it during pinned history hydration", async () => {
+    const known = { ...snapshot(4), authorityGeneration: 2 };
+    const page = { ...snapshot(4), authorityGeneration: 3 };
+    const request = vi.fn().mockResolvedValue({ sync: { kind: "snapshot", value: page } });
+    expect(await readEarlier(client(request), known)).toMatchObject({
+      revision: 4,
+      authorityGeneration: 3,
+    });
+    request.mockResolvedValue({ sync: { kind: "snapshot", value: known } });
+    expect(await readEarlier(client(request), page)).toMatchObject({
+      revision: 4,
+      authorityGeneration: 3,
+    });
+    request.mockResolvedValue({ kind: "snapshot", value: page });
+    expect(await readSession(client(request), "session", known)).toMatchObject({
+      revision: 4,
+      authorityGeneration: 3,
+    });
+  });
   it("waits on a known revision with the same abort signal and loaded window", async () => {
     const signal = new AbortController().signal;
     const request = vi.fn().mockResolvedValue({ kind: "unchanged", revision: 1 });
     const known = snapshot();
-    await expect(readSession(client(request), "session", known, { signal, waitMs: 20_000 })).resolves.toBe(known);
-    expect(request).toHaveBeenCalledWith("sessions.sync", { sessionId: "session", revision: 1, preview: true, partial: true, loadedBlockIds: ["tail"], waitMs: 20_000 }, { signal });
+    await expect(
+      readSession(client(request), "session", known, { signal, waitMs: 20_000 }),
+    ).resolves.toBe(known);
+    expect(request).toHaveBeenCalledWith(
+      "sessions.sync",
+      {
+        sessionId: "session",
+        revision: 1,
+        preview: true,
+        partial: true,
+        loadedBlockIds: ["tail"],
+        waitMs: 20_000,
+      },
+      { signal },
+    );
   });
   it("loads a bounded tail rather than requesting the complete transcript", async () => {
     const value = snapshot();
@@ -119,6 +151,51 @@ describe("mobile transcript wire", () => {
       resolveSync(client(request), "session", { kind: "chunked", transfer: "t", length: 100 }),
     ).rejects.toThrow("incomplete");
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels chunk decoding after the last request before a stale snapshot can publish", async () => {
+    const sync = { kind: "snapshot", value: snapshot() };
+    sync.value.session.blocks[0].text = "x".repeat(600_000);
+    const json = JSON.stringify(sync);
+    const controller = new AbortController();
+    const request = vi.fn().mockImplementation(async () => {
+      setTimeout(() => controller.abort(), 0);
+      return { data: json };
+    });
+    // Exercise a completed final chunk: transport-level cancellation alone
+    // cannot reject this already-resolved response.
+    await expect(
+      resolveSync(
+        client(request),
+        "session",
+        {
+          kind: "chunked",
+          transfer: "cancelled",
+          length: json.length,
+        },
+        { signal: controller.signal },
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the mobile cap before IO and rejects a decoded earlier page from a stale revision", async () => {
+    const request = vi.fn();
+    await expect(
+      resolveSync(client(request), "session", {
+        kind: "chunked",
+        transfer: "too-large",
+        length: 16 * 1024 * 1024 + 1,
+      }),
+    ).rejects.toThrow("limit");
+    expect(request).not.toHaveBeenCalled();
+    const value = snapshot(2);
+    value.session.blocks[0].text = "x".repeat(300_000);
+    const json = JSON.stringify({ kind: "snapshot", value });
+    request
+      .mockResolvedValueOnce({ sync: { kind: "chunked", transfer: "stale", length: json.length } })
+      .mockResolvedValueOnce({ data: json });
+    await expect(readEarlier(client(request), snapshot(1))).rejects.toThrow("changed");
   });
 
   it("merges earlier pages without overwriting an already-loaded newer block", async () => {

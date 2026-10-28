@@ -37,13 +37,25 @@ export function WorktreeCreate({ scope, visible, blocked, beforeChange, onSelect
     try { await action(); } catch (cause) { setError(cause); if (creating && unknownWorktreeResult(cause)) setUncertain(true); }
     finally { occupied.current = false; setBusy(false); }
   };
+  const unavailableMessage = !machine
+    ? copy("Bilgisayar bağlantısını yeniden kurun ve bu projeyi tekrar açın.", "Reconnect the computer and reopen this project.")
+    : !current() || machine.id !== identity.machineId
+      ? copy("Bu işlemin bilgisayarını ve projesini yeniden açın. Worktree taslağı korunur.", "Reopen this operation's computer and project. The worktree draft is retained.")
+      : copy("Worktree oluşturmak için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer to create worktrees.");
+  const initialUnavailable = !supported && !busy && !branch && base === "HEAD" && !existing &&
+    !created && !uncertain && !error && !submitted.current;
+  if (initialUnavailable) return <Sheet visible={visible} title={copy("Worktree oluştur", "Create worktree")} size="compact" onClose={onClose}>
+    <Body mono>{`${identity.machineId} · ${identity.cwd || identity.projectId}`}</Body>
+    <Notice message={unavailableMessage} />
+    <Button tone="quiet" label={copy("Kapat", "Close")} onPress={onClose} />
+  </Sheet>;
   return <Sheet visible={visible} title={copy("Worktree oluştur", "Create worktree")} size="form" dirty={!created && !!branch} dismissible={!busy} onClose={onClose}>
     <Body mono>{identity.cwd || trees.data?.worktrees.find((tree) => tree.isMain)?.path || identity.projectId}</Body>
-    {!supported ? <Notice message={copy("Worktree oluşturmak için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer to create worktrees.")} /> : null}
+    {!supported ? <Notice message={unavailableMessage} /> : null}
     <ErrorText error={error} />
     {uncertain ? <Notice tone="warning" message={copy("Oluşturma sonucu belirsiz. Tekrar göndermeden çalışma klasörlerini yenileyip bilgisayarda kontrol et.", "The create result is uncertain. Refresh working folders and check the computer before sending again.")} /> : null}
     {created ? <View style={{ gap: space.sm }}><Body mono>{created.path}</Body><Body>{created.branch}</Body>
-      <Button label={copy("Bu çalışma klasörünü kullan", "Use this working folder")} disabled={blocked || busy || !current()} onPress={() => { void run(async () => { await beforeChange(); if (!current()) throw new Error("The selected computer changed."); onSelect(created.path); onClose(); }); }} />
+      <Button busy={busy} label={copy("Bu çalışma klasörünü kullan", "Use this working folder")} disabled={blocked || busy || !current()} onPress={() => { void run(async () => { await beforeChange(); if (!current()) throw new Error("The selected computer changed."); onSelect(created.path); onClose(); }); }} />
       <Button tone="quiet" label={copy("Başka worktree oluştur", "Create another worktree")} disabled={busy || blocked || !current()} onPress={() => { submitted.current = false; setCreated(null); setBranch(""); setBase("HEAD"); setExisting(false); }} />
     </View> : <>
       {supported ? <><QueryState query={branches} /><QueryState query={trees} /></> : null}
@@ -71,6 +83,6 @@ export function WorktreeCreate({ scope, visible, blocked, beforeChange, onSelect
         }}
         cancelLabel={copy("Vazgeç", "Cancel")} cancelDisabled={busy} onCancel={onClose} />
     </>}
-    <Button tone="quiet" label={copy("Çalışma klasörlerini yenile", "Refresh working folders")} disabled={busy || !supported} onPress={() => { void trees.refetch(); void branches.refetch(); }} />
+    <Button busy={trees.isFetching || branches.isFetching} tone="quiet" label={copy("Çalışma klasörlerini yenile", "Refresh working folders")} disabled={busy || !supported} onPress={() => { void trees.refetch(); void branches.refetch(); }} />
   </Sheet>;
 }

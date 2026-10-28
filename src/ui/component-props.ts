@@ -107,6 +107,7 @@ export type ErrorNoticeProps = PropsWithChildren<{
   error: unknown;
   onRetry?: () => void;
   retryLabel?: string;
+  retrying?: boolean;
   message?: string;
   action?: { label: string; onPress: () => void };
 }>;
@@ -116,6 +117,7 @@ export type NoticeProps = PropsWithChildren<{
   message: string;
   onRetry?: () => void;
   retryLabel?: string;
+  retrying?: boolean;
   action?: { label: string; onPress: () => void };
 }>;
 
@@ -172,5 +174,5 @@ export type SheetProps = PropsWithChildren<{
   scroll?: boolean;
   dismissible?: boolean;
   dirty?: boolean;
-  returnFocusRef?: RefObject<View | null>;
+  returnFocusRef?: RefObject<View | TextInput | null>;
 }>;

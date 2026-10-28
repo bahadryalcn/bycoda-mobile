@@ -13,16 +13,24 @@ import {
   Field,
   MutationState,
   Notice,
-  Loading,
   QueryState,
   Row,
   Section,
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { catalogModel, catalogProviders, modelDefaults } from "./catalog";
+import { providerSelectionOption } from "@/ui/provider-identity";
+import {
+  catalogProviders,
+  modelDefaults,
+  sessionCatalog,
+  sessionModel,
+  sessionSettings,
+} from "./catalog";
+import { AgentModelFields } from "./agent-model-fields";
 import type { HostSession } from "./wire";
 import { SelectRow, workspaceStyles } from "./shared";
+import { captureSessionAuthority } from "@/domain/session-authority";
 
 export function SessionSettings({
   onClose,
@@ -43,20 +51,29 @@ export function SessionSettings({
   }));
   const { title, provider, model, mode, modelSettings } = form.values;
   const configure = useAsyncAction();
-  const [configurationAction, setConfigurationAction] = useState<"configure" | "compact">("configure");
+  const [configurationAction, setConfigurationAction] = useState<"configure" | "compact">(
+    "configure",
+  );
   const catalog = useModelCatalog(projectId);
   const update = useHostMutation<HostSession>("sessions.update", ["sessions", projectId]);
-  const models = catalog.data?.models[provider] ?? [];
-  const modelPending = !!catalog.data?.pending?.includes(provider);
-  const selectedModel = models.find((item) => item.id === model);
   const providers = [
     ...new Set([value.session.harness, ...catalogProviders(machine?.providers, catalog.data)]),
   ];
+  const availableCatalog = sessionCatalog(catalog.data, providers);
+  const models = availableCatalog.models[provider] ?? [];
+  const selectedModel = sessionModel(availableCatalog, provider, model);
   const switchAllowed = machine?.capabilities?.includes("sessions.harnessSwitch");
   const running = value.status === "running";
   const pending = disabled || configure.isPending || update.isPending;
   return (
-    <Sheet visible onClose={onClose} title={copy("Oturum ayarları", "Session settings")} size="form" dirty={form.dirty} dismissible={!configure.isPending && !update.isPending && !disabled}>
+    <Sheet
+      visible
+      onClose={onClose}
+      title={copy("Oturum ayarları", "Session settings")}
+      size="form"
+      dirty={form.dirty}
+      dismissible={!configure.isPending && !update.isPending && !disabled}
+    >
       <Card>
         <View style={workspaceStyles.stack}>
           <Field
@@ -72,7 +89,12 @@ export function SessionSettings({
             busy={update.isPending && update.variables?.title !== undefined}
             onPress={() => {
               void update
-                .mutateAsync({ projectId, sessionId: value.session.id, title: title.trim() })
+                .mutateAsync({
+                  projectId,
+                  sessionId: value.session.id,
+                  title: title.trim(),
+                  ...captureSessionAuthority(value),
+                })
                 .then(onUpdated)
                 .catch(() => {});
             }}
@@ -86,7 +108,12 @@ export function SessionSettings({
               busy={update.isPending && update.variables?.pinned !== undefined}
               onPress={() => {
                 void update
-                  .mutateAsync({ projectId, sessionId: value.session.id, pinned: !value.pinned })
+                  .mutateAsync({
+                    projectId,
+                    sessionId: value.session.id,
+                    pinned: !value.pinned,
+                    ...captureSessionAuthority(value),
+                  })
                   .then(onUpdated)
                   .catch(() => {});
               }}
@@ -104,6 +131,7 @@ export function SessionSettings({
                   .mutateAsync({
                     projectId,
                     sessionId: value.session.id,
+                    ...captureSessionAuthority(value),
                     archived: !value.archived,
                   })
                   .then(onUpdated)
@@ -124,10 +152,10 @@ export function SessionSettings({
           value={provider}
           options={providers
             .filter((item) => switchAllowed || item === value.session.harness)
-            .map((item) => ({ value: item, label: item }))}
+            .map(providerSelectionOption)}
           disabled={disabled || running}
           onChange={(item) => {
-            const next = catalogModel(catalog.data, item, "");
+            const next = sessionModel(availableCatalog, item, "");
             form.patch({
               provider: item,
               model: next?.id ?? "",
@@ -138,40 +166,22 @@ export function SessionSettings({
         {catalog.data?.errors[provider] ? (
           <Notice tone="danger" message={catalog.data.errors[provider]} />
         ) : null}
-        {modelPending && !catalog.isError && !models.length ? <Loading /> : null}
-        {catalog.isSuccess && !modelPending && !models.length && !catalog.data.errors[provider] ? (
+        {models.length > 0 && !catalog.data?.models[provider]?.length ? (
           <Notice
-            tone="warning"
+            tone="info"
             message={copy(
-              "Bu agent için model listesi boş. Bilgisayardaki sağlayıcı bağlantısını kontrol et.",
-              "The model list is empty for this agent. Check the provider connection on your computer.",
+              "Yerleşik model listesi gösteriliyor. Kullanılabilirlik bilgisayarındaki sağlayıcıya bağlıdır.",
+              "Showing bundled models. Availability depends on the provider on your computer.",
             )}
           />
         ) : null}
-        <SelectField
-          label={copy("Model", "Model")}
-          value={model}
-          options={models.map((item) => ({ value: item.id, label: item.name }))}
-          disabled={disabled || running || !models.length}
-          onChange={(id) => {
-            const item = models.find((item) => item.id === id);
-            if (item) form.patch({ model: id, modelSettings: modelDefaults(item) });
-          }}
+        <AgentModelFields
+          models={models}
+          model={model}
+          settings={modelSettings}
+          disabled={pending || running}
+          onChange={(next, settings) => form.patch({ model: next, modelSettings: settings })}
         />
-        {(selectedModel?.settings ?? []).map((setting) => (
-          <SelectField
-            key={setting.id}
-            label={setting.label}
-            value={modelSettings[setting.id] ?? setting.value}
-            options={setting.options}
-            disabled={disabled || running}
-            onChange={(option) =>
-              form.patch((current) => ({
-                modelSettings: { ...current.modelSettings, [setting.id]: option },
-              }))
-            }
-          />
-        ))}
       </Section>
       <SelectField
         label={copy("İzinler", "Permissions")}
@@ -210,7 +220,9 @@ export function SessionSettings({
               sessionId: value.session.id,
               harness: provider,
               model,
-              modelSettings,
+              modelSettings: selectedModel
+                ? sessionSettings(selectedModel, modelSettings)
+                : modelSettings,
               runtimeMode: mode,
             });
             onClose();

@@ -32,6 +32,7 @@ export type SessionChunk = Pick<SessionSyncChunk, "data">;
 export type DiffOptions = { timeout?: number; maxEditLength?: number };
 
 export type Requester = {
+  assertCurrentAccess?(): void;
   request<T>(
     method: string,
     params?: Record<string, unknown>,

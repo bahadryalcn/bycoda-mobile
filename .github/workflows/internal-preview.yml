@@ -1,0 +1,117 @@
+name: Manual internal mobile preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        options: [android, ios-simulator]
+        required: true
+        default: android
+      parent-sha:
+        description: Exact trusted bycoda parent commit containing shared src/core/brand inputs
+        type: string
+        required: true
+      eas-version:
+        description: Owner-selected exact numeric EAS CLI version (no latest/range)
+        type: string
+        required: true
+      project-id:
+        description: Existing Expo project UUID; this workflow never creates a project
+        type: string
+        required: true
+      allow-remote-build:
+        description: Explicitly authorize one potentially billable internal EAS build
+        type: boolean
+        default: false
+        required: true
+      wait:
+        description: Wait for EAS completion metadata (still no artifact/install acceptance)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - name: Guard explicit remote authorization and exact inputs before bootstrap
+        shell: bash
+        env:
+          ALLOW_REMOTE: ${{ inputs.allow-remote-build }}
+          TOKEN_CONFIGURED: ${{ secrets.EXPO_TOKEN != '' }}
+          PARENT_SHA: ${{ inputs.parent-sha }}
+          EAS_VERSION: ${{ inputs.eas-version }}
+          PROJECT_ID: ${{ inputs.project-id }}
+        run: |
+          [[ "$ALLOW_REMOTE" == true ]] || { echo 'Remote preview authorization is missing; no EAS request made.'; exit 1; }
+          [[ "$TOKEN_CONFIGURED" == true ]] || { echo 'EXPO_TOKEN is missing; no EAS request made.'; exit 1; }
+          [[ "$PARENT_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo 'Exact parent SHA required.'; exit 1; }
+          [[ "$EAS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Exact numeric EAS CLI version required.'; exit 1; }
+          [[ "$PROJECT_ID" =~ ^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$ ]] || { echo 'Existing project UUID required.'; exit 1; }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # verified official actions/checkout commit
+        with:
+          repository: bahadryalcn/bycoda
+          ref: ${{ inputs.parent-sha }}
+          path: preview-parent
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require parent source already on the trusted main history
+        working-directory: preview-parent
+        shell: bash
+        env:
+          PARENT_SHA: ${{ inputs.parent-sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$PARENT_SHA"
+          git merge-base --is-ancestor "$PARENT_SHA" origin/main
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # verified official actions/checkout commit
+        with:
+          ref: ${{ github.sha }}
+          path: preview-parent/mobile
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # verified official actions/setup-node commit
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # verified official pnpm/action-setup commit
+        with:
+          package_json_file: preview-parent/mobile/package.json
+          run_install: false
+      - name: Install only the mobile frozen dependency graph
+        working-directory: preview-parent/mobile
+        run: pnpm install --frozen-lockfile
+      - name: Validate the offline preview plan
+        working-directory: preview-parent/mobile
+        env:
+          PREVIEW_PLATFORM: ${{ inputs.platform }}
+          EAS_VERSION: ${{ inputs.eas-version }}
+          PROJECT_ID: ${{ inputs.project-id }}
+        run: node scripts/preview.mjs --platform "$PREVIEW_PLATFORM" --eas-version "$EAS_VERSION" --project-id "$PROJECT_ID" --output temp/verification/internal-preview/plan.json
+      - name: Bootstrap exactly the owner-selected EAS CLI without exposing the token
+        env:
+          EAS_VERSION: ${{ inputs.eas-version }}
+        run: npm install --global "eas-cli@$EAS_VERSION"
+      - name: Request one internal preview; pending remains pending
+        working-directory: preview-parent/mobile
+        shell: bash
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          PREVIEW_PLATFORM: ${{ inputs.platform }}
+          EAS_VERSION: ${{ inputs.eas-version }}
+          PROJECT_ID: ${{ inputs.project-id }}
+          WAIT_FOR_BUILD: ${{ inputs.wait }}
+        run: |
+          wait_args=()
+          if [[ "$WAIT_FOR_BUILD" == true ]]; then wait_args+=(--wait); fi
+          node scripts/preview.mjs --run --allow-remote-build --platform "$PREVIEW_PLATFORM" --eas-version "$EAS_VERSION" --project-id "$PROJECT_ID" --output temp/verification/internal-preview/request.json "${wait_args[@]}"
+      - name: Upload source/request receipts (no secrets or private artifact URLs)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # verified official actions/upload-artifact commit
+        with:
+          name: internal-preview-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: preview-parent/mobile/temp/verification/internal-preview/
+          if-no-files-found: warn
+          retention-days: 7

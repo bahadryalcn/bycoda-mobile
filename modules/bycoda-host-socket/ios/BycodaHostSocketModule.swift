@@ -1,0 +1,305 @@
+import ExpoModulesCore
+import ExpoSecureStore
+import Foundation
+import Security
+import CryptoKit
+
+struct HostCa: Record {
+  @Field var version: Int = 0
+  @Field var environmentId: String = ""
+  @Field var caGeneration: Double = -1
+  @Field var caCertificatePem: String = ""
+  @Field var caSpkiPin: String = ""
+}
+struct HostBinding: Record {
+  @Field var machineId: String = ""
+  @Field var environmentId: String = ""
+  @Field var endpoint: String = ""
+  @Field var credentialGeneration: Double = -1
+  @Field var accessEpoch: Double = -1
+  @Field var tls: HostCa?
+}
+struct HostBulkDescriptor: Record {
+  @Field var kind: String = ""
+  @Field var transferId: String = ""
+  @Field var environmentId: String = ""
+  @Field var totalBytes: Double = -1
+  @Field var chunkBytes: Double = -1
+  @Field var sha256: String = ""
+  @Field var expiresAt: Double = -1
+}
+private enum HostSocketFailure: Error { case rejected(String) }
+private func failure(_ code: String) -> Error { HostSocketFailure.rejected(code) }
+private func safe(_ value: Double) -> Bool { value.isFinite && value >= 0 && value <= 9_007_199_254_740_991 && value.rounded() == value }
+private func matches(_ value: String, _ pattern: String) -> Bool {
+  let full = NSRange(location: 0, length: value.utf16.count)
+  guard let expression = try? NSRegularExpression(pattern: pattern), let match = expression.firstMatch(in: value, range: full) else { return false }
+  return match.range == full
+}
+
+/** CryptoKit emits the complete DER SubjectPublicKeyInfo, not a raw EC point. */
+enum HostTls {
+  static func ca(_ binding: HostBinding) throws -> SecCertificate? {
+    guard let paired = binding.tls else { return nil }
+    guard paired.version == 1, paired.environmentId == binding.environmentId, safe(paired.caGeneration), paired.caCertificatePem.utf8.count <= 16_384 else { throw failure("trust") }
+    let pem = paired.caCertificatePem.trimmingCharacters(in: .whitespacesAndNewlines)
+    let begin = "-----BEGIN CERTIFICATE-----", end = "-----END CERTIFICATE-----"
+    guard pem.hasPrefix(begin), pem.hasSuffix(end) else { throw failure("trust") }
+    let body = String(pem.dropFirst(begin.count).dropLast(end.count)).filter { !$0.isWhitespace }
+    guard let der = Data(base64Encoded: body), let certificate = SecCertificateCreateWithData(nil, der as CFData), let key = SecCertificateCopyKey(certificate) else { throw failure("trust") }
+    var error: Unmanaged<CFError>?
+    guard let raw = SecKeyCopyExternalRepresentation(key, &error) as Data? else { throw failure("trust") }
+    let publicKey = try P256.Signing.PublicKey(x963Representation: raw)
+    let pin = "sha256/" + Data(SHA256.hash(data: publicKey.derRepresentation)).base64EncodedString()
+    guard pin == paired.caSpkiPin else { throw failure("trust") }
+    return certificate
+  }
+  static func endpoint(_ binding: HostBinding) throws -> URL {
+    guard let url = URL(string: binding.endpoint), let components = URLComponents(url: url, resolvingAgainstBaseURL: false), components.scheme == "wss", components.host != nil, components.user == nil, components.password == nil, components.query == nil, components.fragment == nil, components.path == "/ws" else { throw failure("endpoint") }
+    return url
+  }
+}
+
+private class TrustDelegate: NSObject, URLSessionTaskDelegate {
+  let binding: HostBinding
+  let anchor: SecCertificate?
+  init(binding: HostBinding) throws { self.binding = binding; self.anchor = try HostTls.ca(binding); super.init() }
+  func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
+  func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+    evaluate(challenge, completionHandler)
+  }
+  func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+    evaluate(challenge, completionHandler)
+  }
+  private func evaluate(_ challenge: URLAuthenticationChallenge, _ completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+    guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust, let anchor else { completionHandler(.performDefaultHandling, nil); return }
+    guard let trust = challenge.protectionSpace.serverTrust, let endpoint = URL(string: binding.endpoint), challenge.protectionSpace.host == endpoint.host else { completionHandler(.cancelAuthenticationChallenge, nil); return }
+    SecTrustSetPolicies(trust, SecPolicyCreateSSL(true, challenge.protectionSpace.host as CFString))
+    SecTrustSetAnchorCertificates(trust, [anchor] as CFArray)
+    SecTrustSetAnchorCertificatesOnly(trust, true)
+    var error: CFError?
+    guard SecTrustEvaluateWithError(trust, &error), SecTrustGetCertificateCount(trust) >= 2,
+      let root = SecTrustGetCertificateAtIndex(trust, SecTrustGetCertificateCount(trust) - 1),
+      (SecCertificateCopyData(root) as Data) == (SecCertificateCopyData(anchor) as Data) else { completionHandler(.cancelAuthenticationChallenge, nil); return }
+    completionHandler(.useCredential, URLCredential(trust: trust))
+  }
+}
+private final class SocketDelegate: TrustDelegate, URLSessionWebSocketDelegate {
+  weak var owner: BycodaHostSocketModule?
+  let id: String
+  let generation: Double
+  init(owner: BycodaHostSocketModule, id: String, generation: Double, binding: HostBinding) throws {
+    self.owner = owner; self.id = id; self.generation = generation; try super.init(binding: binding)
+  }
+  func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) { owner?.opened(id, generation, protocol) }
+  func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) { owner?.ended(id, generation, "remote_closed", false) }
+  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    owner?.completedJob(id, generation)
+    if error != nil {
+      let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
+      let code = [401, 403].contains(status) ? "authentication" : (error as NSError?)?.domain == NSURLErrorDomain && [-1200, -1201, -1202, -1203, -1204].contains((error as NSError?)?.code ?? 0) ? "tls" : "network"
+      owner?.ended(id, generation, code, true)
+    }
+  }
+}
+
+private final class BulkDelegate: TrustDelegate, URLSessionDataDelegate {
+  let limit: Int
+  var bytes = Data()
+  let done: (Result<Data, Error>) -> Void
+  var rejected = false
+  init(binding: HostBinding, limit: Int, done: @escaping (Result<Data, Error>) -> Void) throws { self.limit = limit; self.done = done; try super.init(binding: binding) }
+  func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+    guard let http = response as? HTTPURLResponse, http.statusCode == 200, response.expectedContentLength <= Int64(limit) else { rejected = true; completionHandler(.cancel); return }
+    completionHandler(.allow)
+  }
+  func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    if bytes.count + data.count > limit { rejected = true; dataTask.cancel(); return }
+    bytes.append(data)
+  }
+  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    if rejected || error != nil || bytes.count != limit { done(.failure(failure("bulk_response"))) }
+    else { done(.success(bytes)) }
+    session.finishTasksAndInvalidate()
+  }
+}
+
+public final class BycodaHostSocketModule: Module {
+  private struct Credential { let binding: HostBinding; let digest: Data }
+  private final class Connection {
+    let id: String; let generation: Double; let credential: Credential; let session: URLSession; let task: URLSessionWebSocketTask; let opening: Promise
+    var opened = false; var settled = false; var sequence = 0
+    var deliveries = [Int: Int](); var deliveryBytes = 0; var outgoingBytes = 0
+    var sends = [UUID: Promise]()
+    init(id: String, generation: Double, credential: Credential, session: URLSession, task: URLSessionWebSocketTask, opening: Promise) { self.id = id; self.generation = generation; self.credential = credential; self.session = session; self.task = task; self.opening = opening }
+  }
+  private let lock = NSRecursiveLock()
+  private var credentials = [String: Credential]()
+  private var connections = [String: Connection]()
+  // SDK jobs remain charged after detach/cancellation until their delegate settles.
+  private var socketJobs = [String: Connection]()
+  private var bulks = [UUID: (String, URLSession)]()
+  private var foreground = true
+  private var accessAllowed = false
+  private var accessEpoch: Double = -1
+  private var lifecycleEpoch = 0
+  private func sync<T>(_ body: () throws -> T) rethrows -> T { lock.lock(); defer { lock.unlock() }; return try body() }
+  private func secureStore() throws -> SecureStoreModule {
+    guard let module = appContext?.moduleRegistry.get(moduleWithName: "ExpoSecureStore") as? SecureStoreModule else { throw failure("secure_store_unavailable") }
+    return module
+  }
+  private func validate(_ binding: HostBinding) throws {
+    guard matches(binding.machineId, "^[A-Za-z0-9-]{1,80}$"), !binding.machineId.contains("\n"), matches(binding.environmentId, "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$"), !binding.environmentId.contains("\n"), safe(binding.credentialGeneration), safe(binding.accessEpoch) else { throw failure("binding") }
+    _ = try HostTls.endpoint(binding); _ = try HostTls.ca(binding)
+  }
+  private func secret(_ binding: HostBinding) throws -> String {
+    guard let value = try secureStore().bycodaHostReadNative("bycoda.remote.\(binding.machineId)"), matches(value, "^[A-Za-z0-9_-]{43}$"), value.utf8.count == 43 else { throw failure("credential_missing") }
+    return value
+  }
+  private func digest(_ value: String) -> Data { Data(SHA256.hash(data: Data(value.utf8))) }
+  private func event(_ connection: Connection, _ type: String, _ fields: [String: Any] = [:]) {
+    sendEvent("onSocketEvent", ["connectionId": connection.id, "environmentId": connection.credential.binding.environmentId, "generation": connection.generation, "type": type].merging(fields, uniquingKeysWith: { _, new in new }))
+  }
+  fileprivate func ended(_ id: String, _ generation: Double, _ code: String, _ failed: Bool) {
+    sync {
+      guard let connection = connections[id], connection.generation == generation else { return }
+      connections.removeValue(forKey: id); connection.task.cancel(with: .goingAway, reason: nil); connection.session.invalidateAndCancel()
+      if !connection.settled { connection.settled = true; connection.opening.reject("ERR_HOST_SOCKET", code) }
+      for promise in connection.sends.values { promise.reject("ERR_HOST_SOCKET", code) }
+      connection.sends.removeAll(); connection.deliveries.removeAll()
+      event(connection, failed ? "error" : "closed", ["code": code])
+    }
+  }
+  private func invalidate(_ machineId: String? = nil) {
+    sync {
+      lifecycleEpoch += 1
+      credentials = credentials.filter { machineId != nil && $0.value.binding.machineId != machineId }
+      for connection in Array(connections.values) where machineId == nil || connection.credential.binding.machineId == machineId { ended(connection.id, connection.generation, "credentials_invalidated", true) }
+      for value in Array(bulks.values) where machineId == nil || value.0 == machineId { value.1.invalidateAndCancel() }
+    }
+  }
+  fileprivate func completedJob(_ id: String, _ generation: Double) { sync { if socketJobs[id]?.generation == generation { socketJobs.removeValue(forKey: id) } } }
+  private func acquire(_ binding: HostBinding) throws -> [String: Any] {
+    try validate(binding)
+    let epoch = try sync { () throws -> Int in if !foreground || !accessAllowed || binding.accessEpoch != accessEpoch || credentials.count >= 64 { throw failure("unavailable") }; return lifecycleEpoch }
+    let value = try secret(binding)
+    return try sync {
+      guard foreground, accessAllowed, binding.accessEpoch == accessEpoch, epoch == lifecycleEpoch, credentials.count < 64 else { throw failure("access_changed") }
+      let handle = UUID().uuidString; credentials[handle] = Credential(binding: binding, digest: digest(value))
+      return ["handle": handle, "machineId": binding.machineId, "environmentId": binding.environmentId, "credentialGeneration": binding.credentialGeneration, "accessEpoch": binding.accessEpoch]
+    }
+  }
+  fileprivate func opened(_ id: String, _ generation: Double, _ proto: String?) {
+    sync {
+      guard foreground, accessAllowed, let connection = connections[id], connection.generation == generation else { return }
+      guard proto == "bycoda.rpc.v2" else { ended(id, generation, "schema", true); return }
+      connection.opened = true; connection.settled = true; connection.opening.resolve(nil); receive(connection)
+    }
+  }
+  private func receive(_ connection: Connection) {
+    connection.task.receive { [weak self, weak connection] result in
+      guard let self, let connection else { return }
+      self.sync {
+        guard self.foreground, self.accessAllowed, self.connections[connection.id] === connection else { return }
+        switch result {
+        case .failure: self.ended(connection.id, connection.generation, "network", true)
+        case .success(.data): self.ended(connection.id, connection.generation, "binary_not_supported", true)
+        case .success(.string(let text)):
+          let count = text.utf8.count
+          guard count <= 1_048_576, connection.deliveries.count < 32, connection.deliveryBytes + count <= 2_097_152 else { self.ended(connection.id, connection.generation, "overload", true); return }
+          connection.sequence += 1; connection.deliveries[connection.sequence] = count; connection.deliveryBytes += count
+          self.event(connection, "message", ["sequence": connection.sequence, "text": text]); self.receive(connection)
+        @unknown default: self.ended(connection.id, connection.generation, "schema", true)
+        }
+      }
+    }
+  }
+  public func definition() -> ModuleDefinition {
+    Name("BycodaHostSocket")
+    Events("onSocketEvent")
+    AsyncFunction("setAccess") { (active: Bool, epoch: Double) in
+      try self.sync {
+        guard safe(epoch), epoch >= self.accessEpoch else { throw failure("access_epoch") }
+        if active && !self.accessAllowed && epoch <= self.accessEpoch { throw failure("access_epoch") }
+        if !active || epoch != self.accessEpoch { self.invalidate() }
+        self.accessEpoch = epoch; self.accessAllowed = active && self.foreground
+      }
+    }
+    AsyncFunction("acquireCredential") { (binding: HostBinding) in try self.acquire(binding) }
+    AsyncFunction("storeCredential") { (binding: HostBinding, token: String) in
+      try self.sync { guard self.foreground, self.accessAllowed, binding.accessEpoch == self.accessEpoch else { throw failure("access_changed") } }
+      try self.validate(binding)
+      guard matches(token, "^[A-Za-z0-9_-]{43}$"), token.utf8.count == 43 else { throw failure("credential") }
+      self.invalidate(binding.machineId); try self.secureStore().bycodaHostWriteNative("bycoda.remote.\(binding.machineId)", value: token)
+      return try self.acquire(binding)
+    }
+    AsyncFunction("deleteCredential") { (machineId: String) in
+      try self.sync { guard self.foreground, self.accessAllowed else { throw failure("access_changed") } }
+      guard matches(machineId, "^[A-Za-z0-9-]{1,80}$"), !machineId.contains("\n") else { throw failure("binding") }
+      self.invalidate(machineId); try self.secureStore().bycodaHostDeleteNative("bycoda.remote.\(machineId)")
+    }
+    AsyncFunction("invalidateCredentials") { (machineId: String?) in self.invalidate(machineId) }
+    AsyncFunction("open") { (handle: String, id: String, generation: Double, promise: Promise) in
+      guard safe(generation), !id.isEmpty, id.utf8.count <= 200 else { throw failure("generation") }
+      let credential = try self.sync { () throws -> Credential in guard self.foreground, self.accessAllowed, let credential = self.credentials[handle], credential.binding.accessEpoch == self.accessEpoch, self.socketJobs.count < 4, self.socketJobs[id] == nil else { throw failure("unavailable") }; return credential }
+      let token = try self.secret(credential.binding)
+      guard self.digest(token) == credential.digest else { self.invalidate(credential.binding.machineId); throw failure("credential_rotated") }
+      let delegate = try SocketDelegate(owner: self, id: id, generation: generation, binding: credential.binding)
+      let config = URLSessionConfiguration.ephemeral; config.httpCookieStorage = nil; config.urlCredentialStorage = nil; config.timeoutIntervalForRequest = 5
+      let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
+      var request = URLRequest(url: try HostTls.endpoint(credential.binding)); request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization"); request.setValue("bycoda.rpc.v2", forHTTPHeaderField: "Sec-WebSocket-Protocol")
+      let task = session.webSocketTask(with: request); task.maximumMessageSize = 1_048_576
+      let connection = Connection(id: id, generation: generation, credential: credential, session: session, task: task, opening: promise)
+      try self.sync {
+        guard self.foreground, self.accessAllowed, self.credentials[handle] != nil, self.socketJobs[id] == nil, self.socketJobs.count < 4 else { session.invalidateAndCancel(); throw failure("access_changed") }
+        self.connections[id] = connection; self.socketJobs[id] = connection; task.resume()
+      }
+      DispatchQueue.global().asyncAfter(deadline: .now() + 5) { [weak self, weak connection] in
+        guard let self, let connection else { return }; self.sync { if self.connections[id] === connection && !connection.opened { self.ended(id, generation, "deadline", true) } }
+      }
+    }
+    AsyncFunction("send") { (id: String, generation: Double, text: String, promise: Promise) in
+      try self.sync {
+        guard self.foreground, self.accessAllowed, let connection = self.connections[id], connection.generation == generation, connection.opened else { throw failure("stale_connection") }
+        let count = text.utf8.count
+        guard count <= 1_048_576, connection.outgoingBytes + count <= 8_388_608, connection.sends.count < 64 else { throw failure("overload") }
+        if let data = text.data(using: .utf8), let request = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let method = request["method"] as? String,
+          method.hasPrefix("native.") || method.hasPrefix("devServers.bridge") { throw failure("native_profile_required") }
+        let key = UUID(); connection.sends[key] = promise; connection.outgoingBytes += count
+        connection.task.send(.string(text)) { [weak self, weak connection] error in
+          guard let self, let connection else { return }; self.sync {
+            guard let pending = connection.sends.removeValue(forKey: key) else { return }; connection.outgoingBytes -= count
+            if error != nil || self.connections[id] !== connection || !self.foreground { pending.reject("ERR_HOST_SOCKET", "send_failed") } else { pending.resolve(nil) }
+          }
+        }
+      }
+    }
+    AsyncFunction("acknowledge") { (id: String, generation: Double, sequence: Int) in self.sync { if let connection = self.connections[id], connection.generation == generation, let bytes = connection.deliveries.removeValue(forKey: sequence) { connection.deliveryBytes -= bytes } } }
+    AsyncFunction("close") { (id: String, generation: Double) in self.ended(id, generation, "detached", false) }
+    AsyncFunction("readBulk") { (handle: String, descriptor: HostBulkDescriptor, offset: Double, promise: Promise) in
+      let credential = try self.sync { () throws -> Credential in guard self.foreground, self.accessAllowed, let credential = self.credentials[handle], credential.binding.accessEpoch == self.accessEpoch, self.bulks.count < 2 else { throw failure("bulk_unavailable") }; return credential }
+      guard descriptor.kind == "bulk", descriptor.environmentId == credential.binding.environmentId, matches(descriptor.transferId, "^[A-Za-z0-9][A-Za-z0-9._:@-]{0,199}$"), !descriptor.transferId.contains("\n"), safe(descriptor.totalBytes), descriptor.totalBytes <= 33_554_432, safe(descriptor.chunkBytes), (1...65_536).contains(descriptor.chunkBytes), safe(descriptor.expiresAt), descriptor.expiresAt > Date().timeIntervalSince1970 * 1000, safe(offset), offset < descriptor.totalBytes, matches(descriptor.sha256, "^[a-f0-9]{64}$"), descriptor.sha256.count == 64 else { throw failure("bulk_descriptor") }
+      let token = try self.secret(credential.binding)
+      guard self.digest(token) == credential.digest else { self.invalidate(credential.binding.machineId); throw failure("credential_rotated") }
+      let key = UUID(); let epoch = self.sync { self.lifecycleEpoch }
+      let limit = Int(min(descriptor.chunkBytes, descriptor.totalBytes - offset))
+      let delegate = try BulkDelegate(binding: credential.binding, limit: limit) { [weak self] result in
+        guard let self else { promise.reject("ERR_HOST_SOCKET", "closed"); return }
+        self.sync {
+          self.bulks.removeValue(forKey: key)
+          guard self.foreground, self.accessAllowed, self.lifecycleEpoch == epoch, self.credentials[handle] != nil else { promise.reject("ERR_HOST_SOCKET", "access_changed"); return }
+          switch result { case .success(let bytes): promise.resolve(["dataBase64": bytes.base64EncodedString()]); case .failure: promise.reject("ERR_HOST_SOCKET", "bulk_response") }
+        }
+      }
+      let config = URLSessionConfiguration.ephemeral; config.httpCookieStorage = nil; config.urlCredentialStorage = nil; config.timeoutIntervalForRequest = 12
+      let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
+      var url = URLComponents(url: try HostTls.endpoint(credential.binding), resolvingAgainstBaseURL: false)!; url.scheme = "https"; url.path = "/ws-bulk/\(descriptor.transferId)"; url.queryItems = [URLQueryItem(name: "offset", value: String(Int(offset)))]
+      var request = URLRequest(url: url.url!); request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+      try self.sync { guard self.foreground, self.accessAllowed, self.lifecycleEpoch == epoch, self.credentials[handle] != nil, self.bulks.count < 2 else { session.invalidateAndCancel(); throw failure("access_changed") }; self.bulks[key] = (credential.binding.machineId, session) }
+      session.dataTask(with: request).resume()
+    }
+    OnAppEntersBackground { self.sync { self.foreground = false; self.accessAllowed = false; self.invalidate() } }
+    OnAppBecomesActive { self.sync { self.foreground = true } }
+    OnDestroy { self.sync { self.foreground = false; self.accessAllowed = false; self.invalidate() } }
+  }
+}

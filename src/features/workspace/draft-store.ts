@@ -4,22 +4,33 @@ type Storage = {
   removeItem(key: string): Promise<void>;
 };
 
+// Navigation creates a new store while the outgoing editor can still be flushing.
+// Share pending writes by storage/key so its replacement cannot read stale data.
+const storageWrites = new WeakMap<Storage, Map<string, Promise<void>>>();
+
 /** Failed reads never grant permission to overwrite or remove an unread draft. */
 export class DraftStore<T> {
   private loaded = false;
-  private writes = Promise.resolve();
+  private readonly writes: Map<string, Promise<void>>;
   constructor(
     private readonly storage: Storage,
     readonly key: string,
     private readonly decode: (raw: string) => T,
     private readonly encode: (value: T | null) => string | null,
-  ) {}
+  ) {
+    let writes = storageWrites.get(storage);
+    if (!writes) {
+      writes = new Map();
+      storageWrites.set(storage, writes);
+    }
+    this.writes = writes;
+  }
   get ready() {
     return this.loaded;
   }
   async load(): Promise<T | null> {
     this.loaded = false;
-    await this.writes.catch(() => undefined);
+    await this.writes.get(this.key)?.catch(() => undefined);
     const raw = await this.storage.getItem(this.key);
     const value = raw === null ? null : this.decode(raw);
     this.loaded = true;
@@ -29,12 +40,17 @@ export class DraftStore<T> {
     if (!this.loaded)
       return Promise.reject(new Error("Read the saved draft successfully before changing it."));
     const raw = this.encode(value);
-    this.writes = this.writes
+    const write = (this.writes.get(this.key) ?? Promise.resolve())
       .catch(() => undefined)
       .then(() =>
         raw === null ? this.storage.removeItem(this.key) : this.storage.setItem(this.key, raw),
       );
-    return this.writes;
+    this.writes.set(this.key, write);
+    const settled = () => {
+      if (this.writes.get(this.key) === write) this.writes.delete(this.key);
+    };
+    void write.then(settled, settled);
+    return write;
   }
 }
 

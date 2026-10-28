@@ -1,6 +1,8 @@
 import { useEditorRecord } from "./shared/use-editor-record";
 import { ScreenList } from "@/ui/screen-list";
 import { useState } from "react";
+import { useLocale } from "@/i18n";
+import { matchesSearch } from "./shared/search";
 import { FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import Plus from "lucide-react-native/icons/plus";
 
@@ -37,6 +39,7 @@ import type { TaskEditorFlow } from "./tasks/types";
 
 export function TasksScreen() {
   const copy = useCopy();
+  const locale = useLocale();
   const [search, setSearch] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const machine = useActiveMachine();
@@ -124,9 +127,7 @@ export function TasksScreen() {
   const visible = query.data?.filter(
     (task) =>
       taskMatchesFilter(task, filter) &&
-      (task.title + " " + task.prompt)
-        .toLocaleLowerCase()
-        .includes(search.trim().toLocaleLowerCase()),
+      matchesSearch(task.title + " " + task.prompt, search, locale),
   );
   return (
     <ScreenList<HostTask>

@@ -2,8 +2,15 @@ node_modules/
 .expo/
 dist/
 web-build/
-android/
-ios/
+# Generated Expo application projects; local module native sources are maintained.
+/android/
+/ios/
+# Generated outputs inside maintained local native modules.
+/modules/**/android/.gradle/
+/modules/**/android/.cxx/
+/modules/**/android/build/
+/modules/**/ios/Pods/
+/modules/**/ios/build/
 *.tsbuildinfo
 .env*
 !.env.example

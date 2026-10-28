@@ -4,6 +4,7 @@ import { View, type TextProps } from "react-native";
 import { Pressable } from "react-native";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import { Body } from "./typography";
+import { BusyIndicator } from "./busy-indicator";
 import { colors, opacity, semanticColors, space, type SemanticTone } from "./tokens";
 import { uiStyles } from "./styles";
 import type { ContainerProps } from "./component-props";
@@ -53,10 +54,13 @@ export function NavigationRow({
   trailing,
   onPress,
   disabled,
+  busy,
   selected,
   tone,
   variant,
   detailLines = 1,
+  metadata,
+  metadataLines = 2,
   detailSelectable = true,
   detailEllipsizeMode,
   emphasized,
@@ -67,10 +71,14 @@ export function NavigationRow({
   label: string;
   accessibilityLabel?: string;
   detail?: string;
+  /** Secondary context gets its own space rather than displacing the main description. */
+  metadata?: string;
+  metadataLines?: number;
   icon?: ReactNode;
   trailing?: ReactNode;
   onPress: () => void;
   disabled?: boolean;
+  busy?: boolean;
   /** Selection for a visible exclusive choice, independent of disabled state. */
   selected?: boolean;
   tone?: SemanticTone;
@@ -86,11 +94,12 @@ export function NavigationRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? [label, detail].filter(Boolean).join(". ")}
-      accessibilityState={{ disabled: !!disabled, ...(selected === undefined ? {} : { selected }) }}
+      accessibilityLabel={accessibilityLabel ?? [label, detail, metadata].filter(Boolean).join(". ")}
+      accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy, ...(selected === undefined ? {} : { selected }) }}
       aria-pressed={selected}
-      aria-disabled={!!disabled}
-      disabled={disabled}
+      aria-disabled={!!disabled || !!busy}
+      aria-busy={!!busy}
+      disabled={disabled || busy}
       onPress={onPress}
       style={({ pressed }) => [
         uiStyles.press,
@@ -103,7 +112,7 @@ export function NavigationRow({
           flexDirection: "row",
           alignItems: "center",
           gap: space.row,
-          opacity: disabled ? opacity.disabled : 1,
+          opacity: disabled && !busy ? opacity.disabled : 1,
         },
         pressed && { backgroundColor: semantic?.surface ?? colors.raised },
       ]}
@@ -134,9 +143,12 @@ export function NavigationRow({
             {detail}
           </Body>
         ) : null}
+        {metadata ? <Body muted numberOfLines={metadataLines} style={[uiStyles.caption, { lineHeight: 18 }]}>
+          {metadata}
+        </Body> : null}
       </View>
       {trailing ? <View style={{ flexShrink: 0 }}>{trailing}</View> : null}
-      <ChevronRight size={17} strokeWidth={2.4} color={colors.tertiary} style={{ flexShrink: 0 }} />
+      {busy ? <BusyIndicator size="sm" color={colors.accent} /> : <ChevronRight size={17} strokeWidth={2.4} color={colors.tertiary} style={{ flexShrink: 0 }} />}
     </Pressable>
   );
 }

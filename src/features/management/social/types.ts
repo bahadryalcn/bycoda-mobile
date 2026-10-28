@@ -9,6 +9,16 @@ import type {
 } from "@/domain/types";
 import type { SocialEditor, SocialFlowEvent } from "../social-flow";
 import type { EffectiveSocialPolicy, SocialOAuthStatus } from "@/remote/types";
+import type { SocialPage } from "../../../../../src/features/social/model/social";
+export type SocialCollectionPage = {
+  search: string;
+  setSearch(value: string): void;
+  page?: SocialPage;
+  loading: boolean;
+  busy: boolean;
+  invalidSearch: boolean;
+  onOffset(offset: number): void;
+};
 export type SocialDraft = SocialSnapshot["drafts"][number];
 export type SocialProfile = SocialSnapshot["profiles"][number];
 export type EffectivePolicy = EffectiveSocialPolicy;
@@ -21,6 +31,7 @@ export type FactChoicesProps = {
 };
 export type ThreadEditorProps = {
   thread: SocialThread;
+  recipientLabel?: string;
   accounts: SocialAccount[];
   projects: HostProject[];
   profiles: SocialProfile[];
@@ -64,6 +75,7 @@ export type RuleFormDraft = {
   dailyLimit: string;
 };
 export type SocialPanelContext = {
+  page?: SocialCollectionPage;
   state: SocialSnapshot;
   projectId: string | null;
   editor: SocialEditor;
@@ -80,11 +92,11 @@ export type SocialPanelContext = {
 export type AccountsPanelProps = Pick<SocialPanelContext, "state" | "projectId" | "action" | "run">;
 export type ThreadsPanelProps = Pick<
   SocialPanelContext,
-  "state" | "projectId" | "selectedThread" | "projects" | "closeEditor" | "dispatch"
+  "state" | "projectId" | "selectedThread" | "projects" | "closeEditor" | "dispatch" | "page"
 >;
 export type DraftsPanelProps = Pick<
   SocialPanelContext,
-  "state" | "projectId" | "selectedDraft" | "closeEditor" | "dispatch" | "action" | "run"
+  "state" | "projectId" | "selectedDraft" | "closeEditor" | "dispatch" | "action" | "run" | "page"
 >;
 export type CampaignsPanelProps = Pick<
   SocialPanelContext,
@@ -96,9 +108,10 @@ export type CampaignsPanelProps = Pick<
   | "dispatch"
   | "action"
   | "run"
+  | "page"
 >;
 export type RulesPanelProps = Pick<
   SocialPanelContext,
-  "state" | "projectId" | "ruleAccount" | "editor" | "closeEditor" | "dispatch" | "action" | "run"
+  "state" | "projectId" | "ruleAccount" | "editor" | "closeEditor" | "dispatch" | "action" | "run" | "page"
 >;
-export type JobsPanelProps = Pick<SocialPanelContext, "state" | "projectId" | "action" | "run">;
+export type JobsPanelProps = Pick<SocialPanelContext, "state" | "projectId" | "action" | "run" | "page">;

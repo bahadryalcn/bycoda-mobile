@@ -167,7 +167,9 @@ export function SettingsScreen() {
         />
       </NavigationGroup>
       {panel ? (
-        <Sheet visible size={panel === "appearance" ? "compact" : "form"} title={titles[panel]} onClose={() => setPanel(null)}>
+        <Sheet visible size={panel === "appearance" || panel === "privacy" || panel === "about" ||
+          (process.env.EXPO_OS === "web" && (panel === "security" || panel === "permissions")) ? "compact" : "form"}
+          title={titles[panel]} onClose={() => setPanel(null)}>
           {panel === "permissions" ? (
             <DevicePermissionSettings />
           ) : panel === "appearance" ? (

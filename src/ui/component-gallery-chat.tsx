@@ -27,8 +27,13 @@ import { useCopy } from "./copy";
 
 type Mode = "send" | "queue" | "steer";
 
-export function GalleryChat() {
+export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "tour" } = {}) {
   const copy = useCopy();
+  const tour = scenario === "tour";
+  const tourReply = copy(
+    "## Kişisel web sitesi planı\n\nÖnce ziyaretçilerin seni ve çalışmalarını kolayca tanıyabileceği bir ana sayfa hazırlayabiliriz.\n\n1. Kısa bir tanıtım ve iletişim bağlantısı\n2. Seçtiğin çalışmalar için bir galeri\n3. Telefon ve bilgisayarda okunabilir bir düzen\n\nBu çevrimdışı örnekte hiçbir proje dosyası değişmez. Gerçek bir oturumda sonuçları ve dosya değişikliklerini bu konuşmadan inceleyebilirsin.",
+    "## Personal website plan\n\nWe can start with a home page that helps visitors get to know you and your work.\n\n1. A short introduction and contact link\n2. A gallery of selected projects\n3. A readable layout on phones and computers\n\nThis offline example changes no project files. In a real session, you can inspect results and file changes in this conversation.",
+  );
   const [prompt, setPrompt] = useState("");
   const [mode, setMode] = useState<Mode>("send");
   const [modePicker, setModePicker] = useState(false);
@@ -62,12 +67,12 @@ export function GalleryChat() {
         <Badge label={copy("Çevrimdışı örnek", "Offline example")} />
         <ChatMessage role="user" style={chatUserBubbleStyle()}>
           <ChatMessageContent>
-            <Body>{copy("Mobil konuşmayı sadeleştir.", "Simplify the mobile conversation.")}</Body>
+            <Body>{tour ? copy("Kişisel web sitem için bir plan hazırla.", "Plan a personal website for me.") : copy("Mobil konuşmayı sadeleştir.", "Simplify the mobile conversation.")}</Body>
           </ChatMessageContent>
         </ChatMessage>
         <ChatMessage role="assistant" style={{ backgroundColor: "transparent", padding: 0 }}>
           <ChatMessageContent>
-            <MessageText text={messageExample} compactMedia />
+            <MessageText text={tour ? tourReply : messageExample} compactMedia />
           </ChatMessageContent>
         </ChatMessage>
         <Attachment
@@ -87,14 +92,14 @@ export function GalleryChat() {
         </Attachment>
         <ChatActivity title={copy("Örnek gerekçe", "Sample rationale")} reasoning status="complete">
           <Body>
-            {copy(
+            {tour ? copy("Önce ziyaretçinin ihtiyaçlarını ve proje kapsamını netleştiriyoruz.", "We start by clarifying visitor needs and the project scope.") : copy(
               "Mesajlar, dosyalar ve kuyruk aynı ortak bileşenlerle gösterilir.",
               "Messages, files and the queue use the same shared components.",
             )}
           </Body>
         </ChatActivity>
         <ChatActivity title={copy("Çalışma ayrıntıları", "Work details")} status="complete">
-          <MessageText text={"```tsx\nconst ready = true;\n```"} />
+          <MessageText text={tour ? copy("Örnek kapsam: tanıtım, çalışmalar ve iletişim. Henüz bir dosya değişikliği yok.", "Example scope: introduction, selected work and contact. No files have changed.") : "```tsx\nconst ready = true;\n```"} />
         </ChatActivity>
         {queue.length ? (
           <View style={{ flexDirection: "row" }}>
@@ -181,12 +186,12 @@ export function GalleryChat() {
           steps={[
             {
               id: "shared",
-              title: copy("Ortak bileşenleri kur", "Set up shared components"),
+              title: tour ? copy("Sayfa kapsamını belirle", "Define the page scope") : copy("Ortak bileşenleri kur", "Set up shared components"),
               status: "done",
             },
             {
               id: "device",
-              title: copy("Konuşmayı cihazda doğrula", "Verify the conversation on a device"),
+              title: tour ? copy("Tanıtım ve çalışmalar bölümünü tasarla", "Design the introduction and work sections") : copy("Konuşmayı cihazda doğrula", "Verify the conversation on a device"),
               status: "pending",
             },
           ]}

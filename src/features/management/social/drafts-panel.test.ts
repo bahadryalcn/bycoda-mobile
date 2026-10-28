@@ -18,10 +18,15 @@ vi.mock("@/ui/primitives", () => ({
 vi.mock("../shared/paged-rows", () => ({ PagedRows: "paged-rows" }));
 vi.mock("../shared/status", () => ({ Status: "status" }));
 vi.mock("./draft-editor", () => ({ DraftEditor: "draft-editor" }));
+vi.mock("./collection-search", () => ({
+  CollectionSearch: "collection-search",
+  useCollectionSearch: (items: unknown[]) => ({ visible: items }),
+}));
+vi.mock("./collection-rows", () => ({ CollectionRows: "collection-rows" }));
 
 beforeEach(() => vi.clearAllMocks());
 
-function approval() {
+function approval(pending?: { action: string; input: { id: string } }) {
   const draft: SocialDraft = {
     id: "draft",
     accountId: "account",
@@ -37,20 +42,20 @@ function approval() {
   const props = {
     state: { drafts: [draft], accounts: [{ id: "account", name: "Reviewed account" }], jobs: [] },
     projectId: null,
-    action: { isPending: false },
+    action: { isPending: !!pending, variables: pending },
     run,
   } as unknown as DraftsPanelProps;
   const panel = DraftsPanel(props) as ReactElement<{ children: ReactNode[] }>;
-  const rows = panel.props.children[1] as ReactElement<{
+  const rows = panel.props.children[2] as ReactElement<{
     renderItem: (
       draft: SocialDraft,
     ) => ReactElement<{
-      footer: ReactElement<{ children: ReactElement<{ onPress: () => void }>[] }>;
+      footer: ReactElement<{ children: ReactElement<{ onPress: () => void; busy?: boolean; disabled?: boolean }>[] }>;
     }>;
   }>;
   const card = rows.props.renderItem(draft);
   const button = card.props.footer.props.children[0];
-  return { draft, run, press: button.props.onPress };
+  return { draft, run, press: button.props.onPress, buttons: card.props.footer.props.children };
 }
 
 it("previews the full text, recipient and media before any approval request", () => {
@@ -80,4 +85,14 @@ it("submits the exact reviewed snapshot even if the current draft changes during
     id: reviewed.id,
     reviewedDraft: reviewed,
   });
+});
+
+it("shows pending on only the initiating draft and operation while preserving approval locks", () => {
+  const approving = approval({ action: "drafts.approve", input: { id: "draft" } }).buttons;
+  expect(approving.map((button) => !!button.props.busy)).toEqual([true, false]);
+  expect(approving.every((button) => button.props.disabled)).toBe(true);
+  const sending = approval({ action: "messages.send", input: { id: "draft" } }).buttons;
+  expect(sending.map((button) => !!button.props.busy)).toEqual([false, true]);
+  const other = approval({ action: "messages.send", input: { id: "other-draft" } }).buttons;
+  expect(other.every((button) => !button.props.busy)).toBe(true);
 });

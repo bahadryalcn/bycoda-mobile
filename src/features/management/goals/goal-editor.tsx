@@ -50,6 +50,8 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
   };
   return (
     <Stack>
+      <Stack>
+      <Heading>{copy("İstenen sonuç", "Desired result")}</Heading>
       <Field
         editable={!busy}
         label={copy("Başlık", "Title")}
@@ -63,6 +65,9 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
         onChangeText={(prompt) => update({ prompt })}
         multiline
       />
+      </Stack>
+      <Stack>
+      <Heading>{copy("Proje kapsamı", "Project scope")}</Heading>
       <Body muted>
         {copy(
           "Aynı bilgisayardan en fazla 8 proje seçin.",
@@ -86,6 +91,9 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
           })
         }
       />
+      </Stack>
+      <Stack>
+      <Heading>{copy("Planlayıcı", "Planner")}</Heading>
       <SelectField
         label={copy("Planlayıcının başlangıç projesi", "Planner lead project")}
         value={draft.leadProjectId}
@@ -102,6 +110,7 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
         projectId={draft.leadProjectId}
         onChange={(agent) => update(agent)}
       />
+      </Stack>
       <Disclosure label={copy("Çalışma seçenekleri", "Execution options")}>
       <NavigationGroup>
         <ToggleField

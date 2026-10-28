@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useState, type PropsWithChildren } from "react";
+import { useEffect, useState, type PropsWithChildren } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -10,6 +10,8 @@ import { OverlayProvider } from "./ui/overlays";
 import { colors } from "./ui/tokens";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BycodaUIProvider, MobileThemeController } from "./ui/provider";
+import { installMobileHostRuntime } from "./state/host-runtime";
+import { isProjectPrivacyQuery } from "./features/workspace/project-privacy-cache";
 
 export function AppProviders({ children }: PropsWithChildren) {
   useMobileTheme();
@@ -27,6 +29,32 @@ export function AppProviders({ children }: PropsWithChildren) {
         },
       }),
   );
+  useEffect(() => {
+    if (process.env.EXPO_OS === "web") return;
+    let disposed = false,
+      release: (() => void) | undefined;
+    void installMobileHostRuntime({
+      onState: (machineId, state) => {
+        if (state === "ready")
+          void cache.invalidateQueries({
+            queryKey: ["machine", machineId],
+            predicate: ({ queryKey }) => !isProjectPrivacyQuery(queryKey),
+          });
+      },
+    })
+      .then((installed) => {
+        if (disposed) installed.dispose();
+        else release = installed.dispose;
+      })
+      .catch(() => {
+        // Eligible socket calls report their explicit unsupported state. Existing
+        // encrypted HTTP cohorts continue through the compatibility adapter.
+      });
+    return () => {
+      disposed = true;
+      release?.();
+    };
+  }, [cache]);
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <MobileThemeController />

@@ -81,6 +81,45 @@ describe("native host contract", () => {
     });
     expect(JSON.parse(String(fetcher.mock.calls[2]![1]?.body)).params.offset).toBe(12);
   });
+  it("cancels an already-downloaded transcript decode on disconnect and allows a fresh read after reconnect", async () => {
+    const sync = { kind: "snapshot", value: { revision: 3, text: "x".repeat(500_000) } };
+    const serialized = JSON.stringify(sync);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        respond({ sync: { kind: "chunked", transfer: "large", length: serialized.length } }),
+      )
+      .mockImplementationOnce(async () => {
+        setTimeout(() => client.disconnect(), 0);
+        return respond({ data: serialized });
+      })
+      .mockResolvedValueOnce(respond({ sync: { kind: "snapshot", value: { revision: 4 } } }));
+    const client = createHostClient(connection, fetcher);
+    await expect(client.sessions.read("s")).rejects.toMatchObject({ kind: "disconnected" });
+    client.reconnect();
+    await expect(client.sessions.read("s")).resolves.toEqual({ revision: 4 });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+  it("rechecks compatibility access while decoding and reports authentication loss", async () => {
+    let allowed = true;
+    const serialized = JSON.stringify({ kind: "snapshot", value: { text: "x".repeat(500_000) } });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        respond({ sync: { kind: "chunked", transfer: "large", length: serialized.length } }),
+      )
+      .mockImplementationOnce(async () => {
+        setTimeout(() => {
+          allowed = false;
+        }, 0);
+        return respond({ data: serialized });
+      });
+    const client = createHostClient(connection, fetcher, undefined, () => {
+      if (!allowed) throw new Error("Workspace locked.");
+    });
+    await expect(client.sessions.read("s")).rejects.toMatchObject({ kind: "authentication" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it("rejects stale deltas rather than overwriting the transcript", () => {
     const known = {
       revision: 2,

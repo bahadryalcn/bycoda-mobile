@@ -28,7 +28,7 @@ import {
 } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { identifier } from "../shared/format";
-import { copyLibraryMember, crewValidation, newMember } from "./model";
+import { copyLibraryMember, crewMemberPresentation, crewNameError, crewValidation, crewValidationMessage, memberValidation, newMember } from "./model";
 import { MemberEditor, useRoleOptions } from "./member-editor";
 import type { CrewCatalogRead } from "./presentation";
 
@@ -84,6 +84,13 @@ export function CrewEditor({
       ) as Record<NumericPolicy, string>,
   );
   const [member, setMember] = useState<CrewAgent | null>(null);
+  const [nameTouched, setNameTouched] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [interactedMembers, setInteractedMembers] = useState<ReadonlySet<string>>(() => new Set());
+  const closeMember = () => {
+    if (member) setInteractedMembers((current) => new Set([...current, member.id]));
+    setMember(null);
+  };
   const [profileId, setProfileId] = useState("");
   const save = useHostMutation<CrewDefinition>("crews.save", ["crews", projectId]);
   const sending = useRef(false);
@@ -111,7 +118,14 @@ export function CrewEditor({
   const error = invalidNumbers
     ? copy("Geçerli sayısal sınırlar girin.", "Enter valid numeric limits.")
     : crewValidation(normalized);
+  const invalidMember = draft.agents.some((agent) => !!memberValidation(agent));
+  const visibleError = invalidNumbers && (submitted || changedNumbers)
+    ? error
+    : (submitted || changedNumbers || form.dirty) && !invalidMember
+      ? crewValidationMessage(error, copy)
+      : undefined;
   const submit = () => {
+    setSubmitted(true);
     if (
       !supported ||
       sending.current ||
@@ -151,6 +165,8 @@ export function CrewEditor({
       <Field
         label={copy("Ekip adı", "Crew name")}
         value={draft.name}
+        error={nameTouched || submitted ? crewNameError(draft.name, copy) : undefined}
+        onBlur={() => setNameTouched(true)}
         editable={!busy && supported}
         onChangeText={(name) => form.patch({ name })}
       />
@@ -174,20 +190,20 @@ export function CrewEditor({
         )}
       </Body>
       <NavigationGroup>
-        {draft.agents.map((agent) => (
-          <NavigationRow
+        {draft.agents.map((agent) => {
+          const presentation = crewMemberPresentation(agent,
+            roles.find((role) => role.value === agent.role)!.label, copy,
+            submitted || interactedMembers.has(agent.id));
+          return <NavigationRow
             key={agent.id}
-            label={agent.name || roles.find((role) => role.value === agent.role)!.label}
-            detail={[
-              roles.find((role) => role.value === agent.role)!.label,
-              agent.candidates[0]?.model,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
+            label={presentation.label}
+            detail={presentation.detail}
+            detailLines={2}
+            tone={presentation.error ? "danger" : undefined}
             disabled={busy || !supported}
             onPress={() => setMember(structuredClone(agent))}
-          />
-        ))}
+          />;
+        })}
       </NavigationGroup>
       <Button
         tone="quiet"
@@ -278,7 +294,7 @@ export function CrewEditor({
           }
         />
       </Disclosure>
-      <ErrorText error={error} />
+      <ErrorText error={visibleError} />
       <FormActions
         feedback={<MutationState mutation={save} />}
         submitLabel={copy("Ekibi kaydet", "Save crew")}
@@ -287,9 +303,11 @@ export function CrewEditor({
         cancelDisabled={busy}
         cancelLabel={copy("Vazgeç", "Cancel")}
         onCancel={requestClose}
-        onSubmit={() =>
-          draft.policy.delegateApprovals && !opening.policy.delegateApprovals
-            ? confirmAction(
+        onSubmit={() => {
+          setSubmitted(true);
+          if (error) return;
+          if (draft.policy.delegateApprovals && !opening.policy.delegateApprovals)
+            confirmAction(
                 copy("Onayları devret", "Delegate approvals"),
                 copy(
                   "Koordinatör, ekip üyelerinin izin isteklerine sizin yerinize yanıt verebilecek.",
@@ -297,16 +315,16 @@ export function CrewEditor({
                 ),
                 copy("Onayla", "Approve"),
                 submit,
-              )
-            : submit()
-        }
+              );
+          else submit();
+        }}
       />
       {member && (
         <Sheet
           visible
           size="form"
           title={copy("Ekip üyesi", "Crew member")}
-          onClose={() => setMember(null)}
+          onClose={closeMember}
         >
           <MemberEditor
             key={member.id}
@@ -316,14 +334,14 @@ export function CrewEditor({
             groupsSupported={groupsSupported}
             busy={busy}
             disabled={!supported}
-            onClose={() => setMember(null)}
+            onClose={closeMember}
             onSave={(edited) => {
               form.patch({
                 agents: draft.agents.some((item) => item.id === edited.id)
                   ? draft.agents.map((item) => (item.id === edited.id ? edited : item))
                   : [...draft.agents, edited],
               });
-              setMember(null);
+              closeMember();
             }}
           />
           {draft.agents.some((item) => item.id === member.id) && (

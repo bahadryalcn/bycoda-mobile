@@ -3,6 +3,15 @@ import { parseMessage, messageDisplaySource, messageNodeText, type MessageNode }
 import { highlightCode } from "./message-highlight";
 const flatten = (nodes: MessageNode[]): MessageNode[] => nodes.flatMap((node) => [node, ...flatten(node.children)]);
 describe("native rich message model", () => {
+  it("renders scoped file links with spaces and balanced parentheses without changing literal examples", () => {
+    const source = "Read [Change summary](G:/Projects/(mobile)/My notes/README.md:12).";
+    expect(flatten(parseMessage(source)).find((node) => node.type === "link")?.attrs.href)
+      .toBe("G:/Projects/(mobile)/My notes/README.md:12");
+    for (const literal of [`\`${source}\``, `\`\`\`md\n${source}\n\`\`\``, String.raw`\[Change summary](G:/My notes/README.md)`]) {
+      expect(flatten(parseMessage(literal)).some((node) => node.type === "link")).toBe(false);
+    }
+    expect(flatten(parseMessage("[unsafe](javascript:alert(1))")).some((node) => node.type === "link")).toBe(false);
+  });
   const memoryCitation = "<oai-mem-citation>\n<citation_entries>\nMEMORY.md:1-2|note=[context]\n</citation_entries>\n<rollout_ids>\nexample-id\n</rollout_ids>\n</oai-mem-citation>";
   it("omits complete internal memory metadata from presentation while preserving surrounding Markdown", () => {
     const source = `**Done**\n\n${memoryCitation}\n\nNext step`;

@@ -96,7 +96,7 @@ export function DemoScreen() {
         </>
       ) : page === "session" ? (
         <Suspense fallback={<Loading />}>
-          <SampleChat />
+          <SampleChat scenario="tour" />
         </Suspense>
       ) : (
         <>

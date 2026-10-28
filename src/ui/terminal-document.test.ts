@@ -7,6 +7,7 @@ it("has a trusted offline renderer without remote resources or HTML output inter
   expect(html).not.toMatch(/<script[^>]+src=/);
   expect(html).toContain("disableStdin:true");
   expect(html).toContain("allowProposedApi:false");
+  expect(html).not.toMatch(/maximum-scale|user-scalable\s*=\s*no/);
 });
 it("rejects foreign documents, arbitrary bridge actions, invalid resize and oversized input", () => {
   expect(

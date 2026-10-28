@@ -9,6 +9,8 @@ vi.mock("react-native", () => ({
   Pressable: ({ children, onPress, accessibilityLabel, accessibilityState, ...props }: PropsWithChildren<{ onPress: () => void; accessibilityLabel: string; accessibilityState: { selected?: boolean; disabled: boolean }; "aria-pressed"?: boolean }>) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, "aria-pressed": props["aria-pressed"], "data-native-selected": accessibilityState.selected, disabled: accessibilityState.disabled }, children),
 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => null }));
+// Keep the real row accessibility behavior without loading native animation runtimes.
+vi.mock("@/ui/busy-indicator", () => ({ BusyIndicator: () => null }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, opacity: {}, semanticColors: {}, space: {} }));

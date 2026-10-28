@@ -25,7 +25,7 @@ function PendingInput({ input, run, disabled }: { input: CrewPendingInput; run: 
   return <Stack>
     <Body muted>{run.tasks.find((task) => task.id === input.taskId)?.title ?? input.taskId}</Body>
     {!run.definition.policy.delegateApprovals && <Notice tone="info" message={copy("Bu çalışma için devredilmiş onay izni yok. Üye oturumundan yanıtlayın.", "Delegated approval is unavailable for this work. Respond in the member session.")} />}
-    {input.question && <QuestionCard question={input.question} disabled={blocked} onAnswer={async (reply) => {
+    {input.question && <QuestionCard question={input.question} draftScope={JSON.stringify([machineId, input.sessionId, input.targetRunId])} deliveryVersion={run.updatedAt} disabled={blocked} onAnswer={async (reply) => {
       if (blocked || sending.current || useMachines.getState().activeId !== machineId) return;
       sending.current = true;
       // Keep the same receipt identity after an uncertain response; never replay automatically.

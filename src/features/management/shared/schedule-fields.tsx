@@ -32,7 +32,7 @@ export function ScheduleFields({ value, minute, onMinuteChange, onChange, disabl
         onChange={(time) => onChange({ time })} />
       {!validScheduleTime(value.time) ? <ErrorText error={copy("Saati SS:DD biçiminde girin (00:00–23:59).", "Use HH:MM time (00:00–23:59).")} /> : null}
     </>}
-    {value.scheduleKind === "weekly" ? <SelectField label={copy("Gün", "Day")} value={String(value.dayOfWeek)} disabled={disabled}
+    {value.scheduleKind === "weekly" ? <SelectField label={copy("Gün", "Day")} value={String(value.dayOfWeek)} disabled={disabled} searchable={false}
       options={[
         { value: "0", label: copy("Pazar", "Sunday") },
         { value: "1", label: copy("Pazartesi", "Monday") },

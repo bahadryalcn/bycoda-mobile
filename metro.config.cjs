@@ -29,6 +29,13 @@ config.resolver.nodeModulesPaths = [
   path.join(__dirname, "node_modules"),
   path.resolve(__dirname, "../node_modules"),
 ];
+// This app owns its dependency links independently. Resolve the portable package
+// through its real folder/exports even before a root workspace link is installed.
+// The existing parent watchFolder already includes packages/core.
+config.resolver.extraNodeModules = {
+  ...config.resolver.extraNodeModules,
+  "@bycoda/core": path.resolve(__dirname, "../packages/core"),
+};
 module.exports = withUniwindConfig(config, {
   cssEntryFile: "./src/global.css",
   dtsFile: "./src/uniwind-types.d.ts",

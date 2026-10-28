@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { hostKey, useHostClient, useHostReadActive } from "@/state/queries";
 import { readEarlier, readSession, resolveSync } from "./wire";
@@ -7,8 +7,20 @@ import type { SessionBlockRequest, SessionScope } from "./session-types";
 import type { SessionSyncResponse } from "../../../../src/features/connections/model/protocol";
 import { RemoteHostError } from "@/remote/host-error";
 import { sessionReadSchedule, unsupportedSessionWait } from "./session-read-schedule";
+import { pruneInactiveSessionCache } from "./session-cache";
+import { retainSessionAuthority } from "@/domain/session-authority";
+import { watchSessionStream } from "@/remote/session-sync";
+import type { MobileStreamSubscription } from "@/remote/host-transport";
 
-export function useSessionSnapshot(scope: SessionScope, options: { enabled?: boolean; projectId?: string; canRead?: () => boolean } = {}) {
+export function useSessionSnapshot(
+  scope: SessionScope,
+  options: {
+    enabled?: boolean;
+    projectId?: string;
+    canRead?: () => boolean;
+    restoreBefore?: () => number | undefined;
+  } = {},
+) {
   const client = useHostClient();
   const active = useHostReadActive();
   const cache = useQueryClient();
@@ -18,49 +30,211 @@ export function useSessionSnapshot(scope: SessionScope, options: { enabled?: boo
   );
   const identity = [scope.machineId, client?.machine.environmentId, client?.endpoint].join("\0");
   const enabled = !!client && active && options.enabled !== false && !!options.projectId;
+  const streaming = enabled && (client?.supportsStreams?.() ?? false);
+  const liveOptions = useRef(options);
+  liveOptions.current = options;
+  const liveIdentity = useRef({
+    enabled,
+    machineId: scope.machineId,
+    sessionId: scope.sessionId,
+    projectId: options.projectId,
+  });
+  liveIdentity.current = {
+    enabled,
+    machineId: scope.machineId,
+    sessionId: scope.sessionId,
+    projectId: options.projectId,
+  };
+  const [streamError, setStreamError] = useState<Error | undefined>();
+  const observedKey = useMemo(
+    () => (active ? key : hostKey(scope.machineId, ["parked-session", scope.sessionId])),
+    [active, key, scope.machineId, scope.sessionId],
+  );
   useEffect(() => {
-    const cancelInactive = () => queueMicrotask(() => {
-      const query = cache.getQueryCache().find({ queryKey: key, exact: true });
-      if (query && !query.isActive()) void cache.cancelQueries({ queryKey: key, exact: true });
-    });
+    const cancelInactive = () =>
+      queueMicrotask(() => {
+        const query = cache.getQueryCache().find({ queryKey: key, exact: true });
+        if (query && !query.isActive())
+          void cache
+            .cancelQueries({ queryKey: key, exact: true })
+            .then(() => pruneInactiveSessionCache(cache));
+      });
     if (!enabled) cancelInactive();
     return cancelInactive;
   }, [cache, key, enabled]);
+  useEffect(() => {
+    if (!streaming || !client || !options.projectId) {
+      setStreamError(undefined);
+      return;
+    }
+    let disposed = false,
+      subscription: MobileStreamSubscription | undefined;
+    const controller = new AbortController();
+    const current = () => {
+      client.assertCurrentAccess();
+      const currentIdentity = liveIdentity.current;
+      if (
+        disposed ||
+        controller.signal.aborted ||
+        !currentIdentity.enabled ||
+        currentIdentity.machineId !== scope.machineId ||
+        currentIdentity.sessionId !== scope.sessionId ||
+        currentIdentity.projectId !== options.projectId ||
+        liveOptions.current.canRead?.() === false
+      )
+        throw new RemoteHostError(scope.machineId, "auth", "The session project is unavailable.");
+    };
+    void watchSessionStream(client, {
+      sessionId: scope.sessionId,
+      projectId: options.projectId,
+      known: () => cache.getQueryData<HostSession | null>(key) ?? undefined,
+      apply: async (snapshot, assertCurrent) => {
+        current();
+        assertCurrent();
+        let value = snapshot;
+        const wanted =
+          liveOptions.current.restoreBefore?.() ??
+          cache.getQueryData<HostSession>(key)?.history?.before;
+        while (
+          wanted !== undefined &&
+          value.history?.before !== undefined &&
+          value.history.before > wanted
+        ) {
+          current();
+          assertCurrent();
+          const before = value.history.before;
+          value = await readEarlier(client, value, { signal: controller.signal });
+          if (value.history?.before !== undefined && value.history.before >= before)
+            throw new Error("Transcript restore cursor did not advance.");
+        }
+        current();
+        assertCurrent();
+        await cache.cancelQueries({ queryKey: key, exact: true }, { silent: true, revert: false });
+        current();
+        assertCurrent();
+        cache.setQueryData<HostSession>(key, (previous) =>
+          previous && previous.revision > value.revision
+            ? previous
+            : retainSessionAuthority(previous, value),
+        );
+        setStreamError(undefined);
+      },
+      onError: (error) => {
+        if (!disposed) setStreamError(error);
+      },
+    })
+      .then((value) => {
+        if (disposed) value.close();
+        else subscription = value;
+      })
+      .catch((error) => {
+        if (!disposed)
+          setStreamError(
+            error instanceof Error ? error : new Error("The Host stream could not be opened."),
+          );
+      });
+    return () => {
+      disposed = true;
+      controller.abort();
+      subscription?.close();
+    };
+  }, [streaming, client, cache, key, scope.machineId, scope.sessionId, options.projectId]);
 
-  const query = useQuery({
-    queryKey: key,
+  const query = useQuery<HostSession | null>({
+    queryKey: observedKey,
+    // A defined, payload-free value also releases QueryObserver's retained
+    // previous-data reference when the old full query is evicted.
+    initialData: active ? undefined : null,
     queryFn: async ({ signal }) => {
-      if (!client || !options.projectId || options.canRead?.() === false) throw new Error("The session project is unavailable.");
+      if (!client || !options.projectId || options.canRead?.() === false)
+        throw new Error("The session project is unavailable.");
       let value: HostSession;
-      const schedule = sessionReadSchedule(cache.getQueryCache().find({ queryKey: key, exact: true }), identity);
+      const schedule = sessionReadSchedule(
+        cache.getQueryCache().find({ queryKey: key, exact: true }),
+        identity,
+      );
       const known = cache.getQueryData<HostSession>(key);
-      const waitMs = schedule.waitMs(known);
+      const waitMs = streaming ? 0 : schedule.waitMs(known);
       const started = Date.now();
       try {
-        try { value = await readSession(client, scope.sessionId, known, { signal, waitMs }); }
-        catch (error) {
+        try {
+          value = await readSession(client, scope.sessionId, known, { signal, waitMs });
+        } catch (error) {
           if (!waitMs || !unsupportedSessionWait(error)) throw error;
           schedule.rejectWait();
           value = await readSession(client, scope.sessionId, known, { signal });
         }
+      } catch (error) {
+        if (error instanceof Error && /Transcript identity changed/.test(error.message))
+          throw new RemoteHostError(scope.machineId, "identity", "Transcript identity changed.");
+        throw error;
       }
-      catch (error) { if (error instanceof Error && /Transcript identity changed/.test(error.message)) throw new RemoteHostError(scope.machineId, "identity", "Transcript identity changed."); throw error; }
-      if (options.canRead?.() === false || value.projectId !== options.projectId || value.session.id !== scope.sessionId)
-        throw new RemoteHostError(scope.machineId, "identity", "Transcript project identity changed.");
+      if (
+        options.canRead?.() === false ||
+        value.projectId !== options.projectId ||
+        value.session.id !== scope.sessionId
+      )
+        throw new RemoteHostError(
+          scope.machineId,
+          "identity",
+          "Transcript project identity changed.",
+        );
       schedule.observe(known, value, Date.now() - started, waitMs);
+      const restoreBefore = options.restoreBefore?.();
+      while (
+        restoreBefore !== undefined &&
+        value.history?.before !== undefined &&
+        value.history.before > restoreBefore
+      ) {
+        if (signal.aborted || options.canRead?.() === false)
+          throw new Error("Session restore cancelled.");
+        const before = value.history.before;
+        const earlier = await readEarlier(client, value, { signal });
+        if (signal.aborted) throw new Error("Session restore cancelled.");
+        if (earlier.history?.before !== undefined && earlier.history.before >= before)
+          throw new Error("Transcript restore cursor did not advance.");
+        value = earlier;
+      }
+      if (
+        options.canRead?.() === false ||
+        value.projectId !== options.projectId ||
+        value.session.id !== scope.sessionId
+      )
+        throw new RemoteHostError(
+          scope.machineId,
+          "identity",
+          "Transcript project identity changed.",
+        );
       return value;
     },
     enabled,
     staleTime: 1_000,
     refetchInterval: (query) => {
+      if (streaming) return false;
       if (!enabled || query.state.fetchStatus === "fetching") return false;
       const kind = (query.state.error as { kind?: string } | null)?.kind;
       if (kind === "auth" || kind === "identity" || kind === "unsupported") return false;
-      return sessionReadSchedule(query, identity).delay(query.state.data?.status === "running", !!query.state.error);
+      return sessionReadSchedule(query, identity).delay(
+        query.state.data?.status === "running",
+        !!query.state.error,
+      );
     },
   });
-  const denied = ["auth", "identity"].includes((query.error as { kind?: string } | null)?.kind ?? "");
-  return denied ? { ...query, data: undefined } : query;
+  useEffect(() => {
+    if (query.isSuccess) setStreamError(undefined);
+  }, [query.dataUpdatedAt, query.isSuccess]);
+  const denied = ["auth", "identity"].includes(
+    ((streamError ?? query.error) as { kind?: string } | null)?.kind ?? "",
+  );
+  return {
+    ...query,
+    error: streamError ?? query.error,
+    isError: !!streamError || query.isError,
+    streaming,
+    connectionState: client?.connectionState?.() ?? "legacy-http",
+    data: denied || !active ? undefined : (query.data ?? undefined),
+    parked: !active,
+  };
 }
 
 export function useEarlierSession(scope: SessionScope, session?: HostSession) {
@@ -74,7 +248,7 @@ export function useEarlierSession(scope: SessionScope, session?: HostSession) {
       const loaded = await readEarlier(client, session);
       // A poll can advance during paging. Never replace its newer revision.
       cache.setQueryData<HostSession>(key, (current) =>
-        current?.revision === loaded.revision ? loaded : current,
+        current?.revision === loaded.revision ? retainSessionAuthority(current, loaded) : current,
       );
     },
   });

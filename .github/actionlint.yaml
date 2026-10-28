@@ -1,0 +1,4 @@
+# Declares the optional dedicated virtual-device runner label; does not provision a runner.
+self-hosted-runner:
+  labels:
+    - bycoda-showcase

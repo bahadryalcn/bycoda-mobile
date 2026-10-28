@@ -26,7 +26,10 @@ const value: HostSession = {
   },
 };
 
-function client(handler: (method: string, params: Record<string, unknown>) => unknown) {
+function client(
+  handler: (method: string, params: Record<string, unknown>) => unknown,
+  assertAccess?: () => void,
+) {
   const calls: { method: string; params: Record<string, unknown> }[] = [];
   const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_address, init) => {
     const { method, params } = JSON.parse(String(init?.body)) as {
@@ -36,7 +39,7 @@ function client(handler: (method: string, params: Record<string, unknown>) => un
     calls.push({ method, params });
     return new Response(JSON.stringify({ result: handler(method, params) }), { status: 200 });
   });
-  const transport = new HostTransport(machine, async () => "a".repeat(43), fetcher);
+  const transport = new HostTransport(machine, async () => "a".repeat(43), fetcher, assertAccess);
   return { api: createRemoteApi(transport), transport, calls };
 }
 
@@ -75,6 +78,33 @@ describe("typed remote API", () => {
     await expect(
       resolveSessionSync(transport, "session-1", { kind: "chunked", transfer: "x", length: 10 }),
     ).rejects.toMatchObject({ kind: "protocol" });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("keeps an access change during cooperative decoding on the authentication error channel", async () => {
+    let allowed = true;
+    const json = JSON.stringify({
+      kind: "snapshot",
+      value: { ...value, text: "x".repeat(500_000) },
+    });
+    const { transport, calls } = client(
+      () => {
+        setTimeout(() => {
+          allowed = false;
+        }, 0);
+        return { data: json };
+      },
+      () => {
+        if (!allowed) throw new Error("Workspace locked.");
+      },
+    );
+    await expect(
+      resolveSessionSync(transport, "session-1", {
+        kind: "chunked",
+        transfer: "locked",
+        length: json.length,
+      }),
+    ).rejects.toMatchObject({ kind: "auth" });
     expect(calls).toHaveLength(1);
   });
 
@@ -125,7 +155,12 @@ describe("typed remote API", () => {
   });
 
   it("sends the opening draft snapshot after checking policy without authorizing delivery", async () => {
-    const draft = { id: "draft-1", accountId: "account-1", kind: "reply", text: "Original" } as SocialDraft;
+    const draft = {
+      id: "draft-1",
+      accountId: "account-1",
+      kind: "reply",
+      text: "Original",
+    } as SocialDraft;
     const { api, calls } = client((_method, params) => {
       if (params.action === "policy.get") {
         draft.text = "Changed while policy loads";
@@ -136,7 +171,9 @@ describe("typed remote API", () => {
     await api.social.updateDraft(draft, "Revised", []);
     expect(calls.map((call) => call.params.action)).toEqual(["policy.get", "drafts.update"]);
     expect(calls[1].params.input).toMatchObject({
-      id: "draft-1", text: "Revised", expectedDraft: { text: "Original" },
+      id: "draft-1",
+      text: "Revised",
+      expectedDraft: { text: "Original" },
     });
   });
 

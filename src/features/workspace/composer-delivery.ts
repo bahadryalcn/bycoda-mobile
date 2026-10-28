@@ -6,17 +6,34 @@ import type { QueuedMessage } from "../../../../src/features/sessions/model/sess
 import type { SharedQueue } from "../../../../src/features/connections/model/sharedQueue";
 import type { NoteComposerCard } from "../../../../src/features/notes/notes";
 import { readNoteContext } from "../../../../src/features/notes/noteContext";
+import { captureSessionAuthority } from "@/domain/session-authority";
 
 export type ComposerDelivery = "send" | "queue" | "steer";
+
+export function desktopOwnsTurn(session: Pick<HostSession, "executionOwner" | "runId">): boolean {
+  return (
+    session.executionOwner === "desktop" || (!session.executionOwner && session.runId === "desktop")
+  );
+}
 
 export const queuedDeliveryUnknown =
   "Delivery is unconfirmed. Review this message on the sending computer before resuming the queue.";
 
-export function validateNoteDelivery(noteCard: NoteComposerCard | undefined, mode: ComposerDelivery, text: string, supported: boolean) {
+export function validateNoteDelivery(
+  noteCard: NoteComposerCard | undefined,
+  mode: ComposerDelivery,
+  text: string,
+  supported: boolean,
+) {
   if (!noteCard) return;
-  if (!supported) throw new Error("Update bycoda on this computer to send note context. Your draft is preserved.");
+  if (!supported)
+    throw new Error(
+      "Update bycoda on this computer to send note context. Your draft is preserved.",
+    );
   if (mode !== "send" || /^\s*\/(?:plan|compact|build|clear|new)(?:\s|$)/i.test(text))
-    throw new Error("Note context requires Send without plan, compact or session commands. Change the delivery mode or remove the note.");
+    throw new Error(
+      "Note context requires Send without plan, compact or session commands. Change the delivery mode or remove the note.",
+    );
   readNoteContext(noteCard);
 }
 
@@ -30,10 +47,15 @@ export function composerCommand(
 ): Record<string, unknown> {
   validateNoteDelivery(noteCard, mode, text, true);
   if (mode === "steer") {
+    if (desktopOwnsTurn(session))
+      throw new Error(
+        "This turn is running in the desktop app. Steer it there or queue your message.",
+      );
     if (session.status !== "running" || !session.runId)
       throw new Error("Refresh the running turn before steering it.");
     return {
       type: "steer",
+      ...captureSessionAuthority(session),
       sessionId: session.session.id,
       runId: session.runId,
       text,
@@ -44,11 +66,12 @@ export function composerCommand(
     throw new Error("Wait for this turn, queue your message, or choose Steer.");
   if (/^\s*\/compact\s*$/.test(text)) {
     if (attachments.length) throw new Error("Remove attachments before compacting context.");
-    return { type: "compact", sessionId: session.session.id };
+    return { type: "compact", sessionId: session.session.id, ...captureSessionAuthority(session) };
   }
   const plan = /^\s*\/plan\s+\S/.test(text);
   return {
     type: "send",
+    ...captureSessionAuthority(session),
     sessionId: session.session.id,
     text: plan ? text.replace(/^\s*\/plan\s+/, "") : text,
     ...(plan ? { intent: "plan" } : {}),
@@ -68,6 +91,7 @@ export function queuedComposerMessage(
   const plan = /^\s*\/plan\s+\S/.test(text);
   return {
     id,
+    ...captureSessionAuthority(session),
     text: plan ? text.replace(/^\s*\/plan\s+/, "") : text,
     attachments,
     ...(plan ? { intent: "plan" as const } : {}),
@@ -116,6 +140,8 @@ export function queuedCommand(queue: SharedQueue, session: HostSession, clientId
     : { type: "send", sessionId: session.session.id, text: row.text, attachments: row.attachments };
   return {
     ...command,
+    // A queued row is an existing intent, including a captured legacy absence.
+    ...captureSessionAuthority(row),
     ...(row.intent ? { intent: row.intent } : {}),
     queued: { id: row.id, clientId, revision: queue.revision },
   };

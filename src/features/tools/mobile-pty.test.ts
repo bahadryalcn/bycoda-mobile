@@ -116,6 +116,7 @@ vi.mock("@/ui/primitives", () => {
     Body: box,
     Row: box,
     Stack: box,
+    Disclosure: box,
     Sheet: box,
     Button: button,
     NavigationRow: button,

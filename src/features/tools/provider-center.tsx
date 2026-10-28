@@ -69,7 +69,7 @@ export function ProviderCenter() {
       header={<View style={{ gap: space.sm }}>
         {!machine ? <Notice message={copy("Önce bir bilgisayar bağla", "Connect a computer first")} /> : !supported ? <Notice message={copy("Sağlayıcı merkezini açmak için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to open the provider center.")} /> : <QueryState query={query} />}
         <Notice message={copy("Başlatıcının bulunması, hesabın oturum açtığı anlamına gelmez. Hesap ve kimlik doğrulama yönetimi bilgisayarda kalır.", "Finding a launcher does not prove an account is signed in. Account and authentication management stay on the computer.")} />
-        <Button tone="quiet" label={copy("Yenile", "Refresh")} disabled={!supported || query.isFetching} onPress={() => { void query.refetch(); }} />
+        <Button busy={query.isFetching} tone="quiet" label={copy("Yenile", "Refresh")} disabled={!supported || query.isFetching} onPress={() => { void query.refetch(); }} />
         {report ? <ProviderLauncherRows providers={report.providers} /> : null}
         <Body>{copy("Yapılandırılmış ACP ajanları", "Configured ACP agents")}</Body>
         {report && !report.acp.agents.length ? <Body muted>{copy("Yapılandırılmış ACP ajanı yok.", "No configured ACP agents.")}</Body> : null}

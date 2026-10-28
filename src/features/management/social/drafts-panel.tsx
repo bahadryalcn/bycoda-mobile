@@ -1,16 +1,17 @@
 import { RecordCard } from "@/ui/record-card";
 import { MessageText } from "@/ui/message-text";
 import { socialLabel } from "./labels";
-import { PagedRows } from "../shared/paged-rows";
+import { CollectionRows } from "./collection-rows";
 import { ActionMenu, Sheet, Body, Button, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 
-import { Status } from "../shared/status";
+import { Status, statusLabel } from "../shared/status";
 import { canEditSocialDraft } from "../social-content";
 
 import { DraftEditor } from "./draft-editor";
 import type { DraftsPanelProps, SocialDraft } from "./types";
+import { CollectionSearch, useCollectionSearch } from "./collection-search";
 
 export function DraftsPanel({
   state,
@@ -20,8 +21,14 @@ export function DraftsPanel({
   dispatch,
   action,
   run,
+  page,
 }: DraftsPanelProps) {
   const copy = useCopy();
+  const collection = useCollectionSearch(page ? state.drafts : state.drafts.filter((draft) => !projectId || draft.projectId === projectId),
+    (draft) => [state.accounts.find((account) => account.id === draft.accountId)?.name ?? copy("Taslak", "Draft"),
+      socialLabel(draft.kind, copy), draft.text, draft.reviewReason,
+      draft.generation && statusLabel(draft.generation.status, copy),
+    ].filter(Boolean).join(" "), page);
   return (
     <>
       {selectedDraft && (
@@ -34,7 +41,7 @@ export function DraftsPanel({
           <DraftEditor
             key={selectedDraft.id}
             draft={selectedDraft}
-            thread={state.threads.find((thread) => thread.id === selectedDraft.threadId)}
+            thread={[...state.threads, ...(state.related?.threads ?? [])].find((thread) => thread.id === selectedDraft.threadId)}
             profile={state.profiles.find(
               (profile) => profile.projectId === selectedDraft.projectId,
             )}
@@ -42,9 +49,10 @@ export function DraftsPanel({
           />
         </Sheet>
       )}
-      <PagedRows
+      <CollectionSearch {...collection} />
+      <CollectionRows page={page}
         key={projectId ?? "all"}
-        items={state.drafts.filter((draft) => !projectId || draft.projectId === projectId)}
+        items={collection.visible}
         renderItem={(draft) => (
           <RecordCard
             key={draft.id}
@@ -64,6 +72,7 @@ export function DraftsPanel({
                       : copy("Taslağı onayla", "Approve draft")
                   }
                   tone={draft.approvedAt ? "quiet" : "primary"}
+                  busy={action.isPending && action.variables?.action === "drafts.approve" && (action.variables?.input as { id?: string } | undefined)?.id === draft.id}
                   disabled={
                     action.isPending ||
                     !!draft.reviewReason ||
@@ -89,6 +98,7 @@ export function DraftsPanel({
                 />
                 <Button
                   label={copy("Gönder", "Send")}
+                  busy={action.isPending && action.variables?.action === `${draft.kind === "reply" ? "replies" : draft.kind === "message" ? "messages" : "comments"}.send` && (action.variables?.input as { id?: string } | undefined)?.id === draft.id}
                   tone={draft.approvedAt ? "primary" : "quiet"}
                   disabled={
                     !draft.approvedAt || !state.sendingEnabled || state.stopped || action.isPending

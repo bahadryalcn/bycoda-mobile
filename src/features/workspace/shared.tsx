@@ -2,7 +2,7 @@ import { useCallback, type PropsWithChildren } from "react";
 import { View } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Crypto from "expo-crypto";
-import { hostKey, useHostClient } from "@/state/queries";
+import { useHostClient } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { Body, Button, Card, ErrorText, MutationState, Notice, Separator } from "@/ui/primitives";
 import { colors, radii, space } from "@/ui/tokens";
@@ -13,6 +13,7 @@ import { stamp } from "../management/shared/format";
 import type { CommandReceipt, HostSessionSummary } from "./wire";
 import { dispatchCommand, UncertainCommand } from "./commands";
 import { isProjectWorkspaceQuery } from "./project-cache";
+import { invalidateCommandQueries } from "./command-cache";
 import type { CommandInvocation, CommandErrorProps, CommandStatusCheck } from "./shared-types";
 export { UncertainCommand } from "./commands";
 export { SelectRow, ErrorText } from "@/ui/primitives";
@@ -42,8 +43,10 @@ export function sessionStatus(
   session: Pick<HostSessionSummary, "needsInput" | "status" | "pinned">,
   copy: CopyFn,
 ): SessionStatus {
-  if (session.needsInput) return { label: copy("Yanıt bekliyor", "Needs reply"), color: colors.warning };
-  if (session.status === "running") return { label: copy("Çalışıyor", "Running"), color: colors.live };
+  if (session.needsInput)
+    return { label: copy("Yanıt bekliyor", "Needs reply"), color: colors.warning };
+  if (session.status === "running")
+    return { label: copy("Çalışıyor", "Running"), color: colors.live };
   if (session.status === "interrupted")
     return { label: copy("Durduruldu", "Interrupted"), color: colors.muted };
   if (session.pinned) return { label: copy("Sabit", "Pinned"), color: colors.muted };
@@ -133,9 +136,7 @@ export function useCommands(invalidate: readonly unknown[] = []) {
       return dispatchCommand(invocation.client, invocation.commandId, invocation.params);
     },
     onSuccess: (_receipt, invocation) => {
-      void cache.invalidateQueries({
-        queryKey: hostKey(invocation.machineId, invocation.invalidate),
-      });
+      void invalidateCommandQueries(cache, invocation.machineId, invocation.invalidate);
     },
   });
   const mutateAsync = useCallback(
@@ -143,7 +144,7 @@ export function useCommands(invalidate: readonly unknown[] = []) {
       mutation.mutateAsync({
         client,
         machineId: machine?.id ?? null,
-        params,
+        params: { ...params },
         commandId: Crypto.randomUUID(),
         invalidate: [...invalidate],
       }),
@@ -186,12 +187,14 @@ export function CommandError({ error, onRecovered, onDismiss }: CommandErrorProp
       <View style={workspaceStyles.stack}>
         <ErrorText
           error={error}
-          message={error instanceof UncertainCommand
-            ? copy(
-                "Bağlantı kesildi. Yeniden denemeden önce bilgisayarın komutu alıp almadığını kontrol et.",
-                "Connection interrupted. Check whether the computer accepted this command before trying again.",
-              )
-            : undefined}
+          message={
+            error instanceof UncertainCommand
+              ? copy(
+                  "Bağlantı kesildi. Yeniden denemeden önce bilgisayarın komutu alıp almadığını kontrol et.",
+                  "Connection interrupted. Check whether the computer accepted this command before trying again.",
+                )
+              : undefined
+          }
         />
         {error instanceof UncertainCommand && client ? (
           <Button

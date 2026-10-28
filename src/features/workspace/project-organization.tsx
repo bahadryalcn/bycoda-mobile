@@ -85,6 +85,7 @@ export function ProjectOrganization({
   const [snapshot, setSnapshot] = useState<OrganizationSnapshot | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState("primary");
   const occupied = useRef(false);
   const [editor, setEditor] = useState<Editor | null>(null);
   const form = useFormDraft(empty);
@@ -175,9 +176,10 @@ export function ProjectOrganization({
       : null;
   const status = supported ? (receipt ?? statusQuery.data) : undefined;
   const disabled = !visible || loading || busy || !!attempt;
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async (action: () => Promise<unknown>, actionKey = "primary") => {
     if (occupied.current || !supported) return;
     occupied.current = true;
+    setPendingAction(actionKey);
     setBusy(true);
     setError(null);
     try {
@@ -365,7 +367,7 @@ export function ProjectOrganization({
                             )
                     }
                   />
-                  <Button
+                  <Button busy={busy && pendingAction === "secondary-1"}
                     tone="quiet"
                     label={copy("İşlem durumunu kontrol et", "Check operation status")}
                     disabled={!supported || busy || statusQuery.isFetching}
@@ -377,11 +379,11 @@ export function ProjectOrganization({
                           setReceipt(result.data);
                           if (result.data.snapshot) setSnapshot(result.data.snapshot);
                         }
-                      });
+                      }, "secondary-1");
                     }}
                   />
                   {status?.state === "applied" || status?.state === "failed" ? (
-                    <Button
+                    <Button busy={busy && pendingAction === "secondary-2"}
                       tone="quiet"
                       label={copy(
                         "Güncel durumu inceleyip devam et",
@@ -399,7 +401,7 @@ export function ProjectOrganization({
                           setSnapshot(result.data);
                           setEditor(null);
                           form.reset(empty());
-                        });
+                        }, "secondary-2");
                       }}
                     />
                   ) : null}
@@ -484,7 +486,7 @@ export function ProjectOrganization({
                   ) : null}
                 </>
               ) : null}
-              <Button
+              <Button busy={busy && pendingAction === "secondary-3"}
                 tone="quiet"
                 label={copy("Organizasyonu yenile", "Refresh organization")}
                 disabled={!supported || busy || !!attempt || !!editor || query.isFetching}
@@ -493,7 +495,7 @@ export function ProjectOrganization({
                     const result = await query.refetch();
                     if (result.error) throw result.error;
                     if (result.data) setSnapshot(result.data);
-                  });
+                  }, "secondary-3");
                 }}
               />
             </Stack>
@@ -549,7 +551,7 @@ export function ProjectOrganization({
             <FormActions
               submitLabel={copy("Sıralamayı kaydet", "Save order")}
               disabled={disabled || !form.dirty}
-              busy={busy}
+              busy={busy && pendingAction === "primary"}
               onSubmit={submit}
             />
           </>
@@ -668,7 +670,7 @@ export function ProjectOrganization({
               <FormActions
                 submitLabel={copy("Organizasyon değişikliğini kaydet", "Save organization change")}
                 disabled={disabled || !form.dirty}
-                busy={busy}
+                busy={busy && pendingAction === "primary"}
                 onSubmit={submit}
               />
             ) : null}

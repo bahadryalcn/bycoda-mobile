@@ -48,10 +48,11 @@ export function QueryState({
           "Bilgiler yenilenemedi. Son alınan bilgiler gösteriliyor.",
           "Could not refresh. Showing the last received information.",
         )}
+        retrying={query.isFetching}
         onRetry={
           query.refetch
             ? () => {
-                query.refetch?.();
+                if (!query.isFetching) void query.refetch?.();
               }
             : undefined
         }
@@ -63,10 +64,11 @@ export function QueryState({
     return (
       <ErrorNotice
         error={query.error}
+        retrying={query.isFetching}
         onRetry={
           !repair && kind !== "unsupported" && query.refetch
             ? () => {
-                query.refetch?.();
+                if (!query.isFetching) void query.refetch?.();
               }
             : undefined
         }

@@ -72,6 +72,7 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
   const editing = mode === "edit" || (mode === "default" && !!draft.value && dirty);
   const [confirmation, setConfirmation] = useState<FileEditorConfirmation>(null);
   const transition = useAsyncAction<void>();
+  const [discarding, setDiscarding] = useState(false);
   const navigation = useNavigation();
   const persist = draft.persist;
   useEffect(() => {
@@ -162,8 +163,9 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
             onCancel={() => setConfirmation(null)}
             confirmLabel={copy("Taslağı koruyarak dön", "Back, keep draft")}
             tone="default"
-            busy={transition.isPending}
+            busy={transition.isPending && !discarding}
             onConfirm={() => {
+              setDiscarding(false);
               void transition.run(async () => {
                 await persist();
                 leaveEditor();
@@ -171,10 +173,12 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
             }}
             additionalActions={
               <Button
+                busy={transition.isPending && discarding}
                 label={copy("Değişiklikleri bırak", "Discard edits")}
                 tone="danger"
                 disabled={transition.isPending || save.isPending}
                 onPress={() => {
+                  setDiscarding(true);
                   void transition.run(async () => {
                     await persist(null);
                     draft.setValue(null);

@@ -17,9 +17,11 @@ import { colors, metrics, opacity, radii, semanticColors, space } from "./tokens
 import { uiStyles } from "./styles";
 import { filterSelection, selectionLabels, toggleSelection, type SelectionOption } from "./selection-model";
 
+type SelectionFieldOption<T extends string> = SelectionOption<T> & { icon?: ReactNode };
+
 type CommonProps<T extends string> = {
   label: string;
-  options: readonly SelectionOption<T>[];
+  options: readonly SelectionFieldOption<T>[];
   disabled?: boolean;
   placeholder?: string;
   hideLabel?: boolean;
@@ -82,6 +84,9 @@ function SelectionField<T extends string>({
     [options],
   );
   const labels = selectionLabels(values, optionLabels);
+  const selectedIcon = values.length === 1
+    ? options.find((option) => option.value === values[0])?.icon
+    : undefined;
   const limit = Math.max(1, summaryLimit);
   const summary = labels.length
     ? `${labels.slice(0, limit).join(", ")}${labels.length > limit ? ` +${labels.length - limit}` : ""}`
@@ -121,9 +126,10 @@ function SelectionField<T extends string>({
           <Body selectable={false} numberOfLines={1} style={[uiStyles.label, uiStyles.grow]}>
             {label}
           </Body>
-          <Body selectable={false} numberOfLines={1} muted style={{ flexShrink: 1, maxWidth: "55%" }}>
-            {summary}
-          </Body>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexShrink: 1, maxWidth: "55%" }}>
+            <SelectionIcon>{selectedIcon}</SelectionIcon>
+            <Body selectable={false} numberOfLines={1} muted style={{ flexShrink: 1 }}>{summary}</Body>
+          </View>
           <ChevronsUpDown size={15} strokeWidth={2.2} color={colors.tertiary} />
         </Pressable>
       ) : (
@@ -158,6 +164,7 @@ function SelectionField<T extends string>({
           },
         ]}
       >
+        <SelectionIcon>{selectedIcon}</SelectionIcon>
         <Body selectable={false} muted={!labels.length} style={uiStyles.grow}>
           {summary}
         </Body>
@@ -319,6 +326,7 @@ function SelectionField<T extends string>({
                     opacity: off ? opacity.disabled : 1,
                   })}
                 >
+                  <SelectionIcon>{item.icon}</SelectionIcon>
                   <View style={[uiStyles.grow, { gap: 2 }]}>
                     <Body
                       style={selected ? { color: colors.accent, fontWeight: "600" } : undefined}
@@ -348,4 +356,10 @@ function SelectionField<T extends string>({
       </Sheet>
     </View>
   );
+}
+
+function SelectionIcon({ children }: { children?: ReactNode }) {
+  if (!children) return null;
+  return <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+    style={{ flexShrink: 0, alignItems: "center", justifyContent: "center" }}>{children}</View>;
 }

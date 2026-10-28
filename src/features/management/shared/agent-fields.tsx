@@ -1,17 +1,21 @@
 import { useCopy } from "@/ui/copy";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { ErrorText } from "@/ui/primitives";
-import { Body, Disclosure, Field, IdentifierField, QueryState, SelectField } from "@/ui/primitives";
+import { Body, Button, Disclosure, Field, IdentifierField, NavigationRow, QueryState, ScreenList, SearchField, SelectField, Sheet } from "@/ui/primitives";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import type { HostModelCatalog } from "@/domain/types";
-import { effectiveAgentModel } from "../agent-model";
 import type { AgentFieldsProps } from "./types";
+import { providerSelectionOption } from "@/ui/provider-identity";
+import { agentModelChoices, selectAgentModel, selectAgentProvider } from "./agent-model-selection";
 
 export function AgentFields({ value, onChange, projectId, disabled, onValidityChange, showRunLimit = true }: AgentFieldsProps) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const [minutes, setMinutes] = useState(String(value.maxRunMinutes));
+  const modelInput = useRef<ComponentRef<typeof IdentifierField>>(null);
+  const [choosingModel, setChoosingModel] = useState(false);
+  const [modelSearch, setModelSearch] = useState("");
   const minutesValid = /^\d+$/.test(minutes) && Number(minutes) <= 10080;
   useEffect(() => { onValidityChange?.(minutesValid); }, [minutesValid, onValidityChange]);
   const models = useHostQuery<HostModelCatalog>(
@@ -21,20 +25,17 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
     { enabled: !!projectId },
   );
   const available = models.data?.models[value.harness] ?? [];
-  const effectiveModel = effectiveAgentModel(value.model, value.harness, models.data);
+  const choices = agentModelChoices(models.data, value.harness, modelSearch);
   return (
     <>
       <SelectField
         label={copy("Ajan", "Agent")}
         value={value.harness}
-        options={(machine?.providers ?? []).map((provider) => ({
-          value: provider,
-          label: provider,
-        }))}
+        options={(machine?.providers ?? []).map(providerSelectionOption)}
         disabled={disabled}
         onChange={(harness) => {
           if (harness !== value.harness)
-            onChange({ ...value, harness, providerAccountId: undefined, model: models.data?.models[harness]?.[0]?.id ?? "" });
+            onChange(selectAgentProvider(value, harness, models.data));
         }}
       />
       {!machine?.providers?.length && (
@@ -45,24 +46,37 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
           )}
         </Body>
       )}
-      {available.length ? (
-        <SelectField
+      <IdentifierField
+          ref={modelInput}
           label={copy("Model", "Model")}
-          value={effectiveModel}
-          options={available.map((model) => ({ value: model.id, label: model.name ?? model.id }))}
-          disabled={disabled}
-          onChange={(model) => onChange({ ...value, model })}
-        />
-      ) : (
-        <IdentifierField
-          label={copy("Model", "Model")}
-          value={effectiveModel}
-          onChangeText={(model) => onChange({ ...value, model })}
+          value={value.model}
+          onChangeText={(model) => onChange(selectAgentModel(value, model, models.data))}
           editable={!disabled}
           placeholder={copy("Bilgisayardaki model kimliği", "Model ID on the computer")}
+          hint={copy("Model kimliği girin veya katalogdan seçin. Özel model kimlikleri kullanılabilir.", "Enter a model ID or choose from the catalogue. Custom model IDs are supported.")}
         />
-      )}
-      <Disclosure label={copy("Gelişmiş seçenekler", "Advanced options")}>
+      <Button
+        tone="quiet"
+        label={copy("Katalogdan seç", "Choose from catalogue")}
+        disabled={disabled || !available.length}
+        onPress={() => { setModelSearch(""); setChoosingModel(true); }}
+      />
+      <Sheet visible={choosingModel} title={copy("Model seç", "Choose model")} size="full" scroll={false}
+        onClose={() => setChoosingModel(false)} returnFocusRef={modelInput}>
+        <ScreenList
+          data={choices}
+          keyExtractor={(item) => item.value}
+          header={<SearchField label={copy("Model ara", "Search models")} value={modelSearch} onChangeText={setModelSearch} />}
+          ListEmptyComponent={<Body muted>{copy("Eşleşen model yok. Model kimliğini doğrudan girmek için bu listeyi kapatın.", "No matching models. Close this list to enter a model ID directly.")}</Body>}
+          renderItem={({ item }) => <NavigationRow label={item.label} detail={item.detail} selected={value.model === item.value}
+            disabled={disabled} onPress={() => {
+              if (disabled) return;
+              onChange(selectAgentModel(value, item.value, models.data));
+              setChoosingModel(false);
+            }} />}
+        />
+      </Sheet>
+      <Disclosure label={copy("Ajan ayarları", "Agent settings")}>
         <SelectField
           label={copy("İzinler", "Permissions")}
           value={value.runtimeMode}

@@ -2,6 +2,7 @@ import { ActivityBadge } from "@/ui/activity-badge";
 import { isRunningSession } from "./activity-model";
 import { router, Stack } from "expo-router";
 import { useState } from "react";
+import { useAsyncAction } from "@/state/actions";
 import { View } from "react-native";
 import Plus from "lucide-react-native/icons/plus";
 import { FilterButton, FilterSheet } from "@/ui/filter-sheet";
@@ -49,6 +50,8 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
   const storageError = useMachines((state) => state.storageError);
   const connectionPending = useMachines((state) => state.connectionPending);
   const activity = useProjectActivity();
+  const retry = useAsyncAction();
+  const retryActivity = () => { void retry.run(() => activity.refetch()); };
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [archived, setArchived] = useState(false);
@@ -132,7 +135,6 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
       grouped
       keyExtractor={(row) => row.key}
       title={title}
-      subtitle={machine.name}
       actions={actions}
       refresh={activity.refetch}
       query={{ ...activity.projects, isFetching: activity.refreshing, isPending: activity.pending }}
@@ -171,7 +173,8 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
               data: directory.length ? directory : undefined,
               isPending: activity.pending,
               error: activity.error,
-              refetch: activity.refetch,
+              isFetching: retry.isPending,
+              refetch: retryActivity,
             }}
             loading="list"
             loadingLabel={copy("Oturumlar yükleniyor…", "Loading sessions…")}
@@ -183,9 +186,8 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
                 "Oturumları görmek için bilgisayarda bycoda’yı aç ve proje listesini eşitle.",
                 "Open bycoda on the computer and sync the project directory to see sessions.",
               )}
-              onRetry={() => {
-                void activity.refetch();
-              }}
+              retrying={retry.isPending}
+              onRetry={retryActivity}
             />
           ) : activity.readiness === "waiting" ? (
             <Notice message={copy("Bağlantı bekleniyor.", "Waiting for a connection.")}
@@ -197,9 +199,8 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
                 "Bazı projelerin oturumları henüz alınamadı.",
                 "Sessions from some projects are not available yet.",
               )}
-              onRetry={() => {
-                void activity.refetch();
-              }}
+              retrying={retry.isPending}
+              onRetry={retryActivity}
             />
           ) : null}
           {activity.directoryReady && activity.complete && !visible.length ? (
@@ -275,8 +276,9 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
             <NavigationRow
               variant="plain"
               label={session.title || copy("Yeni oturum", "New session")}
-              detail={[status.label, !overview ? project.name : undefined, session.harness, session.branch || session.model].filter(Boolean).join(" · ")}
-              icon={<ProjectIcon appearance={project.appearance} />}
+              accessibilityLabel={[session.title || copy("Yeni oturum", "New session"), status.label, !overview ? project.name : undefined, session.harness, session.branch || session.model, relativeTime(session.updatedAt, copy)].filter(Boolean).join(". ")}
+              detail={[isRunningSession(session) && !session.needsInput ? undefined : status.label, !overview ? project.name : undefined, session.harness, session.branch || session.model].filter(Boolean).join(" · ")}
+              icon={!overview ? <ProjectIcon appearance={project.appearance} /> : undefined}
               trailing={
                 <View style={{ alignItems: "flex-end", gap: space.xs }}>
                   {isRunningSession(session) ? <ActivityBadge /> : null}

@@ -1,6 +1,13 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { useIsFocused } from "expo-router/react-navigation";
-import { focusManager, onlineManager, useMutation, useQuery, useQueryClient, type MutateOptions } from "@tanstack/react-query";
+import {
+  focusManager,
+  onlineManager,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type MutateOptions,
+} from "@tanstack/react-query";
 import { HostTransport } from "../remote/transport";
 import { credentials, useActiveMachine, useMachines } from "./machines";
 import { assertAppAccess, useSecurity } from "./security";
@@ -19,19 +26,26 @@ import {
 
 import { attachmentReleases } from "../features/workspace/attachment-ownership";
 import { usePrivateContentAccess } from "../ui/private-access";
+import { getHostWsRuntimeProvider, observeHostWsRuntimeProvider } from "../remote/ws-runtime-port";
+import { selectMobileHostTransport } from "../remote/lan-ws";
 
 export { hostKey } from "./host-request";
 /** Stack routes stay mounted. Only the visible foreground route should refresh host data. */
 export function useHostReadActive() {
   const privateAccess = usePrivateContentAccess();
   const focused = useIsFocused();
-  const available = useSecurity((state) =>
-    state.status === "unlocked" && state.appState === "active" && state.windowFocused,
+  const available = useSecurity(
+    (state) => state.status === "unlocked" && state.appState === "active" && state.windowFocused,
   );
   return focused && available && privateAccess.allowed && privateAccess.check();
 }
 
 export function useHostClient() {
+  const socketProvider = useSyncExternalStore(
+    observeHostWsRuntimeProvider,
+    getHostWsRuntimeProvider,
+    getHostWsRuntimeProvider,
+  );
   const privateAccess = usePrivateContentAccess();
   const machine = useActiveMachine();
   const unlocked = useSecurity((s) => s.status === "unlocked");
@@ -39,10 +53,36 @@ export function useHostClient() {
   const scope = machine ? consentScope(machine.environmentId, machine.providers ?? []) : "";
   const consented = useProviderPermission((state) => state.scopes[scope] === true);
   const client = useMemo(() => {
-    if (!machine || !unlocked || !ready || !consented || !privateAccess.allowed || !privateAccess.check()) return null;
+    if (
+      !machine ||
+      !unlocked ||
+      !ready ||
+      !consented ||
+      !privateAccess.allowed ||
+      !privateAccess.check()
+    )
+      return null;
+    if (
+      process.env.EXPO_OS !== "web" &&
+      selectMobileHostTransport(machine.capabilities ?? [], true) === "native-wss" &&
+      !socketProvider
+    )
+      return null;
     const assertAccess = () => {
       assertAppAccess();
       if (!privateAccess.check()) throw new Error("This private workspace is no longer available.");
+      const state = useMachines.getState();
+      const current = state.machines?.find((value) => value.id === machine.id);
+      if (
+        state.storageError ||
+        !state.hydrated ||
+        state.connectionPending ||
+        (current &&
+          (current.endpoint !== machine.endpoint ||
+            current.environmentId !== machine.environmentId ||
+            current.lanKey !== machine.lanKey))
+      )
+        throw new Error("This computer connection changed. Reopen its current route.");
       assertProviderPermission(
         useMachines.getState().machines.find((value) => value.id === machine.id),
       );
@@ -64,7 +104,13 @@ export function useHostClient() {
     scope,
     privateAccess,
     machine?.capabilities,
+    socketProvider,
   ]);
+  useEffect(() => {
+    if (!client) return;
+    void client.prepare?.().catch(() => undefined);
+    return () => client.dispose?.();
+  }, [client]);
   return client;
 }
 
@@ -75,20 +121,36 @@ export function useAttachmentReleaseRetry() {
     if (!client) return;
     const flush = () => {
       const access = useSecurity.getState();
-      if (focusManager.isFocused() && access.status === "unlocked" && access.appState === "active" && access.windowFocused)
+      if (
+        focusManager.isFocused() &&
+        access.status === "unlocked" &&
+        access.appState === "active" &&
+        access.windowFocused
+      )
         void attachmentReleases.flush(client).catch(() => {});
     };
     flush();
-    const online = onlineManager.subscribe((connected) => { if (connected) flush(); });
-    const focus = focusManager.subscribe((focused) => { if (focused) flush(); });
-    return () => { online(); focus(); };
+    const online = onlineManager.subscribe((connected) => {
+      if (connected) flush();
+    });
+    const focus = focusManager.subscribe((focused) => {
+      if (focused) flush();
+    });
+    return () => {
+      online();
+      focus();
+    };
   }, [client]);
 }
 export function useHostQuery<T>(
   key: readonly unknown[],
   method: string,
   params: Record<string, unknown> = {},
-  options: { enabled?: boolean; interval?: number | ((data: T | undefined) => number | false); queryFn?: (client: HostTransport, signal: AbortSignal) => Promise<T> } = {},
+  options: {
+    enabled?: boolean;
+    interval?: number | ((data: T | undefined) => number | false);
+    queryFn?: (client: HostTransport, signal: AbortSignal) => Promise<T>;
+  } = {},
 ) {
   const machine = useActiveMachine();
   const client = useHostClient();
@@ -98,27 +160,38 @@ export function useHostQuery<T>(
     queryKey: hostKey(machine?.id ?? null, [...key, { method, params }]),
     queryFn: ({ signal }) => {
       if (!client) throw new Error("Choose a computer first.");
-      return options.queryFn ? options.queryFn(client, signal) : client.request<T>(method, params, { signal });
+      return options.queryFn
+        ? options.queryFn(client, signal)
+        : client.request<T>(method, params, { signal });
     },
     enabled: !!client && active && options.enabled !== false,
     staleTime: 4000,
     retry: false,
     // Hosts can be reachable on a LAN without internet connectivity.
     networkMode: "always",
-    refetchInterval: typeof interval === "function"
-      ? (query) => query.state.status === "error" ? false : interval(query.state.data)
-      : interval ?? false,
+    refetchInterval:
+      typeof interval === "function"
+        ? (query) => (query.state.status === "error" ? false : interval(query.state.data))
+        : (interval ?? false),
     refetchIntervalInBackground: false,
   });
   const kind = (query.error as { kind?: string } | null)?.kind;
   if (query.isError && (kind === "auth" || kind === "identity")) {
     // A transient refresh failure may retain content; lost authorization or a
     // changed computer identity must not continue exposing cached host data.
-    return { ...query, data: undefined, isLoadingError: true as const, isRefetchError: false as const };
+    return {
+      ...query,
+      data: undefined,
+      isLoadingError: true as const,
+      isRefetchError: false as const,
+    };
   }
   return query;
 }
-export function useHostMutation<T = unknown>(method: string, invalidate: readonly unknown[] = []) {
+export function useHostMutation<T = unknown>(
+  method: string,
+  invalidate: readonly unknown[] | null = [],
+) {
   const machine = useActiveMachine();
   const client = useHostClient();
   const cache = useQueryClient();

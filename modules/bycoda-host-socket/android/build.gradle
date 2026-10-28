@@ -1,0 +1,15 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'com.bycoda'
+version = '1.0.0'
+android {
+  namespace 'expo.modules.bycodahostsocket'
+  sourceSets { test { resources.srcDirs += '../fixtures' } }
+}
+dependencies {
+  implementation project(':expo-secure-store')
+  implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+  testImplementation 'junit:junit:4.13.2'
+}

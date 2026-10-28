@@ -53,7 +53,7 @@ export function GitSelective({ scope, path, visible, busy: parentBusy, onBusyCha
         {!supported ? <Notice message={copy("Güvenli satır seçimi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer for safe line selection.")} /> : <QueryState query={query} />}
         <ErrorText error={error} />
         {sent ? <Notice tone={done ? "success" : "warning"} message={done ? copy("Seçili değişiklikler stage’e alındı.", "Selected changes were staged.") : copy("İşlem gönderildi. Tekrar göndermeden Git durumunu yenileyip incele.", "The action was sent. Refresh and review Git state before sending again.")} /> : null}
-        <Button tone="quiet" label={copy("Güncel diff’i incele", "Review current diff")} disabled={busy || !supported || query.isFetching || !current()} onPress={() => { void query.refetch().then((result) => { if (result.data && !result.error) { setReview(result.data); setSelected(new Set()); if (done) { submitted.current = false; setSent(false); setDone(false); } } }); }} />
+        <Button busy={query.isFetching} tone="quiet" label={copy("Güncel diff’i incele", "Review current diff")} disabled={busy || !supported || query.isFetching || !current()} onPress={() => { void query.refetch().then((result) => { if (result.data && !result.error) { setReview(result.data); setSelected(new Set()); if (done) { submitted.current = false; setSent(false); setDone(false); } } }); }} />
       </View>} renderItem={({ item }) => <GitSelectiveItem item={item} selected={selected} disabled={disabled} onToggle={toggle} />} />
   </Sheet>;
 }

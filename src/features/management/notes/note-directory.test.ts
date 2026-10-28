@@ -17,3 +17,16 @@ it("orders by content time, not concurrency updates, and searches full project p
   expect(noteDirectory(source, "", "none", "title").map((row) => row.kind === "note" && row.note.id)).toEqual(["Note 2", "Note 10"]);
   expect(noteDirectory(source, "hidden/path", "none", "created")).toHaveLength(1);
 });
+
+it("searches the available body preview with the explicit app locale", () => {
+  const source = [note("other", { body: "İZMİR\n  tasarım incelemesi" }), note("unrelated")];
+  expect(noteDirectory(source, "izmir tasarım", "none", "title", "tr").map((row) => row.kind === "note" && row.note.id)).toEqual(["other"]);
+  expect(noteDirectory(source, "missing", "none", "title", "tr")).toEqual([]);
+  expect(source[0].body).toBe("İZMİR\n  tasarım incelemesi");
+});
+
+it("sorts titles and group labels by the app locale", () => {
+  const source = [note("dotted", { title: "İ", tags: ["İ"] }), note("dotless", { title: "I", tags: ["I"] })];
+  expect(noteDirectory(source, "", "none", "title", "tr").map((row) => row.kind === "note" && row.note.id)).toEqual(["dotless", "dotted"]);
+  expect(noteDirectory(source, "", "tag", "title", "tr").filter((row) => row.kind === "heading").map((row) => row.group)).toEqual(["I", "İ"]);
+});

@@ -1,12 +1,147 @@
 import { HostTransport, RemoteHostError } from "./transport";
+import { assertDecodeCurrent, parseJsonParts } from "@/state/cooperative-json";
 import type {
+  HostSession,
+  HostSessionSummary,
   RemoteRequestOptions,
   SessionSync,
   SessionSyncChunk,
   SessionSyncResponse,
 } from "./types";
+import {
+  SessionViewSchema,
+  SessionSyncSchema,
+  SessionsListResultSchema,
+  SessionProviderSchema,
+  SessionRuntimeModeSchema,
+  type SubscriptionEvent,
+} from "../../../src/shared/model/host-contracts";
+import { applySessionSync } from "../../../src/features/connections/model/protocol";
+import type { MobileStreamSubscription } from "./host-transport";
+import { retainSessionAuthority } from "@/domain/session-authority";
 
 const MAX_TRANSFER_UNITS = 32 * 1024 * 1024;
+
+function requireSessionRead(value: unknown, sessionId: string, projectId: string): HostSession {
+  const parsed = SessionViewSchema.parse(value);
+  const session = parsed.session;
+  if (
+    parsed.projectId !== projectId ||
+    session.id !== sessionId ||
+    !Array.isArray(session.blocks) ||
+    typeof session.title !== "string" ||
+    typeof session.cwd !== "string" ||
+    typeof session.model !== "string" ||
+    !SessionProviderSchema.safeParse(session.harness).success ||
+    !SessionRuntimeModeSchema.safeParse(session.runtimeMode).success ||
+    !session.modelSettings ||
+    typeof session.modelSettings !== "object" ||
+    Array.isArray(session.modelSettings) ||
+    Object.values(session.modelSettings).some((value) => typeof value !== "string") ||
+    session.blocks.some(
+      (block) =>
+        !block ||
+        typeof block !== "object" ||
+        Array.isArray(block) ||
+        typeof block.id !== "string" ||
+        typeof block.role !== "string" ||
+        typeof block.text !== "string",
+    )
+  )
+    throw new Error("Transcript stream identity or read fields changed.");
+  // Inner feature extensions remain the explicitly opaque read boundary. This
+  // checks required UI fields, not a claim that every Block DTO has migrated.
+  return parsed as unknown as HostSession;
+}
+
+/** Pure revision fence used by the live adapter and golden behavior tests. */
+export function sessionStreamValue(
+  event: SubscriptionEvent,
+  known: HostSession | undefined,
+  sessionId: string,
+  projectId: string,
+): HostSession | "resync" {
+  let next: HostSession;
+  if (event.params.kind === "snapshot")
+    next = requireSessionRead(event.params.data, sessionId, projectId);
+  else if (event.params.kind === "delta") {
+    const sync = SessionSyncSchema.parse(event.params.data);
+    if (sync.kind !== "delta" || !known || sync.base !== known.revision) return "resync";
+    if (event.params.baseRevision !== undefined && event.params.baseRevision !== sync.base)
+      throw new Error("Transcript delta base changed.");
+    requireSessionRead(
+      { ...sync.value, session: { ...sync.value.session, blocks: sync.blocks } },
+      sessionId,
+      projectId,
+    );
+    try {
+      next = applySessionSync(known, sync as unknown as SessionSync);
+    } catch {
+      return "resync";
+    }
+  } else return "resync";
+  if (event.params.revision !== undefined && event.params.revision !== next.revision)
+    throw new Error("Transcript stream revision changed.");
+  return known && next.revision < known.revision ? known : retainSessionAuthority(known, next);
+}
+
+export function watchSessionStream(
+  transport: HostTransport,
+  options: {
+    sessionId: string;
+    projectId: string;
+    known(): HostSession | undefined;
+    apply(value: HostSession, assertCurrent: () => void): Promise<void>;
+    onError?(error: Error): void;
+  },
+): Promise<MobileStreamSubscription> {
+  return transport.observeStream(
+    { kind: "session", sessionId: options.sessionId },
+    async (event, assertCurrent) => {
+      assertCurrent();
+      const value = sessionStreamValue(
+        event,
+        options.known(),
+        options.sessionId,
+        options.projectId,
+      );
+      if (value === "resync") return "resync";
+      await options.apply(value, assertCurrent);
+      assertCurrent();
+      return true;
+    },
+    options.onError,
+  );
+}
+
+export function watchProjectStream(
+  transport: HostTransport,
+  projectId: string,
+  apply: (
+    value: { etag: string; sessions: HostSessionSummary[] },
+    assertCurrent: () => void,
+  ) => Promise<void>,
+  onError?: (error: Error) => void,
+): Promise<MobileStreamSubscription> {
+  return transport.observeStream(
+    { kind: "project", projectId },
+    async (event, assertCurrent) => {
+      assertCurrent();
+      if (event.params.kind !== "snapshot") return "resync";
+      const parsed = SessionsListResultSchema.parse(event.params.data);
+      if (
+        Array.isArray(parsed) ||
+        !("sessions" in parsed) ||
+        parsed.sessions.some((session) => session.projectId !== projectId)
+      )
+        throw new Error("Project stream identity changed.");
+      await apply(parsed as { etag: string; sessions: HostSessionSummary[] }, assertCurrent);
+      assertCurrent();
+      return true;
+    },
+    onError,
+  );
+}
 
 /** Resolve a pinned revision in bounded pieces; never silently truncate history. */
 export async function resolveSessionSync(
@@ -57,9 +192,11 @@ export async function resolveSessionSync(
     offset += chunk.data.length;
   }
   let parsed: SessionSyncResponse;
+  const decodeOptions = { ...options, assertCurrent: () => transport.assertCurrentAccess() };
   try {
-    parsed = JSON.parse(parts.join("")) as SessionSyncResponse;
-  } catch {
+    parsed = (await parseJsonParts(parts, decodeOptions)) as SessionSyncResponse;
+  } catch (error) {
+    if (options.signal?.aborted || error instanceof RemoteHostError) throw error;
     throw new RemoteHostError(
       transport.machine.id,
       "protocol",
@@ -76,5 +213,6 @@ export async function resolveSessionSync(
       "protocol",
       "Invalid transcript transfer. Reload the session.",
     );
+  assertDecodeCurrent(decodeOptions);
   return parsed as SessionSync;
 }

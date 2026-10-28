@@ -54,7 +54,7 @@ export function RecordCard({
                 {status || metadata ? (
                   <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }}>
                     {status}
-                    {metadata ? <Body muted selectable={false} style={uiStyles.caption}>{metadata}</Body> : null}
+                    {metadata ? <Body muted selectable={false} style={[uiStyles.caption, { maxWidth: "100%" }]}>{metadata}</Body> : null}
                   </View>
                 ) : null}
               </View>

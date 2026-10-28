@@ -1,12 +1,14 @@
 import { socialLabel } from "./labels";
 import { RecordCard } from "@/ui/record-card";
-import { PagedRows } from "../shared/paged-rows";
+import { CollectionRows } from "./collection-rows";
 import { NavigationGroup, SelectField, Sheet, Body, Button, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 
 import { RuleEditor } from "./rule-editor";
 import type { RulesPanelProps } from "./types";
+import { accountIdentity } from "./review-presentation";
+import { CollectionSearch, useCollectionSearch } from "./collection-search";
 
 export function RulesPanel({
   state,
@@ -17,8 +19,14 @@ export function RulesPanel({
   dispatch,
   action,
   run,
+  page,
 }: RulesPanelProps) {
   const copy = useCopy();
+  const collection = useCollectionSearch(page ? state.rules : state.rules.filter((rule) => !projectId || rule.projectId === projectId),
+    (rule) => [rule.name, accountIdentity(state.accounts, rule.accountId), rule.projectId,
+      socialLabel(rule.mode, copy), socialLabel(rule.trigger, copy), `${rule.dailyLimit} ${copy("/ gün", "/ day")}`,
+      rule.topics.join(" "), rule.pausedReason,
+    ].filter(Boolean).join(" "), page);
   return (
     <>
       {projectId && (
@@ -44,10 +52,10 @@ export function RulesPanel({
         />
         </Sheet>
       )}
-      <PagedRows key={projectId ?? "all"} items={state.rules
-        .filter((rule) => !projectId || rule.projectId === projectId)} renderItem={(rule) => (
+      <CollectionSearch {...collection} />
+      <CollectionRows page={page} key={projectId ?? "all"} items={collection.visible} renderItem={(rule) => (
           <RecordCard key={rule.id} title={rule.name}
-            metadata={`${socialLabel(rule.mode, copy)} · ${socialLabel(rule.trigger, copy)} · ${rule.dailyLimit} ${copy("/ gün", "/ day")}`}
+            metadata={`${accountIdentity(state.accounts, rule.accountId)} · ${copy("Proje", "Project")}: ${rule.projectId} · ${socialLabel(rule.mode, copy)} · ${socialLabel(rule.trigger, copy)} · ${rule.dailyLimit} ${copy("/ gün", "/ day")}`}
       footer={
             <Row>
               <Button
@@ -59,7 +67,7 @@ export function RulesPanel({
                     ? run("automations.pause", { id: rule.id })
                     : confirmAction(
                         copy("Kuralı etkinleştir", "Activate rule"),
-                        rule.mode === "automatic"
+                        `${rule.name}\n${accountIdentity(state.accounts, rule.accountId)}\n${copy("Proje", "Project")}: ${rule.projectId}\n\n${rule.mode === "automatic"
                           ? copy(
                               "Bu kural, izinli alıcılara sizin her seferinde onayınızı almadan dışarıya yanıt gönderebilir.",
                               "This rule may send external replies to eligible recipients without approval for each reply.",
@@ -67,7 +75,7 @@ export function RulesPanel({
                           : copy(
                               "Kural gelen içerikten taslak hazırlayacak; gönderim ayrı onay gerektirir.",
                               "The rule will prepare drafts from incoming content; sending needs separate approval.",
-                            ),
+                            )}`,
                         copy("Etkinleştir", "Activate"),
                         () =>
                           run("automations.activate", {

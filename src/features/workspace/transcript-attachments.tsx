@@ -70,7 +70,7 @@ export function AttachmentFile({
             {query.isFetching ? <Loading /> : null}
             <ErrorText error={query.error} />
             {query.error ? (
-              <Button
+              <Button busy={query.isFetching}
                 label={copy("Dosyayı yeniden yükle", "Retry file")}
                 onPress={() => {
                   void query.refetch();

@@ -1,6 +1,6 @@
 import { ContentExcerpt } from "./content-excerpt";
 import { RecordCard } from "@/ui/record-card";
-import { PagedRows } from "../shared/paged-rows";
+import { CollectionRows } from "./collection-rows";
 import { Sheet, Body, Button, NavigationGroup, Row, SelectField, Stack } from "@/ui/primitives";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
@@ -9,6 +9,8 @@ import { stamp } from "../shared/format";
 
 import { CampaignEditor } from "./campaign-editor";
 import type { CampaignsPanelProps } from "./types";
+import { accountIdentity, campaignReview, captureCampaignReview, variantReviewLines } from "./review-presentation";
+import { CollectionSearch, useCollectionSearch } from "./collection-search";
 
 export function CampaignsPanel({
   state,
@@ -19,8 +21,11 @@ export function CampaignsPanel({
   dispatch,
   action,
   run,
+  page,
 }: CampaignsPanelProps) {
   const copy = useCopy();
+  const collection = useCollectionSearch(page ? state.campaigns : state.campaigns.filter((campaign) => !projectId || campaign.projectIds.includes(projectId)),
+    (campaign) => [campaign.name, ...campaign.variants.map((variant) => variant.text)].join(" "), page);
   return (
     <>
       {projectId && (
@@ -46,28 +51,29 @@ export function CampaignsPanel({
         />
         </Sheet>
       )}
-      <PagedRows key={projectId ?? "all"} items={state.campaigns
-        .filter((campaign) => !projectId || campaign.projectIds.includes(projectId))} renderItem={(campaign) => (
+      <CollectionSearch {...collection} />
+      <CollectionRows page={page} key={projectId ?? "all"} items={collection.visible} renderItem={(campaign) => (
           <RecordCard key={campaign.id} title={campaign.name}
             preview={<Body numberOfLines={2}>{campaign.variants[0]?.text}</Body>}
-            metadata={campaign.variants.map((variant) => state.accounts.find((account) => account.id === variant.accountId)?.name ?? variant.accountId).join(" · ")}
+            metadata={campaign.variants.map((variant) => accountIdentity(state.accounts, variant.accountId)).join(" · ")}
       footer={
             <Row>
               <Button
                 label={copy("İçeriği onayla", "Approve content")}
                 tone="secondary"
                 disabled={action.isPending}
-                onPress={() =>
+                onPress={() => {
+                  const reviewed = captureCampaignReview(campaign);
                   confirmAction(
                     copy("İçeriği onayla", "Approve content"),
-                    copy(
+                    `${copy(
                       "Bu içerik ve hedef hesaplar için gönderim onayı verilecek.",
                       "Sending approval will be recorded for this content and its target accounts.",
-                    ),
+                    )}\n\n${campaignReview(reviewed.snapshot, state.accounts, copy, stamp)}`,
                     copy("Onayla", "Approve"),
-                    () => run("campaigns.approve", { id: campaign.id }),
-                  )
-                }
+                    () => run("campaigns.approveReviewed", reviewed.input),
+                  );
+                }}
               />
               <Button
                 label={copy("Gönderimi sıraya al", "Queue publishing")}
@@ -78,10 +84,10 @@ export function CampaignsPanel({
                 onPress={() =>
                   confirmAction(
                     copy("Gönderimi sıraya al", "Queue publishing"),
-                    copy(
+                    `${copy(
                       "Onaylı içerik belirtilen zamanda dış platformlarda yayınlanacak. Host onaysız gönderimi engeller.",
                       "Approved content will publish externally at its scheduled time. The host rejects unapproved sending.",
-                    ),
+                    )}\n\n${campaignReview(campaign, state.accounts, copy, stamp)}`,
                     copy("Sıraya al", "Queue"),
                     () => run("campaigns.schedule", { id: campaign.id }),
                   )
@@ -97,14 +103,17 @@ export function CampaignsPanel({
               />
             </Row>
       }
-            details={<>{campaign.variants.map((variant) => (
-              <Stack key={variant.accountId}>
+            details={<>
+              <Body muted style={uiStyles.caption}>{copy("Projeler", "Projects")}: {campaign.projectIds.join(" · ")} · {copy("Sürüm", "Revision")}: {campaign.revision}</Body>
+              {campaign.variants.map((variant, index) => (
+              <Stack key={`${variant.accountId}:${index}`}>
                 <Body muted style={uiStyles.caption}>
-                  {state.accounts.find((account) => account.id === variant.accountId)?.name} ·{" "}
+                  {accountIdentity(state.accounts, variant.accountId)} ·{" "}
                   {stamp(variant.scheduledAt)}
                 </Body>
                 <ContentExcerpt text={variant.text} />
                 {variant.link && <Body>{variant.link}</Body>}
+                {variantReviewLines(variant, copy).map((line, detailIndex) => <Body key={detailIndex}>{line}</Body>)}
               </Stack>
             ))}</>}
           >

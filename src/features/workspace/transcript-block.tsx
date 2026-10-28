@@ -161,7 +161,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
         <QueryState query={detail} />
       ) : null}
       {(open || activityDetail || requested || value.plan || value.taskList) && detail.error ? (
-        <Button
+        <Button busy={detail.isFetching}
           label={copy("İçeriği yeniden yükle", "Retry loading content")}
           tone="quiet"
           onPress={() => {

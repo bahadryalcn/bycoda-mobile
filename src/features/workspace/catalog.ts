@@ -1,5 +1,41 @@
 import { REMOTE_PROVIDERS } from "../../../../src/features/connections/model/protocol";
 import type { HostModelCatalog, RemoteProvider } from "./wire";
+import { BUNDLED_CLAUDE_MODELS, CODEX_MODEL_CATALOG } from "./bundled-models";
+
+/** Local choices remain usable during discovery; Host options always win. */
+export function sessionCatalog(catalog: HostModelCatalog | undefined, providers: readonly RemoteProvider[]): HostModelCatalog {
+  const models = { ...catalog?.models };
+  for (const provider of providers) {
+    if (models[provider]?.length) {
+      const bundled = provider === "codex" ? CODEX_MODEL_CATALOG : provider === "claude" ? BUNDLED_CLAUDE_MODELS : [];
+      models[provider] = models[provider]!.map((model) => {
+        // Old Hosts can omit settings. An explicit empty array still means none.
+        if (model.settings !== undefined) return model;
+        const known = bundled.find((entry) => entry.id === model.id || (!!model.nativeId && entry.nativeId === model.nativeId));
+        return known ? { ...model, settings: known.settings } : model;
+      });
+      continue;
+    }
+    if (provider === "codex") models.codex = CODEX_MODEL_CATALOG;
+    if (provider === "claude") models.claude = BUNDLED_CLAUDE_MODELS;
+  }
+  return { ...catalog, models, errors: catalog?.errors ?? {} };
+}
+
+/** Custom IDs must never inherit another model's settings. */
+export function sessionModel(catalog: HostModelCatalog | undefined, provider: RemoteProvider | undefined, requested: string) {
+  const models = provider ? catalog?.models[provider] ?? [] : [];
+  return requested.trim()
+    ? models.find((model) => model.id === requested || model.nativeId === requested)
+    : models[0];
+}
+
+export function sessionSettings(model: ReturnType<typeof sessionModel>, values: Record<string, string>): Record<string, string> {
+  if (!model) return {};
+  return Object.fromEntries((model.settings ?? []).map((setting) => [setting.id,
+    setting.options.some((option) => option.value === values[setting.id]) ? values[setting.id] : setting.value,
+  ]));
+}
 
 /** Older saved connections may lack a descriptor; infer only providers returned by the host. */
 export function catalogProviders(
@@ -34,6 +70,6 @@ export function catalogProvider(
     : providers.find((provider) => !!catalog?.models[provider]?.length) ?? providers[0];
 }
 
-export function modelDefaults(model: ReturnType<typeof catalogModel>): Record<string, string> {
+export function modelDefaults(model: ReturnType<typeof sessionModel>): Record<string, string> {
   return Object.fromEntries((model?.settings ?? []).map((setting) => [setting.id, setting.value]));
 }

@@ -23,14 +23,13 @@ import {
   SelectField,
   Sheet,
   SearchField,
-  Notice,
-  Loading,
   NavigationRow,
   ScreenList,
   QueryState,
   Row,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { providerSelectionOption } from "@/ui/provider-identity";
 import {
   CommandError,
   ErrorText,
@@ -41,7 +40,8 @@ import {
   useCommands,
   workspaceStyles,
 } from "./shared";
-import { catalogModel, catalogProvider, catalogProviders, modelDefaults } from "./catalog";
+import { catalogProvider, catalogProviders, sessionCatalog, sessionModel, sessionSettings } from "./catalog";
+import { AgentModelFields } from "./agent-model-fields";
 import type { HostSessionSummary } from "./wire";
 import { filterSessionDirectory, sessionDirectoryRows, toggleSessionDirectoryFolder, type SessionDirectoryRow } from "./session-directory";
 import { SessionFolderRow } from "./session-folder-row";
@@ -72,6 +72,8 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
   const [creation] = useState(() => createSingleFlight<void>());
   const form = useFormDraft<SessionCreationDraft>({ provider: undefined, model: "" });
   const { provider, model } = form.values;
+  const [modelSettings, setModelSettings] = useState<Record<string, string>>({});
+  const [runtimeMode, setRuntimeMode] = useState<"supervised" | "auto-accept-edits" | "auto" | "full-access">("supervised");
   const sessions = useHostQuery<HostSessionSummary[]>(
     ["sessions", projectId],
     "sessions.list",
@@ -83,11 +85,12 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
   const uncertain = command.error instanceof Error && command.error.name === "UncertainCommand";
   const locked = command.isPending || uncertain;
   const providers = catalogProviders(machine?.providers, catalog.data);
-  const selectedProvider = catalogProvider(providers, catalog.data, provider);
-  const models = selectedProvider ? (catalog.data?.models[selectedProvider] ?? []) : [];
-  const modelPending = !!selectedProvider && !!catalog.data?.pending?.includes(selectedProvider);
-  const selectedModelValue = catalogModel(catalog.data, selectedProvider, model);
-  const selectedModel = selectedModelValue?.id ?? "";
+  const availableCatalog = sessionCatalog(catalog.data, providers);
+  const selectedProvider = catalogProvider(providers, availableCatalog, provider);
+  const models = selectedProvider ? availableCatalog.models[selectedProvider] ?? [] : [];
+  const selectedModelValue = sessionModel(availableCatalog, selectedProvider, model);
+  const selectedModel = model.trim() || selectedModelValue?.id || "";
+  const bundled = !!models.length && !catalog.data?.models[selectedProvider!]?.length;
   const visible = filterSessionDirectory(
     (sessions.data ?? []).filter((session) => Boolean(session.archived) === archived),
     sessionLayout,
@@ -145,12 +148,14 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
               visible
               size="form"
               dismissible={!locked}
-              dirty={form.dirty}
+              dirty={form.dirty || Object.keys(modelSettings).length > 0 || runtimeMode !== "supervised"}
               title={copy("Yeni oturum", "New session")}
               onClose={() => {
                 if (!locked) {
                   setCreating(false);
                   form.reset({ provider: undefined, model: "" });
+                  setModelSettings({});
+                  setRuntimeMode("supervised");
                 }
               }}
             >
@@ -164,44 +169,61 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
                     style={uiStyles.caption}
                   >{`${copy("Çalışma klasörü:", "Working folder:")} ${cwd}`}</Body>
                 ) : null}
-                <QueryState query={catalog} />
+                <QueryState query={catalog} loading="inline" />
                 <SelectField
                   label={copy("Agent", "Agent")}
                   value={selectedProvider}
-                  options={providers.map((value) => ({ value, label: value }))}
-                  disabled={locked || catalog.isPending}
-                  onChange={(value) => form.patch({ provider: value, model: "" })}
+                  options={providers.map(providerSelectionOption)}
+                  disabled={locked}
+                  onChange={(value) => {
+                    form.patch({ provider: value, model: "" });
+                    setModelSettings({});
+                  }}
                 />
                 {selectedProvider && catalog.data?.errors[selectedProvider] ? (
                   <ErrorText error={catalog.data.errors[selectedProvider]} />
                 ) : null}
-                {modelPending && !catalog.isError && !models.length ? <Loading /> : null}
-                {!catalog.isPending &&
-                !modelPending &&
-                !catalog.error &&
-                !models.length &&
-                !catalog.data?.errors[selectedProvider!] ? (
-                  <Notice
-                    tone="warning"
-                    message={copy(
-                      "Bu agent için kullanılabilir model yok. Bilgisayardaki sağlayıcı bağlantısını kontrol et.",
-                      "No models are available for this agent. Check the provider connection on your computer.",
-                    )}
-                  />
-                ) : null}
-                <SelectField
-                  label={copy("Model", "Model")}
-                  value={selectedModel}
-                  options={models.map((value) => ({ value: value.id, label: value.name }))}
-                  onChange={(value) => form.setField("model", value)}
-                  disabled={locked || !models.length}
+                {bundled ? <Body muted>{copy("Yerleşik model listesi gösteriliyor. Kullanılabilirlik bilgisayarındaki sağlayıcıya bağlıdır.", "Showing bundled models. Availability depends on the provider on your computer.")}</Body> : null}
+                <AgentModelFields
+                  models={models}
+                  model={selectedModel}
+                  settings={sessionSettings(selectedModelValue, modelSettings)}
+                  disabled={locked}
+                  onChange={(next, settings) => {
+                    form.setField("model", next);
+                    setModelSettings(settings);
+                  }}
                 />
-                <Body muted style={uiStyles.caption}>
+                <SelectField
+                  label={copy("İzinler", "Permissions")}
+                  value={runtimeMode}
+                  options={[
+                    { value: "supervised", label: copy("Onay iste", "Ask for approval") },
+                    {
+                      value: "auto-accept-edits",
+                      label: copy("Düzenlemeleri otomatik kabul et", "Auto-accept edits"),
+                    },
+                    { value: "auto", label: copy("Otomatik inceleme", "Automatic review") },
+                    {
+                      value: "full-access",
+                      label: copy("Tam erişim", "Full access"),
+                      detail: copy(
+                        "Agent komutları ve düzenlemeleri onay beklemeden uygulayabilir.",
+                        "The agent may run commands and edits without waiting for approval.",
+                      ),
+                    },
+                  ]}
+                  disabled={locked}
+                  onChange={(next) =>
+                    setRuntimeMode(next as "supervised" | "auto-accept-edits" | "auto" | "full-access")
+                  }
+                />
+                {runtimeMode === "supervised" ? <Body muted style={uiStyles.caption}>
                   {copy(
                     "Başlangıçta komut ve dosya değişiklikleri için onay istenir. Oturum ayarlarından değiştirebilirsin.",
                     "Commands and file changes ask for approval initially. You can change this in session settings.",
                   )}
-                </Body>
+                </Body> : null}
                 <CommandError
                   error={command.error}
                   onDismiss={() => command.reset()}
@@ -213,10 +235,10 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
                 <FormActions
                   submitLabel={copy("Oturumu başlat", "Start session")}
                   tone="primary"
-                  disabled={!selectedModel || !selectedProvider || locked || catalog.isPending || !!catalog.error}
+                  disabled={!selectedModel || !selectedProvider || locked}
                   busy={command.isPending}
                   onSubmit={() => {
-                    if (!selectedModel || !selectedProvider || locked || catalog.isPending || catalog.error ||
+                    if (!selectedModel || !selectedProvider || locked ||
                       !machine || useMachines.getState().activeId !== machine.id) return;
                     void creation.run(async () => {
                       const receipt = await command.mutateAsync({
@@ -225,8 +247,8 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
                         ...(cwd ? { worktreeCwd: cwd } : {}),
                         harness: selectedProvider,
                         model: selectedModel,
-                        modelSettings: modelDefaults(selectedModelValue),
-                        runtimeMode: "supervised",
+                        modelSettings: sessionSettings(selectedModelValue, modelSettings),
+                        runtimeMode,
                       });
                       haptic.success();
                       openSession(receipt.sessionId);

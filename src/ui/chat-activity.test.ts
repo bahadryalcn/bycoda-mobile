@@ -78,6 +78,15 @@ vi.mock("panelui-native/components/shimmer", () => ({
 import { ChatActivity, ChatStreaming } from "./chat-activity";
 
 describe("chat continuous animation lifecycle", () => {
+  it("shows the filename first while retaining the full path in the accessible inspector name", () => {
+    const title = "Read /Users/name/project/src/features/settings/preferences.tsx";
+    const html = renderToStaticMarkup(createElement(ChatActivity, {
+      title, status: "complete", onInspect: vi.fn(),
+    }));
+    expect(html).toContain(`aria-label="${title}. Completed"`);
+    expect(html).toMatch(/>Read preferences\.tsx<\//);
+    expect(html).toContain("/Users/name/project/src/features/settings/ · Completed");
+  });
   it("keeps title metrics stable across running, settled and reduced motion", () => {
     fixture.active = true;
     const styles = (status: "running" | "complete", reduced: boolean) => {

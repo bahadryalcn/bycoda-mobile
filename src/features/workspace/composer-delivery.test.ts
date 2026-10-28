@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   composerCommand,
+  desktopOwnsTurn,
   moveQueuedMessage,
   queuedCommand,
   queuedComposerMessage,
@@ -41,18 +42,63 @@ const queue = (): SharedQueue => ({
 });
 
 describe("mobile composer delivery", () => {
+  it.each([undefined, 2])(
+    "sends queued generation %s without blessing it from the displayed generation",
+    (authorityGeneration) => {
+      const old = { ...session(), authorityGeneration };
+      const current = { ...session(), authorityGeneration: 3 };
+      const row = queuedComposerMessage("queued-intent", old, "next", []);
+      const pending = { ...queue(), messages: [row] };
+      expect(queuedCommand(pending, current, "mobile:test").authorityGeneration).toBe(
+        authorityGeneration,
+      );
+      expect(
+        Object.hasOwn(queuedCommand(pending, current, "mobile:test"), "authorityGeneration"),
+      ).toBe(true);
+      expect(composerCommand(current, "send", "new", []).authorityGeneration).toBe(3);
+    },
+  );
+  it("does not send host steer commands for a known desktop-owned turn, including older hosts", () => {
+    for (const value of [
+      { ...session("running"), executionOwner: "desktop" as const },
+      { ...session("running"), runId: "desktop" },
+    ]) {
+      expect(desktopOwnsTurn(value)).toBe(true);
+      expect(() => composerCommand(value, "steer", "Next", [])).toThrow(/desktop app/);
+    }
+    expect(desktopOwnsTurn(session("running"))).toBe(false);
+    expect(desktopOwnsTurn({ executionOwner: "host", runId: "desktop" })).toBe(false);
+  });
   it("carries reviewed note content only on explicit supported sends; special modes never drop it", () => {
     const note = { id: "note-1", slug: "note", title: "Reviewed", body: "Full private body" };
     const command = composerCommand(session(), "send", "Owner prose", [attachment], note);
-    expect(command).toEqual({ type: "send", sessionId: "s", text: "Owner prose", attachments: [attachment], noteCard: note });
+    expect(command).toEqual({
+      type: "send",
+      sessionId: "s",
+      text: "Owner prose",
+      attachments: [attachment],
+      noteCard: note,
+    });
     expect(command.text).not.toContain(note.body);
-    expect(composerCommand(session(), "send", "", [], note)).toMatchObject({ text: "", noteCard: note });
-    expect(() => composerCommand(session("running"), "steer", "Next", [], note)).toThrow(/requires Send/);
-    expect(() => queuedComposerMessage("queued", session(), "Next", [], note)).toThrow(/requires Send/);
+    expect(composerCommand(session(), "send", "", [], note)).toMatchObject({
+      text: "",
+      noteCard: note,
+    });
+    expect(() => composerCommand(session("running"), "steer", "Next", [], note)).toThrow(
+      /requires Send/,
+    );
+    expect(() => queuedComposerMessage("queued", session(), "Next", [], note)).toThrow(
+      /requires Send/,
+    );
     for (const text of ["/compact", " /plan Investigate", "/build", "/clear", "/new project"])
       expect(() => composerCommand(session(), "send", text, [], note)).toThrow(/requires Send/);
-    expect(() => validateNoteDelivery(note, "send", "Original prose", false)).toThrow(/draft is preserved/);
-    expect(composerCommand(session(), "send", "/goal Complete work", [], note)).toMatchObject({ text: "/goal Complete work", noteCard: note });
+    expect(() => validateNoteDelivery(note, "send", "Original prose", false)).toThrow(
+      /draft is preserved/,
+    );
+    expect(composerCommand(session(), "send", "/goal Complete work", [], note)).toMatchObject({
+      text: "/goal Complete work",
+      noteCard: note,
+    });
   });
   it("sends an idle turn with attachments and never turns a running send into a draft", () => {
     expect(composerCommand(session(), "send", "Hello", [attachment])).toEqual({
@@ -114,8 +160,12 @@ describe("mobile composer delivery", () => {
   it("never dispatches a row with unconfirmed delivery, including compact commands", () => {
     for (const text of ["Next", "/compact"]) {
       const value = queue();
-      value.messages = [{ ...queuedComposerMessage("q", session(), text, []), deliveryUnknown: true }];
-      expect(() => queuedCommand(value, session(), "mobile:test")).toThrow(/Delivery is unconfirmed/);
+      value.messages = [
+        { ...queuedComposerMessage("q", session(), text, []), deliveryUnknown: true },
+      ];
+      expect(() => queuedCommand(value, session(), "mobile:test")).toThrow(
+        /Delivery is unconfirmed/,
+      );
       expect(value.messages[0]?.deliveryUnknown).toBe(true);
     }
   });

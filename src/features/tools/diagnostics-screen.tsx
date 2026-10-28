@@ -19,7 +19,7 @@ export function DiagnosticsScreen({ project }: { project: HostProject }) {
   return <Screen title={copy("Tanılama", "Diagnostics")} subtitle={`${machine?.name ?? ""} · ${project.name}`}>
     <QueryState query={query} />
     <NavigationGroup><ToggleField label={copy("Otomatik yenile", "Auto refresh")} value={autoRefresh} onChange={setAutoRefresh} /></NavigationGroup>
-    <Button tone="quiet" label={copy("Yenile", "Refresh")} disabled={query.isFetching} onPress={() => { void query.refetch(); }} />
+    <Button busy={query.isFetching} tone="quiet" label={copy("Yenile", "Refresh")} disabled={query.isFetching} onPress={() => { void query.refetch(); }} />
     {sample ? <DiagnosticsDetails sample={sample} /> : <DiagnosticsScope />}
   </Screen>;
 }

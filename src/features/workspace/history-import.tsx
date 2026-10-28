@@ -74,6 +74,7 @@ export function HistoryImport({
   const [initialStatus, setInitialStatus] = useState<HistoryStatus>();
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState("primary");
   const occupied = useRef(false);
   useEffect(() => {
     let live = true;
@@ -144,9 +145,10 @@ export function HistoryImport({
     if (attempt && initialStatus && supported) void statusQuery.refetch();
   }, [attempt?.operationId, initialStatus, supported]);
   const disabled = !supported || loading || busy || !!attempt;
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async (action: () => Promise<unknown>, actionKey = "primary") => {
     if (occupied.current || !supported) return;
     occupied.current = true;
+    setPendingAction(actionKey);
     setBusy(true);
     setError(null);
     try {
@@ -212,7 +214,7 @@ export function HistoryImport({
         <Button
           label={copy("Geçmişi içe aktar", "Import history")}
           disabled={disabled || !review || !selected.size}
-          busy={busy}
+          busy={busy && pendingAction === "primary"}
           onPress={start}
         />
       }
@@ -289,7 +291,7 @@ export function HistoryImport({
             ) : null}
             {attempt ? (
               <>
-                <Button
+                <Button busy={statusQuery.isFetching}
                   tone="quiet"
                   label={copy("İçe aktarma durumunu kontrol et", "Check import status")}
                   disabled={!supported || busy || statusQuery.isFetching}
@@ -298,7 +300,7 @@ export function HistoryImport({
                   }}
                 />
                 {status?.state === "running" ? (
-                  <Button
+                  <Button busy={busy && pendingAction === "secondary-1"}
                     tone="quiet"
                     label={copy("İçe aktarmayı durdur", "Stop importing")}
                     disabled={!supported || busy}
@@ -310,12 +312,12 @@ export function HistoryImport({
                           operationId: attempt.operationId,
                         });
                         await statusQuery.refetch();
-                      });
+                      }, "secondary-1");
                     }}
                   />
                 ) : null}
                 {status?.state === "complete" || status?.state === "failed" ? (
-                  <Button
+                  <Button busy={busy && pendingAction === "secondary-2"}
                     tone="quiet"
                     label={copy("Yeni geçmiş incelemesi", "New history review")}
                     disabled={!supported || busy}
@@ -326,13 +328,13 @@ export function HistoryImport({
                         setReview(null);
                         setSelected(new Set());
                         setInitialStatus(undefined);
-                      });
+                      }, "secondary-2");
                     }}
                   />
                 ) : null}
               </>
             ) : (
-              <Button
+              <Button busy={busy && pendingAction === "secondary-3"}
                 tone="quiet"
                 label={copy("Bu projenin geçmişini tara", "Scan this project's history")}
                 disabled={disabled || previewQuery.isFetching}
@@ -344,7 +346,7 @@ export function HistoryImport({
                       setReview(result.data);
                       setSelected(new Set());
                     }
-                  });
+                  }, "secondary-3");
                 }}
               />
             )}
