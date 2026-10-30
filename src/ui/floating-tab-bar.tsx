@@ -4,13 +4,12 @@ import { Keyboard, Pressable, ScrollView, Text, View, type LayoutChangeEvent } f
 import type { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
-import { colors, fontSize, metrics, radii, space } from "./tokens";
-import { haptic, indicatorSpring, usePressMotion } from "./motion";
+import { colors, fontSize, metrics, opacity, radii, space } from "./tokens";
+import { haptic, indicatorSpring } from "./motion";
 import { useReducedMotionPreference } from "./use-reduced-motion";
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function useKeyboardVisible() {
   const [visible, setVisible] = useState(false);
@@ -47,9 +46,8 @@ function TabItem({
   onLongPress: () => void;
   onLayout: (event: LayoutChangeEvent) => void;
 }) {
-  const press = usePressMotion(0.9);
   return (
-    <AnimatedPressable
+    <Pressable
       accessibilityRole="tab"
       accessibilityLabel={badge ? `${label}, ${badge}` : label}
       accessibilityState={{ selected: focused }}
@@ -57,9 +55,7 @@ function TabItem({
       onPress={onPress}
       onLongPress={onLongPress}
       onLayout={onLayout}
-      onPressIn={press.onPressIn}
-      onPressOut={press.onPressOut}
-      style={[
+      style={({ pressed }) => [
         {
           flexGrow: 1,
           flexShrink: 0,
@@ -71,7 +67,7 @@ function TabItem({
           paddingHorizontal: space.xs,
           paddingVertical: space.xs,
         },
-        press.animatedStyle,
+        pressed && { opacity: opacity.pressed },
       ]}
     >
       <View>
@@ -120,13 +116,13 @@ function TabItem({
       >
         {label}
       </Text>
-    </AnimatedPressable>
+    </Pressable>
   );
 }
 
 /** Intrinsic labels share available room, then scroll instead of compressing scaled text. */
 export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) {
-  const { mode } = useMobileTheme();
+  useMobileTheme();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardVisible();
   const reducedMotion = useReducedMotionPreference();
@@ -151,7 +147,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
     <View
       style={{
         backgroundColor: colors.background,
-        paddingTop: space.xs,
+        paddingTop: 0,
         paddingBottom: Math.max(insets.bottom, space.sm),
         paddingStart: Math.max(insets.left, space.sm),
         paddingEnd: Math.max(insets.right, space.sm),
@@ -163,14 +159,14 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         style={{
           width: "100%",
-          maxWidth: metrics.entryWidth,
+          maxWidth: metrics.contentWidth,
           minHeight: metrics.tabBarHeight,
-          borderRadius: radii.pill,
+          borderRadius: 0,
           borderCurve: "continuous",
           backgroundColor: colors.panel,
-          borderWidth: mode === "dark" ? 0.5 : 0,
+          borderWidth: 0,
           borderColor: colors.separator,
-          boxShadow: mode === "dark" ? undefined : `0px 6px 24px -6px ${colors.scrim}`,
+          boxShadow: undefined,
         }}
       >
         <ScrollView
@@ -190,9 +186,9 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
                 top: 4,
                 bottom: 4,
                 start: 0,
-                borderRadius: radii.pill,
+                borderRadius: radii.control,
                 borderCurve: "continuous",
-                backgroundColor: colors.fill,
+                backgroundColor: colors.selected,
               },
               indicator,
             ]}

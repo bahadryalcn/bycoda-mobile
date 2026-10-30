@@ -33,7 +33,7 @@ it("shows a named Codex model and reasoning immediately, and keeps effort change
   expect(reasoning.value).toBe("low");
   await act(async () => { reasoning.value = "high"; reasoning.dispatchEvent(new Event("change", { bubbles: true })); });
   expect(reasoning.value).toBe("high");
-  expect(container.querySelector('select[aria-label="Speed"]')).not.toBeNull();
+  expect(container.querySelector('select[aria-label="Service Tier"]')).not.toBeNull();
 });
 it("updates Claude capabilities when switching from Fable to Haiku", async () => {
   await render("claude");
@@ -47,4 +47,17 @@ it("updates Claude capabilities when switching from Fable to Haiku", async () =>
 it("locks model, reasoning and custom ID while a session configuration is busy", async () => {
   await render("codex", true);
   expect([...container.querySelectorAll<HTMLSelectElement | HTMLInputElement>("select,input")].every((element) => element.disabled)).toBe(true);
+});
+it("leads with Model, Reasoning and Fast, then the Context and Advisor groups", async () => {
+  await render("codex");
+  const codex = [...container.querySelectorAll("select")].map((select) => select.getAttribute("aria-label"));
+  expect(codex.slice(0, 3)).toEqual(["Model", "Reasoning", "Service Tier"]);
+  await act(async () => root.unmount());
+  container.replaceChildren();
+  await render("claude");
+  const claude = [...container.querySelectorAll("select")].map((select) => select.getAttribute("aria-label"));
+  expect(claude.slice(0, 2)).toEqual(["Model", "Reasoning"]);
+  const text = container.textContent ?? "";
+  expect(text.indexOf("Context")).toBeGreaterThan(-1);
+  expect(text.indexOf("Context")).toBeLessThan(text.indexOf("Advisor and subagents"));
 });

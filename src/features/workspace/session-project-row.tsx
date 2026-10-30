@@ -21,7 +21,7 @@ export function SessionProjectRow({ row, onToggle }: {
       label={[row.project.name, row.project.cwd, `${row.count}`, row.running ? `${row.running} ${copy("Çalışıyor", "Running")}` : ""].filter(Boolean).join(". ")}
       expanded={row.expanded}
       onPress={onToggle}
-      style={{ borderWidth: 0, backgroundColor: colors.background, paddingVertical: space.md }}
+      style={{ borderWidth: 0, backgroundColor: colors.background, paddingVertical: space.sm }}
     >
       <Row style={{ flexWrap: "nowrap" }}>
         <ProjectIcon appearance={row.project.appearance} />
@@ -30,9 +30,11 @@ export function SessionProjectRow({ row, onToggle }: {
           <Body muted style={uiStyles.caption} numberOfLines={1} ellipsizeMode="middle">
             {projectPathLabel(row.project.cwd)}
           </Body>
-          {row.running ? <Row><ActivityBadge count={row.running} /></Row> : null}
         </View>
-        <Body muted style={uiStyles.caption}>{row.count}</Body>
+        <View style={{ alignItems: "flex-end", gap: space.xxs }}>
+          <Body muted style={uiStyles.caption}>{row.count}</Body>
+          {row.running ? <ActivityBadge count={row.running} /> : null}
+        </View>
         <DisclosureChevron expanded={row.expanded} color={colors.muted} />
       </Row>
     </PressableCard>

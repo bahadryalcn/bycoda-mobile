@@ -6,7 +6,7 @@ import X from "lucide-react-native/icons/x";
 import { Input } from "./fields";
 import { IconButton } from "./buttons";
 import { useCopy } from "./copy";
-import { colors, radii, space } from "./tokens";
+import { colors, metrics, radii, space } from "./tokens";
 import type { InputProps } from "./component-props";
 import { decorativeSvgProps } from "./accessibility";
 
@@ -46,8 +46,8 @@ export function SearchField({
         backgroundColor: colors.fill,
         borderWidth: 1.5,
         borderColor: focused ? colors.accent : "transparent",
-        borderRadius: radii.pill,
-        minHeight: 44,
+        borderRadius: radii.control,
+        minHeight: metrics.touchTarget,
       }}
     >
       <Search
@@ -73,7 +73,7 @@ export function SearchField({
           onBlur?.(event);
         }}
         style={[
-          { flex: 1, minWidth: 0, minHeight: 42, borderWidth: 0, backgroundColor: "transparent" },
+          { flex: 1, minWidth: 0, minHeight: metrics.inputHeight, borderWidth: 0, backgroundColor: "transparent" },
           style,
         ]}
       />

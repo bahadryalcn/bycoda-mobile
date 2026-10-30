@@ -22,7 +22,9 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label);
-  return { Body: Wrapper, Row: Wrapper, Sheet: Wrapper, NavigationGroup: Wrapper, CodePanel: Wrapper, CodeText: Wrapper,
+  return {
+    Disclosure: Wrapper,
+    FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, `Confirm ${submitLabel}`)), Body: Wrapper, Row: Wrapper, Sheet: Wrapper, NavigationGroup: Wrapper, CodePanel: Wrapper, CodeText: Wrapper,
     Button, QueryState: () => null, MutationState: () => null, ErrorText: () => null, ToggleField: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message),
     ConfirmationCard: ({ confirmLabel, onConfirm, disabled }: { confirmLabel: string; onConfirm: () => void; disabled?: boolean }) => createElement(Button, { label: `Confirm ${confirmLabel}`, onPress: onConfirm, disabled }),

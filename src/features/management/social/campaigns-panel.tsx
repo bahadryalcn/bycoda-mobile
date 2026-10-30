@@ -1,7 +1,7 @@
 import { ContentExcerpt } from "./content-excerpt";
 import { RecordCard } from "@/ui/record-card";
 import { CollectionRows } from "./collection-rows";
-import { Sheet, Body, Button, NavigationGroup, Row, SelectField, Stack } from "@/ui/primitives";
+import { ActionMenu, Sheet, Body, Button, NavigationGroup, Row, SelectField, Stack } from "@/ui/primitives";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
@@ -54,6 +54,10 @@ export function CampaignsPanel({
       <CollectionSearch {...collection} />
       <CollectionRows page={page} key={projectId ?? "all"} items={collection.visible} renderItem={(campaign) => (
           <RecordCard key={campaign.id} title={campaign.name}
+            menu={<ActionMenu label={copy("Diğer işlemler", "More actions")}
+              busy={action.isPending && action.variables?.action === "campaigns.pause" && (action.variables?.input as { id?: string } | undefined)?.id === campaign.id}
+              actions={[{ key: "pause", label: campaign.paused ? copy("Devam et", "Resume") : copy("Duraklat", "Pause"),
+                disabled: action.isPending, onPress: () => run("campaigns.pause", { id: campaign.id, paused: !campaign.paused }) }]} />}
             preview={<Body numberOfLines={2}>{campaign.variants[0]?.text}</Body>}
             metadata={campaign.variants.map((variant) => accountIdentity(state.accounts, variant.accountId)).join(" · ")}
       footer={
@@ -91,14 +95,6 @@ export function CampaignsPanel({
                     copy("Sıraya al", "Queue"),
                     () => run("campaigns.schedule", { id: campaign.id }),
                   )
-                }
-              />
-              <Button
-                label={campaign.paused ? copy("Devam et", "Resume") : copy("Duraklat", "Pause")}
-                tone="quiet"
-                disabled={action.isPending}
-                onPress={() =>
-                  run("campaigns.pause", { id: campaign.id, paused: !campaign.paused })
                 }
               />
             </Row>

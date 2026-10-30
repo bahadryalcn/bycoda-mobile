@@ -4,19 +4,10 @@ import { View } from "react-native";
 import { useActiveMachine } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
 import type { HostProject } from "@/domain/types";
-import {
-  Body,
-  Button,
-  Card,
-  Disclosure,
-  Notice,
-  QueryState,
-  Row,
-  ScreenList,
-  SelectField,
-} from "@/ui/primitives";
+import { Body, Button, Disclosure, Notice, QueryState, Row, ScreenList, SelectField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
+import { RecordCard } from "@/ui/record-card";
 import {
   readUsageReport,
   usageDuration,
@@ -136,10 +127,6 @@ export function UsageScreen({ project }: { project: HostProject }) {
           )}
           {report ? (
             <>
-              <Body muted>
-                {copy("Bu sayfanın gözlemlenen toplamları", "Observed totals on this page")} ·{" "}
-                {usageWindowDate(report.sampledAt)} · UTC
-              </Body>
               {report.coverage.truncated || report.coverage.undatedTurns > 0 ? (
                 <Notice
                   tone="warning"
@@ -149,7 +136,10 @@ export function UsageScreen({ project }: { project: HostProject }) {
                   )}
                 />
               ) : null}
-              <UsageValues value={report.totals} />
+              <RecordCard title={copy("Bu sayfanın gözlemlenen toplamları", "Observed totals on this page")}
+                metadata={`${usageWindowDate(report.sampledAt)} · UTC`}
+                preview={<Row><Body muted>{copy("Gözlemlenen turlar", "Observed turns")}: {usageNumber(report.totals.turns)}</Body><Body mono>{usageDuration(report.totals.durationMs)}</Body></Row>}
+                details={<UsageValues value={report.totals} />} />
             </>
           ) : null}
           {cursor || action === "first" ? (
@@ -164,13 +154,12 @@ export function UsageScreen({ project }: { project: HostProject }) {
         </View>
       }
       renderItem={({ item }) => (
-        <Card>
-          <Body mono>{item.sessionId}</Body>
-          <Body muted>
-            {copy("Sağlayıcı", "Provider")}: {item.provider}
-          </Body>
-          <UsageValues value={item} />
-        </Card>
+        <RecordCard
+          title={item.provider}
+          metadata={item.sessionId}
+          preview={<Row><Body muted>{copy("Gözlemlenen turlar", "Observed turns")}: {usageNumber(item.turns)}</Body><Body mono>{usageDuration(item.durationMs)}</Body></Row>}
+          details={<UsageValues value={item} />}
+        />
       )}
       footer={
         report?.nextCursor || action === "next" ? (

@@ -45,8 +45,27 @@ function releaseBrowserLease(scope: BrowserScope): Promise<void> {
   return scope.releasing;
 }
 
-/** One serialized request path preserves the shared browser's control lease. */
+const clientIds = new WeakMap<object, number>();
+let nextClientId = 1;
+function clientIdentity(client: object | null | undefined) {
+  if (!client) return 0;
+  let id = clientIds.get(client);
+  if (id === undefined) {
+    id = nextClientId++;
+    clientIds.set(client, id);
+  }
+  return id;
+}
+
+/** Screen state belongs to one client/project/session/start-URL identity, so a new identity remounts it. */
 export function BrowserScreen({ project, initialUrl = "", sessionId }: { project: HostProject; initialUrl?: string; sessionId?: string }) {
+  const client = useHostClient();
+  return <BrowserScreenBody key={`${clientIdentity(client)}:${project.id}:${sessionId ?? ""}:${initialUrl}`}
+    project={project} initialUrl={initialUrl} sessionId={sessionId} />;
+}
+
+/** One serialized request path preserves the shared browser's control lease. */
+function BrowserScreenBody({ project, initialUrl, sessionId }: { project: HostProject; initialUrl: string; sessionId?: string }) {
   useMobileTheme();
   const copy = useCopy();
   const client = useHostClient();
@@ -58,7 +77,7 @@ export function BrowserScreen({ project, initialUrl = "", sessionId }: { project
   const action = useAsyncAction<BrowserState>();
   const [browserState, setState] = useState<BrowserState>();
   const [browserFrame, setFrame] = useState<BrowserState>();
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl);
   const [text, setText] = useState("");
   const [now, setNow] = useState(Date.now());
   const scopeRef = useRef<BrowserScope | undefined>(undefined);
@@ -125,12 +144,6 @@ export function BrowserScreen({ project, initialUrl = "", sessionId }: { project
     if (scope?.client === client && scope?.projectId === project.id && scope.sessionId === sessionId) requestForScope(scope, method, params, capture);
   };
   useEffect(() => {
-    setState(undefined);
-    setFrame(undefined);
-    setUrl(initialUrl);
-    setText("");
-    setComment(""); setSelectionError(undefined); setPreparedSelection(undefined); setDrafting(false);
-    setReview(undefined);
     if (!client) {
       scopeRef.current = undefined;
       return;
@@ -152,7 +165,7 @@ export function BrowserScreen({ project, initialUrl = "", sessionId }: { project
         if (browserCleanupByHost.get(hostKey) === released) browserCleanupByHost.delete(hostKey);
       });
     };
-  }, [client, project.id, initialUrl, sessionId]);
+  }, [client, project.id, sessionId]);
   useEffect(() => {
     if (!active || !state?.controlling) return;
     const currentTime = Date.now();

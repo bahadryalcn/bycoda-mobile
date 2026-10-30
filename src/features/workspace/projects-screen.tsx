@@ -125,7 +125,7 @@ export function ProjectsScreen() {
   };
   if (!machine) return <WelcomeScreen />;
   const header = (
-    <View style={{ gap: space.md, paddingBottom: space.xs }}>
+    <View style={{ gap: space.sm, paddingBottom: space.xs }}>
       <LargeTitle
         title={copy("Projeler", "Projects")}
         subtitle={
@@ -283,9 +283,9 @@ export function ProjectsScreen() {
                   borderBottomStartRadius: 0,
                   borderBottomEndRadius: 0,
                   backgroundColor: colors.background,
-                  paddingHorizontal: space.lg,
+                  paddingHorizontal: space.sm,
                   paddingVertical: space.sm,
-                  marginTop: space.sm,
+                  marginTop: space.xs,
                   gap: space.sm,
                 }}
               >

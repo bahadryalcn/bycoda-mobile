@@ -25,13 +25,15 @@ vi.mock("@/state/queries", () => ({ useHostQuery: (key: readonly unknown[], _met
 
 let root: ReturnType<typeof createRoot>;
 let current: ReturnType<typeof useSocialWorkspace>;
-function Harness() { current = useSocialWorkspace("inbox", "project"); return null; }
+let projectId = "project";
+function Harness() { current = useSocialWorkspace("inbox", projectId); return null; }
 async function render() { await act(async () => root.render(createElement(Harness))); }
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   fixture.machine = { id: "machine", endpoint: "https://one.example", environmentId: "environment", lanKey: "private-key" };
   fixture.data = undefined;
+  projectId = "project";
   root = createRoot(document.createElement("div"));
 });
 afterEach(async () => { await act(async () => root.unmount()); vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -64,4 +66,23 @@ it("does not reuse a connection scope or cache when the same saved machine is pa
   expect(JSON.stringify(fixture.key)).not.toContain("another-private-key");
   expect(current.state).toBeUndefined();
   expect(current.page!.loading).toBe(true);
+});
+
+it("never shows another project's retained snapshot under the current input, but keeps the same input's", async () => {
+  const pages = Object.fromEntries(["campaigns", "publishingPlans", "threads", "contacts", "rules", "jobs", "drafts"]
+    .map((key) => [key, { offset: 0, limit: 20, total: 0 }]));
+  const snapshot = { executorId: "environment", hostOnline: true, accounts: [], profiles: [], campaigns: [], publishingPlans: [],
+    threads: [], contacts: [], rules: [], jobs: [], drafts: [], pages } as unknown as SocialSnapshot;
+  await render();
+  const client = { request: async () => ({ cursor: "revision", unchanged: false, snapshot }) };
+  await act(async () => { await fixture.options.queryFn!(client, new AbortController().signal); });
+  await render();
+  expect(current.state).toBe(snapshot);
+  projectId = "other";
+  await render();
+  expect(current.state).toBeUndefined();
+  expect(current.page!.loading).toBe(true);
+  projectId = "project";
+  await render();
+  expect(current.state).toBe(snapshot);
 });

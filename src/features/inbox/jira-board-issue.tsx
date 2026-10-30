@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useCopy } from "@/ui/copy";
 import { useMachines } from "@/state/machines";
 import { Body, Button, Notice, QueryState, SelectField, Sheet, Stack } from "@/ui/primitives";
@@ -33,11 +33,10 @@ export function JiraBoardIssueActions({
     [sprintId, setSprint] = useState(""),
     [anchor, setAnchor] = useState(""),
     [direction, setDirection] = useState("before");
-  const delivery = useJiraBoardDelivery(origin, snapshot.board.id),
+  const delivery = useJiraBoardDelivery(origin, snapshot.board.id, () => onChanged()),
     pending = delivery.draft.value?.pending,
     writeAllowed = useRef(canWrite);
   writeAllowed.current = canWrite;
-  const notified = useRef(false);
   const current = () => isInboxOriginCurrent(origin, useMachines.getState());
   const locked =
     !canWrite ||
@@ -58,12 +57,6 @@ export function JiraBoardIssueActions({
     },
     !locked && action === "transition",
   );
-  useEffect(() => {
-    if (delivery.result && !notified.current) {
-      notified.current = true;
-      onChanged();
-    }
-  }, [delivery.result, onChanged]);
   let command: InboxJobRequest<"jira-board-transition" | "jira-board-move"> | undefined;
   const base = {
     projectId: origin.projectId!,

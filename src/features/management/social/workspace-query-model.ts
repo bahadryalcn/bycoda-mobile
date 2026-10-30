@@ -65,8 +65,8 @@ function assertSnapshot(snapshot: SocialSnapshot, environmentId: string, limit: 
 /** A cache belongs to one reviewed connection; cursors never cross query or machine identity. */
 export class SocialWorkspaceCache {
   private pages = new Map<string, { cursor: string; snapshot: SocialSnapshot }>();
-  private latestSnapshot?: SocialSnapshot;
-  latest() { return this.latestSnapshot; }
+  /** The retained snapshot for exactly this query input; another project, tab, search or page never matches. */
+  peek(input: SocialWorkspaceQuery): SocialSnapshot | undefined { return this.pages.get(JSON.stringify(input))?.snapshot; }
 
   async read(input: SocialWorkspaceQuery, environmentId: string, request: (input: SocialWorkspaceQuery) => Promise<unknown>, isCurrent: () => boolean) {
     if (!isCurrent()) throw new WorkspaceQueryError("scope");
@@ -89,7 +89,6 @@ export class SocialWorkspaceCache {
     this.pages.delete(key);
     this.pages.set(key, { cursor: response.cursor, snapshot });
     if (this.pages.size > 16) this.pages.delete(this.pages.keys().next().value!);
-    this.latestSnapshot = snapshot;
     return snapshot;
   }
 }

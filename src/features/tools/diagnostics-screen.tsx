@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
-import { Body, Button, Card, NavigationGroup, Notice, QueryState, Row, Screen, ToggleField } from "@/ui/primitives";
+import { Body, Button, Disclosure, NavigationGroup, Notice, QueryState, Row, Screen, Section, Stack, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import type { HostProject } from "@/domain/types";
 import { memoryLabel, readDiagnostics, type ResourceDiagnostics, type ResourceSample } from "./diagnostics-model";
@@ -16,10 +16,10 @@ export function DiagnosticsScreen({ project }: { project: HostProject }) {
     queryFn: async (client, signal) => readDiagnostics(await client.request("resources.read", {}, { signal })),
   });
   const sample = query.data?.samples.at(-1);
-  return <Screen title={copy("Tanılama", "Diagnostics")} subtitle={`${machine?.name ?? ""} · ${project.name}`}>
+  return <Screen title={copy("Tanılama", "Diagnostics")} subtitle={`${machine?.name ?? ""} · ${project.name}`}
+    actions={<Button busy={query.isFetching} tone="quiet" label={copy("Yenile", "Refresh")} disabled={query.isFetching} onPress={() => { void query.refetch(); }} />}>
     <QueryState query={query} />
     <NavigationGroup><ToggleField label={copy("Otomatik yenile", "Auto refresh")} value={autoRefresh} onChange={setAutoRefresh} /></NavigationGroup>
-    <Button busy={query.isFetching} tone="quiet" label={copy("Yenile", "Refresh")} disabled={query.isFetching} onPress={() => { void query.refetch(); }} />
     {sample ? <DiagnosticsDetails sample={sample} /> : <DiagnosticsScope />}
   </Screen>;
 }
@@ -33,17 +33,19 @@ function DiagnosticsScope() {
 export function DiagnosticsDetails({ sample }: { sample: ResourceSample }) {
   const copy = useCopy();
   return <>
-      <DiagnosticsScope />
       <Body muted>{stamp(sample.at)}</Body>
-      <Card>
-        <Row><Body>{copy("Toplam bellek", "Total memory")}</Body><Body mono>{memoryLabel(sample.host.totalMemoryBytes)}</Body></Row>
-        <Row><Body>{copy("Boş bellek", "Free memory")}</Body><Body mono>{memoryLabel(sample.host.freeMemoryBytes)}</Body></Row>
-        <Row><Body>{copy("Mantıksal işlemciler", "Logical CPUs")}</Body><Body mono>{sample.host.logicalCpus}</Body></Row>
-        <Row><Body>{copy("İşlem belleği", "Process memory")}</Body><Body mono>{memoryLabel(sample.process.rssBytes)}</Body></Row>
-        <Row><Body>{copy("Heap kullanımı", "Heap used")}</Body><Body mono>{memoryLabel(sample.process.heapUsedBytes)}</Body></Row>
-        <Row><Body>{copy("İşlem CPU", "Process CPU")}</Body><Body mono>{sample.process.cpuPercent === null ? "—" : `${sample.process.cpuPercent.toFixed(1)}%`}</Body></Row>
-        <Row><Body>{copy("Çalışma süresi", "Uptime")}</Body><Body mono>{Math.floor(sample.process.uptimeSeconds / 60)} min</Body></Row>
-        <Row><Body>PID</Body><Body mono>{sample.process.pid}</Body></Row>
-      </Card>
+      <Section title={copy("Bilgisayar", "Computer")}><Stack>
+        <Row><Body style={{ flex: 1 }}>{copy("Toplam bellek", "Total memory")}</Body><Body mono>{memoryLabel(sample.host.totalMemoryBytes)}</Body></Row>
+        <Row><Body style={{ flex: 1 }}>{copy("Boş bellek", "Free memory")}</Body><Body mono>{memoryLabel(sample.host.freeMemoryBytes)}</Body></Row>
+        <Row><Body style={{ flex: 1 }}>{copy("Mantıksal işlemciler", "Logical CPUs")}</Body><Body mono>{sample.host.logicalCpus}</Body></Row>
+      </Stack></Section>
+      <Section title={copy("İşlem", "Process")}><Stack>
+        <Row><Body style={{ flex: 1 }}>{copy("İşlem belleği", "Process memory")}</Body><Body mono>{memoryLabel(sample.process.rssBytes)}</Body></Row>
+        <Row><Body style={{ flex: 1 }}>{copy("Heap kullanımı", "Heap used")}</Body><Body mono>{memoryLabel(sample.process.heapUsedBytes)}</Body></Row>
+        <Row><Body style={{ flex: 1 }}>{copy("İşlem CPU", "Process CPU")}</Body><Body mono>{sample.process.cpuPercent === null ? "—" : `${sample.process.cpuPercent.toFixed(1)}%`}</Body></Row>
+        <Row><Body style={{ flex: 1 }}>{copy("Çalışma süresi", "Uptime")}</Body><Body mono>{Math.floor(sample.process.uptimeSeconds / 60)} min</Body></Row>
+        <Row><Body style={{ flex: 1 }}>PID</Body><Body mono>{sample.process.pid}</Body></Row>
+      </Stack></Section>
+      <Disclosure label={copy("Ayrıntılar", "Details")}><DiagnosticsScope /></Disclosure>
     </>;
 }

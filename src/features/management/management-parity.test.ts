@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   fields: new Map<string, (value: string) => void>(), submit: undefined as undefined | (() => void),
   actions: [] as Array<{ key: string; disabled?: boolean; onPress: () => void } | false | null>,
 }));
+vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
 vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
@@ -27,7 +28,7 @@ vi.mock("@/ui/confirm", () => ({ confirmAction: (_title: string, _message: strin
 vi.mock("./shared/format", () => ({ stamp: (value: number) => `date:${value}` }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Stack: wrapper, Row: wrapper, Body: wrapper, ErrorText: () => null, ToggleField: () => null, MutationState: () => null,
+  return { Disclosure: wrapper, IconButton: wrapper, Stack: wrapper, Row: wrapper, Body: wrapper, ErrorText: () => null, ToggleField: () => null, MutationState: () => null,
     ActionMenu: ({ actions }: { actions: typeof state.actions }) => { state.actions = actions; return null; },
     Notice: ({ message }: { message: string }) => createElement("div", null, message),
     Button: ({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),

@@ -4,6 +4,7 @@ import {
   Body,
   Button,
   ConfirmationCard,
+  Disclosure,
   ErrorText,
   Field,
   Row,
@@ -66,7 +67,37 @@ export function ProviderAccountEditor({
       dismissible={!busy}
       dirty={!!value && !value.pending && !value.finished}
       footer={
-        <Row>
+        review ? <><ErrorText error={error ?? delivery.error ?? draft.error} /><ConfirmationCard
+            tone="primary"
+            message={
+              review.kind === "quotaRefresh"
+                ? copy(
+                    "Bu hesabın Claude kotası bilgisayardan bir kez sorgulansın mı?",
+                    "Read this account's Claude quota once from the computer?",
+                  )
+                : review.kind === "default"
+                  ? copy(
+                      "Bu hesabı bu sağlayıcının gelecekteki konuşmaları için varsayılan yap?",
+                      "Make this account the default for this provider's future conversations?",
+                    )
+                  : copy(
+                      "İncelenen hesap ayarını bilgisayara kaydet?",
+                      "Save the reviewed account setting on the computer?",
+                    )
+            }
+            confirmLabel={
+              review.kind === "quotaRefresh"
+                ? copy("Kotayı yenile", "Refresh quota")
+                : copy("Kaydet", "Save")
+            }
+            cancelLabel={copy("Vazgeç", "Cancel")}
+            busy={busy}
+            disabled={disabled}
+            onCancel={() => setReview(undefined)}
+            onConfirm={() => {
+              void delivery.submit(review).catch(setError);
+            }}
+          /></> : <Row>
           <Button tone="quiet" label={copy("Kapat", "Close")} onPress={onClose} disabled={busy} />
           {value?.pending ? (
             <Button
@@ -123,12 +154,7 @@ export function ProviderAccountEditor({
             "Display name and color change the computer's account settings. The default applies only to future conversations; open conversations keep their accounts.",
           )}
         />
-        <Body muted>
-          {copy(
-            "Başka bir pencerede yapılan değişikliklerle çakışma olabilir. Kaydetmeden önce ayarlar yeniden kontrol edilir.",
-            "Changes in another window may conflict. Settings are checked again before saving.",
-          )}
-        </Body>
+
         {value ? (
           <>
             <SelectField
@@ -234,40 +260,16 @@ export function ProviderAccountEditor({
             ) : null}
           </>
         ) : null}
+        <Disclosure label={copy("Ayrıntılar", "Details")}>
+          <Body muted>
+          {copy(
+            "Başka bir pencerede yapılan değişikliklerle çakışma olabilir. Kaydetmeden önce ayarlar yeniden kontrol edilir.",
+            "Changes in another window may conflict. Settings are checked again before saving.",
+          )}
+        </Body>
+        </Disclosure>
         </> : null}
-        <ErrorText error={error ?? delivery.error ?? draft.error} />
-        {review ? (
-          <ConfirmationCard
-            message={
-              review.kind === "quotaRefresh"
-                ? copy(
-                    "Bu hesabın Claude kotası bilgisayardan bir kez sorgulansın mı?",
-                    "Read this account's Claude quota once from the computer?",
-                  )
-                : review.kind === "default"
-                  ? copy(
-                      "Bu hesabı bu sağlayıcının gelecekteki konuşmaları için varsayılan yap?",
-                      "Make this account the default for this provider's future conversations?",
-                    )
-                  : copy(
-                      "İncelenen hesap ayarını bilgisayara kaydet?",
-                      "Save the reviewed account setting on the computer?",
-                    )
-            }
-            confirmLabel={
-              review.kind === "quotaRefresh"
-                ? copy("Kotayı yenile", "Refresh quota")
-                : copy("Kaydet", "Save")
-            }
-            cancelLabel={copy("Vazgeç", "Cancel")}
-            busy={busy}
-            disabled={disabled}
-            onCancel={() => setReview(undefined)}
-            onConfirm={() => {
-              void delivery.submit(review).catch(setError);
-            }}
-          />
-        ) : null}
+        {!review ? <ErrorText error={error ?? delivery.error ?? draft.error} /> : null}
       </Stack>
     </Sheet>
   );

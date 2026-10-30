@@ -1,17 +1,16 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Body, Button, NavigationGroup, Row, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
 import { nextPublishTime, type ScheduledTimeProps } from "./scheduled-time-types";
 
-export function ScheduledTimeField({ value, onChange, disabled, onValidityChange }: ScheduledTimeProps) {
+export function ScheduledTimeField({ value, onChange, disabled }: ScheduledTimeProps) {
   const copy = useCopy();
   const locale = useLocale();
   const [mode, setMode] = useState<"date" | "time" | null>(null);
   const parsed = value ? new Date(value) : nextPublishTime();
   const date = Number.isFinite(parsed.getTime()) ? parsed : nextPublishTime();
-  useEffect(() => { onValidityChange?.(true); }, [onValidityChange]);
   return <>
     <NavigationGroup>
       <ToggleField label={copy("Yayın zamanı seç", "Choose a publish time")} value={!!value} disabled={disabled} onChange={(enabled) => { setMode(null); onChange(enabled ? nextPublishTime().toISOString() : ""); }} />

@@ -195,7 +195,7 @@ export function ChatPlan({
 }) {
   useMobileTheme();
   return (
-    <Plan defaultOpen onOpenChange={onOpenChange} className="min-w-0">
+    <Plan defaultOpen onOpenChange={onOpenChange} className="min-w-0 rounded-none border-0 bg-transparent shadow-none">
       <Plan.Header style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
         <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
           <Plan.Title>

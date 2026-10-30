@@ -5,6 +5,7 @@ import { randomUUID } from "expo-crypto";
 import { router } from "expo-router";
 import { Button, ErrorText, NavigationGroup, NavigationRow, Sheet } from "@/ui/primitives";
 import { RemoteHostError } from "@/remote/transport";
+import { useSingleFlight } from "@/state/actions";
 import type { MessageContext } from "@/ui/media-policy";
 import { useCopy } from "@/ui/copy";
 import { startContentReport } from "../reporting/report-store";
@@ -12,12 +13,16 @@ import { SelectedText } from "./selected-text";
 import { useComposerTransfer } from "./composer-transfer";
 
 export function TranscriptActions({ text, responseText, context, reportable, onClose }: { text: string; responseText?: string; context?: MessageContext; reportable: boolean; onClose: () => void }) {
-  const copy = useCopy(); const [error, setError] = useState<unknown>(null); const [pendingAction, setPendingAction] = useState<string>(); const busy = !!pendingAction; const occupied = useRef(false); const [saved, setSaved] = useState(false);
+  const copy = useCopy(); const [error, setError] = useState<unknown>(null); const [pendingAction, setPendingAction] = useState<string>(); const busy = !!pendingAction; const flight = useSingleFlight<void>(); const [saved, setSaved] = useState(false);
   const noteId = useRef(randomUUID());
   const bridge = useComposerTransfer();
   const [selecting, setSelecting] = useState(false);
   const uncertain = error instanceof RemoteHostError && error.uncertain;
-  const act = (key: string, action: () => Promise<unknown>) => { if (occupied.current) return; occupied.current = true; setPendingAction(key); setError(null); void action().catch(setError).finally(() => { occupied.current = false; setPendingAction(undefined); }); };
+  // One synchronous owner for every message action (copy, share, note, check): a second press joins the first.
+  const act = (key: string, action: () => Promise<unknown>) => { void flight.run(async () => {
+    setPendingAction(key); setError(null);
+    try { await action(); } catch (cause) { setError(cause); } finally { setPendingAction(undefined); }
+  }); };
   if (selecting && context?.sessionId) return <SelectedText text={text} scope={{ machineId: context.machineId, sessionId: context.sessionId }} onClose={onClose} />;
   return <Sheet visible title={copy("Mesaj seçenekleri", "Message options")} size="compact" dismissible={!busy} onClose={onClose}><NavigationGroup>
     {bridge && context?.sessionId ? <NavigationRow label={copy("Metin seç", "Select excerpt")} disabled={busy} onPress={() => setSelecting(true)} /> : null}

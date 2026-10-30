@@ -1,11 +1,11 @@
 import { useMobileTheme } from "@/ui/theme";
 import Animated from "react-native-reanimated";
-import { Body, Card, Notice, Section, SegmentedControl } from "@/ui/primitives";
+import { Body, Stack, Notice, Section, SegmentedControl } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { colors, space } from "@/ui/tokens";
 import { chatTextStyles } from "@/ui/chat-styles";
-import { uiStyles } from "@/ui/styles";
+
 import { useChatAppearance } from "@/state/chat-appearance";
 import { ChatMessage, ChatResponse, chatUserBubbleStyle } from "@/ui/chat";
 import type { UIMessage } from "ai";
@@ -83,7 +83,7 @@ export function ChatAppearanceSettings() {
         />
       ) : null}
       <Section title={copy("Önizleme", "Preview")}>
-        <Card style={{ backgroundColor: colors.background, gap: space.md }}>
+        <Stack style={{ gap: space.lg }}>
           <ChatMessage
             role="user"
             message={messages[0]}
@@ -98,7 +98,7 @@ export function ChatAppearanceSettings() {
             </Body>
             <ChatResponse message={messages[1]} />
           </ChatMessage>
-        </Card>
+        </Stack>
       </Section>
     </Animated.View>
   );

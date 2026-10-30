@@ -14,7 +14,9 @@ vi.mock("@/state/queries", () => ({ useHostMutation: (method: string) => ({ isPe
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => { const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
-  return { Body: Wrapper, Sheet: Wrapper, ErrorText: () => null, MutationState: () => null, Notice: ({ message }: { message: string }) => createElement("p", null, message), Button,
+  return {
+    Disclosure: Wrapper,
+    FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, submitLabel === "Review changes" ? submitLabel : "Confirm tunnel")), Body: Wrapper, Sheet: Wrapper, ErrorText: () => null, MutationState: () => null, Notice: ({ message }: { message: string }) => createElement("p", null, message), Button,
     Field: () => null, SelectField: () => null,
     ConfirmationCard: ({ disabled, onConfirm }: { disabled?: boolean; onConfirm: () => void }) => createElement(Button, { label: "Confirm tunnel", disabled, onPress: onConfirm }) }; });
 let root: ReturnType<typeof createRoot> | undefined; let container: HTMLDivElement;

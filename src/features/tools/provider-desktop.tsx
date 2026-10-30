@@ -6,6 +6,7 @@ import { useHostQuery } from "@/state/queries";
 import { Body, Button, Notice, QueryState, ScreenList, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
+import { RecordCard } from "@/ui/record-card";
 import type { SessionScope } from "../workspace/session-types";
 import { ProviderAccountEditor } from "./provider-account-editor";
 import {
@@ -156,13 +157,10 @@ export function ProviderDesktop({
         }
         renderItem={({ item }) =>
           "account" in item ? (
-            <View style={{ gap: space.xs }}>
-              <Body>
-                {item.account.label} · {item.account.provider}
-                {item.account.isDefault ? ` · ${copy("Varsayılan", "Default")}` : ""}
-              </Body>
-              <CachedQuota quota={item.account.quota} />
-              {machine?.capabilities?.includes("providers.desktop.metadata.v1") ? (
+            <RecordCard title={item.account.label}
+              metadata={`${item.account.provider}${item.account.isDefault ? ` · ${copy("Varsayılan", "Default")}` : ""}`}
+              details={<CachedQuota quota={item.account.quota} />}
+              footer={machine?.capabilities?.includes("providers.desktop.metadata.v1") ? (
                 <Button
                   tone="quiet"
                   label={copy("Hesap işlemleri", "Account actions")}
@@ -171,8 +169,8 @@ export function ProviderDesktop({
                     if (report && current()) setSelected({ report, account: item.account });
                   }}
                 />
-              ) : null}
-            </View>
+              ) : undefined}
+            />
           ) : (
             <View style={{ gap: space.xs }}>
               <Body>{item.server.name} · MCP</Body>

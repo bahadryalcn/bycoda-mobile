@@ -59,26 +59,26 @@ export function SettingsScreen() {
     about: copy("bycoda hakkında", "About bycoda"),
     appearance: copy("Sohbet görünümü", "Chat appearance"),
   };
-  const tile = (Glyph: typeof Laptop, color: string) => (
-    <IconTile color={color}>
-      <Glyph size={18} strokeWidth={2} color={color} />
+  const tile = (Glyph: typeof Laptop) => (
+    <IconTile color={colors.muted}>
+      <Glyph size={18} strokeWidth={2} color={colors.muted} />
     </IconTile>
   );
   return (
     <Screen title={copy("Ayarlar", "Settings")}>
-      <NavigationGroup>
+      <Section title={copy("Bilgisayar", "Computer")}><NavigationGroup>
         <NavigationRow
           label={machine?.name ?? copy("Bilgisayar seçilmedi", "No computer selected")}
           detail={machine?.endpoint ?? copy("Bilgisayar bağla", "Connect a computer")}
-          icon={tile(Laptop, colors.accent)}
+          icon={tile(Laptop)}
           onPress={() => router.push("/machines")}
         />
-      </NavigationGroup>
+      </NavigationGroup></Section>
       <Section title={copy("Tercihler", "Preferences")}>
         <NavigationGroup>
           <SelectField
             variant="row"
-            icon={tile(themeMode === "dark" ? Moon : Sun, colors.warning)}
+            icon={tile(themeMode === "dark" ? Moon : Sun)}
             label={copy("Tema", "Theme")}
             value={themeMode}
             disabled={!appearanceHydrated}
@@ -93,7 +93,7 @@ export function SettingsScreen() {
           />
           <SelectField
             variant="row"
-            icon={tile(Globe, colors.info)}
+            icon={tile(Globe)}
             label={copy("Dil", "Language")}
             value={language}
             disabled={!storageHydrated || !!storageError}
@@ -102,7 +102,7 @@ export function SettingsScreen() {
           />
           <NavigationRow
             label={titles.appearance}
-            icon={tile(Type, colors.muted)}
+            icon={tile(Type)}
             onPress={() => setPanel("appearance")}
           />
         </NavigationGroup>
@@ -120,54 +120,56 @@ export function SettingsScreen() {
           />
         ) : null}
       </Section>
-      <NavigationGroup>
+      <Section title={copy("Erişim ve gizlilik", "Access & privacy")}><NavigationGroup>
         <NavigationRow
           label={titles.security}
-          icon={tile(ShieldCheck, colors.success)}
+          icon={tile(ShieldCheck)}
           onPress={() => setPanel("security")}
         />
-        <NavigationRow label={titles.permissions} icon={tile(ShieldCheck, colors.info)}
+        <NavigationRow label={titles.permissions} icon={tile(ShieldCheck)}
           onPress={() => setPanel("permissions")} />
         <NavigationRow
           label={titles.privacy}
-          icon={tile(LockKeyhole, colors.accent)}
+          icon={tile(LockKeyhole)}
           onPress={() => setPanel("privacy")}
         />
+      </NavigationGroup></Section>
+      {machine ? <Section title={machine.name}><NavigationGroup>
         {machine ? (
-          <NavigationRow label={copy("Bilgisayar erişimi", "Host access")} icon={tile(ShieldCheck, colors.info)}
+          <NavigationRow label={copy("Bilgisayar erişimi", "Host access")} icon={tile(ShieldCheck)}
             onPress={() => router.push({ pathname: "/tools/[tool]", params: { tool: "access", machineId: machine.id } })} />
         ) : null}
         {machine ? (
-          <NavigationRow label={copy("Sağlayıcı merkezi", "Provider center")} icon={tile(Server, colors.info)}
+          <NavigationRow label={copy("Sağlayıcı merkezi", "Provider center")} icon={tile(Server)}
             onPress={() => router.push({ pathname: "/tools/[tool]", params: { tool: "providers", machineId: machine.id } })} />
         ) : null}
         {machine ? (
           <NavigationRow
             label={titles.host}
-            icon={tile(SlidersHorizontal, colors.warning)}
+            icon={tile(SlidersHorizontal)}
             onPress={() => setPanel("host")}
           />
         ) : null}
-      </NavigationGroup>
-      <NavigationGroup>
+      </NavigationGroup></Section> : null}
+      <Section title={copy("Destek", "Support")}><NavigationGroup>
         <NavigationRow
           label={copy("Yardım ve destek", "Help & support")}
-          icon={tile(LifeBuoy, colors.muted)}
+          icon={tile(LifeBuoy)}
           onPress={() => router.push("/legal/help")}
         />
         <NavigationRow
           label={copy("AI içeriğini bildir", "Report AI content")}
-          icon={tile(Flag, colors.danger)}
+          icon={tile(Flag)}
           onPress={() => router.push("/report")}
         />
         <NavigationRow
           label={titles.about}
-          icon={tile(Info, colors.muted)}
+          icon={tile(Info)}
           onPress={() => setPanel("about")}
         />
-      </NavigationGroup>
+      </NavigationGroup></Section>
       {panel ? (
-        <Sheet visible size={panel === "appearance" || panel === "privacy" || panel === "about" ||
+        <Sheet visible size={panel === "appearance" || panel === "privacy" || panel === "about" || panel === "host" ||
           (process.env.EXPO_OS === "web" && (panel === "security" || panel === "permissions")) ? "compact" : "form"}
           title={titles[panel]} onClose={() => setPanel(null)}>
           {panel === "permissions" ? (

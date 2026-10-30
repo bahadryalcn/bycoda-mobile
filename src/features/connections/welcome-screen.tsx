@@ -5,7 +5,7 @@ import Animated from "react-native-reanimated";
 import { BrandLogo, LegalLinks } from "@/ui/brand";
 import { WorkspacePreview } from "@/ui/workspace-preview";
 import { useCopy } from "@/ui/copy";
-import { Body, Button, Screen } from "@/ui/primitives";
+import { Body, Button, Disclosure, Screen } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
 import { uiStyles } from "@/ui/styles";
 import { metrics, space } from "@/ui/tokens";
@@ -25,11 +25,11 @@ export function WelcomeScreen() {
           paddingTop: space.lg,
         }}
       >
-        <Animated.View entering={enterItem(0)} style={{ alignItems: "center" }}>
+        <Animated.View entering={enterItem(0)} style={{ alignItems: "flex-start" }}>
           <BrandLogo compact />
         </Animated.View>
         <Animated.View entering={enterItem(1)} style={{ gap: space.sm }}>
-          <Text selectable accessibilityRole="header" style={uiStyles.largeTitle}>
+          <Text selectable accessibilityRole="header" style={uiStyles.heading}>
             {copy("Kaldığın yerden devam et.", "Pick up where you left off.")}
           </Text>
           <Body muted>
@@ -50,11 +50,13 @@ export function WelcomeScreen() {
             label={copy("Uygulamayı keşfet", "Explore the app")}
             tone="quiet"
             onPress={() => router.push("/demo")}
-            style={{ alignSelf: "center" }}
+            style={{ alignSelf: "flex-start" }}
           />
         </Animated.View>
         <Animated.View entering={enterItem(3)}>
-          <WorkspacePreview />
+          <Disclosure label={copy("Önizleme", "Preview")}>
+            <WorkspacePreview />
+          </Disclosure>
         </Animated.View>
         <Animated.View entering={enterItem(4)}>
           <LegalLinks onOpen={(document) => router.push(`/legal/${document}`)} />

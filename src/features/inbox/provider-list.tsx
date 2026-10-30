@@ -6,8 +6,6 @@ import {
   Button,
   Disclosure,
   NavigationRow,
-  Card,
-  Heading,
   Notice,
   Row,
 } from "@/ui/primitives";
@@ -92,6 +90,7 @@ export function ProviderInboxItems({ result, limit, onOpen, onMore }: ProviderIn
           ]
             .filter(Boolean)
             .join(" · ")}
+          detailLines={2}
           trailing={<Badge label={providerStateLabel(item.state, copy)} />}
           onPress={() => onOpen(item)}
         />

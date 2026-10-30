@@ -1,7 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
-import NotebookPen from "lucide-react-native/icons/notebook-pen";
 import type { Note } from "@/domain/types";
 import { useCopy } from "@/ui/copy";
 import { Body, PressableCard } from "@/ui/primitives";
@@ -40,11 +39,10 @@ export function NoteSummaryRow({
       onPress={onPress}
       style={[
         uiStyles.card,
-        { flexDirection: "row", alignItems: "flex-start", gap: space.sm, paddingVertical: 10 },
+        { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.md },
       ]}
     >
-      <NotebookPen size={18} color={colors.accent} style={{ marginTop: 2 }} />
-      <View style={[uiStyles.grow, { gap: 3 }]}>
+      <View style={[uiStyles.grow, { gap: space.xs }]}>
         <Body numberOfLines={2} style={uiStyles.title}>
           {title}
         </Body>
@@ -53,7 +51,7 @@ export function NoteSummaryRow({
             {excerpt}
           </Body>
         ) : null}
-        <Body muted numberOfLines={1} style={uiStyles.caption}>
+        <Body muted style={uiStyles.caption}>
           {metadata}
         </Body>
       </View>

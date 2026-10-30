@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { router } from "expo-router";
-import { Badge, Body, Button, Card, MutationState, Row, Section } from "@/ui/primitives";
+import { Badge, Body, Button, Disclosure, MutationState, Row, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useHostMutation } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
@@ -14,7 +14,7 @@ export function ReviewNotes({ task }: ReviewNotesProps) {
   const resolved = notes.filter((note) => note.resolvedAt !== undefined);
   const visible = notes.filter((note) => showResolved || note.resolvedAt === undefined);
   return (
-    <Section title={copy("İnceleme notları", "Review notes")}>
+    <Disclosure label={copy("İnceleme notları", "Review notes")} detail={`${notes.length - resolved.length} ${copy("açık", "open")} · ${resolved.length} ${copy("çözüldü", "resolved")}`}>
       <Row>
         <Body muted>
           {notes.length - resolved.length} {copy("açık", "open")} · {resolved.length}{" "}
@@ -34,7 +34,7 @@ export function ReviewNotes({ task }: ReviewNotesProps) {
       {visible.map((note) => (
         <ReviewNote key={note.id} task={task} note={note} />
       ))}
-    </Section>
+    </Disclosure>
   );
 }
 
@@ -46,7 +46,7 @@ export function ReviewNote({ task, note }: ReviewNoteProps) {
   const resolved = note.resolvedAt !== undefined;
   const sessionId = note.sessionId ?? note.sessionIds?.at(-1);
   return (
-    <Card>
+    <Stack>
       <Row>
         <Badge
           label={resolved ? copy("Çözüldü", "Resolved") : copy("Açık", "Open")}
@@ -60,7 +60,7 @@ export function ReviewNote({ task, note }: ReviewNoteProps) {
       </Row>
       <Body>{note.finding}</Body>
       {note.suggestion && <Body muted>{note.suggestion}</Body>}
-      {note.details && <Body muted>{note.details}</Body>}
+      {note.details && <Disclosure label={copy("Ayrıntılar", "Details")}><Body muted>{note.details}</Body></Disclosure>}
       <Row>
         <Button
           label={
@@ -95,6 +95,6 @@ export function ReviewNote({ task, note }: ReviewNoteProps) {
       </Row>
       <MutationState mutation={resolve} />
       <MutationState mutation={read} />
-    </Card>
+    </Stack>
   );
 }

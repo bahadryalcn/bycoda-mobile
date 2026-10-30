@@ -237,7 +237,7 @@ export function CrewsScreen() {
         ) : item.kind === "definition" ? (
           <RecordCard
             title={item.value.name}
-            metadata={`${item.value.agents.length} · ${item.value.projectId ? copy("Bu proje", "This project") : copy("Bilgisayar geneli", "Host-wide")}`}
+            metadata={`${item.value.agents.length} ${copy("üye", "members")} · ${item.value.projectId ? copy("Bu proje", "This project") : copy("Bilgisayar geneli", "Host-wide")}`}
             footer={
               <Button
                 tone="quiet"

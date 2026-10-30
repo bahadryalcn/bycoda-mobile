@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 import Animated from "react-native-reanimated";
-import { Body, Button, Card, Disclosure, Field, IdentifierField } from "@/ui/primitives";
+import { Body, FormActions, Disclosure, Field, IdentifierField, Stack } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
 import { uiStyles } from "@/ui/styles";
 import { space } from "@/ui/tokens";
@@ -14,17 +14,17 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
   const editing = target?.kind === "existing";
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
-      <View style={{ alignItems: "center", gap: space.sm }}>
+      <View style={{ gap: space.sm }}>
         <Text
           selectable
           accessibilityRole="header"
-          style={[uiStyles.heading, { textAlign: "center" }]}
+          style={uiStyles.heading}
         >
           {editing
             ? copy("Bağlantıyı yenile", "Update connection")
             : copy("Manuel bağlan", "Connect manually")}
         </Text>
-        <Body muted style={{ textAlign: "center" }}>
+        <Body muted>
           {controller.connectionMode === "lan"
             ? copy(
                 "Yerel ağ adresini güncelle. Bilgisayarın QR koduyla doğrulanan anahtarı korunur.",
@@ -36,7 +36,7 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
               )}
         </Body>
       </View>
-      <Card>
+      <Stack>
         <IdentifierField
           label={copy("Bilgisayar adresi", "Computer address")}
           value={endpoint}
@@ -69,7 +69,7 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
             placeholder={copy("Çalışma bilgisayarım", "My work computer")}
           />
         </Disclosure>
-      </Card>
+      </Stack>
       {controller.connectionMode === "tailscale" ? (
         <Disclosure label={copy("Cihaz anahtarını nereden alırım?", "Where do I get a device key?")}>
           <Body muted>
@@ -80,9 +80,9 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
           </Body>
         </Disclosure>
       ) : null}
-      <Button
-        label={copy("Bağlan", "Connect")}
-        onPress={() => {
+      <FormActions
+        submitLabel={copy("Bağlan", "Connect")}
+        onSubmit={() => {
           void controller.connect();
         }}
         busy={busy}
@@ -91,15 +91,9 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
           !endpoint.trim() ||
           (!(controller.connectionMode === "lan" && editing) && !token.trim())
         }
-        tone="primary"
-        fullWidth
-      />
-      <Button
-        label={copy("Vazgeç", "Cancel")}
-        tone="quiet"
-        disabled={busy}
-        onPress={controller.cancel}
-        style={{ alignSelf: "center" }}
+        cancelLabel={copy("Vazgeç", "Cancel")}
+        cancelDisabled={busy}
+        onCancel={controller.cancel}
       />
       {process.env.EXPO_OS === "web" ? (
         <Body muted style={{ textAlign: "center" }}>

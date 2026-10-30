@@ -19,7 +19,7 @@ export function controlClasses({
   selected,
 }: Pick<ButtonProps, "tone" | "density" | "selected"> = {}) {
   return cn(
-    "min-h-control min-w-touch flex-row items-center justify-center gap-ui-xs rounded-control border-0 shadow-none px-ui-md py-ui-xs web:focus-visible:outline-2 web:focus-visible:outline-ring",
+    "min-h-control min-w-touch active:opacity-75 flex-row items-center justify-center gap-ui-xs rounded-control border-0 shadow-none px-ui-md py-ui-xs web:focus-visible:outline-2 web:focus-visible:outline-ring",
     toneClasses[tone],
     density === "compact" && "px-ui-sm",
     selected && "bg-info-surface",
@@ -28,7 +28,7 @@ export function controlClasses({
 
 export const fieldClasses =
   "min-h-control rounded-control border-0 bg-fill text-foreground px-ui-md py-ui-sm web:focus-visible:outline-2 web:focus-visible:outline-ring";
-export const surfaceClasses = "rounded-card border-0 bg-card p-ui-lg gap-ui-sm";
+export const surfaceClasses = "rounded-card border-0 bg-card shadow-none p-ui-lg gap-ui-sm";
 export const rowClasses =
   "min-h-control rounded-control border-0 bg-panel p-ui-lg active:bg-raised";
 export const bodyClasses = "text-base text-foreground";

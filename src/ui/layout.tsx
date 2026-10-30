@@ -12,7 +12,7 @@ import { Card as PanelCard } from "panelui-native/components/card";
 import { surfaceClasses } from "./design-system";
 import { usePullRefresh } from "./use-pull-refresh";
 import type { PropsWithChildren, ReactNode } from "react";
-import type { ScreenProps, ContainerProps, SectionProps, CodePanelProps } from "./component-props";
+import type { ScreenProps, ContainerProps, CardProps, SectionProps, CodePanelProps } from "./component-props";
 
 const ScreenChrome = createContext<{
   nativeTitle: boolean;
@@ -162,12 +162,27 @@ export function ScreenHeader({ children }: PropsWithChildren) {
   return <View style={uiStyles.header}>{children}</View>;
 }
 
-export function Card({ children, style }: ContainerProps) {
+const CardDepth = createContext(0);
+
+/** Plain task groups align with their page; nesting never multiplies the gutter. */
+export function Card({ children, style, variant = "plain" }: CardProps) {
   useMobileTheme();
+  const depth = use(CardDepth);
+  const surface = variant === "surface";
   return (
-    <PanelCard className={surfaceClasses} style={StyleSheet.flatten([uiStyles.card, style])}>
-      {children}
-    </PanelCard>
+    <CardDepth value={depth + 1}>
+      <PanelCard
+        className={surface ? surfaceClasses : "min-w-0 rounded-none border-0 bg-transparent shadow-none p-0 gap-ui-sm"}
+        style={StyleSheet.flatten([
+          uiStyles.card,
+          !surface && { backgroundColor: "transparent", borderRadius: 0, paddingHorizontal: 0,
+            paddingVertical: depth ? 0 : space.sm },
+          style,
+        ])}
+      >
+        {children}
+      </PanelCard>
+    </CardDepth>
   );
 }
 

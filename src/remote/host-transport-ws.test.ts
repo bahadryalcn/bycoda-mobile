@@ -3,7 +3,11 @@ import { HostTransport } from "./host-transport";
 import { HostWsError, MobileHostWsConnection, type HostWsRequestOptions } from "./ws-connection";
 import { binding, fakeNative } from "./ws-connection.test-fixture";
 import type { HostSteward } from "./types";
-import { HOST_RPC_METHODS, type CrewDefinition } from "../../../src/shared/model/host-contracts";
+import {
+  getHostRpcMethod,
+  HOST_RPC_METHODS,
+  type CrewDefinition,
+} from "../../../src/shared/model/host-contracts";
 import {
   registerHostWsRuntimeProvider,
   type HostWsConsumer,
@@ -252,6 +256,282 @@ afterEach(() => {
   for (const cleanup of cleanups.splice(0).reverse()) cleanup();
   vi.useRealTimers();
 });
+
+const deviceCapability = "transport.ws.devices.v1";
+const deviceCases = [
+  [
+    "devices.capture",
+    { deviceId: "simulator" },
+    { mime: "image/png", base64: "private-frame", capturedAt: "2026-10-29T00:00:00.000Z" },
+  ],
+  [
+    "devices.action",
+    { deviceId: "simulator", action: { type: "press", x: 1, y: 2 } },
+    '{"ok":true}',
+  ],
+  [
+    "devices.preview",
+    { deviceId: "simulator", requestId: "original-preview", url: "exp://127.0.0.1:8081" },
+    {
+      id: "preview-job",
+      requestId: "original-preview",
+      deviceId: "simulator",
+      state: "queued",
+      stages: [],
+      verification: "launch-only",
+      updatedAt: "2026-10-29T00:00:00.000Z",
+    },
+  ],
+] as const;
+
+describe("canonical paired device consumer", () => {
+  it.each(deviceCases)(
+    "sends %s with its original identity once over the device cohort",
+    async (method, params, result) => {
+      const p = provider(),
+        f = transport([deviceCapability]);
+      vi.mocked(p.consumer.request).mockResolvedValueOnce(result as never);
+      expect(getHostRpcMethod(method)?.retry).toBe("never");
+      await expect(f.client.request(method, { ...params })).resolves.toEqual(result);
+      expect(p.consumer.request).toHaveBeenCalledExactlyOnceWith(method, params, expect.anything());
+      expect(f.credential).not.toHaveBeenCalled();
+      expect(f.fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(deviceCases)("never replays dispatched %s after socket loss", async (method, params) => {
+    const p = provider(),
+      f = transport([deviceCapability]);
+    vi.mocked(p.consumer.request).mockRejectedValueOnce(new HostWsError("network", true));
+    await expect(f.client.request(method, { ...params })).rejects.toMatchObject({
+      kind: "network",
+      uncertain: true,
+    });
+    expect(p.consumer.request).toHaveBeenCalledExactlyOnceWith(method, params, expect.anything());
+    expect(f.credential).not.toHaveBeenCalled();
+    expect(f.fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(deviceCases)(
+    "keeps dispatched %s uncertain and suppresses data when access locks",
+    async (method, params, result) => {
+      const p = provider(),
+        credential = vi.fn(async () => "a".repeat(43)),
+        fetcher = vi.fn();
+      let locked = false,
+        complete!: () => void;
+      const client = new HostTransport(
+        { ...machine, capabilities: [deviceCapability] },
+        credential,
+        fetcher,
+        () => {
+          if (locked) throw new Error("locked");
+        },
+      );
+      cleanups.push(() => client.dispose());
+      vi.mocked(p.consumer.request).mockImplementationOnce(
+        () =>
+          new Promise<never>((resolve) => {
+            complete = () => resolve(result as never);
+          }),
+      );
+      const pending = client.request(method, { ...params }).catch((error: unknown) => error);
+      await vi.waitFor(() => expect(p.consumer.request).toHaveBeenCalledTimes(1));
+      locked = true;
+      complete();
+      const error = await pending;
+      expect(error).toMatchObject({ kind: "auth", uncertain: true });
+      expect(error).not.toHaveProperty("result");
+      expect(error).not.toHaveProperty("frame");
+      expect(p.consumer.request).toHaveBeenCalledTimes(1);
+      expect(credential).not.toHaveBeenCalled();
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(deviceCases)(
+    "retains %s timeout uncertainty without a retry or HTTP fallback",
+    async (method, params) => {
+      vi.useFakeTimers();
+      const p = provider(),
+        f = transport([deviceCapability]);
+      vi.mocked(p.consumer.request).mockImplementationOnce(
+        (_method, _params, options) =>
+          new Promise<never>((_resolve, reject) => {
+            options?.signal?.addEventListener(
+              "abort",
+              () => reject(new HostWsError("deadline", true)),
+              { once: true },
+            );
+          }),
+      );
+      const pending = f.client
+        .request(method, { ...params }, { timeoutMs: 1_000 })
+        .catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(p.consumer.request).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await pending).toMatchObject({ kind: "timeout", uncertain: true });
+      expect(getHostRpcMethod(method)?.retry).toBe("never");
+      expect(p.consumer.request).toHaveBeenCalledTimes(1);
+      expect(f.credential).not.toHaveBeenCalled();
+      expect(f.fetcher).not.toHaveBeenCalled();
+    },
+  );
+});
+
+const mobilePreviewCapability = "transport.ws.devices.preview.mobile.v1";
+const lifecycleStatus = {
+  running: false,
+  installed: true,
+  agentInstalled: false,
+  platform: "win32",
+  platforms: [{ platform: "android", available: true }],
+};
+const mobilePreview = {
+  id: "mobile-preview-job",
+  requestId: "mobile-original",
+  deviceId: "simulator",
+  state: "queued",
+  stages: [],
+  verification: "launch-only",
+  updatedAt: "2026-10-29T00:00:00.000Z",
+};
+const deviceLifecycleCases = [
+  [
+    "devices.setup",
+    { projectId: "project", agentAccess: false },
+    lifecycleStatus,
+    deviceCapability,
+    "never",
+  ],
+  ["devices.stop", { projectId: "project" }, lifecycleStatus, deviceCapability, "never"],
+  [
+    "devices.preview.mobile.start",
+    {
+      projectId: "project",
+      requestId: "mobile-original",
+      deviceId: "simulator",
+      url: "exp://127.0.0.1:8081",
+      installExpoGo: false,
+    },
+    mobilePreview,
+    mobilePreviewCapability,
+    "never",
+  ],
+  [
+    "devices.preview.mobile.status",
+    { projectId: "project", requestId: "mobile-original", includeFrame: true },
+    {
+      ...mobilePreview,
+      frame: { mime: "image/png", base64: "iVBORw0KGgo=", capturedAt: "2026-10-29T00:00:00.000Z" },
+    },
+    mobilePreviewCapability,
+    "safe-query",
+  ],
+  [
+    "devices.preview.impact",
+    { projectId: "project" },
+    {
+      activeCount: 1,
+      owned: [{ id: "mobile-preview-job", deviceId: "simulator", state: "running" }],
+      otherActiveCount: 0,
+    },
+    mobilePreviewCapability,
+    "safe-query",
+  ],
+] as const;
+
+describe("device lifecycle and mobile preview WS policy", () => {
+  it.each(deviceLifecycleCases)(
+    "selects %s by its transport capability and retains original payload",
+    async (method, params, result, capability, retry) => {
+      const p = provider(),
+        f = transport([capability, "device.host", "devices.preview.mobile.v1"]);
+      expect(getHostRpcMethod(method)?.retry).toBe(retry);
+      expect(getHostRpcMethod(method)?.requiredCapability).toBe(capability);
+      vi.mocked(p.consumer.request).mockResolvedValueOnce(result as never);
+      await expect(f.client.request(method, { ...params })).resolves.toEqual(result);
+      expect(p.consumer.request).toHaveBeenCalledExactlyOnceWith(method, params, expect.anything());
+      expect(f.credential).not.toHaveBeenCalled();
+      expect(f.fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(deviceLifecycleCases)(
+    "does not replay dispatched %s or fall back to HTTP",
+    async (method, params, _result, capability, retry) => {
+      const p = provider(),
+        f = transport([capability]);
+      vi.mocked(p.consumer.request).mockRejectedValueOnce(
+        new HostWsError("network", retry === "never"),
+      );
+      await expect(f.client.request(method, { ...params })).rejects.toMatchObject({
+        kind: "network",
+        uncertain: retry === "never",
+      });
+      expect(p.consumer.request).toHaveBeenCalledExactlyOnceWith(method, params, expect.anything());
+      expect(f.credential).not.toHaveBeenCalled();
+      expect(f.fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(deviceLifecycleCases)(
+    "keeps %s effect/read uncertainty distinct when access locks",
+    async (method, params, result, capability, retry) => {
+      const p = provider(),
+        credential = vi.fn(async () => "a".repeat(43)),
+        fetcher = vi.fn();
+      let locked = false,
+        complete!: () => void;
+      const client = new HostTransport(
+        { ...machine, capabilities: [capability] },
+        credential,
+        fetcher,
+        () => {
+          if (locked) throw new Error("locked");
+        },
+      );
+      cleanups.push(() => client.dispose());
+      vi.mocked(p.consumer.request).mockImplementationOnce(
+        () =>
+          new Promise<never>((resolve) => {
+            complete = () => resolve(result as never);
+          }),
+      );
+      const pending = client.request(method, { ...params }).catch((error: unknown) => error);
+      await vi.waitFor(() => expect(p.consumer.request).toHaveBeenCalledTimes(1));
+      locked = true;
+      complete();
+      const error = await pending;
+      expect(error).toMatchObject({ kind: "auth", uncertain: retry === "never" });
+      expect(error).not.toHaveProperty("result");
+      expect(error).not.toHaveProperty("frame");
+      expect(p.consumer.request).toHaveBeenCalledTimes(1);
+      expect(credential).not.toHaveBeenCalled();
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(deviceLifecycleCases)(
+    "does not mistake legacy availability for %s WS authority",
+    async (method, params, result) => {
+      const p = provider(),
+        f = transport(["device.host", "devices.preview.mobile.v1"]);
+      f.fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ result }), { status: 200 }));
+      await expect(f.client.request(method, { ...params })).resolves.toEqual(result);
+      expect(p.runtime.acquire).not.toHaveBeenCalled();
+      expect(p.consumer.request).not.toHaveBeenCalled();
+      expect(f.credential).toHaveBeenCalledTimes(1);
+      expect(f.fetcher).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(f.fetcher.mock.calls[0]?.[1]?.body))).toMatchObject({
+        method,
+        params,
+      });
+    },
+  );
+});
+
 describe("existing mobile facade to native WS consumer", () => {
   it("discovers a Crew-only Host and sends full closed definition CAS/read through its negotiated native cohort", async () => {
     const p = await familyConnection(crewCapability, ["crews.save", "crews.list"]);

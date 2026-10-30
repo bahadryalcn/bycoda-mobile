@@ -83,38 +83,40 @@ export function GitFileRow({
         <View style={[uiStyles.grow, { gap: 1 }]}>
           <Body
             selectable={false}
-            numberOfLines={1}
+            numberOfLines={2}
             ellipsizeMode="middle"
             style={{ fontSize: fontSize.control, lineHeight: 20, fontWeight: "600" }}
           >
             {name}
           </Body>
-          {directory ? (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }}>
+            {directory ? (
+              <Body
+                selectable={false}
+                muted
+                numberOfLines={1}
+                ellipsizeMode="middle"
+                style={[uiStyles.caption, { flexShrink: 1 }]}
+              >
+                {directory}
+              </Body>
+            ) : null}
             <Body
               selectable={false}
-              muted
-              numberOfLines={1}
-              ellipsizeMode="middle"
-              style={uiStyles.caption}
+              style={{ fontSize: fontSize.small, lineHeight: 18, fontVariant: ["tabular-nums"] }}
             >
-              {directory}
+              <Body
+                selectable={false}
+                style={{ fontSize: fontSize.small, lineHeight: 18, color: colors.success }}
+              >{`+${file.additions}`}</Body>
+              {"  "}
+              <Body
+                selectable={false}
+                style={{ fontSize: fontSize.small, lineHeight: 18, color: colors.danger }}
+              >{`−${file.deletions}`}</Body>
             </Body>
-          ) : null}
+          </View>
         </View>
-        <Body
-          selectable={false}
-          style={{ fontSize: fontSize.small, lineHeight: 18, fontVariant: ["tabular-nums"] }}
-        >
-          <Body
-            selectable={false}
-            style={{ fontSize: fontSize.small, lineHeight: 18, color: colors.success }}
-          >{`+${file.additions}`}</Body>
-          {"  "}
-          <Body
-            selectable={false}
-            style={{ fontSize: fontSize.small, lineHeight: 18, color: colors.danger }}
-          >{`−${file.deletions}`}</Body>
-        </Body>
         <ChevronRight size={14} strokeWidth={2.4} color={colors.tertiary} />
       </PressableCard>
       <IconButton label={`${stageLabel}: ${file.relative}`} onPress={onStage} disabled={busy}>

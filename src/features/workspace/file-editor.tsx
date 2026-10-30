@@ -1,6 +1,6 @@
 import type { FileEditorProps, FileEditorMode, FileEditorConfirmation } from "./file-editor-types";
 import { useCallback, useEffect, useState } from "react";
-import { BackHandler } from "react-native";
+import { BackHandler, useWindowDimensions } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
 import { useAsyncAction } from "@/state/actions";
@@ -24,7 +24,7 @@ import {
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import { useMobileTheme } from "@/ui/theme";
 import { haptic } from "@/ui/motion";
-import { colors, radii, space } from "@/ui/tokens";
+import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { View } from "react-native";
 import { DocumentPreview, ProjectMedia } from "@/ui/document-preview";
@@ -43,6 +43,7 @@ const encodeFileDraft = (value: FileDraft | null) =>
 export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }: FileEditorProps) {
   useMobileTheme();
   const copy = useCopy();
+  const { height } = useWindowDimensions();
   const machine = useActiveMachine();
   const client = useHostClient();
   const media = isMediaFile(path);
@@ -224,8 +225,8 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
       ) : null}
       {!binary && edit && draft.ready ? (
         <>
-          <Row style={{ flexWrap: "nowrap" }}>
-            <View style={uiStyles.grow}>
+          <Row style={{ gap: space.xs }}>
+            <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 180 }}>
               <SegmentedControl
                 label={copy("Düzenle veya önizle", "Edit or preview")}
                 value={editing ? "edit" : "preview"}
@@ -320,7 +321,6 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
             </Sheet>
           ) : null}
           {editing ? (
-            <View style={{ backgroundColor: colors.panel, borderRadius: radii.card, padding: space.sm }}>
             <Input
               label={copy("Dosya içeriği", "File content")}
               mono
@@ -334,9 +334,8 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
                 draft.setValue((current) => ({ ...(current ?? edit), content }))
               }
               textAlignVertical="top"
-              style={{ minHeight: 340 }}
+              style={{ minHeight: Math.max(160, Math.min(340, height * 0.45)) }}
             />
-            </View>
           ) : (
             <DocumentPreview name={path} text={edit.content} context={context} />
           )}

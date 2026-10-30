@@ -1,8 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
 import { Pressable, Text, View } from "react-native";
-import Animated from "react-native-reanimated";
-import { haptic, usePressMotion } from "./motion";
+import { haptic } from "./motion";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Laptop from "lucide-react-native/icons/laptop";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
@@ -14,7 +13,7 @@ import { useActiveMachine, useMachines } from "../state/machines";
 import { useHostClient, useHostQuery } from "../state/queries";
 import { useSecurity } from "../state/security";
 import type { HostDescriptor } from "../remote/types";
-import { colors, radii, semanticColors, space } from "./tokens";
+import { colors, metrics, opacity, radii, semanticColors, space } from "./tokens";
 import { uiStyles } from "./styles";
 import { Body } from "./primitives";
 import { useCopy } from "./copy";
@@ -99,47 +98,44 @@ export function MachineHealthMonitor() {
 }
 
 /** Compact computer switcher shown beside large titles: status dot, name and a menu. */
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function MachinePill() {
   useMobileTheme();
   const { machine, copy, health, successAt, unlocked, status, statusColor, storageError } = useMachineStatus();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-  useEffect(closeMenu, [machine?.id, closeMenu]);
-  useEffect(() => {
-    if (!unlocked) closeMenu();
-  }, [unlocked, closeMenu]);
-  const press = usePressMotion(0.95);
+  const [menuMachineId, setMenuMachineId] = useState(machine?.id);
+  if (menuMachineId !== machine?.id) {
+    setMenuMachineId(machine?.id);
+    if (menuOpen) setMenuOpen(false);
+  }
+  if (!unlocked && menuOpen) setMenuOpen(false);
   const name = machine?.name ?? copy("Bilgisayar bağla", "Connect a computer");
   return (
     <View style={{ flexDirection: "row", alignItems: "center" }}>
       <Menu open={menuOpen && unlocked} onOpenChange={(next) => setMenuOpen(unlocked && next)}>
         <Menu.Trigger>
-          <AnimatedPressable
+          <Pressable
             accessibilityRole="button"
             accessibilityLabel={[name, machine ? status : undefined, copy("Bilgisayar seç", "Choose computer")]
               .filter(Boolean)
               .join(". ")}
             accessibilityState={{ expanded: menuOpen && unlocked }}
             aria-expanded={menuOpen && unlocked}
-            onPressIn={press.onPressIn}
-            onPressOut={press.onPressOut}
             onPress={() => haptic.select()}
-            hitSlop={6}
-            style={[
+            style={({ pressed }) => [
               {
                 flexDirection: "row",
                 alignItems: "center",
                 gap: space.sm,
-                minHeight: 36,
+                minHeight: metrics.touchTarget,
                 paddingStart: space.md,
                 paddingEnd: space.sm,
                 borderRadius: radii.pill,
                 backgroundColor: colors.fill,
                 maxWidth: 240,
               },
-              press.animatedStyle,
+              pressed && { opacity: opacity.pressed },
             ]}
           >
             {machine ? (
@@ -162,7 +158,7 @@ export function MachinePill() {
               {storageError && unlocked ? status : name}
             </Text>
             <ChevronDown size={14} strokeWidth={2.6} color={colors.muted} />
-          </AnimatedPressable>
+          </Pressable>
         </Menu.Trigger>
         <Menu.Content
           placement="bottom"

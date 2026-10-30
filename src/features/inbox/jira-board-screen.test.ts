@@ -31,6 +31,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: { children?: ReactNode }) => createElement("div", null, children);
   return {
     Body: Wrapper,
+    Disclosure: Wrapper,
     Sheet: Wrapper,
     Row: Wrapper,
     Stack: Wrapper,

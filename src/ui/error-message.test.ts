@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RemoteHostError } from "../remote/host-error";
+import { ApprovalCommandRefused } from "../domain/approval-command";
 import { errorMessage, remoteErrorKind } from "./error-message";
 
 const tr = (turkish: string, _english: string) => turkish;
@@ -9,6 +10,18 @@ const remote = (
   message = "Raw transport message",
   uncertain = false,
 ) => new RemoteHostError("synthetic-machine", kind, message, uncertain);
+
+it("localizes approval identity refusals without suggesting uncertain delivery", () => {
+  for (const reason of ["unsupported", "unidentified"] as const) {
+    const error = new ApprovalCommandRefused(reason);
+    expect(errorMessage(error, en)).toBe(error.message);
+    expect(errorMessage(error, tr)).toContain(
+      reason === "unsupported" ? "Host'u güncelle" : "istek doğrulanamıyor",
+    );
+    expect(error.uncertain).toBe(false);
+    expect(errorMessage(error, tr)).not.toContain("uygulanmış olabilir");
+  }
+});
 
 describe("shared remote error copy", () => {
   it.each([

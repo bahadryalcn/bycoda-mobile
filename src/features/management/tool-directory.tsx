@@ -20,12 +20,10 @@ import Globe from "lucide-react-native/icons/globe";
 import Terminal from "lucide-react-native/icons/terminal";
 import ChartColumn from "lucide-react-native/icons/chart-column";
 import { useActiveMachine, useMachines } from "@/state/machines";
-import { Empty, NavigationGroup, NavigationRow } from "@/ui/primitives";
+import { Empty, NavigationGroup, NavigationRow, Section } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { colors } from "@/ui/tokens";
 import { useMobileTheme } from "@/ui/theme";
-import { enterItem } from "@/ui/motion";
-import Animated from "react-native-reanimated";
 import { managementSections, type ManagementSection } from "./sections";
 
 type CopyPair = readonly [tr: string, en: string];
@@ -63,12 +61,13 @@ const tools: readonly Tool[] = [
   { id: "access", label: ["Bilgisayar erişimi", "Host access"], icon: ShieldCheck },
 ];
 
-/** Short inset groups, each a Settings-style list; empty groups disappear while searching. */
-const groups: readonly (readonly string[])[] = [
-  ["sessions", "files", "git"],
-  ["tasks", "goals", "crews", "automations", "stewards", "notes", "social", "inbox"],
-  ["terminals", "servers", "logs", "diagnostics", "usage", "browser", "devices"],
-  ["providers", "access", "computers"],
+/** Task groups also supply search vocabulary; an empty group never leaves a heading. */
+const groups: readonly { title: CopyPair; ids: readonly string[] }[] = [
+  { title: ["Proje", "Project"], ids: ["sessions", "files", "git", "notes"] },
+  { title: ["İşler", "Work"], ids: ["tasks", "goals", "crews", "automations", "stewards"] },
+  { title: ["İletişim", "Communication"], ids: ["inbox", "social"] },
+  { title: ["Geliştirme", "Development"], ids: ["terminals", "servers", "logs", "diagnostics", "usage", "browser", "devices"] },
+  { title: ["Bilgisayar", "Computer"], ids: ["providers", "access", "computers"] },
 ];
 
 export function ToolDirectory({
@@ -87,9 +86,11 @@ export function ToolDirectory({
   const machine = useActiveMachine();
   const [pendingTool, setPendingTool] = useState<Tool | null>(null);
   const normalized = query.trim().toLocaleLowerCase();
-  const visible = tools.filter((tool) =>
-    copy(...tool.label).toLocaleLowerCase().includes(normalized),
-  );
+  const visible = tools.filter((tool) => {
+    const group = groups.find((group) => group.ids.includes(tool.id));
+    return [copy(...tool.label), group ? copy(...group.title) : ""]
+      .join(" ").toLocaleLowerCase().includes(normalized);
+  });
   if (!visible.length)
     return <Empty title={copy("Aramana uyan araç yok.", "No tools match your search.")} />;
   const open = (tool: Tool, targetProjectId = projectId) => {
@@ -126,8 +127,8 @@ export function ToolDirectory({
   };
   const byId = new Map(visible.map((tool) => [tool.id, tool]));
   const rendered = groups
-    .map((ids) => ids.map((id) => byId.get(id)).filter((tool): tool is Tool => !!tool))
-    .filter((group) => group.length > 0);
+    .map((group) => ({ ...group, tools: group.ids.map((id) => byId.get(id)).filter((tool): tool is Tool => !!tool) }))
+    .filter((group) => group.tools.length > 0);
   return (
     <>
       {pendingTool ? <ProjectPicker key={machine?.id} visible onClose={() => setPendingTool(null)} onSelect={(project) => {
@@ -135,10 +136,10 @@ export function ToolDirectory({
         setPendingTool(null);
         open(tool, project.id);
       }} /> : null}
-      {rendered.map((group, index) => (
-        <Animated.View key={group.map((tool) => tool.id).join("-")} entering={enterItem(index)}>
+      {rendered.map((group) => (
+        <Section key={group.title[1]} title={copy(...group.title)}>
           <NavigationGroup>
-            {group.map((tool) => {
+            {group.tools.map((tool) => {
               const Icon = tool.icon;
               return (
                 <NavigationRow
@@ -152,7 +153,7 @@ export function ToolDirectory({
               );
             })}
           </NavigationGroup>
-        </Animated.View>
+        </Section>
       ))}
     </>
   );

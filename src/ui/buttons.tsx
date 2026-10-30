@@ -6,9 +6,7 @@ import { colors, metrics, opacity, radii, semanticColors, space } from "./tokens
 import { uiStyles } from "./styles";
 import { LifecycleButton as PanelButton } from "./busy-indicator";
 import { controlClasses } from "./design-system";
-import { useReducedMotionPreference } from "./use-reduced-motion";
-import Animated from "react-native-reanimated";
-import { haptic, usePressMotion } from "./motion";
+import { haptic } from "./motion";
 import type {
   ButtonProps,
   ChoiceChipProps,
@@ -17,7 +15,6 @@ import type {
   IconButtonProps,
 } from "./component-props";
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function Button({
   label,
@@ -33,7 +30,6 @@ export function Button({
   children,
 }: ButtonProps) {
   useMobileTheme();
-  const reducedMotion = useReducedMotionPreference();
   const off = !!(disabled || busy);
   const semantic =
     tone === "default" || tone === "primary" || tone === "secondary" || tone === "quiet"
@@ -55,7 +51,7 @@ export function Button({
       aria-pressed={selected}
       disabled={off}
       loading={busy}
-      pressScale={reducedMotion ? 1 : 0.96}
+      pressScale={1}
       spinnerProps={{ color: foreground }}
       onPress={() => {
         if (tone === "primary") haptic.tap();
@@ -118,31 +114,28 @@ export function PressableCard({
   style,
 }: PressableCardProps) {
   useMobileTheme();
-  const press = usePressMotion(0.98);
   return (
-    <AnimatedPressable
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected, disabled: !!disabled, expanded }}
-      onPressIn={press.onPressIn}
-      onPressOut={press.onPressOut}
       aria-disabled={!!disabled}
       aria-pressed={selected}
       aria-expanded={expanded}
       disabled={disabled}
       onPress={onPress}
-      style={[
+      style={({ pressed }) => [
         StyleSheet.flatten([
           uiStyles.press,
           selected && uiStyles.selected,
           style,
           { opacity: disabled ? opacity.disabled : 1 },
         ]),
-        press.animatedStyle,
+        pressed && !disabled && { opacity: opacity.pressed },
       ]}
     >
       {children}
-    </AnimatedPressable>
+    </Pressable>
   );
 }
 export function SelectRow({ label, detail, selected, onPress, disabled }: SelectRowProps) {
@@ -156,7 +149,7 @@ export function SelectRow({ label, detail, selected, onPress, disabled }: Select
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
         <View style={[uiStyles.grow, { gap: 2 }]}>
-          <Body numberOfLines={2} style={uiStyles.label}>
+          <Body style={uiStyles.label}>
             {label}
           </Body>
           {detail ? (
@@ -181,7 +174,6 @@ export function IconButton({
   expanded,
 }: IconButtonProps) {
   useMobileTheme();
-  const reducedMotion = useReducedMotionPreference();
   const off = !!(disabled || busy);
   return (
     <PanelButton
@@ -193,15 +185,15 @@ export function IconButton({
       aria-expanded={expanded}
       disabled={off}
       loading={busy}
-      pressScale={reducedMotion ? 1 : 0.9}
+      pressScale={1}
       spinnerProps={{ color: tone === "primary" ? colors.primaryText : colors.accent }}
       startContent={children}
       variant={tone === "primary" ? "primary" : "ghost"}
       size="icon"
       className={
         tone === "primary"
-          ? "min-h-control min-w-touch rounded-full border-0 shadow-none bg-primary p-ui-xs"
-          : "min-h-control min-w-touch rounded-full border-0 shadow-none bg-transparent p-ui-xs active:bg-fill"
+          ? "min-h-control min-w-touch rounded-full border-0 shadow-none bg-primary p-ui-xs active:opacity-75"
+          : "min-h-control min-w-touch rounded-full border-0 shadow-none bg-transparent p-ui-xs active:bg-fill active:opacity-75"
       }
       onPress={onPress}
       style={[

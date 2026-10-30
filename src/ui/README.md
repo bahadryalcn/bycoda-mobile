@@ -147,7 +147,7 @@ styles per mode and resolves the current palette when read. Do not capture color
 values in module-level objects or `StyleSheet.create`. A theme change updates
 existing screens without remounting them or clearing drafts and form state.
 
-The dark theme uses black/graphite; the light theme uses neutral white surfaces.
+The dark theme uses neutral graphite; the light theme uses a white canvas and neutral control fills.
 Both share the same blue action role and semantic status roles. Controls retain
 48dp touch targets, dynamic text and the system reduced-motion preference.
 Action labels use the compact control type token and control radius, not pill
@@ -190,3 +190,10 @@ callbacks remain in their original owners.
 Type checks, catalog/theme tests and web export validate source integration.
 Keyboard, gestures, text scaling, reduced motion, lock transitions and both
 appearances still require simulator/physical-device acceptance.
+
+
+`Card` defaults to `variant="plain"`: a task group sharing its page gutter.
+Nested groups do not multiply padding. Explicit `variant="surface"` retains a
+semantic raised task area when needed. This is one facade, not a second kit.
+`Button` and `IconButton` keep their full target during presses; opacity supplies
+feedback. Long selectable option labels wrap in the shared selection owner.

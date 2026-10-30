@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { Children, createContext, Fragment, isValidElement, use, type ReactNode } from "react";
+import { createContext, use, type ReactNode } from "react";
 import { View, type TextProps } from "react-native";
 import { Pressable } from "react-native";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
@@ -13,31 +13,12 @@ const GroupedNavigation = createContext(false);
 /** True inside a NavigationGroup, so row-like controls can adopt list padding. */
 export const useInNavigationGroup = () => use(GroupedNavigation);
 
-/** Related rows share one surface and one divider, instead of nested cards. */
+/** Related navigation shares one rhythm without adding a decorative container. */
 export function NavigationGroup({ children, style }: ContainerProps) {
   useMobileTheme();
-  const rows = Children.toArray(children);
   return (
     <GroupedNavigation value>
-      <View style={[uiStyles.card, { padding: 0, gap: 0, overflow: "hidden" }, style]}>
-        {rows.map((row, index) => (
-          <Fragment key={isValidElement(row) ? row.key : index}>
-            {index ? (
-              <View
-                style={[
-                  uiStyles.separator,
-                  {
-                    marginStart:
-                      space.lg +
-                      (isValidElement<{ icon?: unknown }>(row) && row.props.icon ? 32 + space.row : 0),
-                  },
-                ]}
-              />
-            ) : null}
-            {row}
-          </Fragment>
-        ))}
-      </View>
+      <View style={[{ gap: 0 }, style]}>{children}</View>
     </GroupedNavigation>
   );
 }
@@ -106,14 +87,15 @@ export function NavigationRow({
         plain && { borderWidth: 0, borderRadius: 0, backgroundColor: "transparent" },
         semantic && !plain && { borderColor: semantic.border, backgroundColor: semantic.surface },
         {
-          minHeight: detail ? 62 : 52,
-          paddingHorizontal: space.lg,
+          minHeight: detail ? 60 : 48,
+          paddingHorizontal: plain ? 0 : space.md,
           paddingVertical: space.sm,
           flexDirection: "row",
           alignItems: "center",
           gap: space.row,
           opacity: disabled && !busy ? opacity.disabled : 1,
         },
+        selected && { backgroundColor: colors.selected },
         pressed && { backgroundColor: semantic?.surface ?? colors.raised },
       ]}
     >

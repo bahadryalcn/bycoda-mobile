@@ -107,21 +107,24 @@ export function EngagementSettings() {
             disabled={!!busy || !links.reviewUrl}
             detail={!links.reviewUrl ? copy("Mağazada yayımlandığında kullanılabilir.", "Available after the store release.") : undefined}
             detailLines={2}
-            icon={tile(Star, colors.warning)}
+            icon={tile(Star, colors.muted)}
+            busy={busy === "review"}
             onPress={() => { void perform("review"); }}
           />
           <View ref={shareAnchor} collapsable={false}>
             <NavigationRow
               label={copy("Uygulamayı paylaş", "Share the app")}
               disabled={!!busy || !nativeSharing}
-              icon={tile(Share2, colors.accent)}
+              icon={tile(Share2, colors.muted)}
+              busy={busy === "share"}
               onPress={() => { void perform("share"); }}
             />
           </View>
           <NavigationRow
             label={copy("Uygulama sayfası", "App page")}
             disabled={!!busy}
-            icon={tile(Globe, colors.info)}
+            icon={tile(Globe, colors.muted)}
+            busy={busy === "public"}
             onPress={() => { void perform("public"); }}
           />
           <NavigationRow

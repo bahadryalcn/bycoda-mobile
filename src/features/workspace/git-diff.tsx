@@ -2,7 +2,7 @@ import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { View } from "react-native";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
-import { Body, Button, Card, IconButton, QueryState, Row, Separator } from "@/ui/primitives";
+import { Body, Button, IconButton, QueryState, Row } from "@/ui/primitives";
 import { colors, space, fontSize } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
@@ -32,7 +32,6 @@ export function GitDiffPanel({
   const textDiff = diff.data && !diff.data.binary && !diff.data.tooLarge ? diff.data : undefined;
   const preview = useDiffPreview(textDiff?.original, textDiff?.current);
   return (
-    <Card>
       <View style={workspaceStyles.stack}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
           <IconButton
@@ -70,7 +69,6 @@ export function GitDiffPanel({
             onPress={() => onStage(selection)}
           />
         </Row>
-        <Separator />
         {!selection.staged && diff.data && preview && !diff.data.binary && !diff.data.tooLarge && !preview.tooLarge && !preview.truncated && !preview.unchanged ? <Button tone="quiet" label={copy("Değişiklikleri seç", "Select changes")} disabled={busy} onPress={() => setSelecting(true)} /> : null}
         <QueryState query={diff} />
         {textDiff && !preview ? <Body muted>{copy("Diff hesaplanıyor…", "Computing diff…")}</Body> : null}
@@ -112,6 +110,5 @@ export function GitDiffPanel({
         {children}
         <GitSelective key={`${scope.projectId}:${scope.cwd}:${scope.root}:${selection.path}`} scope={scope} path={selection.path} visible={selecting} busy={busy} onBusyChange={onReviewBusy ?? (() => {})} onClose={() => setSelecting(false)} onChanged={() => { void diff.refetch(); }} registerExit={onReviewExit} />
       </View>
-    </Card>
   );
 }

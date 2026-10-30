@@ -14,7 +14,11 @@ vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => crea
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label);
-  return { Body: Wrapper, Sheet: Wrapper, QueryState: () => null, ErrorText: () => null, MutationState: () => null,
+  return {
+    Disclosure: Wrapper,
+    Row: Wrapper, Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    SearchField: ({ label, value, onChangeText }: { label: string; value: string; onChangeText: (value: string) => void }) => createElement("input", { "aria-label": label, value, onChange: (event: import("react").ChangeEvent<HTMLInputElement>) => onChangeText(event.target.value) }),
+    FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, submitLabel === "Review changes" ? submitLabel : "Confirm save")), Body: Wrapper, Sheet: Wrapper, QueryState: () => null, ErrorText: () => null, MutationState: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message), Button, NavigationRow: Button,
     Field: ({ label, value, editable, onChangeText }: { label: string; value: string; editable: boolean; onChangeText: (text: string) => void }) => createElement("input", { 'aria-label': label, value, disabled: !editable, onChange: (event: import("react").ChangeEvent<HTMLInputElement>) => onChangeText(event.target.value) }),
     ConfirmationCard: ({ onConfirm, disabled }: { onConfirm: () => void; disabled?: boolean }) => createElement(Button, { label: "Confirm save", onPress: onConfirm, disabled }),

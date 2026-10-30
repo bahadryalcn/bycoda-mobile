@@ -5,6 +5,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ProjectOrganization } from "./project-organization";
 const f = vi.hoisted(() => ({ activeId: "machine", raw: null as string | null, private: false, sends: [] as Record<string, unknown>[], snapshot: { environmentId: "env", sourceSessionId: "source", projectCwd: "/private-project", workingCwd: "/private-project", revision: "a".repeat(64), atomic: false, name: "Private project label", customName: "", groupId: null, groups: [], projectPosition: 0, projectCount: 1, folders: [], sessions: [{ id: "s1", title: "First" }], order: {} } as Record<string, unknown> }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
+vi.mock("lucide-react-native/icons/arrow-up", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/arrow-down", () => ({ default: () => null }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "operation" }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: async () => f.raw, setItem: async (_key: string, value: string) => { f.raw = value; }, removeItem: async () => { f.raw = null; } } }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "machine", name: "Computer", environmentId: "env", capabilities: ["projects.organization.desktop.v1"] }), useMachines: { getState: () => ({ activeId: f.activeId, machines: [{ id: "machine", environmentId: "env" }] }) } }));
@@ -14,7 +16,7 @@ vi.mock("@/ui/primitives", () => {
  const box = ({ children }: PropsWithChildren) => createElement("div", null, children); const button = ({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
  return { Body: box, Stack: box, Row: box, NavigationGroup: box, Sheet: ({ children, visible }: PropsWithChildren<{ visible: boolean }>) => visible ? createElement("div", null, children) : null, Notice: ({ message }: { message: string }) => createElement("p", null, message), QueryState: () => null, ErrorText: ({ error }: { error: unknown }) => error ? createElement("p", null, String(error)) : null,
   ScreenList: ({ data, header, renderItem }: { data: unknown[]; header: unknown; renderItem: (input: { item: unknown; index: number }) => unknown }) => createElement("div", null, header as never, ...data.map((item, index) => renderItem({ item, index }) as never)),
-  Button: button, NavigationRow: button, FormActions: ({ submitLabel, disabled, onSubmit }: { submitLabel: string; disabled: boolean; onSubmit: () => void }) => button({ label: submitLabel, disabled, onPress: onSubmit }),
+  Button: button, IconButton: button, NavigationRow: button, FormActions: ({ submitLabel, disabled, onSubmit }: { submitLabel: string; disabled: boolean; onSubmit: () => void }) => button({ label: submitLabel, disabled, onPress: onSubmit }),
   Field: ({ label, value, editable, onChangeText }: { label: string; value: string; editable: boolean; onChangeText: (value: string) => void }) => createElement("input", { "aria-label": label, value, disabled: !editable, onChange: (event) => onChangeText(event.currentTarget.value) }), SelectField: () => null, MultiSelectField: () => null };
 });
 const container = document.createElement("div"); let root: ReturnType<typeof createRoot>;

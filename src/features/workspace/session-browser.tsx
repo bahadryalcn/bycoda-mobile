@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { Notice, QueryState, Sheet } from "@/ui/primitives";
+import { ScreenChromeProvider } from "@/ui/layout";
 import { useCopy } from "@/ui/copy";
 import { useProjectList } from "./use-project-directory";
 import { BrowserScreen } from "../tools/browser-screen";
@@ -14,6 +15,6 @@ export function SessionBrowser({ scope, projectId, onClose }: { scope: SessionSc
   return <Sheet visible title={copy("Tarayıcı", "Browser")} size="full" scroll={false} onClose={onClose}>
     {!current ? <Notice message={copy("Seçili bilgisayar değişti veya bu özelliği desteklemiyor.", "The selected computer changed or does not support this feature.")} />
       : !machine.capabilities?.includes("browser.shared") ? <Notice message={copy("Bu bilgisayar ortak tarayıcıyı desteklemiyor.", "This computer does not support the shared browser.")} />
-      : project ? <BrowserScreen project={project} sessionId={opening.sessionId} /> : <QueryState query={projects} empty={!projects.isPending} emptyTitle={copy("Proje bulunamadı.", "Project not found.")} />}
+      : project ? <ScreenChromeProvider nativeTitle><BrowserScreen project={project} sessionId={opening.sessionId} /></ScreenChromeProvider> : <QueryState query={projects} empty={!projects.isPending} emptyTitle={copy("Proje bulunamadı.", "Project not found.")} />}
   </Sheet>;
 }

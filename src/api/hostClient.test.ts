@@ -12,6 +12,92 @@ const connection = {
 };
 const respond = (result: unknown) => new Response(JSON.stringify({ result }), { status: 200 });
 describe("native host contract", () => {
+  it("captures approval primitives across capability discovery and dispatches once through the actual compatibility transport", async () => {
+    let release!: (response: Response) => void;
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(
+        respond({ commandId: "original-command", sessionId: "s", revision: 1, acceptedAt: 1 }),
+      );
+    const client = createHostClient(connection, fetcher);
+    const occurrenceId = "12345678-1234-4123-8123-123456789abc";
+    const command = {
+      type: "approve" as const,
+      commandId: "original-command",
+      sessionId: "s",
+      runId: "original-run",
+      authorityGeneration: 4,
+      requestId: 7,
+      approvalOccurrenceId: occurrenceId,
+      decision: "allow" as const,
+    };
+    const pending = client.sessions.dispatch(command);
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    command.approvalOccurrenceId = "abcdef12-1234-4123-9123-123456789abc";
+    command.authorityGeneration = 9;
+    release(
+      respond({
+        protocolVersion: 1,
+        environmentId: "env-a",
+        name: "Work PC",
+        platform: "win32",
+        providers: ["codex"],
+        capabilities: ["sessions.approvalOccurrence.v1"],
+      }),
+    );
+    await pending;
+    const requests = fetcher.mock.calls.map((call) => JSON.parse(String(call[1]?.body)));
+    expect(requests.map((request) => request.method)).toEqual([
+      "environment.describe",
+      "commands.dispatch",
+    ]);
+    expect(requests[1].params).toEqual({
+      ...command,
+      approvalOccurrenceId: occurrenceId,
+      authorityGeneration: 4,
+    });
+  });
+
+  it("refuses legacy approval identities before HTTP and unsupported Hosts after a read without dispatch", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      respond({
+        protocolVersion: 1,
+        environmentId: "env-a",
+        name: "Old PC",
+        platform: "win32",
+        providers: ["codex"],
+        capabilities: [],
+      }),
+    );
+    const client = createHostClient(connection, fetcher);
+    const command = {
+      type: "approve" as const,
+      commandId: "command",
+      sessionId: "s",
+      runId: "run",
+      requestId: 7,
+      decision: "deny" as const,
+    };
+    await expect(client.sessions.dispatch(command)).rejects.toMatchObject({
+      reason: "unidentified",
+      uncertain: false,
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    await expect(
+      client.sessions.dispatch({
+        ...command,
+        approvalOccurrenceId: "12345678-1234-4123-8123-123456789abc",
+      }),
+    ).rejects.toMatchObject({ reason: "unsupported", uncertain: false });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).method).toBe("environment.describe");
+  });
   it("scopes requests to paired environment and never leaks auth in the body", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(respond([]));
     await createHostClient(connection, fetcher).sessions.list("project-a");

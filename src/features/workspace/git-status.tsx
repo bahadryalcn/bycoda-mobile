@@ -28,7 +28,7 @@ import type {
   GitOperationPanelProps,
 } from "./git-types";
 
-/** Branch, sync state and the primary commit/sync entry share one compact summary card. */
+/** Branch identity leads; sync state and the next action share one wrapping toolbar. */
 export function GitHeader({
   index,
   refreshing,
@@ -41,7 +41,7 @@ export function GitHeader({
   const copy = useCopy();
   return (
     <Animated.View entering={enterItem(0)}>
-      <Card>
+      <View style={{ gap: space.xs }}>
         <Row style={{ flexWrap: "nowrap" }}>
           <PressableCard
             label={copy("Dallar", "Branches")}
@@ -59,7 +59,7 @@ export function GitHeader({
               borderTopEndRadius: 0,
               borderBottomStartRadius: 0,
               borderBottomEndRadius: 0,
-              backgroundColor: colors.panel,
+              backgroundColor: colors.background,
             }}
           >
             <IconTile color={colors.accent}>
@@ -84,16 +84,18 @@ export function GitHeader({
             <RefreshCw size={18} color={colors.muted} />
           </IconButton>
         </Row>
-        <GitSyncBadges index={index} />
-        <Button
-          label={copy("Commit ve eşitleme", "Commit and sync")}
-          tone="primary"
-          density="compact"
-          disabled={busy}
-          onPress={onOpenActions}
-          style={{ alignSelf: "flex-start" }}
-        />
-      </Card>
+        <Row style={{ justifyContent: "space-between", gap: space.xs }}>
+          <GitSyncBadges index={index} />
+          <Button
+            label={copy("Commit ve eşitleme", "Commit and sync")}
+            tone="primary"
+            density="compact"
+            disabled={busy}
+            onPress={onOpenActions}
+            style={{ alignSelf: "flex-start" }}
+          />
+        </Row>
+      </View>
     </Animated.View>
   );
 }

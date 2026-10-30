@@ -175,8 +175,8 @@ export function ProjectScreen({
             }}
           >
             {projects.error ? <QueryState query={projects} /> : null}
-            <Row style={{ flexWrap: "nowrap" }}>
-              <ProjectIcon appearance={project.appearance} />
+            <Row style={{ flexWrap: "nowrap", gap: space.sm }}>
+              <ProjectIcon appearance={project.appearance} size={20} />
               <Body
                 muted
                 selectable={false}

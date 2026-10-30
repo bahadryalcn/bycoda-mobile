@@ -13,7 +13,8 @@ vi.mock("@/state/queries", () => ({
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Wrapper, NavigationGroup: Wrapper, Sheet: Wrapper, QueryState: () => null, MutationState: () => null, ErrorText: () => null,
+  return {
+    FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, submitLabel)), Body: Wrapper, NavigationGroup: Wrapper, Sheet: Wrapper, QueryState: () => null, MutationState: () => null, ErrorText: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message),
     Button: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label),
     NavigationRow: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label),

@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { BackHandler, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import type { GitBlameLine, GitChangedFile, GitFileDiff, GitHistory, GitHistoryCommit } from "../../../../src/platform/tauri/fs";
-import { Body, Button, Empty, NavigationRow, QueryState, Row, ScreenList, SearchField } from "@/ui/primitives";
+import { Body, Button, Empty, NavigationRow, QueryState, ScreenList, SearchField, SegmentedControl } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
@@ -41,11 +41,14 @@ export function GitHistoryPanel({ scope, onClose }: { scope: GitScope; onClose: 
   if (view.kind === "history") return <CommitList scope={scope} header={header} onSelect={(commit) => setView({ kind: "commit", commit })} />;
   if (view.kind === "commit") return <CommitFiles scope={scope} commit={view.commit} header={header} onSelect={(path) => setView({ kind: "file", commit: view.commit, path, mode: "diff" })} />;
   return <HistoricalFile scope={scope} commit={view.commit} path={view.path} mode={view.mode}
-    header={<View style={{ gap: space.sm }}>{header}<Body mono>{view.path}</Body><Row>
-      <Button label={copy("Diff", "Diff")} tone={view.mode === "diff" ? "primary" : "quiet"} onPress={() => setView({ ...view, mode: "diff" })} />
-      <Button label={copy("Satır geçmişi", "Blame")} tone={view.mode === "blame" ? "primary" : "quiet"} onPress={() => setView({ ...view, mode: "blame" })} />
-      <Button label={copy("Dosya geçmişi", "File history")} tone={view.mode === "fileHistory" ? "primary" : "quiet"} onPress={() => setView({ ...view, mode: "fileHistory" })} />
-    </Row></View>}
+    header={<View style={{ gap: space.sm }}>{header}<Body mono>{view.path}</Body>
+      <SegmentedControl label={copy("Görünüm", "View")} value={view.mode}
+        options={[
+          { value: "diff", label: copy("Diff", "Diff") },
+          { value: "blame", label: copy("Satır geçmişi", "Blame") },
+          { value: "fileHistory", label: copy("Dosya geçmişi", "File history") },
+        ]} onChange={(mode) => setView({ ...view, mode })} />
+    </View>}
     onSelect={(commit) => setView({ kind: "commit", commit })} />;
 }
 

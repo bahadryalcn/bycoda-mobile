@@ -3,10 +3,10 @@ import { View } from "react-native";
 import type { ReactNode } from "react";
 import { colors } from "./tokens";
 
-/** Settings-style rounded square; a 6-digit tint becomes a soft fill behind the glyph. */
+/** A neutral icon well; semantic meaning belongs to its glyph and label. */
 export function IconTile({
   children,
-  color,
+  color: _color,
   size = 32,
 }: {
   children: ReactNode;
@@ -14,7 +14,6 @@ export function IconTile({
   size?: number;
 }) {
   useMobileTheme();
-  const tinted = !!color && /^#[\da-f]{6}$/i.test(color);
   return (
     <View
       accessible={false}
@@ -26,7 +25,7 @@ export function IconTile({
         alignItems: "center",
         borderRadius: Math.round(size * 0.28),
         borderCurve: "continuous",
-        backgroundColor: tinted ? `${color}24` : colors.fill,
+        backgroundColor: colors.fill,
       }}
     >
       {children}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useWindowDimensions } from "react-native";
 import Pencil from "lucide-react-native/icons/pencil";
 import {
   Body,
@@ -7,7 +8,7 @@ import {
   ErrorText,
   Input,
   Loading,
-  Row,
+  FormActions,
   Sheet,
 } from "@/ui/primitives";
 import { ChatToolbarAction } from "@/ui/chat-controls";
@@ -179,14 +180,15 @@ export function SessionQueueEditor({
 }) {
   useMobileTheme();
   const copy = useCopy();
+  const { height } = useWindowDimensions();
   const [confirmReload, setConfirmReload] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  useEffect(() => {
-    if (!editor.visible) {
-      setConfirmReload(false);
-      setConfirmDiscard(false);
-    }
-  }, [editor.visible]);
+  // Closing the sheet is the only way to leave it with a confirmation still open.
+  const close = () => {
+    setConfirmReload(false);
+    setConfirmDiscard(false);
+    editor.hide();
+  };
   const edit = editor.value;
   const disabled = blocked || editor.working;
   return (
@@ -201,14 +203,14 @@ export function SessionQueueEditor({
         visible={editor.visible}
         title={copy("Sıradaki mesajı düzenle", "Edit queued message")}
         dismissible={!editor.working}
-        onClose={editor.hide}
+        onClose={close}
         size="form"
       >
         {!editor.ready && !editor.error ? <Loading /> : null}
-        <ErrorText
+        {!edit ? <ErrorText
           error={editor.error || editor.editError}
           message={composerDeliveryError(editor.error || editor.editError, copy)}
-        />
+        /> : null}
         {editor.error ? (
           <Button
             label={copy("Taslağı yeniden yükle", "Retry loading draft")}
@@ -234,6 +236,7 @@ export function SessionQueueEditor({
               label={copy("Mesaj", "Message")}
               value={edit.text}
               multiline
+              style={{ minHeight: Math.max(120, Math.min(240, height * 0.28)) }}
               editable={!disabled}
               onChangeText={(text) =>
                 editor.setValue((current) => (current ? { ...current, text } : current))
@@ -244,13 +247,14 @@ export function SessionQueueEditor({
                 {file.name} · {Math.ceil(file.size / 1024)} KB
               </Body>
             ))}
-            <Row>
-              <Button
-                label={copy("Değişiklikleri kaydet", "Save changes")}
-                onPress={editor.save}
-                busy={editor.working}
-                disabled={blocked}
-              />
+            <FormActions
+              submitLabel={copy("Değişiklikleri kaydet", "Save changes")}
+              onSubmit={editor.save}
+              busy={editor.working}
+              disabled={blocked || confirmReload || confirmDiscard}
+              feedback={<>
+                <ErrorText error={editor.error || editor.editError}
+                  message={composerDeliveryError(editor.error || editor.editError, copy)} />
               <Button
                 label={copy("Sıradaki güncel mesajı yükle", "Reload latest queued message")}
                 tone="quiet"
@@ -263,7 +267,6 @@ export function SessionQueueEditor({
                 onPress={() => setConfirmDiscard(true)}
                 disabled={disabled}
               />
-            </Row>
             {confirmReload ? (
               <ConfirmationCard
                 message={copy(
@@ -297,6 +300,8 @@ export function SessionQueueEditor({
                 disabled={disabled}
               />
             ) : null}
+              </>}
+            />
           </>
         ) : null}
       </Sheet>

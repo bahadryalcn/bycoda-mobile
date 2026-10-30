@@ -6,6 +6,10 @@ group = 'com.bycoda'
 version = '1.0.0'
 android {
   namespace 'expo.modules.bycodahostsocket'
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
   sourceSets { test { resources.srcDirs += '../fixtures' } }
 }
 dependencies {

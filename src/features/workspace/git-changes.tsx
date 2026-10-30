@@ -5,7 +5,7 @@ import Download from "lucide-react-native/icons/download";
 import ArrowDownToLine from "lucide-react-native/icons/arrow-down-to-line";
 import ArrowUpFromLine from "lucide-react-native/icons/arrow-up-from-line";
 import GitCommitHorizontal from "lucide-react-native/icons/git-commit-horizontal";
-import { Body, Button, Card, Disclosure, Field, Row, Separator } from "@/ui/primitives";
+import { Body, Button, Disclosure, Field, Row } from "@/ui/primitives";
 import { colors, space, fontSize } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
@@ -17,7 +17,7 @@ export function GitChangesPanel({ files, busy, onSelect, onAction }: GitChangesP
   const copy = useCopy();
   if (!files.some((file) => file.staged || file.unstaged)) {
     return (
-      <Card style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.md }}>
         <CheckCircle size={18} color={colors.success} />
         <View style={uiStyles.grow}>
           <Body style={{ fontSize: fontSize.control, lineHeight: 20, fontWeight: "600" }}>
@@ -27,7 +27,7 @@ export function GitChangesPanel({ files, busy, onSelect, onAction }: GitChangesP
             {copy("Kaydedilecek dosya değişikliği yok.", "No file changes to record.")}
           </Body>
         </View>
-      </Card>
+      </View>
     );
   }
   return (
@@ -40,7 +40,7 @@ export function GitChangesPanel({ files, busy, onSelect, onAction }: GitChangesP
           ? copy("Stage’de", "Staged")
           : copy("Değişen dosyalar", "Changed files");
         return (
-          <Card key={group} style={{ paddingVertical: 4 }}>
+          <View key={group} style={{ gap: space.xs }}>
             <View
               style={{
                 flexDirection: "row",
@@ -68,7 +68,6 @@ export function GitChangesPanel({ files, busy, onSelect, onAction }: GitChangesP
             </View>
             {groupedFiles.map((file) => (
               <View key={`${group}:${file.relative}`}>
-                <Separator />
                 <GitFileRow
                   file={file}
                   staged={staged}
@@ -78,7 +77,7 @@ export function GitChangesPanel({ files, busy, onSelect, onAction }: GitChangesP
                 />
               </View>
             ))}
-          </Card>
+          </View>
         );
       })}
     </View>
@@ -102,7 +101,7 @@ export function GitCommitPanel({
   const commitDisabled =
     !message.trim() || !stagedCount || !!index.conflicts?.length || !!index.operation;
   return (
-    <Card>
+    <View style={{ gap: space.sm }}>
       <Disclosure
         label={copy("Commit oluştur", "Create commit")}
         detail={
@@ -136,7 +135,6 @@ export function GitCommitPanel({
       </Disclosure>
       {index.remote ? (
         <>
-          <Separator />
           <Row style={{ gap: space.sm }}>
             {canRunWorkspace ? (
               <Button
@@ -177,6 +175,6 @@ export function GitCommitPanel({
         </>
       ) : null}
       {children}
-    </Card>
+    </View>
   );
 }

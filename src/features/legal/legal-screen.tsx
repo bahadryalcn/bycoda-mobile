@@ -1,5 +1,5 @@
 import { Stack, router, useLocalSearchParams } from "expo-router";
-import { Body, Button, Card, Screen } from "@/ui/primitives";
+import { Empty, Button, Screen } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { isLegalDocument, legalDocumentTitle, LegalDocument } from "./legal-document";
 
@@ -11,13 +11,11 @@ export function LegalScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: copy("Belge bulunamadı", "Document not found") }} />
-        <Card>
-          <Body>{copy("Bu belge mevcut değil.", "This document is unavailable.")}</Body>
+          <Empty title={copy("Bu belge mevcut değil.", "This document is unavailable.")} />
           <Button label={copy("Geri dön", "Go back")} onPress={() => {
             if (router.canGoBack()) router.back();
             else router.replace("/");
           }} />
-        </Card>
       </Screen>
     );
   }

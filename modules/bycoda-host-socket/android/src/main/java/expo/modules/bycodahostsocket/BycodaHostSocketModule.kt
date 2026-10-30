@@ -105,7 +105,7 @@ class BycodaHostSocketModule : Module() {
   private var accessEpoch = -1.0
   private var lifecycleEpoch = 0L
   private fun error(code: String) = IllegalStateException("Host socket: $code")
-  private fun secureStore(): SecureStoreModule = appContext.moduleRegistry.getModule<SecureStoreModule>() ?: throw error("secure_store_unavailable")
+  private fun secureStore(): SecureStoreModule = appContext.registry.getModule<SecureStoreModule>() ?: throw error("secure_store_unavailable")
   private fun validate(binding: HostBinding) {
     require(Regex("[A-Za-z0-9-]{1,80}").matches(binding.machineId))
     require(Regex("[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}").matches(binding.environmentId))

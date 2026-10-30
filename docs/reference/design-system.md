@@ -112,7 +112,7 @@ Do not invent feature-local hex colors, tints or gradients.
 | `semanticColors[tone]` | Matching status text, surface and border |
 | `userMessage`, `scrim` | Conversation bubble and modal backdrop |
 
-Dark uses black and graphite; light uses neutral grouped surfaces. Keep
+Dark uses neutral graphite layers; light uses a white canvas with neutral control fills. Keep
 system/light/dark preference working from the lock screen onward. Theme changes
 must update mounted content without resetting forms, focus or drafts.
 
@@ -146,8 +146,8 @@ system scaling.
 | Family | Current values |
 | --- | --- |
 | Spacing | `xxs` 3; `xs` 4; `sm` 8; `row`/`md` 12; `lg`/`screen` 16; `xl` 24; `xxl` 32 |
-| Type | `micro` 11; `caption`/`badge` 12; `small` 13; `control`/`body` 16; `input`/`title` 17; `heading` 20; `hero` 28; `display` 34 |
-| Radius | `badge` 6; `control` 12; `card` 20; `preview` 22; `sheet` 32; `pill` 999 |
+| Type | `micro` 11; `caption`/`badge` 12; `small` 13; `control` 14; `body` 16; `input`/`title` 17; `heading` 20; `hero` 28; `display` 34 |
+| Radius | `badge` 6; `control` 12; `card` 12; `preview` 16; `sheet` 24; `pill` 999 |
 | Targets | Controls, inputs, selections and icon targets 48; multiline minimum 96 |
 | Width | Content 760; entry surfaces 520 |
 | Motion | Press 120ms; reveal 220ms; sheet 280ms |
@@ -157,8 +157,15 @@ and shared monospace role. Avoid fixed text heights and truncation hiding
 essential values. Wrap long localized labels or move secondary metadata to a
 second row. Compact density reduces padding, not target height.
 
-Role radius does not imply every component uses that shape: shared buttons use
-a pill through `controlClasses`. Presentation belongs in the shared owner.
+Shared buttons and search use the control radius. Presentation belongs in the shared owner.
+NavigationGroup is an unboxed collection with aligned rows; RecordCard separates record
+identity, visible status and optional retained details through spacing. Reserve Card
+for a meaningful task group, and avoid nesting cards for ordinary metadata.
+Page titles use the hero scale; body and form controls keep their readable scale.
+The bottom tab bar sits in normal layout without a floating tray or shadow.
+The composer gives text its own full-width row and places attachment, mode and send
+controls below it. Its fill and perimeter remain stable on focus; editable fields
+keep local focus cues and the caret.
 
 ## Choose components by task
 
@@ -257,3 +264,21 @@ Source checks and browser previews support implementation review. Native
 keyboard, gestures, OS Back, screen readers, lock transitions and physical-device
 behavior require native acceptance. The offline tour grants no host access and
 does not authorize sends or publication.
+
+
+## Compact task composition
+
+Card defaults to an unboxed, aligned task group. Nested Card groups do not add
+another horizontal gutter or multiply vertical insets. Use `variant="surface"`
+only when a genuinely independent task region needs a raised surface; inputs,
+code and media viewports retain their own boundaries. This avoids treating every
+metadata block as another large card. Buttons, icon actions, selection rows and
+list rows retain stable 48dp targets; pressed feedback changes opacity rather
+than scaling the target. Primary option labels may grow instead of being clipped.
+
+Collapsed task records lead with title, status and a directly named session icon.
+Stop, pending operations and actionable failures stay visible. Completion and
+restart/repair actions use the existing record menu. Expanded task content leads
+with instructions; execution locations, statistics and evidence use disclosure.
+Long forms keep both initial review actions and final confirmation in the shared
+action area, with current feedback beside the action.

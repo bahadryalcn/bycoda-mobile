@@ -74,7 +74,7 @@ export function ComposerAttachments({
                     <File size={16} color={colors.muted} />
                   )}
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Body numberOfLines={1} ellipsizeMode="middle" style={uiStyles.caption}>
+                    <Body numberOfLines={2} ellipsizeMode="middle" style={uiStyles.caption}>
                       {file.name}
                     </Body>
                     <Body muted style={uiStyles.caption}>

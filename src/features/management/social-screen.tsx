@@ -5,7 +5,6 @@ import {
   Body,
   Badge,
   Button,
-  NavigationGroup,
   SelectField,
   MutationState,
   Notice,
@@ -96,9 +95,8 @@ export function SocialScreen() {
   return (
     <Screen title={copy("Sosyal medya", "Social media")} query={query}>
       <Scope allowAll />
-      <NavigationGroup>
         <SelectField
-          variant="row"
+          compact
           label={copy("Görünüm", "View")}
           value={tab}
           options={[
@@ -111,7 +109,6 @@ export function SocialScreen() {
           ]}
           onChange={(tab) => dispatch({ type: "tab", tab })}
         />
-      </NavigationGroup>
       {missingEnvironment ? <Notice tone="warning" message={copy(
         "Sosyal medya geçmişini görüntülemek için bilgisayardaki bycoda’yı güncelleyin.",
         "Update bycoda on the computer to view social history.",

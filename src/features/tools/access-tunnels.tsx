@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation } from "@/state/queries";
-import { Body, Button, ConfirmationCard, ErrorText, Field, MutationState, Notice, SelectField, Sheet } from "@/ui/primitives";
+import { Body, Button, Disclosure, FormActions, ErrorText, Field, MutationState, Notice, SelectField, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { localTunnelUrl, type AccessTarget, type HostAccessReport } from "./access-center-model";
 import { claimTunnelIntent, clearTunnelIntent, reconcileTunnelIntent } from "./access-tunnel-intent";
@@ -45,7 +45,7 @@ export function AccessTunnels({ target, overview, tunnel, onClose, onUpdated }: 
     }).finally(() => { occupied.current = false; });
   };
   return <Sheet visible title={opening.tunnel ? copy("Tüneli incele", "Review tunnel") : copy("Tünel başlat", "Start tunnel")} size="form" dismissible={!busy} dirty={!opening.tunnel && (provider !== "cloudflare" || kind !== "host" || localUrl !== "http://127.0.0.1:3000")} onClose={onClose}>
-    <Body mono>{opening.target.machineId}</Body>
+    <Body muted>{machine?.name}</Body>
     {opening.tunnel ? <><Body>{opening.tunnel.provider} · {opening.tunnel.target} · {opening.tunnel.state}</Body><Body mono>{opening.tunnel.localUrl}</Body>{opening.tunnel.publicUrl ? <Body mono>{opening.tunnel.publicUrl}</Body> : null}</> : <>
       <SelectField label={copy("Tünel sağlayıcısı", "Tunnel provider")} value={provider} options={[{ value: "cloudflare", label: "Cloudflare" }, { value: "ngrok", label: "ngrok" }]} disabled={busy || !!review || uncertain} onChange={setProvider} />
       <SelectField label={copy("Hedef", "Target")} value={kind} options={[{ value: "host", label: copy("Bilgisayar erişimi", "Host access") }, { value: "dev-server", label: copy("Geliştirme sunucusu", "Dev server") }]} disabled={busy || !!review || uncertain} onChange={setKind} />
@@ -55,13 +55,14 @@ export function AccessTunnels({ target, overview, tunnel, onClose, onUpdated }: 
     {hostImpact ? <Notice tone="warning" message={opening.tunnel ? copy("Bu tünel üzerinden bağlıysan durdurmak bağlantını keser. Yeniden bağlanmak için başka bir erişim yolu gerekir.", "Stopping this tunnel disconnects you if you are connected through it. Another access route is required to reconnect.") : copy("Bu işlem bilgisayara dış erişim adresi oluşturur. Eşleştirilmiş cihaz kimlik doğrulaması yine gereklidir.", "This creates an external address for the computer. Paired-device authentication is still required.")} /> : null}
     <Body muted>{copy("Genel adresin erişilebilirliği doğrulanmadı.", "Public address reachability is unverified.")}</Body>
     {uncertain ? <Notice tone="warning" message={copy("Tünel işleminin sonucu bilinmiyor. Tekrar göndermeden bilgisayardaki durumu kontrol edin.", "The tunnel operation outcome is unknown. Check the computer state before sending again.")} /> : null}
-    <ErrorText error={error} /><MutationState mutation={write} />
+
     {review ? <><Body>{opening.tunnel ? `${opening.tunnel.provider} · ${opening.tunnel.id}` : `${String(review.provider)} · ${review.target === "host" ? copy("Bilgisayar erişimi", "Host access") : copy("Geliştirme sunucusu", "Dev server")}`}</Body>
-      {review.localUrl ? <Body mono>{String(review.localUrl)}</Body> : null}<ConfirmationCard message={opening.tunnel ? copy("İncelenen tüneli durdur?", "Stop the reviewed tunnel?") : copy("İncelenen sağlayıcı ve hedefle tünel başlat?", "Start a tunnel with the reviewed provider and target?")}
-      confirmLabel={opening.tunnel ? copy("Durdur", "Stop") : copy("Başlat", "Start")} cancelLabel={copy("Vazgeç", "Cancel")} busy={busy} disabled={!current() || !supported || uncertain} onConfirm={submit} onCancel={() => setReview(undefined)} /></> :
-      <Button label={copy("Değişiklikleri incele", "Review changes")} disabled={!intentReady || !current() || !supported || busy || uncertain || (opening.tunnel ? !opening.tunnel.canStop : !canStart)} onPress={() => {
+      {review.localUrl ? <Body mono>{String(review.localUrl)}</Body> : null}<FormActions feedback={<> <Body>{opening.tunnel ? copy("İncelenen tüneli durdur?", "Stop the reviewed tunnel?") : copy("İncelenen sağlayıcı ve hedefle tünel başlat?", "Start a tunnel with the reviewed provider and target?")}</Body> <ErrorText error={error} /><MutationState mutation={write} /> </>}
+      submitLabel={opening.tunnel ? copy("Durdur", "Stop") : copy("Başlat", "Start")} cancelLabel={copy("Vazgeç", "Cancel")} busy={busy} disabled={!current() || !supported || uncertain} onSubmit={submit} onCancel={() => setReview(undefined)} /></> :
+      <FormActions submitLabel={copy("Değişiklikleri incele", "Review changes")} disabled={!intentReady || !current() || !supported || busy || uncertain || (opening.tunnel ? !opening.tunnel.canStop : !canStart)} onSubmit={() => {
         try { setReview(opening.tunnel ? { id: opening.tunnel.id } : { provider, target: kind, ...(kind === "dev-server" ? { localUrl: localTunnelUrl(localUrl) } : {}) }); setError(undefined); }
         catch (cause) { setError(cause); }
-      }} />}
+      }} feedback={<><ErrorText error={error} /><MutationState mutation={write} /></>} />}
+    <Disclosure label={copy("Ayrıntılar", "Details")}><Body mono>{opening.target.machineId}</Body></Disclosure>
   </Sheet>;
 }

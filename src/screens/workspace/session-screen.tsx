@@ -1,4 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
+import { captureApprovalCommand } from "@/domain/approval-command";
 import {
   captureSessionAuthority,
   retainSessionAuthority,
@@ -94,7 +95,7 @@ function TranscriptBlock({
 }: {
   block: Block;
   busy: boolean;
-  onApprove: (requestId: number, decision: "allow" | "deny") => void;
+  onApprove: (requestId: number, decision: "allow" | "deny", occurrenceId?: string) => void;
   onExpand: (block: Block) => void;
 }) {
   useMobileTheme();
@@ -140,12 +141,16 @@ function TranscriptBlock({
               <Button
                 title="İzin ver"
                 disabled={busy}
-                onPress={() => onApprove(block.approval!.requestId, "allow")}
+                onPress={() =>
+                  onApprove(block.approval!.requestId, "allow", block.approval!.occurrenceId)
+                }
               />
               <Button
                 title="Reddet"
                 disabled={busy}
-                onPress={() => onApprove(block.approval!.requestId, "deny")}
+                onPress={() =>
+                  onApprove(block.approval!.requestId, "deny", block.approval!.occurrenceId)
+                }
               />
             </View>
           </View>
@@ -188,7 +193,9 @@ export function SessionScreen({
   const dispatch = useMutation({
     retry: false,
     networkMode: "always",
-    mutationFn: (command: HostCommand) => client!.sessions.dispatch(command),
+    mutationFn: (command: HostCommand) => {
+      return client!.sessions.dispatch(command);
+    },
     onSuccess: () => {
       void session.refetch();
       void cache.invalidateQueries({ queryKey: workspaceKey(machineId, projectId, "sessions") });
@@ -250,16 +257,12 @@ export function SessionScreen({
     onSuccess: (result) =>
       setExpandedBlocks((previous) => ({ ...previous, [result.block.id]: result.block })),
   });
-  const approve = (requestId: number, decision: "allow" | "deny") => {
+  const approve = (requestId: number, decision: "allow" | "deny", occurrenceId?: string) => {
     if (!value?.runId) return;
     dispatch.mutate({
-      type: "approve",
+      ...captureApprovalCommand(sessionId, value.runId, { requestId, occurrenceId }, decision),
       ...captureSessionAuthority(value),
       commandId: commandId(),
-      sessionId,
-      runId: value.runId,
-      requestId,
-      decision,
     });
   };
   if (!client)

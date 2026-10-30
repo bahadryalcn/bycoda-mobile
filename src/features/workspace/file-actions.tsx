@@ -3,11 +3,10 @@ import { View } from "react-native";
 import { useFormDraft } from "@/state/form-draft";
 import {
   Body,
-  Button,
-  ChoiceChip,
+  FormActions,
+  SegmentedControl,
   IdentifierField,
   ErrorNotice,
-  Row,
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -51,13 +50,14 @@ export function FileActions({
         <Body mono muted selectable numberOfLines={3}>
           {path}
         </Body>
-        <Row>
-          {(["rename_path", "copy_path", "move_path", "delete_path"] as const).map((value) => (
-            <ChoiceChip
-              key={value}
-              selected={operation === value}
-              tone={value === "delete_path" ? "danger" : undefined}
-              label={
+        <SegmentedControl
+          label={copy("İşlem", "Operation")}
+          value={operation}
+          disabled={action.isPending}
+          onChange={(value) => form.setField("operation", value)}
+          options={(["rename_path", "copy_path", "move_path", "delete_path"] as const).map((value) => ({
+            value,
+            label:
                 value === "rename_path"
                   ? copy("Adını değiştir", "Rename")
                   : value === "copy_path"
@@ -65,12 +65,8 @@ export function FileActions({
                     : value === "move_path"
                       ? copy("Taşı", "Move")
                       : copy("Sil", "Delete")
-              }
-              disabled={action.isPending}
-              onPress={() => form.setField("operation", value)}
-            />
-          ))}
-        </Row>
+          }))}
+        />
         {operation === "rename_path" ? (
           <IdentifierField
             label={copy("Yeni ad", "New name")}
@@ -89,17 +85,17 @@ export function FileActions({
             placeholder={copy("Kök için boş bırak", "Leave empty for project root")}
           />
         )}
-        <ErrorNotice error={action.error} />
-        <Button
-          label={
+        <FormActions
+          feedback={<ErrorNotice error={action.error} />}
+          submitLabel={
             operation === "delete_path"
               ? copy("Silmeyi onayla", "Confirm deletion")
               : copy("Uygula", "Apply")
           }
-          tone={operation === "delete_path" ? "danger" : undefined}
+          tone={operation === "delete_path" ? "danger" : "primary"}
           busy={action.isPending}
           disabled={operation === "rename_path" && (!name.trim() || name === entry.name)}
-          onPress={() => {
+          onSubmit={() => {
             const args =
               operation === "rename_path"
                 ? { path, name: name.trim() }

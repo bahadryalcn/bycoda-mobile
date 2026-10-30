@@ -8,8 +8,8 @@ import Plus from "lucide-react-native/icons/plus";
 import { FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import {
   Body,
-  Button,
   Empty,
+  FormActions,
   IconButton,
   NavigationRow,
   Notice,
@@ -235,11 +235,11 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
               searchable
               onChange={setNewProjectId}
             />
-            <Button
-              label={copy("Yeni oturum", "New session")}
+            <FormActions
+              submitLabel={copy("Yeni oturum", "New session")}
               tone="primary"
               disabled={!creationProject || activity.privacyPending}
-              onPress={() => {
+              onSubmit={() => {
                 if (!creationProject || useMachines.getState().activeId !== machine.id) return;
                 useMachines.getState().selectProject(creationProject);
                 setCreating(false);

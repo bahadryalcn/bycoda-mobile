@@ -4,26 +4,7 @@ import { FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { useHostQuery } from "@/state/queries";
 import type { HostProject } from "@/domain/types";
-import {
-  Badge,
-  Body,
-  Button,
-  CodePanel,
-  CodeText,
-  Empty,
-  ErrorText,
-  IconButton,
-  NavigationGroup,
-  NavigationRow,
-  Notice,
-  QueryState,
-  Row,
-  ScreenList,
-  SearchField,
-  SelectField,
-  Sheet,
-  ToggleField,
-} from "@/ui/primitives";
+import { Badge, Body, CodePanel, CodeText, Empty, ErrorText, IconButton, NavigationGroup, NavigationRow, Notice, QueryState, Row, ScreenList, SearchField, SelectField, Sheet, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { colors } from "@/ui/tokens";
@@ -111,8 +92,7 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
       header={
         <>
           <Stack.Screen options={{ title: copy("Çalışma günlükleri", "Runtime logs") }} />
-          <Button
-            tone="quiet"
+          <NavigationRow
             label={copy("Günlük izleyicileri", "Log monitors")}
             onPress={() => setShowMonitors(true)}
           />

@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CryptoDigestAlgorithm, digestStringAsync, randomUUID } from "expo-crypto";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostClient, useHostQuery } from "@/state/queries";
-import { reviewedOperationStore, type ReviewedOperationAttempt } from "@/state/reviewed-operation-store";
+import { reviewedOperationStore } from "@/state/reviewed-operation-store";
+import { useMounted } from "@/state/use-mounted";
+import { useReviewedOperation } from "@/state/use-reviewed-operation";
 import { reviewedMachine, isReviewedMachine } from "@/state/reviewed-machine";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
@@ -15,27 +17,16 @@ import { readWorktreeRemoval, readWorktreeRemovalStatus, type WorktreeRemovalSna
 /** Receipts survive closing/restarting; reopening reads status and never replays approval. */
 export function WorktreeRemoval({ scope, projectId, onClose }: { scope: SessionScope; projectId: string; onClose: () => void }) {
   const copy = useCopy(), machine = useActiveMachine(), client = useHostClient();
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const mounted = useMounted();
   const [opening] = useState(() => ({ ...scope, projectId, environmentId: machine?.environmentId, machine: reviewedMachine(machine) }));
   const current = () => mounted.current && isReviewedMachine(opening.machine, useMachines.getState()) && scope.machineId === opening.machineId && scope.sessionId === opening.sessionId && projectId === opening.projectId;
   const supported = !!client && current() && !!opening.environmentId && machine?.capabilities?.includes("worktrees.removal.desktop.v1");
   const params = { projectId: opening.projectId, sessionId: opening.sessionId };
   const store = useMemo(() => reviewedOperationStore(AsyncStorage, `bycoda.worktree-removal.v1:${JSON.stringify([opening.machineId, opening.environmentId, opening.projectId, opening.sessionId])}`), [opening]);
-  const [loading, setLoading] = useState(true), [attempt, setAttempt] = useState<ReviewedOperationAttempt | null>(null);
+  const { loading, loaded: attempt, setLoaded: setAttempt, error, setError, busy, pendingAction, run } = useReviewedOperation({ source: store, load: () => store.load(), canRun: () => !!supported && current() });
   const [receipt, setReceipt] = useState<WorktreeRemovalStatus>();
   const [path, setPath] = useState(""), [review, setReview] = useState<WorktreeRemovalSnapshot>();
-  const [busy, setBusy] = useState(false), [error, setError] = useState<unknown>();
-  const occupied = useRef(false);
-  useEffect(() => { let live = true; void store.load().then((value) => { if (live) setAttempt(value); }, (cause) => { if (live) setError(cause); }).finally(() => { if (live) setLoading(false); }); return () => { live = false; }; }, [store]);
   const trees = useHostQuery<HostWorktrees>(["worktrees", opening.projectId], "git.worktrees", { projectId: opening.projectId }, { enabled: !!supported && !attempt });
-  const [pendingAction, setPendingAction] = useState("primary");
-  const run = async (action: () => Promise<void>, actionKey = "primary") => {
-    if (occupied.current || !supported || !current()) return;
-    occupied.current = true; setPendingAction(actionKey);
-    setBusy(true); setError(undefined);
-    try { await action(); } catch (cause) { setError(cause); } finally { occupied.current = false; setBusy(false); }
-  };
   const disabled = busy || loading || !supported || !!error;
   const unavailableMessage = !client || !machine
     ? copy("Bilgisayar bağlantısını yeniden kurun ve bu oturumu tekrar açın.", "Reconnect the computer and reopen this session.")

@@ -24,8 +24,7 @@ export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
         style={{
           maxHeight: Math.max(160, Math.min(360, height * 0.42)),
           borderRadius: radii.control,
-          borderWidth: 1,
-          borderColor: colors.separator,
+          backgroundColor: colors.fill,
         }}
       >
         <ScrollView horizontal nestedScrollEnabled contentContainerStyle={{ flexGrow: 1 }}>
@@ -36,13 +35,6 @@ export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
                 style={{
                   flexDirection: "row",
                   minHeight: 24,
-                  borderStartWidth: 3,
-                  borderStartColor:
-                    line.kind === "add"
-                      ? colors.success
-                      : line.kind === "remove"
-                        ? colors.danger
-                        : "transparent",
                   backgroundColor:
                     line.kind === "add"
                       ? semanticColors.success.surface

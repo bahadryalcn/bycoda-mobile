@@ -37,6 +37,7 @@ vi.mock("@/ui/primitives", () => {
   return {
     Body: Wrap,
     Card: Wrap,
+    Stack: Wrap,
     Section: Wrap,
     Notice: () => null,
     SegmentedControl: () => null,

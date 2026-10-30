@@ -192,6 +192,7 @@ export function StewardsScreen() {
               <Button
                 label={copy("Şimdi çalıştır", "Run now")}
                 tone="quiet"
+                busy={run.isPending && run.variables?.stewardId === item.id}
                 disabled={busy || !!item.run || !!editor}
                 onPress={() =>
                   confirmAction(
@@ -216,6 +217,7 @@ export function StewardsScreen() {
           menu={
             <ActionMenu
               label={copy("Proje sorumlusu işlemleri", "Steward actions")}
+              busy={(save.isPending && (save.variables?.steward as { id?: string } | undefined)?.id === item.id) || (remove.isPending && remove.variables?.stewardId === item.id)}
               actions={[
                 {
                   key: "toggle",

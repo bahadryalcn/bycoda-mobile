@@ -105,16 +105,15 @@ export function SecurityGate({ children }: PropsWithChildren) {
               <View
                 accessible={false}
                 style={{
-                  width: 96,
-                  height: 96,
+                  width: 56,
+                  height: 56,
                   borderRadius: radii.pill,
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: colors.selected,
                 }}
               >
                 <LockKeyhole
-                  size={44}
+                  size={28}
                   strokeWidth={2}
                   color={security.status === "suspended" ? colors.muted : colors.accent}
                 />

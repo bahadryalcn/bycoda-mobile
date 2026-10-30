@@ -45,7 +45,9 @@ export function useSessionSnapshot(
     sessionId: scope.sessionId,
     projectId: options.projectId,
   };
-  const [streamError, setStreamError] = useState<Error | undefined>();
+  // A stream error belongs to the query data it was raised against; newer data supersedes it.
+  const [streamFailure, setStreamError] = useState<{ error: Error; at: number } | undefined>();
+  const dataStamp = useRef(0);
   const observedKey = useMemo(
     () => (active ? key : hostKey(scope.machineId, ["parked-session", scope.sessionId])),
     [active, key, scope.machineId, scope.sessionId],
@@ -120,7 +122,7 @@ export function useSessionSnapshot(
         setStreamError(undefined);
       },
       onError: (error) => {
-        if (!disposed) setStreamError(error);
+        if (!disposed) setStreamError({ error, at: dataStamp.current });
       },
     })
       .then((value) => {
@@ -129,9 +131,11 @@ export function useSessionSnapshot(
       })
       .catch((error) => {
         if (!disposed)
-          setStreamError(
-            error instanceof Error ? error : new Error("The Host stream could not be opened."),
-          );
+          setStreamError({
+            error:
+              error instanceof Error ? error : new Error("The Host stream could not be opened."),
+            at: dataStamp.current,
+          });
       });
     return () => {
       disposed = true;
@@ -220,9 +224,9 @@ export function useSessionSnapshot(
       );
     },
   });
-  useEffect(() => {
-    if (query.isSuccess) setStreamError(undefined);
-  }, [query.dataUpdatedAt, query.isSuccess]);
+  dataStamp.current = query.dataUpdatedAt;
+  const streamError =
+    streamFailure && streamFailure.at === query.dataUpdatedAt ? streamFailure.error : undefined;
   const denied = ["auth", "identity"].includes(
     ((streamError ?? query.error) as { kind?: string } | null)?.kind ?? "",
   );

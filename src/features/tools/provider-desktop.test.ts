@@ -163,3 +163,5 @@ it("hides cached private rows for an old host and same-id replacement endpoint",
   expect(state.methods).toHaveLength(calls);
   expect(container.textContent).not.toContain("Fixture account");
 });
+
+vi.mock("@/ui/record-card", () => ({ RecordCard: ({ title, metadata, preview, details, footer, children }: { title: string; metadata?: string; preview?: import("react").ReactNode; details?: import("react").ReactNode; footer?: import("react").ReactNode; children?: import("react").ReactNode }) => createElement("section", null, createElement("h2", null, title), metadata, preview, details, children, footer) }));

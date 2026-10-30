@@ -10,6 +10,13 @@ import type { QuestionCardProps, QuestionDraft } from "./session-types";
 import { questionDismissLabel, questionNeedsAttention, questionStatusLabel, questionSubmissionHeld } from "./question-status";
 import { questionCardStates } from "./question-card-state";
 
+const RETAINED = Symbol("retained");
+type LocalDelivery = {
+  value: NonNullable<QuestionCardProps["question"]["delivery"]>;
+  base: QuestionCardProps["question"]["delivery"] | typeof RETAINED;
+  version?: number;
+};
+
 export function QuestionCard({ question, draftScope, deliveryVersion, disabled, onAnswer }: QuestionCardProps) {
   useMobileTheme();
   const copy = useCopy();
@@ -17,12 +24,21 @@ export function QuestionCard({ question, draftScope, deliveryVersion, disabled, 
   const form = useFormDraft<QuestionDraft>(() => retained?.draft ?? { answers: {}, custom: {} });
   const { answers, custom } = form.values;
   const submitting = useRef(!!retained?.delivery && questionSubmissionHeld({ ...question, delivery: retained.delivery }));
-  const [localDelivery, setLocalDelivery] = useState(retained?.delivery);
+  // A local latch belongs to the authoritative delivery it was set under. Once the host
+  // reports a different delivery (or a new revision) the host value wins again.
+  const [local, setLocal] = useState<LocalDelivery | undefined>(
+    retained?.delivery ? { value: retained.delivery, base: RETAINED } : undefined,
+  );
+  const superseded =
+    !!local &&
+    !!question.delivery &&
+    !(local.base === question.delivery && local.version === deliveryVersion);
+  if (superseded) setLocal(undefined);
+  const localDelivery = local && !superseded ? local.value : undefined;
+  const setLocalDelivery = (value: NonNullable<QuestionCardProps["question"]["delivery"]>) =>
+    setLocal({ value, base: question.delivery, version: deliveryVersion });
   useEffect(() => {
-    if (question.delivery) setLocalDelivery(undefined);
-    if (question.delivery === "failed") {
-      submitting.current = false;
-    }
+    if (question.delivery === "failed") submitting.current = false;
   }, [question.delivery, deliveryVersion]);
   useEffect(() => {
     questionCardStates.write(draftScope, question, {

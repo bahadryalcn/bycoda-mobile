@@ -1,19 +1,19 @@
 export const darkColors = {
-  // Apple system dark: true black canvas, elevated grouped surfaces and one accessible blue.
-  background: "#000000",
-  panel: "#1C1C1E",
-  raised: "#2C2C2E",
-  border: "#3A3A3C",
-  separator: "#38383A",
-  text: "#FFFFFF",
-  muted: "#AEAEB2",
-  subtle: "#AEAEB2",
+  // Neutral work surfaces; information and operation states keep semantic color.
+  background: "#151515",
+  panel: "#1C1C1C",
+  raised: "#262626",
+  border: "#414141",
+  separator: "#303030",
+  text: "#F5F5F5",
+  muted: "#B0B0B0",
+  subtle: "#B0B0B0",
   /** Decorative glyphs only (chevrons, grabbers); never body text. */
-  tertiary: "#5A5A5E",
+  tertiary: "#767676",
   /** Borderless control and search fills. */
-  fill: "#2C2C2E",
+  fill: "#292929",
   /** Floating menus and the selected segment, lifted above fills. */
-  elevated: "#3A3A3C",
+  elevated: "#363636",
   accent: "#64B0FF",
   accentSolid: "#0071E3",
   primaryText: "#FFFFFF",
@@ -23,24 +23,24 @@ export const darkColors = {
   danger: "#FF6961",
   warning: "#FFD60A",
   brand: "#FFFFFF",
-  selected: "#16273B",
-  userMessage: "#2C2C2E",
+  selected: "#303030",
+  userMessage: "#292929",
   scrim: "#00000099",
 };
 
 export type MobileThemeMode = "light" | "dark";
 export type MobileColors = typeof darkColors;
 export const lightColors: MobileColors = {
-  background: "#F2F2F7",
+  background: "#FFFFFF",
   panel: "#FFFFFF",
-  raised: "#EEEEF0",
-  border: "#D1D1D6",
-  separator: "#E0E0E5",
-  text: "#000000",
-  muted: "#636366",
-  subtle: "#636366",
-  tertiary: "#C4C4C7",
-  fill: "#E9E9EE",
+  raised: "#F5F5F5",
+  border: "#D4D4D4",
+  separator: "#E8E8E8",
+  text: "#202020",
+  muted: "#656565",
+  subtle: "#656565",
+  tertiary: "#8A8A8A",
+  fill: "#F2F2F2",
   elevated: "#FFFFFF",
   accent: "#0066CC",
   accentSolid: "#0066CC",
@@ -51,8 +51,8 @@ export const lightColors: MobileColors = {
   danger: "#C4141E",
   warning: "#8F5200",
   brand: "#000000",
-  selected: "#E6EFFA",
-  userMessage: "#EEEEF0",
+  selected: "#EBEBEB",
+  userMessage: "#F2F2F2",
   scrim: "#00000059",
 };
 
@@ -103,7 +103,7 @@ export const semanticColors = Object.defineProperties({}, Object.fromEntries(
 export type SemanticTone = keyof typeof semanticColors;
 
 export const space = { xxs: 3, xs: 4, sm: 8, row: 12, md: 12, lg: 16, screen: 16, xl: 24, xxl: 32 };
-export const radii = { badge: 6, control: 12, card: 20, preview: 22, sheet: 32, pill: 999 };
+export const radii = { badge: 6, control: 12, card: 12, preview: 16, sheet: 24, pill: 999 };
 export const motion = { press: 120, reveal: 220, sheet: 280 };
 export const fontSize = {
   micro: 11,
@@ -128,7 +128,10 @@ export const metrics = {
   multilineHeight: 96,
   contentWidth: 760,
   entryWidth: 520,
-  tabBarHeight: 64,
+  tabBarHeight: 56,
 };
 export const opacity = { disabled: 0.45, pressed: 0.72 };
 export const monoFont = process.env.EXPO_OS === "ios" ? "Menlo" : "monospace";
+
+/** Web inputs inherit the same system face as native text; native keeps its OS default. */
+export const interfaceFont = process.env.EXPO_OS === "web" ? "system-ui" : undefined;

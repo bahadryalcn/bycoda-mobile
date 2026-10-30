@@ -1,4 +1,5 @@
 import { RemoteHostError } from "../remote/host-error";
+import { ApprovalCommandRefused } from "../domain/approval-command";
 
 type ErrorCopy = (turkish: string, english: string) => string;
 
@@ -77,13 +78,23 @@ export function errorMessage(error: unknown, copy: ErrorCopy, override?: string)
   const fallback = () => copy("İşlem tamamlanamadı.", "Could not complete this action.");
   const text =
     override ??
-    (error instanceof RemoteHostError
-      ? remoteMessage(error, copy) || fallback()
-      : error instanceof Error
-        ? error.message || fallback()
-        : typeof error === "string" && error
-          ? error
-          : fallback());
+    (error instanceof ApprovalCommandRefused
+      ? error.reason === "unsupported"
+        ? copy(
+            "Bu Host, hangi isteği yanıtladığını doğrulayamıyor. Yanıtlamadan önce Host'u güncelle.",
+            "This Host cannot verify which request you are answering. Update the Host before responding.",
+          )
+        : copy(
+            "Bu istek doğrulanamıyor. Konuşmayı yenile veya isteği çalıştıran istemciyi güncelle.",
+            "This request cannot be verified. Refresh the conversation or update its execution client.",
+          )
+      : error instanceof RemoteHostError
+        ? remoteMessage(error, copy) || fallback()
+        : error instanceof Error
+          ? error.message || fallback()
+          : typeof error === "string" && error
+            ? error
+            : fallback());
   if (!(error instanceof RemoteHostError) || !error.uncertain) return text;
   const caution = copy(
     "İşlem uygulanmış olabilir. Yeniden denemeden önce sonucu kontrol et.",

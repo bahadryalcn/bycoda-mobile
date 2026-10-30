@@ -14,7 +14,7 @@ import type { HostProject } from "@/domain/types";
 import type { HostTerminalList } from "../../../../src/features/host-tools/terminalTypes";
 import {
   ActionMenu, Badge, Body, Button, CodePanel, CodeText, Disclosure, Empty, Field, IconButton, MutationState,
-  Notice, QueryState, Row, Screen, SelectField, Sheet,
+  FormActions, Notice, QueryState, Row, Screen, SelectField, Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
@@ -128,6 +128,8 @@ export function TerminalScreen({ project }: { project: HostProject }) {
           <Badge label={terminal?.state === "running" ? copy("Çalışıyor", "Running") : copy("Durduruldu", "Stopped")} tone={terminal?.state === "running" ? "active" : "default"} />
           <ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
             { key: "refresh", label: copy("Otomatik yenile", "Auto refresh"), selected: autoRefresh, onPress: () => setAutoRefresh(!autoRefresh) },
+            { key: "stop", label: copy("Terminali durdur", "Stop terminal"), destructive: true,
+              disabled: !writable || busy || uncertain || terminal?.state !== "running", onPress: () => setConfirm("stop") },
             { key: "close", label: copy("Terminali kapat", "Close terminal"), destructive: true,
               disabled: !writable || busy || uncertain, onPress: () => setConfirm("close") },
           ]} />
@@ -142,9 +144,6 @@ export function TerminalScreen({ project }: { project: HostProject }) {
         {terminal?.exitCode != null ? <Body muted>{copy("Çıkış kodu: {p0}", "Exit code: {p0}", { p0: terminal.exitCode })}</Body> : null}
         <Field label={copy("Komut", "Command")} value={command} multiline mono autoCapitalize="none" autoCorrect={false} maxLength={TERMINAL_COMMAND_LIMIT} editable={!busy && writable && terminal?.state === "running" && !uncertain} error={command.trim() && !terminalCommandInput(command) ? copy("En fazla 16384 UTF-8 baytı kullan ve terminal kontrol karakterlerini kaldır.", "Use at most 16384 UTF-8 bytes and remove terminal control characters.") : undefined} onChangeText={(value) => setDrafts((previous) => ({ ...previous, [selected.id]: value }))} />
         <Button label={copy("Komutu gönder", "Send command")} tone="primary" busy={busy} disabled={!writable || uncertain || terminal?.state !== "running" || !terminalCommandInput(command)} onPress={send} />
-        <Row>
-          <Button label={copy("Terminali durdur", "Stop terminal")} tone="danger" disabled={!writable || busy || uncertain || terminal?.state !== "running"} onPress={() => setConfirm("stop")} />
-        </Row>
       </> : null}
       <MutationState mutation={action} />
       {uncertain ? <Notice tone="warning" message={copy("İşlem sonucu belirsiz. Yenile ve çıktıyı kontrol et; aynı komutu yeniden gönderme.", "The result is uncertain. Refresh and inspect the output before sending the same command again.")}>
@@ -154,8 +153,8 @@ export function TerminalScreen({ project }: { project: HostProject }) {
         <Body mono muted>{project.cwd}</Body>
         <Field label={copy("Ad", "Name")} value={form.values.name} editable={!busy} maxLength={80} onChangeText={(value) => form.setField("name", value)} />
         <SelectField label={copy("Kabuk", "Shell")} value={form.values.profileId} disabled={busy} options={[{ value: "", label: copy("Varsayılan", "Default") }, ...(list.data?.profiles ?? []).map((profile) => ({ value: profile.id, label: profile.name }))]} onChange={(value) => form.setField("profileId", value)} />
-        <MutationState mutation={action} />
-        <Button label={copy("Terminal oluştur", "Create terminal")} tone="primary" busy={busy} disabled={!writable || uncertain} onPress={create} />
+        <FormActions submitLabel={copy("Terminal oluştur", "Create terminal")} busy={busy} disabled={!writable || uncertain} onSubmit={create}
+          feedback={<MutationState mutation={action} />} />
       </Sheet>
       <Sheet visible={!!leaving} title={copy("Araçtan ayrıl", "Leave tool")} onClose={() => setLeaving(undefined)}>
         <Notice tone="warning" message={copy("Gönderilmemiş komut taslakları silinecek. Bilgisayardaki terminaller açık kalır.", "Unsent command drafts will be discarded. Terminals on the computer stay open.")} />

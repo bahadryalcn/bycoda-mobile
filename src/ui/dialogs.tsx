@@ -54,8 +54,8 @@ function SheetActionArea({ store, footer, bottom, maxHeight }: {
       automaticallyAdjustKeyboardInsets={false}
       contentInsetAdjustmentBehavior="never"
       style={{ flexGrow: 0, flexShrink: 0, minHeight: content ? Math.min(maxHeight, metrics.touchTarget) : 0,
-        maxHeight, borderTopWidth: content ? 1 : 0,
-        borderTopColor: colors.separator, backgroundColor: colors.panel }}
+        maxHeight, borderTopWidth: 0,
+        borderTopColor: colors.separator, backgroundColor: colors.fill }}
       contentContainerStyle={{
       paddingStart: Math.max(space.screen, insets.left),
       paddingEnd: Math.max(space.screen, insets.right),
@@ -198,9 +198,7 @@ export function Sheet({
   const usableHeight = Math.max(0, sheetHeight - topChrome - headerHeight);
   const bodyMinimum = Math.min(usableHeight / 2, metrics.inputHeight * Math.max(1, fontScale) + space.sm + space.lg);
   const actionsMaximum = Math.max(0, usableHeight - bodyMinimum);
-  useEffect(() => {
-    if (!visible) setConfirming(false);
-  }, [visible]);
+  if (!visible && confirming) setConfirming(false);
   useEffect(() => {
     if (!visible || process.env.EXPO_OS === "web") return;
     let active = true;

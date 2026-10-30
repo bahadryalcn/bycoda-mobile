@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import {
-  Body, Button, CodePanel, CodeText, ConfirmationCard, ErrorText, MutationState,
-  Notice, QueryState, Row, Sheet, ToggleField, NavigationGroup,
+  Body, Button, CodePanel, CodeText, FormActions, ErrorText, MutationState,
+  Disclosure, Notice, QueryState, Row, Sheet, ToggleField, NavigationGroup,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -77,13 +77,15 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
       {current ? (
         <>
           <Body mono>{current.command ?? current.name}</Body>
-          {current.cwd ? <Body mono muted>{current.cwd}</Body> : null}
+          <Disclosure label={copy("Ayrıntılar", "Details")}>
+            {current.cwd ? <Body mono muted>{current.cwd}</Body> : null}
+            {current.process ? <Body mono muted>{`PID ${current.process.pid}`}</Body> : null}
+          </Disclosure>
           {current.endpoints.map((endpoint) => <Row key={`${endpoint.address}:${endpoint.port}`}><Body mono>{endpoint.url}</Body>
             {project && machine?.capabilities?.includes("browser.shared") ? <Button tone="quiet" label={copy("Önizleme", "Preview")} disabled={busy || uncertain} onPress={() => {
               try { if (machineId) setPreview({ url: privatePreviewUrl(endpoint.url), machineId, projectId, serverId: server.id }); } catch (error) { setLocalError(error); }
             }} /> : null}</Row>)}
           {current.error ? <ErrorText error={current.error} /> : null}
-          {current.process ? <Body mono muted>{`PID ${current.process.pid}`}</Body> : null}
           <NavigationGroup><ToggleField label={copy("Alt işlemleri de kapsa", "Include child processes")} value={includeChildren} disabled={busy} onChange={(value) => { setIntent(undefined); setIncludeChildren(value); }} /></NavigationGroup>
           <Body muted>{`${copy("Etkilenen portlar", "Affected ports")}: ${details.data?.affectedPorts.join(", ") || "—"}`}</Body>
           {!canReview ? <Notice message={copy("İşlem etkisini güvenle doğrulamak için bilgisayardaki bycoda'yı güncelle.", "Update bycoda on the computer to safely review process impact.")} /> : null}
@@ -97,19 +99,19 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
             {stop.data?.requiresForce || kill.data?.requiresForce || restart.isError ? <Button tone="danger" label={copy("Zorla durdur", "Force stop")} disabled={disabled} onPress={() => prepare("kill")} /> : null}
             {current.logsAvailable ? <Button tone="quiet" label={copy("Günlükler", "Logs")} selected={showLogs} onPress={() => setShowLogs((value) => !value)} /> : null}
           </Row>
-          {intent ? <><Body mono>{`${intent.machineId} / ${intent.projectId}\n${intent.processes.map((process) => `PID ${process.pid} · ${process.name} · ${process.startedAt}`).join("\n")}\n${copy("Etkilenen portlar", "Affected ports")}: ${intent.ports.join(", ") || "—"}`}</Body><ConfirmationCard
-            message={intent.action === "kill" ? copy("Listelenen işlemleri zorla durdur? Kaydedilmemiş uygulama verileri kaybolabilir.", "Force stop the listed processes? Unsaved application data may be lost.") : intent.action === "stop" ? copy("Bu sunucuyu seçili bilgisayarda durdur?", "Stop this server on the selected computer?") : copy("Bu sunucuyu seçili bilgisayarda yeniden başlat?", "Restart this server on the selected computer?")}
+          {intent ? <><Body mono>{`${intent.machineId} / ${intent.projectId}\n${intent.processes.map((process) => `PID ${process.pid} · ${process.name} · ${process.startedAt}`).join("\n")}\n${copy("Etkilenen portlar", "Affected ports")}: ${intent.ports.join(", ") || "—"}`}</Body><FormActions
+            feedback={<> <Body>{intent.action === "kill" ? copy("Listelenen işlemleri zorla durdur? Kaydedilmemiş uygulama verileri kaybolabilir.", "Force stop the listed processes? Unsaved application data may be lost.") : intent.action === "stop" ? copy("Bu sunucuyu seçili bilgisayarda durdur?", "Stop this server on the selected computer?") : copy("Bu sunucuyu seçili bilgisayarda yeniden başlat?", "Restart this server on the selected computer?")}</Body> {localError ? <ErrorText error={localError} /> : null} <MutationState mutation={stop} /> <MutationState mutation={restart} /> <MutationState mutation={kill} /> </>}
             cancelLabel={copy("Vazgeç", "Cancel")}
-            confirmLabel={intent.action === "kill" ? copy("Zorla durdur", "Force stop") : intent.action === "stop" ? copy("Durdur", "Stop") : copy("Yeniden başlat", "Restart")}
+            submitLabel={intent.action === "kill" ? copy("Zorla durdur", "Force stop") : intent.action === "stop" ? copy("Durdur", "Stop") : copy("Yeniden başlat", "Restart")}
             busy={busy}
             disabled={disabled}
             onCancel={() => setIntent(undefined)}
-            onConfirm={act}
+            onSubmit={act}
           /></> : null}
-          {localError ? <ErrorText error={localError} /> : null}
-          <MutationState mutation={stop} />
-          <MutationState mutation={restart} />
-          <MutationState mutation={kill} />
+          {!intent ? <>{localError ? <ErrorText error={localError} /> : null}</> : null}
+          {!intent ? <><MutationState mutation={stop} /></> : null}
+          {!intent ? <><MutationState mutation={restart} /></> : null}
+          {!intent ? <><MutationState mutation={kill} /></> : null}
           {stop.data?.requiresForce ? <Notice tone="warning" message={stop.data.message ?? copy("İşlem hâlâ çalışıyor.", "The process is still running.")} /> : null}
           {restart.data?.conflict ? <Notice tone="warning" message={copy("{p0} portu zaten kullanılıyor.", "Port {p0} is already in use.", { p0: restart.data.conflict.port })} /> : null}
           {showLogs ? <>

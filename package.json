@@ -97,5 +97,12 @@
     "tsc-rs": "0.8.0",
     "typescript": "~6.0.3",
     "vitest": "^5.0.5"
+  },
+  "expo": {
+    "autolinking": {
+      "buildFromSource": [
+        "expo-secure-store"
+      ]
+    }
   }
 }

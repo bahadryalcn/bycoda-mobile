@@ -1,5 +1,5 @@
 import { useCopy } from "@/ui/copy";
-import { useEffect, useRef, useState, type ComponentRef } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { ErrorText } from "@/ui/primitives";
 import { Body, Button, Disclosure, Field, IdentifierField, NavigationRow, QueryState, ScreenList, SearchField, SelectField, Sheet } from "@/ui/primitives";
 import { useHostQuery } from "@/state/queries";
@@ -17,7 +17,6 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
   const [choosingModel, setChoosingModel] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const minutesValid = /^\d+$/.test(minutes) && Number(minutes) <= 10080;
-  useEffect(() => { onValidityChange?.(minutesValid); }, [minutesValid, onValidityChange]);
   const models = useHostQuery<HostModelCatalog>(
     ["models", projectId],
     "models.list",
@@ -100,7 +99,9 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
           value={minutes}
           onChangeText={(text) => {
             setMinutes(text);
-            if (/^\d+$/.test(text) && Number(text) <= 10080) onChange({ ...value, maxRunMinutes: Number(text) });
+            const valid = /^\d+$/.test(text) && Number(text) <= 10080;
+            onValidityChange?.(valid);
+            if (valid) onChange({ ...value, maxRunMinutes: Number(text) });
           }}
           editable={!disabled}
           keyboardType="number-pad"

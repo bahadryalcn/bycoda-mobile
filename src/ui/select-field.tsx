@@ -112,23 +112,25 @@ function SelectionField<T extends string>({
             setOpen(true);
           }}
           style={({ pressed }) => ({
-            minHeight: 52,
+            minHeight: metrics.touchTarget,
             flexDirection: "row",
             alignItems: "center",
             gap: space.row,
-            paddingHorizontal: space.lg,
+            paddingHorizontal: 0,
             paddingVertical: space.sm,
             backgroundColor: pressed ? colors.raised : "transparent",
             opacity: disabled ? opacity.disabled : 1,
           })}
         >
           {icon}
-          <Body selectable={false} numberOfLines={1} style={[uiStyles.label, uiStyles.grow]}>
-            {label}
-          </Body>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexShrink: 1, maxWidth: "55%" }}>
-            <SelectionIcon>{selectedIcon}</SelectionIcon>
-            <Body selectable={false} numberOfLines={1} muted style={{ flexShrink: 1 }}>{summary}</Body>
+          <View style={[uiStyles.grow, { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }]}>
+            <Body selectable={false} style={[uiStyles.label, { flexGrow: 1, flexShrink: 1, flexBasis: 104 }]}>
+              {label}
+            </Body>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexShrink: 1, maxWidth: "100%" }}>
+              <SelectionIcon>{selectedIcon}</SelectionIcon>
+              <Body selectable={false} muted style={{ flexShrink: 1 }}>{summary}</Body>
+            </View>
           </View>
           <ChevronsUpDown size={15} strokeWidth={2.2} color={colors.tertiary} />
         </Pressable>

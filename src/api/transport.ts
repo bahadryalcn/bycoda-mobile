@@ -1,4 +1,6 @@
-import type { HostConnection } from "../domain/types";
+import type { HostConnection, HostDescriptor } from "../domain/types";
+import { ApprovalCommandRefused, assertApprovalCommand } from "../domain/approval-command";
+import { isApprovalOccurrenceId } from "../../../src/shared/model/approvalOccurrence";
 import {
   HostTransport as RemoteTransport,
   RemoteHostError,
@@ -110,6 +112,20 @@ export class HostTransport {
   async request<T>(method: string, params: object = {}, options: RequestOptions = {}): Promise<T> {
     const id = this.connection.id;
     if (this.closed) throw new HostError("disconnected", "This computer is disconnected.", id);
+    if (
+      (method === "commands.dispatch" && (params as { type?: unknown }).type === "approve") ||
+      method === "crews.respond"
+    ) {
+      // Snapshot caller primitives before the descriptor read. It grants no new occurrence.
+      params = { ...params };
+      const approval = { ...params, type: "approve" };
+      if (
+        !isApprovalOccurrenceId((params as { approvalOccurrenceId?: unknown }).approvalOccurrenceId)
+      )
+        throw new ApprovalCommandRefused("unidentified");
+      const descriptor = await this.request<HostDescriptor>("environment.describe", {}, options);
+      assertApprovalCommand(descriptor.capabilities, approval);
+    }
     const controller = new AbortController();
     this.active.add(controller);
     const cancel = () => controller.abort();
@@ -129,11 +145,16 @@ export class HostTransport {
         "capabilities" in result &&
         Array.isArray(result.capabilities)
       )
-        this.capabilities = result.capabilities.filter(
-          (capability): capability is string => typeof capability === "string",
+        this.capabilities.splice(
+          0,
+          this.capabilities.length,
+          ...result.capabilities.filter(
+            (capability): capability is string => typeof capability === "string",
+          ),
         );
       return result;
     } catch (error) {
+      if (error instanceof ApprovalCommandRefused) throw error;
       if (!(error instanceof RemoteHostError))
         throw new HostError("disconnected", "Cannot reach this computer.", id);
       const kinds = {

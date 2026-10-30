@@ -37,13 +37,10 @@ export function AccountCard({ account, state, projectId }: AccountCardProps) {
   return (
     <Card>
       <Row>
-        <Body muted style={[uiStyles.caption, uiStyles.grow]}>
-          {account.platform} ·{" "}
-          {account.connected ? copy("Bağlı", "Connected") : copy("Bağlı değil", "Disconnected")} ·{" "}
-          {account.paused ? copy("Duraklatıldı", "Paused") : copy("Etkin", "Active")}
-        </Body>
+        <Body style={[uiStyles.title, uiStyles.grow]}>{account.name}</Body>
         <ActionMenu
           label={copy("Hesap işlemleri", "Account actions")}
+          busy={action.isPending}
           actions={[
             {
               key: "pause",
@@ -73,7 +70,11 @@ export function AccountCard({ account, state, projectId }: AccountCardProps) {
           ]}
         />
       </Row>
-      <Body style={uiStyles.title}>{account.name}</Body>
+        <Body muted style={uiStyles.caption}>
+          {account.platform} ·{" "}
+          {account.connected ? copy("Bağlı", "Connected") : copy("Bağlı değil", "Disconnected")} ·{" "}
+          {account.paused ? copy("Duraklatıldı", "Paused") : copy("Etkin", "Active")}
+        </Body>
       {!account.connected && account.connection !== "browser" && (
         <Row>
           <Button
@@ -102,7 +103,7 @@ export function AccountCard({ account, state, projectId }: AccountCardProps) {
         <Body muted style={uiStyles.caption}>
           {state.capabilities[account.id]
             ?.map((capability) => `${socialLabel(capability.operation, copy)}: ${socialLabel(capability.status, copy)}`)
-            .join(" · ")}
+            .join(" · ") || copy("Bilinmiyor", "Unknown")}
         </Body>
       </Disclosure>
       {oauth.data?.candidates?.map((candidate) => (

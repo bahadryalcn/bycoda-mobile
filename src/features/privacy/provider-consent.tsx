@@ -15,7 +15,7 @@ import { useAsyncAction } from "../../state/actions";
 import {
   Body,
   Button,
-  Card,
+  Stack,
   ErrorText,
   Disclosure,
   Heading,
@@ -133,7 +133,7 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
             ) : (
               <>
                 <Animated.View entering={enterItem(0)}>
-                  <Card>
+                  <Stack>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
                       <IconTile color={colors.accent}>
                         <Laptop size={18} strokeWidth={2} color={colors.accent} />
@@ -143,10 +143,10 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                         <Body muted numberOfLines={1}>{machine?.endpoint}</Body>
                       </View>
                     </View>
-                  </Card>
+                  </Stack>
                 </Animated.View>
                 <Animated.View entering={enterItem(1)}>
-                  <Card>
+                  <Stack>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
                       <IconTile color={colors.success}>
                         <ShieldCheck size={18} strokeWidth={2} color={colors.success} />
@@ -161,10 +161,10 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                         "Messages, selected files, code, attachments and operation results are sent to this computer. When you start or message an AI session, the provider selected on that computer may process this content.",
                       )}
                     </Body>
-                  </Card>
+                  </Stack>
                 </Animated.View>
                 <Animated.View entering={enterItem(2)}>
-                  <Card>
+                  <Stack>
                     <Heading>{copy("Sağlayıcılar", "Providers")}</Heading>
                     <Body muted>
                       {machine?.providers?.join(", ") ||
@@ -178,7 +178,7 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                         )}
                       </Body>
                     </Disclosure>
-                  </Card>
+                  </Stack>
                 </Animated.View>
                 <ErrorText
                   error={permission.error || action.error}

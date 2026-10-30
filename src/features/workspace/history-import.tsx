@@ -1,9 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { randomUUID } from "expo-crypto";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
+import { useReviewedOperation } from "@/state/use-reviewed-operation";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import {
@@ -67,34 +68,19 @@ export function HistoryImport({
       ),
     [opening],
   );
-  const [loading, setLoading] = useState(true);
-  const [attempt, setAttempt] = useState<Awaited<ReturnType<typeof store.load>>>(null);
+  const {
+    loading,
+    loaded: attempt,
+    setLoaded: setAttempt,
+    error,
+    setError,
+    busy,
+    pendingAction,
+    run,
+  } = useReviewedOperation({ source: store, load: () => store.load(), canRun: () => !!supported });
   const [review, setReview] = useState<HistoryPreview | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [initialStatus, setInitialStatus] = useState<HistoryStatus>();
-  const [error, setError] = useState<unknown>(null);
-  const [busy, setBusy] = useState(false);
-  const [pendingAction, setPendingAction] = useState("primary");
-  const occupied = useRef(false);
-  useEffect(() => {
-    let live = true;
-    void store
-      .load()
-      .then(
-        (saved) => {
-          if (live) setAttempt(saved);
-        },
-        (cause) => {
-          if (live) setError(cause);
-        },
-      )
-      .finally(() => {
-        if (live) setLoading(false);
-      });
-    return () => {
-      live = false;
-    };
-  }, [store]);
   const commit = useHostMutation("history.import.commit", ["sessions", opening.projectId]);
   const cancel = useHostMutation("history.import.cancel");
   const statusQuery = useHostQuery<HistoryStatus>(
@@ -145,21 +131,6 @@ export function HistoryImport({
     if (attempt && initialStatus && supported) void statusQuery.refetch();
   }, [attempt?.operationId, initialStatus, supported]);
   const disabled = !supported || loading || busy || !!attempt;
-  const run = async (action: () => Promise<unknown>, actionKey = "primary") => {
-    if (occupied.current || !supported) return;
-    occupied.current = true;
-    setPendingAction(actionKey);
-    setBusy(true);
-    setError(null);
-    try {
-      await action();
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      occupied.current = false;
-      setBusy(false);
-    }
-  };
   const start = () => {
     if (disabled || !review) return;
     let selection: ReturnType<typeof historySelection>;

@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { View } from "react-native";
 import { Image } from "expo-image";
 import * as Sharing from "expo-sharing";
@@ -9,13 +9,25 @@ import { Button, ErrorText, Row, Sheet } from "./primitives";
 import { useCopy } from "./copy";
 import { colors, space } from "./tokens";
 
-export function MediaViewer({ uri, name, visible, onClose }: { uri: string; name: string; visible: boolean; onClose: () => void }) {
+type MediaViewerProps = { uri: string; name: string; visible: boolean; onClose: () => void };
+
+/** Zoom and error state belong to one image and one opening, so a new uri or reopening remounts the body. */
+export function MediaViewer(props: MediaViewerProps) {
+  const [opening, setOpening] = useState({ visible: props.visible, count: 0 });
+  let count = opening.count;
+  if (props.visible !== opening.visible) {
+    count = props.visible ? opening.count + 1 : opening.count;
+    setOpening({ visible: props.visible, count });
+  }
+  return <MediaViewerBody key={`${count}:${props.uri}`} {...props} />;
+}
+
+function MediaViewerBody({ uri, name, visible, onClose }: MediaViewerProps) {
   useMobileTheme();
   const copy = useCopy();
   const [error, setError] = useState<unknown>(null);
   const scale = useSharedValue(1); const saved = useSharedValue(1);
   const x = useSharedValue(0); const y = useSharedValue(0); const originX = useSharedValue(0); const originY = useSharedValue(0);
-  useEffect(() => { scale.value = 1; saved.value = 1; x.value = 0; y.value = 0; originX.value = 0; originY.value = 0; setError(null); }, [uri, visible]);
   const pinch = Gesture.Pinch().onUpdate((event) => { scale.value = Math.min(5, Math.max(1, saved.value * event.scale)); }).onEnd(() => { saved.value = scale.value; if (scale.value === 1) { x.value = 0; y.value = 0; originX.value = 0; originY.value = 0; } });
   const pan = Gesture.Pan().onUpdate((event) => { if (scale.value > 1) { x.value = originX.value + event.translationX; y.value = originY.value + event.translationY; } }).onEnd(() => { originX.value = x.value; originY.value = y.value; });
   const tap = Gesture.Tap().numberOfTaps(2).onEnd(() => { scale.value = scale.value > 1 ? 1 : 2.5; saved.value = scale.value; x.value = 0; y.value = 0; originX.value = 0; originY.value = 0; });

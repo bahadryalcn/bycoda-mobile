@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useCopy } from "@/ui/copy";
 import {
   Body,
   Button,
+  Disclosure,
   NavigationRow,
   Notice,
   QueryState,
@@ -42,7 +43,10 @@ export function ProviderJiraBoards({
       issue: JiraMobileIssue;
       snapshot: JiraBoardSnapshot;
     } | null>(null);
-  const [sprints, setSprints] = useState<JiraBoardSnapshot["configuration"]["sprints"]>([]);
+  const [sprintCache, setSprintCache] = useState<{
+    boardId: string;
+    sprints: JiraBoardSnapshot["configuration"]["sprints"];
+  }>({ boardId: "", sprints: [] });
   const current = isInboxOriginCurrent(opening, useMachines.getState()),
     supported =
       current &&
@@ -74,10 +78,14 @@ export function ProviderJiraBoards({
     (scope !== "sprint" || board.data.scope.sprintId === Number(sprintId))
       ? board.data
       : undefined;
-  useEffect(() => {
-    if (supported && board.data?.board.id === Number(boardId))
-      setSprints(board.data.configuration.sprints);
-  }, [supported, board.data, boardId]);
+  if (
+    supported &&
+    board.data?.board.id === Number(boardId) &&
+    (sprintCache.boardId !== boardId || sprintCache.sprints !== board.data.configuration.sprints)
+  )
+    setSprintCache({ boardId, sprints: board.data.configuration.sprints });
+  // Keep the last sprint list for the selected board while another scope loads.
+  const sprints = sprintCache.boardId === boardId ? sprintCache.sprints : [];
   const statusIds =
     column && snapshot ? snapshot.configuration.columns[Number(column) - 1]?.statusIds : undefined;
   const rows = snapshot
@@ -117,12 +125,12 @@ export function ProviderJiraBoards({
                 )}
               />
             ) : null}
-            <Body muted>
+            <Disclosure label={copy("Yardım", "Help")}><Body muted>
               {copy(
                 "Yalnız bilgisayarda etkinleştirilen panolar ve görünür Jira projeleri gösterilir. Hesap ayarları bilgisayarda kalır.",
                 "Only boards enabled on the computer and visible Jira projects are shown. Account settings stay on the computer.",
               )}
-            </Body>
+            </Body></Disclosure>
             <QueryState
               query={boards}
               empty={boards.isSuccess && !boards.data?.length}
@@ -132,6 +140,7 @@ export function ProviderJiraBoards({
               )}
             />
             <SelectField
+              compact
               label={copy("Jira panosu", "Jira board")}
               value={boardId}
               disabled={!supported}
@@ -140,7 +149,6 @@ export function ProviderJiraBoards({
                 setScope("board");
                 setSprint("");
                 setColumn("");
-                setSprints([]);
                 setPages([undefined]);
                 setSelected(null);
               }}
@@ -152,6 +160,7 @@ export function ProviderJiraBoards({
             {boardId ? (
               <>
                 <SelectField
+                  compact
                   label={copy("Pano kapsamı", "Board scope")}
                   value={scope}
                   disabled={!supported}
@@ -168,6 +177,7 @@ export function ProviderJiraBoards({
                 />
                 {scope === "sprint" ? (
                   <SelectField
+                    compact
                     label={copy("Sprint", "Sprint")}
                     value={sprintId}
                     disabled={!supported}
@@ -195,6 +205,7 @@ export function ProviderJiraBoards({
             {snapshot ? (
               <>
                 <SelectField
+                  compact
                   label={copy("Sütun", "Column")}
                   value={column}
                   disabled={!supported}

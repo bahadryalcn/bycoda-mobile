@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { View } from "react-native";
 import { randomUUID } from "expo-crypto";
 import { reportSender } from "./report-config";
 import { Stack as RouterStack, router } from "expo-router";
@@ -7,20 +8,7 @@ import { useCopy } from "@/ui/copy";
 import { ConsentField } from "@/ui/consent-field";
 import Animated from "react-native-reanimated";
 import Flag from "lucide-react-native/icons/flag";
-import {
-  Body,
-  Button,
-  Card,
-  Disclosure,
-  ErrorText,
-  Field,
-  NavigationGroup,
-  Screen,
-  SelectField,
-  Sheet,
-  ConfirmationCard,
-  ToggleField,
-} from "@/ui/primitives";
+import { Body, Button, Disclosure, ErrorText, Field, NavigationGroup, Screen, SelectField, Sheet, ConfirmationCard, ToggleField } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
 import { uiStyles } from "@/ui/styles";
@@ -95,7 +83,7 @@ export function ContentReportScreen() {
         </NavigationGroup>
       </Animated.View>
       <Animated.View entering={enterItem(1)}>
-        <Card>
+        <View style={{ gap: space.sm }}>
           <Field
             label={copy("Açıklama", "Description")}
             value={draft.description}
@@ -106,7 +94,7 @@ export function ContentReportScreen() {
           <Body muted style={uiStyles.caption}>
             {Array.from(draft.description).length} / {maxReportDescription}
           </Body>
-        </Card>
+        </View>
       </Animated.View>
       <NavigationGroup>
         <ToggleField
@@ -117,7 +105,7 @@ export function ContentReportScreen() {
         />
       </NavigationGroup>
       {draft.includeExcerpt ? (
-        <Card>
+        <View style={{ gap: space.sm }}>
           <Field
             label={copy(
               "Paylaşılacak alıntı — göndermeden önce düzenle",
@@ -131,7 +119,7 @@ export function ContentReportScreen() {
           <Body muted style={uiStyles.caption}>
             {Array.from(draft.excerpt).length} / {maxReportExcerpt}
           </Body>
-        </Card>
+        </View>
       ) : null}
       <ConsentField label={copy("Gönderim onayı", "Consent to send")}
         detail={copy(

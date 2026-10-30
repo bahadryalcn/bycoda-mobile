@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { View } from "react-native";
 import { BusyIndicator } from "@/ui/busy-indicator";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
@@ -49,19 +49,21 @@ export function ProjectFolderBrowser({
   const [path, setPath] = useState<string>();
   const [manual, setManual] = useState("");
   const [search, setSearch] = useState("");
-  const [locations, setLocations] = useState<Location[]>([]);
+  // Drives and home stay listed while another folder loads (its query data is briefly empty).
+  const [rootsSource, setRootsSource] = useState<ProjectDirectories>();
   const folders = useHostQuery<ProjectDirectories>(["folders", path], "projects.browse", { path });
   const homeLabel = copy("Ev klasörü", "Home folder");
-  useEffect(() => {
-    if (!folders.data) return;
-    const data = folders.data;
-    setLocations([
+  if (folders.data && folders.data !== rootsSource) setRootsSource(folders.data);
+  const locations = useMemo<Location[]>(() => {
+    const data = rootsSource;
+    if (!data) return [];
+    return [
       ...(data.home ? [{ value: data.home, label: homeLabel, detail: data.home }] : []),
       ...(data.roots ?? [])
         .filter((root) => !data.home || pathKey(root.path) !== pathKey(data.home))
         .map((root) => ({ value: root.path, label: root.name, detail: root.path })),
-    ]);
-  }, [folders.data, homeLabel]);
+    ];
+  }, [rootsSource, homeLabel]);
   const current = folders.data?.path;
   const entries = (folders.data?.entries ?? []).filter((entry) =>
     entry.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()),

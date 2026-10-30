@@ -9,6 +9,7 @@ import {
   NavigationRow,
   Notice,
   QueryState,
+  Row,
   ScreenList,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -106,12 +107,8 @@ export function AccessCenter() {
             )}
             {report ? (
               <>
-                <Body>
-                  {copy("Yerel ağ", "Local network")}: {states[report.lan.state]}
-                </Body>
-                <Body>
-                  {copy("Özel ağ", "Private network")}: {states[report.privateNetwork.state]}
-                </Body>
+                <Row><Body style={{ flex: 1 }}>{copy("Yerel ağ", "Local network")}</Body><Badge label={states[report.lan.state]} /></Row>
+                <Row><Body style={{ flex: 1 }}>{copy("Özel ağ", "Private network")}</Body><Badge label={states[report.privateNetwork.state]} /></Row>
                 {report.devicesTruncated ? (
                   <Notice
                     message={copy(

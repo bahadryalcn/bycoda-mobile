@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { ScrollView, type StyleProp, type TextStyle } from "react-native";
-import * as Clipboard from "expo-clipboard";
 import { Body, Button, ErrorText, Row, Sheet } from "./primitives";
 import { useCopy } from "./copy";
 import { space } from "./tokens";
 import { sourceSlice } from "./message-code-model";
 import { messageDisplaySource } from "./message-model";
+import { useClipboardFeedback } from "./use-clipboard-feedback";
 
 const PAGE_SIZE = 12_000;
 
@@ -22,8 +22,8 @@ export function MessageReader({
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(0);
-  const [error, setError] = useState<unknown>(null);
-  const [copied, setCopied] = useState<string | null>(null);
+  // Copies the complete original message, independent of the displayed page or hidden-metadata view.
+  const clipboard = useClipboardFeedback(text);
   const displayText = useMemo(
     () => (open && hideInternalMetadata ? messageDisplaySource(text) : text),
     [text, open, hideInternalMetadata],
@@ -71,19 +71,15 @@ export function MessageReader({
           <ScrollView key={current} contentContainerStyle={{ gap: space.md, padding: space.md }}>
             <Button
               label={
-                copied === text
+                clipboard.copied
                   ? copy("Kopyalandı", "Copied")
                   : copy("Mesajı kopyala", "Copy message")
               }
               tone="quiet"
-              onPress={() => {
-                setError(null);
-                void Clipboard.setStringAsync(text)
-                  .then(() => setCopied(text))
-                  .catch(setError);
-              }}
+              busy={clipboard.busy}
+              onPress={clipboard.copy}
             />
-            <ErrorText error={error} />
+            <ErrorText error={clipboard.error} />
             <Body style={textStyle}>
               {sourceSlice(displayText, current * PAGE_SIZE, (current + 1) * PAGE_SIZE)}
             </Body>

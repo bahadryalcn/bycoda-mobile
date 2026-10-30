@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { claimPreviewIntent, clearPreviewIntent, loadPreviewIntent } from "./device-preview-intent";
+import { claimPreviewIntent, clearPreviewIntent, discardInvalidPreviewIntent, isInvalidPreviewIntentError, loadPreviewIntent } from "./device-preview-intent";
 const state = vi.hoisted(() => ({ values: new Map<string, string>(), fail: false }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
   getItem: async (key: string) => state.values.get(key) ?? null,
@@ -21,4 +21,12 @@ it("storage failure or corrupt recovery cannot silently replace an existing inte
   state.fail = true; await expect(claimPreviewIntent(scope, intent)).rejects.toThrow("Storage failed"); state.fail = false;
   await claimPreviewIntent(scope, intent); for (const key of state.values.keys()) state.values.set(key, "corrupt");
   await expect(loadPreviewIntent(scope)).rejects.toThrow(); await expect(claimPreviewIntent(scope, intent)).rejects.toThrow("Reconcile");
+});
+it("distinguishes an invalid retained value from no intent and only an explicit discard removes it", async () => {
+  expect(await loadPreviewIntent(scope)).toBeNull(); expect(await discardInvalidPreviewIntent(scope)).toBe("empty");
+  await claimPreviewIntent(scope, intent); expect(await discardInvalidPreviewIntent(scope)).toBe("kept"); expect(await loadPreviewIntent(scope)).toEqual(intent);
+  for (const key of state.values.keys()) state.values.set(key, "{corrupt");
+  const failure = await loadPreviewIntent(scope).catch((cause: unknown) => cause); expect(isInvalidPreviewIntentError(failure)).toBe(true);
+  await expect(claimPreviewIntent(scope, intent)).rejects.toThrow("Reconcile"); expect(state.values.size).toBe(1);
+  expect(await discardInvalidPreviewIntent(scope)).toBe("discarded"); expect(await loadPreviewIntent(scope)).toBeNull();
 });

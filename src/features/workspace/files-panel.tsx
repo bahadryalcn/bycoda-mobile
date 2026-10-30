@@ -16,7 +16,7 @@ import {
   ActionMenu,
   Body,
   Button,
-  ChoiceChip,
+  SegmentedControl,
   Empty,
   IdentifierField,
   IconButton,
@@ -183,14 +183,14 @@ export function ProjectFiles({
               </ScrollView>
               <IconButton
                 label={copy("Yeni dosya / klasör", "New file / folder")}
-                tone="primary"
+                tone="default"
                 disabled={create.isPending}
                 onPress={() => {
                   create.reset();
                   dispatch({ type: "view", view: { kind: "create" } });
                 }}
               >
-                <Plus size={20} strokeWidth={2.4} color={colors.primaryText} />
+                <Plus size={20} strokeWidth={2.4} color={colors.accent} />
               </IconButton>
             </Row>
             <Row style={{ flexWrap: "nowrap" }}>
@@ -477,20 +477,16 @@ function CreateFileSheet({
         editable={!mutation.isPending}
         onChangeText={(value) => form.setField("name", value)}
       />
-      <Row>
-        <ChoiceChip
-          selected={!form.values.isDir}
-          disabled={mutation.isPending}
-          label={copy("Dosya", "File")}
-          onPress={() => form.setField("isDir", false)}
-        />
-        <ChoiceChip
-          selected={form.values.isDir}
-          disabled={mutation.isPending}
-          label={copy("Klasör", "Folder")}
-          onPress={() => form.setField("isDir", true)}
-        />
-      </Row>
+      <SegmentedControl
+        label={copy("Tür", "Type")}
+        value={form.values.isDir ? "folder" : "file"}
+        disabled={mutation.isPending}
+        options={[
+          { value: "file", label: copy("Dosya", "File") },
+          { value: "folder", label: copy("Klasör", "Folder") },
+        ]}
+        onChange={(value) => form.setField("isDir", value === "folder")}
+      />
     </Sheet>
   );
 }

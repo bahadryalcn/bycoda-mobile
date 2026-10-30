@@ -5,6 +5,8 @@ import type { StatusProps } from "./types";
 export function statusLabel(value: string, copy: (tr: string, en: string) => string): string {
   const translated: Record<string, readonly [string, string]> = {
     idle: ["Hazır", "Ready"],
+    active: ["Etkin", "Active"],
+    finished: ["Tamamlandı", "Completed"],
     todo: ["Yapılacak", "To do"],
     queued: ["Sırada", "Queued"],
     running: ["Çalışıyor", "Running"],
@@ -32,7 +34,7 @@ export function Status({ value }: StatusProps) {
   const copy = useCopy();
   const tone = ["failed", "blocked"].includes(value)
     ? "danger"
-    : ["done", "succeeded", "completed"].includes(value)
+    : ["done", "succeeded", "completed", "finished"].includes(value)
       ? "success"
       : ["review", "awaiting-approval"].includes(value)
         ? "warning"

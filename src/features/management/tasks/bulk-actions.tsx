@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Body, Button, Disclosure, MultiSelectField, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
@@ -32,12 +32,14 @@ export function TaskBulkActions({
   const remove = useHostMutation("tasks.delete");
   const start = useHostMutation("tasks.start");
   const move = useHostMutation("tasks.move");
-  useEffect(() => {
+  const [seenTasks, setSeenTasks] = useState(tasks);
+  if (seenTasks !== tasks) {
+    // Prune during render (not derived each time) so a task that leaves and
+    // later returns is not silently re-selected for a destructive bulk action.
+    setSeenTasks(tasks);
     const ids = new Set(tasks.map((task) => task.id));
-    setSelected((current) =>
-      current.every((id) => ids.has(id)) ? current : current.filter((id) => ids.has(id)),
-    );
-  }, [tasks]);
+    if (!selected.every((id) => ids.has(id))) setSelected(selected.filter((id) => ids.has(id)));
+  }
   const labels = {
     delete: copy("Sil", "Delete"),
     start: copy("Başlat", "Start"),

@@ -3,7 +3,7 @@ import { PlanSteps } from "@/ui/plan-steps";
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
 import { uiStyles } from "@/ui/styles";
-import { ActionMenu, Body, Button, ErrorText, Row } from "@/ui/primitives";
+import { ActionMenu, Body, Button, Disclosure, ErrorText, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
@@ -79,13 +79,15 @@ export function GoalCard({
       status={<Status value={goal.status} />}
       metadata={goal.taskIds.length + " " + copy("görev", "tasks")}
       defaultExpanded={goal.status === "awaiting-approval"}
-      menu={<ActionMenu label={copy("Hedef işlemleri", "Goal actions")} actions={menu} />}
+      menu={<ActionMenu label={copy("Hedef işlemleri", "Goal actions")}
+        busy={(cancel.isPending && cancel.variables?.goalId === goal.id) || (remove.isPending && remove.variables?.goalId === goal.id)} actions={menu} />}
       footer={goal.status === "awaiting-approval" || goal.plannerSessionId ? (
         <Row>
           {goal.status === "awaiting-approval" && (
             <Button
               label={copy("Planı onayla", "Approve plan")}
               tone="success"
+              busy={approve.isPending && approve.variables?.goalId === goal.id}
               disabled={busy}
               onPress={() =>
                 confirmAction(
@@ -126,13 +128,13 @@ export function GoalCard({
             .map((id) => projects.find((project) => project.id === id)?.name ?? id)
             .join(" · ")}
         </Body>
-        {goal.plan?.tasks.length ? <PlanSteps steps={goal.plan.tasks.map((task) => ({
+        {goal.plan?.tasks.length ? <Disclosure label={copy("Plan", "Plan")} detail={`${goal.plan.tasks.length} ${copy("görev", "tasks")}`}><PlanSteps steps={goal.plan.tasks.map((task) => ({
           id: task.key,
           title: task.title,
           description: task.prompt,
           metadata: [task.project, task.dependsOn.length
             ? `${copy("Bağımlılıklar", "Depends on")}: ${task.dependsOn.join(", ")}` : ""].filter(Boolean).join(" · "),
-        }))} /> : null}
+        }))} /></Disclosure> : null}
       </>}
     >
       <ErrorText error={goal.error} />

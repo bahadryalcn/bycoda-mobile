@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useMobileTheme } from "./theme";
 import { View } from "react-native";
 import { WebView } from "react-native-webview";
 import { Button, ErrorText, Loading, Row } from "./primitives";
@@ -8,11 +9,12 @@ import { previewNavigationAllowed, sandboxPreviewHtml } from "./media-policy";
 
 export function HtmlPreview({ html, height = 420, trustedRuntime }: { html: string; height?: number; trustedRuntime?: string }) {
   const copy = useCopy();
+  const { colors } = useMobileTheme();
   const [javascript, setJavascript] = useState(true);
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
-  const source = useMemo(() => ({ html: sandboxPreviewHtml(html, javascript, trustedRuntime), baseUrl: "about:blank" }), [html, javascript, trustedRuntime]);
+  const source = useMemo(() => ({ html: sandboxPreviewHtml(`<style>html,body{background:${colors.panel};color:${colors.text}}</style>${html}`, javascript, trustedRuntime), baseUrl: "about:blank" }), [html, javascript, trustedRuntime, colors.panel, colors.text]);
   return <View style={{ gap: space.sm }}>
     <Row><Button density="compact" tone="quiet" label={javascript ? copy("Etkileşim açık", "Interaction on") : copy("Etkileşim kapalı", "Interaction off")} onPress={() => { setJavascript(!javascript); setLoading(true); }} /></Row>
     {loading ? <Loading /> : null}

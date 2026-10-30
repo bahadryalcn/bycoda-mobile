@@ -8,6 +8,7 @@ import {
   hostRpcWireMethod,
   MethodNameSchema,
   ConnectionHelloResultSchema,
+  nativeDesktopMethod,
 } from "../../../src/shared/model/host-contracts";
 import { createContentApi } from "./services/content-api";
 import { createTerminalApi } from "./services/terminal-api";
@@ -30,6 +31,13 @@ const generated = JSON.parse(
   schemaHash: string;
   methods: Record<string, { requiredCapability: string | null; retry: string; kind: string }>;
 };
+// Private Native workspace/gateway methods are desktop-only by contract: mobile
+// never routes them, so their capabilities alone must not opt a Host into WSS.
+const mobileMethods = Object.entries(generated.methods).filter(([name]) => !nativeDesktopMethod(name));
+const desktopOnlyMethods = Object.keys(generated.methods).filter((name) => nativeDesktopMethod(name));
+const capabilitiesOf = (entries: [string, { requiredCapability: string | null }][]) => [
+  ...new Set(entries.flatMap(([, method]) => (method.requiredCapability ? [method.requiredCapability] : []))),
+];
 const connections: MobileHostWsConnection[] = [];
 afterEach(() => {
   for (const connection of connections.splice(0)) connection.close();
@@ -305,14 +313,16 @@ describe("mobile compatibility with the generated Host registry", () => {
       ).toThrow();
   });
   it("derives native subset recognition from all actual per-method capabilities and ignores unknown future markers", () => {
-    for (const capability of new Set(
-      Object.values(generated.methods).flatMap((method) =>
-        method.requiredCapability ? [method.requiredCapability] : [],
-      ),
-    ))
+    const mobileCapabilities = capabilitiesOf(mobileMethods);
+    for (const capability of mobileCapabilities)
       expect(selectMobileHostTransport([capability], true)).toBe(
         capability === "transport.ws.read.v2" ? "legacy-http" : "native-wss",
       );
+    // A capability carried only by desktop-only Native methods keeps legacy HTTP.
+    for (const capability of capabilitiesOf(
+      Object.entries(generated.methods).filter(([name]) => nativeDesktopMethod(name)),
+    ).filter((capability) => !mobileCapabilities.includes(capability)))
+      expect(selectMobileHostTransport([capability], true)).toBe("legacy-http");
     expect(selectMobileHostTransport(["transport.ws.read.v2"], false)).toBe("legacy-http");
     expect(
       mobileWsMethodEnabled(["transport.ws.sessions.v2", "transport.ws.read.v2"], "projects.list"),
@@ -339,13 +349,7 @@ describe("mobile compatibility with the generated Host registry", () => {
   );
   it("negotiates the generated versions/methods and requires both capability and actual hello route", async () => {
     const methods = Object.keys(generated.methods);
-    const capabilities = [
-      ...new Set(
-        Object.values(generated.methods).flatMap((method) =>
-          method.requiredCapability ? [method.requiredCapability] : [],
-        ),
-      ),
-    ];
+    const capabilities = capabilitiesOf(Object.entries(generated.methods));
     const f = fakeNative({ methods, capabilities });
     const connection = new MobileHostWsConnection(
       f.native,
@@ -358,7 +362,10 @@ describe("mobile compatibility with the generated Host registry", () => {
     await connection.start();
     expect(f.sent[0]!.params.supportedWireVersions).toEqual([generated.wireVersion]);
     expect(f.sent[0]!.params.supportedSchemaVersions).toEqual([generated.schemaVersion]);
-    for (const method of methods) expect(connection.supports(method)).toBe(true);
+    for (const [method] of mobileMethods) expect(connection.supports(method)).toBe(true);
+    // Even when the Host advertises them, desktop-only Native methods are never routed from mobile.
+    expect(desktopOnlyMethods.length).toBeGreaterThan(0);
+    for (const method of desktopOnlyMethods) expect(connection.supports(method)).toBe(false);
     const reduced = fakeNative({
       methods: ["notes.list"],
       capabilities: ["transport.ws.notes.v2"],

@@ -1,19 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
-import { randomUUID } from "expo-crypto";
+import { useEffect, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
-import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
+import { isReviewedMachine } from "@/state/reviewed-machine";
 import { useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import type { SocialSnapshot } from "@/domain/types";
 import type { SocialTab } from "../social-flow";
 import { socialCollections, SocialWorkspaceCache, WorkspaceQueryError, workspaceInput, workspaceSearch } from "./workspace-query-model";
 import type { SocialCollectionPage } from "./types";
+import { useConnectionScope } from "./connection-scope";
 
 export function useSocialWorkspace(tab: SocialTab, projectId: string | null) {
   const machine = useActiveMachine();
   const copy = useCopy();
-  const scope = useMemo(() => ({ token: randomUUID(), review: reviewedMachine(machine), cache: new SocialWorkspaceCache() }),
-    [machine?.id, machine?.endpoint, machine?.environmentId, machine?.lanKey]);
+  // The reviewed connection epoch and its request cache share one explicit owner;
+  // neither depends on a memo surviving.
+  const scope = useConnectionScope(machine, () => new SocialWorkspaceCache());
+  const cache = scope.resource;
   const controlKey = JSON.stringify([scope.token, tab, projectId]);
   const initial = { key: controlKey, search: "", query: "", offset: 0 };
   const [saved, setSaved] = useState(initial);
@@ -33,7 +35,7 @@ export function useSocialWorkspace(tab: SocialTab, projectId: string | null) {
       interval: 8000,
       queryFn: async (client, signal) => {
         try {
-          return await scope.cache.read(input, scope.review!.environmentId!,
+          return await cache.read(input, scope.review!.environmentId!,
             (requested) => client.request("social.request", { action: "workspace.snapshot", input: requested }, { signal }),
             () => isReviewedMachine(scope.review, useMachines.getState()));
         } catch (error) {
@@ -52,7 +54,7 @@ export function useSocialWorkspace(tab: SocialTab, projectId: string | null) {
   const errorKind = (query.error as { kind?: string } | null)?.kind;
   const missingEnvironment = !scope.review?.environmentId;
   const blocked = missingEnvironment || query.error instanceof WorkspaceQueryError || errorKind === "auth" || errorKind === "identity";
-  const state = blocked ? undefined : query.data ?? scope.cache.latest();
+  const state = blocked ? undefined : query.data ?? cache.peek(input);
   const collection = socialCollections[tab];
   const page: SocialCollectionPage | undefined = collection ? {
     search: controls.search,

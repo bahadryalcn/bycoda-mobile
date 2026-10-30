@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CryptoDigestAlgorithm, digestStringAsync, randomUUID } from "expo-crypto";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -9,13 +9,15 @@ import {
 } from "@/state/reviewed-machine";
 import { useSecurity, isAppAccessAllowed } from "@/state/security";
 import { useHostClient } from "@/state/queries";
+import { useMounted } from "@/state/use-mounted";
+import { useReviewedOperation } from "@/state/use-reviewed-operation";
 import {
   reviewedOperationStore,
   type ReviewedOperationAttempt,
 } from "@/state/reviewed-operation-store";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
-import { Body, Button, ErrorText, Notice, SelectField, Sheet } from "@/ui/primitives";
+import { Body, Button, FormActions, ErrorText, Notice, SelectField, Sheet } from "@/ui/primitives";
 import type { SessionScope } from "../workspace/session-types";
 import {
   readSshCatalog,
@@ -25,6 +27,12 @@ import {
   type SshWorkspaceReview,
   type SshWorkspaceStatus,
 } from "./ssh-workspace-model";
+
+type SshAttempts = {
+  connect: ReviewedOperationAttempt | null;
+  close: ReviewedOperationAttempt | null;
+};
+const noAttempts: SshAttempts = { connect: null, close: null };
 
 export function SshWorkspace({
   scope,
@@ -42,14 +50,7 @@ export function SshWorkspace({
     (value) => value.status === "unlocked" && value.appState === "active" && value.windowFocused,
   );
   const [opening] = useState(() => ({ ...scope, projectId, machine: reviewedMachine(machine) }));
-  const mounted = useRef(true),
-    occupied = useRef(false);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+  const mounted = useMounted();
   const current = () =>
     mounted.current &&
     isAppAccessAllowed() &&
@@ -74,14 +75,41 @@ export function SshWorkspace({
       close: reviewedOperationStore(AsyncStorage, `${key}:close`),
     };
   }, [opening]);
-  const [attempts, setAttempts] = useState<{
-    connect: ReviewedOperationAttempt | null;
-    close: ReviewedOperationAttempt | null;
-  }>({ connect: null, close: null });
-  const [loading, setLoading] = useState(true),
-    [storageReady, setStorageReady] = useState(false),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState<unknown>();
+  const {
+    loaded,
+    setLoaded,
+    ready: storageReady,
+    loading,
+    error,
+    setError,
+    busy,
+    pendingAction,
+    run,
+  } = useReviewedOperation({
+    source: stores,
+    enabled: !!opening.machine,
+    canRun: () => !!supported && current(),
+    load: async () => {
+      const [connect, close, targetIdentityDigest] = await Promise.all([
+        stores.connect.load(),
+        stores.close.load(),
+        identityDigest(),
+      ]);
+      if (
+        [connect, close].some(
+          (value) =>
+            value &&
+            (value.environmentId !== opening.machine?.environmentId ||
+              value.targetIdentityDigest !== targetIdentityDigest),
+        )
+      )
+        throw new Error("Saved SSH receipt machine identity mismatch");
+      return { connect, close };
+    },
+  });
+  const attempts = loaded ?? noAttempts;
+  const setAttempts = (update: (value: SshAttempts) => SshAttempts) =>
+    setLoaded((value) => update(value ?? noAttempts));
   const [connections, setConnections] = useState<SshConnection[]>([]),
     [selected, setSelected] = useState("");
   const [review, setReview] = useState<SshWorkspaceReview>(),
@@ -102,56 +130,6 @@ export function SshWorkspace({
     reviewedMachineIdentityDigest(opening.machine, (value) =>
       digestStringAsync(CryptoDigestAlgorithm.SHA256, value),
     );
-  useEffect(() => {
-    let live = true;
-    if (!opening.machine) {
-      setLoading(false);
-      return () => {
-        live = false;
-      };
-    }
-    void Promise.all([stores.connect.load(), stores.close.load(), identityDigest()])
-      .then(([connect, close, targetIdentityDigest]) => {
-        if (
-          [connect, close].some(
-            (value) =>
-              value &&
-              (value.environmentId !== opening.machine?.environmentId ||
-                value.targetIdentityDigest !== targetIdentityDigest),
-          )
-        )
-          throw new Error("Saved SSH receipt machine identity mismatch");
-        if (live) {
-          setAttempts({ connect, close });
-          setStorageReady(true);
-        }
-      })
-      .catch((cause) => {
-        if (live) setError(cause);
-      })
-      .finally(() => {
-        if (live) setLoading(false);
-      });
-    return () => {
-      live = false;
-    };
-  }, [stores, opening]);
-  const [pendingAction, setPendingAction] = useState("primary");
-  const run = async (work: () => Promise<void>, actionKey = "primary") => {
-    if (occupied.current || !supported || !current()) return;
-    occupied.current = true;
-    setPendingAction(actionKey);
-    setBusy(true);
-    setError(undefined);
-    try {
-      await work();
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      occupied.current = false;
-      setBusy(false);
-    }
-  };
   const request = async (method: string, input: Record<string, unknown>) => {
     if (!current() || !client) throw new Error("Reviewed SSH source changed");
     const result = await client.request(method, { ...params, ...input }, { timeoutMs: 115000 });
@@ -380,16 +358,16 @@ export function SshWorkspace({
               />
             </>
           ) : null}
-          <Button busy={busy && pendingAction === "secondary-7"}
+          <FormActions busy={busy && pendingAction === "secondary-7"}
             tone={review.operation === "close" ? "danger" : "primary"}
-            label={copy("Bilgisayar onayı iste", "Request computer approval")}
+            submitLabel={copy("Bilgisayar onayı iste", "Request computer approval")}
             disabled={
               disabled ||
               reviewExpired ||
               review.expiresAt <= Date.now() ||
               !!attempts[review.operation]
             }
-            onPress={() => {
+            onSubmit={() => {
               void run(async () => {
                 if (review.expiresAt <= Date.now()) {
                   setReviewExpired(true);
@@ -419,7 +397,7 @@ export function SshWorkspace({
                 setReceipt(result);
                 setReview(undefined);
               }, "secondary-7");
-            }}
+            }} onCancel={() => setReview(undefined)} cancelLabel={copy("Vazgeç", "Cancel")}
           />
         </>
       ) : null}

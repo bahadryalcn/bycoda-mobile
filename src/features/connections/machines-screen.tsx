@@ -92,8 +92,8 @@ export function MachinesScreen() {
           const active = machine.id === state.activeId;
           return <NavigationRow
             key={machine.id} label={machine.name} detail={machine.endpoint} selected={active}
-            icon={<IconTile color={active ? colors.success : colors.muted}><Laptop size={18} strokeWidth={2} color={active ? colors.success : colors.muted} /></IconTile>}
-            trailing={active ? <Check size={18} strokeWidth={2.4} color={colors.success} /> : undefined}
+            icon={<IconTile color={colors.muted}><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
+            trailing={active ? <Check size={18} strokeWidth={2.4} color={colors.text} /> : undefined}
             disabled={unavailable || busy} onPress={() => setManaging(machine.id)}
           />;
         })}

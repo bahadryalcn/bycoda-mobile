@@ -53,6 +53,13 @@ export function SessionToolbar({
   const [contextual, setContextual] = useState<"handoff" | "secondOpinion" | null>(null);
   const [contextualCompact, setContextualCompact] = useState(false);
   const [stopping, setStopping] = useState(false);
+  // The open view reports compact sizing; every open starts from the default so a previous
+  // report can never size the next sheet.
+  const openContextual = (mode: "handoff" | "secondOpinion") => {
+    setContextualCompact(false);
+    setContextual(mode);
+  };
+  const closeContextual = () => setContextual(null);
   const queue = useSessionQueue(scope);
   const status = !session
     ? query.error
@@ -158,14 +165,28 @@ export function SessionToolbar({
         onClose={() => setMenu(false)}
       >
         <NavigationGroup>
+          <NavigationRow
+            label={copy("Oturum ayarları", "Session settings")}
+            onPress={() => {
+              setMenu(false);
+              onSettings();
+            }}
+          />
+          <NavigationRow
+            label={copy("Oturum incelemesi", "Session review")}
+            disabled={blocked}
+            onPress={() => {
+              setMenu(false);
+              setReview(true);
+            }}
+          />
           {session ? (
             <NavigationRow
               label={copy("Bağlamlı agent devri", "Contextual handoff")}
               disabled={blocked || session.status === "running"}
               onPress={() => {
                 setMenu(false);
-                setContextualCompact(false);
-                setContextual("handoff");
+                openContextual("handoff");
               }}
             />
           ) : null}
@@ -175,8 +196,7 @@ export function SessionToolbar({
               disabled={blocked || session.status === "running"}
               onPress={() => {
                 setMenu(false);
-                setContextualCompact(false);
-                setContextual("secondOpinion");
+                openContextual("secondOpinion");
               }}
             />
           ) : null}
@@ -270,21 +290,6 @@ export function SessionToolbar({
               }}
             />
           ) : null}
-          <NavigationRow
-            label={copy("Oturum incelemesi", "Session review")}
-            disabled={blocked}
-            onPress={() => {
-              setMenu(false);
-              setReview(true);
-            }}
-          />
-          <NavigationRow
-            label={copy("Oturum ayarları", "Session settings")}
-            onPress={() => {
-              setMenu(false);
-              onSettings();
-            }}
-          />
           <NavigationRow
             label={copy("Yenile", "Refresh")}
             disabled={query.isFetching}
@@ -395,7 +400,7 @@ export function SessionToolbar({
             ? copy("Bağlamlı agent devri", "Contextual handoff")
             : copy("İkinci görüş", "Second opinion")
         }
-        onClose={() => setContextual(null)}
+        onClose={closeContextual}
       >
         {contextual && session ? (
           <HandoffSession
@@ -404,7 +409,7 @@ export function SessionToolbar({
             source={session}
             mode={contextual}
             blocked={blocked}
-            onClose={() => setContextual(null)}
+            onClose={closeContextual}
             onCompactChange={setContextualCompact}
           />
         ) : null}

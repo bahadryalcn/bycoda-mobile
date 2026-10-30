@@ -14,6 +14,7 @@ import { readonlyRequest } from "./request-policy";
 import { RemoteHostError } from "./host-error";
 import { nativeHostFetch } from "./native-fetch";
 import { encryptedLanFetch } from "./lan-fetch";
+import { assertApprovalCommand } from "../domain/approval-command";
 import { boundedResponseText } from "./response-body";
 import { mobileWsMethodEnabled, selectMobileHostTransport } from "./lan-ws";
 import { getHostWsRuntimeProvider, type HostWsConsumer } from "./ws-runtime-port";
@@ -21,6 +22,10 @@ import { HostWsError } from "./ws-connection";
 import { requestSessionExecution, sessionExecutionMethod } from "./session-execution";
 import {
   getHostRpcMethod,
+  hostRpcHasEffect,
+  DEVICE_LIFECYCLE_METHODS,
+  MOBILE_DEVICE_PREVIEW_METHODS,
+  NATIVE_DEVICE_METHODS,
   nativeDesktopMethod,
   hostRpcWireMethod,
   WS_LIMITS,
@@ -31,6 +36,15 @@ import {
 } from "../../../src/shared/model/host-contracts";
 
 const DEFAULT_TIMEOUT_MS = 12_000;
+const deviceHttpMethods = new Set<string>([
+  ...NATIVE_DEVICE_METHODS,
+  ...DEVICE_LIFECYCLE_METHODS,
+  ...MOBILE_DEVICE_PREVIEW_METHODS,
+]);
+function deviceHttpEffect(method: string): boolean {
+  const definition = deviceHttpMethods.has(method) ? getHostRpcMethod(method) : undefined;
+  return !!definition && hostRpcHasEffect(method, definition.kind);
+}
 let streamIdSequence = 0;
 export type MobileStreamTarget = ReturnType<typeof SubscriptionOpenParamsSchema.parse>["target"];
 export type MobileStreamSubscription = { close(): void };
@@ -127,6 +141,11 @@ export class HostTransport {
     params: Record<string, unknown> = {},
     options: RemoteRequestOptions = {},
   ): Promise<T> {
+    if (method === "commands.dispatch" || method === "crews.respond")
+      assertApprovalCommand(
+        this.machine.capabilities,
+        method === "crews.respond" ? { ...params, type: "approve" } : params,
+      );
     if (nativeDesktopMethod(method))
       throw new RemoteHostError(
         this.machine.id,
@@ -192,7 +211,7 @@ export class HostTransport {
     params: Record<string, unknown>,
     options: RemoteRequestOptions,
   ): Promise<T> {
-    const read = readonlyRequest(method, params);
+    const read = readonlyRequest(method, params) && !deviceHttpEffect(method);
     const waiting =
       ["sessions.sync", "machine.changes"].includes(method) && typeof params.waitMs === "number"
         ? Math.max(0, params.waitMs) + 5_000
@@ -776,25 +795,35 @@ export class HostTransport {
         redirect: "error",
         cache: "no-store",
       });
-      if (response.status === 401)
-        throw new RemoteHostError(
-          this.machine.id,
-          "auth",
-          "This device credential is invalid or revoked. Pair the computer again.",
-        );
-      const raw = await boundedResponseText(response, MAX_RESPONSE_BYTES, () => {
-        controller.abort();
-        return new RemoteHostError(
-          this.machine.id,
-          "protocol",
-          "The host response exceeds the transfer limit.",
-          !read,
-        );
-      });
+      const unauthorized = response.status === 401;
+      const authMessage = "This device credential is invalid or revoked. Pair the computer again.";
+      let raw: string;
+      try {
+        raw = await boundedResponseText(response, MAX_RESPONSE_BYTES, () => {
+          controller.abort();
+          return new RemoteHostError(
+            this.machine.id,
+            unauthorized ? "auth" : "protocol",
+            unauthorized ? authMessage : "The host response exceeds the transfer limit.",
+            !read,
+          );
+        });
+      } catch (error) {
+        this.requireAccess(!read);
+        if (unauthorized && !timedOut && !options.signal?.aborted)
+          throw new RemoteHostError(this.machine.id, "auth", authMessage, !read);
+        throw error;
+      }
+      this.requireAccess(!read);
+      this.assertTargetAvailable(params, !read);
       // A proxy may return HTML while the host restarts. Only these explicit
       // transient HTTP statuses qualify for the existing bounded read retry;
       // a malformed successful response remains a protocol failure.
-      const invalidKind = [502, 503, 504].includes(response.status) ? "network" : "protocol";
+      const invalidKind = unauthorized
+        ? "auth"
+        : [502, 503, 504].includes(response.status)
+          ? "network"
+          : "protocol";
       let value: unknown;
       try {
         value = JSON.parse(raw);
@@ -802,9 +831,11 @@ export class HostTransport {
         throw new RemoteHostError(
           this.machine.id,
           invalidKind,
-          invalidKind === "network"
-            ? `The computer is temporarily unavailable (HTTP ${response.status}).`
-            : "The computer returned an invalid host response.",
+          unauthorized
+            ? authMessage
+            : invalidKind === "network"
+              ? `The computer is temporarily unavailable (HTTP ${response.status}).`
+              : "The computer returned an invalid host response.",
           !read,
         );
       }
@@ -812,12 +843,29 @@ export class HostTransport {
         throw new RemoteHostError(
           this.machine.id,
           invalidKind,
-          invalidKind === "network"
-            ? `The computer is temporarily unavailable (HTTP ${response.status}).`
-            : "The computer returned an invalid host response.",
+          unauthorized
+            ? authMessage
+            : invalidKind === "network"
+              ? `The computer is temporarily unavailable (HTTP ${response.status}).`
+              : "The computer returned an invalid host response.",
           !read,
         );
       const envelope = value as Record<string, unknown>;
+      const admittedUnknown =
+        deviceHttpEffect(method) &&
+        envelope.code === "HOST_DEVICE_OPERATION_UNCONFIRMED" &&
+        envelope.delivery === "unknown";
+      const unknownMessage =
+        "The device operation may have completed; its outcome is unknown. Do not repeat this request; inspect the original device or preview status.";
+      if (unauthorized) {
+        const uncertain = admittedUnknown || (!read && typeof envelope.error !== "string");
+        throw new RemoteHostError(
+          this.machine.id,
+          "auth",
+          uncertain && deviceHttpEffect(method) ? `${authMessage} ${unknownMessage}` : authMessage,
+          uncertain,
+        );
+      }
       if (typeof envelope.error === "string") {
         const message = safeHostMessage(envelope.error, credential);
         const kind: RemoteErrorKind = /identity changed/i.test(message)
@@ -825,8 +873,14 @@ export class HostTransport {
           : /Unsupported host method|incompatible protocol/i.test(message)
             ? "unsupported"
             : "host";
-        throw new RemoteHostError(this.machine.id, kind, message, !read && response.status >= 500);
+        throw new RemoteHostError(
+          this.machine.id,
+          kind,
+          admittedUnknown ? `${message} ${unknownMessage}` : message,
+          admittedUnknown || (!read && response.status >= 500),
+        );
       }
+      if (admittedUnknown) throw new RemoteHostError(this.machine.id, "host", unknownMessage, true);
       if (!response.ok || !Object.prototype.hasOwnProperty.call(envelope, "result"))
         throw new RemoteHostError(
           this.machine.id,

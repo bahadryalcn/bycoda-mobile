@@ -12,6 +12,11 @@ import type { QueryLike } from "./query-presentation";
 
 export type ContainerProps = PropsWithChildren<{ style?: StyleProp<ViewStyle> }>;
 
+export type CardProps = ContainerProps & {
+  /** Ordinary sections stay unboxed. Use surface only for a distinct task region. */
+  variant?: "plain" | "surface";
+};
+
 export type ButtonProps = PropsWithChildren<{
   label: string;
   accessibilityLabel?: string;

@@ -105,7 +105,7 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
       query={sessions}
       contentContainerStyle={{ gap: 0 }}
       header={
-        <View style={[workspaceStyles.stack, { paddingBottom: space.md }]}>
+        <View style={[workspaceStyles.stack, { gap: space.sm, paddingBottom: space.sm }]}>
           <Row style={{ flexWrap: "nowrap", gap: space.xs }}>
             <View style={uiStyles.grow}>
               <SearchField

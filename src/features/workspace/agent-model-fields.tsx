@@ -1,4 +1,5 @@
 import type { AgentModel } from "../../../../src/features/sessions/model/models";
+import { groupedSettings, isPrimarySetting, SETTING_GROUP_TITLE, settingLabel } from "./agent-model-settings";
 import { Body, Disclosure, IdentifierField, SelectField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { modelDefaults } from "./catalog";
@@ -14,10 +15,11 @@ export function AgentModelFields({ models, model, settings, disabled, onChange }
   const copy = useCopy();
   const labels: Record<string, string> = {
     Reasoning: copy("Akıl yürütme", "Reasoning"),
-    "Service Tier": copy("Hız", "Speed"),
-    Fast: copy("Hızlı mod", "Fast mode"),
+    "Service Tier": copy("Hız katmanı", "Service Tier"),
+    Fast: copy("Hızlı", "Fast"),
     Thinking: copy("Düşünme", "Thinking"),
     Context: copy("Bağlam", "Context"),
+    "Advisor and subagents": copy("Danışman ve alt ajanlar", "Advisor and subagents"),
     Low: copy("Düşük", "Low"),
     Medium: copy("Orta", "Medium"),
     High: copy("Yüksek", "High"),
@@ -30,11 +32,18 @@ export function AgentModelFields({ models, model, settings, disabled, onChange }
   const selected = models.find((entry) => entry.id === model || entry.nativeId === model);
   const options = models.map((entry) => ({ value: entry.id, label: entry.name, detail: entry.nativeId || entry.id }));
   if (model && !selected) options.unshift({ value: model, label: model, detail: model });
-  const primaryIds = new Set(["reasoningEffort", "effort", "fast", "thinking", "context", "serviceTier"]);
-  const advanced = (selected?.settings ?? []).filter((setting) => !primaryIds.has(setting.id));
+  const groups = groupedSettings(selected);
+  // Reasoning, Fast and Thinking lead; the rarer model options and the groups below are secondary.
+  const primary = groups.model.filter(isPrimarySetting);
+  const otherModel = groups.model.filter((setting) => !isPrimarySetting(setting));
+  const { context, delegation } = groups;
+  const caption = (group: "context" | "delegation") => {
+    const title = SETTING_GROUP_TITLE[group];
+    return <Body muted>{labels[title] ?? title}</Body>;
+  };
   const renderSetting = (setting: NonNullable<AgentModel["settings"]>[number]) => <SelectField
     key={setting.id}
-    label={labels[setting.label] ?? setting.label}
+    label={labels[settingLabel(setting)] ?? settingLabel(setting)}
     value={settings[setting.id] ?? setting.value}
     options={setting.options.map((option) => ({ ...option, label: labels[option.label] ?? option.label }))}
     hint={setting.description}
@@ -51,9 +60,11 @@ export function AgentModelFields({ models, model, settings, disabled, onChange }
       onChange={(id) => onChange(id, modelDefaults(models.find((entry) => entry.id === id)))}
     />
     {selected?.nativeId ? <Body muted mono>{selected.nativeId}</Body> : null}
-    {(selected?.settings ?? []).filter((setting) => primaryIds.has(setting.id)).map(renderSetting)}
-    {advanced.length ? <Disclosure label={copy("Ajan ayarları", "Agent settings")}>
-      {advanced.map(renderSetting)}
+    {primary.map(renderSetting)}
+    {context.length ? <>{caption("context")}{context.map(renderSetting)}</> : null}
+    {otherModel.length || delegation.length ? <Disclosure label={copy("Ajan ayarları", "Agent settings")}>
+      {otherModel.map(renderSetting)}
+      {delegation.length ? <>{caption("delegation")}{delegation.map(renderSetting)}</> : null}
     </Disclosure> : null}
     <Disclosure label={copy("Özel model kimliği", "Custom model ID")}>
       <IdentifierField

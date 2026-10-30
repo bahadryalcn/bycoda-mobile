@@ -5,10 +5,7 @@ import Server from "lucide-react-native/icons/server";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useFormDraft } from "@/state/form-draft";
 import type { HostProject } from "@/domain/types";
-import {
-  Badge, Body, Button, ErrorText, Field, IconButton, MutationState, NavigationRow, Notice,
-  QueryState, ScreenList, SearchField, Sheet,
-} from "@/ui/primitives";
+import { Badge, Body, ErrorText, Field, FormActions, IconButton, MutationState, NavigationRow, Notice, QueryState, ScreenList, SearchField, Sheet } from "@/ui/primitives";
 import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { colors } from "@/ui/tokens";
@@ -88,8 +85,8 @@ export function DevServersScreen({ project }: { project: HostProject }) {
             <Field label={copy("Port (isteğe bağlı)", "Port (optional)")} value={form.values.port} editable={!start.isPending} keyboardType="number-pad" onChangeText={(port) => form.setField("port", port)} />
             {validationError ? <ErrorText error={validationError} /> : null}
             {start.data?.conflict ? <Notice tone="warning" message={copy("{p0} portu zaten kullanılıyor.", "Port {p0} is already in use.", { p0: start.data.conflict.port })} /> : null}
-            <MutationState mutation={start} />
-            <Button label={copy("Sunucu başlat", "Start server")} tone="primary" busy={start.isPending} disabled={!form.values.command.trim()} onPress={submit} />
+            <FormActions submitLabel={copy("Sunucu başlat", "Start server")} busy={start.isPending} disabled={!form.values.command.trim()} onSubmit={submit}
+              feedback={<MutationState mutation={start} />} />
           </Sheet>
           {selected ? <DevServerDetail key={selected.id} projectId={project.id} project={project} server={selected} onClose={() => setSelected(undefined)} /> : null}
         </>

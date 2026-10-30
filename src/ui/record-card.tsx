@@ -1,9 +1,9 @@
-import { useEffect, useState, type PropsWithChildren, type ReactNode } from "react";
+import { useState, type PropsWithChildren, type ReactNode } from "react";
 import { View } from "react-native";
 import { Accordion } from "panelui-native/components/accordion";
 import { Card } from "./layout";
 import { Body } from "./typography";
-import { colors, metrics, opacity, space } from "./tokens";
+import { metrics, opacity, space } from "./tokens";
 import { uiStyles } from "./styles";
 import { useMobileTheme } from "./theme";
 
@@ -23,11 +23,13 @@ export function RecordCard({
   useMobileTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [visited, setVisited] = useState(defaultExpanded);
-  useEffect(() => {
+  const [seenDefault, setSeenDefault] = useState(defaultExpanded);
+  if (seenDefault !== defaultExpanded) {
+    setSeenDefault(defaultExpanded);
     if (defaultExpanded) { setExpanded(true); setVisited(true); }
-  }, [defaultExpanded]);
+  }
   return (
-    <Card style={{ gap: 0 }}>
+    <Card style={{ gap: 0, paddingHorizontal: 0, paddingVertical: space.sm, borderRadius: 0, backgroundColor: "transparent" }}>
       <Accordion
         variant="ghost"
         hideSeparator
@@ -68,7 +70,7 @@ export function RecordCard({
           {visited && details ? (
             <Accordion.Content keepMounted className="px-0 pb-0">
               <View style={{ gap: space.sm, paddingTop: space.md, paddingBottom: space.sm,
-                borderTopWidth: 1, borderTopColor: colors.separator, marginTop: space.sm }}>
+                marginTop: space.xs }}>
                 {details}
               </View>
             </Accordion.Content>

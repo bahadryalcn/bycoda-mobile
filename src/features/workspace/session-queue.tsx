@@ -36,7 +36,7 @@ export function SessionQueue({
   const copy = useCopy();
   const client = useHostClient();
   const [open, setOpen] = useState(false);
-  const [automatic, setAutomatic] = useState(false);
+  const { automatic, setAutomatic } = queue;
   const [sending, setSending] = useState(false);
   const [controlling, setControlling] = useState(false);
   const controlPending = useRef(false);
@@ -65,9 +65,6 @@ export function SessionQueue({
   }, []);
   const rows = queue.data?.messages ?? [];
   const unconfirmed = rows.some((row) => row.deliveryUnknown);
-  useEffect(() => {
-    if (queue.autoStart) setAutomatic(true);
-  }, [queue.autoStart]);
   const act = async (action: () => Promise<unknown>) => {
     setError(null);
     try {
@@ -295,9 +292,7 @@ export function SessionQueue({
             key={row.id}
             style={{
               gap: space.sm,
-              paddingVertical: space.md,
-              borderBottomWidth: 1,
-              borderBottomColor: colors.separator,
+              paddingVertical: space.sm,
             }}
           >
             <Row style={{ justifyContent: "space-between" }}>

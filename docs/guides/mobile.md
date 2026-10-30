@@ -175,6 +175,13 @@ device on the host if you also want to remove its authorization.
 Social content reads the selected account's effective policy before creating or
 updating a draft. Per-platform policy fields and Unicode character limits apply.
 Approval, execution permission and sending remain separate owner actions.
+
+Approval replies retain the identity of the request you saw, including delegated
+Crew approvals. A reused request number cannot redirect an old reply. Unsupported
+Hosts or older requests without this identity show an error before a write; update
+the Host, refresh the conversation or update the execution client as indicated.
+An interrupted write keeps its original command identity and is checked by its
+receipt rather than sent again automatically.
 Incoming text is content to display; it cannot change permissions or issue
 instructions to the application.
 
@@ -253,3 +260,24 @@ public policy publication, store privacy forms, native permissions/assets,
 signing, device verification and reviewer access. Source preparation and the
 example tour do not establish store acceptance or complete the required AI
 reporting and Apple architecture review.
+
+
+## Navigation and editing
+
+The bottom navigation keeps Projects, Sessions, Inbox, Tools and Settings within
+reach. Tools groups destinations by Project, Work, Communication, Development and
+Computer; search also finds a group name. Settings separates preferences, access
+and privacy, computer controls and support.
+
+The message composer gives text a full-width editing row and keeps attachment,
+mode and send controls together below it. Its surface stays steady while typing.
+Long forms and operation reviews use a scrolling body with a shared action area;
+errors and recovery remain beside those actions. Closing an editor retains its
+existing draft or unsaved-change behavior. The offline tour remains sample data
+and does not connect to a computer or grant operation authority.
+
+Task rows keep the session shortcut beside the task title; completion and
+retained-session start/retry commands stay in the task menu. Stop, pending
+operations and errors remain beside the affected task. Technical execution and
+review details expand on demand. Short computer preferences use content-sized
+sheets; longer editors keep their scrolling body and reserved action area.

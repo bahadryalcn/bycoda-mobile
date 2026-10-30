@@ -1,6 +1,7 @@
 import { CollectionRows } from "./collection-rows";
 import { ContentExcerpt } from "./content-excerpt";
-import { Body, Button, Card, ErrorText, Row } from "@/ui/primitives";
+import { Body, Button, ErrorText, Row } from "@/ui/primitives";
+import { RecordCard } from "@/ui/record-card";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
@@ -21,20 +22,22 @@ export function JobsPanel({ state, projectId, action, run, page }: JobsPanelProp
   return <><CollectionSearch {...collection} /><CollectionRows page={page} key={projectId ?? "all"} items={page ? collection.visible : collection.visible
     .sort((a, b) => b.scheduledAt - a.scheduledAt)
     } renderItem={(job) => (
-      <Card key={job.id}>
-        <Body style={uiStyles.title}>{accountIdentity(state.accounts, job.accountId, job.provider)}</Body>
-        {(job.contactId || job.payload.recipientId) ? <Body muted>
+      <RecordCard key={job.id}
+        title={accountIdentity(state.accounts, job.accountId, job.provider)}
+        status={<Status value={job.status} />}
+        metadata={stamp(job.scheduledAt)}
+        preview={<Body numberOfLines={2}>{job.payload.text.replace(/\s+/g, " ").trim()}</Body>}
+        details={<>
+        <Body muted style={uiStyles.caption}>{copy("Projeler", "Projects")}: {job.projectIds.join(" · ")}</Body>
+        <ContentExcerpt text={job.payload.text} />
+        </>}
+      >
+        {(job.contactId || job.payload.recipientId) ? <Body muted style={uiStyles.caption}>
           {copy("Alıcı", "Recipient")}: {recipientIdentity(
             [...(state.contacts ?? []), ...(state.related?.contacts ?? [])], job.accountId,
             job.contactId || job.payload.recipientId || "",
           )}
         </Body> : null}
-        <Body muted style={uiStyles.caption}>{copy("Projeler", "Projects")}: {job.projectIds.join(" · ")}</Body>
-        <Row>
-          <Status value={job.status} />
-          <Body muted style={[uiStyles.caption, uiStyles.grow]}>{stamp(job.scheduledAt)}</Body>
-        </Row>
-        <ContentExcerpt text={job.payload.text} />
         <ErrorText error={job.error} />
         {job.status === "queued" || job.status === "failed" ? (
           <Row>
@@ -42,6 +45,7 @@ export function JobsPanel({ state, projectId, action, run, page }: JobsPanelProp
               <Button
                 label={copy("İptal et", "Cancel")}
                 tone="quiet"
+                busy={action.isPending && action.variables?.action === "jobs.cancel" && (action.variables?.input as { id?: string } | undefined)?.id === job.id}
                 disabled={action.isPending}
                 onPress={() => run("jobs.cancel", { id: job.id })}
               />
@@ -50,6 +54,7 @@ export function JobsPanel({ state, projectId, action, run, page }: JobsPanelProp
               <Button
                 label={copy("Tekrar dene", "Retry")}
                 tone="secondary"
+                busy={action.isPending && action.variables?.action === "jobs.retry" && (action.variables?.input as { id?: string } | undefined)?.id === job.id}
                 disabled={action.isPending}
                 onPress={() =>
                   confirmAction(
@@ -69,6 +74,6 @@ export function JobsPanel({ state, projectId, action, run, page }: JobsPanelProp
             )}
           </Row>
         ) : null}
-      </Card>
+      </RecordCard>
     )} /></>;
 }

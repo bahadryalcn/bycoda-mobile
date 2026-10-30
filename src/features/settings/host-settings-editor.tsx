@@ -2,17 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import Animated from "react-native-reanimated";
 import type { HostSettingsState } from "../../remote/types";
 import { hostKey, useHostMutation, useHostQuery } from "../../state/queries";
-import {
-  Body,
-  Button,
-  Card,
-  Field,
-  QueryState,
-  MutationState,
-  Notice,
-  Stack,
-  ErrorText,
-} from "../../ui/primitives";
+import { Body, FormActions, Field, QueryState, MutationState, Notice, Stack, ErrorText } from "../../ui/primitives";
 import { uiStyles } from "../../ui/styles";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
@@ -69,7 +59,7 @@ export function HostSettingsEditor({ machineId }: HostSettingsEditorProps) {
       {settings.data ? (
         <>
           <Animated.View entering={enterItem(0)}>
-            <Card>
+            <Stack>
               <Field
                 label={copy("Aynı anda çalışan görev (1–8)", "Concurrent tasks (1–8)")}
                 value={fields.maxRunning}
@@ -91,7 +81,7 @@ export function HostSettingsEditor({ machineId }: HostSettingsEditorProps) {
               {!validMinutes ? (
                 <ErrorText error={copy("Sıfır veya pozitif bir tam dakika girin.", "Enter zero or a positive whole number of minutes.")} />
               ) : null}
-            </Card>
+            </Stack>
           </Animated.View>
           <Body muted style={uiStyles.caption}>
             {copy(
@@ -105,7 +95,12 @@ export function HostSettingsEditor({ machineId }: HostSettingsEditorProps) {
               message={copy("Günlük süre sınırına ulaşıldı.", "Daily time limit reached.")}
             />
           ) : null}
-          <MutationState
+          <FormActions
+            submitLabel={copy("Bilgisayar ayarlarını kaydet", "Save computer settings")}
+            busy={action.isPending || save.isPending}
+            disabled={!dirty || !validSettingsFields(fields)}
+            onSubmit={submit}
+            feedback={<MutationState
             mutation={action}
             success={
               dirty
@@ -115,15 +110,7 @@ export function HostSettingsEditor({ machineId }: HostSettingsEditorProps) {
                   )
                 : copy("Bilgisayar ayarları kaydedildi.", "Computer settings saved.")
             }
-          />
-          <Button
-            label={copy("Bilgisayar ayarlarını kaydet", "Save computer settings")}
-            busy={action.isPending || save.isPending}
-            disabled={!dirty || !validSettingsFields(fields)}
-            tone="primary"
-            fullWidth
-            onPress={submit}
-          />
+          />} />
         </>
       ) : null}
       <ShellProfileSettings />

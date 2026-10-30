@@ -9,15 +9,16 @@ import { useMachines } from "@/state/machines";
 import { hostKey, useHostClient } from "@/state/queries";
 import {
   Badge,
+  ActionMenu,
   Body,
   Button,
-  Card,
+  Heading,
   MutationState,
   Notice,
   QueryState,
   Row,
   Screen,
-  Section,
+  Stack,
   Sheet,
 } from "@/ui/primitives";
 import { confirmAction } from "@/ui/confirm";
@@ -71,6 +72,7 @@ export function ProviderInboxDetail({
   const form = useFormDraft<InboxCommentDraft>(emptyInboxCommentDraft);
   const [composing, setComposing] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [pendingAction, setPendingAction] = useState<InboxWriteCommand["action"] | null>(null);
   const submission = useAsyncAction<InboxWriteResult>();
   const openProvider = useAsyncAction<void>();
   const access = providerInboxAccess(availability);
@@ -87,6 +89,7 @@ export function ProviderInboxDetail({
 
   function submit(command: InboxWriteCommand, draft?: InboxCommentDraft) {
     if (busy || uncertain || !latestWriteAccess.current) return;
+    setPendingAction(command.action);
     void submission.run(async () => {
       // An old confirmation cannot authorize a newly selected computer or project.
       if (!currentOrigin())
@@ -165,8 +168,20 @@ export function ProviderInboxDetail({
             onPress={openProviderLink}
           />
         ) : null}
+        {prActions.length ? <ActionMenu
+          label={copy("Pull request işlemleri", "Pull request actions")}
+          busy={submission.isPending && pendingAction === "pr-action"}
+          actions={prActions.map((action) => ({
+            key: action,
+            label: providerActionLabel(action, copy),
+            disabled: busy || uncertain || !access.canWrite,
+            onPress: () => stateAction(action),
+          }))}
+        /> : null}
       </Row>
+      <Heading>{item.title}</Heading>
       <MutationState mutation={openProvider} />
+      {pendingAction === "pr-action" ? <MutationState mutation={submission} /> : null}
       <QueryState query={availability} loading="none" />
       {availability.data?.available === false ? (
         <Notice
@@ -187,21 +202,7 @@ export function ProviderInboxDetail({
       </Row>
       <QueryState query={details} />
       {details.data ? <ProviderInboxDescription details={details.data} /> : null}
-      {prActions.length ? (
-        <Section title={copy("Pull request işlemleri", "Pull request actions")}>
-          <Row>
-            {prActions.map((action) => (
-              <Button
-                key={action}
-                label={providerActionLabel(action, copy)}
-                disabled={busy || uncertain || !access.canWrite}
-                onPress={() => stateAction(action)}
-              />
-            ))}
-          </Row>
-        </Section>
-      ) : null}
-      <Button label={form.values.body.trim() ? copy("Yorum taslağına dön", "Continue comment draft") : copy("Yorum ekle", "Add a comment")} disabled={busy || !access.canWrite} onPress={() => setComposing(true)} />
+      <Button tone="primary" label={form.values.body.trim() ? copy("Yorum taslağına dön", "Continue comment draft") : copy("Yorum ekle", "Add a comment")} disabled={busy || !access.canWrite} onPress={() => setComposing(true)} />
       {item.kind === "pr" && item.provider === "github" && client?.machine.capabilities?.includes("inbox.review.v1") ? <Button
         label={copy("Pull request incelemesi", "Pull request review")} disabled={busy || uncertain || !access.canRead} onPress={() => setReviewing(true)} /> : null}
       {reviewing ? <ProviderPrReview item={item} origin={origin} canRead={access.canRead} canWrite={access.canWrite} onClose={() => setReviewing(false)} /> : null}
@@ -228,7 +229,7 @@ export function ProviderInboxDetail({
 function ProviderInboxDescription({ details }: ProviderInboxDescriptionProps) {
   const copy = useCopy();
   return (
-    <Card>
+    <Stack>
       <Body muted>{details.author}</Body>
       <MessageText text={details.body || copy("Açıklama yok.", "No description.")} role="assistant" />
       {details.headRefName && details.baseRefName ? (
@@ -237,6 +238,6 @@ function ProviderInboxDescription({ details }: ProviderInboxDescriptionProps) {
         </Body>
       ) : null}
       {details.reviewDecision ? <Badge label={providerStateLabel(details.reviewDecision, copy)} /> : null}
-    </Card>
+    </Stack>
   );
 }

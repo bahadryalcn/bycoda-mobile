@@ -197,7 +197,9 @@ export function TasksScreen() {
           )}
           <MutationState mutation={manualStart} />
           <MutationState mutation={reorder} />
-          {lifecycleSupported && projectId && <QueryState query={allTasks} loading="none" />}
+          {lifecycleSupported && projectId &&
+            !(query.error && allTasks.error?.message === query.error.message) &&
+            <QueryState query={allTasks} loading="none" />}
           {editor?.kind === "edit" && !draft && (
             <Card>
               <QueryState query={editQuery} empty={editQuery.data?.length === 0} />

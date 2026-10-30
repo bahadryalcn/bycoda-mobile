@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { View, useWindowDimensions } from "react-native";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Plus from "lucide-react-native/icons/plus";
@@ -27,13 +27,14 @@ import {
   retainQueuedComposerIntent,
   type QueuedComposerDraft,
 } from "./composer-draft";
-import { composerTokenAt, replaceComposerToken, moveSuggestionSelection } from "./composer-tokens";
-import { useComposerCatalog, type ComposerSuggestion } from "./use-composer-catalog";
+import { useComposerSuggestions } from "./use-composer-suggestions";
+import { useComposerDelivery } from "./use-composer-delivery";
+import { useComposerAttachments } from "./use-composer-attachments";
+import { useMounted } from "@/state/use-mounted";
 import { ComposerSuggestions } from "./composer-suggestions";
 import { ComposerAttachments } from "./composer-attachments";
-import { pickAttachments, removeStagedFile, stageBrowserCapture } from "./attachment-files";
-import { ATTACHMENT_COUNT, type StagedAttachment, type TransferState } from "./attachment-model";
-import { uploadAttachment } from "./attachment-transfer";
+import { removeStagedFile, stageBrowserCapture } from "./attachment-files";
+import { ATTACHMENT_COUNT, type StagedAttachment } from "./attachment-model";
 import {
   attachmentReleases,
   composerDraftKey,
@@ -43,15 +44,8 @@ import { ChatCircleAction, ChatToolbarAction } from "@/ui/chat-controls";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { ChatComposer } from "@/ui/chat-composer";
 import { haptic } from "@/ui/motion";
-import {
-  composerCommand,
-  desktopOwnsTurn,
-  queuedComposerMessage,
-  validateNoteDelivery,
-  type ComposerDelivery,
-} from "./composer-delivery";
+import { composerCommand, queuedComposerMessage, validateNoteDelivery } from "./composer-delivery";
 import { useSessionQueue } from "./use-session-queue";
-import { deliveryAfterRun } from "./queue-delivery";
 import { SessionQueue } from "./session-queue";
 import { composerDeliveryError } from "./composer-delivery-copy";
 import { TemplateLibrary } from "@/features/management/templates/template-library";
@@ -76,35 +70,18 @@ export function SessionComposer({
   const copy = useCopy();
   const client = useHostClient();
   const queue = useSessionQueue(scope);
-  const [delivery, setDelivery] = useState<ComposerDelivery>("send");
-  const initializedDelivery = useRef(false);
-  const deliveryChosen = useRef(false);
   const submission = useRef(false);
   const queuedDraft = useRef<QueuedComposerDraft | null>(null);
   const { height: windowHeight, fontScale } = useWindowDimensions();
   const availableHeight = use(SessionKeyboardSpace);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
-  const [dismissed, setDismissed] = useState<string | null>(null);
-  const [selected, setSelected] = useState(-1);
   const [picker, setPicker] = useState(false);
   const [templatePicker, setTemplatePicker] = useState(false);
   const templateDestination = useRef<{ machineId: string; sessionId: string } | null>(null);
-  const [picking, setPicking] = useState(false);
   const [modePicker, setModePicker] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [retryingDraft, setRetryingDraft] = useState(false);
   const [localError, setLocalError] = useState<unknown>(null);
-  const [transfers, setTransfers] = useState<Record<string, TransferState>>({});
-  const transfer = useRef<AbortController | null>(null);
-  const claimedFiles = useRef(new Map<string, StagedAttachment>());
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-      transfer.current?.abort();
-    };
-  }, []);
+  const mounted = useMounted();
   const minimumInputHeight = Math.max(
     metrics.touchTarget,
     Math.ceil(22 * fontScale + space.sm * 2),
@@ -123,17 +100,8 @@ export function SessionComposer({
   const composerTransfer = useComposerTransfer();
   const value = draft.value ?? emptyComposerDraft();
   const prompt = value.text;
-  const running = session?.status === "running";
-  const wasRunning = useRef(running);
-  useEffect(() => {
-    const previous = wasRunning.current;
-    setDelivery((current) => deliveryAfterRun(current, previous, running, deliveryChosen.current));
-    wasRunning.current = running;
-  }, [running]);
-  const supportsSteer = !!client?.machine.capabilities?.includes("sessions.steer");
-  const desktopOwned = !!session && desktopOwnsTurn(session);
-  const canSteer = supportsSteer && running && !!session?.runId && !desktopOwned;
-  const mode = delivery;
+  const delivery = useComposerDelivery({ session, client, queueSupported: queue.supported });
+  const { mode, running, supportsSteer, desktopOwned, canSteer } = delivery;
   const noteContextSupported =
     client?.machine.id === scope.machineId &&
     !!client.machine.capabilities?.includes("sessions.noteContext.v1");
@@ -143,141 +111,27 @@ export function SessionComposer({
   } catch (cause) {
     noteError = cause as Error;
   }
-  useEffect(() => {
-    if (!session || initializedDelivery.current) return;
-    initializedDelivery.current = true;
-    setDelivery(session.status === "running" && queue.supported ? "queue" : "send");
-  }, [session, queue.supported]);
-  const deliveryOptions = [
-    { value: "send" as const, label: copy("Gönder", "Send") },
-    ...(queue.supported ? [{ value: "queue" as const, label: copy("Sıraya al", "Queue") }] : []),
-    ...(supportsSteer ? [{ value: "steer" as const, label: copy("Yönlendir", "Steer") }] : []),
-  ];
-  const modeLabel = deliveryOptions.find((option) => option.value === mode)?.label ?? "";
-  // Delivery choice matters only while a run is active (or when a non-send mode is still set).
-  const showModeChip = deliveryOptions.length > 1 && (running || mode !== "send");
   useEffect(
     () => (ready && !isStored ? registerWorkspaceDraft(draftKey, () => persist()) : undefined),
     [ready, isStored, draftKey, persist],
   );
-  const detected = composerTokenAt(prompt, selection);
-  const tokenId = detected ? `${detected.start}:${detected.trigger}:${detected.query}` : "";
-  const token = tokenId && tokenId !== dismissed ? detected : null;
-  const catalog = useComposerCatalog(session, token);
-  const items = useMemo(() => {
-    const needle = token?.query.toLocaleLowerCase() ?? "";
-    return (catalog.data ?? [])
-      .filter(
-        (item) => !needle || `${item.name} ${item.detail}`.toLocaleLowerCase().includes(needle),
-      )
-      .sort(
-        (a, b) =>
-          Number(b.name.toLocaleLowerCase().startsWith(needle)) -
-          Number(a.name.toLocaleLowerCase().startsWith(needle)),
-      )
-      .slice(0, 30);
-  }, [catalog.data, token?.query]);
-  useEffect(() => setSelected(-1), [tokenId]);
-  const choose = (item: ComposerSuggestion) => {
-    if (!token) return;
-    const replacement = replaceComposerToken(prompt, token, item.label);
-    setValue((current) => ({
-      ...(current ?? emptyComposerDraft()),
-      text: replacement.text,
-      selectedMentionRefs: item.path
-        ? [
-            ...(current?.selectedMentionRefs ?? []).filter((ref) => ref.label !== item.label),
-            { label: item.label, path: item.path },
-          ]
-        : (current?.selectedMentionRefs ?? []),
-    }));
-    setSelection({ start: replacement.cursor, end: replacement.cursor });
-    setDismissed(null);
-  };
-  const chooseFiles = async (kind: "photo" | "document") => {
-    setPicker(false);
-    setPicking(true);
-    setLocalError(null);
-    try {
-      const files = await pickAttachments(kind, `${scope.machineId}:${scope.sessionId}`);
-      if (!mounted.current) {
-        files.forEach(removeStagedFile);
-        return;
-      }
-      const current = valueRef.current ?? emptyComposerDraft();
-      if (current.attachments.length + files.length > ATTACHMENT_COUNT) {
-        files.forEach(removeStagedFile);
-        throw new Error(
-          copy("En fazla 20 dosya ekleyebilirsin.", "You can attach up to 20 files."),
-        );
-      }
-      setValue({ ...current, attachments: [...current.attachments, ...files] });
-    } catch (cause) {
-      if (mounted.current) setLocalError(cause);
-    } finally {
-      if (mounted.current) setPicking(false);
-    }
-  };
-  const upload = async (file: StagedAttachment, controller: AbortController) => {
-    if (!client) throw new Error(copy("Bilgisayara bağlan.", "Connect to your computer."));
-    const update = (state: TransferState) => {
-      if (mounted.current) setTransfers((current) => ({ ...current, [file.id]: state }));
-    };
-    update({ status: "uploading", progress: 0 });
-    try {
-      let prepared = file;
-      if (supportsAttachmentOwnership(client)) {
-        await attachmentReleases.flush(client).catch(() => {});
-        const claimId = await attachmentReleases.prepare(client, scope.sessionId, file);
-        prepared = { ...file, claimId };
-        if (
-          !mounted.current ||
-          !valueRef.current?.attachments.some((entry) => entry.id === file.id)
-        )
-          throw new Error("Attachment upload cancelled.");
-        setValue((current) =>
-          current
-            ? {
-                ...current,
-                attachments: current.attachments.map((entry) =>
-                  entry.id === file.id ? { ...entry, claimId } : entry,
-                ),
-              }
-            : current,
-        );
-      }
-      // Claim only after the private file reference and generation are durable.
-      await persist();
-      claimedFiles.current.set(file.id, prepared);
-      const ref = await uploadAttachment(
-        client,
-        prepared,
-        scope.sessionId,
-        controller.signal,
-        (progress) => update({ status: "uploading", progress }),
-      );
-      update({ status: "ready", progress: 1 });
-      return ref;
-    } catch (cause) {
-      update({ status: "error", progress: 0, error: cause });
-      throw cause;
-    }
-  };
-  const retry = async (file: StagedAttachment) => {
-    if (transfer.current || submission.current) return;
-    const controller = new AbortController();
-    transfer.current = controller;
-    setUploading(true);
-    setLocalError(null);
-    try {
-      await upload(file, controller);
-    } catch {
-      /* The attachment card owns upload failure and retry. */
-    } finally {
-      if (mounted.current) setUploading(false);
-      transfer.current = null;
-    }
-  };
+  const suggestions = useComposerSuggestions({
+    session,
+    prompt,
+    selection,
+    setSelection,
+    setValue,
+  });
+  const { token } = suggestions;
+  const uploads = useComposerAttachments({
+    scope,
+    client,
+    draft,
+    submission,
+    mounted,
+    setLocalError,
+  });
+  const { uploading, picking, transfers, transfer, claimedFiles } = uploads;
   const submit = async () => {
     if (!ready || blocked || busy || uploading || submission.current || !client || !session) return;
     if (mode === "queue" && (!queue.supported || !!queue.error || queue.changing)) return;
@@ -332,8 +186,7 @@ export function SessionComposer({
         intendedSession,
       );
     submission.current = true;
-    transfer.current = controller;
-    setUploading(true);
+    uploads.begin(controller);
     setLocalError(null);
     try {
       if (mode === "queue") {
@@ -344,7 +197,8 @@ export function SessionComposer({
         if (controller.signal.aborted || !mounted.current) return;
       }
       const attachments = [];
-      for (const file of submitted.attachments) attachments.push(await upload(file, controller));
+      for (const file of submitted.attachments)
+        attachments.push(await uploads.upload(file, controller));
       if (controller.signal.aborted || !mounted.current) return;
       // Stage before delivery: a later storage failure cannot mask an accepted send.
       // Until draft removal is durable, the saved draft blocks this tombstone.
@@ -395,8 +249,7 @@ export function SessionComposer({
       if (mounted.current) setLocalError(cause);
     } finally {
       submission.current = false;
-      if (mounted.current) setUploading(false);
-      transfer.current = null;
+      uploads.end();
     }
   };
   const unavailable = blocked || busy || uploading || picking || !ready || queue.changing;
@@ -490,16 +343,16 @@ export function SessionComposer({
     >
       {token ? (
         <ComposerSuggestions
-          items={items}
-          loading={catalog.isFetching}
-          error={catalog.error}
+          items={suggestions.items}
+          loading={suggestions.catalog.isFetching}
+          error={suggestions.catalog.error}
           trigger={token.trigger}
-          selected={selected}
-          onPick={choose}
+          selected={suggestions.selected}
+          onPick={suggestions.choose}
           onRetry={() => {
-            void catalog.refetch();
+            void suggestions.catalog.refetch();
           }}
-          onClose={() => setDismissed(tokenId)}
+          onClose={suggestions.close}
         />
       ) : null}
       {value.noteCard ? (
@@ -531,30 +384,9 @@ export function SessionComposer({
           transfers={transfers}
           disabled={unavailable}
           onRetry={(file) => {
-            void retry(file);
+            void uploads.retry(file);
           }}
-          onRemove={(file) => {
-            void (async () => {
-              const machine =
-                client?.machine ??
-                useMachines.getState().machines.find((entry) => entry.id === scope.machineId);
-              const latest =
-                valueRef.current?.attachments.find((entry) => entry.id === file.id) ??
-                claimedFiles.current.get(file.id) ??
-                file;
-              if (machine) await attachmentReleases.stage({ machine }, scope.sessionId, [latest]);
-              setValue((current) => ({
-                ...(current ?? emptyComposerDraft()),
-                attachments: (current?.attachments ?? []).filter((entry) => entry.id !== file.id),
-              }));
-              await persist();
-              removeStagedFile(file);
-              claimedFiles.current.delete(file.id);
-              if (client) void attachmentReleases.flush(client).catch(() => {});
-            })().catch((cause) => {
-              if (mounted.current) setLocalError(cause);
-            });
-          }}
+          onRemove={uploads.remove}
         />
       ) : null}
       <SessionQueue
@@ -577,13 +409,13 @@ export function SessionComposer({
             text: expanded?.text ?? text,
           }));
           if (expanded) setSelection(expanded.selection);
-          setDismissed(null);
+          suggestions.reopen();
         }}
         disabled={!ready}
         mode={
-          showModeChip ? (
+          delivery.showModeChip ? (
             <ChatToolbarAction
-              label={modeLabel}
+              label={delivery.modeLabel}
               disabled={unavailable}
               onPress={() => setModePicker(true)}
             >
@@ -605,29 +437,7 @@ export function SessionComposer({
           accessibilityLabel: copy("Mesaj", "Message"),
           selection,
           onSelectionChange: (event) => setSelection(event.nativeEvent.selection),
-          onKeyPress: (event) => {
-            if (!token) return;
-            if (event.nativeEvent.key === "Escape") {
-              event.preventDefault();
-              setDismissed(tokenId);
-            }
-            if (event.nativeEvent.key === "ArrowDown" && items.length) {
-              event.preventDefault();
-              setSelected((index) => moveSuggestionSelection(index, items.length, 1));
-            }
-            if (event.nativeEvent.key === "ArrowUp" && items.length) {
-              event.preventDefault();
-              setSelected((index) => moveSuggestionSelection(index, items.length, -1));
-            }
-            if (
-              (event.nativeEvent.key === "Tab" ||
-                (event.nativeEvent.key === "Enter" && selected >= 0)) &&
-              items[Math.max(0, selected)]
-            ) {
-              event.preventDefault();
-              choose(items[Math.max(0, selected)]!);
-            }
-          },
+          onKeyPress: suggestions.onKeyPress,
           disableFullscreenUI: true,
           submitBehavior: "newline",
           maxLength: 256_000,
@@ -673,7 +483,7 @@ export function SessionComposer({
           tone="quiet"
           density="compact"
           label={copy("Yüklemeyi iptal et", "Cancel upload")}
-          onPress={() => transfer.current?.abort()}
+          onPress={uploads.cancel}
         />
       ) : null}
       <ErrorText
@@ -745,7 +555,7 @@ export function SessionComposer({
         onClose={() => setModePicker(false)}
       >
         <NavigationGroup>
-          {deliveryOptions.map((option) => (
+          {delivery.options.map((option) => (
             <NavigationRow
               key={option.value}
               label={option.label}
@@ -768,8 +578,7 @@ export function SessionComposer({
                 ) : undefined
               }
               onPress={() => {
-                deliveryChosen.current = true;
-                setDelivery(option.value);
+                delivery.choose(option.value);
                 setModePicker(false);
               }}
             />
@@ -806,7 +615,7 @@ export function SessionComposer({
               }
               setValue({ ...current, text: result.text });
               setSelection(result.selection);
-              setDismissed(null);
+              suggestions.reopen();
             }}
           />
         ) : null}
@@ -830,14 +639,16 @@ export function SessionComposer({
             label={copy("Fotoğraflar", "Photos")}
             icon={<ImageIcon size={22} color={colors.text} />}
             onPress={() => {
-              void chooseFiles("photo");
+              setPicker(false);
+              void uploads.choose("photo");
             }}
           />
           <NavigationRow
             label={copy("Dosyalar", "Files")}
             icon={<File size={22} color={colors.text} />}
             onPress={() => {
-              void chooseFiles("document");
+              setPicker(false);
+              void uploads.choose("document");
             }}
           />
         </NavigationGroup>

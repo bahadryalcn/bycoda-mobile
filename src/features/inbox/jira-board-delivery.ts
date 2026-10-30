@@ -34,7 +34,12 @@ export function decodeJiraPending(raw: string): Draft {
     throw new Error("Invalid saved Jira request");
   return value;
 }
-export function useJiraBoardDelivery(origin: InboxOrigin, boardId: number) {
+export function useJiraBoardDelivery(
+  origin: InboxOrigin,
+  boardId: number,
+  /** Called once when a confirmed outcome is committed, where it settles. */
+  onSettled?: (outcome: JiraWriteOutcome) => void,
+) {
   const client = useHostClient(),
     draft = useLocalDraft(
       `bycoda.mobile.jira-pending.v1:${JSON.stringify([origin.machineId, origin.projectId, boardId])}`,
@@ -45,7 +50,9 @@ export function useJiraBoardDelivery(origin: InboxOrigin, boardId: number) {
     [error, setError] = useState<unknown>(null),
     [result, setResult] = useState<JiraWriteOutcome | null>(null);
   const occupied = useRef(false),
-    mounted = useRef(true);
+    mounted = useRef(true),
+    settledHandler = useRef(onSettled);
+  settledHandler.current = onSettled;
   const opening = useRef(reviewedMachine(client?.machine));
   useEffect(() => {
     mounted.current = true;
@@ -64,7 +71,9 @@ export function useJiraBoardDelivery(origin: InboxOrigin, boardId: number) {
       latest?.pending?.requestId === requestId ? { version: 1 } : latest,
     );
     await draft.persist();
-    if (outcome) setResult(outcome);
+    if (!outcome) return;
+    setResult(outcome);
+    settledHandler.current?.(outcome);
   };
   const reconcile = async () => {
     const pending = draft.valueRef.current?.pending;

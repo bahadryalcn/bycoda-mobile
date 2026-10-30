@@ -2,8 +2,10 @@ import { RecordCard } from "@/ui/record-card";
 import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useRef } from "react";
 import { router } from "expo-router";
+import MessageSquare from "lucide-react-native/icons/message-square";
 import { uiStyles } from "@/ui/styles";
-import { ActionMenu, Body, Button, ErrorText, Row } from "@/ui/primitives";
+import { ActionMenu, Body, Button, Disclosure, ErrorText, IconButton, Row } from "@/ui/primitives";
+import { colors } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
@@ -41,7 +43,7 @@ export function TaskCard({
     (decline.isPending && decline.variables?.taskId === task.id) ||
     (recheck.isPending && recheck.variables?.taskId === task.id) ||
     (reorder.isPending && orderedHere.current) ||
-    (moving && (move.variables?.to === "todo" || (supported && move.variables?.to === "queued")));
+    (moving && move.variables?.to === "todo");
   const waiting = tasks.filter(
     (entry) => task.dependsOn?.includes(entry.id) && entry.status !== "done",
   );
@@ -57,6 +59,20 @@ export function TaskCard({
     reorder.mutate({ taskIds: ids });
   };
   const queued = supported && (task.status === "todo" || task.status === "queued");
+  const canStart = supported && ["todo", "queued", "blocked"].includes(task.status);
+  const openSession = () => {
+    if (machine && task.sessionId)
+      router.push({ pathname: "/session/[id]", params: {
+        id: task.sessionId, machineId: machine.id, projectId: task.projectId,
+      } });
+  };
+  const complete = () => confirmAction(
+    copy("Görevi tamamla", "Complete task"),
+    task.status === "review" && task.branch
+      ? copy("Bu işlem görev dalını bilgisayardaki hedef dala birleştirebilir.", "This can merge the task branch into the target branch on the computer.")
+      : copy("Görev tamamlandı olarak işaretlenecek.", "The task will be marked complete."),
+    copy("Tamamla", "Complete"), () => move.mutate({ taskId: task.id, to: "done" }),
+  );
   // Rare or secondary actions live in the overflow menu; the card keeps only the next step.
   const queueLabel =
     task.status === "done"
@@ -65,6 +81,14 @@ export function TaskCard({
         ? copy("Tekrar çalıştır", "Retry")
         : copy("Sıraya al", "Queue");
   const menu = [
+    canStart && !!task.sessionId && !starting && {
+      key: "start", label: copy("Şimdi başlat", "Start now"),
+      disabled: busy || !lifecycleReady || moves.queueBlocked || waiting.length > 0,
+      onPress: () => start.mutate({ taskId: task.id }),
+    },
+    moves.complete && {
+      key: "complete", label: copy("Tamamla", "Complete"), disabled: busy, onPress: complete,
+    },
     task.source === "steward" && task.status === "todo" && {
       key: "decline",
       label: copy("Öneriyi reddet", "Decline suggestion"),
@@ -74,8 +98,7 @@ export function TaskCard({
         copy("Bu görev önerisi kaldırılacak ve proje sorumlusu aynı başlığı tekrar önermeyecek. Diğer görevler korunur.", "This task suggestion will be removed and the steward will remember its title. Other tasks are kept."),
         copy("Reddet", "Decline"), () => decline.mutate({ taskId: task.id })),
     },
-    supported &&
-      moves.queue && {
+    moves.queue && {
         key: "queue",
         label: queueLabel,
         disabled: busy || moves.queueBlocked,
@@ -143,11 +166,15 @@ export function TaskCard({
       title={task.title}
       status={<Status value={task.status} />}
       metadata={[task.harness, task.model].filter(Boolean).join(" · ")}
-      menu={<ActionMenu label={copy("Görev işlemleri", "Task actions")} busy={menuBusy} actions={menu} />}
-      footer={
+      menu={<Row style={{ gap: 0, flexWrap: "nowrap" }}>
+        {task.sessionId ? <IconButton label={copy("Oturumu aç", "Open session")} onPress={openSession}>
+          <MessageSquare size={18} color={colors.accent} />
+        </IconButton> : null}
+        <ActionMenu label={copy("Görev işlemleri", "Task actions")} busy={menuBusy} actions={menu} />
+      </Row>}
+      footer={moves.stop || starting || (canStart && !task.sessionId) || (moving && ["done", "queued"].includes(String(move.variables?.to))) ?
         <Row>
-          {supported &&
-            (task.status === "todo" || task.status === "queued" || task.status === "blocked") && (
+          {(starting || (canStart && !task.sessionId)) && (
               <Button
                 label={copy("Şimdi başlat", "Start now")}
                 busy={starting}
@@ -156,24 +183,7 @@ export function TaskCard({
                 onPress={() => start.mutate({ taskId: task.id })}
               />
             )}
-          {task.sessionId && (
-            <Button
-              label={copy("Oturumu aç", "Open session")}
-              tone="quiet"
-              onPress={() => {
-                if (machine && task.sessionId)
-                  router.push({
-                    pathname: "/session/[id]",
-                    params: {
-                      id: task.sessionId,
-                      machineId: machine.id,
-                      projectId: task.projectId,
-                    },
-                  });
-              }}
-            />
-          )}
-          {!supported && moves.queue && (
+          {moving && move.variables?.to === "queued" && (
             <Button
               label={queueLabel}
               busy={moving && move.variables?.to === "queued"}
@@ -201,39 +211,26 @@ export function TaskCard({
               }
             />
           )}
-          {moves.complete && (
+          {moving && move.variables?.to === "done" && (
             <Button
               label={copy("Tamamla", "Complete")}
               busy={moving && move.variables?.to === "done"}
               tone="success"
               disabled={busy}
-              onPress={() =>
-                confirmAction(
-                  copy("Görevi tamamla", "Complete task"),
-                  task.status === "review" && task.branch
-                    ? copy(
-                        "Bu işlem görev dalını bilgisayardaki hedef dala birleştirebilir.",
-                        "This can merge the task branch into the target branch on the computer.",
-                      )
-                    : copy(
-                        "Görev tamamlandı olarak işaretlenecek.",
-                        "The task will be marked complete.",
-                      ),
-                  copy("Tamamla", "Complete"),
-                  () => move.mutate({ taskId: task.id, to: "done" }),
-                )
-              }
+              onPress={complete}
             />
           )}
-        </Row>
+        </Row> : null
       }
       details={
         <>
+          <Body>{task.prompt}</Body>
           {supported && lifecycleReady && (task.status === "todo" || task.status === "queued") && (
             <Body muted style={uiStyles.caption}>
               {copy("Bilgisayardaki sıra", "Queue position on computer")}: {position + 1}
             </Body>
           )}
+          {(task.worktreeCwd || task.workspace?.checkoutCwd || task.deliveryCwd || task.baseBranch || task.branch || task.diffStat) ? <Disclosure label={copy("Çalışma", "Execution")}>
           {(task.worktreeCwd || task.workspace?.checkoutCwd) && (
             <Body mono>
               {copy("Çalışma", "Execution")}: {task.worktreeCwd || task.workspace?.checkoutCwd}
@@ -246,8 +243,8 @@ export function TaskCard({
             </Body>
           )}
           {task.branch && <Body mono>{task.branch}</Body>}
-          <Body>{task.prompt}</Body>
           {task.diffStat && <Body mono>{task.diffStat}</Body>}
+          </Disclosure> : null}
           <ReviewNotes task={task} />
         </>
       }

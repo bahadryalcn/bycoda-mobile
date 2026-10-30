@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Field } from "./fields";
 import { useCopy } from "./copy";
 import { Button } from "./buttons";
@@ -12,7 +12,7 @@ import { parseWallTime, type TimeFieldProps } from "./time-field-model";
 export function TimeField({ label, value, onChange, disabled }: TimeFieldProps) {
   const copy = useCopy();
   const [draft, setDraft] = useState<string | null>(null);
-  useEffect(() => { if (disabled) setDraft(null); }, [disabled]);
+  if (disabled && draft !== null) setDraft(null);
   const valid = draft !== null && parseWallTime(draft) !== undefined;
   return <>
     <NavigationGroup><NavigationRow label={label} detail={value} disabled={disabled}

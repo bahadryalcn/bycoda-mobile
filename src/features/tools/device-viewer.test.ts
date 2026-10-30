@@ -23,7 +23,8 @@ vi.mock("@/ui/remote-frame", () => ({ RemoteFrame: ({ onPress }: { onPress: (poi
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
-  return { Body: Wrapper, Sheet: Wrapper, Row: Wrapper, Disclosure: Wrapper, NavigationGroup: Wrapper, QueryState: () => null, MutationState: () => null, Notice: () => null, Badge: () => null, Field: () => null, Button, IconButton: Button,
+  return {
+    NavigationRow: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label), Body: Wrapper, Sheet: Wrapper, Row: Wrapper, Disclosure: Wrapper, NavigationGroup: Wrapper, QueryState: () => null, MutationState: () => null, Notice: () => null, Badge: () => null, Field: () => null, Button, IconButton: Button,
     ToggleField: ({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) => createElement(Button, { label, onPress: () => onChange(!value) }) };
 });
 let root: ReturnType<typeof createRoot> | undefined; let container: HTMLDivElement; const onDevice = vi.fn();

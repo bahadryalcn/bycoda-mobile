@@ -89,3 +89,13 @@ it("copy remains the exact complete original source while reading a paged styled
   await click("Copy message");
   expect(state.copied).toEqual([text]);
 });
+it("repeated copy presses before a render write the complete source once", async () => {
+  await render({ fontSize: 17 });
+  await click("Full text");
+  await act(async () => {
+    const button = [...container.querySelectorAll("button")].find((b) => b.textContent === "Copy message")!;
+    button.click();
+    button.click();
+  });
+  expect(state.copied).toEqual([text]);
+});

@@ -1,7 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Text, View } from "react-native";
-import * as Clipboard from "expo-clipboard";
 import { Body, CodePanel, CodeText, ErrorText, Loading, Row, Sheet } from "./primitives";
 import { HtmlDocument } from "./html-document";
 import type { MessageContext } from "./media-policy";
@@ -13,6 +12,7 @@ import { useChatAppearance } from "@/state/chat-appearance";
 import { highlightCode } from "./message-highlight";
 import { codePreview } from "./message-code-model";
 import { ChatToolbarAction } from "./chat-controls";
+import { useClipboardFeedback } from "./use-clipboard-feedback";
 
 const MessageDiagram = lazy(() =>
   import("./message-diagram").then((module) => ({ default: module.MessageDiagram })),
@@ -70,9 +70,8 @@ function CodeDocument({ code, language = "", complete = true, context, textSize,
   const size = textSize ?? preference;
   const styles = chatTextStyles(size);
   const [preview, setPreview] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [copiedSource, setCopiedSource] = useState<string | null>(null);
-  const [copying, setCopying] = useState(false);
+  // The prepared payload is always the complete source, never the bounded preview.
+  const clipboard = useClipboardFeedback(code);
   const summary = useMemo(() => codePreview(code, compact ? 8 : 24), [code, compact]);
   const html = /^(?:html|htm)$/i.test(language) && complete && code.length <= 2 * 1024 * 1024;
   const diagram = language.toLowerCase() === "mermaid" && complete;
@@ -82,12 +81,8 @@ function CodeDocument({ code, language = "", complete = true, context, textSize,
       <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: radii.control, backgroundColor: colors.panel }}>
         <Row style={{ paddingHorizontal: space.sm, borderBottomWidth: 1, borderBottomColor: colors.separator }}>
           <Body muted style={[styles.metadata, { flexGrow: 1, flexShrink: 1 }]}>{language || copy("Kod", "Code")}</Body>
-          <ChatToolbarAction label={copiedSource === code ? copy("Kopyalandı", "Copied") : copy("Kodu kopyala", "Copy code")}
-            busy={copying} onPress={() => {
-              setError(null);
-              setCopying(true);
-              void Clipboard.setStringAsync(code).then(() => setCopiedSource(code)).catch(setError).finally(() => setCopying(false));
-            }} />
+          <ChatToolbarAction label={clipboard.copied ? copy("Kopyalandı", "Copied") : copy("Kodu kopyala", "Copy code")}
+            busy={clipboard.busy} onPress={clipboard.copy} />
           {html || diagram ? <ChatToolbarAction label={copy("Önizle", "Preview")} onPress={() => setPreview(true)} /> : null}
         </Row>
         <CodeSource code={shown} language={language} textSize={size} />
@@ -98,7 +93,7 @@ function CodeDocument({ code, language = "", complete = true, context, textSize,
         ) : null}
       </View>
       {!complete ? <Body muted style={styles.metadata}>{copy("Kod devam ediyor…", "Code is still arriving…")}</Body> : null}
-      <ErrorText error={error} />
+      <ErrorText error={clipboard.error} />
       <Sheet visible={preview} title={html ? copy("HTML önizleme", "HTML preview") : copy("Önizle", "Preview")}
         size="full" onClose={() => setPreview(false)}>
         {preview && html ? <HtmlDocument html={code} name="preview.html" context={context} height={540} /> : null}

@@ -65,6 +65,7 @@ const styles = createThemedStyles(() => ({
   },
   link: {
     minHeight: metrics.controlHeight,
+    minWidth: metrics.touchTarget,
     maxWidth: "100%",
     justifyContent: "center",
     paddingVertical: space.sm,

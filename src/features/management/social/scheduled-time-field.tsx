@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Body, ErrorText, Field, NavigationGroup, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { nextPublishTime, parseLocalPublishTime, type ScheduledTimeProps } from "./scheduled-time-types";
@@ -10,16 +10,16 @@ export function ScheduledTimeField({ value, onChange, disabled, onValidityChange
     return { date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`, time: `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}` };
   });
   const valid = !value || !!parseLocalPublishTime(parts.date, parts.time);
-  useEffect(() => { onValidityChange?.(valid); }, [valid, onValidityChange]);
   function update(patch: Partial<typeof parts>) {
     const next = { ...parts, ...patch };
     setParts(next);
     const parsed = parseLocalPublishTime(next.date, next.time);
+    onValidityChange?.(!value || !!parsed);
     if (parsed) onChange(parsed.toISOString());
   }
   return <>
     <NavigationGroup>
-      <ToggleField label={copy("Yayın zamanı seç", "Choose a publish time")} value={!!value} disabled={disabled} onChange={(enabled) => onChange(enabled ? (parseLocalPublishTime(parts.date, parts.time) ?? nextPublishTime()).toISOString() : "")} />
+      <ToggleField label={copy("Yayın zamanı seç", "Choose a publish time")} value={!!value} disabled={disabled} onChange={(enabled) => { onValidityChange?.(!enabled || !!parseLocalPublishTime(parts.date, parts.time)); onChange(enabled ? (parseLocalPublishTime(parts.date, parts.time) ?? nextPublishTime()).toISOString() : ""); }} />
     </NavigationGroup>
     {value && <>
       <Field label={copy("Tarih (YYYY-AA-GG)", "Date (YYYY-MM-DD)")} value={parts.date} editable={!disabled} onChangeText={(date) => update({ date })} />

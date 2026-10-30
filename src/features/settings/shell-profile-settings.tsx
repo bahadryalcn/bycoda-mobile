@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
-import { Body, Button, ErrorText, FormActions, MutationState, Notice, QueryState, SelectField, Sheet, Stack } from "@/ui/primitives";
+import { Body, ErrorText, FormActions, MutationState, NavigationRow, Notice, QueryState, SelectField, Sheet, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { readShellChoices, shellChoiceRequest, type ShellChoices } from "./shell-profile-model";
 
@@ -25,7 +25,7 @@ export function ShellPreference({ snapshot, machineId, machineName, onClose, onS
     } catch (cause) { setError(cause); if ((cause as { uncertain?: boolean })?.uncertain) setUncertain(true); }
     finally { latch.current = false; }
   };
-  return <Sheet visible title={copy("Komut kabuğu", "Command shell")} onClose={onClose} dirty={changed && !saved} dismissible={!mutation.isPending && !uncertain}>
+  return <Sheet visible size="compact" title={copy("Komut kabuğu", "Command shell")} onClose={onClose} dirty={changed && !saved} dismissible={!mutation.isPending && !uncertain}>
     <Body>{machineName}</Body>
     <Notice message={copy("Bu bilgisayardaki yeni !komut isteklerinin kabuğunu değiştirir. Açık terminaller ve çalışan komutlar etkilenmez.", "Changes the shell for new !command requests on this computer. Open terminals and running commands are unaffected.")} />
     <SelectField label={copy("Komut kabuğu", "Command shell")} value={selected} disabled={!validMachine || mutation.isPending || uncertain || saved}
@@ -47,7 +47,7 @@ export function ShellProfileSettings() {
   const [review, setReview] = useState<{ snapshot: ShellChoices; machineId: string; machineName: string }>();
   if (!supported) return null;
   return <Stack><QueryState query={query} />
-    <Button tone="quiet" label={copy("Komut kabuğu", "Command shell")} disabled={!query.data || query.isError || query.isFetching} onPress={() => { if (query.data && machine) setReview({ snapshot: query.data, machineId: machine.id, machineName: machine.name }); }} />
+    <NavigationRow label={copy("Komut kabuğu", "Command shell")} detail={query.data?.profiles.find((profile) => profile.id === query.data?.chosenId)?.name ?? copy("Sistem varsayılanı", "System default")} disabled={!query.data || query.isError || query.isFetching} onPress={() => { if (query.data && machine) setReview({ snapshot: query.data, machineId: machine.id, machineName: machine.name }); }} />
     {review ? <ShellPreference key={review.machineId} {...review} onClose={() => setReview(undefined)} onSaved={() => { void query.refetch(); }} /> : null}
   </Stack>;
 }

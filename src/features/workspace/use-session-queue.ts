@@ -23,7 +23,8 @@ export function useSessionQueue(scope: SessionScope) {
     clientId: mobileQueueClient,
     ...(leaseAware ? { leaseAware: true } : {}),
   };
-  const [autoStart, setAutoStart] = useState(0);
+  // The visible queue owns the drain loop; an accepted fresh enqueue turns it on.
+  const [automatic, setAutomatic] = useState(false);
   const query = useHostQuery<SharedQueue>(
     ["session-queue", scope.sessionId],
     "sessions.queue.get",
@@ -106,7 +107,8 @@ export function useSessionQueue(scope: SessionScope) {
     ...query,
     supported,
     leaseAware,
-    autoStart,
+    automatic,
+    setAutomatic,
     clientId: mobileQueueClient,
     retainEdit: async (row: QueuedMessage) => {
       if (!client) throw new Error("Connect before preserving the queued edit.");
@@ -120,7 +122,7 @@ export function useSessionQueue(scope: SessionScope) {
     change: mutate,
     enqueue: async (row: QueuedMessage) => {
       const accepted = (queue: SharedQueue) => {
-        if (mobileDrainsQueue(queue, mobileQueueClient)) setAutoStart((value) => value + 1);
+        if (mobileDrainsQueue(queue, mobileQueueClient)) setAutomatic(true);
         return queue;
       };
       try {

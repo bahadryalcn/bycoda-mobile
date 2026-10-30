@@ -50,6 +50,18 @@ describe("bounded social workspace reads", () => {
     expect(request.mock.calls[3][0]).not.toHaveProperty("cursor");
   });
 
+  it("returns retained data only for the exact query input", async () => {
+    const cache = new SocialWorkspaceCache();
+    const first = workspaceInput("inbox", "project-a", 0, "");
+    const value = await cache.read(first, "computer-a", async () => response(), () => true);
+    expect(cache.peek(first)).toBe(value);
+    expect(cache.peek({ ...first })).toBe(value);
+    for (const other of [
+      workspaceInput("inbox", "project-b", 0, ""), workspaceInput("inbox", "project-a", 20, ""),
+      workspaceInput("inbox", "project-a", 0, "needle"), workspaceInput("drafts", "project-a", 0, ""),
+    ]) expect(cache.peek(other)).toBeUndefined();
+  });
+
   it("rejects late results after a connection change and never retains them", async () => {
     const cache = new SocialWorkspaceCache();
     let current = true;
@@ -58,7 +70,7 @@ describe("bounded social workspace reads", () => {
     current = false;
     resolve(response());
     await expect(read).rejects.toMatchObject({ code: "scope" });
-    expect(cache.latest()).toBeUndefined();
+    expect(cache.peek(workspaceInput("inbox", null, 0, ""))).toBeUndefined();
     const request = vi.fn();
     await expect(cache.read(workspaceInput("inbox", null, 0, ""), "computer-a", request, () => false)).rejects.toMatchObject({ code: "scope" });
     expect(request).not.toHaveBeenCalled();

@@ -4,7 +4,7 @@ import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import {
-  Badge, Body, Button, Disclosure, Field, IconButton, MutationState, Notice, QueryState, Row, Sheet, ToggleField, NavigationGroup,
+  Badge, Body, Button, Disclosure, Field, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, Sheet, ToggleField, NavigationGroup,
 } from "@/ui/primitives";
 import { RemoteFrame } from "@/ui/remote-frame";
 import { useCopy } from "@/ui/copy";
@@ -55,9 +55,11 @@ export function DeviceViewer({ projectId, device, canControl, onDevice, onClose 
         <Body muted style={[uiStyles.caption, uiStyles.grow]}>{`${device.platform} ${device.version}`}</Body>
         <Badge label={device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off")} tone={device.booted ? "active" : "default"} />
       </Row>
-      <Button label={copy("Cihaz servisi", "Device service")} tone="quiet" disabled={!current() || busy} onPress={() => setRuntime(true)} />
+      <Disclosure label={copy("Araçlar", "Tools")}>
+        <NavigationRow label={copy("Cihaz servisi", "Device service")} disabled={!current() || busy} onPress={() => setRuntime(true)} />
+        <NavigationRow label={copy("Expo önizlemesi", "Expo preview")} disabled={!current() || busy} onPress={() => setPreview(true)} />
+      </Disclosure>
       {runtime ? <DeviceRuntime projectId={opening.projectId} deviceId={opening.deviceId} onClose={() => setRuntime(false)} /> : null}
-      <Button label={copy("Expo önizlemesi", "Expo preview")} tone="quiet" disabled={!current() || busy} onPress={() => setPreview(true)} />
       {preview ? <DevicePreviewSheet projectId={opening.projectId} device={device} onClose={() => setPreview(false)} /> : null}
       {!device.booted ? <Button label={copy("Cihazı başlat", "Boot device")} tone="primary" disabled={!current()} busy={boot.isPending} onPress={() => {
         if (!current() || pending.current) return;

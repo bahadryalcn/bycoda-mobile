@@ -7,7 +7,7 @@ import PencilLine from "lucide-react-native/icons/pencil-line";
 import Wifi from "lucide-react-native/icons/wifi";
 import Network from "lucide-react-native/icons/network";
 import Laptop from "lucide-react-native/icons/laptop";
-import { Body, Button, Card, NavigationGroup, NavigationRow, Row } from "@/ui/primitives";
+import { Body, Button, FormActions, NavigationGroup, NavigationRow, Row } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
 import { uiStyles } from "@/ui/styles";
@@ -17,8 +17,8 @@ import { ManualConnectionForm } from "./manual-connection-form";
 import { PairingPaste } from "./pairing-paste";
 import type { PairingEntryProps } from "./connection-types";
 
-const centered = { alignItems: "center" as const, gap: space.sm };
-const title = { textAlign: "center" as const };
+const centered = { alignItems: "stretch" as const, gap: space.sm };
+const title = { textAlign: "left" as const };
 
 function tile(Glyph: typeof QrCode, color: string) {
   return (
@@ -70,13 +70,15 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
   if (entry.kind === "preview")
     return (
       <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
-        <Card style={{ alignItems: "center", gap: space.sm }}>
-          <IconTile color={colors.accent} size={56}>
-            <Laptop size={26} strokeWidth={2} color={colors.accent} />
+        <View style={{ gap: space.sm }}>
+          <Row>
+          <IconTile color={colors.muted}>
+            <Laptop size={20} strokeWidth={2} color={colors.muted} />
           </IconTile>
           <Text selectable style={[uiStyles.heading, title]}>
             {entry.code.name}
           </Text>
+          </Row>
           <Body muted style={title}>
             {entry.code.endpoint}
           </Body>
@@ -85,28 +87,22 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
               ? copy("Aynı yerel ağda, şifreli bağlantı.", "Encrypted connection on your local network.")
               : copy("Tailscale özel ağından bağlantı.", "Connection through your private Tailscale network.")}
           </Body>
-        </Card>
+        </View>
         {process.env.EXPO_OS === "web" ? (
           <Body muted style={title}>
             {copy("Bilgisayarına telefon uygulamasından bağlan.", "Connect to your computer from the phone app.")}
           </Body>
         ) : null}
-        <Button
-          label={copy("Bağlan", "Connect")}
-          tone="primary"
-          fullWidth
+        <FormActions
+          submitLabel={copy("Bağlan", "Connect")}
           disabled={disabled || process.env.EXPO_OS === "web"}
           busy={busy}
-          onPress={() => {
+          onSubmit={() => {
             void controller.connect();
           }}
-        />
-        <Button
-          label={copy("Vazgeç", "Cancel")}
-          tone="quiet"
-          disabled={busy}
-          onPress={controller.cancel}
-          style={{ alignSelf: "center" }}
+          cancelLabel={copy("Vazgeç", "Cancel")}
+          onCancel={controller.cancel}
+          cancelDisabled={busy}
         />
       </Animated.View>
     );

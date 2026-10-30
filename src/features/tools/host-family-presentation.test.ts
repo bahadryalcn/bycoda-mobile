@@ -221,7 +221,7 @@ it("shows the provider already present in the usage row without opening a sessio
     createElement(UsageScreen, { project: { id: "project", name: "Fixture", cwd: "/fixture" } }),
   );
   expect(container.textContent).toContain("session-fixture");
-  expect(container.textContent).toContain("Provider: Provider fixture");
+  expect([...container.querySelectorAll("h2")].map((heading) => heading.textContent)).toContain("Provider fixture");
   expect(container.querySelectorAll("a")).toHaveLength(0);
 });
 
@@ -231,3 +231,5 @@ it("includes the localized tunnel state in the visible badge and accessible name
   expect(container.querySelector('[aria-label*="Interrupted"]')).not.toBeNull();
   expect(container.textContent).toContain("Public address reachability is unverified.");
 });
+
+vi.mock("@/ui/record-card", () => ({ RecordCard: ({ title, metadata, preview, details, footer, children }: { title: string; metadata?: string; preview?: import("react").ReactNode; details?: import("react").ReactNode; footer?: import("react").ReactNode; children?: import("react").ReactNode }) => createElement("section", null, createElement("h2", null, title), metadata, preview, details, children, footer) }));

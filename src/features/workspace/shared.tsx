@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Crypto from "expo-crypto";
 import { useHostClient } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
-import { Body, Button, Card, ErrorText, MutationState, Notice, Separator } from "@/ui/primitives";
+import { Body, Button, Card, ErrorText, MutationState, Notice } from "@/ui/primitives";
 import { colors, radii, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
@@ -63,14 +63,8 @@ export function StatusDot({ color, size = 8 }: { color: string; size?: number })
   );
 }
 
-/**
- * FlatList rows share one rounded surface: the first and last rows own the corners and
- * later rows draw an inset hairline. `first`/`last` describe the surrounding list items.
- */
+/** Collection rhythm belongs to the row, without a second card or clipped focus owner. */
 export function GroupedListRow({
-  first,
-  last,
-  inset = 0,
   children,
 }: PropsWithChildren<{ first: boolean; last: boolean; inset?: number }>) {
   useMobileTheme();
@@ -78,15 +72,8 @@ export function GroupedListRow({
     <View
       style={{
         backgroundColor: colors.panel,
-        borderTopStartRadius: first ? radii.card : 0,
-        borderTopEndRadius: first ? radii.card : 0,
-        borderBottomStartRadius: last ? radii.card : 0,
-        borderBottomEndRadius: last ? radii.card : 0,
-        borderCurve: "continuous",
-        overflow: "hidden",
       }}
     >
-      {first ? null : <Separator style={{ marginStart: inset }} />}
       {children}
     </View>
   );

@@ -60,7 +60,7 @@ export function DemoScreen() {
       {page === "projects" ? (
         <>
           <Section title={copy("Örnek bilgisayar", "Example computer")}>
-            <Card>
+            <View style={{ gap: space.sm }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
                 <IconTile color={colors.muted}>
                   <Laptop size={18} strokeWidth={2} color={colors.muted} />
@@ -75,7 +75,7 @@ export function DemoScreen() {
                   "Projects and agents run on your computer. Follow sessions, answer pending questions and inspect changes from your phone.",
                 )}
               </Body>
-            </Card>
+            </View>
           </Section>
           <Section title={copy("Örnek proje", "Example project")}>
             <NavigationGroup>

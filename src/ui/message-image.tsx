@@ -1,6 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
 import { mediaQueryKey, visibleMediaData } from "./media-policy";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { View } from "react-native";
 import { Image } from "expo-image";
 import { useQuery } from "@tanstack/react-query";
@@ -22,7 +22,8 @@ export function MessageImage({
   useMobileTheme();
   const copy = useCopy();
   const [open, setOpen] = useState(false);
-  if (!deferred) return <InlineMessageImage {...props} />;
+  const identity = `${props.attachmentId ?? ""}:${props.source}`;
+  if (!deferred) return <InlineMessageImage key={identity} {...props} />;
   const name = props.alt || copy("Resim", "Image");
   return (
     <>
@@ -33,7 +34,7 @@ export function MessageImage({
         onPress={() => setOpen(true)}
       />
       <Sheet visible={open} title={name} size="full" onClose={() => setOpen(false)}>
-        {open ? <InlineMessageImage {...props} /> : null}
+        {open ? <InlineMessageImage key={identity} {...props} /> : null}
       </Sheet>
     </>
   );
@@ -68,11 +69,6 @@ function InlineMessageImage({
   const dataSource = /^data:/i.test(source);
   const noteAsset = source.startsWith("/note-assets/");
   const [allowExternal, setAllowExternal] = useState(false);
-  useEffect(() => {
-    setAllowExternal(false);
-    setLoaded(false);
-    setFailed(false);
-  }, [source, attachmentId]);
   const local = localFile && source.startsWith("file:") ? source : null;
   const query = useQuery({
     queryKey: mediaQueryKey(context, [

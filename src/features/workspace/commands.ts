@@ -1,5 +1,6 @@
 import type { HostTransport } from "@/remote/transport";
 import type { CommandReceipt } from "./wire";
+import { assertApprovalCommand } from "@/domain/approval-command";
 
 type CommandClient = Pick<HostTransport, "machine" | "request">;
 export class UncertainCommand extends Error {
@@ -8,6 +9,11 @@ export class UncertainCommand extends Error {
     readonly machineId: string,
     readonly client: CommandClient,
     readonly authorityGeneration?: number,
+    readonly approval?: Readonly<{
+      requestId: number;
+      occurrenceId: string;
+      decision: "allow" | "deny";
+    }>,
   ) {
     super(
       "Connection interrupted. Check whether the computer accepted this command before trying again.",
@@ -22,10 +28,13 @@ export async function dispatchCommand(
   commandId: string,
   params: Record<string, unknown>,
 ): Promise<CommandReceipt> {
+  const original = { ...params };
+  const originalMachineId = client.machine.id;
+  assertApprovalCommand(client.machine.capabilities, original);
   try {
     return await client.request<CommandReceipt>(
       "commands.dispatch",
-      { ...params, commandId },
+      { ...original, commandId },
       { retry: false },
     );
   } catch (error) {
@@ -40,9 +49,16 @@ export async function dispatchCommand(
     }
     throw new UncertainCommand(
       commandId,
-      client.machine.id,
+      originalMachineId,
       client,
-      params.authorityGeneration as number | undefined,
+      original.authorityGeneration as number | undefined,
+      original.type === "approve"
+        ? Object.freeze({
+            requestId: original.requestId as number,
+            occurrenceId: original.approvalOccurrenceId as string,
+            decision: original.decision as "allow" | "deny",
+          })
+        : undefined,
     );
   }
 }

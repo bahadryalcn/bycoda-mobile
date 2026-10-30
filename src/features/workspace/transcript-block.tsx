@@ -1,4 +1,5 @@
 import { memo, useState } from "react";
+import { captureApprovalCommand } from "@/domain/approval-command";
 import { View } from "react-native";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import Terminal from "lucide-react-native/icons/terminal";
@@ -21,7 +22,12 @@ import { TranscriptStructured } from "./transcript-structured";
 import { TranscriptActions } from "./transcript-actions";
 import { SessionArtifacts } from "./session-artifacts";
 import { AgentAvatar } from "@/ui/agent-avatar";
-import { activityState, canCollapseToolFailure, isBlockStreaming, toolResultTexts } from "./transcript-model";
+import {
+  activityState,
+  canCollapseToolFailure,
+  isBlockStreaming,
+  toolResultTexts,
+} from "./transcript-model";
 import { useMobileTheme } from "@/ui/theme";
 import { PlanReview } from "@/features/management/plans/plan-review";
 import { SubagentDetails } from "./subagent-details";
@@ -69,7 +75,11 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   const warning = needsApproval || value.notice === "interrupt";
   const semantic = isError ? semanticColors.danger : warning ? semanticColors.warning : undefined;
   const foldable =
-    !activityDetail && !conversational && (!semantic || canCollapseToolFailure(value)) && !value.approval && !value.interjection;
+    !activityDetail &&
+    !conversational &&
+    (!semantic || canCollapseToolFailure(value)) &&
+    !value.approval &&
+    !value.interjection;
   const title =
     value.role === "reasoning"
       ? copy("Düşünce", "Reasoning")
@@ -129,13 +139,10 @@ export const TranscriptBlock = memo(function TranscriptBlock({
     : text.replace(/\s+/g, " ").trim();
 
   const approve = (decision: "allow" | "deny") => {
-    void onCommand({
-      type: "approve",
-      sessionId: scope.sessionId,
-      runId,
-      requestId: value.approval!.requestId,
-      decision,
-    }).catch(() => {});
+    if (!runId) return;
+    void onCommand(captureApprovalCommand(scope.sessionId, runId, value.approval!, decision)).catch(
+      () => {},
+    );
   };
   const planAction =
     value.plan?.status === "ready" ? (
@@ -153,15 +160,28 @@ export const TranscriptBlock = memo(function TranscriptBlock({
 
   const contents = (
     <View style={{ gap: space.sm }}>
-      <Sheet visible={reviewPlan} title={copy("Planı incele", "Review plan")} onClose={() => setReviewPlan(false)}>
-        {reviewPlan ? <PlanReview block={value} scope={scope} disabled={disabled} onCommand={onCommand} onClose={() => setReviewPlan(false)} /> : null}
+      <Sheet
+        visible={reviewPlan}
+        title={copy("Planı incele", "Review plan")}
+        onClose={() => setReviewPlan(false)}
+      >
+        {reviewPlan ? (
+          <PlanReview
+            block={value}
+            scope={scope}
+            disabled={disabled}
+            onCommand={onCommand}
+            onClose={() => setReviewPlan(false)}
+          />
+        ) : null}
       </Sheet>
       {(open || activityDetail || requested || value.plan || value.taskList) &&
       value.remoteContent ? (
         <QueryState query={detail} />
       ) : null}
       {(open || activityDetail || requested || value.plan || value.taskList) && detail.error ? (
-        <Button busy={detail.isFetching}
+        <Button
+          busy={detail.isFetching}
           label={copy("İçeriği yeniden yükle", "Retry loading content")}
           tone="quiet"
           onPress={() => {
@@ -184,22 +204,70 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           }
         />
       ) : null}
-      {toolResults.length ? <View style={{ gap: space.sm }}>
-        <Body muted style={uiStyles.label}>{copy("Çıktı", "Output")}</Body>
-        {toolResults.map((output, index) => <CodePanel key={index}>
-          <CodeText style={[typography.code, isError && { color: colors.danger }]}>{output}</CodeText>
-        </CodePanel>)}
-      </View> : null}
-      {value.tool?.outputTruncated ? <Body muted>{copy("Çıktı kısaltıldı.", "Output was truncated.")}</Body> : null}
-      {value.agentRun ? <Button label={copy("Alt ajan ayrıntıları", "Subagent details")} tone="quiet" disabled={!!value.remoteContent && !detail.data}
-        onPress={() => setSubagentOpen(true)} /> : null}
-      <Sheet visible={subagentOpen} title={value.agentRun?.name || copy("Alt ajan ayrıntıları", "Subagent details")} size="full" scroll={false} onClose={() => setSubagentOpen(false)}>
-        {subagentOpen && value.agentRun ? <SubagentDetails block={value} scope={scope} runId={runId} parentProvider={parentProvider} disabled={disabled} onCommand={onCommand} context={context} /> : null}
+      {toolResults.length ? (
+        <View style={{ gap: space.sm }}>
+          <Body muted style={uiStyles.label}>
+            {copy("Çıktı", "Output")}
+          </Body>
+          {toolResults.map((output, index) => (
+            <CodePanel key={index}>
+              <CodeText style={[typography.code, isError && { color: colors.danger }]}>
+                {output}
+              </CodeText>
+            </CodePanel>
+          ))}
+        </View>
+      ) : null}
+      {value.tool?.outputTruncated ? (
+        <Body muted>{copy("Çıktı kısaltıldı.", "Output was truncated.")}</Body>
+      ) : null}
+      {value.agentRun ? (
+        <Button
+          label={copy("Alt ajan ayrıntıları", "Subagent details")}
+          tone="quiet"
+          disabled={!!value.remoteContent && !detail.data}
+          onPress={() => setSubagentOpen(true)}
+        />
+      ) : null}
+      <Sheet
+        visible={subagentOpen}
+        title={value.agentRun?.name || copy("Alt ajan ayrıntıları", "Subagent details")}
+        size="full"
+        scroll={false}
+        onClose={() => setSubagentOpen(false)}
+      >
+        {subagentOpen && value.agentRun ? (
+          <SubagentDetails
+            block={value}
+            scope={scope}
+            runId={runId}
+            parentProvider={parentProvider}
+            disabled={disabled}
+            onCommand={onCommand}
+            context={context}
+          />
+        ) : null}
       </Sheet>
-      {value.orchestration ? <Button label={copy("Koordinasyon ayrıntıları", "Coordination details")} tone="quiet" disabled={!!value.remoteContent && !detail.data}
-        onPress={() => setOrchestrationOpen(true)} /> : null}
-      <Sheet visible={orchestrationOpen} title={value.orchestration?.title || copy("Koordinasyon ayrıntıları", "Coordination details")} size="full" scroll={false} onClose={() => setOrchestrationOpen(false)}>
-        {orchestrationOpen && value.orchestration ? <OrchestrationDetails block={value} scope={scope} context={context} /> : null}
+      {value.orchestration ? (
+        <Button
+          label={copy("Koordinasyon ayrıntıları", "Coordination details")}
+          tone="quiet"
+          disabled={!!value.remoteContent && !detail.data}
+          onPress={() => setOrchestrationOpen(true)}
+        />
+      ) : null}
+      <Sheet
+        visible={orchestrationOpen}
+        title={
+          value.orchestration?.title || copy("Koordinasyon ayrıntıları", "Coordination details")
+        }
+        size="full"
+        scroll={false}
+        onClose={() => setOrchestrationOpen(false)}
+      >
+        {orchestrationOpen && value.orchestration ? (
+          <OrchestrationDetails block={value} scope={scope} context={context} />
+        ) : null}
       </Sheet>
       <TranscriptStructured block={value} context={context} compactAgent compactOrchestration />
       <TranscriptAttachments block={value} context={context} />
@@ -332,7 +400,17 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           detail={isError ? copy("Başarısız", "Failed") : status}
           reasoning={value.role === "reasoning"}
           onInspect={() => setOpen(true)}
-          status={isError ? "error" : state === "running" ? "running" : state === "completed" ? "complete" : state === "stopped" ? "stopped" : "record"}
+          status={
+            isError
+              ? "error"
+              : state === "running"
+                ? "running"
+                : state === "completed"
+                  ? "complete"
+                  : state === "stopped"
+                    ? "stopped"
+                    : "record"
+          }
         />
       ) : foldable ? (
         <View style={{ gap: space.xs }}>
@@ -435,7 +513,9 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                 ) : null}
               </Row>
             ) : null}
-            {isBlockStreaming(value) ? <ChatStreaming label={copy("Yazıyor…", "Writing…")} /> : null}
+            {isBlockStreaming(value) ? (
+              <ChatStreaming label={copy("Yazıyor…", "Writing…")} />
+            ) : null}
             {isError ? <Badge label={copy("Başarısız", "Failed")} tone="danger" /> : null}
             {value.notice === "interrupt" ? (
               <Badge label={copy("Durduruldu", "Interrupted")} tone="warning" />
@@ -470,9 +550,27 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           ) : null}
         </View>
       )}
-      {foldable && !value.plan && !value.taskList && (value.role === "reasoning" || value.role === "tool") ? (
+      {foldable &&
+      !value.plan &&
+      !value.taskList &&
+      (value.role === "reasoning" || value.role === "tool") ? (
         <Sheet visible={open} title={label} size="full" onClose={() => setOpen(false)}>
-          {open ? <TranscriptBlock {...{ block, author, scope, revision, runId, disabled, onCommand, context, parentProvider }} activityDetail /> : null}
+          {open ? (
+            <TranscriptBlock
+              {...{
+                block,
+                author,
+                scope,
+                revision,
+                runId,
+                disabled,
+                onCommand,
+                context,
+                parentProvider,
+              }}
+              activityDetail
+            />
+          ) : null}
         </Sheet>
       ) : null}
       {actions ? (

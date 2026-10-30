@@ -1,14 +1,12 @@
 import { haptic } from "@/ui/motion";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { randomUUID } from "expo-crypto";
+import { useEffect, useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
-import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
+import { isReviewedMachine } from "@/state/reviewed-machine";
 import { MessageText } from "@/ui/message-text";
 import { Stack } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import {
   Body,
-  Card,
   Field,
   FormActions,
   Heading,
@@ -31,18 +29,20 @@ import { FactChoices } from "./fact-choices";
 import type { ThreadEditorProps, ReplyFormDraft } from "./types";
 import { isThreadPage, THREAD_PAGE_LIMIT, ThreadPageUnavailable } from "./thread-page";
 import { accountIdentity } from "./review-presentation";
+import { sameConnectionEpoch, useConnectionScope } from "./connection-scope";
 
 export function ThreadEditor({ thread, recipientLabel, accounts, projects, profiles, onClose }: ThreadEditorProps) {
   const copy = useCopy();
   const machine = useActiveMachine();
-  const scope = useMemo(() => ({ token: randomUUID(), review: reviewedMachine(machine) }),
-    [machine?.id, machine?.endpoint, machine?.environmentId, machine?.lanKey]);
+  // The reviewed connection epoch has an explicit owner (state, not a memo that
+  // React may discard); it changes only when endpoint, environment or credential do.
+  const scope = useConnectionScope(machine);
   // A reply belongs to the connection that opened it. Re-pairing must require
   // reopening the view, without discarding this editor's unsaved text.
-  const openingScope = useRef(scope).current;
+  const [openingScope] = useState(scope);
   const latestScope = useRef(scope);
   latestScope.current = scope;
-  const matchesConnection = () => latestScope.current === openingScope &&
+  const matchesConnection = () => sameConnectionEpoch(latestScope.current, openingScope) &&
     isReviewedMachine(openingScope.review, useMachines.getState());
   const connectionChanged = !matchesConnection();
   const connectionMessage = copy("Bilgisayar bağlantısı değişti. Doğru bilgisayarı seçip bu görünümü yeniden açın.", "The computer connection changed. Select the correct computer and reopen this view.");
@@ -183,13 +183,13 @@ export function ThreadEditor({ thread, recipientLabel, accounts, projects, profi
         disabled={query.isFetching || readAction !== null} onPress={() => { if (page) navigatePage("earlier", Math.max(0, page.offset - THREAD_PAGE_LIMIT)); }} />}
       {page && page.total > 0 && <Body muted>{page.offset + 1}–{Math.min(page.offset + page.limit, page.total)} / {page.total}</Body>}
       {detail?.events.map((event) => (
-        <Card key={event.id}>
+        <Stack key={event.id}>
           <Body muted>
             {event.direction === "inbound" ? copy("Gelen", "Received") : copy("Gönderilen", "Sent")}{" "}
             · {stamp(event.at)}
           </Body>
           <MessageText text={event.text} role="assistant" />
-        </Card>
+        </Stack>
       ))}
       {((page && page.offset + page.limit < page.total) || readAction === "next") && <Button label={copy("Sonraki", "Next")} tone="quiet"
         busy={readAction === "next"}

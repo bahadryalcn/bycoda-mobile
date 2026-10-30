@@ -20,7 +20,7 @@ export function ToggleField({ label, detail, value, onChange, disabled }: Toggle
         alignItems: "center",
         gap: space.sm,
         minHeight: grouped ? 52 : metrics.selectionHeight,
-        paddingHorizontal: grouped ? space.lg : 0,
+        paddingHorizontal: 0,
         paddingVertical: grouped ? space.sm : 0,
       }}
     >
@@ -113,7 +113,7 @@ export function Input({
           focused && { borderColor: semantic?.text ?? colors.accent },
           props.editable === false && { color: colors.muted },
           fieldStyle,
-          // Focus is drawn by the accent border (or the composer capsule), not the browser ring.
+          // Keep focus local to the editable field; never recolor its containing panel.
           process.env.EXPO_OS === "web" && ({ outlineStyle: "none", resize: "none" } as object),
         ])}
       />

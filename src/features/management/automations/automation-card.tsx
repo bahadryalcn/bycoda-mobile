@@ -86,12 +86,14 @@ export function AutomationCard({
       metadata={
         scheduleLabel(item, copy) + " · " + copy("Sonraki", "Next") + ": " + stamp(item.nextRunAt)
       }
-      menu={<ActionMenu label={copy("Otomasyon işlemleri", "Automation actions")} actions={menu} />}
+      menu={<ActionMenu label={copy("Otomasyon işlemleri", "Automation actions")}
+        busy={(save.isPending && (save.variables?.automation as { id?: string } | undefined)?.id === item.id) || (remove.isPending && remove.variables?.automationId === item.id)} actions={menu} />}
       footer={
         <Row>
           <Button
             label={copy("Şimdi çalıştır", "Run now")}
             tone="quiet"
+            busy={run.isPending && run.variables?.automationId === item.id}
             disabled={busy}
             onPress={() =>
               confirmAction(

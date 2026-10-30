@@ -8,7 +8,7 @@ import { useHostMutation } from "@/state/queries";
 import { useModelCatalog } from "@/state/model-catalog";
 import {
   Button,
-  Card,
+  FormActions,
   SelectField,
   Field,
   MutationState,
@@ -42,13 +42,14 @@ export function SessionSettings({
 }: SessionSettingsProps) {
   const copy = useCopy();
   const machine = useActiveMachine();
-  const form = useFormDraft<SessionSettingsDraft>(() => ({
+  const [initialDraft] = useState<SessionSettingsDraft>(() => ({
     title: value.session.title,
     provider: value.session.harness,
     model: value.session.model,
     mode: value.session.runtimeMode,
     modelSettings: value.session.modelSettings,
   }));
+  const form = useFormDraft(initialDraft);
   const { title, provider, model, mode, modelSettings } = form.values;
   const configure = useAsyncAction();
   const [configurationAction, setConfigurationAction] = useState<"configure" | "compact">(
@@ -74,20 +75,21 @@ export function SessionSettings({
       dirty={form.dirty}
       dismissible={!configure.isPending && !update.isPending && !disabled}
     >
-      <Card>
+      <Section title={copy("Oturum", "Session")}>
         <View style={workspaceStyles.stack}>
           <Field
             label={copy("Başlık", "Title")}
             value={title}
             onChangeText={(text) => form.setField("title", text)}
           />
-          <Button
-            label={copy("Başlığı kaydet", "Save title")}
-            density="compact"
-            tone="quiet"
+          <FormActions
+            submitLabel={copy("Başlığı kaydet", "Save title")}
+            tone="secondary"
             disabled={!title.trim() || pending || title.trim() === value.session.title}
             busy={update.isPending && update.variables?.title !== undefined}
-            onPress={() => {
+            feedback={<MutationState mutation={update} success={copy("Oturum güncellendi.", "Session updated.")} />}
+            onSubmit={() => {
+              const submitted = title;
               void update
                 .mutateAsync({
                   projectId,
@@ -95,7 +97,11 @@ export function SessionSettings({
                   title: title.trim(),
                   ...captureSessionAuthority(value),
                 })
-                .then(onUpdated)
+                .then(() => {
+                  form.markSaved({ ...initialDraft, title: submitted.trim() });
+                  form.patch((current) => current.title === submitted ? { title: submitted.trim() } : {});
+                  onUpdated();
+                })
                 .catch(() => {});
             }}
           />
@@ -139,12 +145,8 @@ export function SessionSettings({
               }}
             />
           </Row>
-          <MutationState
-            mutation={update}
-            success={copy("Oturum güncellendi.", "Session updated.")}
-          />
         </View>
-      </Card>
+      </Section>
       <Section title={copy("Agent ve model", "Agent and model")}>
         <QueryState query={catalog} />
         <SelectField
@@ -205,14 +207,13 @@ export function SessionSettings({
         ]}
         onChange={(next) => form.setField("mode", next)}
       />
-      <MutationState mutation={configure} />
-      <Button
-        label={copy("Agent ayarlarını kaydet", "Save agent settings")}
+      <FormActions
+        feedback={<MutationState mutation={configure} />}
+        submitLabel={copy("Agent ayarlarını kaydet", "Save agent settings")}
         tone="primary"
-        density="compact"
         disabled={pending || !model || running}
         busy={configure.isPending && configurationAction === "configure"}
-        onPress={() => {
+        onSubmit={() => {
           setConfigurationAction("configure");
           void configure.run(async () => {
             const receipt = await onCommand({

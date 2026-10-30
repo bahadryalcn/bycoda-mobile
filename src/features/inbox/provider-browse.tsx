@@ -7,17 +7,15 @@ import { useEffect, useReducer, useState } from "react";
 import { View } from "react-native";
 import {
   Row,
+  ActionMenu,
   Button,
   Empty,
-  IconButton,
   Notice,
   QueryState,
   Screen,
   Sheet,
   ToggleField, NavigationGroup,
 } from "@/ui/primitives";
-import RefreshCw from "lucide-react-native/icons/refresh-cw";
-import { colors, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { Scope } from "../management/common";
 import { ProviderInboxDetail } from "./provider-detail";
@@ -70,7 +68,6 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
         <ProviderInboxDetail key={inboxItemKey(view.item)} item={view.item} origin={origin} availability={availability} onClose={(message) => dispatch({ type: "close", notice: message })} />
       </Sheet>}
       <Scope allowAll />
-      {machine?.capabilities?.includes("inbox.jiraBoard.v1") ? <Button label={copy("Jira panoları","Jira boards")} disabled={!origin.projectId||!view.canRead} onPress={()=>setJiraBoards(true)}/> : null}
       {jiraBoards?<ProviderJiraBoards origin={origin} canRead={view.canRead} canWrite={view.canRead} onClose={()=>setJiraBoards(false)}/>:null}
       {notice ? <Notice tone="success" message={notice} /> : null}
       <QueryState query={availability} />
@@ -98,16 +95,12 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
               />
             </View>
             <FilterButton count={Number(assigned) + Number(all)} onPress={() => setFilterDraft({ assigned, all })} />
-            <IconButton
-              label={copy("Yenile", "Refresh")}
-              busy={items.isFetching && items.data !== undefined}
-              disabled={items.isFetching}
-              onPress={() => {
-                void items.refetch();
-              }}
-            >
-              <RefreshCw size={18} color={colors.muted} />
-            </IconButton>
+            <ActionMenu label={copy("Diğer işlemler", "More actions")} busy={items.isFetching && items.data !== undefined} actions={[
+              machine?.capabilities?.includes("inbox.jiraBoard.v1") && {
+              key: "jira", label: copy("Jira panoları", "Jira boards"), disabled: !origin.projectId || !view.canRead, onPress: () => setJiraBoards(true),
+              },
+              { key: "refresh", label: copy("Yenile", "Refresh"), disabled: items.isFetching, onPress: () => { void items.refetch(); } },
+            ]} />
           </Row>
           {filterDraft ? <FilterSheet visible onClose={() => setFilterDraft(null)}
             onReset={() => setFilterDraft({ assigned: false, all: false })}

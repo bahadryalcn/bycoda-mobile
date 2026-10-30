@@ -1,6 +1,14 @@
 import type { HostTask } from "../../../../src/features/tasks/model/hostTasks";
 import type { CrewRun } from "../../../../src/features/crews/model/crew";
-export type { CrewAgent, CrewCandidate, CrewDefinition, CrewPolicy, CrewRole, CrewRun, SavedCrewAgent } from "../../../../src/features/crews/model/crew";
+export type {
+  CrewAgent,
+  CrewCandidate,
+  CrewDefinition,
+  CrewPolicy,
+  CrewRole,
+  CrewRun,
+  SavedCrewAgent,
+} from "../../../../src/features/crews/model/crew";
 
 export type CrewRunView = CrewRun & {
   tasks: HostTask[];
@@ -16,7 +24,7 @@ export type CrewPendingInput = {
   taskId: string;
   sessionId: string;
   targetRunId?: string;
-  approval?: { requestId: string; decided?: boolean };
+  approval?: { requestId: number; occurrenceId?: string; decided?: "allow" | "deny" | "cancelled" };
   text?: string;
   question?: import("../../features/workspace/wire").UserQuestionPrompt;
 };

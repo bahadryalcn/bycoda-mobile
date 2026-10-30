@@ -52,6 +52,7 @@ vi.mock("@/ui/primitives", () => {
   return {
     Body: Wrap,
     Stack: Wrap,
+    Disclosure: Wrap,
     Row: Wrap,
     Sheet: ({
       children,

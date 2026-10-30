@@ -138,12 +138,19 @@ export function GitManagement({ scope, onClose, onBusyChange, registerExit }: {
         {tab === "tags" && <Button tone="quiet" label={labels.createTag} disabled={unavailable} onPress={() => open("createTag")} />}
         {tab === "remotes" && <Button tone="quiet" label={labels.addRemote} disabled={unavailable} onPress={() => open("addRemote")} />}
         {tab === "operations" && <>
-          <NavigationRow label={copy("Dalları birleştir veya yeniden tabanla", "Merge or rebase branches")} detail={copy("Mevcut dal üzerinde çalışır", "Acts on the current branch")}
-            onPress={() => open("merge")} trailing={<ActionMenu label={copy("Dal işlemi", "Branch action")} actions={["merge", "rebase"].map((action) => ({ key: action, label: labels[action as GitManagementAction], disabled: unavailable, onPress: () => open(action as GitManagementAction) }))} />} />
-          <NavigationRow label={copy("Commit uygula veya tersine çevir", "Apply or revert a commit")} onPress={() => open("cherryPick")}
-            trailing={<ActionMenu label={copy("Commit işlemi", "Commit action")} actions={["cherryPick", "revert"].map((action) => ({ key: action, label: labels[action as GitManagementAction], disabled: unavailable, onPress: () => open(action as GitManagementAction) }))} />} />
-          <NavigationRow label={copy("Dal geçmişini geri al", "Undo branch history")} onPress={() => open("undoCommit")}
-            trailing={<ActionMenu label={copy("Geçmişi değiştir", "Rewrite history")} actions={["undoCommit", "reset"].map((action) => ({ key: action, label: labels[action as GitManagementAction], destructive: true, disabled: unavailable, onPress: () => open(action as GitManagementAction) }))} />} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+            <View style={{ flex: 1, minWidth: 0 }}><NavigationRow variant="plain" label={copy("Dalları birleştir veya yeniden tabanla", "Merge or rebase branches")} detail={copy("Mevcut dal üzerinde çalışır", "Acts on the current branch")}
+              onPress={() => open("merge")} /></View>
+            <ActionMenu label={copy("Dal işlemi", "Branch action")} actions={["merge", "rebase"].map((action) => ({ key: action, label: labels[action as GitManagementAction], disabled: unavailable, onPress: () => open(action as GitManagementAction) }))} />
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+            <View style={{ flex: 1, minWidth: 0 }}><NavigationRow variant="plain" label={copy("Commit uygula veya tersine çevir", "Apply or revert a commit")} onPress={() => open("cherryPick")} /></View>
+            <ActionMenu label={copy("Commit işlemi", "Commit action")} actions={["cherryPick", "revert"].map((action) => ({ key: action, label: labels[action as GitManagementAction], disabled: unavailable, onPress: () => open(action as GitManagementAction) }))} />
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+            <View style={{ flex: 1, minWidth: 0 }}><NavigationRow variant="plain" label={copy("Dal geçmişini geri al", "Undo branch history")} onPress={() => open("undoCommit")} /></View>
+            <ActionMenu label={copy("Geçmişi değiştir", "Rewrite history")} actions={["undoCommit", "reset"].map((action) => ({ key: action, label: labels[action as GitManagementAction], destructive: true, disabled: unavailable, onPress: () => open(action as GitManagementAction) }))} />
+          </View>
         </>}
         {tab === "pr" && <>
           <QueryState query={pr} /><QueryState query={remotes} /><QueryState query={destination} />
@@ -153,11 +160,14 @@ export function GitManagement({ scope, onClose, onBusyChange, registerExit }: {
           <Button tone="quiet" label={labels.createPr} disabled={unavailable || !pr.isSuccess || !remotes.isSuccess || !remotes.data?.length || !destination.isSuccess} onPress={() => open("createPr")} />
         </>}
       </View>}
-      renderItem={({ item }) => <NavigationRow label={`${item.remote ? `${item.remote}/` : ""}${item.name}${item.current ? " · HEAD" : ""}`} detail={item.url ? safeRemoteUrl(item.url) : undefined}
+      renderItem={({ item }) => <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+        <View style={{ flex: 1, minWidth: 0 }}><NavigationRow variant="plain" label={`${item.remote ? `${item.remote}/` : ""}${item.name}${item.current ? " · HEAD" : ""}`} detail={item.url ? safeRemoteUrl(item.url) : undefined}
         onPress={() => open(item.kind === "remote" ? "removeRemote" : item.kind === "tag" ? "deleteTag" : item.remote ? "deleteRemoteBranch" : "renameBranch", item)}
-        trailing={<ActionMenu label={copy("Kayıt işlemleri", "Entry actions")} actions={
+        /></View>
+        <ActionMenu label={copy("Kayıt işlemleri", "Entry actions")} actions={
           (item.kind === "remote" ? ["removeRemote"] : item.kind === "tag" ? ["deleteTag"] : item.remote ? ["deleteRemoteBranch"] : ["renameBranch", "deleteBranch"])
-            .map((action) => ({ key: action, label: labels[action as GitManagementAction], destructive: action !== "renameBranch", disabled: unavailable || (item.current && action === "deleteBranch"), onPress: () => open(action as GitManagementAction, item) }))} />} />} />
+            .map((action) => ({ key: action, label: labels[action as GitManagementAction], destructive: action !== "renameBranch", disabled: unavailable || (item.current && action === "deleteBranch"), onPress: () => open(action as GitManagementAction, item) }))} />
+      </View>} />
     {editor && <Sheet visible size="form" title={labels[editor.value.action]} dirty={JSON.stringify(editor.opening) !== JSON.stringify(editor.value)} dismissible={!busy} onClose={close}>
       <Body mono>{editor.branch ?? "HEAD"} · {editor.head}</Body>
       <Button tone="quiet" label={copy("Yenile", "Refresh")} busy={preflighting} disabled={busy || uncertain} onPress={refreshEditor} />

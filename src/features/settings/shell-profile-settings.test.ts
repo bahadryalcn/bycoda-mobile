@@ -14,6 +14,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label);
   return { Stack: Wrapper, Body: Wrapper, Sheet: Wrapper, QueryState: () => null, ErrorText: () => null, MutationState: () => null,
+    NavigationRow: Button,
     Notice: ({ message }: { message: string }) => createElement("p", null, message), Button,
     SelectField: ({ value, onChange, disabled }: { value: string; onChange: (value: string) => void; disabled: boolean }) => createElement("select", { value, disabled, onChange: (event: import("react").ChangeEvent<HTMLSelectElement>) => onChange(event.target.value) }, createElement("option", { value: "" }, "Default"), createElement("option", { value: "sh" }, "Shell")),
     FormActions: ({ submitLabel, onSubmit, disabled }: { submitLabel: string; onSubmit: () => void; disabled: boolean }) => createElement(Button, { label: submitLabel, onPress: onSubmit, disabled }),

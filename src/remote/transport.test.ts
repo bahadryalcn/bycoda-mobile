@@ -29,6 +29,235 @@ const result = (value: unknown) =>
     headers: { "Content-Type": "application/json" },
   });
 
+const deviceEffects = [
+  ["devices.setup", { agentAccess: false }],
+  ["devices.stop", {}],
+  ["devices.start", {}],
+  ["devices.boot", { deviceId: "simulator" }],
+  ["devices.capture", { deviceId: "simulator" }],
+  ["devices.action", { deviceId: "simulator", action: { type: "home" } }],
+  [
+    "devices.preview",
+    { deviceId: "simulator", requestId: "original-preview", url: "exp://127.0.0.1:8081" },
+  ],
+  [
+    "devices.preview.mobile.start",
+    {
+      projectId: "project",
+      deviceId: "simulator",
+      requestId: "original-preview",
+      url: "exp://127.0.0.1:8081",
+    },
+  ],
+] as const;
+
+describe("admitted device HTTP delivery", () => {
+  it.each(deviceEffects)(
+    "keeps explicit admitted %s 400/401 outcomes unknown without replay",
+    async (method, params) => {
+      for (const status of [400, 401]) {
+        const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: `Host authority retired Bearer ${credential}`,
+              code: "HOST_DEVICE_OPERATION_UNCONFIRMED",
+              delivery: "unknown",
+            }),
+            { status },
+          ),
+        );
+        const error = await new HostTransport(machine, async () => credential, fetcher)
+          .request(method, { ...params }, { retry: true })
+          .catch((reason: unknown) => reason);
+        expect(error).toMatchObject({ kind: status === 401 ? "auth" : "host", uncertain: true });
+        expect(String(error)).toContain("outcome is unknown");
+        expect(String(error)).toContain("Do not repeat");
+        expect(String(error)).not.toContain(credential);
+        expect(error).not.toHaveProperty("result");
+        expect(error).not.toHaveProperty("frame");
+        expect(fetcher).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+
+  it.each(deviceEffects)("keeps real predispatch %s denials definite", async (method, params) => {
+    for (const status of [400, 401]) {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: status === 401 ? "Device credential is revoked" : "Invalid device input",
+          }),
+          { status, headers: status === 401 ? { "X-Bycoda-Auth-Stage": "before-dispatch" } : {} },
+        ),
+      );
+      await expect(
+        new HostTransport(machine, async () => credential, fetcher).request(
+          method,
+          { ...params },
+          { retry: true },
+        ),
+      ).rejects.toMatchObject({ kind: status === 401 ? "auth" : "host", uncertain: false });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it.each([
+    { code: "HOST_DEVICE_OPERATION_UNCONFIRMED" },
+    { delivery: "unknown" },
+    { code: "OTHER_UNCONFIRMED", delivery: "unknown" },
+    { code: "HOST_DEVICE_OPERATION_UNCONFIRMED", delivery: "not-sent" },
+  ])("requires the exact complete admitted marker %j", async (metadata) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "Invalid device input", ...metadata }), {
+        status: 400,
+      }),
+    );
+    await expect(
+      new HostTransport(machine, async () => credential, fetcher).request("devices.capture", {
+        deviceId: "simulator",
+      }),
+    ).rejects.toMatchObject({ kind: "host", uncertain: false });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["malformed", "truncated", "oversized"] as const)(
+    "keeps an effect's %s 400/401 body conservative and bounded",
+    async (damage) => {
+      for (const status of [400, 401]) {
+        const cancel = vi.fn();
+        const body =
+          damage === "truncated"
+            ? new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.error(new Error("response truncated"));
+                },
+              })
+            : new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(
+                    new TextEncoder().encode(damage === "malformed" ? "not-json" : "{}"),
+                  );
+                  controller.close();
+                },
+                cancel,
+              });
+        const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+          new Response(body, {
+            status,
+            headers: damage === "oversized" ? { "Content-Length": String(17 * 1024 * 1024) } : {},
+          }),
+        );
+        const error = await new HostTransport(machine, async () => credential, fetcher)
+          .request("devices.capture", { deviceId: "simulator" }, { retry: true })
+          .catch((reason: unknown) => reason);
+        expect(error).toMatchObject({
+          kind: status === 401 ? "auth" : damage === "truncated" ? "network" : "protocol",
+          uncertain: true,
+        });
+        expect(fetcher).toHaveBeenCalledTimes(1);
+        if (damage === "oversized") expect(cancel).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+
+  it.each([{}, { error: 42 }, { result: { frame: "private" } }])(
+    "keeps an effect's malformed 401 rejection envelope %j conservative",
+    async (envelope) => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(new Response(JSON.stringify(envelope), { status: 401 }));
+      await expect(
+        new HostTransport(machine, async () => credential, fetcher).request(
+          "devices.capture",
+          { deviceId: "simulator" },
+          { retry: true },
+        ),
+      ).rejects.toMatchObject({ kind: "auth", uncertain: true });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(["projects.list", "devices.status", "devices.preview.mobile.status"])(
+    "does not promote pure %s HTTP errors to device uncertainty",
+    async (method) => {
+      for (const status of [400, 401]) {
+        const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: "Read unavailable",
+              code: "HOST_DEVICE_OPERATION_UNCONFIRMED",
+              delivery: "unknown",
+            }),
+            { status },
+          ),
+        );
+        await expect(
+          new HostTransport(machine, async () => credential, fetcher).request(method, {
+            projectId: "project",
+            requestId: "original-preview",
+          }),
+        ).rejects.toMatchObject({ kind: status === 401 ? "auth" : "host", uncertain: false });
+        expect(fetcher).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+
+  it("never retries an HTTP capture after network loss despite the legacy read name", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new TypeError("offline after dispatch"));
+    await expect(
+      new HostTransport(machine, async () => credential, fetcher).request(
+        "devices.capture",
+        { deviceId: "simulator" },
+        { retry: true },
+      ),
+    ).rejects.toMatchObject({ kind: "network", uncertain: true });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("rechecks the app lock after bounded error-body reading before exposing Host text", async () => {
+    let finish!: () => void;
+    let locked = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        finish = () => {
+          locked = true;
+          controller.enqueue(
+            new TextEncoder().encode(
+              JSON.stringify({
+                error: "private host content",
+                code: "HOST_DEVICE_OPERATION_UNCONFIRMED",
+                delivery: "unknown",
+              }),
+            ),
+          );
+          controller.close();
+        };
+      },
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(body, { status: 401 }));
+    const pending = new HostTransport(
+      machine,
+      async () => credential,
+      fetcher,
+      () => {
+        if (locked) throw new Error("locked");
+      },
+    )
+      .request("devices.capture", { deviceId: "simulator" })
+      .catch((reason: unknown) => reason);
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    finish();
+    const error = await pending;
+    expect(error).toMatchObject({ kind: "auth", uncertain: true });
+    expect(String(error)).not.toContain("private host content");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("mobile host transport", () => {
   beforeEach(() => {
     access.locked = false;
@@ -238,33 +467,53 @@ describe("mobile host transport", () => {
     expect(writeFetcher).toHaveBeenCalledTimes(1);
   });
 
-  it.each([502, 503, 504])("retries a non-host HTTP %i response only for a known read", async (status) => {
-    const read = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response("<html>unavailable</html>", { status }))
-      .mockResolvedValueOnce(result([]));
-    await expect(new HostTransport(machine, async () => credential, read).request("projects.list"))
-      .resolves.toEqual([]);
-    expect(read).toHaveBeenCalledTimes(2);
-    const write = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response("<html>unavailable</html>", { status }));
-    await expect(new HostTransport(machine, async () => credential, write).request("commands.dispatch", {}, { retry: true }))
-      .rejects.toMatchObject({ kind: "network", uncertain: true });
-    expect(write).toHaveBeenCalledTimes(1);
-  });
+  it.each([502, 503, 504])(
+    "retries a non-host HTTP %i response only for a known read",
+    async (status) => {
+      const read = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(new Response("<html>unavailable</html>", { status }))
+        .mockResolvedValueOnce(result([]));
+      await expect(
+        new HostTransport(machine, async () => credential, read).request("projects.list"),
+      ).resolves.toEqual([]);
+      expect(read).toHaveBeenCalledTimes(2);
+      const write = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(new Response("<html>unavailable</html>", { status }));
+      await expect(
+        new HostTransport(machine, async () => credential, write).request(
+          "commands.dispatch",
+          {},
+          { retry: true },
+        ),
+      ).rejects.toMatchObject({ kind: "network", uncertain: true });
+      expect(write).toHaveBeenCalledTimes(1);
+    },
+  );
 
-  it.each([200, 400, 403, 500])("does not disguise a malformed HTTP %i response as a transient gateway", async (status) => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response("invalid", { status }));
-    await expect(new HostTransport(machine, async () => credential, fetcher).request("projects.list"))
-      .rejects.toMatchObject({ kind: "protocol", uncertain: false });
-    expect(fetcher).toHaveBeenCalledTimes(1);
-  });
+  it.each([200, 400, 403, 500])(
+    "does not disguise a malformed HTTP %i response as a transient gateway",
+    async (status) => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(new Response("invalid", { status }));
+      await expect(
+        new HostTransport(machine, async () => credential, fetcher).request("projects.list"),
+      ).rejects.toMatchObject({ kind: "protocol", uncertain: false });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("preserves structured host errors even when the HTTP status is transient", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(
-      JSON.stringify({ error: "Host identity changed" }), { status: 503 },
-    ));
-    await expect(new HostTransport(machine, async () => credential, fetcher).request("projects.list"))
-      .rejects.toMatchObject({ kind: "identity" });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "Host identity changed" }), { status: 503 }),
+      );
+    await expect(
+      new HostTransport(machine, async () => credential, fetcher).request("projects.list"),
+    ).rejects.toMatchObject({ kind: "identity" });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
@@ -371,15 +620,23 @@ describe("mobile host transport", () => {
   });
 });
 
-
 describe("whole mobile request budget", () => {
   it("times out stalled credentials without fetching or retrying beyond the deadline", async () => {
     vi.useFakeTimers();
     let finish!: (value: string) => void;
-    const credentials = vi.fn(() => new Promise<string>((resolve) => { finish = resolve; }));
+    const credentials = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve;
+        }),
+    );
     const fetcher = vi.fn<typeof fetch>();
     try {
-      const pending = new HostTransport(machine, credentials, fetcher).request("projects.list", {}, { timeoutMs: 1000 });
+      const pending = new HostTransport(machine, credentials, fetcher).request(
+        "projects.list",
+        {},
+        { timeoutMs: 1000 },
+      );
       const rejected = expect(pending).rejects.toMatchObject({ kind: "timeout", uncertain: false });
       await vi.advanceTimersByTimeAsync(1000);
       await rejected;
@@ -388,14 +645,22 @@ describe("whole mobile request budget", () => {
       expect(credentials).toHaveBeenCalledOnce();
       expect(fetcher).not.toHaveBeenCalled();
       expect(vi.getTimerCount()).toBe(0);
-    } finally { vi.useRealTimers(); }
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("aborts stalled credentials and ignores a late credential", async () => {
     let finish!: (value: string) => void;
     const fetcher = vi.fn<typeof fetch>();
     const controller = new AbortController();
-    const pending = new HostTransport(machine, () => new Promise<string>((resolve) => { finish = resolve; }), fetcher)
-      .request("sessions.create", {}, { signal: controller.signal });
+    const pending = new HostTransport(
+      machine,
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve;
+        }),
+      fetcher,
+    ).request("sessions.create", {}, { signal: controller.signal });
     const rejected = expect(pending).rejects.toMatchObject({ kind: "aborted", uncertain: false });
     await Promise.resolve();
     controller.abort();
@@ -407,15 +672,23 @@ describe("whole mobile request budget", () => {
   it("rejects a chunked HTTPS response at limit+1 and aborts its request", async () => {
     const cancel = vi.fn();
     let pulls = 0;
-    const response = new Response(new ReadableStream<Uint8Array>({
-      pull(controller) {
-        pulls++;
-        controller.enqueue(new Uint8Array(pulls === 1 ? 16 * 1024 * 1024 : 1));
-      }, cancel,
-    }, { highWaterMark: 0 }), { headers: { "content-length": "1" } });
+    const response = new Response(
+      new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            pulls++;
+            controller.enqueue(new Uint8Array(pulls === 1 ? 16 * 1024 * 1024 : 1));
+          },
+          cancel,
+        },
+        { highWaterMark: 0 },
+      ),
+      { headers: { "content-length": "1" } },
+    );
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response);
-    await expect(new HostTransport(machine, async () => credential, fetcher).request("projects.list"))
-      .rejects.toMatchObject({ kind: "protocol" });
+    await expect(
+      new HostTransport(machine, async () => credential, fetcher).request("projects.list"),
+    ).rejects.toMatchObject({ kind: "protocol" });
     expect(pulls).toBe(2);
     expect(cancel).toHaveBeenCalledOnce();
     expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(true);

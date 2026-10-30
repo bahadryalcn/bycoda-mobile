@@ -7,7 +7,9 @@ import type {
   ProviderInboxCommentProps,
 } from "./provider-component-types";
 import { inboxReplyTarget } from "../../../../src/features/inbox/model/remoteInbox";
-import { Badge, Body, Button, Card, Notice, QueryState, Row, Section } from "@/ui/primitives";
+import { Badge, Body, Button, Notice, QueryState, Row, Section, Stack } from "@/ui/primitives";
+import { uiStyles } from "@/ui/styles";
+import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 
 export {
@@ -61,16 +63,17 @@ export function ProviderInboxComment({
   const copy = useCopy();
   const [expanded, setExpanded] = useState(false);
   return (
-    <Card>
+    <Stack style={{ paddingVertical: space.sm }}>
       <Row>
-        <Body muted>{comment.author}</Body>
+        <Body style={[uiStyles.label, uiStyles.grow]}>{comment.author}</Body>
+        <Body muted style={uiStyles.caption}>{stamp(comment.createdAt)}</Body>
         {comment.resolved ? <Badge label={copy("Çözüldü", "Resolved")} tone="success" /> : null}
       </Row>
       <MessageText text={comment.body} role="assistant" />
-      <Body muted>{stamp(comment.createdAt)}</Body>
       {inboxReplyTarget(provider, comment) ? (
         <Button
           label={copy("Yanıtla", "Reply")}
+          tone="quiet"
           disabled={disabled}
           onPress={() => onReply(comment)}
         />
@@ -95,6 +98,6 @@ export function ProviderInboxComment({
           onPress={() => setExpanded(true)}
         />
       ) : null}
-    </Card>
+    </Stack>
   );
 }

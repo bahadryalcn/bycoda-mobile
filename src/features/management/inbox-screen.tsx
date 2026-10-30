@@ -104,7 +104,8 @@ function AttentionInboxScreen() {
           <NavigationRow
             label={item.title}
             detail={item.detail}
-            detailLines={1}
+            detailLines={2}
+            emphasized={needsAttention}
             icon={
               <View
                 accessible={false}
