@@ -1,3 +1,4 @@
+import { RetiredDraftError } from "@/state/local-draft-storage";
 type Registration = { flush: () => Promise<void> };
 const drafts = new Map<string, Registration>();
 
@@ -12,5 +13,8 @@ export function registerWorkspaceDraft(id: string, flush: () => Promise<void>) {
 
 /** Failed storage leaves the current computer and all editors available for retry. */
 export async function flushWorkspaceDrafts() {
-  for (const registration of [...drafts.values()]) await registration.flush();
+  for (const registration of [...drafts.values()]) {
+    try { await registration.flush(); }
+    catch (cause) { if (!(cause instanceof RetiredDraftError)) throw cause; }
+  }
 }

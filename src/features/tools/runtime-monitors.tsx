@@ -1,65 +1,82 @@
 import { useRef, useState } from "react";
 import { useHostMutation, useHostQuery, useHostReadActive } from "@/state/queries";
-import { useMachines } from "@/state/machines";
-import { Body, Button, FormActions, ErrorText, Field, MutationState, NavigationGroup, NavigationRow, Notice, QueryState, Sheet } from "@/ui/primitives";
+import { useActiveMachine, useMachines } from "@/state/machines";
+import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
+import { Body, Button, Disclosure, FormActions, Field, MutationState, NavigationGroup, NavigationRow, Notice, QueryState, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { monitorUrl, readMonitors, uncertainMonitorWrite, type RuntimeMonitor } from "./runtime-monitor-model";
 
-export function RuntimeMonitors({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+export function RuntimeMonitors({ projectId, projectName, onClose }: { projectId: string; projectName?: string; onClose: () => void }) {
   const copy = useCopy();
-  const machineId = useMachines((state) => state.activeId);
+  const machine = useActiveMachine();
+  const [opening] = useState(() => ({ projectId, projectName, machineName: machine?.name, reviewed: reviewedMachine(machine) }));
+  const latestProject = useRef(projectId);
+  latestProject.current = projectId;
+  const invalidated = useRef(false);
+  const current = () => {
+    if (latestProject.current !== opening.projectId || !isReviewedMachine(opening.reviewed, useMachines.getState())) invalidated.current = true;
+    return !invalidated.current;
+  };
+  const validScope = current();
   const active = useHostReadActive();
   const [url, setUrl] = useState("");
   const [intent, setIntent] = useState<{ url: string } | { monitor: RuntimeMonitor }>();
-  const [error, setError] = useState<unknown>();
+  const [error, setError] = useState<string>();
   const [reconciling, setReconciling] = useState(false);
   const flight = useRef(false);
-  const query = useHostQuery<RuntimeMonitor[]>(["runtime-monitors", projectId], "runtimeLogs.monitors.list", { projectId }, {
+  const query = useHostQuery<RuntimeMonitor[]>(["runtime-monitors", opening.projectId], "runtimeLogs.monitors.list", { projectId: opening.projectId }, {
+    enabled: validScope && active,
     interval: 15_000,
-    queryFn: async (client, signal) => readMonitors(await client.request("runtimeLogs.monitors.list", { projectId }, { signal }), projectId),
+    queryFn: async (client, signal) => readMonitors(await client.request("runtimeLogs.monitors.list", { projectId: opening.projectId }, { signal }), opening.projectId),
   });
-  const start = useHostMutation<RuntimeMonitor>("runtimeLogs.monitors.start", ["runtime-monitors", projectId]);
-  const stop = useHostMutation<{ stopped: true }>("runtimeLogs.monitors.stop", ["runtime-monitors", projectId]);
+  const start = useHostMutation<RuntimeMonitor>("runtimeLogs.monitors.start", ["runtime-monitors", opening.projectId]);
+  const stop = useHostMutation<{ stopped: true }>("runtimeLogs.monitors.stop", ["runtime-monitors", opening.projectId]);
   const busy = start.isPending || stop.isPending || reconciling;
   const uncertain = uncertainMonitorWrite(start.error) || uncertainMonitorWrite(stop.error);
-  const disabled = busy || uncertain || !active || !query.data || query.isError || query.isFetching;
+  const disabled = busy || uncertain || !active || !validScope || !query.data || query.isError || query.isFetching;
   const refresh = async () => {
-    if (flight.current || !active) return;
+    if (flight.current || !active || !current()) return;
+    flight.current = true;
     setReconciling(true);
     try {
       const result = await query.refetch();
-      if (!result.isError && useMachines.getState().activeId === machineId) { start.reset(); stop.reset(); setIntent(undefined); }
-    } finally { setReconciling(false); }
+      if (!result.isError && current()) { start.reset(); stop.reset(); setIntent(undefined); }
+    } finally { flight.current = false; setReconciling(false); }
   };
   const act = () => {
-    if (flight.current || disabled || !intent || useMachines.getState().activeId !== machineId) return;
-    if ("monitor" in intent && !query.data?.some((row) => row.id === intent.monitor.id && row.projectId === projectId && row.url === intent.monitor.url)) {
+    if (flight.current || disabled || !intent || !current()) return;
+    if ("monitor" in intent && !query.data?.some((row) => row.id === intent.monitor.id && row.projectId === opening.projectId && row.url === intent.monitor.url)) {
       setIntent(undefined); return;
     }
     flight.current = true;
-    const request = "url" in intent ? start.mutateAsync({ projectId, url: intent.url }) : stop.mutateAsync({ projectId, id: intent.monitor.id });
+    const submittedUrl = url;
+    const request = "url" in intent ? start.mutateAsync({ projectId: opening.projectId, url: intent.url }) : stop.mutateAsync({ projectId: opening.projectId, id: intent.monitor.id });
     void request.then(() => {
-      if (useMachines.getState().activeId !== machineId) return;
-      if ("url" in intent) setUrl("");
+      if (!current()) return;
+      if ("url" in intent) setUrl((value) => value === submittedUrl ? "" : value);
       setIntent(undefined);
     }).catch(() => {}).finally(() => { flight.current = false; });
   };
-  return <Sheet visible title={copy("Günlük izleyicileri", "Log monitors")} size="full" dismissible={!busy} onClose={onClose}>
-    <Notice message={copy("Başlatma, seçili bilgisayarda bağımsız bir tarayıcı açar. İzleyici ekran kapansa da durdurulana kadar çalışır.", "Starting opens an independent browser on the selected computer. A monitor keeps running after this screen closes until stopped.")} />
-    <QueryState query={query} empty={query.data?.length === 0} emptyTitle={copy("Etkin izleyici yok.", "No active monitors.")} />
-    <Button tone="quiet" label={copy("Yenile", "Refresh")} busy={reconciling} disabled={busy || query.isFetching || !active} onPress={() => { void refresh(); }} />
+  const consequence = copy("Başlatma, seçili bilgisayarda bağımsız bir tarayıcı açar. İzleyici ekran kapansa da durdurulana kadar çalışır.", "Starting opens an independent browser on the selected computer. A monitor keeps running after this screen closes until stopped.");
+  return <Sheet visible title={copy("Günlük izleyicileri", "Log monitors")} size={(query.data?.length ?? 0) > 2 ? "form" : "compact"} dirty={!!url.trim()} dismissible={!busy} onClose={onClose}>
+    <Body muted>{[opening.machineName, opening.projectName ?? opening.projectId].filter(Boolean).join(" · ")}</Body>
+    {!validScope ? <Notice tone="warning" message={copy("Bağlantı veya proje değişti. Devam etmek için bu ekranı yeniden açın.", "The connection or project changed. Reopen this view to continue.")} /> : <QueryState query={query} empty={query.data?.length === 0} emptyTitle={copy("Etkin izleyici yok.", "No active monitors.")} />}
+    <Button tone="quiet" label={copy("Yenile", "Refresh")} busy={reconciling} disabled={busy || query.isFetching || !active || !validScope} onPress={() => { void refresh(); }} />
     {uncertain ? <Notice tone="warning" message={copy("İşlemin sonucu bilinmiyor. Yeniden işlem yapmadan önce izleyici listesini yenile.", "The operation outcome is unknown. Refresh the monitor list before another action.")} /> : null}
-    <NavigationGroup>{(query.data ?? []).map((monitor) => <NavigationRow key={monitor.id} label={monitor.url}
+    <NavigationGroup>{(validScope ? query.data ?? [] : []).map((monitor) => <NavigationRow key={monitor.id} label={monitor.url}
       detail={monitor.sourceId ? copy("Çalışıyor", "Running") : copy("Başlatılıyor", "Starting")}
       disabled={disabled} onPress={() => { setError(undefined); setIntent({ monitor }); }} />)}</NavigationGroup>
-    <Field label={copy("Port veya HTTP(S) adresi", "Port or HTTP(S) URL")} value={url} editable={!busy} autoCapitalize="none" autoCorrect={false} maxLength={2048} onChangeText={(value) => { setUrl(value); setError(undefined); setIntent(undefined); }} />
+    <Field label={copy("Port veya HTTP(S) adresi", "Port or HTTP(S) URL")} value={url} error={error} editable={!busy && validScope} autoCapitalize="none" autoCorrect={false} maxLength={2048} onChangeText={(value) => { setUrl(value); setError(undefined); setIntent(undefined); }} />
+    {!intent ? <Disclosure label={copy("Ayrıntılar", "Details")}><Body muted>{consequence}</Body></Disclosure> : null}
     {!intent ? <FormActions submitLabel={copy("İzleyici başlat", "Start monitor")} disabled={disabled || !url.trim() || (query.data?.length ?? 0) >= 8} onSubmit={() => {
-      try { setIntent({ url: monitorUrl(url) }); setError(undefined); } catch (error) { setError(error); }
-    }} feedback={<><ErrorText error={error} /><MutationState mutation={start} /><MutationState mutation={stop} /></>} /> : null}
+      try { setIntent({ url: monitorUrl(url) }); setError(undefined); } catch { setError(copy("1–65535 arasında bir port veya kimlik bilgisi içermeyen bir HTTP(S) adresi gir.", "Enter a port (1–65535) or an HTTP(S) URL without credentials.")); }
+    }} feedback={<><MutationState mutation={start} /><MutationState mutation={stop} /></>} /> : null}
 
     {intent ? <>
       <Body mono>{"url" in intent ? intent.url : intent.monitor.url}</Body>
-      <FormActions feedback={<> <Body>{"url" in intent ? copy("Bu adres için bilgisayarda günlük izleyicisi başlat?", "Start a log monitor on the computer for this URL?") : copy("Bu günlük izleyicisini durdur?", "Stop this log monitor?")}</Body> {error ? <ErrorText error={error} /> : null} <MutationState mutation={start} /><MutationState mutation={stop} /> </>}
+      {"url" in intent ? <Notice message={consequence} /> : null}
+      <Body>{"url" in intent ? copy("Bu adres için bilgisayarda günlük izleyicisi başlat?", "Start a log monitor on the computer for this URL?") : copy("Bu günlük izleyicisini durdur?", "Stop this log monitor?")}</Body>
+      <FormActions feedback={<><MutationState mutation={start} /><MutationState mutation={stop} /></>}
         submitLabel={"url" in intent ? copy("Başlat", "Start") : copy("Durdur", "Stop")} cancelLabel={copy("Vazgeç", "Cancel")}
         busy={busy} disabled={disabled} onCancel={() => setIntent(undefined)} onSubmit={act} />
     </> : null}

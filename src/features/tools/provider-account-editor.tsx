@@ -3,11 +3,8 @@ import { useActiveMachine } from "@/state/machines";
 import {
   Body,
   Button,
-  ConfirmationCard,
   Disclosure,
-  ErrorText,
   Field,
-  Row,
   Notice,
   SelectField,
   Sheet,
@@ -16,6 +13,7 @@ import {
 import { useCopy } from "@/ui/copy";
 import type { SessionScope } from "../workspace/session-types";
 import type { DesktopManagementReport } from "./provider-desktop-model";
+import { ProviderAccountActions, ProviderAccountReview } from "./provider-account-actions";
 import { useProviderAccountDelivery } from "./provider-account-delivery";
 import { validateAccountChange, type AccountMetadataChange } from "./provider-account-draft";
 export function ProviderAccountEditor({
@@ -38,7 +36,10 @@ export function ProviderAccountEditor({
     [error, setError] = useState<unknown>();
   const { draft, busy, receipt } = delivery;
   const value = draft.value;
-  const current = delivery.current();
+  const current = !!delivery.current();
+  const canMetadata = !!machine?.capabilities?.includes("providers.desktop.metadata.v1");
+  const canQuota = account.provider === "claude" && !!machine?.capabilities?.includes("providers.desktop.quotaRefresh.v1");
+  const changeSupported = value?.kind === "quotaRefresh" ? canQuota : canMetadata;
   const [showSavedSettings, setShowSavedSettings] = useState(false);
   const wasAvailable = useRef(current);
   wasAvailable.current ||= current;
@@ -62,82 +63,11 @@ export function ProviderAccountEditor({
     <Sheet
       visible
       title={copy("Hesap görünen ayarları", "Account display settings")}
-      size={!current && draft.ready && !showFields && !draft.error && !busy ? "compact" : "form"}
+      size="compact"
       onClose={onClose}
       dismissible={!busy}
       dirty={!!value && !value.pending && !value.finished}
-      footer={
-        review ? <><ErrorText error={error ?? delivery.error ?? draft.error} /><ConfirmationCard
-            tone="primary"
-            message={
-              review.kind === "quotaRefresh"
-                ? copy(
-                    "Bu hesabın Claude kotası bilgisayardan bir kez sorgulansın mı?",
-                    "Read this account's Claude quota once from the computer?",
-                  )
-                : review.kind === "default"
-                  ? copy(
-                      "Bu hesabı bu sağlayıcının gelecekteki konuşmaları için varsayılan yap?",
-                      "Make this account the default for this provider's future conversations?",
-                    )
-                  : copy(
-                      "İncelenen hesap ayarını bilgisayara kaydet?",
-                      "Save the reviewed account setting on the computer?",
-                    )
-            }
-            confirmLabel={
-              review.kind === "quotaRefresh"
-                ? copy("Kotayı yenile", "Refresh quota")
-                : copy("Kaydet", "Save")
-            }
-            cancelLabel={copy("Vazgeç", "Cancel")}
-            busy={busy}
-            disabled={disabled}
-            onCancel={() => setReview(undefined)}
-            onConfirm={() => {
-              void delivery.submit(review).catch(setError);
-            }}
-          /></> : <Row>
-          <Button tone="quiet" label={copy("Kapat", "Close")} onPress={onClose} disabled={busy} />
-          {value?.pending ? (
-            <Button
-              label={copy("Sonucu oku", "Read result")}
-              onPress={() => {
-                void delivery.reconcile();
-              }}
-              disabled={!current || busy}
-            />
-          ) : !value?.finished ? (
-            <Button
-              label={
-                value?.kind === "quotaRefresh"
-                  ? copy("İsteği incele", "Review request")
-                  : copy("Değişiklikleri incele", "Review changes")
-              }
-              disabled={disabled || !!review}
-              onPress={() => {
-                try {
-                  if (!value) return;
-                  setReview(
-                    validateAccountChange(
-                      value.kind === "rename"
-                        ? { kind: "rename", label: value.label }
-                        : value.kind === "color"
-                          ? { kind: "color", color: value.color }
-                          : value.kind === "quotaRefresh"
-                            ? { kind: "quotaRefresh", confirm: "REFRESH_PROVIDER_QUOTA" }
-                            : { kind: "default", confirm: "DEFAULT_FOR_FUTURE_SESSIONS" },
-                    ),
-                  );
-                  setError(undefined);
-                } catch (cause) {
-                  setError(cause);
-                }
-              }}
-            />
-          ) : null}
-        </Row>
-      }
+
     >
       <Stack>
         <Body>
@@ -148,12 +78,7 @@ export function ProviderAccountEditor({
         {!showFields && value ? <Button tone="quiet" label={copy("Kaydedilmiş ayarları göster", "Show saved settings")}
           onPress={() => setShowSavedSettings(true)} /> : null}
         {showFields ? <>
-        <Notice
-          message={copy(
-            "Görünen ad ve renk bilgisayardaki hesap ayarlarını değiştirir. Varsayılan seçimi yalnız gelecekteki konuşmalar içindir; açık konuşmaların hesabı değişmez.",
-            "Display name and color change the computer's account settings. The default applies only to future conversations; open conversations keep their accounts.",
-          )}
-        />
+
 
         {value ? (
           <>
@@ -161,20 +86,21 @@ export function ProviderAccountEditor({
               label={copy("Değişiklik", "Change")}
               value={value.kind}
               options={[
-                { value: "rename", label: copy("Görünen ad", "Display name") },
-                { value: "color", label: copy("Renk", "Color") },
+                { value: "rename", disabled: !canMetadata, label: copy("Görünen ad", "Display name") },
+                { value: "color", disabled: !canMetadata, label: copy("Renk", "Color") },
                 {
                   value: "default",
+                  disabled: !canMetadata,
                   label: copy(
                     "Gelecek konuşmalar için varsayılan",
                     "Default for future conversations",
                   ),
                 },
-                ...(account.provider === "claude" &&
-                machine?.capabilities?.includes("providers.desktop.quotaRefresh.v1")
+                ...(account.provider === "claude" && (canQuota || value.kind === "quotaRefresh")
                   ? [
                       {
                         value: "quotaRefresh",
+                        disabled: !canQuota,
                         label: copy("Claude kotasını yenile", "Refresh Claude quota"),
                       },
                     ]
@@ -188,7 +114,7 @@ export function ProviderAccountEditor({
                 label={copy("Görünen ad", "Display name")}
                 value={value.label}
                 maxLength={48}
-                editable={!disabled && !review}
+                editable={!disabled && canMetadata && !review}
                 onChangeText={(label) => draft.setValue({ ...value, label })}
               />
             ) : value.kind === "color" ? (
@@ -209,58 +135,39 @@ export function ProviderAccountEditor({
                     ["orange", copy("Turuncu", "Orange")],
                   ].map(([color, label]) => ({ value: color, label })),
                 ]}
-                disabled={disabled || !!review}
+                disabled={disabled || !canMetadata || !!review}
                 onChange={(color) =>
                   draft.setValue({ ...value, color: color === "auto" ? null : color })
                 }
               />
             ) : value.kind === "quotaRefresh" ? (
-              <Notice
-                message={copy(
+              <Body muted>
+                {copy(
                   "Bilgisayar Claude kotasını bir kez sorgular. Oturum açılmaz veya kimlik yenilenmez; otomatik tekrar yoktur. Hesap başına beş dakika bekleme uygulanır.",
                   "The computer reads Claude quota once. It does not sign in or renew authentication, and does not retry automatically. Each account has a five-minute cooldown.",
                 )}
-              />
-            ) : (
-              <Body>
-                {copy(
-                  "Bu hesap bundan sonra yeni konuşmalarda varsayılan olacak.",
-                  "This account will be the default for new conversations.",
-                )}
               </Body>
+            ) : (
+              <Body muted>{copy(
+                "Bu hesap bundan sonra yeni konuşmalarda varsayılan olacak.",
+                "This account will be the default for new conversations.",
+              )}</Body>
             )}
-            {value.pending ? (
-              <Notice
-                tone="warning"
-                message={copy(
-                  "Kaydedilen işlemin yalnız sonucu okunur; istek yeniden gönderilmez.",
-                  "Only the saved operation's result is read; the request is never resent.",
-                )}
-              />
-            ) : null}
-            {value.finished ? (
-              <Notice
-                message={
-                  receipt?.state === "applied" && value.kind === "quotaRefresh"
-                    ? copy(
-                        "Kota gözlemi tamamlandı. Sonucu güncellenen hesap listesinde görün.",
-                        "Quota observation completed. View the result in the refreshed account list.",
-                      )
-                    : receipt?.state === "applied"
-                      ? copy(
-                          "Hesap ayarları kaydedildi. Yeni bir değişiklik için güncel listeyi yeniden açın.",
-                          "Account settings saved. Reopen the refreshed list for another change.",
-                        )
-                      : copy(
-                          "Değişiklik uygulanamadı. Güncel listeyi açıp yeniden inceleyin.",
-                          "The change could not be applied. Open the refreshed list and review again.",
-                        )
-                }
-              />
-            ) : null}
+
           </>
         ) : null}
+        {current && !changeSupported && !value?.pending && !value?.finished ? <Notice message={copy(
+          "Bu bilgisayar hesap ayarlarını değiştirmeyi desteklemiyor. Bilgisayardaki bycoda’yı güncelleyin.",
+          "This computer does not support account settings changes. Update bycoda on the computer.",
+        )} /> : null}
+        <ProviderAccountReview review={value?.pending || value?.finished ? undefined : review} />
         <Disclosure label={copy("Ayrıntılar", "Details")}>
+        <Body muted>
+          {copy(
+            "Görünen ad ve renk bilgisayardaki hesap ayarlarını değiştirir. Varsayılan seçimi yalnız gelecekteki konuşmalar içindir; açık konuşmaların hesabı değişmez.",
+            "Display name and color change the computer's account settings. The default applies only to future conversations; open conversations keep their accounts.",
+          )}
+        </Body>
           <Body muted>
           {copy(
             "Başka bir pencerede yapılan değişikliklerle çakışma olabilir. Kaydetmeden önce ayarlar yeniden kontrol edilir.",
@@ -269,8 +176,26 @@ export function ProviderAccountEditor({
         </Body>
         </Disclosure>
         </> : null}
-        {!review ? <ErrorText error={error ?? delivery.error ?? draft.error} /> : null}
+
+
       </Stack>
+      <ProviderAccountActions value={value} review={review} applied={receipt?.state === "applied"}
+        current={current} disabled={disabled || !changeSupported} busy={busy} error={error ?? delivery.error ?? draft.error}
+        onClose={onClose} onCancelReview={() => setReview(undefined)}
+        onConfirm={() => { if (review) void delivery.submit(review).catch(setError); }}
+        onReconcile={() => { void delivery.reconcile(); }}
+        onReview={() => {
+          try {
+            if (!value || disabled || !changeSupported || !delivery.current()) return;
+            setReview(validateAccountChange(
+              value.kind === "rename" ? { kind: "rename", label: value.label }
+                : value.kind === "color" ? { kind: "color", color: value.color }
+                : value.kind === "quotaRefresh" ? { kind: "quotaRefresh", confirm: "REFRESH_PROVIDER_QUOTA" }
+                : { kind: "default", confirm: "DEFAULT_FOR_FUTURE_SESSIONS" },
+            ));
+            setError(undefined);
+          } catch (cause) { setError(cause); }
+        }} />
     </Sheet>
   );
 }

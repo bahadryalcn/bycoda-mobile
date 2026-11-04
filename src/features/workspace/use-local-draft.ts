@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DraftStore, flushLatestDraft } from "./draft-store";
+import { useLocalDraftEpoch } from "@/state/use-local-draft-epoch";
+import { RetiredDraftError } from "@/state/local-draft-storage";
 
 type DraftState<T> = {
   status: "loading" | "load-error" | "ready";
@@ -37,6 +39,7 @@ export function useLocalDraft<T>(
   decode: (raw: string) => T,
   encode: (value: T | null) => string | null,
 ) {
+  const epoch = useLocalDraftEpoch(key);
   const [state, dispatch] = useReducer(reducer<T>, {
     status: "loading",
     value: null,
@@ -45,45 +48,51 @@ export function useLocalDraft<T>(
   });
   const store = useMemo(
     () => new DraftStore<T>(AsyncStorage, key, decode, encode),
-    [key, decode, encode],
+    [key, decode, encode, epoch],
   );
+  const owner = useRef(store); owner.current = store;
   const valueRef = useRef<T | null>(null);
   const setValue = useCallback((update: T | null | ((current: T | null) => T | null)) => {
+    if (store.retired) throw new RetiredDraftError();
+    if (owner.current !== store) throw new Error("This draft belongs to another editor.");
     const value =
       typeof update === "function"
         ? (update as (current: T | null) => T | null)(valueRef.current)
         : update;
     valueRef.current = value;
     dispatch({ type: "edit", value });
-  }, []);
+  }, [store]);
   const persist = useCallback(
     async (value?: T | null) => {
       try {
-        if (value === undefined)
-          await flushLatestDraft(
-            store,
-            () => valueRef.current,
-            (saved) => dispatch({ type: "saved", value: saved }),
-          );
+        if (store.retired) throw new RetiredDraftError();
+        if (value === undefined) {
+          if (owner.current !== store) throw new Error("This draft belongs to another editor.");
+          await flushLatestDraft(store, () => valueRef.current, saved => {
+            if (owner.current === store) dispatch({ type: "saved", value: saved });
+          });
+        }
         else {
           await store.persist(value);
-          dispatch({ type: "saved", value });
+          if (owner.current === store) dispatch({ type: "saved", value });
         }
       } catch (error) {
-        dispatch({ type: "save-error", error });
+        if (owner.current === store) dispatch({ type: "save-error", error });
         throw error;
       }
     },
     [store],
   );
   const load = useCallback(async () => {
+    if (owner.current !== store) return;
     dispatch({ type: "loading" });
     try {
       const value = await store.load();
+      if (owner.current !== store) return;
       valueRef.current = value;
       dispatch({ type: "loaded", value });
     } catch (error) {
-      dispatch({ type: "load-error", error });
+      if (owner.current === store) dispatch({ type: "load-error", error });
     }
   }, [store]);
   useEffect(() => {
@@ -103,9 +112,9 @@ export function useLocalDraft<T>(
     value: state.value,
     valueRef,
     setValue,
-    ready: state.status === "ready",
+    ready: state.status === "ready" && store.ready,
     error: state.error,
-    isStored: encode(state.value) === encode(state.saved) && !state.error,
+    isStored: store.ready && encode(state.value) === encode(state.saved) && !state.error,
     load,
     persist,
   };

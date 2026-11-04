@@ -1,21 +1,19 @@
 import { useMobileTheme } from "@/ui/theme";
-import { View } from "react-native";
-import ChevronRight from "lucide-react-native/icons/chevron-right";
 import type { Note } from "@/domain/types";
 import { useCopy } from "@/ui/copy";
-import { Body, PressableCard } from "@/ui/primitives";
-import { uiStyles } from "@/ui/styles";
-import { colors, fontSize, space } from "@/ui/tokens";
+import { NavigationRow } from "@/ui/primitives";
 import { stamp } from "../shared/format";
 
 export function NoteSummaryRow({
   note,
   disabled,
   onPress,
+  labelLines,
 }: {
   note: Note;
   disabled: boolean;
   onPress: () => void;
+  labelLines?: number;
 }) {
   useMobileTheme();
   const copy = useCopy();
@@ -33,29 +31,15 @@ export function NoteSummaryRow({
     .filter(Boolean)
     .join(" · ");
   return (
-    <PressableCard
-      label={[title, metadata, note.sourceCwd].filter(Boolean).join(". ")}
+    <NavigationRow
+      label={title}
+      labelLines={labelLines}
+      detail={excerpt || undefined}
+      detailLines={2}
+      metadata={metadata}
+      accessibilityLabel={[title, metadata, note.sourceCwd].filter(Boolean).join(". ")}
       disabled={disabled}
       onPress={onPress}
-      style={[
-        uiStyles.card,
-        { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.md },
-      ]}
-    >
-      <View style={[uiStyles.grow, { gap: space.xs }]}>
-        <Body numberOfLines={2} style={uiStyles.title}>
-          {title}
-        </Body>
-        {excerpt ? (
-          <Body muted numberOfLines={2} style={{ fontSize: fontSize.control, lineHeight: 20 }}>
-            {excerpt}
-          </Body>
-        ) : null}
-        <Body muted style={uiStyles.caption}>
-          {metadata}
-        </Body>
-      </View>
-      <ChevronRight size={15} color={colors.subtle} style={{ marginTop: 3 }} />
-    </PressableCard>
+    />
   );
 }

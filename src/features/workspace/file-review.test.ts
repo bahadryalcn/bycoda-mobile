@@ -22,7 +22,7 @@ vi.mock("react-native", () => ({
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => null }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, space: { screen: 16 } }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { mono: { fontSize: 13, lineHeight: 20 } } }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, params?: Record<string, string | number>) => en.replace(/\{(\w+)\}/g, (match, key: string) => String(params?.[key] ?? match)) }));
 vi.mock("@/ui/document-preview", () => ({
   DocumentPreview: ({ text }: { text: string }) => createElement("article", null, text),
   ProjectMedia: ({ path }: { path: string }) => createElement("article", { "data-media": true }, path),
@@ -38,10 +38,10 @@ vi.mock("@/ui/primitives", () => {
 let root: ReturnType<typeof createRoot>;
 const container = document.createElement("div");
 const onBack = vi.fn();
-async function render(path = "src/example.ts") {
+async function render(path = "src/example.ts", initialLine?: number) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   root ??= createRoot(container);
-  await act(async () => root.render(createElement(FileReview, { projectId: "project", cwd: "/checkout", path, onBack })));
+  await act(async () => root.render(createElement(FileReview, { projectId: "project", cwd: "/checkout", path, onBack, initialLine })));
 }
 afterEach(async () => { await act(async () => root?.unmount()); state.machine = { id: "machine-a" }; state.text = "const answer = 42;\n"; state.draft = { expected: "before", content: "preserved local work" }; state.active = true; state.methods = []; vi.unstubAllGlobals(); });
 
@@ -102,5 +102,28 @@ it("offers one selectable multiline source without numbers and keeps drafts read
   await click("Select text");
   expect(container.textContent).not.toContain("Başlık");
   expect(container.textContent).toContain("preserved local work");
+  expect(state.methods.every((method) => method === "files.read")).toBe(true);
+});
+
+
+it("distinguishes search context from a real preview limit through both source windows", async () => {
+  root = createRoot(container);
+  state.draft = null;
+  state.text = Array.from({ length: 10 }, (_, index) => `line-${index + 1}`).join("\n");
+  await render("src/example.ts", 6);
+  expect(container.textContent).toContain("Search result: line 6.");
+  expect(container.textContent).not.toContain("Preview limit reached.");
+  const click = async (label: string) => act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === label)!.click();
+  });
+  await click("Show file beginning");
+  expect(container.textContent).toContain("line-1");
+  expect(container.textContent).not.toContain("Preview limit reached.");
+  await click("Back to search result");
+  expect(container.textContent).toContain("Search result: line 6.");
+  expect(container.textContent).not.toContain("Preview limit reached.");
+  state.text += "\n" + "x".repeat(3000);
+  await render("src/example.ts", 6);
+  expect(container.textContent).toContain("Preview limit reached.");
   expect(state.methods.every((method) => method === "files.read")).toBe(true);
 });

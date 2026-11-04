@@ -1,23 +1,21 @@
+import { SocialCollectionFeedback, SocialRecordFeedback } from "./action-feedback";
 import { RecordCard } from "@/ui/record-card";
 import { MessageText } from "@/ui/message-text";
 import { socialLabel } from "./labels";
 import { CollectionRows } from "./collection-rows";
-import { ActionMenu, Sheet, Body, Button, Row } from "@/ui/primitives";
+import { ActionMenu, Body, Button, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 
 import { Status, statusLabel } from "../shared/status";
 import { canEditSocialDraft } from "../social-content";
 
-import { DraftEditor } from "./draft-editor";
 import type { DraftsPanelProps, SocialDraft } from "./types";
 import { CollectionSearch, useCollectionSearch } from "./collection-search";
 
 export function DraftsPanel({
   state,
   projectId,
-  selectedDraft,
-  closeEditor,
   dispatch,
   action,
   run,
@@ -31,26 +29,9 @@ export function DraftsPanel({
     ].filter(Boolean).join(" "), page);
   return (
     <>
-      {selectedDraft && (
-        <Sheet
-          visible
-          size="form"
-          title={copy("Taslağı düzenle", "Edit draft")}
-          onClose={closeEditor}
-        >
-          <DraftEditor
-            key={selectedDraft.id}
-            draft={selectedDraft}
-            thread={[...state.threads, ...(state.related?.threads ?? [])].find((thread) => thread.id === selectedDraft.threadId)}
-            profile={state.profiles.find(
-              (profile) => profile.projectId === selectedDraft.projectId,
-            )}
-            onClose={closeEditor}
-          />
-        </Sheet>
-      )}
       <CollectionSearch {...collection} />
-      <CollectionRows page={page}
+
+      <CollectionRows page={page} beforeRows={(visible) => <SocialCollectionFeedback action={action} collection="drafts" visible={visible} />}
         key={projectId ?? "all"}
         items={collection.visible}
         renderItem={(draft) => (
@@ -92,7 +73,7 @@ export function DraftsPanel({
                         "Approval applies to this text and recipient. Editing removes it.",
                       )}\n\n${account?.name ?? reviewedDraft.accountId}\n${reviewedDraft.contactId}${reviewedDraft.postId ? `\n${reviewedDraft.postId}` : ""}\n\n${reviewedDraft.text}${reviewedDraft.media?.length ? `\n\n${reviewedDraft.media.map((item) => [item.kind, item.url ?? item.uploadId, item.alt].filter(Boolean).join(" · ")).join("\n")}` : ""}`,
                       copy("Onayla", "Approve"),
-                      () => run("drafts.approve", { id: reviewedDraft.id, reviewedDraft }),
+                      () => run("drafts.approve", { id: reviewedDraft.id, reviewedDraft }), undefined, "default",
                     );
                   }}
                 />
@@ -112,7 +93,7 @@ export function DraftsPanel({
                         run(
                           `${draft.kind === "reply" ? "replies" : draft.kind === "message" ? "messages" : "comments"}.send`,
                           { id: draft.id },
-                        ),
+                        ), undefined, "default",
                     )
                   }
                 />
@@ -135,6 +116,7 @@ export function DraftsPanel({
             }
           >
             {draft.reviewReason && <Body>{draft.reviewReason}</Body>}
+          <SocialRecordFeedback action={action} collection="drafts" id={draft.id} />
           </RecordCard>
         )}
       />

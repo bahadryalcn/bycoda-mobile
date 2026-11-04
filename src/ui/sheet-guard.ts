@@ -1,12 +1,59 @@
-import { createContext, useCallback, useContext, useEffect, useId, useState } from "react";
+import { useCallback, useContext, useId, useLayoutEffect, useRef, useState } from "react";
 import { confirmAction } from "./confirm";
 import { useCopy } from "./copy";
 
-type Guard = { dirty?: boolean; pending?: boolean };
-export const SheetGuardContext = createContext<{
-  register(id: string, guard: Guard | null): void;
-  requestClose(): void;
-} | null>(null);
+import { SheetGuardContext, type SheetGuardState as Guard } from "./sheet-guard-context";
+export { SheetGuardContext } from "./sheet-guard-context";
+
+/** The Sheet owns approval; a continuation exists only for that specific request. */
+export function useSheetDismissal({ visible, dirty, pending, onClose }: {
+  visible: boolean; dirty: boolean; pending: boolean; onClose: () => void;
+}) {
+  type Intent = { afterClose?: () => void };
+  const [confirmation, setConfirmation] = useState<Intent | null>(null);
+  const active = useRef<Intent | null>(null);
+  const mounted = useRef(true);
+  const completed = useRef(false);
+  const latest = useRef({ visible, dirty, pending, onClose });
+  latest.current = { visible, dirty, pending, onClose };
+  const cancelClose = useCallback(() => { active.current = null; setConfirmation(null); }, []);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; active.current = null; };
+  }, []);
+  useLayoutEffect(() => {
+    if (!visible) { completed.current = false; cancelClose(); }
+  }, [visible, cancelClose]);
+  const startClose = useCallback((afterClose?: () => void) => {
+    const state = latest.current;
+    if (!mounted.current || completed.current || !state.visible || state.pending) return;
+    if (state.dirty) {
+      const intent = { afterClose };
+      active.current = intent;
+      setConfirmation(intent);
+    } else {
+      cancelClose();
+      completed.current = true;
+      state.onClose();
+      afterClose?.();
+    }
+  }, [cancelClose]);
+  const confirmClose = () => {
+    const state = latest.current;
+    if (!mounted.current || completed.current || !state.visible || state.pending || !confirmation || active.current !== confirmation) return;
+    const afterClose = confirmation.afterClose;
+    cancelClose();
+    completed.current = true;
+    state.onClose();
+    afterClose?.();
+  };
+  return {
+    confirming: visible && confirmation !== null,
+    requestClose: useCallback(() => startClose(), [startClose]),
+    requestCloseThen: useCallback((afterClose: () => void) => startClose(afterClose), [startClose]),
+    cancelClose, confirmClose,
+  };
+}
 
 export function useSheetGuards() {
   const [guards, setGuards] = useState<Record<string, Guard>>({});
@@ -40,27 +87,46 @@ export function useSheetGuard({
   const register = context?.register;
   const id = useId();
   const copy = useCopy();
-  useEffect(() => {
+  const latest = useRef({ dirty, pending, onClose, context });
+  latest.current = { dirty, pending, onClose, context };
+  const mounted = useRef(true);
+  const requestId = useRef(0);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; requestId.current++; };
+  }, []);
+  useLayoutEffect(() => {
     register?.(id, { dirty, pending });
     return () => register?.(id, null);
   }, [register, id, dirty, pending]);
-  const requestClose = () => {
-    if (context) {
-      context.requestClose();
+  const startClose = (afterClose?: () => void) => {
+    const state = latest.current;
+    if (!mounted.current || state.pending) return;
+    const currentRequest = ++requestId.current;
+    if (state.context) {
+      if (afterClose) state.context.requestCloseThen(afterClose);
+      else state.context.requestClose();
       return;
     }
-    if (pending || !onClose) return;
-    if (!dirty) {
-      onClose();
+    if (!state.onClose) return;
+    const finish = () => {
+      const current = latest.current;
+      if (!mounted.current || current.pending || currentRequest !== requestId.current || !current.onClose) return;
+      requestId.current++;
+      current.onClose();
+      afterClose?.();
+    };
+    if (!state.dirty) {
+      finish();
       return;
     }
     confirmAction(
       copy("Değişiklikler kaydedilmedi", "Unsaved changes"),
       copy("Kaydedilmemiş değişiklikleri silmek istiyor musun?", "Discard your unsaved changes?"),
       copy("Değişiklikleri sil", "Discard changes"),
-      onClose,
+      finish,
       copy("Düzenlemeye devam et", "Keep editing"),
     );
   };
-  return { requestClose };
+  return { requestClose: () => startClose(), requestCloseThen: (afterClose: () => void) => startClose(afterClose) };
 }

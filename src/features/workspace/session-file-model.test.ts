@@ -70,3 +70,10 @@ it("matches every search term against name, host path and content type", () => {
   expect(filterSessionFiles(index, "", { source: "user", kind: "image" })).toEqual([]);
   expect(index).toHaveLength(3);
 });
+
+it("matches Turkish dotted and dotless letters without changing all-term search", () => {
+  const files = sessionFileIndex([{ id: "tr", role: "user", text: "", attachments: [{ ...attachment, name: "İLETİŞİM IŞIK.pdf", path: "Belgeler/İLETİŞİM.pdf" }] }]);
+  expect(filterSessionFiles(files, "ışık iletişim", defaultSessionFileFilters, "tr")).toHaveLength(1);
+  expect(filterSessionFiles(files, "iletisim", defaultSessionFileFilters, "tr")).toHaveLength(0);
+  expect(filterSessionFiles(files, "iletişim absent", defaultSessionFileFilters, "tr")).toHaveLength(0);
+});

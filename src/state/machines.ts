@@ -100,7 +100,7 @@ type MachineState = {
   connectionPending: boolean;
   hydrate(): Promise<void>;
   saveMachine(machine: MobileMachine, token: string): Promise<void>;
-  removeMachine(id: string): Promise<void>;
+  removeMachine(id: string, expected?: Pick<MobileMachine, "endpoint" | "environmentId" | "lanKey">): Promise<void>;
   selectMachine(id: string): void;
   refreshDescriptor(id: string, descriptor: HostDescriptor): void;
   selectProject(id: string | null): void;
@@ -110,17 +110,19 @@ let persistence = Promise.resolve();
 let hydration: Promise<void> | null = null;
 let mutations = Promise.resolve();
 let pendingMutations = 0;
-function serializeMutation<T>(id: string, operation: () => Promise<T>): Promise<T> {
-  changingCredentials.set(id, (changingCredentials.get(id) ?? 0) + 1);
+function serializeMutation<T>(id: string | null, operation: () => Promise<T>): Promise<T> {
+  if (id !== null) changingCredentials.set(id, (changingCredentials.get(id) ?? 0) + 1);
   pendingMutations++;
   useMachines.setState({ connectionPending: true });
   const task = mutations
     .catch(() => undefined)
     .then(operation)
     .finally(() => {
-      const remaining = (changingCredentials.get(id) ?? 1) - 1;
-      if (remaining) changingCredentials.set(id, remaining);
-      else changingCredentials.delete(id);
+      if (id !== null) {
+        const remaining = (changingCredentials.get(id) ?? 1) - 1;
+        if (remaining) changingCredentials.set(id, remaining);
+        else changingCredentials.delete(id);
+      }
       pendingMutations--;
       useMachines.setState({ connectionPending: pendingMutations > 0 });
     });
@@ -145,6 +147,14 @@ function requireStorage() {
   const state = useMachines.getState();
   if (!state.hydrated || state.storageError)
     throw new Error("Connection storage is unavailable. Retry loading first.");
+}
+/** Pairing cannot add a computer while disconnected local data is being removed. */
+export function withDisconnectedComputers<T>(operation: () => Promise<T>): Promise<T> {
+  return serializeMutation(null, async () => {
+    requireStorage(); assertAppAccess();
+    if (useMachines.getState().machines.length) throw new Error("Disconnect computers before deleting saved drafts.");
+    return operation();
+  });
 }
 export const useMachines = create<MachineState>((set, get) => ({
   machines: [],
@@ -250,12 +260,16 @@ export const useMachines = create<MachineState>((set, get) => ({
       }
     });
   },
-  async removeMachine(id) {
+  async removeMachine(id, expected) {
     if (!validId(id)) throw new Error("Invalid computer identifier.");
+    const expectedIdentity = expected ? { endpoint: expected.endpoint, environmentId: expected.environmentId, lanKey: expected.lanKey } : undefined;
     return serializeMutation(id, async () => {
       requireStorage();
       const prior = get();
-      if (!prior.machines.some((machine) => machine.id === id)) return;
+      const origin = prior.machines.find((machine) => machine.id === id);
+      if (!origin) return;
+      if (expectedIdentity && (origin.endpoint !== expectedIdentity.endpoint || origin.environmentId !== expectedIdentity.environmentId || origin.lanKey !== expectedIdentity.lanKey))
+        throw new Error("This computer connection changed. Reopen its current route.");
       let oldToken: string | null;
       try {
         oldToken = await readSecret(id);

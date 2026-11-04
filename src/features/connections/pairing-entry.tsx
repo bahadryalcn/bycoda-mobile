@@ -6,14 +6,14 @@ import ClipboardPaste from "lucide-react-native/icons/clipboard-paste";
 import PencilLine from "lucide-react-native/icons/pencil-line";
 import Wifi from "lucide-react-native/icons/wifi";
 import Network from "lucide-react-native/icons/network";
-import Laptop from "lucide-react-native/icons/laptop";
-import { Body, Button, FormActions, NavigationGroup, NavigationRow, Row } from "@/ui/primitives";
+import { Body, Button, NavigationGroup, NavigationRow, Row } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
 import { uiStyles } from "@/ui/styles";
 import { colors, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { ManualConnectionForm } from "./manual-connection-form";
+import { PairingPreview } from "./pairing-preview";
 import { PairingPaste } from "./pairing-paste";
 import type { PairingEntryProps } from "./connection-types";
 
@@ -47,6 +47,7 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
           <NavigationRow
             label={copy("Yerel ağ", "Local network")}
             detail={copy("Aynı Wi-Fi veya yerel ağ", "Same Wi-Fi or local network")}
+            detailLines={0}
             icon={tile(Wifi, colors.accent)}
             disabled={disabled || busy}
             onPress={() => controller.begin("methods", "lan")}
@@ -54,6 +55,7 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
           <NavigationRow
             label="Tailscale"
             detail={copy("Farklı ağlardan özel bağlantı", "Private access across networks")}
+            detailLines={0}
             icon={tile(Network, colors.muted)}
             disabled={disabled || busy}
             onPress={() => controller.begin("methods", "tailscale")}
@@ -68,44 +70,8 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
       <PairingPaste disabled={disabled} onCode={controller.readCode} onCancel={controller.cancel} />
     );
   if (entry.kind === "preview")
-    return (
-      <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
-        <View style={{ gap: space.sm }}>
-          <Row>
-          <IconTile color={colors.muted}>
-            <Laptop size={20} strokeWidth={2} color={colors.muted} />
-          </IconTile>
-          <Text selectable style={[uiStyles.heading, title]}>
-            {entry.code.name}
-          </Text>
-          </Row>
-          <Body muted style={title}>
-            {entry.code.endpoint}
-          </Body>
-          <Body muted style={title}>
-            {entry.code.lanKey
-              ? copy("Aynı yerel ağda, şifreli bağlantı.", "Encrypted connection on your local network.")
-              : copy("Tailscale özel ağından bağlantı.", "Connection through your private Tailscale network.")}
-          </Body>
-        </View>
-        {process.env.EXPO_OS === "web" ? (
-          <Body muted style={title}>
-            {copy("Bilgisayarına telefon uygulamasından bağlan.", "Connect to your computer from the phone app.")}
-          </Body>
-        ) : null}
-        <FormActions
-          submitLabel={copy("Bağlan", "Connect")}
-          disabled={disabled || process.env.EXPO_OS === "web"}
-          busy={busy}
-          onSubmit={() => {
-            void controller.connect();
-          }}
-          cancelLabel={copy("Vazgeç", "Cancel")}
-          onCancel={controller.cancel}
-          cancelDisabled={busy}
-        />
-      </Animated.View>
-    );
+    return <PairingPreview code={entry.code} operation={controller.operation} disabled={disabled}
+      busy={busy} onConnect={controller.connect} onCancel={controller.cancel} />;
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <View style={centered}>

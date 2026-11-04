@@ -1,15 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { Stack } from "expo-router";
-import { FilterButton, FilterSheet } from "@/ui/filter-sheet";
+import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { useHostQuery } from "@/state/queries";
+import { useActiveMachine } from "@/state/machines";
+import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { HostProject } from "@/domain/types";
-import { Badge, Body, CodePanel, CodeText, Empty, ErrorText, IconButton, NavigationGroup, NavigationRow, Notice, QueryState, Row, ScreenList, SearchField, SelectField, Sheet, ToggleField } from "@/ui/primitives";
+import { ActionMenu, Badge, Body, CodePanel, CodeText, Empty, ErrorText, IconButton, NavigationGroup, NavigationRow, Notice, QueryState, Row, ScreenList, SearchField, SearchToolbar, SelectField, Sheet, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { colors } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { useMobileTheme } from "@/ui/theme";
+import { IssueSummary } from "@/ui/issue-summary";
 import { stamp } from "../management/shared/format";
 import type {
   RuntimeLogEntry,
@@ -23,8 +26,13 @@ import { LOG_SEARCH_LIMIT, logDetails, logSearch } from "./runtime-log-presentat
 export function RuntimeLogsScreen({ project }: { project: HostProject }) {
   useMobileTheme();
   const copy = useCopy();
+  const machine = useActiveMachine();
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
+  const searchField = useRef<ComponentRef<typeof SearchField>>(null);
+  const clearSearch = () => {
+    setSearch(""); setQuery(""); searchField.current?.focus();
+  };
   const [source, setSource] = useState("");
   const [level, setLevel] = useState<"" | RuntimeLogLevel>("");
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -33,10 +41,14 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
     level: "" | RuntimeLogLevel;
     autoRefresh: boolean;
   } | null>(null);
-  const [selected, setSelected] = useState<RuntimeLogEntry>();
+  const [selected, setSelected] = useState<{ entry: RuntimeLogEntry; reviewed: ReviewedMachine | undefined }>();
   const [showMonitors, setShowMonitors] = useState(false);
   const searchInput = logSearch(search);
-  const details = selected?.details !== undefined ? logDetails(selected.details) : undefined;
+  const selectedEntry = selected?.entry.projectId === project.id && isReviewedMachine(selected.reviewed, { activeId: machine?.id ?? null, machines: machine ? [machine] : [] }) ? selected.entry : undefined;
+  const details = selectedEntry?.details !== undefined ? logDetails(selectedEntry.details) : undefined;
+  useEffect(() => {
+    setSelected(undefined); setFilterDraft(null); setSource("");
+  }, [machine?.id, machine?.endpoint, machine?.environmentId, machine?.lanKey, project.id]);
   // Avoid making a host request for every keystroke while preserving the visible draft.
   useEffect(() => {
     if (searchInput.tooLong) return;
@@ -61,206 +73,222 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
     },
     { interval: autoRefresh ? 5_000 : undefined, enabled: !searchInput.tooLong },
   );
-  const refresh = usePullRefresh(() => Promise.all([logs.refetch(), sources.refetch()]));
+  const refresh = usePullRefresh(() => Promise.all([...(searchInput.tooLong ? [] : [logs.refetch()]), sources.refetch()]));
   // Validate host scope before displaying data, including cached or stale responses.
   const entries = (searchInput.tooLong ? [] : (logs.data?.entries ?? []))
     .filter((entry) => entry.projectId === project.id)
     .reverse();
   const projectSources = (sources.data ?? []).filter((entry) => entry.projectId === project.id);
+  const levelOptions = [
+    { value: "", label: copy("Tüm seviyeler", "All levels") },
+    { value: "error", label: copy("Hata", "Error") },
+    { value: "warn", label: copy("Uyarı", "Warning") },
+    { value: "info", label: copy("Bilgi", "Info") },
+    { value: "debug", label: "Debug" },
+  ] as const;
+  const unavailableSources = projectSources.filter((entry) => !entry.available);
+  const sourceIssues = <IssueSummary issues={unavailableSources.map(entry => [entry.label, entry.reason].filter(Boolean).join(" · "))}
+    retrying={sources.isFetching} onRetry={() => { if (!sources.isFetching) void sources.refetch(); }} />;
   return (
-    <ScreenList<RuntimeLogEntry>
-      title={copy("Çalışma günlükleri", "Runtime logs")}
-      subtitle={project.name}
-      data={entries}
-      keyExtractor={(entry) => entry.id}
-      query={logs}
-      actions={
-        <>
-          <FilterButton
-            count={Number(!!source) + Number(!!level) + Number(!autoRefresh)}
-            onPress={() => setFilterDraft({ source, level, autoRefresh })}
-          />
-          <IconButton busy={refresh.refreshing}
-            label={copy("Yenile", "Refresh")}
-            disabled={logs.isFetching}
-            onPress={() => { void refresh.onRefresh(); }}
-          >
-            <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
-          </IconButton>
-        </>
-      }
-      header={
-        <>
-          <Stack.Screen options={{ title: copy("Çalışma günlükleri", "Runtime logs") }} />
-          <NavigationRow
-            label={copy("Günlük izleyicileri", "Log monitors")}
-            onPress={() => setShowMonitors(true)}
-          />
-          {showMonitors ? (
-            <RuntimeMonitors projectId={project.id} onClose={() => setShowMonitors(false)} />
-          ) : null}
-          {filterDraft ? (
-            <FilterSheet
-              visible
-              onClose={() => setFilterDraft(null)}
-              onReset={() => setFilterDraft({ source: "", level: "", autoRefresh: true })}
-              onApply={() => {
-                setSource(filterDraft.source);
-                setLevel(filterDraft.level);
-                setAutoRefresh(filterDraft.autoRefresh);
-                setFilterDraft(null);
-              }}
+    <>
+      <ScreenList<RuntimeLogEntry>
+        title={copy("Çalışma günlükleri", "Runtime logs")}
+        subtitle={project.name}
+        data={entries}
+        keyExtractor={(entry) => entry.id}
+        query={logs}
+        refreshState={refresh}
+        actions={
+          <>
+            <IconButton busy={refresh.refreshing}
+              label={copy("Yenile", "Refresh")}
+              disabled={logs.isFetching || sources.isFetching || searchInput.tooLong}
+              onPress={() => { void refresh.onRefresh(); }}
             >
-              <QueryState query={sources} loading="inline" />
-              <SelectField
-                label={copy("Kaynak", "Source")}
-                searchable
-                value={filterDraft.source}
-                options={[
-                  { value: "", label: copy("Tüm kaynaklar", "All sources") },
-                  ...projectSources.map((entry) => ({
-                    value: entry.id,
-                    label: entry.label,
-                    detail: entry.url,
-                  })),
-                ]}
-                onChange={(source) => setFilterDraft({ ...filterDraft, source })}
-              />
-              <SelectField
-                label={copy("Seviye", "Level")}
-                value={filterDraft.level}
-                options={[
-                  { value: "", label: copy("Tüm seviyeler", "All levels") },
-                  { value: "error", label: copy("Hata", "Error") },
-                  { value: "warn", label: copy("Uyarı", "Warning") },
-                  { value: "info", label: copy("Bilgi", "Info") },
-                  { value: "debug", label: "Debug" },
-                ]}
-                onChange={(level) => setFilterDraft({ ...filterDraft, level })}
-              />
-              <NavigationGroup>
-                <ToggleField
-                  label={copy("Otomatik yenile", "Auto refresh")}
-                  value={filterDraft.autoRefresh}
-                  onChange={(autoRefresh) => setFilterDraft({ ...filterDraft, autoRefresh })}
-                />
-              </NavigationGroup>
-            </FilterSheet>
-          ) : null}
-          <SearchField
-            label={copy("Günlüklerde ara", "Search logs")}
-            value={search}
-            maxLength={LOG_SEARCH_LIMIT}
-            onChangeText={setSearch}
-          />
-          {searchInput.tooLong ? <ErrorText error={copy(
-            "Aramayı 512 karakter veya daha az olacak şekilde kısaltın.",
-            "Shorten the search to 512 characters or fewer.",
-          )} /> : searchInput.query.length >= LOG_SEARCH_LIMIT - 64 ? <Body muted style={uiStyles.caption}>
-            {copy(
-              "Günlük araması en fazla 512 karakter olabilir.",
-              "Log search supports up to 512 characters.",
-            )}
-          </Body> : null}
-          {!searchInput.tooLong ? (
-            <QueryState
-              query={logs}
-              empty={!entries.length}
-              emptyTitle={copy("Henüz günlük yok.", "No logs yet.")}
-            />
-          ) : null}
-          {projectSources
-            .filter((entry) => !entry.available)
-            .map((entry) => (
-              <Notice
-                key={entry.id}
-                tone="warning"
-                message={[entry.label, entry.reason].filter(Boolean).join(" · ")}
-              />
-            ))}
-          {logs.data && entries.length >= 200 ? (
-            <Notice
-              message={copy(
-                "Son 200 kayıt gösteriliyor. Aramayla daraltabilirsin.",
-                "Showing the latest 200 entries. Use search to narrow the results.",
+              <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
+            </IconButton>
+            <ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
+              { key: "monitors", label: copy("Günlük izleyicileri", "Log monitors"), onPress: () => setShowMonitors(true) },
+            ]} />
+          </>
+        }
+        header={
+          <>
+            <Stack.Screen options={{ title: copy("Çalışma günlükleri", "Runtime logs") }} />
+            <SearchToolbar search={<SearchField
+              ref={searchField}
+              label={copy("Günlüklerde ara", "Search logs")}
+              value={search}
+              maxLength={LOG_SEARCH_LIMIT}
+              onChangeText={setSearch}
+            />} actions={<FilterButton
+              count={Number(!!source) + Number(!!level) + Number(!autoRefresh)}
+              onPress={() => setFilterDraft({ source, level, autoRefresh })}
+            />} />
+            <AppliedFilters filters={[
+              source && `${copy("Kaynak", "Source")}: ${projectSources.find(entry => entry.id === source)?.label ?? source}`,
+              level && `${copy("Seviye", "Level")}: ${levelOptions.find(option => option.value === level)?.label ?? level}`,
+              !autoRefresh && `${copy("Otomatik yenile", "Auto refresh")}: ${copy("Kapalı", "Off")}`,
+            ]} />
+            {searchInput.tooLong ? <ErrorText error={copy(
+              "Aramayı 512 karakter veya daha az olacak şekilde kısaltın.",
+              "Shorten the search to 512 characters or fewer.",
+            )} /> : searchInput.query.length >= LOG_SEARCH_LIMIT - 64 ? <Body muted style={uiStyles.caption}>
+              {copy(
+                "Günlük araması en fazla 512 karakter olabilir.",
+                "Log search supports up to 512 characters.",
               )}
+            </Body> : null}
+            {!searchInput.tooLong ? (
+              <QueryState
+                query={logs}
+                empty={!entries.length && sources.isSuccess && !sources.error && !unavailableSources.length}
+                emptyTitle={source || level || query ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz günlük yok.", "No logs yet.")}
+                emptyAction={source || level ? {
+                  label: copy("Filtreleri temizle", "Clear filters"),
+                  onPress: () => { setSource(""); setLevel(""); clearSearch(); },
+                } : query ? {
+                  label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
+                } : undefined}
+              />
+            ) : null}
+            {!filterDraft ? <QueryState query={sources} loading="none" /> : null}
+            {!filterDraft ? sourceIssues : null}
+            {logs.data && entries.length >= 200 ? (
+              <Notice
+                message={copy(
+                  "Son 200 kayıt gösteriliyor. Aramayla daraltabilirsin.",
+                  "Showing the latest 200 entries. Use search to narrow the results.",
+                )}
+              />
+            ) : null}
+
+          </>
+        }
+        renderItem={({ item: entry }) => {
+          const sourceLabel = projectSources.find((item) => item.id === entry.sourceId)?.label ?? entry.source;
+          const levelLabel = levelOptions.find((option) => option.value === entry.level)?.label ?? entry.level;
+          const time = stamp(entry.timestamp);
+          return (
+          <NavigationRow
+            label={entry.message}
+            detail={sourceLabel}
+            accessibilityLabel={[entry.message, levelLabel, time, sourceLabel].filter(Boolean).join(". ")}
+            supporting={<Row>
+              <Badge
+                label={levelLabel}
+                tone={
+                  entry.level === "error" ? "danger" : entry.level === "warn" ? "warning" : "default"
+                }
+              />
+              <Body muted style={[uiStyles.caption, { flexShrink: 1, minWidth: 0 }]}>{time}</Body>
+            </Row>}
+            onPress={() => setSelected({ entry, reviewed: reviewedMachine(machine) })}
+          />
+          );
+        }}
+      />
+      {showMonitors ? (
+        <RuntimeMonitors projectId={project.id} projectName={project.name} onClose={() => setShowMonitors(false)} />
+      ) : null}
+      {filterDraft ? (
+        <FilterSheet
+          visible
+          onClose={() => setFilterDraft(null)}
+          onReset={() => setFilterDraft({ source: "", level: "", autoRefresh: true })}
+          onApply={() => {
+            setSource(filterDraft.source);
+            setLevel(filterDraft.level);
+            setAutoRefresh(filterDraft.autoRefresh);
+            setFilterDraft(null);
+          }}
+        >
+          <QueryState query={sources} loading="inline" />
+          {sourceIssues}
+          <SelectField
+            label={copy("Kaynak", "Source")}
+            searchable
+            value={filterDraft.source}
+            options={[
+              { value: "", label: copy("Tüm kaynaklar", "All sources") },
+              ...projectSources.map((entry) => ({
+                value: entry.id,
+                label: entry.label,
+                detail: entry.url,
+              })),
+            ]}
+            onChange={(source) => setFilterDraft({ ...filterDraft, source })}
+          />
+          <SelectField
+            label={copy("Seviye", "Level")}
+            value={filterDraft.level}
+            options={levelOptions}
+            onChange={(level) => setFilterDraft({ ...filterDraft, level })}
+          />
+          <NavigationGroup>
+            <ToggleField
+              label={copy("Otomatik yenile", "Auto refresh")}
+              value={filterDraft.autoRefresh}
+              onChange={(autoRefresh) => setFilterDraft({ ...filterDraft, autoRefresh })}
             />
-          ) : null}
-          <Sheet
-            visible={!!selected}
-            title={copy("Günlük ayrıntıları", "Log details")}
-            size="full"
-            onClose={() => setSelected(undefined)}
-          >
-            {selected ? (
-              <>
-                <Row>
-                  <Body muted style={uiStyles.caption}>
-                    {stamp(selected.timestamp)}
-                  </Body>
-                  <Badge
-                    label={selected.level}
-                    tone={
-                      selected.level === "error"
-                        ? "danger"
-                        : selected.level === "warn"
-                          ? "warning"
-                          : "default"
-                    }
-                  />
-                </Row>
-                <CodePanel horizontal={false}>
-                  <CodeText>{selected.message}</CodeText>
-                </CodePanel>
-                {selected.stack ? (
-                  <CodePanel horizontal={false}>
-                    <CodeText>{selected.stack}</CodeText>
-                  </CodePanel>
-                ) : null}
-                {details ? (
-                  <CodePanel horizontal={false}>
-                    <CodeText>{details.text}</CodeText>
-                  </CodePanel>
-                ) : null}
-                {details?.truncated ? (
-                  <Notice
-                    message={copy(
-                      "Ayrıntıların ilk 16.000 karakteri gösteriliyor.",
-                      "Showing the first 16,000 characters of details.",
-                    )}
-                  />
-                ) : null}
-                {selected.location ? (
-                  <Body
-                    mono
-                    muted
-                  >{`${selected.location.file}:${selected.location.line ?? ""}:${selected.location.column ?? ""}`}</Body>
-                ) : null}
-              </>
-            ) : (
-              <Empty title={copy("Henüz günlük yok.", "No logs yet.")} />
-            )}
-          </Sheet>
-        </>
-      }
-      renderItem={({ item: entry }) => (
-        <NavigationRow
-          label={entry.message}
-          detail={[
-            stamp(entry.timestamp),
-            projectSources.find((item) => item.id === entry.sourceId)?.label ?? entry.source,
-          ].join(" · ")}
-          trailing={
-            <Badge
-              label={entry.level}
-              tone={
-                entry.level === "error" ? "danger" : entry.level === "warn" ? "warning" : "default"
-              }
-            />
-          }
-          onPress={() => setSelected(entry)}
-        />
-      )}
-    />
+          </NavigationGroup>
+        </FilterSheet>
+      ) : null}
+      <Sheet
+        visible={!!selectedEntry}
+        title={copy("Günlük ayrıntıları", "Log details")}
+        size="full"
+        onClose={() => setSelected(undefined)}
+      >
+        {selectedEntry ? (
+          <>
+            <Row>
+              <Body muted style={uiStyles.caption}>
+                {stamp(selectedEntry.timestamp)}
+              </Body>
+              <Badge
+                label={levelOptions.find((option) => option.value === selectedEntry.level)?.label ?? selectedEntry.level}
+                tone={
+                  selectedEntry.level === "error"
+                    ? "danger"
+                    : selectedEntry.level === "warn"
+                      ? "warning"
+                      : "default"
+                }
+              />
+            </Row>
+            <CodePanel horizontal={false}>
+              <CodeText>{selectedEntry.message}</CodeText>
+            </CodePanel>
+            {selectedEntry.stack ? (
+              <CodePanel horizontal={false}>
+                <CodeText>{selectedEntry.stack}</CodeText>
+              </CodePanel>
+            ) : null}
+            {details ? (
+              <CodePanel horizontal={false}>
+                <CodeText>{details.text}</CodeText>
+              </CodePanel>
+            ) : null}
+            {details?.truncated ? (
+              <Notice
+                message={copy(
+                  "Ayrıntıların ilk 16.000 karakteri gösteriliyor.",
+                  "Showing the first 16,000 characters of details.",
+                )}
+              />
+            ) : null}
+            {selectedEntry.location ? (
+              <Body
+                mono
+                muted
+              >{`${selectedEntry.location.file}:${selectedEntry.location.line ?? ""}:${selectedEntry.location.column ?? ""}`}</Body>
+            ) : null}
+          </>
+        ) : (
+          <Empty title={copy("Henüz günlük yok.", "No logs yet.")} />
+        )}
+      </Sheet>
+    </>
   );
 }

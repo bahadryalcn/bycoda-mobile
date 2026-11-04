@@ -18,7 +18,7 @@ import {
   PairingFailure,
 } from "./pairing-code";
 import { redeemMobilePairingCode } from "./pairing-redeem";
-import { ConnectionRecoveryError } from "./recovery";
+import { ConnectionRecoveryError, ConnectionRemovalError } from "./recovery";
 import type {
   ConnectionDraft,
   ConnectionEntryState,
@@ -258,7 +258,9 @@ export function useComputerConnection() {
       try {
         await action();
       } catch (error) {
-        throw error instanceof ConnectionRecoveryError
+        throw error instanceof ConnectionRemovalError
+          ? new Error(copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden açın.", "Saved computers changed. Reopen this review to continue."))
+          : error instanceof ConnectionRecoveryError
           ? new Error(
               copy(
                 "Bilgisayar seçilemedi. Kaydedilmiş bağlantıları yeniden yükleyip tekrar dene.",

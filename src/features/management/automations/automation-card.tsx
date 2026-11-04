@@ -1,7 +1,7 @@
 import { RecordCard } from "@/ui/record-card";
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
-import { ActionMenu, Body, Button, ErrorText, Row } from "@/ui/primitives";
+import { ActionMenu, Body, Button, ErrorText, MutationState, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
@@ -10,6 +10,7 @@ import { Status } from "../shared/status";
 import { AutomationHistory } from "./automation-history";
 import type { AutomationCardProps } from "./types";
 import { scheduleLabel } from "./schedule-model";
+import { savedAutomationId } from "./automation-feedback";
 
 export function AutomationCard({
   item,
@@ -103,7 +104,7 @@ export function AutomationCard({
                   "The agent will run this automation on the computer.",
                 ),
                 copy("Çalıştır", "Run"),
-                () => run.mutate({ automationId: item.id }),
+                () => run.mutate({ automationId: item.id }), undefined, "default",
               )
             }
           />
@@ -115,10 +116,12 @@ export function AutomationCard({
         </>
       }
     >
-      <ErrorText error={item.lastRunError} />
-
+      <ErrorText error={historyId === item.id ? undefined : item.lastRunError} />
+      {!editorOpen && savedAutomationId(save.variables) === item.id ? <MutationState mutation={save} success={copy("Otomasyon kaydedildi.", "Automation saved.")} /> : null}
+      {run.variables?.automationId === item.id ? <MutationState mutation={run} success={copy("Çalıştırma istendi.", "Run requested.")} /> : null}
+      {remove.variables?.automationId === item.id ? <MutationState mutation={remove} /> : null}
       {historyId === item.id && (
-        <AutomationHistory automationId={item.id} projectId={item.projectId} />
+        <AutomationHistory automationId={item.id} projectId={item.projectId} summary={item} automationName={item.name} onClose={() => onHistory(null)} />
       )}
     </RecordCard>
   );

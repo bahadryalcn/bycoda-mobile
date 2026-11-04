@@ -30,7 +30,8 @@ export function SessionKeyboardFrame({
   const keyboardHeight = useKeyboardState((state) => state.height);
   const [frameHeight, setFrameHeight] = useState(0);
   const onFrameLayout = useCallback((event: LayoutChangeEvent) => {
-    setFrameHeight(event.nativeEvent.layout.height);
+    const next = event.nativeEvent.layout.height;
+    if (Number.isFinite(next) && next > 0) setFrameHeight(previous => previous === next ? previous : next);
   }, []);
   const availableHeight = frameHeight > 0 ? Math.max(0, frameHeight - keyboardHeight) : null;
   const composerHeight = useSharedValue(0);

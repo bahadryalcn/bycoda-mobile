@@ -1,6 +1,6 @@
 import { useCopy } from "@/ui/copy";
-import { router } from "expo-router";
-import { Notice, QueryState, SelectField } from "@/ui/primitives";
+import { SelectField } from "@/ui/primitives";
+import { ProjectDirectoryFeedback } from "../../workspace/project-directory-feedback";
 import { useProjectList } from "../../workspace/use-project-directory";
 import { useMachines } from "@/state/machines";
 import type { ScopeProps } from "./types";
@@ -41,20 +41,9 @@ export function Scope({ allowAll = false }: ScopeProps) {
           selectProject(id || null);
         }}
       />
-      <QueryState query={projects} loading="inline" loadingLabel={copy("Projeler yükleniyor…", "Loading projects…")} />
-      {projects.readiness === "waiting" ? <Notice
-        message={copy("Bağlantı bekleniyor.", "Waiting for a connection.")}
-        action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: () => router.push("/machines") }}
-      /> : null}
-      {projects.privacyUnavailable ? (
-        <Notice
-          tone="info"
-          message={copy(
-            "Proje listesini eşitlemek için bu bilgisayarda bycoda’yı aç. Korunan gruplar gizli kalır.",
-            "Open bycoda on this computer to sync the project directory. Protected groups stay hidden.",
-          )}
-        />
-      ) : null}
+      <ProjectDirectoryFeedback query={projects} readiness={projects.readiness}
+        privacyUnavailable={projects.privacyUnavailable} loading="inline"
+        loadingLabel={copy("Projeler yükleniyor…", "Loading projects…")} />
     </>
   );
 }

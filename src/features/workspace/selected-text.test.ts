@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SelectedText } from "./selected-text";
-const state = vi.hoisted(() => ({ transfer: vi.fn() }));
+const state = vi.hoisted(() => ({ transfer: vi.fn(), selections: [] as ((event:{nativeEvent:{selection:{start:number;end:number}}})=>void)[], buttons: [] as {label:string;press:()=>void}[] }));
+const security=vi.hoisted(()=>({allowed:true,listeners:new Set<()=>void>()}));
+vi.mock("@/state/security",()=>({isAppAccessAllowed:()=>security.allowed,useSecurity:{getState:()=>({appState:"active",windowFocused:true}),subscribe:(fn:()=>void)=>{security.listeners.add(fn);return()=>security.listeners.delete(fn);}}}));
 vi.mock("react-native", () => ({ useWindowDimensions: () => ({ height: 844 }) }));
 vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
 vi.mock("@/localization", () => ({ LANGUAGES: [{ value: "tr", label: "Türkçe" }, { value: "en", label: "English" }] }));
@@ -12,8 +14,8 @@ vi.mock("./composer-transfer", () => ({ useComposerTransfer: () => ({ transfer: 
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Wrapper, Row: Wrapper, Sheet: ({ children, footer }: PropsWithChildren<{ footer?: import("react").ReactNode }>) => createElement("div", null, children, footer), ErrorText: () => null, Notice: () => null, SelectField: () => null,
-    Field: ({ value, readOnly, onSelectionChange }: { value: string; readOnly: boolean; onSelectionChange: (event: { nativeEvent: { selection: { start: number; end: number } } }) => void }) => createElement("textarea", { value, readOnly, onSelect: (event: import("react").SyntheticEvent<HTMLTextAreaElement>) => onSelectionChange({ nativeEvent: { selection: { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd } } }) }),
-    Button: ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),
+    Field: ({ value, readOnly, onSelectionChange }: { value: string; readOnly: boolean; onSelectionChange: (event: { nativeEvent: { selection: { start: number; end: number } } }) => void }) => {state.selections.push(onSelectionChange);return createElement("textarea", { value, readOnly, onSelect: (event: import("react").SyntheticEvent<HTMLTextAreaElement>) => onSelectionChange({ nativeEvent: { selection: { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd } } }) });},
+    Button: ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => {state.buttons.push({label,press:onPress});return createElement("button", { disabled, onClick: onPress }, label);},
   };
 });
 let root: ReturnType<typeof createRoot> | undefined; let container: HTMLDivElement;
@@ -41,4 +43,30 @@ it("prepares a language-specific translation draft without sending or including 
 it("clears selection when paging instead of applying old offsets to another page", async () => {
   await render("x".repeat(12000) + "second page"); await select(0, 3); await click("Next"); await click("Add quote to draft");
   expect(state.transfer).not.toHaveBeenCalled();
+});
+
+it("rejects a retained quote callback after the selection view unmounts",async()=>{
+ await render();await select(7,12);const old=state.buttons.filter(button=>button.label==="Add quote to draft").at(-1)!.press;await act(async()=>root!.unmount());root=undefined;await act(async()=>old());expect(state.transfer).not.toHaveBeenCalled();
+});
+it("does not revive a selection after its source changes and returns",async()=>{
+ await render();await select(7,12);await render("different source");await render();await click("Add quote to draft");expect(state.transfer).not.toHaveBeenCalled();
+});
+
+beforeEach(()=>{security.allowed=true;state.buttons=[];state.selections=[];});
+it("does not transfer an old page or selection through a retained callback",async()=>{
+ await render("before EXACT after"+"x".repeat(12000));await select(7,12);const old=state.buttons.filter(button=>button.label==="Add quote to draft").at(-1)!.press;await click("Next");await act(async()=>old());expect(state.transfer).not.toHaveBeenCalled();
+});
+it("retires draft insertion on a transient lock/return without sending",async()=>{
+ await render();await select(7,12);const old=state.buttons.filter(button=>button.label==="Add quote to draft").at(-1)!.press;await act(async()=>{security.allowed=false;security.listeners.forEach(fn=>fn());security.allowed=true;security.listeners.forEach(fn=>fn());old();});await click("Add quote to draft");expect(state.transfer).not.toHaveBeenCalled();
+});
+
+it("quotes the exact visible selection after CRLF line endings",async()=>{
+ await render("before\r\nEXACT after");const visible=container.querySelector("textarea")!.value,start=visible.indexOf("EXACT");await select(start,start+5);await click("Add quote to draft");expect(state.transfer).toHaveBeenCalledWith({machineId:"machine",sessionId:"session",text:"> EXACT"});
+});
+
+it("ignores a selection event from a retired page even after returning to the same page",async()=>{
+ await render("before EXACT after"+"x".repeat(12000));const old=state.selections.at(-1)!;await click("Next");await click("Back");await act(async()=>old({nativeEvent:{selection:{start:7,end:12}}}));await click("Add quote to draft");expect(state.transfer).not.toHaveBeenCalled();await select(7,12);await click("Add quote to draft");expect(state.transfer).toHaveBeenCalledWith({machineId:"machine",sessionId:"session",text:"> EXACT"});
+});
+it("ignores retained page navigation after another page becomes current",async()=>{
+ await render("x".repeat(24000)+"third page");const next=state.buttons.find(button=>button.label==="Next")!.press;await click("Next");await click("Next");await act(async()=>next());expect(container.querySelector("textarea")!.value).toBe("third page");
 });

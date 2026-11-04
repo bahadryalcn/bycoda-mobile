@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   command: vi.fn(async (_input: Record<string, unknown>) => ({})),
   onCommand: undefined as undefined | ((input: Record<string, unknown>) => Promise<unknown>),
 }));
+vi.mock("@/ui/workspace-frame", () => ({ WorkspaceFrame: ({ toolbar, feedback, children }: any) => createElement("div", null, toolbar, feedback, children) }));
 vi.mock("react-native", () => ({
   View: ({ children, style, ...props }: PropsWithChildren<Record<string, unknown>>) => {
     const {
@@ -35,9 +36,9 @@ vi.mock("react-native", () => ({
 vi.mock("expo-router", () => ({
   router: { push: state.navigate },
   Stack: {
-    Screen: ({ options }: { options: { title: string } }) => {
+    Screen: ({ options }: { options: { title: string; headerRight?: () => import("react").ReactNode } }) => {
       state.title = options.title;
-      return null;
+      return options.headerRight?.() ?? null;
     },
   },
 }));
@@ -45,12 +46,14 @@ vi.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ left: 0, right: 0 }),
 }));
 vi.mock("@/state/machines", () => ({
-  useActiveMachine: () => ({ id: "machine", environmentId: "host" }),
+  useActiveMachine: () => ({ id: "machine", name: "Design computer", environmentId: "host" }),
 }));
 vi.mock("@/state/queries", () => ({
   hostKey: (machine: string, key: unknown[]) => ["machine", machine, ...key],
 }));
-vi.mock("@/ui/tokens", () => ({ metrics: { contentWidth: 800 }, space: { screen: 16, xs: 4 } }));
+vi.mock("@/ui/tokens", () => ({ colors: {}, metrics: { contentWidth: 800 }, space: { screen: 16, xs: 4 } }));
+vi.mock("lucide-react-native/icons/search", () => ({ default: () => null }));
+vi.mock("@/ui/chat-controls", () => ({ ChatAction: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./use-project-directory", () => ({
   useProjectList: () => ({
@@ -70,7 +73,7 @@ vi.mock("./use-project-directory", () => ({
             : "waiting",
     data:
       state.readable && !state.pending && !state.projectError
-        ? state.visibleIds.map((id) => ({ id }))
+        ? state.visibleIds.map((id) => ({ id, name: `Project ${id}` }))
         : undefined,
     isProjectVisible: (id: string) =>
       state.readable &&
@@ -128,11 +131,11 @@ vi.mock("./session-keyboard-frame", () => ({
     createElement("div", null, children, composer),
 }));
 vi.mock("./session-toolbar", () => ({
-  SessionToolbar: () => createElement("p", null, "Private toolbar"),
+  SessionToolbar: ({ contextLabel }: { contextLabel?: string }) => createElement("p", null, "Private toolbar", contextLabel),
 }));
 vi.mock("./session-transcript", () => ({
-  SessionTranscript: ({ session }: { session?: unknown }) =>
-    session ? createElement("p", null, "Secret transcript") : null,
+  SessionTranscript: ({ session, findOpen, onFindOpenChange }: { session?: unknown; findOpen: boolean; onFindOpenChange: (open: boolean) => void }) =>
+    session ? createElement("div", { "data-find-open": findOpen }, "Secret transcript", findOpen ? createElement("button", { onClick: () => onFindOpenChange(false) }, "Close find") : null) : null,
 }));
 vi.mock("./session-settings", () => ({ SessionSettings: () => null }));
 vi.mock("./transcript-view-filter", () => ({ TranscriptViewFilter: () => null }));
@@ -244,12 +247,32 @@ it("binds new commands to the displayed authority without blessing older callbac
     expect.objectContaining({ authorityGeneration: 2 }),
   );
 });
+it("opens find from the header without replacing the transcript or composer draft", async () => {
+  cache = new QueryClient();
+  cache.setQueryData(["machine", "machine", "session", "session"], session());
+  await render();
+  const input = container.querySelector("input")!;
+  const transcript = container.querySelector("[data-find-open]")!;
+  const button = (label: string) => [...container.querySelectorAll("button")].find(node => node.textContent === label)!;
+  expect(transcript.getAttribute("data-find-open")).toBe("false");
+  await act(async () => button("Find in messages").click());
+  expect(transcript.getAttribute("data-find-open")).toBe("true");
+  await act(async () => button("Close find").click());
+  expect(transcript.getAttribute("data-find-open")).toBe("false");
+  expect(container.querySelector("[data-find-open]")).toBe(transcript);
+  expect(container.querySelector("input")).toBe(input);
+  expect(input.value).toBe("Preserved owner draft");
+  expect(state.mounted).toBe(1);
+  expect(state.command).not.toHaveBeenCalled();
+});
+
 it("wrong-project cached deep links never display a private title/transcript or enable fetching", async () => {
   cache = new QueryClient();
   cache.setQueryData(["machine", "machine", "session", "session"], session("hidden"));
   await render();
   expect(state.title).toBe("Session");
   expect(container.textContent).not.toContain("Secret transcript");
+  expect(container.textContent).not.toContain("Design computer");
   expect(state.options?.enabled).toBe(false);
   await expect(state.onCommand!({ type: "send" })).rejects.toThrow("no longer available");
   expect(state.command).not.toHaveBeenCalled();
@@ -280,6 +303,7 @@ it("normal visibility shows exact content, then conceals on lock/revoke/pending 
   cache.setQueryData(["machine", "machine", "session", "session"], session());
   await render();
   expect(state.title).toBe("Private title");
+  expect(container.textContent).toContain("Design computer · Project visible");
   expect(state.options?.enabled).toBe(true);
   const input = container.querySelector("input")!;
   expect(state.mounted).toBe(1);

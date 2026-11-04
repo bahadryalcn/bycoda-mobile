@@ -15,3 +15,11 @@ export function codePreview(code: string, lineLimit = 8, characterLimit = 2400) 
   const preview = sourceSlice(selected, 0, characterLimit);
   return { text: preview, lineCount: Math.max(1, count), truncated: preview.length < code.length };
 }
+
+
+/** Preview eligibility uses the complete source, never an individual reader page. */
+export function codePreviewKind(code: string, language: string, complete = true): "html" | "diagram" | null {
+  if (!complete) return null;
+  if (/^(?:html|htm)$/i.test(language) && code.length <= 2 * 1024 * 1024) return "html";
+  return language.toLowerCase() === "mermaid" ? "diagram" : null;
+}

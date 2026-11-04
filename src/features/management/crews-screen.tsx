@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "./shared/search";
 import Plus from "lucide-react-native/icons/plus";
@@ -57,10 +57,14 @@ export function CrewsScreen() {
   const machine = useActiveMachine();
   const projectId = useMachines((state) => state.selectedProjectId);
   const supported = machine?.capabilities?.includes("crews.v1") === true;
-  const executionSupported = machine?.capabilities?.includes("crews.tasks.v1") === true;
-  const deleteSupported = machine?.capabilities?.includes("crews.delete.v1") === true;
+  const executionSupported =
+    machine?.capabilities?.includes("crews.tasks.v1") === true;
+  const deleteSupported =
+    machine?.capabilities?.includes("crews.delete.v1") === true;
   const [tab, setTab] = useState<Tab>("definitions");
   const [search, setSearch] = useState("");
+  const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
+  const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
   const [editor, setEditor] = useState<Editor | null>(null);
   const query = useHostQuery<CrewDirectory>(
     ["crews", projectId],
@@ -89,7 +93,10 @@ export function CrewsScreen() {
       void catalog.refetch();
     },
   };
-  const removeAgent = useHostMutation("crews.agent.delete", ["crews", projectId]);
+  const removeAgent = useHostMutation("crews.agent.delete", [
+    "crews",
+    projectId,
+  ]);
   const busy = remove.isPending || removeAgent.isPending;
   const directory = query.data;
   const rows: Row[] = !directory
@@ -100,7 +107,13 @@ export function CrewsScreen() {
         ? directory.runs.map((value) => ({ kind: "run", value }))
         : directory.agents.map((value) => ({ kind: "profile", value }));
   const visible = rows.filter((row) =>
-    matchesSearch(row.kind === "run" ? `${row.value.title ?? ""} ${row.value.definition.name}` : row.value.name, search, locale),
+    matchesSearch(
+      row.kind === "run"
+        ? `${row.value.title ?? ""} ${row.value.definition.name}`
+        : row.value.name,
+      search,
+      locale,
+    ),
   );
   const open = (entry: Omit<Editor, "projectId" | "directory">) => {
     if (!projectId || !directory || editor || busy) return;
@@ -111,16 +124,27 @@ export function CrewsScreen() {
     if (tab === "agents")
       open({
         kind: "profile",
-        value: { ...newMember(identifier(), "specialist", ""), projectId, updatedAt: 0 },
+        value: {
+          ...newMember(identifier(), "specialist", ""),
+          projectId,
+          updatedAt: 0,
+        },
       });
-    else open({ kind: "definition", value: newDefinition(identifier(), projectId) });
+    else
+      open({
+        kind: "definition",
+        value: newDefinition(identifier(), projectId),
+      });
   };
   return (
     <ScreenList<Row>
       title={copy("Ekipler", "Crews")}
       query={supported && projectId ? query : undefined}
       data={visible}
-      keyExtractor={(row) => `${machine?.id}:${projectId}:${row.kind}:${row.value.id}`}
+      keyExtractor={(row) =>
+        `${machine?.id}:${projectId}:${row.kind}:${row.value.id}`
+      }
+      context={<Scope />}
       actions={
         supported && tab !== "runs" ? (
           <IconButton
@@ -138,7 +162,6 @@ export function CrewsScreen() {
       }
       header={
         <>
-          <Scope />
           {!supported ? (
             <Notice
               tone="info"
@@ -164,18 +187,42 @@ export function CrewsScreen() {
                 options={[
                   { value: "definitions", label: copy("Ekipler", "Crews") },
                   { value: "runs", label: copy("Çalışmalar", "Work") },
-                  { value: "agents", label: copy("Üye kütüphanesi", "Member library") },
+                  {
+                    value: "agents",
+                    label: copy("Üye kütüphanesi", "Member library"),
+                  },
                 ]}
               />
-              <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
-              <MutationState mutation={remove} />
-              <MutationState mutation={removeAgent} />
+              <SearchField
+                ref={searchInput}
+                label={copy("Ara", "Search")}
+                value={search}
+                onChangeText={setSearch}
+              />
+              {!visible.some(
+                (row) =>
+                  row.kind === "definition" &&
+                  row.value.id === remove.variables?.definitionId,
+              ) ? (
+                <MutationState mutation={remove} />
+              ) : null}
+              {!visible.some(
+                (row) =>
+                  row.kind === "profile" &&
+                  row.value.id === removeAgent.variables?.agentId,
+              ) ? (
+                <MutationState mutation={removeAgent} />
+              ) : null}
               <QueryState
                 query={query}
                 empty={!visible.length}
-                emptyTitle={search.trim() && rows.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Bu görünümde kayıt yok", "No entries in this view")}
+                emptyTitle={
+                  search.trim() && rows.length
+                    ? copy("Eşleşen sonuç yok", "No matching results")
+                    : copy("Bu görünümde kayıt yok", "No entries in this view")
+                }
+                emptyAction={search.trim() && rows.length ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
               />
-              {search.trim() && !visible.length ? <Button tone="quiet" label={copy("Aramayı temizle", "Clear search")} onPress={() => setSearch("")} /> : null}
               {tab === "runs" && !executionSupported && (
                 <Notice
                   tone="info"
@@ -256,12 +303,17 @@ export function CrewsScreen() {
             menu={
               <ActionMenu
                 label={copy("Ekip işlemleri", "Crew actions")}
+                busy={
+                  remove.isPending &&
+                  remove.variables?.definitionId === item.value.id
+                }
                 actions={[
                   {
                     key: "edit",
                     label: copy("Düzenle", "Edit"),
                     disabled: busy || !!editor,
-                    onPress: () => open({ kind: "definition", value: item.value }),
+                    onPress: () =>
+                      open({ kind: "definition", value: item.value }),
                   },
                   {
                     key: "copy",
@@ -270,7 +322,11 @@ export function CrewsScreen() {
                     onPress: () =>
                       open({
                         kind: "definition",
-                        value: { ...structuredClone(item.value), id: identifier(), updatedAt: 0 },
+                        value: {
+                          ...structuredClone(item.value),
+                          id: identifier(),
+                          updatedAt: 0,
+                        },
                       }),
                   },
                   {
@@ -287,7 +343,12 @@ export function CrewsScreen() {
                         ),
                         copy("Sil", "Delete"),
                         () => {
-                          if (useMachines.getState().activeId !== machine?.id || useMachines.getState().selectedProjectId !== projectId) return;
+                          if (
+                            useMachines.getState().activeId !== machine?.id ||
+                            useMachines.getState().selectedProjectId !==
+                              projectId
+                          )
+                            return;
                           remove.mutate({
                             projectId,
                             definitionId: item.value.id,
@@ -299,7 +360,11 @@ export function CrewsScreen() {
                 ]}
               />
             }
-          />
+          >
+            {remove.variables?.definitionId === item.value.id ? (
+              <MutationState mutation={remove} />
+            ) : null}
+          </RecordCard>
         ) : (
           <RecordCard
             title={item.value.name}
@@ -307,7 +372,14 @@ export function CrewsScreen() {
             details={<Body>{item.value.instructions}</Body>}
             menu={
               <ActionMenu
-                label={copy("Kütüphane üyesi işlemleri", "Library member actions")}
+                label={copy(
+                  "Kütüphane üyesi işlemleri",
+                  "Library member actions",
+                )}
+                busy={
+                  removeAgent.isPending &&
+                  removeAgent.variables?.agentId === item.value.id
+                }
                 actions={[
                   {
                     key: "edit",
@@ -328,13 +400,27 @@ export function CrewsScreen() {
                           "The library profile will be deleted. Copies in crews are kept.",
                         ),
                         copy("Sil", "Delete"),
-                        () => { if (useMachines.getState().activeId === machine?.id && useMachines.getState().selectedProjectId === projectId) removeAgent.mutate({ projectId, agentId: item.value.id }); },
+                        () => {
+                          if (
+                            useMachines.getState().activeId === machine?.id &&
+                            useMachines.getState().selectedProjectId ===
+                              projectId
+                          )
+                            removeAgent.mutate({
+                              projectId,
+                              agentId: item.value.id,
+                            });
+                        },
                       ),
                   },
                 ]}
               />
             }
-          />
+          >
+            {removeAgent.variables?.agentId === item.value.id ? (
+              <MutationState mutation={removeAgent} />
+            ) : null}
+          </RecordCard>
         )
       }
     />

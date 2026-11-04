@@ -2,6 +2,14 @@ import type { HostSettingsState } from "../../remote/types";
 
 export type SettingsFields = { maxRunning: string; dailyMinutes: string };
 export type SettingsDraft = { override: SettingsFields | null };
+export function readHostSettingsState(value: unknown): HostSettingsState {
+  const row = value as HostSettingsState | null;
+  if (!row || !Number.isInteger(row.maxRunningTasks) || row.maxRunningTasks < 1 || row.maxRunningTasks > 8 ||
+    !Number.isSafeInteger(row.dailyAgentMinutes) || row.dailyAgentMinutes < 0 ||
+    typeof row.usedMinutes !== "number" || !Number.isFinite(row.usedMinutes) || row.usedMinutes < 0 || typeof row.limitReached !== "boolean")
+    throw new Error("Invalid computer task settings");
+  return { maxRunningTasks: row.maxRunningTasks, dailyAgentMinutes: row.dailyAgentMinutes, usedMinutes: row.usedMinutes, limitReached: row.limitReached };
+}
 export const settingsFields = (
   settings: Pick<HostSettingsState, "maxRunningTasks" | "dailyAgentMinutes">,
 ): SettingsFields => ({
@@ -12,8 +20,8 @@ export function validSettingsFields(fields: SettingsFields): boolean {
   const max = Number(fields.maxRunning);
   const minutes = Number(fields.dailyMinutes);
   return (
-    !!fields.maxRunning.trim() &&
-    !!fields.dailyMinutes.trim() &&
+    /^\d+$/.test(fields.maxRunning) &&
+    /^\d+$/.test(fields.dailyMinutes) &&
     Number.isInteger(max) &&
     max >= 1 &&
     max <= 8 &&

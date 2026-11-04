@@ -45,7 +45,7 @@ export function SocialPolicyEditor({ snapshot, scope, machineId, onClose, onSave
           .then(() => { settled.current = true; setSavedDraft(submitted); setSaved(true); onSaved(); })
           .catch((cause: unknown) => { setError(cause); if ((cause as { uncertain?: boolean })?.uncertain) { settled.current = true; setUncertain(true); } })
           .finally(() => { latch.current = false; });
-      });
+      }, undefined, "default");
   };
   const labels = {
     maxContentCharacters: copy("Paylaşım karakter sınırı", "Post character limit"),

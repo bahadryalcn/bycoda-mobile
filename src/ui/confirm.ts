@@ -1,4 +1,5 @@
 import { Alert } from "react-native";
+import { tr } from "../i18n";
 
 /** Only the caller supplies the action; incoming text never controls permissions. */
 export function confirmAction(
@@ -6,7 +7,8 @@ export function confirmAction(
   detail: string,
   label: string,
   action: () => void,
-  cancelLabel = "Cancel",
+  cancelLabel = tr("Cancel", "Vazgeç"),
+  intent: "default" | "destructive" = "destructive",
 ) {
   if (process.env.EXPO_OS === "web" && typeof globalThis.confirm === "function") {
     if (globalThis.confirm(`${title}\n\n${detail}`)) action();
@@ -14,6 +16,6 @@ export function confirmAction(
   }
   Alert.alert(title, detail, [
     { text: cancelLabel, style: "cancel" },
-    { text: label, style: "destructive", onPress: action },
+    { text: label, style: intent, onPress: action },
   ]);
 }

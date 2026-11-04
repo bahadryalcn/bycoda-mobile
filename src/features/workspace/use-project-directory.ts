@@ -8,7 +8,7 @@ import type { HostProject, HostProjectDirectory } from "@/domain/types";
 import { deduplicateProjects } from "./activity-model";
 import { distinctDirectoryProjects } from "./project-directory";
 import { getProjectDirectoryReadiness } from "./project-readiness";
-import { invalidateProjectPrivacy, projectPrivacyKey } from "./project-privacy-cache";
+import { invalidateProjectPrivacy, projectPrivacyKey, projectVisibilityDenied, projectVisibilityExpired, subscribeProjectPrivacy } from "./project-privacy-cache";
 const DIRECTORY_QUERY_KEY = "directory";
 
 export function useProjectDirectory() {
@@ -21,18 +21,22 @@ export function useProjectDirectory() {
   const visibilityHash = useMemo(() => hashKey(visibilityKey), [visibilityKey]);
   const subscribe = useCallback((notify: () => void) => {
     const schedule = notifyManager.batchCalls(notify);
-    return cache.getQueryCache().subscribe((event) => {
+    const releaseProof = subscribeProjectPrivacy(cache, notify);
+    const releaseQuery = cache.getQueryCache().subscribe((event) => {
       if (event.query.queryHash !== visibilityHash ||
         event.type !== "updated" && event.type !== "added" && event.type !== "removed") return;
       // Query observers can be constructed during another consumer's render.
       // Only directory state changes matter; use React Query's scheduling for
       // restored proof, but conceal invalidated proof immediately.
-      if (event.type === "updated" && event.query.state.isInvalidated) notify();
+      if (event.type === "updated" && projectVisibilityExpired(cache, visibilityKey)) notify();
       else schedule();
     });
-  }, [cache, visibilityHash]);
-  const invalidated = useSyncExternalStore(subscribe, () => cache.getQueryState(visibilityKey)?.isInvalidated === true, () => true);
-  const readable = !!client && access && !invalidated;
+    return () => { releaseProof(); releaseQuery(); };
+  }, [cache, visibilityHash, visibilityKey]);
+  const proof = useSyncExternalStore(subscribe, () => projectVisibilityExpired(cache, visibilityKey)
+    ? "invalidated" : projectVisibilityDenied(cache, visibilityKey) ? "denied" : "readable", () => "denied");
+  const invalidated = proof === "invalidated", denied = proof === "denied";
+  const readable = !!client && access && !invalidated && !denied;
   useEffect(() => {
     if ((!client || !access) && machine?.id && cache.getQueryState(visibilityKey) && !invalidated)
       void invalidateProjectPrivacy(cache, machine.id);
@@ -50,18 +54,22 @@ export function useProjectDirectory() {
     { interval: 15_000, enabled: grouped },
   );
   const source = grouped ? directory : legacy;
+  // Use the authoritative entry after proof, never a lagging observer's old payload.
+  const data = readable ? cache.getQueryData<HostProjectDirectory | HostProject[]>(visibilityKey) : undefined;
+  const directoryData = grouped ? data as HostProjectDirectory | undefined : undefined;
+  const legacyData = !grouped ? data as HostProject[] | undefined : undefined;
   const readiness = getProjectDirectoryReadiness({
     readable,
-    hasData: source.data !== undefined,
+    hasData: data !== undefined,
     grouped,
-    privacyReady: directory.data?.privacyReady,
+    privacyReady: directoryData?.privacyReady,
     isFetching: source.isFetching,
     error: source.error,
   });
   const directoryReady = readiness === "ready";
   const verifying = readiness === "loading";
   const privacyUnavailable = readiness === "sync-required";
-  const visibleQuery = readable ? source : { ...source, data: undefined };
+  const visibleQuery = { ...source, data };
   // An invalidated cached success is not a successful empty directory. Expose
   // its real in-flight state while the private workspace remains concealed.
   const query = verifying || readiness === "waiting" || privacyUnavailable
@@ -72,32 +80,31 @@ export function useProjectDirectory() {
   const projects = useMemo<HostProjectDirectory["projects"]>(
     () =>
       !readable ? [] : grouped
-        ? distinctDirectoryProjects(directory.data?.privacyReady ? directory.data.projects : [])
-        : deduplicateProjects(legacy.data ?? []).map((project) => ({
+        ? distinctDirectoryProjects(directoryData?.privacyReady ? directoryData.projects : [])
+        : deduplicateProjects(legacyData ?? []).map((project) => ({
             ...project,
             registered: true,
           })),
-    [readable, grouped, directory.data, legacy.data],
+    [readable, grouped, directoryData, legacyData],
   );
   const registered = useMemo(() => projects.filter((project) => project.registered), [projects]);
   const groups = useMemo(
-    () => (readable && grouped && directory.data?.privacyReady ? directory.data.groups : []),
-    [readable, grouped, directory.data],
+    () => (readable && grouped && directoryData?.privacyReady ? directoryData.groups : []),
+    [readable, grouped, directoryData],
   );
-  const privacyPending = invalidated || grouped && !!directory.data && !directory.data.privacyReady;
-  const isProjectVisible = useCallback((projectId: string) => {
+  const privacyPending = invalidated || denied || grouped && !!directoryData && !directoryData.privacyReady;
+  const isProjectVisible = useCallback((projectId: string, expectedCwd?: string) => {
     const state = useMachines.getState(); const security = useSecurity.getState(); const current = state.machines.find((row) => row.id === machine?.id);
     if (!machine || state.activeId !== machine.id || !state.hydrated || state.storageError || state.connectionPending || !current ||
       current.environmentId !== machine.environmentId || security.status !== "unlocked" || security.appState !== "active" || !security.windowFocused || !isAppAccessAllowed() || !hasProviderPermission(current)) return false;
     const method = grouped ? "projects.directory" : "projects.list";
     const key = hostKey(machine.id, grouped ? ["projects", DIRECTORY_QUERY_KEY, { method, params: {} }] : ["projects", { method, params: {} }]);
-    const queryState = cache.getQueryState(key);
-    if (queryState?.isInvalidated || ["auth", "identity"].includes((queryState?.error as { kind?: string } | null)?.kind ?? "")) return false;
+    if (projectVisibilityExpired(cache, key) || projectVisibilityDenied(cache, key)) return false;
     if (grouped) {
       const data = cache.getQueryData<HostProjectDirectory>(key);
-      return !!data?.privacyReady && data.projects.some((row) => row.id === projectId && row.registered);
+      return !!data?.privacyReady && data.projects.some((row) => row.id === projectId && row.registered && (expectedCwd === undefined || row.cwd === expectedCwd));
     }
-    return cache.getQueryData<HostProject[]>(key)?.some((row) => row.id === projectId) === true;
+    return cache.getQueryData<HostProject[]>(key)?.some((row) => row.id === projectId && (expectedCwd === undefined || row.cwd === expectedCwd)) === true;
   }, [machine?.id, machine?.environmentId, grouped, cache]);
   return { query, projects, registered, groups, grouped, privacyPending, readable,
     readiness, directoryReady, verifying, privacyUnavailable, isProjectVisible };

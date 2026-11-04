@@ -1,0 +1,131 @@
+// @vitest-environment happy-dom
+import { act, createElement as h, type PropsWithChildren } from "react";
+import { createRoot } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { afterEach, expect, it, vi } from "vitest";
+import { PrivateContentAccessProvider } from "@/ui/private-access";
+import type { MessageContext } from "@/ui/media-policy";
+import { AttachmentFile } from "./transcript-attachments";
+
+const state = vi.hoisted(() => {
+  const machine = { id: "machine", name: "Computer", endpoint: "https://synthetic.invalid", environmentId: "host", lanKey: "synthetic" };
+  const transport = vi.fn(async () => "allowed");
+  return { machine, client: { machine, request: transport }, transport, active: true, allowed: true, available: true, epoch: 0,
+    actions: new Map<string, () => void>(), reload: undefined as undefined | (() => void), previewCheck: undefined as undefined | (() => boolean), previewContext: undefined as undefined | MessageContext,
+    kind: "success", load: vi.fn(async () => ({ uri: "file:///synthetic/report.txt", name: "Report.txt", mimeType: "text/plain" })) };
+});
+vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
+vi.mock("lucide-react-native/icons/file", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/image", () => ({ default: () => null }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => {} }));
+vi.mock("@/ui/tokens", () => ({ colors: {}, space: {} }));
+vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/state/machines", () => ({ useMachines: { getState: () => ({ activeId: state.machine.id, machines: [state.machine] }) } }));
+vi.mock("@/state/connection-scope", () => {
+  const scopes = new Map<number, any>();
+  return { useConnectionScope: () => { const epoch = state.epoch; if (!scopes.has(epoch)) scopes.set(epoch, { token: `epoch-${epoch}`, isCurrent: () => state.epoch === epoch }); return scopes.get(epoch); } };
+});
+vi.mock("@/state/queries", async () => {
+  const { usePrivateContentAccess } = await import("@/ui/private-access");
+  const { useMemo } = await import("react");
+  return { useHostReadActive: () => state.active, useHostClient: () => { const access = usePrivateContentAccess(); return useMemo(() => !state.available || !access.allowed || !access.check() ? null : { ...state.client, request: async () => { if (!access.check()) throw new Error("Retired access"); return state.transport(); } }, [access, state.available]); } };
+});
+vi.mock("@/ui/media-loader", () => ({ loadSessionMedia: (...args: unknown[]) => {
+  if (state.kind !== "success") { state.load(); return Promise.reject(Object.assign(new Error(state.kind), { kind: state.kind })); }
+  return state.load(...args as []);
+} }));
+vi.mock("@/ui/chat-controls", () => ({ ChatSummary: ({ label, onPress, disabled }: any) => { state.actions.set("Open", onPress); return h("button", { disabled, onClick: onPress }, label); } }));
+vi.mock("@/ui/document-preview", async () => {
+  const { usePrivateContentAccess } = await import("@/ui/private-access");
+  return { DocumentPreview: ({ uri, onReload, context }: any) => { state.reload = onReload; state.previewCheck = usePrivateContentAccess().check; state.previewContext = context; return h("p", { "data-document": true }, uri); } };
+});
+vi.mock("@/ui/primitives", () => {
+  const Button = ({ label, onPress, busy, disabled }: any) => { state.actions.set(label, onPress); return h("button", { disabled: busy || disabled, onClick: onPress }, label); };
+  return { Button, Body: ({ children }: PropsWithChildren) => h("p", null, children), Notice: ({ message }: any) => h("p", null, message), Loading: () => h("p", null, "Loading"), ErrorText: ({ error }: any) => error ? h("p", null, String(error.message)) : null,
+    Sheet: ({ visible, title, onClose, children, footer }: any) => { state.actions.set("Close", onClose); return visible ? h("section", { "aria-label": title }, children, footer, h(Button, { label: "Close", onPress: onClose })) : null; },
+    FormActions: ({ submitLabel, onSubmit, cancelLabel, onCancel, busy, disabled, feedback }: any) => h("div", null, h(Button, { label: submitLabel, onPress: onSubmit, busy, disabled }), onCancel ? h(Button, { label: cancelLabel, onPress: onCancel }) : null, feedback),
+  };
+});
+let root: ReturnType<typeof createRoot> | undefined, container: HTMLDivElement, cache: QueryClient;
+const context = { machineId: "machine", projectId: "project", sessionId: "session", cwd: "/original", client: state.client } as unknown as MessageContext;
+async function flush() { await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)); }); }
+async function render(id = "file") { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); if (!root) { cache = new QueryClient({ defaultOptions: { queries: { retry: false } } }); container = document.createElement("div"); root = createRoot(container); } await act(async () => root!.render(h(QueryClientProvider, { client: cache }, h(PrivateContentAccessProvider, { value: { allowed: state.allowed, check: () => state.allowed } }, h(AttachmentFile, { id, name: "Report.txt", image: false, mimeType: "text/plain", context }))))); await flush(); }
+async function press(name: string) { await act(async () => state.actions.get(name)!()); await flush(); }
+afterEach(async () => { await act(async () => root?.unmount()); root = undefined; cache?.clear(); state.actions.clear(); state.load.mockClear(); state.transport.mockClear(); state.kind = "success"; state.active = state.allowed = state.available = true; state.epoch = 0; state.reload = state.previewCheck = state.previewContext = undefined; vi.unstubAllGlobals(); });
+
+it("rejects captured reload after closing and reopening the same attachment", async () => {
+  await render(); await press("Open"); expect(state.load).toHaveBeenCalledOnce(); const oldReload = state.reload!;
+  await press("Close"); await act(async () => oldReload()); await flush(); expect(state.load).toHaveBeenCalledOnce();
+  await press("Open"); expect(container.querySelector("[data-document]")).not.toBeNull(); await act(async () => oldReload()); await flush(); expect(state.load).toHaveBeenCalledOnce();
+});
+it("keeps cached data concealed after auth then network failure, including reopen", async () => {
+  await render(); await press("Open"); expect(container.querySelector("[data-document]")).not.toBeNull();
+  state.kind = "auth"; await act(async () => state.reload!()); await flush(); expect(container.querySelector("[data-document]")).toBeNull();
+  state.kind = "network"; await press("Retry file"); expect(container.querySelector("[data-document]")).toBeNull();
+  await press("Close"); await press("Open"); expect(container.querySelector("[data-document]")).toBeNull();
+  state.kind = "success"; await press("Retry file"); expect(container.querySelector("[data-document]")).not.toBeNull();
+});
+it("retires descendant private reads when the individual preview closes", async () => {
+  await render(); await press("Open"); const oldCheck = state.previewCheck!, oldClient = state.previewContext!.client;
+  await press("Close"); expect(oldCheck()).toBe(false); await expect(oldClient.request("read", {})).rejects.toThrow(); expect(state.transport).not.toHaveBeenCalled();
+});
+it("requires a fresh explicit opening when the attachment identity changes", async () => {
+  await render(); await press("Open"); await render("other-file"); expect(container.querySelector("section")).toBeNull(); expect(state.load).toHaveBeenCalledOnce();
+  await press("Open"); expect(state.load).toHaveBeenCalledTimes(2); expect(container.querySelector("[data-document]")).not.toBeNull();
+});
+it("rejects queued row opens after a preview has been closed", async () => {
+  await render(); const oldOpen = state.actions.get("Open")!; await press("Open"); await press("Close");
+  await act(async () => oldOpen()); await flush(); expect(container.querySelector("section")).toBeNull(); expect(state.load).toHaveBeenCalledOnce();
+});
+it("disables unavailable rows and blocks their captured open callbacks", async () => {
+  await render(); const oldOpen = state.actions.get("Open")!; state.active = false; await render();
+  expect(container.querySelector("button")!.disabled).toBe(true); await act(async () => oldOpen()); await flush(); expect(state.load).not.toHaveBeenCalled();
+});
+it.each(["background", "private", "client"])("retires old reload and descendant authority across temporary %s loss", async kind => {
+  await render(); await press("Open"); const oldReload = state.reload!, oldCheck = state.previewCheck!;
+  if (kind === "background") state.active = false;
+  if (kind === "private") state.allowed = false;
+  if (kind === "client") state.available = false;
+  await render(); expect(container.querySelector("[data-document]")).toBeNull(); expect(oldCheck()).toBe(false);
+  state.active = state.allowed = state.available = true; await render();
+  await act(async () => oldReload()); await flush(); expect(state.load).toHaveBeenCalledOnce(); expect(oldCheck()).toBe(false);
+});
+it("refuses old epoch callbacks before React commits and after a new explicit opening", async () => {
+  await render(); await press("Open"); const oldReload = state.reload!, oldCheck = state.previewCheck!;
+  state.epoch = 1; expect(oldCheck()).toBe(false); await act(async () => oldReload()); await flush(); expect(state.load).toHaveBeenCalledOnce();
+  await render(); expect(container.querySelector("[data-document]")).toBeNull(); await press("Close"); await press("Open");
+  await act(async () => oldReload()); await flush(); expect(state.load).toHaveBeenCalledOnce(); expect(oldCheck()).toBe(false);
+});
+it("discards a late result from a closed opening and permits a fresh explicit read", async () => {
+  let finish!: (value: { uri: string; name: string; mimeType: string }) => void;
+  state.load.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await render(); await press("Open"); expect(state.load).toHaveBeenCalledOnce(); await press("Close");
+  await act(async () => finish({ uri: "file:///late", name: "Report.txt", mimeType: "text/plain" })); await flush();
+  expect(container.querySelector("section")).toBeNull(); expect(cache.getQueryCache().getAll()[0]?.state.data).toBeUndefined();
+  await press("Open"); expect(state.load).toHaveBeenCalledTimes(2); expect(container.querySelector("[data-document]")).not.toBeNull();
+});
+it("serializes captured retries without cancelling an in-flight file read", async () => {
+  await render(); await press("Open"); state.kind = "network"; await act(async () => state.reload!()); await flush();
+  let finish!: (value: { uri: string; name: string; mimeType: string }) => void;
+  state.kind = "success"; state.load.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const retry = state.actions.get("Retry file")!; await act(async () => { retry(); retry(); }); await flush(); expect(state.load).toHaveBeenCalledTimes(3);
+  await act(async () => finish({ uri: "file:///fresh", name: "Report.txt", mimeType: "text/plain" })); await flush();
+  expect(container.querySelector("[data-document]")!.textContent).toBe("file:///fresh");
+});
+it("guards the cached query function itself after its reader unmounts", async () => {
+  await render(); await press("Open"); const query = cache.getQueryCache().getAll()[0]!;
+  await press("Close"); await expect(query.fetch()).rejects.toThrow("unavailable"); expect(state.load).toHaveBeenCalledOnce();
+});
+it("retires descendant authority and content reload on denial without disabling explicit repair", async () => {
+  await render(); await press("Open"); const oldCheck = state.previewCheck!, oldReload = state.reload!;
+  state.kind = "auth"; await act(async () => oldReload()); await flush(); expect(oldCheck()).toBe(false);
+  await act(async () => oldReload()); await flush(); expect(state.load).toHaveBeenCalledTimes(2);
+  state.kind = "success"; await press("Retry file"); expect(container.querySelector("[data-document]")).not.toBeNull(); expect(oldCheck()).toBe(false);
+});
+it("retires replaced error controls and content callbacks after fresh media", async () => {
+  await render(); await press("Open"); const oldReload = state.reload!;
+  state.kind = "network"; await act(async () => oldReload()); await flush(); const oldRetry = state.actions.get("Retry file")!;
+  state.kind = "success"; state.load.mockResolvedValueOnce({ uri: "file:///fresh-version", name: "Report.txt", mimeType: "text/plain" });
+  await press("Retry file"); expect(state.load).toHaveBeenCalledTimes(3);
+  await act(async () => { oldReload(); oldRetry(); }); await flush(); expect(state.load).toHaveBeenCalledTimes(3);
+});

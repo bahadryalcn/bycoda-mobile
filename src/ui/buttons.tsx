@@ -169,6 +169,7 @@ export function IconButton({
   disabled,
   busy,
   onPress,
+  onLongPress,
   density = "regular",
   tone = "default",
   expanded,
@@ -186,7 +187,7 @@ export function IconButton({
       disabled={off}
       loading={busy}
       pressScale={1}
-      spinnerProps={{ color: tone === "primary" ? colors.primaryText : colors.accent }}
+      spinnerProps={{ color: tone === "primary" ? colors.primaryText : tone === "danger" ? colors.danger : colors.accent }}
       startContent={children}
       variant={tone === "primary" ? "primary" : "ghost"}
       size="icon"
@@ -196,6 +197,7 @@ export function IconButton({
           : "min-h-control min-w-touch rounded-full border-0 shadow-none bg-transparent p-ui-xs active:bg-fill active:opacity-75"
       }
       onPress={onPress}
+      onLongPress={onLongPress}
       style={[
         uiStyles.iconButton,
         density === "compact" && {

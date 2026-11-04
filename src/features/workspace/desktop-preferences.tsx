@@ -7,7 +7,6 @@ import { reviewedOperationStore } from "@/state/reviewed-operation-store";
 import { useReviewedOperation } from "@/state/use-reviewed-operation";
 import { reviewedMachine, isReviewedMachine } from "@/state/reviewed-machine";
 import { useCopy } from "@/ui/copy";
-import { useSheetGuard } from "@/ui/sheet-guard";
 import {
   Body,
   Button,
@@ -30,6 +29,7 @@ import {
   type PreferenceDefaults,
 } from "./desktop-preferences-model";
 import { DesktopPreferenceEditorSheet, type PreferenceEditor as Editor } from "./desktop-preferences-editor";
+import { DesktopPreferenceContext } from "./desktop-preference-context";
 type Props = {
   scope: SessionScope;
   projectId: string;
@@ -95,11 +95,7 @@ export function DesktopPreferences({
         body !== editor.template.body ||
         trigger !== (editor.template.trigger ?? "")
       : !!editor && JSON.stringify([modelId, defaults]) !== providerBaseline;
-  const closeEditor = useSheetGuard({
-    dirty,
-    pending: busy,
-    onClose: () => setEditor(null),
-  }).requestClose;
+  const closeEditor = () => { if (!busy) setEditor(null); };
   const [receipt, setReceipt] = useState<DesktopPreferenceStatus>();
   const params = { projectId: opening.projectId, sessionId: opening.sessionId };
   const query = useHostQuery<DesktopPreferencesSnapshot>(
@@ -217,7 +213,7 @@ export function DesktopPreferences({
   };
   const header = (
     <Stack>
-      <Body muted>{opening.machineName}</Body>
+      <DesktopPreferenceContext computerName={opening.machineName?.trim() || opening.machineId} snapshot={snapshot} />
       <Body muted>
         {copy(
           "Bilgisayar ayarları yalnızca gelecekteki konuşmalara uygulanır. Şablon eklemek mesaj göndermez.",
@@ -357,12 +353,14 @@ export function DesktopPreferences({
           title={copy("Bilgisayar tercihleri", "Computer preferences")}
           size="full"
           scroll={false}
-          onClose={editor ? closeEditor : onClose}
+          dismissible={!busy}
+          onClose={onClose}
         >
           {content}
         </Sheet>
       )}
       <DesktopPreferenceEditorSheet
+        computerName={opening.machineName?.trim() || opening.machineId}
         editor={editor}
         snapshot={snapshot}
         form={{

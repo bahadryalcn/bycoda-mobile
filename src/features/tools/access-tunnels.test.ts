@@ -9,7 +9,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
   setItem: async (key: string, value: string) => { state.values.set(key, value); },
   removeItem: async (key: string) => { state.values.delete(key); },
 } }));
-vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: state.id, environmentId: "host", capabilities: ["tunnels.manage"] }), useMachines: { getState: () => ({ activeId: state.id }) } }));
+vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: state.id, environmentId: "host", capabilities: ["tunnels.manage"] }), useMachines: { getState: () => ({ activeId: state.id, machines: [{ id: state.id, environmentId: "host" }] }) } }));
 vi.mock("@/state/queries", () => ({ useHostMutation: (method: string) => ({ isPending: false, mutateAsync: async (params: unknown) => { state.requests.push({ method, params }); if (state.uncertain) throw { uncertain: true }; return {}; } }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => { const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
@@ -38,5 +38,10 @@ it("blocks replay after unknown outcome even after closing and reopening the she
 });
 it("stops only the reviewed tunnel and refuses a machine switch before confirmation", async () => {
   await render(true); await click("Review changes"); state.id = "other"; await click("Confirm tunnel"); expect(state.requests).toEqual([]);
-  state.id = "machine"; await click("Confirm tunnel"); expect(state.requests).toEqual([{ method: "tunnels.stop", params: { id: "reviewed" } }]);
+  state.id = "machine"; await click("Confirm tunnel"); expect(state.requests).toEqual([]);
+});
+
+it("stops exactly the reviewed tunnel after a fresh explicit review", async () => {
+  await render(true); await click("Review changes"); await click("Confirm tunnel");
+  expect(state.requests).toEqual([{ method: "tunnels.stop", params: { id: "reviewed" } }]);
 });

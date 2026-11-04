@@ -1,8 +1,9 @@
 import { useMobileTheme } from "@/ui/theme";
-import { use, useEffect, useRef, useState } from "react";
-import { View, useWindowDimensions } from "react-native";
+import { use, useCallback, useEffect, useRef, useState } from "react";
+import { View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Plus from "lucide-react-native/icons/plus";
+import X from "lucide-react-native/icons/x";
 import Check from "lucide-react-native/icons/check";
 import { randomUUID } from "expo-crypto";
 import ImageIcon from "lucide-react-native/icons/image";
@@ -11,7 +12,7 @@ import { useHostClient } from "@/state/queries";
 import { useMachines } from "@/state/machines";
 import { Body, Button, Row, Stack, NavigationGroup, NavigationRow, Sheet } from "@/ui/primitives";
 import { uiStyles } from "@/ui/styles";
-import { colors, metrics, space } from "@/ui/tokens";
+import { colors, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { registerWorkspaceDraft } from "./draft-guard";
 import { ErrorText } from "./shared";
@@ -43,6 +44,8 @@ import {
 import { ChatCircleAction, ChatToolbarAction } from "@/ui/chat-controls";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { ChatComposer } from "@/ui/chat-composer";
+import { ComposerActionsProvider } from "@/ui/composer-actions";
+import { composerInputLimits, composerSuggestionLimits, COMPOSER_LINE_HEIGHT } from "@/ui/chat-composer-model";
 import { haptic } from "@/ui/motion";
 import { composerCommand, queuedComposerMessage, validateNoteDelivery } from "./composer-delivery";
 import { useSessionQueue } from "./use-session-queue";
@@ -82,18 +85,11 @@ export function SessionComposer({
   const [retryingDraft, setRetryingDraft] = useState(false);
   const [localError, setLocalError] = useState<unknown>(null);
   const mounted = useMounted();
-  const minimumInputHeight = Math.max(
-    metrics.touchTarget,
-    Math.ceil(22 * fontScale + space.sm * 2),
-  );
-  const maximumInputHeight = Math.max(
-    minimumInputHeight,
-    Math.min(
-      160,
-      Math.floor(windowHeight / 4),
-      Math.floor((availableHeight ?? windowHeight) * 0.45),
-    ),
-  );
+  const [prefixHeight, measurePrefix] = useComposerHeight();
+  const [footerHeight, measureFooter] = useComposerHeight();
+  const [toolbarHeight, measureToolbar] = useComposerHeight();
+  const [suggestionsHeight, measureSuggestions] = useComposerHeight();
+  const suggestionLimits = composerSuggestionLimits(windowHeight, availableHeight, fontScale, prefixHeight, footerHeight, toolbarHeight);
   const draftKey = composerDraftKey(scope.machineId, scope.sessionId);
   const draft = useLocalDraft(draftKey, decodeComposerDraft, encodeComposerDraft);
   const { ready, isStored, persist, load, setValue, valueRef, error } = draft;
@@ -123,6 +119,11 @@ export function SessionComposer({
     setValue,
   });
   const { token } = suggestions;
+  const suggestionPrefix = token ? suggestionsHeight + (prefixHeight > 0 ? space.xs : 0) : 0;
+  const inputLimits = composerInputLimits(windowHeight, availableHeight, fontScale, prefixHeight + suggestionPrefix, footerHeight, toolbarHeight);
+  const minimumInputHeight = inputLimits.minimum;
+  const maximumInputHeight = inputLimits.maximum;
+  const compactSuggestions = !!token && suggestionLimits.compact;
   const uploads = useComposerAttachments({
     scope,
     client,
@@ -334,27 +335,32 @@ export function SessionComposer({
     (mode === "send" && running) ||
     (mode === "steer" && !canSteer);
   return (
-    <View
+    <ComposerActionsProvider><View
       style={{
         paddingVertical: space.sm,
-        gap: space.xs,
+        gap: 0,
         backgroundColor: colors.background,
       }}
     >
       {token ? (
-        <ComposerSuggestions
-          items={suggestions.items}
-          loading={suggestions.catalog.isFetching}
-          error={suggestions.catalog.error}
-          trigger={token.trigger}
-          selected={suggestions.selected}
-          onPick={suggestions.choose}
-          onRetry={() => {
-            void suggestions.catalog.refetch();
-          }}
-          onClose={suggestions.close}
-        />
+        <View onLayout={measureSuggestions} style={{marginBottom:space.xs}}>
+          <ComposerSuggestions
+            maximumHeight={suggestionLimits.maximum}
+            compact={suggestionLimits.compact}
+            items={suggestions.items}
+            loading={suggestions.catalog.isFetching}
+            error={suggestions.catalog.error}
+            trigger={token.trigger}
+            selected={suggestions.selected}
+            onPick={suggestions.choose}
+            onRetry={() => {
+              void suggestions.catalog.refetch();
+            }}
+            onClose={suggestions.close}
+          />
+        </View>
       ) : null}
+      <View onLayout={measurePrefix} style={{gap:space.xs,marginBottom:prefixHeight>0?space.xs:0}}>
       {value.noteCard ? (
         <Stack>
           <Row>
@@ -389,6 +395,7 @@ export function SessionComposer({
           onRemove={uploads.remove}
         />
       ) : null}
+      </View>
       <SessionQueue
         scope={scope}
         queue={queue}
@@ -397,6 +404,7 @@ export function SessionComposer({
         onCommand={onCommand}
       />
       <ChatComposer
+        onToolbarLayout={measureToolbar}
         value={prompt}
         onValueChange={(text) => {
           const templates = useTemplates.getState();
@@ -416,6 +424,7 @@ export function SessionComposer({
           delivery.showModeChip ? (
             <ChatToolbarAction
               label={delivery.modeLabel}
+              accessibilityLabel={`${copy("Gönderme biçimi", "Delivery mode")}: ${delivery.modeLabel}`}
               disabled={unavailable}
               onPress={() => setModePicker(true)}
             >
@@ -425,12 +434,12 @@ export function SessionComposer({
         }
         leading={
           <ChatCircleAction
-            label={copy("Mesaja ekle", "Add to message")}
-            disabled={unavailable}
-            busy={picking}
-            onPress={() => setPicker(true)}
+            label={compactSuggestions ? copy("Kapat", "Close") : copy("Mesaja ekle", "Add to message")}
+            disabled={compactSuggestions ? false : unavailable}
+            busy={compactSuggestions ? false : picking}
+            onPress={compactSuggestions ? suggestions.close : () => setPicker(true)}
           >
-            <Plus size={19} strokeWidth={2.4} color={colors.text} />
+            {compactSuggestions ? <X size={19} strokeWidth={2.4} color={colors.text} /> : <Plus size={19} strokeWidth={2.4} color={colors.text} />}
           </ChatCircleAction>
         }
         field={{
@@ -448,7 +457,7 @@ export function SessionComposer({
             maxHeight: maximumInputHeight,
             borderWidth: 0,
             backgroundColor: "transparent",
-            lineHeight: 22,
+            lineHeight: COMPOSER_LINE_HEIGHT,
             includeFontPadding: false,
             paddingVertical: space.sm,
             paddingHorizontal: space.sm,
@@ -478,6 +487,7 @@ export function SessionComposer({
           </ChatCircleAction>
         }
       />
+      <View onLayout={measureFooter} style={{gap:space.xs,marginTop:footerHeight>0?space.xs:0}}>
       {uploading && Object.values(transfers).some((state) => state.status === "uploading") ? (
         <Button
           tone="quiet"
@@ -548,6 +558,7 @@ export function SessionComposer({
               )}
         </Body>
       ) : null}
+      </View>
       <Sheet
         visible={modePicker}
         title={copy("Gönderme biçimi", "Delivery mode")}
@@ -606,12 +617,14 @@ export function SessionComposer({
                 templateDestination.current?.machineId !== scope.machineId ||
                 templateDestination.current?.sessionId !== scope.sessionId
               )
-                return;
+                throw new Error(copy(
+                  "Bu konuşmaya şu anda ekleme yapılamıyor. Taslağınız değişmedi.",
+                  "This conversation is not available for insertion. Your draft is unchanged.",
+                ));
               const current = valueRef.current ?? emptyComposerDraft();
               const result = insertTemplate(current.text, selection, body);
               if (result.text.length > 256_000) {
-                setLocalError(new Error(copy("Mesaj çok uzun.", "The message is too long.")));
-                return;
+                throw new Error(copy("Mesaj çok uzun.", "The message is too long."));
               }
               setValue({ ...current, text: result.text });
               setSelection(result.selection);
@@ -653,6 +666,15 @@ export function SessionComposer({
           />
         </NavigationGroup>
       </Sheet>
-    </View>
+    </View></ComposerActionsProvider>
   );
+}
+
+function useComposerHeight() {
+  const [height,setHeight]=useState(0);
+  const onLayout=useCallback((event:LayoutChangeEvent)=>{
+    const next=event.nativeEvent.layout.height;
+    if(Number.isFinite(next)&&next>=0)setHeight(previous=>previous===Math.ceil(next)?previous:Math.ceil(next));
+  },[]);
+  return [height,onLayout] as const;
 }

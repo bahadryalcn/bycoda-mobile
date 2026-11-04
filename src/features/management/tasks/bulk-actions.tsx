@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
-import { Body, Button, Disclosure, MultiSelectField, Row } from "@/ui/primitives";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Body, Button, Disclosure, Loading, MultiSelectField, Row, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useHostMutation } from "@/state/queries";
 import type { HostTask } from "@/domain/types";
+import { taskBulkReason } from "./bulk-feedback";
 import {
   runTaskBulkAction,
   type TaskBulkAction,
@@ -16,14 +17,22 @@ export function TaskBulkActions({
   onBusy,
   onComplete,
   disabled,
+  context,
 }: {
   tasks: readonly HostTask[];
   machineId: string;
   onBusy: (busy: boolean) => void;
   onComplete: () => Promise<unknown>;
   disabled: boolean;
+  context?: ReactNode;
 }) {
   const copy = useCopy();
+  const [open, setOpen] = useState(false);
+  const opening = useRef<object | null>(null);
+  const port = opening.current;
+  useEffect(() => () => { opening.current = null; }, []);
+  const show = () => { opening.current = {}; setOpen(true); };
+  const close = () => { opening.current = null; setOpen(false); };
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
@@ -81,7 +90,11 @@ export function TaskBulkActions({
     }
   };
   const request = (operation: TaskBulkAction, retry = false) => {
-    if (busy || disabled) return;
+    if (busy || disabled || (!retry && (!port || opening.current !== port))) return;
+    const approve = () => {
+      if (!retry && opening.current !== port) return;
+      void run(operation, retry);
+    };
     if (operation === "delete" || operation === "stop")
       confirmAction(
         labels[operation],
@@ -90,15 +103,42 @@ export function TaskBulkActions({
           "Only selected tasks are affected. Active tasks and unmerged code are protected from deletion.",
         ),
         labels[operation],
-        () => {
-          void run(operation, retry);
-        },
+        approve,
         copy("İptal", "Cancel"),
       );
-    else void run(operation, retry);
+    else approve();
   };
-  return (
-    <Disclosure label={copy("Toplu işlemler", "Bulk actions")}>
+  const feedback = <>
+    {busy ? <Loading label={labels[action]} /> : null}
+    {results.length ? (
+      <Body accessibilityLiveRegion="polite">
+        {copy("Başarılı", "Succeeded")}: {results.filter((row) => row.status === "succeeded").length}. {copy("Atlanan", "Skipped")}
+        : {results.filter((row) => row.status === "skipped").length}. {copy("Başarısız", "Failed")}: {results.filter((row) => row.status === "failed").length}.
+      </Body>
+    ) : null}
+    {results.some((row) => row.status !== "succeeded") ? (
+      <Disclosure label={copy("İşlem ayrıntıları", "Operation details")}>
+        {results.filter((row) => row.status !== "succeeded").map((row) => (
+          <Body key={row.task.id}>{row.task.title}: {taskBulkReason(row, copy)}</Body>
+        ))}
+      </Disclosure>
+    ) : null}
+    {results.some((row) => row.status === "failed") ? (
+      <Button label={copy("Başarısızları tekrar dene", "Retry failed tasks")}
+        disabled={busy || disabled} onPress={() => request(action, true)} />
+    ) : null}
+  </>;
+  return <>
+    <Row style={{ justifyContent: "space-between" }}>
+      {context}
+      <Button label={copy("Toplu işlemler", "Bulk actions") + (selected.length ? ` · ${selected.length}` : "")}
+        accessibilityLabel={copy("Toplu işlemler", "Bulk actions")}
+        tone="quiet" disabled={disabled} onPress={show} />
+    </Row>
+    {!open ? feedback : null}
+    <Sheet visible={open} title={copy("Toplu işlemler", "Bulk actions")} size="full"
+      onClose={close}
+      footer={<Button label={copy("Kapat", "Close")} tone="quiet" onPress={close} />}>
       <MultiSelectField
         label={copy("Görevleri seç", "Select tasks")}
         values={selected}
@@ -121,9 +161,6 @@ export function TaskBulkActions({
           onPress={() => setSelected([])}
         />
       </Row>
-      <Body>
-        {copy("Seçilen", "Selected")}: {selected.length}
-      </Body>
       <Row>
         {(["start", "stop", "retry", "delete"] as const).map((operation) => (
           <Button
@@ -135,32 +172,7 @@ export function TaskBulkActions({
           />
         ))}
       </Row>
-      {results.length ? (
-        <Body accessibilityLiveRegion="polite">
-          {copy("Başarılı", "Succeeded")}:{" "}
-          {results.filter((row) => row.status === "succeeded").length}. {copy("Atlanan", "Skipped")}
-          : {results.filter((row) => row.status === "skipped").length}.{" "}
-          {copy("Başarısız", "Failed")}: {results.filter((row) => row.status === "failed").length}.
-        </Body>
-      ) : null}
-      {results.some((row) => row.status !== "succeeded") ? (
-        <Disclosure label={copy("İşlem ayrıntıları", "Operation details")}>
-          {results
-            .filter((row) => row.status !== "succeeded")
-            .map((row) => (
-              <Body key={row.task.id}>
-                {row.task.title}: {row.reason}
-              </Body>
-            ))}
-        </Disclosure>
-      ) : null}
-      {results.some((row) => row.status === "failed") ? (
-        <Button
-          label={copy("Başarısızları tekrar dene", "Retry failed tasks")}
-          disabled={busy || disabled}
-          onPress={() => request(action, true)}
-        />
-      ) : null}
-    </Disclosure>
-  );
+      {open ? feedback : null}
+    </Sheet>
+  </>;
 }

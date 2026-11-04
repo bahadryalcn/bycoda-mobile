@@ -3,10 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   size: "standard" as "compact" | "standard" | "large",
+  hydrated: true,
   shared: vi.fn(),
   bubble: vi.fn(),
 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => {} }));
+vi.mock("@/state/actions", () => ({ useAsyncAction: () => ({isPending:false,run:(work:()=>Promise<void>)=>work()}) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("react-native-reanimated", () => ({
@@ -14,7 +16,7 @@ vi.mock("react-native-reanimated", () => ({
 }));
 vi.mock("@/state/chat-appearance", () => ({
   useChatAppearance: (select: (s: unknown) => unknown) =>
-    select({ textSize: state.size, hydrated: true, setTextSize: () => {}, storageError: null }),
+    select({ textSize: state.size, hydrated: state.hydrated, setTextSize: () => {}, storageError: null }),
 }));
 vi.mock("@/ui/chat", () => ({
   ChatMessage: ({ children, role, style }: PropsWithChildren<{ role: string; style: unknown }>) =>
@@ -40,10 +42,19 @@ vi.mock("@/ui/primitives", () => {
     Stack: Wrap,
     Section: Wrap,
     Notice: () => null,
+    Loading: ({label}: {label:string}) => createElement("p", {role:"progressbar","aria-label":label},label),
     SegmentedControl: () => null,
   };
 });
 import { ChatAppearanceSettings } from "./chat-appearance-settings";
+it("names the pending preference read while preserving the shared preview",()=>{
+  state.hydrated=false;
+  try {
+    const html=renderToStaticMarkup(createElement(ChatAppearanceSettings));
+    expect(html).toContain('role="progressbar"');expect(html).toContain('aria-label="Loading…"');
+    expect(html).toContain('data-shared-reader="assistant"');
+  } finally {state.hydrated=true;}
+});
 it("delegates both preview roles to actual chat owners and includes source-faithful code and an underlined-link candidate without host context", () => {
   const html = renderToStaticMarkup(createElement(ChatAppearanceSettings));
   expect(html).toContain('data-shared-reader="user"');

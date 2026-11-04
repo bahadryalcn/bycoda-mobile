@@ -3,8 +3,8 @@ import { isRunningSession } from "./activity-model";
 
 export type SessionLayout = NonNullable<HostProjectDirectory["projects"][number]["sessionLayout"]>;
 export type SessionDirectoryRow =
-  | { kind: "folder"; key: string; folder: SessionLayout["folders"][number]; depth: number; count: number; expanded: boolean }
-  | { kind: "session"; key: string; session: HostSessionSummary; depth: number };
+  | { kind: "folder"; key: string; folder: SessionLayout["folders"][number]; depth: number; count: number; expanded: boolean; ancestors?: readonly string[] }
+  | { kind: "session"; key: string; session: HostSessionSummary; depth: number; ancestors?: readonly string[] };
 
 /** Searching an organization label includes its descendants without rewriting membership. */
 export function filterSessionDirectory(
@@ -88,10 +88,10 @@ export function sessionDirectoryRows(
   }
   const assigned = new Set<string>();
   const visited = new Set<string>();
-  const visit = (folder: SessionLayout["folders"][number], depth: number): { rows: SessionDirectoryRow[]; count: number } => {
+  const visit = (folder: SessionLayout["folders"][number], depth: number, ancestors: readonly string[] = []): { rows: SessionDirectoryRow[]; count: number } => {
     if (visited.has(folder.id) || depth >= 4) return { rows: [], count: 0 };
     visited.add(folder.id);
-    const children = (childrenByParent.get(folder.id) ?? []).map((child) => visit(child, depth + 1));
+    const children = (childrenByParent.get(folder.id) ?? []).map((child) => visit(child, depth + 1, [...ancestors, folder.name]));
     const members = folder.sessionIds.flatMap((id) => {
       const session = byId.get(id);
       if (!session || assigned.has(id)) return [];
@@ -102,9 +102,9 @@ export function sessionDirectoryRows(
     if (!count) return { rows: [], count: 0 };
     const expanded = searching || !(collapsed[folder.id] ?? folder.collapsed);
     return { count, rows: [
-      { kind: "folder", key: `folder:${folder.id}`, folder, depth, count, expanded },
+      { kind: "folder", key: `folder:${folder.id}`, folder, depth, count, expanded, ancestors },
       ...(expanded ? [ ...children.flatMap((child) => child.rows), ...ordered(members, folder.ordered ? folder.sessionIds : undefined)
-        .map((session): SessionDirectoryRow => ({ kind: "session", key: `session:${session.id}`, session, depth: Math.min(depth + 1, 4) })) ] : []),
+        .map((session): SessionDirectoryRow => ({ kind: "session", key: `session:${session.id}`, session, depth: Math.min(depth + 1, 4), ancestors: [...ancestors, folder.name] })) ] : []),
     ] };
   };
   const roots = layout.folders.filter((folder) => !folder.parentId || !folders.has(folder.parentId));

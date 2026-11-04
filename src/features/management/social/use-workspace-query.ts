@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
-import { useActiveMachine, useMachines } from "@/state/machines";
-import { isReviewedMachine } from "@/state/reviewed-machine";
+import { useEffect, useRef, useState } from "react";
 import { useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import type { SocialSnapshot } from "@/domain/types";
@@ -10,22 +8,33 @@ import type { SocialCollectionPage } from "./types";
 import { useConnectionScope } from "./connection-scope";
 
 export function useSocialWorkspace(tab: SocialTab, projectId: string | null) {
-  const machine = useActiveMachine();
   const copy = useCopy();
   // The reviewed connection epoch and its request cache share one explicit owner;
   // neither depends on a memo surviving.
-  const scope = useConnectionScope(machine, () => new SocialWorkspaceCache());
+  const scope = useConnectionScope(() => new SocialWorkspaceCache());
   const cache = scope.resource;
-  const controlKey = JSON.stringify([scope.token, tab, projectId]);
-  const initial = { key: controlKey, search: "", query: "", offset: 0 };
-  const [saved, setSaved] = useState(initial);
-  const controls = saved.key === controlKey ? saved : initial;
+  const scopeKey = JSON.stringify([scope.token, projectId]);
+  const controlKey = JSON.stringify([scopeKey, tab]);
+  type Controls = { search: string; query: string; offset: number };
+  const initial: Controls = { search: "", query: "", offset: 0 };
+  const [saved, setSaved] = useState<{ key: string; tabs: Partial<Record<SocialTab, Controls>> }>({ key: scopeKey, tabs: {} });
+  const active = useRef(controlKey);
+  active.current = controlKey;
+  // Retain each collection's browsing controls only within the current project/connection.
+  const current = saved.key === scopeKey ? saved : { key: scopeKey, tabs: {} };
+  if (current !== saved) setSaved(current);
+  const controls = current.tabs[tab] ?? initial;
+  const updateControls = (update: (value: Controls) => Controls) => setSaved(value => {
+    if (active.current !== controlKey || !scope.isCurrent()) return value;
+    const tabs = value.key === scopeKey ? value.tabs : {};
+    return { key: scopeKey, tabs: { ...tabs, [tab]: update(tabs[tab] ?? initial) } };
+  });
   const search = workspaceSearch(controls.search);
   const changing = search.query !== controls.query;
   useEffect(() => {
     if (search.invalid) return;
-    const timer = setTimeout(() => setSaved((value) => value.key !== controlKey ? initial :
-      { ...value, query: search.query, offset: changing ? 0 : value.offset }), changing ? 300 : 0);
+    const timer = setTimeout(() => updateControls(value =>
+      ({ ...value, query: search.query, offset: changing ? 0 : value.offset })), changing ? 300 : 0);
     return () => clearTimeout(timer);
   }, [controlKey, controls.search]);
   const input = workspaceInput(tab, projectId, controls.offset, controls.query);
@@ -37,7 +46,7 @@ export function useSocialWorkspace(tab: SocialTab, projectId: string | null) {
         try {
           return await cache.read(input, scope.review!.environmentId!,
             (requested) => client.request("social.request", { action: "workspace.snapshot", input: requested }, { signal }),
-            () => isReviewedMachine(scope.review, useMachines.getState()));
+            scope.isCurrent);
         } catch (error) {
           if (!(error instanceof WorkspaceQueryError)) throw error;
           const message = error.code === "unsupported" ? copy(
@@ -58,12 +67,12 @@ export function useSocialWorkspace(tab: SocialTab, projectId: string | null) {
   const collection = socialCollections[tab];
   const page: SocialCollectionPage | undefined = collection ? {
     search: controls.search,
-    setSearch: (value) => setSaved((old) => ({ ...(old.key === controlKey ? old : initial), search: value })),
+    setSearch: (value) => updateControls(old => ({ ...old, search: value })),
     page: state?.pages?.[collection],
     loading: changing || search.invalid || !query.data,
     busy: changing || search.invalid || query.isFetching,
     invalidSearch: search.invalid,
-    onOffset: (offset) => setSaved((old) => ({ ...(old.key === controlKey ? old : initial), offset })),
+    onOffset: (offset) => updateControls(old => ({ ...old, offset })),
   } : undefined;
   return { query, state, page, collection, missingEnvironment };
 }

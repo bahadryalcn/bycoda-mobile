@@ -1,10 +1,8 @@
 import { View } from "react-native";
-import Search from "lucide-react-native/icons/search";
 import X from "lucide-react-native/icons/x";
 import ChevronUp from "lucide-react-native/icons/chevron-up";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { Body, Button, Disclosure, IconButton, Row, SearchField } from "@/ui/primitives";
-import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { colors, space } from "@/ui/tokens";
@@ -46,15 +44,9 @@ export function TranscriptFindControls({
 }) {
   useMobileTheme();
   const copy = useCopy();
+  if (!open) return null;
   return (
     <View style={{ gap: space.xs, paddingBottom: space.xs }}>
-      {!open ? (
-        <Row>
-          <ChatToolbarAction label={copy("Mesajlarda bul", "Find in messages")} onPress={onToggle}>
-            <Search size={16} color={colors.muted} />
-          </ChatToolbarAction>
-        </Row>
-      ) : null}
       {open ? (
         <>
           <Row style={{ flexWrap: "nowrap" }}>

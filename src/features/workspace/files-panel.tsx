@@ -30,6 +30,7 @@ import {
 } from "@/ui/primitives";
 import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
+import { SearchToolbar } from "@/ui/search-field";
 import { useCopy } from "@/ui/copy";
 import { haptic } from "@/ui/motion";
 import { IconTile } from "@/ui/icon-tile";
@@ -193,8 +194,8 @@ export function ProjectFiles({
                 <Plus size={20} strokeWidth={2.4} color={colors.accent} />
               </IconButton>
             </Row>
-            <Row style={{ flexWrap: "nowrap" }}>
-              <View style={uiStyles.grow}>
+            <SearchToolbar
+              search={
                 <SearchField
                   label={
                     searchContent
@@ -213,83 +214,93 @@ export function ProjectFiles({
                       : copy("Ad veya dosya yolu", "Name or file path")
                   }
                 />
-              </View>
-              <ActionMenu
-                label={copy("Dosya seçenekleri", "File options")}
-                active={activeOptions}
-                trigger={
-                  <SlidersHorizontal
-                    size={21}
-                    strokeWidth={2}
-                    color={activeOptions ? colors.accent : colors.muted}
-                  />
-                }
-                actions={[
-                  {
-                    key: "refresh",
-                    label: copy("Yenile", "Refresh"),
-                    disabled: activeQuery.isFetching || (searchContent && !query),
-                    onPress: () => {
-                      void activeQuery.refetch();
+              }
+              actions={
+                <ActionMenu
+                  label={copy("Dosya seçenekleri", "File options")}
+                  active={activeOptions}
+                  trigger={
+                    <SlidersHorizontal
+                      size={21}
+                      strokeWidth={2}
+                      color={activeOptions ? colors.accent : colors.muted}
+                    />
+                  }
+                  actions={[
+                    {
+                      key: "refresh",
+                      label: copy("Yenile", "Refresh"),
+                      disabled: activeQuery.isFetching || (searchContent && !query),
+                      onPress: () => {
+                        void activeQuery.refetch();
+                      },
                     },
-                  },
-                  {
-                    key: "search-names",
-                    label: copy("Dosya adlarında ara", "Search file names"),
-                    selected: !searchContent,
-                    onPress: () => dispatch({ type: "search-mode", mode: "names" }),
-                  },
-                  {
-                    key: "search-content",
-                    label: copy("Dosya içeriğinde ara", "Search file contents"),
-                    selected: searchContent,
-                    onPress: () => dispatch({ type: "search-mode", mode: "content" }),
-                  },
-                  {
-                    key: "hidden",
-                    label: copy("Gizli dosyaları göster", "Show hidden files"),
-                    selected: options.showHidden,
-                    disabled: searchContent,
-                    onPress: () =>
-                      setOptions((current) => ({ ...current, showHidden: !current.showHidden })),
-                  },
-                  {
-                    key: "ignored",
-                    label: copy("Git tarafından yok sayılanları göster", "Show Git-ignored files"),
-                    selected: options.showIgnored,
-                    disabled: searchContent,
-                    onPress: () =>
-                      setOptions((current) => ({
-                        ...current,
-                        showIgnored: !current.showIgnored,
-                      })),
-                  },
-                  {
-                    key: "ascending",
-                    label: copy("Ada göre A → Z", "Name A → Z"),
-                    selected: options.order === "ascending",
-                    disabled: searchContent,
-                    onPress: () => setOptions((current) => ({ ...current, order: "ascending" })),
-                  },
-                  {
-                    key: "descending",
-                    label: copy("Ada göre Z → A", "Name Z → A"),
-                    selected: options.order === "descending",
-                    disabled: searchContent,
-                    onPress: () => setOptions((current) => ({ ...current, order: "descending" })),
-                  },
-                  {
-                    key: "reset",
-                    label: copy("Sıfırla", "Reset"),
-                    disabled: !activeOptions,
-                    onPress: () => {
-                      setOptions(defaultFileListOptions);
-                      dispatch({ type: "search-mode", mode: "names" });
+                    {
+                      key: "search-names",
+                      label: copy("Dosya adlarında ara", "Search file names"),
+                      selected: !searchContent,
+                      onPress: () => dispatch({ type: "search-mode", mode: "names" }),
                     },
-                  },
-                ]}
-              />
-            </Row>
+                    {
+                      key: "search-content",
+                      label: copy("Dosya içeriğinde ara", "Search file contents"),
+                      selected: searchContent,
+                      onPress: () => dispatch({ type: "search-mode", mode: "content" }),
+                    },
+                    {
+                      key: "hidden",
+                      label: copy("Gizli dosyaları göster", "Show hidden files"),
+                      selected: options.showHidden,
+                      disabled: searchContent,
+                      onPress: () =>
+                        setOptions((current) => ({
+                          ...current,
+                          showHidden: !current.showHidden,
+                        })),
+                    },
+                    {
+                      key: "ignored",
+                      label: copy(
+                        "Git tarafından yok sayılanları göster",
+                        "Show Git-ignored files",
+                      ),
+                      selected: options.showIgnored,
+                      disabled: searchContent,
+                      onPress: () =>
+                        setOptions((current) => ({
+                          ...current,
+                          showIgnored: !current.showIgnored,
+                        })),
+                    },
+                    {
+                      key: "ascending",
+                      label: copy("Ada göre A → Z", "Name A → Z"),
+                      selected: options.order === "ascending",
+                      disabled: searchContent,
+                      onPress: () =>
+                        setOptions((current) => ({ ...current, order: "ascending" })),
+                    },
+                    {
+                      key: "descending",
+                      label: copy("Ada göre Z → A", "Name Z → A"),
+                      selected: options.order === "descending",
+                      disabled: searchContent,
+                      onPress: () =>
+                        setOptions((current) => ({ ...current, order: "descending" })),
+                    },
+                    {
+                      key: "reset",
+                      label: copy("Sıfırla", "Reset"),
+                      disabled: !activeOptions,
+                      onPress: () => {
+                        setOptions(defaultFileListOptions);
+                        dispatch({ type: "search-mode", mode: "names" });
+                      },
+                    },
+                  ]}
+                />
+              }
+            />
             {!creating ? (
               <MutationState
                 mutation={create}
@@ -339,22 +350,29 @@ export function ProjectFiles({
         renderItem={({ item, index }) => {
           const first = index === 0;
           const last = index === rows.length - 1;
-          if ("match" in item)
+          if ("match" in item) {
+            const match = item.match;
+            const name = match.relative.replaceAll("\\", "/").split("/").at(-1) || match.relative;
             return (
               <GroupedListRow first={first} last={last} inset={rowInset}>
                 <NavigationRow
                   variant="plain"
-                  label={item.match.relative + ":" + item.match.line}
-                  detail={item.match.preview}
+                  label={name + ":" + match.line}
+                  detail={match.preview}
+                  detailLines={2}
+                  metadata={fileParentPath(match.relative)}
+                  metadataLines={0}
+                  accessibilityLabel={`${match.relative}:${match.line}. ${match.preview}`}
                   icon={
                     <IconTile>
                       <FileText size={18} strokeWidth={2} color={colors.muted} />
                     </IconTile>
                   }
-                  onPress={() => openFile(item.match.relative, item.match.line)}
+                  onPress={() => openFile(match.relative, match.line)}
                 />
               </GroupedListRow>
             );
+          }
           const entry = item.entry;
           return (
             <GroupedListRow first={first} last={last} inset={rowInset}>
@@ -376,11 +394,15 @@ export function ProjectFiles({
                     }
                     detail={
                       query
-                        ? entry.path
+                        ? fileParentPath(entry.path) || undefined
                         : entry.ignored
                           ? copy("Git tarafından izlenmiyor", "Ignored by Git")
                           : undefined
                     }
+                    detailLines={query ? 2 : 1}
+                    metadata={query && entry.ignored ? copy("Git tarafından izlenmiyor", "Ignored by Git") : undefined}
+                    accessibilityLabel={[entry.name, query ? entry.path : undefined,
+                      entry.ignored ? copy("Git tarafından izlenmiyor", "Ignored by Git") : undefined].filter(Boolean).join(". ")}
                     onPress={() => (entry.isDir ? navigate(entry.path) : openFile(entry.path))}
                   />
                 </View>

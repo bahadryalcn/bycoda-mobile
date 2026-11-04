@@ -26,7 +26,7 @@ export function ManagementHome() {
   const projectId = projects.directoryReady && projects.data?.some((project) => project.id === selectedProjectId)
     ? selectedProjectId : null;
   return (
-    <Screen title={copy("Araçlar", "Tools")}>
+    <Screen title={copy("Araçlar", "Tools")} context={machine ? <Scope allowAll /> : undefined}>
       {!machine ? (
         <Empty
           title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
@@ -37,13 +37,12 @@ export function ManagementHome() {
         />
       ) : (
         <>
-          <Scope allowAll />
           <SearchField
             label={copy("Araçlarda ara", "Search tools")}
             value={search}
             onChangeText={setSearch}
           />
-          <ToolDirectory projectId={projectId} query={search} />
+          <ToolDirectory projectId={projectId} query={search} onClearSearch={() => setSearch("")} />
         </>
       )}
     </Screen>

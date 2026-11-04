@@ -1,12 +1,12 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useCopy } from "@/ui/copy";
 import { useMachines } from "@/state/machines";
 import { Body, Button, Notice, QueryState, SelectField, Sheet, Stack } from "@/ui/primitives";
-import { confirmAction } from "@/ui/confirm";
 import { ErrorText } from "../workspace/shared";
 import { useInboxRead } from "./provider-queries";
 import { isInboxOriginCurrent } from "./provider-model";
 import { useJiraBoardDelivery } from "./jira-board-delivery";
+import { JiraBoardActionReview, type JiraBoardReview } from "./jira-board-action-review";
 import type { InboxJobRequest, InboxOrigin } from "./provider-protocol";
 import type { JiraBoardSnapshot, JiraMobileIssue } from "./jira-board-model";
 
@@ -33,6 +33,13 @@ export function JiraBoardIssueActions({
     [sprintId, setSprint] = useState(""),
     [anchor, setAnchor] = useState(""),
     [direction, setDirection] = useState("before");
+  const [review, setReview] = useState<JiraBoardReview | null>(null);
+  const reviewOwner = useRef(review); reviewOwner.current = review;
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; reviewOwner.current = null; };
+  }, []);
   const delivery = useJiraBoardDelivery(origin, snapshot.board.id, () => onChanged()),
     pending = delivery.draft.value?.pending,
     writeAllowed = useRef(canWrite);
@@ -95,20 +102,37 @@ export function JiraBoardIssueActions({
           : {}),
       },
     };
+  const commandNow = useRef(command); commandNow.current = command;
+  const lockedNow = useRef(locked); lockedNow.current = locked;
+  const closeReview = () => { reviewOwner.current = null; setReview(null); };
+  useLayoutEffect(() => { if (locked) closeReview(); }, [locked]);
+  const editable = () => mounted.current && !lockedNow.current && !reviewOwner.current && current();
+  const change = (setter: (value: string) => void) => (value: string) => { if (editable()) setter(value); };
   const submit = () => {
-    if (locked || !command || !current()) return;
-    const reviewed = command;
-    confirmAction(
-      copy("Jira işlemini incele", "Review Jira action"),
-      `${snapshot.board.name}\n${issue.identifier}: ${issue.title}\n${JSON.stringify(reviewed.input)}`,
-      copy("Bilgisayarda onay iste", "Request approval on computer"),
-      () => {
-        if (current() && writeAllowed.current) void delivery.submit(reviewed);
-      },
-      copy("Vazgeç", "Cancel"),
-    );
+    if (!editable() || !command || commandNow.current !== command) return;
+    let description: string;
+    if (command.action === "jira-board-transition") {
+      const transition = transitions.data?.find((item) => item.id === command.input.transitionId);
+      description = `${copy("Durumu değiştir", "Change status")} · ${transition?.name ?? command.input.transitionId} (#${command.input.transitionId})`;
+    } else if (command.input.target === "sprint") {
+      const sprint = snapshot.configuration.sprints.find((item) => item.id === command.input.sprintId);
+      description = `${copy("Sprint’e taşı", "Move to sprint")} · ${sprint?.name ?? command.input.sprintId} (#${command.input.sprintId})`;
+    } else if (command.input.target === "rank") {
+      const key = command.input.beforeKey ?? command.input.afterKey;
+      const anchorIssue = snapshot.page.issues.find((item) => item.identifier === key);
+      description = `${command.input.beforeKey ? copy("Öncesine", "Before") : copy("Sonrasına", "After")} · ${key} · ${anchorIssue?.title ?? key}`;
+    } else {
+      description = command.input.target === "backlog" ? copy("Backlog’a taşı", "Move to backlog") : copy("Panoya taşı", "Move to board");
+    }
+    const next = { command, description }; reviewOwner.current = next; setReview(next);
+  };
+  const confirmReview = () => {
+    if (!mounted.current || !review || reviewOwner.current !== review || lockedNow.current || !current() || !writeAllowed.current) return;
+    reviewOwner.current = null; setReview(null);
+    void delivery.submit(review.command);
   };
   return (
+    <>
     <Sheet
       visible
       size="form"
@@ -119,7 +143,7 @@ export function JiraBoardIssueActions({
         <Button
           label={delivery.result ? copy("Kapat", "Close") : copy("İşlemi incele", "Review action")}
           busy={delivery.busy}
-          disabled={delivery.result ? false : locked || !command}
+          disabled={delivery.result ? false : locked || !!review || !command}
           onPress={delivery.result ? onClose : submit}
         />
       }
@@ -173,8 +197,9 @@ export function JiraBoardIssueActions({
         <SelectField
           label={copy("İşlem", "Action")}
           value={action}
-          disabled={locked}
+          disabled={locked || !!review}
           onChange={(value) => {
+            if (!editable()) return;
             setAction(value);
             setTransition("");
             setSprint("");
@@ -205,8 +230,8 @@ export function JiraBoardIssueActions({
             <SelectField
               label={copy("Jira geçişi", "Jira transition")}
               value={transitionId}
-              disabled={locked}
-              onChange={setTransition}
+              disabled={locked || !!review}
+              onChange={change(setTransition)}
               options={(transitions.data ?? [])
                 .filter((item) => !item.requiresFields)
                 .map((item) => ({ value: item.id, label: item.name }))}
@@ -225,8 +250,8 @@ export function JiraBoardIssueActions({
           <SelectField
             label={copy("Hedef sprint", "Target sprint")}
             value={sprintId}
-            disabled={locked}
-            onChange={setSprint}
+            disabled={locked || !!review}
+            onChange={change(setSprint)}
             options={snapshot.configuration.sprints.map((item) => ({
               value: String(item.id),
               label: item.name,
@@ -238,8 +263,8 @@ export function JiraBoardIssueActions({
             <SelectField
               label={copy("Sıra yönü", "Rank direction")}
               value={direction}
-              disabled={locked}
-              onChange={setDirection}
+              disabled={locked || !!review}
+              onChange={change(setDirection)}
               options={[
                 { value: "before", label: copy("Öncesine", "Before") },
                 { value: "after", label: copy("Sonrasına", "After") },
@@ -248,8 +273,8 @@ export function JiraBoardIssueActions({
             <SelectField
               label={copy("Görünen referans kayıt", "Displayed anchor issue")}
               value={anchor}
-              disabled={locked}
-              onChange={setAnchor}
+              disabled={locked || !!review}
+              onChange={change(setAnchor)}
               searchable
               options={snapshot.page.issues
                 .filter((item) => item.identifier !== issue.identifier)
@@ -262,5 +287,8 @@ export function JiraBoardIssueActions({
         ) : null}
       </Stack>
     </Sheet>
+    {review && !locked ? <JiraBoardActionReview review={review} snapshot={snapshot} issue={issue}
+      onClose={() => { if (reviewOwner.current === review) closeReview(); }} onConfirm={confirmReview} /> : null}
+    </>
   );
 }

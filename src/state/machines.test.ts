@@ -10,7 +10,7 @@ const access = vi.hoisted(() => ({ assertAppAccess: vi.fn() }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: storage }));
 vi.mock("expo-secure-store", () => secrets);
 vi.mock("./security", () => access);
-import { credentials, useMachines } from "./machines";
+import { credentials, useMachines, withDisconnectedComputers } from "./machines";
 import { useConnectionStore } from "./connection-store";
 import { LANGUAGES } from "../../../src/shared/i18n/languages";
 const machine = {
@@ -314,6 +314,34 @@ describe("connection persistence", () => {
       keychainAccessible: "device-only",
     });
   });
+  it.each(["endpoint", "environmentId", "lanKey"] as const)("keeps a replaced %s and credential when removal was approved for an older connection", async field => {
+    await useMachines.getState().hydrate();
+    await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
+    const current = { ...machine, providers: ["cursor" as const], [field]: field === "endpoint" ? "https://updated.example" : "updated-identity" };
+    useMachines.setState({ machines: [current] }); secrets.getItemAsync.mockClear(); secrets.deleteItemAsync.mockClear(); storage.setItem.mockClear();
+    await expect(useMachines.getState().removeMachine(machine.id, machine)).rejects.toThrow("connection changed");
+    expect(secrets.getItemAsync).not.toHaveBeenCalled(); expect(secrets.deleteItemAsync).not.toHaveBeenCalled(); expect(storage.setItem).not.toHaveBeenCalled();
+    expect(useMachines.getState().machines).toEqual([current]);
+  });
+  it("checks a frozen removal identity inside the mutation queue after a pending replacement", async () => {
+    await useMachines.getState().hydrate(); await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
+    let release!: () => void, began!: () => void; const started = new Promise<void>(resolve => { began = resolve; });
+    secrets.setItemAsync.mockImplementationOnce(() => { began(); return new Promise<void>(resolve => { release = resolve; }); });
+    const updated = { ...machine, providers: ["cursor" as const], endpoint: "https://updated.example" };
+    const saving = useMachines.getState().saveMachine(updated, replacement);
+    const reviewed = { ...machine };
+    const removing = useMachines.getState().removeMachine(machine.id, reviewed).catch(error => error as Error);
+    reviewed.endpoint = updated.endpoint;
+    await started; release(); await saving; expect(await removing).toMatchObject({ message: "This computer connection changed. Reopen its current route." });
+    expect(secrets.deleteItemAsync).not.toHaveBeenCalled(); expect(useMachines.getState().machines[0].endpoint).toBe(updated.endpoint);
+  });
+  it("removes only the reviewed origin when another computer became active", async () => {
+    await useMachines.getState().hydrate(); await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
+    await useMachines.getState().saveMachine({ ...machine, id: "computer-b", environmentId: "env-b", providers: ["cursor"] }, replacement);
+    useMachines.setState({ activeId: "computer-b" });
+    await useMachines.getState().removeMachine(machine.id, machine);
+    expect(secrets.deleteItemAsync).toHaveBeenCalledExactlyOnceWith("bycoda.remote.computer-a"); expect(useMachines.getState().activeId).toBe("computer-b");
+  });
   it("serializes connection mutations so one failed rollback cannot erase a later computer", async () => {
     await useMachines.getState().hydrate();
     storage.setItem.mockRejectedValueOnce(new Error("One write failed"));
@@ -385,4 +413,20 @@ describe("connection persistence", () => {
     ).rejects.toThrow("unavailable");
     expect(storage.setItem).not.toHaveBeenCalled();
   });
+});
+
+it("keeps pairing queued until disconnected local cleanup finishes", async () => {
+  await useMachines.getState().hydrate(); let release!: () => void, began!: () => void;
+  const started = new Promise<void>(resolve => { began = resolve; });
+  const cleanup = withDisconnectedComputers(async () => { began(); await new Promise<void>(resolve => { release = resolve; }); });
+  await started; const pairing = useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
+  expect(useMachines.getState().connectionPending).toBe(true); expect(secrets.setItemAsync).not.toHaveBeenCalled();
+  release(); await cleanup; await pairing; expect(secrets.setItemAsync).toHaveBeenCalledOnce(); expect(useMachines.getState().machines).toHaveLength(1);
+});
+it("checks the absence of computers inside the cleanup queue before touching drafts", async () => {
+  await useMachines.getState().hydrate(); const operation = vi.fn(async () => {});
+  const pairing = useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
+  const cleanup = withDisconnectedComputers(operation).catch(error => error as Error);
+  await pairing; expect(await cleanup).toMatchObject({ message: "Disconnect computers before deleting saved drafts." }); expect(operation).not.toHaveBeenCalled();
+  expect(useMachines.getState().connectionPending).toBe(false);
 });

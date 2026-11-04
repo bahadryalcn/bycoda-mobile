@@ -7,24 +7,29 @@ import { useCopy } from "@/ui/copy";
 import { uiStyles } from "@/ui/styles";
 import type { ComposerSuggestion } from "./use-composer-catalog";
 
-export function ComposerSuggestions({ items, loading, error, trigger, selected, onPick, onRetry, onClose }: { items: ComposerSuggestion[]; loading: boolean; error: unknown; trigger: string; selected: number; onPick: (item: ComposerSuggestion) => void; onRetry: () => void; onClose: () => void }) {
+export function ComposerSuggestions({ items, loading, error, trigger, selected, onPick, onRetry, onClose, maximumHeight, compact }: { maximumHeight: number; compact: boolean; items: ComposerSuggestion[]; loading: boolean; error: unknown; trigger: string; selected: number; onPick: (item: ComposerSuggestion) => void; onRetry: () => void; onClose: () => void }) {
   useMobileTheme();
   const copy = useCopy();
+  const { fontScale } = useWindowDimensions();
   const list = useRef<FlatList<ComposerSuggestion>>(null);
   const revealRetried = useRef(false);
   const revealTarget = useRef({ selected, count: items.length });
   revealTarget.current = { selected, count: items.length };
-  const { height } = useWindowDimensions();
+  const title = trigger === "@" ? copy("Proje dosyaları", "Project files") : trigger === "$" ? copy("Beceriler", "Skills") : copy("Komutlar", "Commands");
   useEffect(() => {
     revealRetried.current = false;
     if (selected >= 0 && selected < items.length)
-      list.current?.scrollToIndex({ index: selected, animated: false, viewPosition: 0.5 });
-  }, [selected, items]);
-  return <View style={{ maxHeight: Math.min(280, height * 0.4), backgroundColor: colors.raised, borderRadius: radii.control, padding: space.sm, gap: space.xs }}>
-    <Row style={{ justifyContent: "space-between" }}><Body muted style={uiStyles.caption}>{trigger === "@" ? copy("Proje dosyaları", "Project files") : trigger === "$" ? copy("Beceriler", "Skills") : copy("Komutlar", "Commands")}</Body><Button tone="quiet" density="compact" label={copy("Kapat", "Close")} onPress={onClose} /></Row>
-    {loading ? <Loading /> : null}<ErrorText error={error} />{error ? <Button label={copy("Yeniden dene", "Retry")} onPress={onRetry} /> : null}
-    {!loading && !error && !items.length ? <Body muted>{copy("Eşleşme yok", "No matches")}</Body> : null}
+      list.current?.scrollToIndex({ index: selected, animated: false, viewPosition: 0 });
+  }, [selected, items, maximumHeight, compact, fontScale]);
+  return <View style={{ maxHeight: maximumHeight, minHeight: 0, flexShrink: 1, backgroundColor: colors.raised, borderRadius: radii.control, padding: compact ? space.xs : space.sm, gap: space.xs }}>
+    {!compact ? <Row style={{ justifyContent: "space-between" }}><Body muted style={uiStyles.caption}>{title}</Body><Button tone="quiet" density="compact" label={copy("Kapat", "Close")} onPress={onClose} /></Row> : null}
     <FlatList ref={list} data={items} keyExtractor={(item) => item.id}
+      accessibilityLabel={title}
+      style={{ minHeight: 0, flexShrink: 1 }}
+      ListHeaderComponent={<View style={{gap:space.xs}}>
+        {loading ? <Loading /> : null}<ErrorText error={error} />{error ? <Button label={copy("Yeniden dene", "Retry")} onPress={onRetry} /> : null}
+        {!loading && !error && !items.length ? <Body muted>{copy("Eşleşme yok", "No matches")}</Body> : null}
+      </View>}
       keyboardShouldPersistTaps="always"
       onScrollToIndexFailed={({ index, averageItemLength }) => {
         list.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
@@ -32,7 +37,7 @@ export function ComposerSuggestions({ items, loading, error, trigger, selected, 
           revealRetried.current = true;
           requestAnimationFrame(() => {
             if (revealTarget.current.selected === index && index < revealTarget.current.count)
-              list.current?.scrollToIndex({ index, animated: false, viewPosition: 0.5 });
+              list.current?.scrollToIndex({ index, animated: false, viewPosition: 0 });
           });
         }
       }}
@@ -42,7 +47,7 @@ export function ComposerSuggestions({ items, loading, error, trigger, selected, 
         const detail = path && path.includes("/") ? path : item.detail;
         return <PressableCard label={[`${trigger}${item.name}`, item.detail].filter(Boolean).join(". ")}
           selected={index === selected} onPress={() => onPick(item)}
-          style={{ padding: space.sm, borderWidth: 0 }}>
+          style={{ padding: space.sm, gap: space.xs, borderWidth: 0, borderRadius: radii.control, backgroundColor: index === selected ? colors.selected : "transparent" }}>
           <Body numberOfLines={2}>{label}</Body>
           {detail ? <Body muted numberOfLines={2} ellipsizeMode="middle" style={uiStyles.caption}>{detail}</Body> : null}
         </PressableCard>;

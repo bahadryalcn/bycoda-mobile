@@ -1,17 +1,23 @@
-import { useState, type PropsWithChildren, type ReactNode } from "react";
-import { View } from "react-native";
+import { useState, type PropsWithChildren, type ReactNode, type ReactElement } from "react";
+import { View, useWindowDimensions, type ViewStyle } from "react-native";
 import { Accordion } from "panelui-native/components/accordion";
 import { Card } from "./layout";
 import { Body } from "./typography";
 import { metrics, opacity, space } from "./tokens";
 import { uiStyles } from "./styles";
 import { useMobileTheme } from "./theme";
+import { Hint } from "./hint";
+
+function RecordIdentity({ hint, style, children }: { hint?: string; style: ViewStyle; children: ReactElement<any> }) {
+  return hint ? <View style={style}><Hint label={hint} stretch>{children}</Hint></View> : children;
+}
 
 /** A record's title opens its details; commands remain separate touch targets. */
 export function RecordCard({
-  title, status, metadata, menu, details, preview, footer, defaultExpanded = false, children,
+  title, status, metadata, menu, details, preview, footer, defaultExpanded = false, children, hint,
 }: PropsWithChildren<{
   title: string;
+  hint?: string;
   status?: ReactNode;
   metadata?: string;
   menu?: ReactNode;
@@ -21,6 +27,7 @@ export function RecordCard({
   defaultExpanded?: boolean;
 }>) {
   useMobileTheme();
+  const { fontScale } = useWindowDimensions();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [visited, setVisited] = useState(defaultExpanded);
   const [seenDefault, setSeenDefault] = useState(defaultExpanded);
@@ -41,17 +48,27 @@ export function RecordCard({
         className="overflow-visible"
       >
         <Accordion.Item value="details" className="overflow-visible">
-          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.xs }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: space.xs }}>
+            <RecordIdentity hint={hint} style={{ flexGrow: 1, flexShrink: 1, flexBasis: 160 * Math.max(1, fontScale), minWidth: "auto", maxWidth: "100%" }}>
             <Accordion.Trigger
               disabled={!details}
+              accessibilityLabel={hint ? `${title}. ${hint}` : undefined}
               aria-expanded={details ? expanded : undefined}
-              className="flex-1 min-w-0 gap-ui-sm py-ui-xs"
+              className="gap-ui-sm py-ui-xs"
               style={({ pressed }) => ({
                 minHeight: metrics.touchTarget,
+                flexGrow: hint ? undefined : 1,
+                flexShrink: hint ? undefined : 1,
+                flexBasis: hint ? undefined : 160 * Math.max(1, fontScale),
+                width: hint ? "100%" : undefined,
+                minWidth: "auto",
+                maxWidth: "100%",
+                flexWrap: "wrap",
                 opacity: pressed ? opacity.pressed : 1,
               })}
             >
-              <View style={[uiStyles.grow, { gap: space.xs }]}>
+              <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 120 * Math.max(1, fontScale),
+                minWidth: "auto", maxWidth: "100%", gap: space.xs }}>
                 <Body selectable={false} style={uiStyles.title}>{title}</Body>
                 {status || metadata ? (
                   <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }}>
@@ -60,10 +77,13 @@ export function RecordCard({
                   </View>
                 ) : null}
               </View>
-              {details ? <Accordion.Indicator accessible={false} accessibilityElementsHidden
-                importantForAccessibility="no-hide-descendants" style={{ flexShrink: 0 }} /> : null}
+              {details ? <View style={{ flexShrink: 0, marginStart: "auto" }}>
+                <Accordion.Indicator accessible={false} accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants" />
+              </View> : null}
             </Accordion.Trigger>
-            {menu}
+            </RecordIdentity>
+            {menu ? <View style={{ marginStart: "auto", flexShrink: 1, maxWidth: "100%" }}>{menu}</View> : null}
           </View>
           {!expanded && preview ? <View style={{ paddingTop: space.xs }}>{preview}</View> : null}
           {children ? <View style={{ gap: space.sm, paddingTop: space.xs }}>{children}</View> : null}

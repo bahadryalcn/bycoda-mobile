@@ -2,9 +2,20 @@ import { MutationObserver, QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import type { HostTransport } from "../remote/transport";
 import { hostKey, hostMutationOptions } from "./host-request";
-import { projectPrivacyKey } from "../features/workspace/project-privacy-cache";
+import { projectPrivacyKey, observeProjectPrivacy, projectVisibilityExpired } from "../features/workspace/project-privacy-cache";
 
 describe("host mutation destination", () => {
+  it("expires explicit project proof after a previous background error on only the original target", async () => {
+    const cache = observeProjectPrivacy(new QueryClient()), key = projectPrivacyKey("pc-a", true), other = projectPrivacyKey("pc-b", true);
+    cache.setQueryData(key, ["preserved A"]); cache.setQueryData(other, ["preserved B"]);
+    await cache.fetchQuery({ queryKey: key, queryFn: async () => { throw Error("network"); }, staleTime: 0, retry: false }).catch(() => {});
+    expect(cache.getQueryState(key)?.isInvalidated).toBe(true); expect(projectVisibilityExpired(cache, key)).toBe(false);
+    const request = vi.fn(async () => "ok"), client = { machine: { id: "pc-a" }, request } as unknown as HostTransport;
+    const observer = new MutationObserver(cache, hostMutationOptions(cache));
+    await observer.mutate({ client, method: "projects.open", params: {}, invalidate: ["projects"] });
+    expect(projectVisibilityExpired(cache, key)).toBe(true); expect(projectVisibilityExpired(cache, other)).toBe(false);
+    expect(request).toHaveBeenCalledTimes(1); expect(cache.getQueryData(key)).toEqual(["preserved A"]); cache.clear();
+  });
   it("keeps visibility proof valid during a default content refresh, but honors explicit project refresh", async () => {
     const cache = new QueryClient();
     const directory = projectPrivacyKey("pc-a", true);

@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { HostTransport } from "../remote/transport";
-import { isProjectPrivacyQuery } from "../features/workspace/project-privacy-cache";
+import { expireProjectPrivacy, isProjectPrivacyQuery } from "../features/workspace/project-privacy-cache";
 
 export const hostKey = (machineId: string | null, key: readonly unknown[]) =>
   ["machine", machineId, ...key] as const;
@@ -26,11 +26,17 @@ export function hostMutationOptions<T>(cache: QueryClient) {
       if (!write.client) return Promise.reject(new Error("Choose a computer first."));
       return write.client.request<T>(write.method, write.params, { retry: false });
     },
-    onSuccess: (_data: T, write: HostWrite) =>
-      write.invalidate === null ? Promise.resolve() : cache.invalidateQueries({
-        queryKey: hostKey(write.client?.machine.id ?? null, write.invalidate),
+    onSuccess: (_data: T, write: HostWrite) => {
+      if (write.invalidate === null) return Promise.resolve();
+      const queryKey = hostKey(write.client?.machine.id ?? null, write.invalidate);
+      if (write.invalidate.length) expireProjectPrivacy(cache, cache.getQueryCache().findAll({
+        queryKey, predicate: ({ queryKey }) => isProjectPrivacyQuery(queryKey),
+      }));
+      return cache.invalidateQueries({
+        queryKey,
         // Only an explicit project mutation or the privacy owner expires proof.
         predicate: ({ queryKey }) => write.invalidate!.length > 0 || !isProjectPrivacyQuery(queryKey),
-      }),
+      });
+    },
   };
 }

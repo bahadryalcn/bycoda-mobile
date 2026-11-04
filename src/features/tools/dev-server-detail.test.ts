@@ -3,18 +3,19 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { DevServerDetail } from "./dev-server-detail";
-const state = vi.hoisted(() => ({ id: "machine", requests: [] as { method: string; params: unknown }[],
-  uncertain: false, force: false, refetch: vi.fn(async () => ({ isError: false })) }));
+const state = vi.hoisted(() => ({ id: "machine", endpoint: "https://synthetic.invalid", environmentId: "host", lanKey: "synthetic", requests: [] as { method: string; params: unknown }[],
+  detailError: null as Error | null, logsError: null as Error | null, logsAvailable: false, fetching: false, returnedId: "web", reviewCapability: true, submit: undefined as undefined | (() => void), uncertain: false, force: false, refetch: vi.fn(async () => ({ isError: false })) }));
 const server = { id: "web", projectId: "project", managed: true, association: "managed" as const, name: "Web", state: "running" as const,
   endpoints: [{ address: "127.0.0.1", port: 3000, url: "http://127.0.0.1:3000" }], logsAvailable: false,
   process: { pid: 101, startedAt: "birth", name: "node" } };
 vi.mock("@/state/machines", () => ({
-  useMachines: Object.assign((fn: (value: { activeId: string }) => unknown) => fn({ activeId: state.id }), { getState: () => ({ activeId: state.id }) }),
-  useActiveMachine: () => ({ capabilities: ["dev.servers.reviewed-impact"] }),
+  useMachines: Object.assign((fn: (value: { activeId: string }) => unknown) => fn({ activeId: state.id }), { getState: () => ({ activeId: state.id, machines: [{ id: state.id, endpoint: state.endpoint, environmentId: state.environmentId, lanKey: state.lanKey }] }) }),
+  useActiveMachine: () => ({ id: state.id, name: "Computer", endpoint: state.endpoint, environmentId: state.environmentId, lanKey: state.lanKey, capabilities: ["browser.shared", ...(state.reviewCapability ? ["dev.servers.reviewed-impact"] : [])] }),
 }));
-vi.mock("./browser-screen", () => ({ BrowserScreen: () => null }));
+vi.mock("@/ui/layout", () => ({ ScreenChromeProvider: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
+vi.mock("./browser-screen", () => ({ BrowserScreen: ({ initialUrl }: any) => createElement("div", { "data-browser-url": initialUrl }) }));
 vi.mock("@/state/queries", () => ({
-  useHostQuery: () => ({ data: { server, descendants: [{ pid: 102, startedAt: "child", name: "worker" }], affectedPorts: [3000], expectedImpact: "b".repeat(64) }, isSuccess: true, refetch: state.refetch }),
+  useHostQuery: (_key: unknown, method: string) => method === "devServers.logs" ? { data: { available: state.logsAvailable, output: "Synthetic output" }, error: state.logsError, isSuccess: !state.logsError, refetch: state.refetch } : ({ data: { server: { ...server, id: state.returnedId, logsAvailable: true }, descendants: [{ pid: 102, startedAt: "child", name: "worker" }], affectedPorts: [3000], expectedImpact: "b".repeat(64) }, error: state.detailError, isFetching: state.fetching, isSuccess: !state.detailError, refetch: state.refetch }),
   useHostMutation: (method: string) => ({ isPending: false, reset: () => {}, data: method === "devServers.stop" && state.force ? { requiresForce: true } : undefined,
     mutateAsync: async (params: unknown) => { state.requests.push({ method, params }); if (state.uncertain) throw { uncertain: true }; return { requiresForce: true }; } }),
 }));
@@ -24,24 +25,24 @@ vi.mock("@/ui/primitives", () => {
   const Button = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label);
   return {
     Disclosure: Wrapper,
-    FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, `Confirm ${submitLabel}`)), Body: Wrapper, Row: Wrapper, Sheet: Wrapper, NavigationGroup: Wrapper, CodePanel: Wrapper, CodeText: Wrapper,
-    Button, QueryState: () => null, MutationState: () => null, ErrorText: () => null, ToggleField: () => null,
-    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => { state.submit = onSubmit; return createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, `Confirm ${submitLabel}`)); }, Body: Wrapper, Row: Wrapper, Sheet: Wrapper, NavigationGroup: Wrapper, CodePanel: Wrapper, CodeText: Wrapper,
+    Button, QueryState: ({ query }: any) => query.error ? createElement("p", null, query.error.message) : null, MutationState: () => null, ErrorText: () => null, ToggleField: () => null,
+    Notice: ({ message, onRetry }: any) => createElement("div", null, message, onRetry ? createElement(Button, { label: "Retry", onPress: onRetry }) : null),
     ConfirmationCard: ({ confirmLabel, onConfirm, disabled }: { confirmLabel: string; onConfirm: () => void; disabled?: boolean }) => createElement(Button, { label: `Confirm ${confirmLabel}`, onPress: onConfirm, disabled }),
   };
 });
 let root: ReturnType<typeof createRoot> | undefined;
 let container: HTMLDivElement;
-async function render() {
+async function render(projectId = "project") {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   if (!root) { container = document.createElement("div"); root = createRoot(container); }
-  await act(async () => root!.render(createElement(DevServerDetail, { projectId: "project", server, onClose: vi.fn() })));
+  await act(async () => root!.render(createElement(DevServerDetail, { projectId, project: { id: projectId, name: "Project", cwd: "/project" }, server, onClose: vi.fn() })));
 }
 async function click(label: string) {
   const button = [...container.querySelectorAll("button")].find((item) => item.textContent === label)!;
   await act(async () => button.click());
 }
-afterEach(async () => { await act(async () => root?.unmount()); root = undefined; state.requests = []; state.id = "machine"; state.uncertain = false; state.force = false; vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root?.unmount()); root = undefined; state.requests = []; state.id = "machine"; state.endpoint = "https://synthetic.invalid"; state.environmentId = "host"; state.lanKey = "synthetic"; state.uncertain = false; state.force = false; state.detailError = null; state.logsError = null; state.logsAvailable = false; state.fetching = false; state.returnedId = "web"; state.reviewCapability = true; state.refetch.mockReset().mockResolvedValue({ isError: false }); vi.unstubAllGlobals(); });
 it("shows exact process/port impact before force and sends the frozen review token only on confirmation", async () => {
   state.force = true; await render(); await click("Force stop");
   expect(state.requests).toEqual([]);
@@ -60,4 +61,37 @@ it("does not resend uncertain writes until explicit successful state reconciliat
   await click("Confirm Stop"); expect(state.requests).toHaveLength(1);
   await click("Refresh state"); state.uncertain = false; await click("Stop"); await click("Confirm Stop");
   expect(state.requests).toHaveLength(2);
+});
+it.each(["endpoint", "environment", "key", "project"])("invalidates a reviewed %s change after rerender and never revives its approval", async kind => {
+  await render(); await click("Stop"); const stale = state.submit!;
+  if (kind === "endpoint") state.endpoint = "https://repaired.invalid";
+  if (kind === "environment") state.environmentId = "other";
+  if (kind === "key") state.lanKey = "other-synthetic";
+  await render(kind === "project" ? "other-project" : "project"); await act(() => stale());
+  expect(state.requests).toEqual([]); expect(container.textContent).toContain("Reopen this view");
+  state.endpoint = "https://synthetic.invalid"; state.environmentId = "host"; state.lanKey = "synthetic"; await render();
+  expect(container.textContent).toContain("Reopen this view"); expect(state.requests).toEqual([]);
+});
+it("does not add unavailable-log feedback beside a log read failure", async () => {
+  await render(); await click("Logs"); state.logsError = new Error("Synthetic log read failure"); await render();
+  expect(container.textContent).toContain("Synthetic log read failure"); expect(container.textContent).not.toContain("Logs are not available");
+  state.logsError = null; await render(); expect(container.textContent).toContain("Logs are not available");
+});
+it("rejects a wrong server identity and provides contextual refresh", async () => {
+  state.returnedId = "other-server"; await render(); expect(container.textContent).toContain("do not match this target");
+  expect([...container.querySelectorAll("button")].some(b => b.textContent === "Stop")).toBe(false);
+  await click("Retry"); expect(state.refetch).toHaveBeenCalledOnce(); expect(state.requests).toEqual([]);
+});
+it("coalesces explicit refresh and blocks an outstanding review while the read reconciles", async () => {
+  let finish!: () => void; state.refetch.mockImplementationOnce(() => new Promise(resolve => { finish = () => resolve({ isError: false }); }));
+  await render(); await click("Stop"); const stale = state.submit!; await click("Refresh state"); await click("Refresh state"); await act(() => stale());
+  expect(state.refetch).toHaveBeenCalledOnce(); expect(state.requests).toEqual([]); await act(async () => finish());
+});
+it("keeps private preview available without process-impact mutation capability", async () => {
+  state.reviewCapability = false; await render(); await click("Preview");
+  expect(container.querySelector("[data-browser-url]")?.getAttribute("data-browser-url")).toBe("http://127.0.0.1:3000/"); expect(state.requests).toEqual([]);
+});
+it("blocks review submission when details have lost read authority", async () => {
+  await render(); await click("Stop"); state.detailError = new Error("Synthetic detail read failure"); await render(); await act(() => state.submit!());
+  expect(state.requests).toEqual([]); expect(container.textContent).toContain("Synthetic detail read failure");
 });

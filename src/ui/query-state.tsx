@@ -1,10 +1,12 @@
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Empty, ErrorNotice, Loading, Notice, Skeleton } from "./feedback";
 import { useCopy } from "./copy";
-import { remoteErrorKind } from "./error-message";
+import { errorMessage, remoteErrorKind } from "./error-message";
 import { getQueryPresentation } from "./query-presentation";
 import type { QueryStateProps, MutationStateProps } from "./component-props";
+import { Body } from "./typography";
+import { SheetGuardContext } from "./sheet-guard-context";
 
 export function QueryState({
   query,
@@ -12,11 +14,23 @@ export function QueryState({
   emptyTitle,
   emptyDetail,
   emptyAction,
+  onManageConnections,
   loading = "list",
   loadingLabel,
 }: QueryStateProps) {
   const copy = useCopy();
+  const sheet = useContext(SheetGuardContext);
   const presentation = getQueryPresentation(query, !!empty);
+  const kind = remoteErrorKind(query.error);
+  const repair = kind === "auth" || kind === "identity";
+  const repairAction = repair ? {
+    label: copy("Bağlantıları yönet", "Manage connections"),
+    onPress: onManageConnections ?? (() => {
+      const navigate = () => router.push("/machines");
+      if (sheet) (sheet.requestCloseStackThen ?? sheet.requestCloseThen)(navigate);
+      else navigate();
+    }),
+  } : undefined;
   if (presentation === "loading")
     return loading === "none" ? null : loading === "inline" ? (
       <Loading label={loadingLabel} />
@@ -40,17 +54,20 @@ export function QueryState({
         }
       />
     );
-  if (presentation === "stale-error")
+  if (presentation === "stale-error") {
+    const unsupported = kind === "unsupported";
+    const cachedMessage = copy(
+      "Bilgiler yenilenemedi. Son alınan bilgiler gösteriliyor.",
+      "Could not refresh. Showing the last received information.",
+    );
     return (
       <Notice
         tone="warning"
-        message={copy(
-          "Bilgiler yenilenemedi. Son alınan bilgiler gösteriliyor.",
-          "Could not refresh. Showing the last received information.",
-        )}
+        message={unsupported || repair ? `${errorMessage(query.error, copy)} ${cachedMessage}` : cachedMessage}
+        action={repairAction}
         retrying={query.isFetching}
         onRetry={
-          query.refetch
+          !unsupported && !repair && query.refetch
             ? () => {
                 if (!query.isFetching) void query.refetch?.();
               }
@@ -58,9 +75,8 @@ export function QueryState({
         }
       />
     );
+  }
   if (presentation === "error") {
-    const kind = remoteErrorKind(query.error);
-    const repair = kind === "auth" || kind === "identity";
     return (
       <ErrorNotice
         error={query.error}
@@ -72,10 +88,7 @@ export function QueryState({
               }
             : undefined
         }
-        action={repair ? {
-          label: copy("Bağlantıları yönet", "Manage connections"),
-          onPress: () => router.push("/machines"),
-        } : undefined}
+        action={repairAction}
       />
     );
   }
@@ -93,18 +106,20 @@ export function QueryState({
 
 export function MutationState({ mutation, pending, success }: MutationStateProps) {
   const [showSuccess, setShowSuccess] = useState(false);
+  // Translating the acknowledgement must not restart its completed operation.
+  const hasSuccess = !!success;
   useEffect(() => {
-    if (!mutation.isSuccess || !success) {
+    if (!mutation.isSuccess || !hasSuccess) {
       setShowSuccess(false);
       return;
     }
     setShowSuccess(true);
     const timer = setTimeout(() => setShowSuccess(false), 5000);
     return () => clearTimeout(timer);
-  }, [mutation.isSuccess, success]);
+  }, [mutation.isSuccess, mutation.submittedAt, hasSuccess]);
   if (mutation.isPending) return pending ? <Loading label={pending} /> : null;
   if (mutation.isError || mutation.error) return <ErrorNotice error={mutation.error} />;
   return mutation.isSuccess && success && showSuccess ? (
-    <Notice tone="success" message={success} />
+    <Body muted accessibilityLiveRegion="polite" style={{ alignSelf: "flex-start" }}>{success}</Body>
   ) : null;
 }

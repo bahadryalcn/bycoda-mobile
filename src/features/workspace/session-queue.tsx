@@ -2,21 +2,18 @@ import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 import ListOrdered from "lucide-react-native/icons/list-ordered";
-import ArrowUp from "lucide-react-native/icons/arrow-up";
-import ArrowDown from "lucide-react-native/icons/arrow-down";
-import Trash2 from "lucide-react-native/icons/trash";
-import Pencil from "lucide-react-native/icons/pencil";
-import { Body, Button, Empty, ErrorText, Notice, Row, Sheet } from "@/ui/primitives";
-import { ChatAction, ChatToolbarAction } from "@/ui/chat-controls";
+import { ErrorText } from "@/ui/primitives";
+import { ComposerActionSlot, useComposerActionArea } from "@/ui/composer-actions";
+import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useHostClient } from "@/state/queries";
 import { colors, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { moveQueuedMessage, queuedCommand, queuedDeliveryUnknown } from "./composer-delivery";
 import { readSession } from "./session-wire";
 import type { SessionCommand, SessionScope } from "./session-types";
 import type { useSessionQueue } from "./use-session-queue";
 import { composerDeliveryError } from "./composer-delivery-copy";
+import { SessionQueueSheet } from "./session-queue-sheet";
 import { SessionQueueEditor, useQueueEditor } from "./session-queue-editor";
 
 export function SessionQueue({
@@ -33,6 +30,7 @@ export function SessionQueue({
   onCommand: SessionCommand;
 }) {
   useMobileTheme();
+  const compact = useComposerActionArea();
   const copy = useCopy();
   const client = useHostClient();
   const [open, setOpen] = useState(false);
@@ -164,6 +162,7 @@ export function SessionQueue({
                 );
   return (
     <>
+      <ComposerActionSlot>
       {rows.length || queue.error || error || editor.value || editor.error || editor.visible ? (
         <View
           style={{
@@ -172,196 +171,57 @@ export function SessionQueue({
             alignItems: "center",
             justifyContent: "space-between",
             gap: space.xs,
+            flexShrink: 1,
+            maxWidth: "100%",
           }}
         >
           {rows.length || queue.error || error ? (
             <ChatToolbarAction
-              label={
-                queue.error
-                  ? copy("Sıra yüklenemedi", "Queue unavailable")
-                  : `${copy("{p0} sırada", "{p0} queued", { p0: rows.length })} · ${queueState}`
-              }
+              label={compact && !queue.error && !error && !unconfirmed && !sending && !queue.changing && !queue.data?.claim
+                ? String(rows.length)
+                : queue.error ? `${copy("Sıra", "Queue")} · ${copy("Hata", "Error")}`
+                  : `${copy("{p0} sırada", "{p0} queued", { p0: rows.length })} · ${queueState}`}
+              accessibilityLabel={queue.error ? copy("Sıra yüklenemedi", "Queue unavailable")
+                : `${copy("{p0} sırada", "{p0} queued", { p0: rows.length })} · ${queueState}`}
               tone={queue.error || error || unconfirmed ? "danger" : "muted"}
               onPress={() => setOpen(true)}
             >
               <ListOrdered size={14} color={queue.error || error ? colors.danger : colors.muted} />
             </ChatToolbarAction>
           ) : null}
-          <SessionQueueEditor editor={editor} blocked={blocked || sending || queue.changing} />
+          <SessionQueueEditor scope={scope} editor={editor} blocked={blocked || sending || queue.changing} />
         </View>
       ) : null}
       {!open ? <ErrorText error={error} message={composerDeliveryError(error, copy)} /> : null}
-      <Sheet
-        visible={open && !editor.visible}
-        title={copy("Mesaj sırası", "Message queue")}
-        size="form"
-        onClose={() => setOpen(false)}
-      >
-        <Body muted style={uiStyles.caption}>
-          {queue.leaseAware
-            ? queueState
-            : automatic
-              ? copy(
-                  "Bu ekran açıkken sırayla gönderilir",
-                  "Sends in order while this screen is open",
-                )
-              : queue.data?.status === "active"
-                ? copy(
-                    "Başka bir istemci sırayı sürdürebilir",
-                    "Another client may continue this queue",
-                  )
-                : copy("Duraklatıldı · göndermek için aç", "Paused · open to send")}
-        </Body>
-        <ErrorText
-          error={queue.error || queue.changeError || error}
-          message={composerDeliveryError(queue.error || queue.changeError || error, copy)}
-        />
-        {unconfirmed ? (
-          <Notice
-            tone="warning"
-            message={composerDeliveryError(new Error(queuedDeliveryUnknown), copy)!}
-          />
-        ) : null}
-        {queue.error ? (
-          <Button busy={queue.isFetching}
-            label={copy("Sırayı yeniden yükle", "Reload queue")}
-            onPress={() => {
-              void queue.refetch();
-            }}
-          />
-        ) : null}
-        {editor.value ? (
-          <Button
-            label={copy("Düzenlemeye devam et", "Continue editing")}
-            disabled={disabled}
-            onPress={() => editor.open()}
-          />
-        ) : null}
-        {rows.length ? (
-          <Row>
-            <Button
-              label={copy("Sonrakini gönder", "Send next")}
-              tone="primary"
-              density="compact"
-              disabled={disabled || unconfirmed || !!queue.error || !!editor.value}
-              busy={sending}
-              onPress={() => {
-                void sendNext();
-              }}
-            />
-            <Button
-              tone="quiet"
-              density="compact"
-              busy={controlling}
-              label={
-                automatic || queue.data?.status === "active"
-                  ? copy("Sırayı duraklat", "Pause queue")
-                  : copy("Sırayı başlat", "Start queue")
-              }
-              disabled={
-                disabled ||
-                !!queue.error ||
-                !!editor.value ||
-                (unconfirmed && !automatic && queue.data?.status !== "active")
-              }
-              onPress={() => {
-                if (controlPending.current) return;
-                controlPending.current = true;
-                setControlling(true);
-                void act(async () => {
-                  if (automatic || queue.data?.status === "active") {
-                    setAutomatic(false);
-                    autoRef.current = false;
-                    await queue.pause();
-                  } else {
-                    await queue.activate();
-                    if (!queue.leaseAware) setAutomatic(true);
-                  }
-                }).finally(() => {
-                  controlPending.current = false;
-                  if (active.current) setControlling(false);
-                });
-              }}
-            />
-          </Row>
-        ) : (
-          <Empty compact title={copy("Sıra boş", "Queue is empty")} />
-        )}
-        {rows.map((row, index) => (
-          <View
-            key={row.id}
-            style={{
-              gap: space.sm,
-              paddingVertical: space.sm,
-            }}
-          >
-            <Row style={{ justifyContent: "space-between" }}>
-              <Body muted style={uiStyles.caption}>
-                {index + 1} · {row.modelTarget?.model ?? ""}
-              </Body>
-              <Row style={{ gap: space.xxs }}>
-                <ChatAction
-                  label={copy("Sırayı duraklat ve düzenle", "Pause queue and edit")}
-                  disabled={disabled || !editor.available || !!queue.error}
-                  onPress={() => {
-                    setAutomatic(false);
-                    autoRef.current = false;
-                    editor.open(row);
-                  }}
-                >
-                  <Pencil size={17} color={colors.muted} />
-                </ChatAction>
-                <ChatAction
-                  label={copy("Yukarı taşı", "Move up")}
-                  disabled={disabled || !!editor.value || index === 0}
-                  onPress={() => {
-                    void act(() => queue.change((value) => moveQueuedMessage(value, row.id, -1)));
-                  }}
-                >
-                  <ArrowUp size={17} color={colors.muted} />
-                </ChatAction>
-                <ChatAction
-                  label={copy("Aşağı taşı", "Move down")}
-                  disabled={disabled || !!editor.value || index === rows.length - 1}
-                  onPress={() => {
-                    void act(() => queue.change((value) => moveQueuedMessage(value, row.id, 1)));
-                  }}
-                >
-                  <ArrowDown size={17} color={colors.muted} />
-                </ChatAction>
-                <ChatAction
-                  label={copy("Sıradan kaldır", "Remove from queue")}
-                  disabled={disabled || !!editor.value}
-                  onPress={() => {
-                    void act(() =>
-                      queue.change((value) => ({
-                        ...value,
-                        messages: value.messages.filter((entry) => entry.id !== row.id),
-                      })),
-                    );
-                  }}
-                >
-                  <Trash2 size={17} color={colors.danger} />
-                </ChatAction>
-              </Row>
-            </Row>
-            <Body selectable>{row.text}</Body>
-            {row.attachments.map((file) => (
-              <Body key={file.id} muted style={uiStyles.caption}>
-                {file.name} · {Math.ceil(file.size / 1024)} KB
-              </Body>
-            ))}
-            {row.attachments.length ? (
-              <Body muted style={uiStyles.caption}>
-                {copy(
-                  "Dosyalar mesaj gönderildikten sonra açılabilir.",
-                  "Files can be opened after the queued message is sent.",
-                )}
-              </Body>
-            ) : null}
-          </View>
-        ))}
-      </Sheet>
+      </ComposerActionSlot>
+      <SessionQueueSheet scope={scope} visible={open && !editor.visible}
+        state={{ rows, label: queue.leaseAware ? queueState : automatic
+          ? copy("Bu ekran açıkken sırayla gönderilir", "Sends in order while this screen is open")
+          : queue.data?.status === "active" ? copy("Başka bir istemci sırayı sürdürebilir", "Another client may continue this queue")
+            : copy("Duraklatıldı · göndermek için aç", "Paused · open to send"),
+          error: queue.error || queue.changeError || error,
+          errorMessage: composerDeliveryError(queue.error || queue.changeError || error, copy),
+          warning: unconfirmed ? composerDeliveryError(new Error(queuedDeliveryUnknown), copy) : undefined,
+          disabled, sending, controlling, reloadBusy: queue.isFetching, queueError: !!queue.error,
+          active: automatic || queue.data?.status === "active", canEdit: editor.available,
+          hasDraft: !!editor.value || !!editor.error,
+          disableSend: disabled || unconfirmed || !!queue.error || !!editor.value || !!editor.error,
+          disableControl: disabled || !!queue.error || !!editor.value || ((unconfirmed || !!editor.error) && !automatic && queue.data?.status !== "active"),
+        }}
+        actions={{close: () => setOpen(false), reload: () => { void queue.refetch(); }, resume: () => editor.open(),
+          send: () => { void sendNext(); },
+          edit: row => { setAutomatic(false); autoRef.current = false; editor.open(row); },
+          move: (id, delta) => { void act(() => queue.change(value => moveQueuedMessage(value, id, delta))); },
+          remove: id => { void act(() => queue.change(value => ({...value, messages: value.messages.filter(entry => entry.id !== id)}))); },
+          control: () => {
+            if (controlPending.current) return;
+            controlPending.current = true; setControlling(true);
+            void act(async () => {
+              if (automatic || queue.data?.status === "active") { setAutomatic(false); autoRef.current = false; await queue.pause(); }
+              else { await queue.activate(); if (!queue.leaseAware) setAutomatic(true); }
+            }).finally(() => { controlPending.current = false; if (active.current) setControlling(false); });
+          },
+        }} />
     </>
   );
 }

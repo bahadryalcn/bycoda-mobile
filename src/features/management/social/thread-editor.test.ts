@@ -22,12 +22,14 @@ const fixture = vi.hoisted(() => ({
   disabled: false,
   machine: { id: "machine", endpoint: "https://one.example", environmentId: "environment", lanKey: "private-key" },
   serial: 0,
+  listeners: new Set<() => void>(),
   fresh: vi.fn(),
 }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => `detail-${++fixture.serial}` }));
 vi.mock("@/state/machines", () => ({
   useActiveMachine: () => fixture.machine,
-  useMachines: { getState: () => ({ activeId: fixture.machine.id, machines: [fixture.machine] }) },
+  useMachines: { getState: () => ({ activeId: fixture.machine.id, machines: [fixture.machine] }),
+    subscribe:(listener:()=>void)=>{fixture.listeners.add(listener);return()=>fixture.listeners.delete(listener);} },
 }));
 vi.mock("@/ui/motion", () => ({ haptic: { success: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -397,6 +399,43 @@ it("does not clean or close the retained draft when an old connection's save com
   expect(props.onClose).not.toHaveBeenCalled();
   expect(fixture.guard).toHaveBeenLastCalledWith(expect.objectContaining({ dirty: true }));
   expect(container.querySelector("output")?.textContent).toBe("Keep the old-host draft");
+});
+
+it("keeps the reply unsent and dirty when a batched A/B/A replacement happens during policy review", async () => {
+  const { props } = await renderAssignmentEditor("project");
+  let release!: () => void;
+  fixture.fresh.mockImplementation(() => new Promise<void>(resolve => { release = resolve; }));
+  act(() => fixture.edit!("Keep this unsent draft"));
+  let saving!: Promise<unknown>;
+  await act(async () => { saving = fixture.submit!(); });
+  const original = fixture.machine;
+  await act(async () => {
+    fixture.machine = { ...original, lanKey: "temporary-replacement" };
+    fixture.listeners.forEach(notify => notify());
+    fixture.machine = original;
+    fixture.listeners.forEach(notify => notify());
+  });
+  const rejected = expect(saving).rejects.toThrow("computer connection changed");
+  await act(async () => { release(); await rejected; });
+  expect(fixture.save).not.toHaveBeenCalled();
+  expect(props.onClose).not.toHaveBeenCalled();
+  expect(container.querySelector("output")?.textContent).toBe("Keep this unsent draft");
+  expect(fixture.guard).toHaveBeenLastCalledWith(expect.objectContaining({ dirty: true }));
+});
+
+it("retains the reply while workspace verification is unavailable and blocks callbacks captured earlier",async()=>{
+  const {props,render}=await renderAssignmentEditor("project");
+  act(()=>fixture.edit!("Keep while workspace reloads"));
+  const submit=fixture.submit!;
+  props.available=false;await act(async()=>render());
+  expect(fixture.query.mock.lastCall![3].enabled).toBe(false);expect(fixture.disabled).toBe(true);
+  expect(container.querySelector("output")?.textContent).toBe("Keep while workspace reloads");
+  await act(async()=>{await expect(submit()).resolves.toBeUndefined();});
+  expect(fixture.fresh).not.toHaveBeenCalled();
+  expect(fixture.save).not.toHaveBeenCalled();expect(props.onClose).not.toHaveBeenCalled();
+  props.available=true;await act(async()=>render());
+  expect(container.querySelector("output")?.textContent).toBe("Keep while workspace reloads");
+  expect(fixture.guard).toHaveBeenLastCalledWith(expect.objectContaining({dirty:true}));
 });
 
 it("ignores a late project-assignment success after the same saved machine is re-paired", async () => {

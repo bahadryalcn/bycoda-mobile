@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQueryClient } from "@tanstack/react-query";
+import { router } from "expo-router";
 import Animated from "react-native-reanimated";
 import ShieldOff from "lucide-react-native/icons/shield-off";
 import UserX from "lucide-react-native/icons/user-x";
@@ -9,12 +10,16 @@ import type { ReactNode } from "react";
 import { IconTile } from "../../ui/icon-tile";
 import { enterItem } from "../../ui/motion";
 import { colors, space } from "../../ui/tokens";
-import { useMachines } from "../../state/machines";
+import { useMachines, withDisconnectedComputers } from "../../state/machines";
 import { assertAppAccess } from "../../state/security";
 import { useAsyncAction } from "../../state/actions";
 import {
   Body,
-  ConfirmationCard,
+  Button,
+  Loading,
+  FormActions,
+  Notice,
+  ScreenList,
   Disclosure,
   MutationState,
   NavigationGroup,
@@ -25,9 +30,15 @@ import {
 import { useCopy } from "../../ui/copy";
 import { flushWorkspaceDrafts } from "../workspace/draft-guard";
 import { revokeProviderConsent } from "../privacy/provider-consent";
-import { deleteSavedDrafts, disconnectSavedComputers } from "./local-data";
+import { deleteSavedDrafts, disconnectSavedComputers, matchesReviewedComputers } from "./local-data";
 import { clearAttachmentDraftFiles } from "../workspace/attachment-files";
 import { clearMediaCache } from "@/ui/media-loader";
+
+import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
+import { RecordCard } from "@/ui/record-card";
+import { useSheetGuard } from "@/ui/sheet-guard";
+
+type CleanupReview = { kind: "connections" | "drafts" | "consent"; machines: (ReviewedMachine & { name: string })[] };
 
 function tile(Glyph: typeof Trash2, color: string): ReactNode {
   return (
@@ -49,15 +60,37 @@ export function LocalDataControls() {
         )
       : undefined;
   const cache = useQueryClient();
-  const action = useAsyncAction<{ message: string }>();
-  const [confirmation, setConfirmation] = useState<"connections" | "drafts" | "consent" | null>(
-    null,
-  );
-  const unavailable =
-    !state.hydrated || !!state.storageError || state.connectionPending || action.isPending;
+  const action = useAsyncAction<{ message: string; retained?: number }>();
+  const [executing, setExecuting] = useState(false);
+  const busy = action.isPending || executing;
+  const { requestCloseThen } = useSheetGuard({ pending: busy });
+  const [confirmation, setConfirmation] = useState<CleanupReview | null>(null);
+  const mounted = useRef(true), working = useRef(false), retired = useRef<CleanupReview | null>(null);
+  const latest = useRef(confirmation); latest.current = confirmation;
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  if (confirmation && ((confirmation.kind === "connections" && !matchesReviewedComputers(confirmation.machines, state.machines)) || (confirmation.kind === "drafts" && state.machines.length > 0))) retired.current = confirmation;
+  const stale = !!confirmation && retired.current === confirmation;
+  const unavailable = !state.hydrated || !!state.storageError || state.connectionPending || busy;
+  const openReview = (kind: CleanupReview["kind"]) => {
+    const current = useMachines.getState();
+    if (working.current || !mounted.current || !current.hydrated || current.storageError || current.connectionPending ||
+      (kind === "drafts" && current.machines.length > 0) || (kind === "connections" && !current.machines.length)) return;
+    action.reset(); retired.current = null;
+    const review = { kind, machines: current.machines.map(machine => ({ ...reviewedMachine(machine)!, name: machine.name })) };
+    latest.current = review; setConfirmation(review);
+  };
+  const closeReview = () => {
+    if (working.current || action.isPending) return;
+    latest.current = null; setConfirmation(null); action.reset();
+  };
   async function perform() {
-    const target = confirmation;
-    await action.run(async () => {
+    const review = confirmation;
+    if (!review || !mounted.current || latest.current !== review || working.current || unavailable || retired.current === review) return;
+    working.current = true; setExecuting(true);
+    const target = review.kind;
+    let retainedDrafts = 0;
+    try { await action.run(async () => {
+      if (!mounted.current || latest.current !== review) throw new Error("Reopen the local data review before continuing.");
       assertAppAccess();
       if (target === "connections") {
         await disconnectSavedComputers({
@@ -66,51 +99,75 @@ export function LocalDataControls() {
             const latest = useMachines.getState();
             return latest.hydrated && !latest.storageError && !latest.connectionPending;
           },
-          ids: () => useMachines.getState().machines.map((machine) => machine.id),
+          reviewed: review.machines,
+          current: () => useMachines.getState().machines,
           flush: flushWorkspaceDrafts,
-          cancelQueries: () => cache.cancelQueries({ queryKey: ["machine"] }),
-          remove: (id) => useMachines.getState().removeMachine(id),
+          cancelQueries: async () => { await Promise.all(review.machines.map(machine => cache.cancelQueries({ queryKey: ["machine", machine.id] }))); },
+          remove: async (id, expected) => {
+            await useMachines.getState().removeMachine(id, expected);
+            if (!useMachines.getState().machines.some(machine => machine.id === id)) cache.removeQueries({ queryKey: ["machine", id] });
+          },
         });
-        cache.removeQueries({ queryKey: ["machine"] });
       } else if (target === "drafts") {
         await flushWorkspaceDrafts();
-        assertAppAccess();
-        await deleteSavedDrafts(AsyncStorage, () => useMachines.getState().machines.length > 0);
-        assertAppAccess();
-        if (useMachines.getState().machines.length > 0)
-          throw new Error(
-            copy(
-              "Taslakları silmeden önce bilgisayar bağlantılarını kaldırın.",
-              "Disconnect computers before deleting saved drafts.",
-            ),
-          );
-        clearAttachmentDraftFiles();
-        clearMediaCache();
+        await withDisconnectedComputers(async () => {
+          assertAppAccess();
+          const result = await deleteSavedDrafts(AsyncStorage, () => useMachines.getState().machines.length > 0, scopes => {
+            assertAppAccess(); clearAttachmentDraftFiles(scopes); clearMediaCache();
+          });
+          retainedDrafts = result.retained;
+          assertAppAccess();
+        });
       } else if (target === "consent") {
         await flushWorkspaceDrafts();
         await cache.cancelQueries({ queryKey: ["machine"] });
         assertAppAccess();
         await revokeProviderConsent();
       } else return { message: "" };
-      setConfirmation(null);
+      if (mounted.current && latest.current === review) { latest.current = null; setConfirmation(null); }
       return {
+        retained: target === "drafts" ? retainedDrafts : undefined,
         message:
           target === "connections"
             ? copy(
                 "Kaydedilmiş bilgisayarlar ve bu telefondaki bağlantı anahtarları kaldırıldı. Taslakların saklandı.",
                 "Saved computers and connection keys on this phone were removed. Your drafts were retained.",
               )
-            : target === "drafts"
+            : target === "drafts" && retainedDrafts > 0
+              ? copy("Taslak temizliği tamamlandı. Bekleyen veya okunamayan mesaj taslakları kurtarma için saklandı.", "Draft cleanup finished. Pending or unreadable message drafts were kept for recovery.")
+              : target === "drafts"
               ? copy(
                   "Bu telefondaki kaydedilmiş mesaj, dosya ve not taslakları silindi.",
                   "Saved message, file and note drafts on this phone were deleted.",
                 )
               : copy("Veri paylaşımı izni geri çekildi.", "Data sharing permission was withdrawn."),
       };
-    });
+    }); } finally { working.current = false; if (mounted.current) setExecuting(false); }
   }
+  const consequence = confirmation ? confirmation.kind === "connections"
+                ? copy(
+                    "Tüm kayıtlı bilgisayarlar ve bağlantı anahtarları yalnız bu telefondan kaldırılacak. Yeniden bağlanman gerekecek. Kaydedilmiş taslaklar kalır.",
+                    "All saved computers and connection keys will be removed from this phone. You will need to connect again. Saved drafts remain.",
+                  )
+                : confirmation.kind === "drafts"
+                  ? copy(
+                      "Telefonda kaydedilmiş mesaj, dosya ve not taslakları kalıcı silinecek. Gönderilmeyen değişiklikleri önce yedekle.",
+                      "Saved message, file and note drafts on this phone will be permanently deleted. Back up unsent changes first.",
+                    )
+                  : copy(
+                      "Bu telefondan çalışma alanına erişim, tekrar izin verene kadar kapanacak. Bilgisayarında zaten çalışan işler ve sağlayıcıya daha önce gönderilen veriler bundan etkilenmez.",
+                      "Workspace access from this phone will pause until you grant permission again. Work already running on your computer and data already sent to providers are unaffected.",
+                    ) : "";
+  const storageIssue = !state.hydrated || (state.connectionPending && !busy)
+    ? <Loading label={copy("Kaydedilmiş bağlantılar yükleniyor…", "Loading saved connections…")} />
+    : state.storageError ? <Stack><Notice tone="warning" message={copy("Kaydedilmiş bağlantılar kullanılamıyor. Yeniden yüklemek için Bilgisayarlar’ı açın.", "Saved connections are unavailable. Open Computers to reload them.")} /><Button tone="quiet" label={copy("Bilgisayarlar", "Computers")} disabled={busy} onPress={() => requestCloseThen(() => router.push("/machines"))} /></Stack> : null;
+  const longReview = confirmation?.kind === "connections" && confirmation.machines.length > 6;
+  const remainingComputers = confirmation?.machines.filter(machine => state.machines.some(current => current.id === machine.id)) ?? [];
+  const reviewIntro = <Stack>{storageIssue}<Body>{consequence}</Body>{stale ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden açın.", "Saved computers changed. Reopen this review to continue.")} /> : null}</Stack>;
+  const computerRow = (item: CleanupReview["machines"][number]) => <RecordCard key={item.id} title={item.name} metadata={item.endpoint} details={<Body mono>{item.id} · {item.environmentId}</Body>} />;
   return (
     <Stack style={{ gap: space.lg }}>
+      {!confirmation ? storageIssue : null}
       <Animated.View entering={enterItem(0)}>
         <NavigationGroup>
           <NavigationRow
@@ -118,8 +175,7 @@ export function LocalDataControls() {
             icon={tile(ShieldOff, colors.warning)}
             disabled={unavailable}
             onPress={() => {
-              action.reset();
-              setConfirmation("consent");
+              openReview("consent");
             }}
           />
         </NavigationGroup>
@@ -132,8 +188,7 @@ export function LocalDataControls() {
             icon={tile(UserX, colors.danger)}
             disabled={unavailable || !state.machines.length}
             onPress={() => {
-              action.reset();
-              setConfirmation("connections");
+              openReview("connections");
             }}
           />
           <NavigationRow
@@ -143,8 +198,7 @@ export function LocalDataControls() {
             icon={tile(Trash2, colors.danger)}
             disabled={unavailable || state.machines.length > 0}
             onPress={() => {
-              action.reset();
-              setConfirmation("drafts");
+              openReview("drafts");
             }}
           />
         </NavigationGroup>
@@ -165,53 +219,27 @@ export function LocalDataControls() {
         </Body>
       </Disclosure>
       {confirmation ? (
-        <Sheet
-          visible
-          size="compact"
-          dismissible={!action.isPending}
-          title={copy("Yerel verileri yönet", "Manage local data")}
-          onClose={() => {
-            if (!action.isPending) setConfirmation(null);
-          }}
-        >
-          <ConfirmationCard
-            message={
-              confirmation === "connections"
-                ? copy(
-                    "Tüm kayıtlı bilgisayarlar ve bağlantı anahtarları yalnız bu telefondan kaldırılacak. Yeniden bağlanman gerekecek. Kaydedilmiş taslaklar kalır.",
-                    "All saved computers and connection keys will be removed from this phone. You will need to connect again. Saved drafts remain.",
-                  )
-                : confirmation === "drafts"
-                  ? copy(
-                      "Telefonda kaydedilmiş mesaj, dosya ve not taslakları kalıcı silinecek. Gönderilmeyen değişiklikleri önce yedekle.",
-                      "Saved message, file and note drafts on this phone will be permanently deleted. Back up unsent changes first.",
-                    )
-                  : copy(
-                      "Bu telefondan çalışma alanına erişim, tekrar izin verene kadar kapanacak. Bilgisayarında zaten çalışan işler ve sağlayıcıya daha önce gönderilen veriler bundan etkilenmez.",
-                      "Workspace access from this phone will pause until you grant permission again. Work already running on your computer and data already sent to providers are unaffected.",
-                    )
-            }
-            cancelLabel={copy("Vazgeç", "Cancel")}
-            confirmLabel={
-              confirmation === "consent"
+        <Sheet visible size={longReview ? "form" : "compact"}
+          scroll={!longReview} dismissible={!busy}
+          title={confirmation.kind === "connections" ? copy("Kaydedilmiş bilgisayarları kaldır", "Remove saved computers") : confirmation.kind === "drafts" ? deleteDraftsLabel : copy("Veri paylaşımı iznini geri çek", "Withdraw data sharing permission")}
+          onClose={closeReview}>
+          {confirmation.kind === "connections" ? longReview ? <ScreenList
+            data={remainingComputers} keyExtractor={machine => machine.id}
+            header={reviewIntro} renderItem={({ item }) => computerRow(item)} />
+            : <Stack>{reviewIntro}{remainingComputers.map(computerRow)}</Stack> : <Body>{consequence}</Body>}
+          {confirmation.kind !== "connections" ? storageIssue : null}
+          {confirmation.kind === "drafts" ? <Body muted>{copy("Bekleyen işlemler ve okunamayan mesaj taslakları kurtarma için saklanır. İncelemek için asıl bilgisayarı yeniden bağlayın.", "Pending operations and unreadable message drafts are kept for recovery. Reconnect the original computer to review them.")}</Body> : null}
+          {stale && confirmation.kind !== "connections" ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden açın.", "Saved computers changed. Reopen this review to continue.")} /> : null}
+          <FormActions submitLabel={confirmation.kind === "consent"
                 ? copy("İzni geri çek", "Withdraw permission")
-                : confirmation === "drafts"
+                : confirmation.kind === "drafts"
                   ? copy("Taslakları sil", "Delete drafts")
-                  : copy("Bilgisayarları kaldır", "Remove computers")
-            }
-            busy={action.isPending}
-            disabled={unavailable}
-            onCancel={() => {
-              if (!action.isPending) setConfirmation(null);
-            }}
-            onConfirm={() => {
-              void perform();
-            }}
-          />
-          <MutationState mutation={action} />
+                  : copy("Bilgisayarları kaldır", "Remove computers")} tone="danger" cancelLabel={copy("Vazgeç", "Cancel")}
+            busy={busy} disabled={unavailable || stale} onCancel={closeReview} onSubmit={() => { void perform(); }}
+            feedback={<MutationState mutation={action} />} />
         </Sheet>
-      ) : null}
-      <MutationState mutation={action} success={action.data?.message} />
+      ) : action.isSuccess && action.data?.retained ? <Stack><Notice tone="info" message={action.data.message} /><Button tone="quiet" label={copy("Bilgisayarlar", "Computers")} onPress={() => requestCloseThen(() => router.push("/machines"))} /></Stack> : <MutationState mutation={action} success={action.data?.message} />}
+
     </Stack>
   );
 }

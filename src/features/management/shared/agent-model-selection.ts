@@ -20,9 +20,9 @@ export function selectAgentProvider<T extends AgentDraft>(value: T, harness: Rem
 }
 
 /** Search presentation is derived separately from the controlled, freely editable model ID. */
-export function agentModelChoices(catalog: HostModelCatalog | undefined, harness: RemoteProvider, search: string) {
+export function agentModelChoices(catalog: HostModelCatalog | undefined, harness: RemoteProvider, search: string, locale?: string) {
   return filterSelection((catalog?.models[harness] ?? []).map((model) => ({
     value: model.id, label: model.name || model.id,
     detail: model.name && model.name !== model.id ? model.id : undefined,
-  })), search);
+  })), search, locale);
 }

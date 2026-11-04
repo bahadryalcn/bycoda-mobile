@@ -1,6 +1,6 @@
 import { haptic } from "@/ui/motion";
 import { useEffect, useRef, useState } from "react";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useMachines } from "@/state/machines";
 import { isReviewedMachine } from "@/state/reviewed-machine";
 import { MessageText } from "@/ui/message-text";
 import { Stack } from "@/ui/primitives";
@@ -31,18 +31,19 @@ import { isThreadPage, THREAD_PAGE_LIMIT, ThreadPageUnavailable } from "./thread
 import { accountIdentity } from "./review-presentation";
 import { sameConnectionEpoch, useConnectionScope } from "./connection-scope";
 
-export function ThreadEditor({ thread, recipientLabel, accounts, projects, profiles, onClose }: ThreadEditorProps) {
+export function ThreadEditor({ thread, recipientLabel, accounts, projects, profiles, onClose, available = true, unavailableFeedback }: ThreadEditorProps) {
   const copy = useCopy();
-  const machine = useActiveMachine();
   // The reviewed connection epoch has an explicit owner (state, not a memo that
   // React may discard); it changes only when endpoint, environment or credential do.
-  const scope = useConnectionScope(machine);
+  const scope = useConnectionScope();
   // A reply belongs to the connection that opened it. Re-pairing must require
   // reopening the view, without discarding this editor's unsaved text.
   const [openingScope] = useState(scope);
   const latestScope = useRef(scope);
   latestScope.current = scope;
-  const matchesConnection = () => sameConnectionEpoch(latestScope.current, openingScope) &&
+  const access = useRef(available);
+  access.current = available;
+  const matchesConnection = () => access.current && openingScope.isCurrent() && sameConnectionEpoch(latestScope.current, openingScope) &&
     isReviewedMachine(openingScope.review, useMachines.getState());
   const connectionChanged = !matchesConnection();
   const connectionMessage = copy("Bilgisayar bağlantısı değişti. Doğru bilgisayarı seçip bu görünümü yeniden açın.", "The computer connection changed. Select the correct computer and reopen this view.");
@@ -155,7 +156,7 @@ export function ThreadEditor({ thread, recipientLabel, accounts, projects, profi
     });
   };
   if (connectionChanged) return <Stack>
-    <Notice tone="warning" message={connectionMessage} />
+    {!available && unavailableFeedback ? unavailableFeedback : <Notice tone="warning" message={connectionMessage} />}
     <Field label={copy("Yanıt taslağı", "Reply draft")} value={text} multiline editable={false} />
     <FormActions feedback={<><MutationState mutation={submission} /><MutationState mutation={assign} /></>}
       submitLabel={copy("Taslağı kaydet", "Save draft")} disabled busy={busy} onSubmit={save}

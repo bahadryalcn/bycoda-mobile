@@ -14,6 +14,7 @@ import { inlineRaster } from "./inline-raster";
 import ImageIcon from "lucide-react-native/icons/image";
 import { ChatSummary } from "./chat-controls";
 import { Sheet } from "./dialogs";
+import { ReaderContext } from "./reader-context";
 
 export function MessageImage({
   deferred = false,
@@ -34,7 +35,7 @@ export function MessageImage({
         onPress={() => setOpen(true)}
       />
       <Sheet visible={open} title={name} size="full" onClose={() => setOpen(false)}>
-        {open ? <InlineMessageImage key={identity} {...props} /> : null}
+        {open ? <><ReaderContext context={props.context} /><InlineMessageImage key={identity} {...props} /></> : null}
       </Sheet>
     </>
   );
@@ -184,6 +185,7 @@ function InlineMessageImage({
           uri={uri}
           name={alt || copy("Resim", "Image")}
           visible
+          context={context}
           onClose={() => setOpen(false)}
         />
       ) : null}

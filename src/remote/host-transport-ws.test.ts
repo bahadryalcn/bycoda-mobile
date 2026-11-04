@@ -23,6 +23,24 @@ const machine = {
 };
 const cleanups: (() => void)[] = [];
 
+it.each([
+  ["deadline", "timeout"],
+  ["cancelled", "aborted"],
+  ["internal", "host"],
+  ["unavailable", "host"],
+  ["overload", "host"],
+  ["validation", "host"],
+  ["unsupported", "unsupported"],
+  ["schema", "protocol"],
+] as const)("exposes %s as %s without changing transport", async (category, kind) => {
+  const p = provider();
+  const f = transport(["transport.ws.read.v2", "transport.ws.sessions.v2"]);
+  vi.mocked(p.consumer.request).mockRejectedValueOnce(new HostWsError(category));
+  await expect(f.client.request("projects.list")).rejects.toMatchObject({ kind, uncertain: false });
+  expect(f.fetcher).not.toHaveBeenCalled();
+  expect(p.consumer.request).toHaveBeenCalledTimes(1);
+});
+
 it.each(["web", "ios"])(
   "denies private Native and bridge operations before credentials or %s HTTP/WS transport",
   async (platform) => {

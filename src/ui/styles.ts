@@ -15,6 +15,18 @@ export const uiStyles = createThemedStyles(() => ({
   header: { paddingHorizontal: space.screen, paddingVertical: space.sm, gap: space.sm,
     width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" },
   titleGroup: { gap: space.xs, paddingTop: space.sm, paddingBottom: space.xs },
+  pageHeading: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: space.sm,
+    minHeight: metrics.touchTarget,
+  },
+  pageIdentity: { flexGrow: 1, flexShrink: 1, minWidth: "auto", maxWidth: "100%", gap: space.xxs },
+  pageActions: {
+    flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end",
+    gap: space.xs, minWidth: 0, maxWidth: "100%", flexShrink: 1, marginStart: "auto",
+  },
   titleRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -38,7 +50,7 @@ export const uiStyles = createThemedStyles(() => ({
     letterSpacing: -0.5,
   },
   stack: { gap: space.md },
-  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.row },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.row, minWidth: 0, maxWidth: "100%" },
   grow: { flex: 1, minWidth: 0 },
   body: { color: colors.text, fontSize: fontSize.body, lineHeight: 22, flexShrink: 1 },
   message: { color: colors.text, fontSize: fontSize.body, lineHeight: 23 },
@@ -133,7 +145,7 @@ export const uiStyles = createThemedStyles(() => ({
   input: {
     color: colors.text,
     backgroundColor: colors.fill,
-    borderColor: "transparent",
+    borderColor: colors.border,
     borderWidth: 1.5,
     minHeight: metrics.inputHeight,
     paddingHorizontal: space.md,
@@ -177,7 +189,7 @@ export const uiStyles = createThemedStyles(() => ({
   },
   noticeRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.sm, rowGap: 0 },
   noticeMessage: { flexDirection: "row", alignItems: "flex-start", gap: space.sm,
-    flexGrow: 1, flexShrink: 1, flexBasis: 128, minWidth: 0 },
+    flexGrow: 1, flexShrink: 1, minWidth: 0 },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
   codePanel: {
     backgroundColor: colors.panel,

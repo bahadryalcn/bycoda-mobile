@@ -1,8 +1,9 @@
 import { ScreenList } from "@/ui/screen-list";
 import type { HostAttentionInbox, MobileInboxItem } from "@/domain/types";
 import { router } from "expo-router";
-import { useState } from "react";
-import { Body, Disclosure, NavigationRow, QueryState, Screen, ScreenHeader, SegmentedControl } from "@/ui/primitives";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ActionMenu, Body, NavigationRow, Notice, QueryState, Row, Screen, ScreenHeader, SegmentedControl, Sheet } from "@/ui/primitives";
+import { CollectionToolbar } from "@/ui/search-field";
 import { useCopy } from "@/ui/copy";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -11,11 +12,15 @@ import { resolveLocale } from "@/localization";
 import { colors, radii, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { Scope } from "./shared/scope";
-import { Status } from "./shared/status";
+import { Status, statusLabel } from "./shared/status";
+import { InboxBrowseMemoryProvider, useInboxBrowseMemory } from "../inbox/inbox-browse-memory-provider";
+import { useInboxScrollMemory } from "../inbox/use-inbox-scroll-memory";
 import { ProviderInboxScreen } from "../inbox/provider-inbox-screen";
 import { View } from "react-native";
 import { inboxRelativeTime } from "./inbox-time";
+import { isInboxOriginCurrent, isInboxPrivateFailure } from "../inbox/provider-model";
 
+const attentionRoutes = { task: "tasks", goal: "goals", automation: "automations", social: "social", "pull-request": "tasks", session: "inbox" } as const;
 const attentionStatuses = ["review", "awaiting-approval", "blocked", "failed"];
 
 /** Mail-style relative time ("5 dk", "2 sa", "dün") in the app language. */
@@ -29,9 +34,10 @@ export function InboxScreen() {
   const copy = useCopy();
   const [mode, setMode] = useState<"attention" | "providers">("attention");
   return (
-    <Screen scroll={false} title={copy("Gelen kutusu", "Inbox")}>
+    <InboxBrowseMemoryProvider><Screen scroll={false} title={copy("Gelen kutusu", "Inbox")}>
       <ScreenHeader>
         <SegmentedControl
+          hideLabel
           label={copy("Gelen kutusu", "Inbox")}
           value={mode}
           options={[
@@ -42,7 +48,7 @@ export function InboxScreen() {
         />
       </ScreenHeader>
       {mode === "providers" ? <ProviderInboxScreen embedded /> : <AttentionInboxScreen />}
-    </Screen>
+    </Screen></InboxBrowseMemoryProvider>
   );
 }
 function AttentionInboxScreen() {
@@ -50,13 +56,38 @@ function AttentionInboxScreen() {
   const machine = useActiveMachine();
   const projectId = useMachines((state) => state.selectedProjectId);
   const selectProject = useMachines((state) => state.selectProject);
+  const memory = useInboxBrowseMemory()?.attention ?? null;
+  const origin = { machineId: machine?.id ?? "", projectId };
+  const [initialView] = useState(() => memory?.read(origin));
+  const mounted = useRef(false);
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const ownsScope = () => !memory || memory.read(origin) !== undefined;
+  const scopeCurrent = !!machine && ownsScope() && isInboxOriginCurrent(origin, useMachines.getState());
   const query = useHostQuery<HostAttentionInbox>(
     ["inbox", projectId],
     "inbox.list",
     projectId ? { projectId } : {},
-    { interval: 6000 },
+    { interval: 6000, enabled: scopeCurrent },
   );
+  const readable = scopeCurrent && query.isEnabled !== false && query.fetchStatus !== "paused" && !isInboxPrivateFailure(query.error);
+  const data = readable ? query.data : undefined;
+  const rows = data?.items ?? [];
+  const lease = useMemo(() => ({ active: false }), [readable, origin.machineId, origin.projectId]);
+  useLayoutEffect(() => { lease.active = true; return () => { lease.active = false; }; }, [lease]);
+  const [help, setHelp] = useState<typeof lease | null>(null);
+  const latest = useRef({ readable, data, enabled: query.isEnabled !== false, refetch: query.refetch });
+  latest.current = { readable, data, enabled: query.isEnabled !== false, refetch: query.refetch };
+  const scrollMemory = useInboxScrollMemory<MobileInboxItem>(memory, origin, initialView?.offset ?? 0,
+    data !== undefined, rows.length, { suspended: !readable });
+  const current = () => mounted.current && ownsScope() && isInboxOriginCurrent(origin, useMachines.getState());
+  const refresh = () => {
+    if (machine && current() && latest.current.enabled) return latest.current.refetch();
+  };
   const open = (item: MobileInboxItem) => {
+    if (!machine || !lease.active || !latest.current.readable || !current()) return;
+    const target = latest.current.data?.items.find(candidate => candidate.id === item.id);
+    if (!target || target.kind !== item.kind || target.projectId !== item.projectId || target.sessionId !== item.sessionId ||
+      (!item.sessionId && !attentionRoutes[item.kind])) return;
     if (item.projectId) selectProject(item.projectId);
     if (item.sessionId) {
       if (machine)
@@ -70,39 +101,41 @@ function AttentionInboxScreen() {
         });
     } else
       router.push(
-        `/manage/${{ task: "tasks", goal: "goals", automation: "automations", social: "social", "pull-request": "tasks", session: "inbox" }[item.kind]}`,
+        `/manage/${attentionRoutes[item.kind]}`,
       );
   };
-  return (
+  return <>
     <ScreenList<MobileInboxItem>
-      query={query}
-      data={query.data?.items ?? []}
+      {...scrollMemory.listProps}
+      query={{...query, data, refetch: refresh}}
+      refresh={refresh}
+      data={rows}
       keyExtractor={(item) => item.id}
+      context={<CollectionToolbar field={<Scope allowAll />} actions={readable ? (
+        <ActionMenu label={copy("Diğer işlemler", "More actions")} busy={query.isFetching && data !== undefined}
+          actions={[
+            { key: "refresh", label: copy("Yenile", "Refresh"), disabled: query.isFetching,
+              onPress: () => { void refresh(); } },
+            data && !data.externalProviderInboxAvailable && { key: "help", label: copy("Yardım", "Help"),
+              onPress: () => { if (lease.active && latest.current.readable && current()) setHelp(lease); } },
+          ]} />
+      ) : null} />}
       header={
         <>
-          <Scope allowAll />
-          <QueryState
-            query={query}
-            empty={query.data?.items.length === 0}
-            emptyTitle={copy("Bekleyen bir iş yok", "Nothing needs your attention")}
-          />
-          {query.data && !query.data.externalProviderInboxAvailable && (
-            <Disclosure label={copy("Yardım", "Help")}>
-              <Body muted>
-                {copy(
-                  "GitHub, GitLab, Jira, Linear ve Azure için üstteki issue ve PR kutusunu açın.",
-                  "Open the issues and pull requests tab above for GitHub, GitLab, Jira, Linear and Azure.",
-                )}
-              </Body>
-            </Disclosure>
-          )}
+          {!machine ? <Notice message={copy("Bir bilgisayar seçin", "Choose a computer")} /> : !scopeCurrent || query.isEnabled === false && !query.error ? (
+            <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
+              "Record access is unavailable. Check the original computer and project connection.")} />
+          ) : <QueryState query={{...query, data, refetch: refresh}} empty={data?.items.length === 0}
+            emptyTitle={copy("Bekleyen bir iş yok", "Nothing needs your attention")} />}
         </>
       }
       renderItem={({ item }) => {
         const needsAttention = !!item.status && attentionStatuses.includes(item.status);
+        const time = relativeTime(item.updatedAt, copy);
         return (
           <NavigationRow
             label={item.title}
+            accessibilityLabel={[item.title, item.detail, time, item.status ? statusLabel(item.status, copy) : undefined].filter(Boolean).join(". ")}
             detail={item.detail}
             detailLines={2}
             emphasized={needsAttention}
@@ -118,18 +151,24 @@ function AttentionInboxScreen() {
                 }}
               />
             }
-            trailing={
-              <View style={{ alignItems: "flex-end", gap: space.xxs }}>
+            supporting={
+              <Row>
                 <Body muted style={uiStyles.caption}>
-                  {relativeTime(item.updatedAt, copy)}
+                  {time}
                 </Body>
                 {item.status ? <Status value={item.status} /> : null}
-              </View>
+              </Row>
             }
             onPress={() => open(item)}
           />
         );
       }}
     />
-  );
+    {help === lease && readable ? <Sheet visible title={copy("Yardım", "Help")} size="compact" onClose={() => setHelp(null)}>
+      <Body muted>{copy(
+        "GitHub, GitLab, Jira, Linear ve Azure için üstteki issue ve PR kutusunu açın.",
+        "Open the issues and pull requests tab above for GitHub, GitLab, Jira, Linear and Azure.",
+      )}</Body>
+    </Sheet> : null}
+  </>;
 }

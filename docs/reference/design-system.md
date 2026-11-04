@@ -27,8 +27,9 @@ pixel sizes, CSS, Arc runtime or overlay infrastructure.
 
 Avoid nested decorative cards, repeated introductions, permanent help paragraphs
 and competing primary buttons. Keep labels, validation, approval requirements,
-connection state and recovery visible. Optional help uses `Disclosure`; less
-frequent commands use `ActionMenu`.
+connection state and recovery visible. Optional inline help uses `Disclosure`.
+Collection toolbars group secondary help with commands in `ActionMenu` and open
+the shared compact `Sheet`, keeping a separate help row out of the record viewport.
 
 ## One coherent product language
 
@@ -112,7 +113,12 @@ Do not invent feature-local hex colors, tints or gradients.
 | `semanticColors[tone]` | Matching status text, surface and border |
 | `userMessage`, `scrim` | Conversation bubble and modal backdrop |
 
-Dark uses neutral graphite layers; light uses a white canvas with neutral control fills. Keep
+Dark uses pure black canvas, panels, controls, floating surfaces and message backgrounds;
+light uses pure white for those same roles. Primary text is pure white/black respectively.
+Use thin semantic borders for editable areas and the composer. Tabs communicate selection
+with text contrast and weight, without colored strips on any edge. Focus, selection and
+status feedback retain their semantic colors; neutral
+gray fills must not return as large resting surfaces. Keep
 system/light/dark preference working from the lock screen onward. Theme changes
 must update mounted content without resetting forms, focus or drafts.
 
@@ -161,8 +167,22 @@ Shared buttons and search use the control radius. Presentation belongs in the sh
 NavigationGroup is an unboxed collection with aligned rows; RecordCard separates record
 identity, visible status and optional retained details through spacing. Reserve Card
 for a meaningful task group, and avoid nesting cards for ordinary metadata.
-Page titles use the hero scale; body and form controls keep their readable scale.
+Operational page titles use the heading scale. `ScreenHeading` owns the compact
+identity/action row, and the tab navigator's `headerIdentity` combines the title
+and computer selector in one 48dp-or-larger target. Counts belong to its secondary
+context. Native-title screens suppress only the duplicate content title, preserving
+context and actions. Reserve explicit `LargeTitle`/hero treatment for intentional
+entry or overview content; body and form controls keep their readable scale.
 The bottom tab bar sits in normal layout without a floating tray or shadow.
+Primary destinations remain visible without horizontal scrolling. Equal columns
+share the available width; larger system text uses fewer columns and additional
+rows. Labels and activity counts can grow, and selection belongs to the actual
+tab target. The shared keyboard controller owns whether the bar is visible.
+Conversation chrome reserves useful identity width before placing its action
+group; the group can move as a unit at narrow widths. Running Stop remains
+direct. Keyboard visibility combines status and scope into one text flow without
+remounting workspace, transcript, composer or action owners. Keep essential
+context readable.
 The composer gives text its own full-width row and places attachment, mode and send
 controls below it. Its fill and perimeter remain stable on focus; editable fields
 keep local focus cues and the caret.
@@ -182,6 +202,12 @@ keep local focus cues and the caret.
 | Collection | `ScreenList`, `SearchField` | Stable rows, query state and refresh |
 | Editor/confirmation | `Sheet`, `FormActions`, `ConfirmationCard` | Guard dismissal and show async feedback |
 | Feedback | `QueryState`, `MutationState`, `Notice`, `ErrorNotice`, `Badge` | Actual state and useful recovery |
+
+Two or three segmented choices share the available width and allow their labels to wrap
+inside each target. Keep every peer visible; a horizontal scroller must not hide
+the final choice. Four or more choices use the facade's labeled selector rather
+than a progressively denser segmented row. Preserve selected and disabled behavior
+when changing presentation.
 | Secondary actions/help | `ActionMenu`, `Disclosure` | Frequent actions stay directly reachable |
 
 Actual component props are authoritative. Mobile Button uses `busy`, not an
@@ -199,6 +225,11 @@ content widths on tablets and wide previews.
 Keep one heading, a compact action area and a clear content flow. Collection
 search and scope belong near the collection. Disclose secondary filters/options
 without obscuring applied state. Prefer separators/grouping before another card.
+Use `SearchToolbar` when search shares a region with filters/overflow: search
+keeps a useful intrinsic width and secondary actions wrap together. Ordinary
+`NavigationRow` instances are flat; use `variant="card"` only for a distinct task.
+Navigation rows disclose destinations, selection rows show the selected choice,
+and commands omit the navigation chevron through their explicit `intent`.
 
 Preserve field values on validation/server failure. Show field errors beside
 fields and operation errors near submit. Sheet content scrolls independently of
@@ -216,6 +247,24 @@ it must not push required actions out of the available viewport. Screen and
 ScreenList share `ScreenHeading`: native title ownership hides only the repeated
 title, never the screen's actions. Route and tools-menu section labels use
 `src/features/management/sections.ts` as their common source.
+
+`ProjectDirectoryFeedback` is the single explanation owner for directory
+loading, reconnection and privacy synchronization in scope/project/session/tool
+gates. Precise query errors take precedence so auth/identity recovery is retained.
+Row operations report beside their target record; a list-level fallback remains
+available when the target is filtered, outside the rendered batch, on another
+page or unavailable during loading. Decide visibility in the final pagination
+owner, not from the unfiltered source collection. Pending feedback follows the
+same ownership rule as failures, and changing sections must not lose recovery.
+Mutation success is a quiet live
+text acknowledgment. `IssueSummary` groups partial source/provider failures with
+all distinct details retained; one failure stays immediately visible.
+
+`confirmAction` keeps consequential actions behind confirmation. Its default
+cancel label follows the current locale. Callers explicitly pass `"default"`
+intent for ordinary start/approve/resume operations; destructive intent remains
+the compatibility default for deletion/discard/stop operations. Presentation
+never supplies or authorizes the callback.
 
 ## States, accessibility and motion
 
@@ -282,3 +331,29 @@ restart/repair actions use the existing record menu. Expanded task content leads
 with instructions; execution locations, statistics and evidence use disclosure.
 Long forms keep both initial review actions and final confirmation in the shared
 action area, with current feedback beside the action.
+
+Compact empty states share the screen/list content alignment. Do not add a
+second horizontal gutter or a centered introductory block for an ordinary empty
+collection or search result. Keep existing readable type, complete growing
+messages and a 48dp action; explicit expanded entry treatments may be centered.
+Loading, failed reads and true emptiness retain distinct semantics and recovery.
+
+Warning/error explanations receive useful width at large text sizes. Recovery
+actions may wrap below the explanation; do not squeeze it into a narrow column
+to keep a short button beside it. Keep complete messages, actionable cautions,
+48dp targets and the existing pending/permission/operation authority.
+
+Preference summaries use a precise task label and the current selected value.
+Current values and permission statuses may grow at large text sizes and must not
+be ellipsized as previews. Retain the existing editor, stored values and authority.
+
+Preference feedback distinguishes reading stored state from saving a user
+choice. Use a named pending state, an unavailable/unsaved summary when relevant,
+and recovery owned by persistence. Keep the initiating explanation during retry;
+never describe an unread default as a saved preference or silently overwrite it.
+
+Local search follows the active product language and retains its draft when a
+collection refreshes to empty. Clear-search recovery restores focus to the same
+field. Browser focus-induced scrolling must not dismiss that field; preserve
+platform-native keyboard dismissal in the shared scrolling owner. Missing
+optional metadata must not become a literal undefined value in rows or search.

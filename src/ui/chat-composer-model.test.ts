@@ -1,0 +1,33 @@
+import { expect, it } from "vitest";
+import { composerInputLimits, composerSuggestionLimits } from "./chat-composer-model";
+it("reserves a header and readable conversation after measured toolbar chrome",()=>{
+ const short=composerInputLimits(844,280,1,0,0,48);expect(short.minimum).toBe(48);expect(short.maximum).toBe(56);expect(short.chrome).toBe(64);expect(280-short.chrome-short.maximum).toBe(short.reserved);
+ expect(composerInputLimits(844,640,1,0,0,48).maximum).toBe(160);
+});
+it("responds to actual auxiliary/footer and wrapped toolbar heights without clipping the input floor",()=>{
+ const basic=composerInputLimits(844,400,1,0,0,48);const busy=composerInputLimits(844,400,1,100,60,96);expect(busy.maximum).toBeLessThan(basic.maximum);expect(busy.maximum).toBe(busy.minimum);
+ const large=composerInputLimits(844,280,2,0,0,48);expect(large.minimum).toBe(60);expect(large.maximum).toBe(60);
+});
+it("handles missing, zero and invalid geometry without an invalid text input size",()=>{
+ for(const frame of [null,0,NaN,Infinity])for(const scale of [0,NaN,Infinity,3]){const result=composerInputLimits(NaN,frame,scale,-1,NaN,Infinity);expect(Number.isFinite(result.maximum)).toBe(true);expect(result.maximum).toBeGreaterThanOrEqual(result.minimum);expect(result.minimum).toBeGreaterThanOrEqual(48);}
+});
+
+it("keeps suggestions inside the measured scene with an editor and reachable toolbar",()=>{
+ for(const scale of [1,2,3])for(const height of [200,280,400,640]) {
+  const panel=composerSuggestionLimits(844,height,scale,0,0,48);
+  const input=composerInputLimits(844,height,scale,panel.maximum,0,48);
+  expect(panel.maximum).toBeGreaterThanOrEqual(0);
+  expect(panel.maximum).toBeLessThanOrEqual(280);
+  expect(input.chrome+input.minimum).toBeLessThanOrEqual(height);
+ }
+ expect(composerSuggestionLimits(844,280,1,0,0,48)).toEqual({maximum:116,compact:true});
+ expect(composerSuggestionLimits(844,640,1,0,0,48)).toEqual({maximum:280,compact:false});
+});
+it("budgets existing notes, recovery and wrapping actions before suggestions",()=>{
+ const plain=composerSuggestionLimits(844,400,1,0,0,48);
+ const busy=composerSuggestionLimits(844,400,1,80,30,96);
+ expect(busy.maximum).toBeLessThan(plain.maximum);
+ expect(busy.compact).toBe(true);
+ expect(composerSuggestionLimits(844,0,1,0,0,48).maximum).toBe(0);
+ for(const frame of [null,NaN,Infinity])expect(Number.isFinite(composerSuggestionLimits(NaN,frame,NaN,-1,NaN,Infinity).maximum)).toBe(true);
+});

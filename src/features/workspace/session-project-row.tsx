@@ -7,7 +7,6 @@ import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
-import { projectPathLabel } from "./project-directory";
 import type { ProjectSessionCollectionRow } from "./session-collection";
 
 export function SessionProjectRow({ row, onToggle }: {
@@ -26,14 +25,11 @@ export function SessionProjectRow({ row, onToggle }: {
       <Row style={{ flexWrap: "nowrap" }}>
         <ProjectIcon appearance={row.project.appearance} />
         <View style={[uiStyles.grow, { gap: space.xs }]}>
-          <Body style={uiStyles.label}>{row.project.name}</Body>
-          <Body muted style={uiStyles.caption} numberOfLines={1} ellipsizeMode="middle">
-            {projectPathLabel(row.project.cwd)}
-          </Body>
-        </View>
-        <View style={{ alignItems: "flex-end", gap: space.xxs }}>
-          <Body muted style={uiStyles.caption}>{row.count}</Body>
-          {row.running ? <ActivityBadge count={row.running} /> : null}
+          <Body style={uiStyles.label} numberOfLines={1}>{row.project.name}</Body>
+          <Row style={{ gap: space.xs }}>
+            <Body muted style={uiStyles.caption}>{row.count} · {copy("Oturumlar", "Sessions")}</Body>
+            {row.running ? <ActivityBadge count={row.running} /> : null}
+          </Row>
         </View>
         <DisclosureChevron expanded={row.expanded} color={colors.muted} />
       </Row>

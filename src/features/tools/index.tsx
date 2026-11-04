@@ -1,3 +1,4 @@
+import { ProjectDirectoryFeedback } from "../workspace/project-directory-feedback";
 import { router } from "expo-router";
 import { useRef } from "react";
 import { View } from "react-native";
@@ -42,15 +43,9 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
   return (
     <View style={{ flex: 1 }}>
       {!visibleProject || !supported ? <Screen title={copy("Araçlar", "Tools")}>
-        <QueryState query={projects} loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
-        {projects.privacyUnavailable ? <Notice message={copy(
-          "Proje listesini eşitlemek için bu bilgisayarda bycoda’yı aç. Korunan gruplar gizli kalır.",
-          "Open bycoda on this computer to sync the project directory. Protected groups stay hidden.",
-        )} /> : null}
-        {projects.readiness === "waiting" ? <Notice
-          message={copy("Bağlantı bekleniyor.", "Waiting for a connection.")}
-          action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: () => router.push("/machines") }}
-        /> : null}
+        <ProjectDirectoryFeedback query={projects} readiness={projects.readiness}
+          privacyUnavailable={projects.privacyUnavailable}
+          loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
         {projects.directoryReady && machine?.capabilities && !supported ? <Notice message={copy("Bu araç için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on your computer to use this tool.")} /> : null}
         {projects.directoryReady && !visibleProject ? <Empty title={projectId
           ? copy("Bu bilgisayarda proje bulunamadı.", "Project not found on this computer.")

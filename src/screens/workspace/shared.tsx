@@ -13,7 +13,7 @@ export const workspaceKey = (machineId: string, projectId: string, ...parts: str
 ];
 export function Loading() {
   useMobileTheme();
-  return <SharedLoading label="Yükleniyor…" centered />;
+  return <SharedLoading showLabel centered />;
 }
 export function Mono({ children }: { children: string }) {
   useMobileTheme();

@@ -59,3 +59,8 @@ export function providerInboxView(
   const { canRead } = providerInboxAccess(availability);
   return selected ? { kind: "detail", item: selected, canRead } : { kind: "browse", canRead };
 }
+
+/** Credential/identity failures conceal cached content; ordinary refresh errors may retain it. */
+export function isInboxPrivateFailure(...errors: unknown[]): boolean {
+  return errors.some(error => ["auth", "identity"].includes((error as {kind?: string} | null)?.kind ?? ""));
+}

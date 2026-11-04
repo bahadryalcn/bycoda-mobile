@@ -1,5 +1,7 @@
 import { providerStateLabel } from "./provider-labels";
-import { useEffect, useRef, useState } from "react";
+import { router } from "expo-router";
+import { getQueryPresentation } from "@/ui/query-presentation";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Linking } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import type { RemoteInboxPrAction } from "../../../../src/features/inbox/model/remoteInbox";
@@ -11,8 +13,8 @@ import {
   Badge,
   ActionMenu,
   Body,
-  Button,
   Heading,
+  Button,
   MutationState,
   Notice,
   QueryState,
@@ -39,6 +41,7 @@ import { InboxJobError, isInboxWriteUncertain, runInboxJob } from "./provider-jo
 import {
   inboxItemInput,
   isInboxOriginCurrent,
+  isInboxPrivateFailure,
   providerInboxAccess,
   providerName,
 } from "./provider-model";
@@ -53,16 +56,17 @@ import {
 export { type ProviderInboxDetailProps } from "./provider-component-types";
 
 export function ProviderInboxDetail({
-  item,
-  origin,
+  item: incomingItem,
+  origin: incomingOrigin,
   availability,
   onClose,
 }: ProviderInboxDetailProps) {
   const copy = useCopy();
+  const [item] = useState(incomingItem), [origin] = useState(incomingOrigin);
   const client = useHostClient();
   const cache = useQueryClient();
   const mounted = useRef(true);
-  useEffect(() => {
+  useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
@@ -76,25 +80,38 @@ export function ProviderInboxDetail({
   const submission = useAsyncAction<InboxWriteResult>();
   const openProvider = useAsyncAction<void>();
   const access = providerInboxAccess(availability);
-  const latestWriteAccess = useRef(access.canWrite);
-  latestWriteAccess.current = access.canWrite;
+  const scopeCurrent = isInboxOriginCurrent(origin, useMachines.getState());
+  const readAllowed = access.canRead && scopeCurrent;
   const input = inboxItemInput(item, origin.projectId);
-  const details = useInboxRead<"details">({ action: "details", input }, access.canRead);
-  const thread = useInboxRead<"thread">({ action: "thread", input }, access.canRead);
+  const details = useInboxRead<"details">({ action: "details", input }, readAllowed);
+  const thread = useInboxRead<"thread">({ action: "thread", input }, readAllowed);
+  const contentAvailable = readAllowed && !isInboxPrivateFailure(availability.error, details.error, thread.error);
+  const sharedReadFailure = !!details.error && !!thread.error && details.error.message === thread.error.message &&
+    (details.error as {kind?: string}).kind === (thread.error as {kind?: string}).kind;
+  const writeAllowed = contentAvailable && access.canWrite;
+  const contentLease = useMemo(() => ({ active: false }), [contentAvailable, writeAllowed]);
+  useLayoutEffect(() => { contentLease.active = true; return () => { contentLease.active = false; }; }, [contentLease]);
   const uncertain = isInboxWriteUncertain(submission.error);
   const busy = submission.isPending;
-  const { requestClose } = useSheetGuard({ dirty: !!form.values.body.trim(), pending: busy, onClose });
+  const latest = useRef({ readAllowed, contentAvailable, writeAllowed, busy, uncertain });
+  latest.current = { readAllowed, contentAvailable, writeAllowed, busy, uncertain };
+  const { requestClose, requestCloseThen } = useSheetGuard({ dirty: !!form.values.body.trim(), pending: busy, onClose });
+  const manageConnections = () => requestCloseThen(() => router.push("/machines"));
   const currentOrigin = () =>
     mounted.current && isInboxOriginCurrent(origin, useMachines.getState());
 
+  const readableNow = () => contentLease.active && currentOrigin() && latest.current.contentAvailable;
+  const editableNow = () => readableNow() && latest.current.writeAllowed && !latest.current.busy;
+  const writableNow = () => editableNow() && !latest.current.uncertain;
+
   function submit(command: InboxWriteCommand, draft?: InboxCommentDraft) {
-    if (busy || uncertain || !latestWriteAccess.current) return;
+    if (!writableNow()) return;
     setPendingAction(command.action);
     void submission.run(async () => {
       // An old confirmation cannot authorize a newly selected computer or project.
       if (!currentOrigin())
         throw new InboxJobError("This inbox changed. Open the item again before sending.");
-      if (!latestWriteAccess.current) {
+      if (!readableNow() || !latest.current.writeAllowed) {
         throw new InboxJobError(
           "The desktop inbox is unavailable. Check the connection before sending.",
         );
@@ -120,7 +137,7 @@ export function ProviderInboxDetail({
   }
 
   function stateAction(action: RemoteInboxPrAction) {
-    if (busy || uncertain || !access.canWrite) return;
+    if (!writableNow()) return;
     confirmAction(
       copy("Pull request durumunu değiştir", "Change pull request state"),
       `${item.repo} #${item.number}\n${providerActionLabel(action, copy)}`,
@@ -135,63 +152,74 @@ export function ProviderInboxDetail({
   }
 
   function refreshConversation() {
+    if (!currentOrigin()) return;
     return Promise.all([
       availability.refetch(),
-      ...(access.canRead ? [details.refetch(), thread.refetch()] : []),
+      ...(latest.current.readAllowed ? [details.refetch(), thread.refetch()] : []),
     ]);
   }
-
+  function refreshDetails() { if (currentOrigin() && latest.current.readAllowed) return details.refetch(); }
+  function refreshThread() { if (currentOrigin() && latest.current.readAllowed) return thread.refetch(); }
   function openProviderLink() {
+    if (!readableNow()) return;
     void openProvider.run(async () => {
-      await Linking.openURL(item.url);
+      if (readableNow()) await Linking.openURL(item.url);
     });
   }
 
+  const desktopUnavailable = scopeCurrent && availability.data?.available === false && getQueryPresentation(availability) === "ready";
+  const accessMessage = !scopeCurrent
+    ? copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")
+    : desktopUnavailable ? copy("Bilgisayardaki Bycoda bağlantısı bekleniyor. Yeni gönderimler durduruldu; mevcut işlemin sonucu korunuyor.",
+      "Waiting for desktop Bycoda. New sends are disabled; the current operation result is retained.") : undefined;
+  const operationMessage = !contentAvailable ? uncertain
+    ? copy("Gönderimin sonucu doğrulanamadı. Yeniden göndermeden önce konuşmayı serviste kontrol et.",
+      "The send result is uncertain. Check the provider conversation before sending again.")
+    : busy ? copy("Çalışıyor…", "Working…") : undefined : undefined;
   const prActions = providerPrActions(item);
   return (
     <Screen
-      subtitle={`${providerName(item.provider)} · ${item.identifier ?? `#${item.number}`} · ${providerStateLabel(item.state, copy)}`}
-      query={access.canRead ? thread : availability}
+      query={readAllowed ? { ...thread, data: contentAvailable ? thread.data : undefined, refetch: refreshThread } : availability}
       refresh={refreshConversation}
     >
+      {contentAvailable ? <>
+        <Heading>{item.title}</Heading>
+        <Body muted>{`${providerName(item.provider)} · ${item.identifier ?? `#${item.number}`} · ${providerStateLabel(item.state, copy)}`}</Body>
+      </> : null}
       <Row>
-        <Button
+        {!contentAvailable ? <Button
           label={copy("Gelen kutusuna dön", "Back to inbox")}
           disabled={busy}
           tone="quiet"
           onPress={requestClose}
-        />
-        {/^https:\/\//i.test(item.url) ? (
+        /> : null}
+        {contentAvailable && /^https:\/\//i.test(item.url) ? (
           <Button
             label={copy("Serviste aç", "Open in provider")}
             busy={openProvider.isPending}
             onPress={openProviderLink}
           />
         ) : null}
-        {prActions.length ? <ActionMenu
-          label={copy("Pull request işlemleri", "Pull request actions")}
+        {contentAvailable ? <ActionMenu
+          label={copy("Diğer işlemler", "More actions")}
           busy={submission.isPending && pendingAction === "pr-action"}
-          actions={prActions.map((action) => ({
-            key: action,
-            label: providerActionLabel(action, copy),
-            disabled: busy || uncertain || !access.canWrite,
-            onPress: () => stateAction(action),
-          }))}
+          actions={[
+            { key: "back", label: copy("Gelen kutusuna dön", "Back to inbox"), disabled: busy, onPress: requestClose },
+            ...prActions.map((action) => ({
+              key: action,
+              label: providerActionLabel(action, copy),
+              disabled: busy || uncertain || !writeAllowed,
+              onPress: () => stateAction(action),
+            })),
+          ]}
         /> : null}
       </Row>
-      <Heading>{item.title}</Heading>
-      <MutationState mutation={openProvider} />
-      {pendingAction === "pr-action" ? <MutationState mutation={submission} /> : null}
-      <QueryState query={availability} loading="none" />
-      {availability.data?.available === false ? (
-        <Notice
-          tone="warning"
-          message={copy(
-            "Bilgisayardaki Bycoda bağlantısı bekleniyor. Yeni gönderimler durduruldu; mevcut işlemin sonucu korunuyor.",
-            "Waiting for desktop Bycoda. New sends are disabled; the current operation result is retained.",
-          )}
-        />
-      ) : null}
+      {contentAvailable ? <MutationState mutation={openProvider} /> : null}
+      {contentAvailable && pendingAction === "pr-action" ? <MutationState mutation={submission} /> : null}
+      {scopeCurrent ? <QueryState query={{ ...availability, refetch: refreshConversation }} loading="none" onManageConnections={manageConnections} /> : null}
+      {accessMessage || operationMessage ? <Notice tone={uncertain || desktopUnavailable ? "warning" : undefined}
+        message={[accessMessage, operationMessage].filter(Boolean).join(" ")} /> : null}
+      {contentAvailable ? <>
       <Row>
         {(item.labels ?? []).map((label) => (
           <Badge key={label.name} label={label.name} />
@@ -200,26 +228,32 @@ export function ProviderInboxDetail({
           <Badge key={assignee.login} label={`@${assignee.login}`} />
         ))}
       </Row>
-      <QueryState query={details} />
+      <QueryState query={{...details, refetch: sharedReadFailure ? refreshConversation : refreshDetails}} onManageConnections={manageConnections} />
       {details.data ? <ProviderInboxDescription details={details.data} /> : null}
-      <Button tone="primary" label={form.values.body.trim() ? copy("Yorum taslağına dön", "Continue comment draft") : copy("Yorum ekle", "Add a comment")} disabled={busy || !access.canWrite} onPress={() => setComposing(true)} />
+      <Button tone="primary" label={form.values.body.trim() ? copy("Yorum taslağına dön", "Continue comment draft") : copy("Yorum ekle", "Add a comment")} disabled={busy || !writeAllowed} onPress={() => { if (editableNow()) setComposing(true); }} />
       {item.kind === "pr" && item.provider === "github" && client?.machine.capabilities?.includes("inbox.review.v1") ? <Button
-        label={copy("Pull request incelemesi", "Pull request review")} disabled={busy || uncertain || !access.canRead} onPress={() => setReviewing(true)} /> : null}
-      {reviewing ? <ProviderPrReview item={item} origin={origin} canRead={access.canRead} canWrite={access.canWrite} onClose={() => setReviewing(false)} /> : null}
+        label={copy("Pull request incelemesi", "Pull request review")} disabled={busy || uncertain || !readAllowed} onPress={() => { if (readableNow() && !latest.current.busy && !latest.current.uncertain) setReviewing(true); }} /> : null}
       <ProviderInboxConversation
         provider={item.provider}
-        thread={thread}
-        onReply={(comment) => { form.setField("reply", comment); setComposing(true); }}
-        disabled={busy}
+        hideFeedback={sharedReadFailure}
+        thread={{...thread, refetch: refreshThread}}
+        onManageConnections={manageConnections}
+        onReply={(comment) => { if (editableNow()) { form.setField("reply", comment); setComposing(true); } }}
+        disabled={busy || !writeAllowed}
       />
-      <Sheet visible={composing} size="form" title={copy("Yorum", "Comment")} dismissible={!busy} onClose={() => setComposing(false)}>
+      </> : readAllowed ? <>
+        <QueryState query={{...details, data: undefined, refetch: sharedReadFailure ? refreshConversation : refreshDetails}} onManageConnections={manageConnections} />
+        {!sharedReadFailure ? <QueryState query={{...thread, data: undefined, refetch: refreshThread}} onManageConnections={manageConnections} /> : null}
+      </> : null}
+      {reviewing ? <ProviderPrReview item={item} origin={origin} canRead={contentAvailable} canWrite={writeAllowed} onClose={() => setReviewing(false)} /> : null}
+      <Sheet visible={composing && contentAvailable} size="form" title={copy("Yorum", "Comment")} dismissible={!busy} onClose={() => setComposing(false)}>
       <ProviderInboxComposer
         item={item}
         draft={form.values}
-        onChange={form.patch}
+        onChange={(change) => { if (editableNow()) form.patch(change); }}
         onConfirm={confirmComment}
         submission={submission}
-        canSend={!!thread.data && access.canWrite}
+        canSend={!!thread.data && writeAllowed}
       />
       </Sheet>
     </Screen>

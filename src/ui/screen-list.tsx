@@ -1,8 +1,9 @@
 import { useMobileTheme } from "./theme";
+import { scrollKeyboardDismissMode } from "./scroll-keyboard";
 import { FlatList, RefreshControl, View, type FlatListProps } from "react-native";
 import type { ReactNode } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ScreenHeading, useScreenChrome } from "./layout";
+import { useScreenHeading, useScreenChrome } from "./layout";
 import { colors, metrics, space } from "./tokens";
 import { uiStyles } from "./styles";
 import type { QueryLike } from "./query-presentation";
@@ -11,11 +12,15 @@ import { usePullRefresh } from "./use-pull-refresh";
 export type ScreenListProps<T> = FlatListProps<T> & {
   title?: string;
   subtitle?: string;
+  /** Current task scope beside heading actions, including under a native title. */
+  context?: ReactNode;
   header?: ReactNode;
   footer?: ReactNode;
   query?: QueryLike;
   refresh?: () => unknown;
-  /** Trailing large-title actions (e.g. a "+" IconButton or ActionMenu). */
+  /** A toolbar and pull gesture can share one active refresh controller. */
+  refreshState?: ReturnType<typeof usePullRefresh>;
+  /** Actions owned by the compact page heading (e.g. an IconButton or ActionMenu). */
   actions?: ReactNode;
   /** Adjacent rows own their shared surface and separators. */
   grouped?: boolean;
@@ -25,10 +30,12 @@ export type ScreenListProps<T> = FlatListProps<T> & {
 export function ScreenList<T>({
   title,
   subtitle,
+  context,
   header,
   footer,
   query,
   refresh,
+  refreshState,
   actions,
   grouped = false,
   style,
@@ -41,15 +48,17 @@ export function ScreenList<T>({
   useMobileTheme();
   const insets = useSafeAreaInsets();
   const chrome = useScreenChrome();
+  const heading = useScreenHeading({ title, subtitle, context, actions });
   const onRefresh = refresh ?? query?.refetch;
-  const pullRefresh = usePullRefresh(onRefresh);
+  const ownRefresh = usePullRefresh(refreshState ? undefined : onRefresh);
+  const pullRefresh = refreshState ?? ownRefresh;
   return (
     <FlatList
       initialNumToRender={12}
       maxToRenderPerBatch={12}
       windowSize={7}
       keyboardShouldPersistTaps="handled"
-      keyboardDismissMode={process.env.EXPO_OS === "ios" ? "interactive" : "on-drag"}
+      keyboardDismissMode={scrollKeyboardDismissMode()}
       contentInsetAdjustmentBehavior="never"
       {...props}
       style={[uiStyles.screen, style]}
@@ -69,7 +78,7 @@ export function ScreenList<T>({
       ]}
       refreshControl={
         refreshControl ??
-        (onRefresh ? (
+        (refreshState || onRefresh ? (
           <RefreshControl
             tintColor={colors.muted}
             refreshing={pullRefresh.refreshing}
@@ -78,9 +87,9 @@ export function ScreenList<T>({
         ) : undefined)
       }
       ListHeaderComponent={
-        header !== undefined || title || subtitle || actions ? (
+        header !== undefined || heading ? (
           <View style={{ gap: space.sm, paddingBottom: space.sm }}>
-            <ScreenHeading title={title} subtitle={subtitle} actions={actions} />
+            {heading}
             {header}
           </View>
         ) : (

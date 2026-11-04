@@ -13,12 +13,18 @@ const state = vi.hoisted(() => ({
   fields: new Map<string, (value: string) => void>(), submit: undefined as undefined | (() => void),
   actions: [] as Array<{ key: string; disabled?: boolean; onPress: () => void } | false | null>,
 }));
+vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/cpu", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/bot", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
 vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/record-card", () => ({ RecordCard: ({ menu }: { menu: React.ReactNode }) => menu }));
-vi.mock("./shared/status", () => ({ Status: () => null }));
+vi.mock("./tasks/task-status-icon", () => ({ TaskStatusIcon: () => null }));
+vi.mock("@/ui/hint", () => ({ Hint: ({children}: PropsWithChildren) => children }));
+vi.mock("@/ui/provider-identity", () => ({ ProviderIcon: () => null }));
+vi.mock("./shared/status", () => ({ Status: () => null, statusLabel: (value: string) => value }));
 vi.mock("./tasks/review-notes", () => ({ ReviewNotes: () => null }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => state.machine }));
 vi.mock("@/state/queries", () => ({ useHostMutation: () => state.mutation }));

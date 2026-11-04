@@ -89,3 +89,5 @@ export type PairingPasteProps = {
 export type ManualConnectionFormProps = PairingEntryProps;
 
 export type PairingCopy = (tr: string, en: string) => string;
+
+export type ConnectionOperation = ReturnType<typeof useComputerConnection>["operation"];

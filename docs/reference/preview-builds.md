@@ -40,6 +40,18 @@ EAS runs from the staged `mobile` project with `EAS_NO_VCS=1` and an explicit ab
 
 For an independently authorized local invocation, `--run --allow-remote-build` additionally requires `EXPO_TOKEN`, the exact preinstalled CLI version and an existing `--project-id`. The helper never installs that CLI. `--freeze-credentials` prevents noninteractive credential updates; any necessary signing setup remains a separate owner action. One request is made, with no automatic retries. The default `--no-wait` result is `pending`; a timeout or lost outcome is uncertain and must be inspected in EAS before retrying. Simulator result metadata is validated as `SIMULATOR`, while Android expects `INTERNAL`. Even `FINISHED` is reported as `build-finished-artifact-unverified`: no artifact was downloaded, installed or submitted to a store. See [EAS CLI](https://docs.expo.dev/eas/cli/) and [internal distribution](https://docs.expo.dev/build/internal-distribution/).
 
+## Brand inputs
+
+Brand inclusion is checked before a preview archive is accepted. In addition to
+the mobile-owned launcher/adaptive PNGs, staging requires the parent
+`mark-white.png`, `logo-horizontal-white.png` and `favicon-32.png` used by the
+runtime mark/avatars, wordmark, Expo splash and web favicon. Missing files fail
+archive preparation instead of producing a preview with incomplete branding.
+For existing ignored Android projects, use the explicit raster refresh command
+in [the brand asset guide](../../assets/brand/README.md#existing-local-android-resources)
+after synchronizing canonical assets. This updates source inputs only; native
+build and installed-device acceptance remain separate.
+
 ## Owned virtual-device showcase
 
 ```sh

@@ -1,38 +1,58 @@
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Block } from "@/domain/types";
+import { useMachines } from "@/state/machines";
+import { useConnectionScope } from "@/state/connection-scope";
 import type { SessionScope } from "./session-types";
-import { Badge, Body, Notice, Row, Stack } from "@/ui/primitives";
+import { ActionMenu, Badge, Body, FormActions, NavigationRow, Notice, Row, Stack } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
-import { MessageText } from "@/ui/message-text";
+import { CollectionToolbar } from "@/ui/search-field";
+import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
+import { useSheetGuard } from "@/ui/sheet-guard";
 import type { MessageContext } from "@/ui/media-policy";
 import { useCopy } from "@/ui/copy";
+import { OrchestrationReader, type CoordinationReader } from "./orchestration-readers";
 
-/** Projection of the actual proposal. Reading never enables or dispatches its native controller. */
-export function OrchestrationDetails({ block, scope, context }: { block: Block; scope: SessionScope; context?: MessageContext }) {
-  const copy = useCopy();
-  const proposal = block.orchestration;
-  if (!proposal) return null;
-  const owned = proposal.leadId === scope.sessionId;
-  const titles = new Map(proposal.tasks.map((task) => [task.id, task.title]));
-  return <ScreenList data={proposal.tasks} keyExtractor={(task) => task.id}
-    header={<Stack>
-      <Row><Body>{proposal.title}</Body><Badge label={proposal.status} /></Row>
-      <Body muted>{copy("Ana oturum", "Parent session")}: {proposal.leadId}</Body>
-      {!owned ? <Notice tone="warning" message={copy("Bu öneri başka bir ana oturuma ait.", "This proposal belongs to another parent session.")} /> : null}
-      <Body mono>{proposal.cwd}</Body>
-      {proposal.checkoutCwd && proposal.checkoutCwd !== proposal.cwd ? <Body mono>{proposal.checkoutCwd}</Body> : null}
-      <Body muted>{proposal.author.harness} · {proposal.author.model}</Body>
-      <Body>{copy("Eşzamanlı çalışan sınırı: {p0}", "Concurrent worker limit: {p0}", { p0: proposal.settings.maxWorkers })}</Body>
-      <Body muted>{proposal.settings.choices.map((choice) => `${choice.harness} · ${choice.model}`).join("\n")}</Body>
-      <Body>{copy("İstek", "Request")}</Body><MessageText text={proposal.request} context={context} compactMedia />
-      <MessageText text={proposal.summary} context={context} compactMedia />
-      {proposal.error ? <Notice tone="danger" message={proposal.error} /> : null}
-    </Stack>}
-    renderItem={({ item: task }) => <Stack>
-      <Body>{task.title}</Body><Body muted>{task.harness} · {task.model}</Body>
-      <MessageText text={task.prompt} context={context} compactMedia />
-      {task.files.length ? <><Body>{copy("Dosya kapsamı", "File scope")}</Body><Body mono>{task.files.join("\n")}</Body></> : null}
-      {task.dependsOn.length ? <><Body>{copy("Bağımlılıklar", "Dependencies")}</Body><Body>{task.dependsOn.map((id) => titles.get(id) ? `${titles.get(id)} (${id})` : id).join("\n")}</Body></> : null}
-      {Object.keys(task.modelSettings ?? {}).length ? <><Body>{copy("Model ayarları", "Model settings")}</Body><Body mono>{Object.entries(task.modelSettings!).map(([key, value]) => `${key}: ${value}`).join("\n")}</Body></> : null}
-    </Stack>}
-    footer={<Body muted>{copy("Bu koordinasyonun eylemlerini bilgisayardan yönet.", "Manage this coordination's actions on your computer.")}</Body>} />;
+/** Read-only proposal projection. No controller or command port is exposed. */
+export function OrchestrationDetails({block,scope,context,onClose}:{block:Block;scope:SessionScope;context?:MessageContext;onClose?:()=>void}){
+  const copy=useCopy(),connection=useConnectionScope(),access=usePrivateContentAccess();
+  const machine=useMachines(state=>state.machines.find(entry=>entry.id===scope.machineId));
+  const proposal=block.orchestration;
+  const [opening]=useState(()=>({connection,machineId:scope.machineId,sessionId:scope.sessionId,blockId:block.id,leadId:proposal?.leadId,cwd:proposal?.cwd,checkoutCwd:proposal?.checkoutCwd,machineName:machine?.name??machine?.id??""}));
+  const mounted=useRef(false);
+  useLayoutEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  const scopeCurrent=!!proposal&&connection===opening.connection&&opening.connection.isCurrent()&&useMachines.getState().activeId===opening.machineId&&scope.machineId===opening.machineId&&scope.sessionId===opening.sessionId&&block.id===opening.blockId&&proposal.leadId===opening.leadId&&proposal.cwd===opening.cwd&&proposal.checkoutCwd===opening.checkoutCwd;
+  const readable=scopeCurrent&&access.allowed&&access.check();
+  const live=useRef({readable,access,proposal});live.current={readable,access,proposal};
+  const lease=useMemo(()=>({active:false}),[readable]);
+  useLayoutEffect(()=>{lease.active=true;return()=>{lease.active=false;};},[lease]);
+  const current=()=>mounted.current&&lease.active&&live.current.readable&&opening.connection.isCurrent()&&useMachines.getState().activeId===opening.machineId&&live.current.access.allowed&&live.current.access.check();
+  type Selection={value:CoordinationReader;lease:typeof lease;proposal:NonNullable<typeof proposal>;context:MessageContext|undefined};
+  const [selection,setSelection]=useState<Selection>(),issued=useRef<Selection|undefined>(undefined);
+  useLayoutEffect(()=>{if(issued.current&&issued.current.lease!==lease){issued.current=undefined;setSelection(undefined);}},[lease]);
+  useLayoutEffect(()=>()=>{issued.current=undefined;},[]);
+  const open=(value:CoordinationReader,from?:Selection)=>{
+    if(!current()||issued.current&&issued.current!==from)return;
+    const source=from?.proposal??live.current.proposal;
+    if(!source || value.kind==="task"&&!source.tasks.includes(value.task))return;
+    const next={value,lease,proposal:source,context:from?from.context:context?{...context}:undefined};issued.current=next;setSelection(next);
+  };
+  const closeReader=()=>{if(mounted.current&&selection&&issued.current===selection){issued.current=undefined;setSelection(undefined);}};
+  const {requestClose}=useSheetGuard({onClose});
+  const close=()=>{if(mounted.current&&lease.active)requestClose();};
+  if(!proposal)return null;
+  const statusLabel={planning:copy("Planlanıyor", "Planning"),ready:copy("Hazır", "Ready"),invalid:copy("İnceleme gerekiyor", "Needs review"),starting:copy("Başlatılıyor", "Starting"),approved:copy("Onaylandı", "Approved")}[proposal.status]??proposal.status;
+  return <><ScreenList data={readable?proposal.tasks:[]} keyExtractor={task=>task.id} header={<Stack>
+    {readable?<>
+      <CollectionToolbar field={<Row><Body selectable style={{flexShrink:1}}>{opening.machineName}</Body><Badge label={statusLabel}/></Row>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[{key:"details",label:copy("Ayrıntılar", "Details"),onPress:()=>open({kind:"details"})},{key:"help",label:copy("Yardım", "Help"),onPress:()=>open({kind:"help"})}]}/>}/>
+      {proposal.leadId!==scope.sessionId?<Notice tone="warning" message={copy("Bu öneri başka bir ana oturuma ait.", "This proposal belongs to another parent session.")}/>:null}
+      {proposal.error?<Notice tone="danger" message={proposal.error}/>:null}
+      <NavigationRow label={copy("İstek", "Request")} onPress={()=>open({kind:"request"})}/>
+      {proposal.summary?<NavigationRow label={copy("Özet", "Summary")} onPress={()=>open({kind:"summary"})}/>:null}
+    </>:<Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")}/>}
+  </Stack>} renderItem={({item:task})=><NavigationRow label={task.title} detail={`${task.harness} · ${task.model}`} onPress={()=>open({kind:"task",task})}/>}/>
+  {onClose?<FormActions submitLabel={copy("Kapat", "Close")} onSubmit={close}/>:null}
+  <PrivateContentAccessProvider value={{allowed:readable,check:current}}>
+    {selection&&selection.lease===lease&&readable?<OrchestrationReader value={selection.value} proposal={selection.proposal} context={selection.context} onClose={closeReader}
+      onDependency={id=>{if(issued.current!==selection)return;const task=selection.proposal.tasks.find(entry=>entry.id===id);if(task)open({kind:"task",task},selection);}}/>:null}
+  </PrivateContentAccessProvider></>;
 }

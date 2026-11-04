@@ -1,142 +1,173 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useActiveMachine } from "@/state/machines";
+import { router } from "expo-router";
+import { useActiveMachine, useMachines } from "@/state/machines";
 import { ProviderJiraBoards } from "./jira-board-screen";
-import { FilterButton, FilterSheet } from "@/ui/filter-sheet";
-import { SearchField } from "@/ui/search-field";
-import { useEffect, useReducer, useState } from "react";
-import { View } from "react-native";
-import {
-  Row,
-  ActionMenu,
-  Button,
-  Empty,
-  Notice,
-  QueryState,
-  Screen,
-  Sheet,
-  ToggleField, NavigationGroup,
-} from "@/ui/primitives";
+import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
+import { SearchField, SearchToolbar } from "@/ui/search-field";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { ActionMenu, Button, Notice, QueryState, Sheet, ToggleField, NavigationGroup } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { getQueryPresentation } from "@/ui/query-presentation";
 import { Scope } from "../management/common";
 import { ProviderInboxDetail } from "./provider-detail";
-import { ProviderConnections, ProviderInboxItems } from "./provider-list";
-import { inboxItemKey, providerInboxView } from "./provider-model";
+import { ScreenList } from "@/ui/screen-list";
+import { ProviderConnections, ProviderInboxFeedback, ProviderInboxRow } from "./provider-list";
+import { inboxItemKey, isInboxOriginCurrent, isInboxPrivateFailure, providerInboxView } from "./provider-model";
 import type { ProviderInboxBrowseProps } from "./provider-component-types";
 import { useInboxRead, useProviderInboxAvailability } from "./provider-queries";
-import { inboxBrowseReducer, initialInboxBrowseState } from "./provider-state";
+import { inboxBrowseReducer, initialInboxBrowseState, type InboxBrowseAction } from "./provider-state";
+import { useInboxBrowseMemory } from "./inbox-browse-memory-provider";
+import { useInboxScrollMemory } from "./use-inbox-scroll-memory";
 
 export { type ProviderInboxBrowseProps } from "./provider-component-types";
+type Filters = { assigned: boolean; all: boolean };
 
 export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxBrowseProps) {
   useMobileTheme();
-  const copy = useCopy();
-  const machine=useActiveMachine();
-  const [jiraBoards,setJiraBoards]=useState(false);
-  const [filterDraft, setFilterDraft] = useState<{ assigned: boolean; all: boolean } | null>(null);
-  const [browse, dispatch] = useReducer(inboxBrowseReducer, initialInboxBrowseState);
+  const copy = useCopy(), machine = useActiveMachine();
+  const [jiraBoards, setJiraBoards] = useState(false);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [filterDraft, setFilterDraft] = useState<Filters | null>(null);
+  const filterOwner = useRef(filterDraft); filterOwner.current = filterDraft;
+  const mounted = useRef(false);
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; filterOwner.current = null; }; }, []);
+  const memory = useInboxBrowseMemory();
+  const [initialView] = useState(() => memory?.read(origin));
+  const [browse, reduce] = useReducer(inboxBrowseReducer, initialView?.preferences,
+    preferences => ({ ...initialInboxBrowseState, ...preferences }));
   const { assigned, all, search, committedSearch, selected, limit, notice } = browse;
-  useEffect(() => {
-    const timer = setTimeout(() => dispatch({ type: "commit-search", value: search.trim() }), 350);
-    return () => clearTimeout(timer);
-  }, [search]);
-
   const availability = useProviderInboxAvailability();
   const view = providerInboxView(selected, availability);
-  const providers = useInboxRead<"providers">({ action: "providers", input: {} }, view.canRead);
-  const items = useInboxRead<"list">(
-    {
-      action: "list",
-      input: {
-        ...(origin.projectId ? { projectId: origin.projectId } : {}),
-        query: { assignedToMe: assigned, state: all ? "all" : "open", search: committedSearch },
-      },
-    },
-    view.canRead,
-  );
-
+  const scopeCurrent = isInboxOriginCurrent(origin, useMachines.getState());
+  const readAllowed = scopeCurrent && view.canRead;
+  const providers = useInboxRead<"providers">({ action: "providers", input: {} }, readAllowed);
+  const items = useInboxRead<"list">({ action: "list", input: {
+    ...(origin.projectId ? { projectId: origin.projectId } : {}),
+    query: { assignedToMe: assigned, state: all ? "all" : "open", search: committedSearch },
+  } }, readAllowed);
+  const privateRead = [items, providers].find(query => isInboxPrivateFailure(query.error));
+  const available = readAllowed && !isInboxPrivateFailure(availability.error) && !privateRead;
+  const lease = useMemo(() => ({ active: false }), [available]);
+  useLayoutEffect(() => { lease.active = true; return () => { lease.active = false; }; }, [lease]);
+  const serviceLease = useMemo(() => ({ active: false }), [connectionsOpen]);
+  useLayoutEffect(() => { serviceLease.active = true; return () => { serviceLease.active = false; }; }, [serviceLease]);
+  const viewKey = JSON.stringify([assigned, all, committedSearch, limit]);
+  const latest = useRef({ available, readAllowed, items, providers, availability, viewKey });
+  latest.current = { available, readAllowed, items, providers, availability, viewKey };
+  const current = useCallback(() => mounted.current && (!memory || memory.read(origin) !== undefined) && isInboxOriginCurrent(origin, useMachines.getState()), [memory, origin.machineId, origin.projectId]);
+  const canBrowse = useCallback(() => lease.active && current() && latest.current.available, [lease, current]);
   function refresh() {
-    return Promise.all([
-      availability.refetch(),
-      ...(view.canRead ? [providers.refetch(), items.refetch()] : []),
-    ]);
+    if (!current()) return;
+    const state = latest.current;
+    return Promise.all([state.availability.refetch(), ...(state.readAllowed ? [state.providers.refetch(), state.items.refetch()] : [])]);
   }
-
+  function retryItems() {
+    if (!current()) return;
+    const state = latest.current;
+    if (!state.readAllowed) return state.availability.refetch();
+    if (!state.items.isFetching) return state.items.refetch();
+  }
+  function retryProviders() {
+    if (!current()) return;
+    const state = latest.current;
+    if (!state.readAllowed) return state.availability.refetch();
+    if (!state.providers.isFetching) return state.providers.refetch();
+  }
+  function manageConnections() {
+    if (!serviceLease.active || !connectionsOpen || !current()) return;
+    setConnectionsOpen(false); router.push("/machines");
+  }
+  const scopedAvailability = { ...availability, isEnabled: available, isSuccess: available && availability.isSuccess,
+    error: availability.error ?? privateRead?.error ?? null, refetch: refresh };
+  const rows = available ? items.data?.items.slice(0, limit) ?? [] : [];
   const empty = items.data?.items.length === 0 && Object.keys(items.data.errors).length === 0;
-  return (
-    <Screen title={embedded ? undefined : copy("Servis gelen kutusu", "Provider inbox")} query={items} refresh={refresh}>
-      {view.kind === "detail" && <Sheet visible size="full" scroll={false} title={view.item.title} onClose={() => dispatch({ type: "close" })}>
-        <ProviderInboxDetail key={inboxItemKey(view.item)} item={view.item} origin={origin} availability={availability} onClose={(message) => dispatch({ type: "close", notice: message })} />
-      </Sheet>}
-      <Scope allowAll />
-      {jiraBoards?<ProviderJiraBoards origin={origin} canRead={view.canRead} canWrite={view.canRead} onClose={()=>setJiraBoards(false)}/>:null}
-      {notice ? <Notice tone="success" message={notice} /> : null}
-      <QueryState query={availability} />
-      {availability.data?.available === false ? (
-        <Empty
-          title={copy("Bilgisayardaki Bycoda açık olmalı", "Open Bycoda on your computer")}
-          detail={copy(
-            "GitHub, GitLab, Azure DevOps, Linear ve Jira erişimi bilgisayardaki oturumundan alınır. Bycoda’yı aç veya güncelle; bağlantı otomatik kontrol edilir.",
-            "Provider access uses your desktop session. Open or update Bycoda on this computer; availability is checked automatically.",
-          )}
-        />
-      ) : null}
-      {availability.data?.available === true ? (
-        <>
-          <QueryState query={providers} loading="none" />
-          {providers.data ? <ProviderConnections providers={providers.data} /> : null}
-          <Row style={{ flexWrap: "nowrap" }}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <SearchField
-                label={copy("Ara", "Search")}
-                value={search}
-                onChangeText={(value) => dispatch({ type: "search", value })}
-                autoCorrect={false}
-                placeholder={copy("Issue veya PR ara", "Search issues or PRs")}
-              />
-            </View>
-            <FilterButton count={Number(assigned) + Number(all)} onPress={() => setFilterDraft({ assigned, all })} />
-            <ActionMenu label={copy("Diğer işlemler", "More actions")} busy={items.isFetching && items.data !== undefined} actions={[
-              machine?.capabilities?.includes("inbox.jiraBoard.v1") && {
-              key: "jira", label: copy("Jira panoları", "Jira boards"), disabled: !origin.projectId || !view.canRead, onPress: () => setJiraBoards(true),
-              },
-              { key: "refresh", label: copy("Yenile", "Refresh"), disabled: items.isFetching, onPress: () => { void items.refetch(); } },
-            ]} />
-          </Row>
-          {filterDraft ? <FilterSheet visible onClose={() => setFilterDraft(null)}
-            onReset={() => setFilterDraft({ assigned: false, all: false })}
-            onApply={() => {
-              dispatch({ type: "filter", key: "assigned", value: filterDraft.assigned });
-              dispatch({ type: "filter", key: "all", value: filterDraft.all });
-              setFilterDraft(null);
-            }}>
-            <NavigationGroup>
-              <ToggleField
-              label={copy("Yalnız bana atananlar", "Assigned to me only")}
-              value={filterDraft.assigned}
-              onChange={(assigned) => setFilterDraft({ ...filterDraft, assigned })}
-            />
-              <ToggleField
-              label={copy("Kapalı kayıtları da göster", "Include closed items")}
-              value={filterDraft.all}
-              onChange={(all) => setFilterDraft({ ...filterDraft, all })}
-            />
-            </NavigationGroup>
-          </FilterSheet> : null}
-          <QueryState
-            query={items}
-            empty={empty}
-            emptyTitle={copy("Bu filtrede kayıt yok", "No items match these filters")}
-          />
-          {items.data ? (
-            <ProviderInboxItems
-              result={items.data}
-              limit={limit}
-              onOpen={(item) => dispatch({ type: "select", item })}
-              onMore={() => dispatch({ type: "more" })}
-            />
-          ) : null}
-        </>
-      ) : null}
-    </Screen>
-  );
+  const scrollMemory = useInboxScrollMemory<(typeof rows)[number]>(memory, origin, initialView?.offset ?? 0,
+    available && items.data !== undefined, rows.length, { suspended: !available });
+  const dispatch = useCallback((action: InboxBrowseAction) => {
+    if (action.type === "close" ? !mounted.current : !canBrowse()) return;
+    if (action.type !== "commit-search") scrollMemory.cancelRestore();
+    reduce(action);
+  }, [scrollMemory.cancelRestore, canBrowse]);
+  const closeFilters = () => { filterOwner.current = null; setFilterDraft(null); };
+  const changeFilters = (next: Filters) => { filterOwner.current = next; setFilterDraft(next); };
+  useLayoutEffect(() => { if (!available) closeFilters(); }, [available]);
+  useLayoutEffect(() => { memory?.remember(origin, browse); },
+    [memory, origin.machineId, origin.projectId, assigned, all, search, committedSearch, limit]);
+  useEffect(() => {
+    if (!available || selected) return;
+    const timer = setTimeout(() => dispatch({ type: "commit-search", value: search.trim() }), 350);
+    return () => clearTimeout(timer);
+  }, [search, dispatch, available, selected]);
+  const accessMessage = copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
+    "Record access is unavailable. Check the original computer and project connection.");
+  const unavailableWithoutCause = scopeCurrent && !readAllowed && !availability.error && availability.data?.available === true && getQueryPresentation(availability) === "ready";
+  const accessFeedback = <>
+    {!scopeCurrent || unavailableWithoutCause ? <>
+      <Notice message={accessMessage} />
+      {unavailableWithoutCause ? <Button tone="quiet" label={copy("Yenile","Refresh")} onPress={()=>{void refresh();}} /> : null}
+    </> : <QueryState query={{...availability, refetch: refresh}}
+      empty={availability.data?.available === false} emptyTitle={copy("Bilgisayardaki Bycoda açık olmalı", "Open Bycoda on your computer")}
+      emptyDetail={copy("GitHub, GitLab, Azure DevOps, Linear ve Jira erişimi bilgisayardaki oturumundan alınır. Bycoda’yı aç veya güncelle; bağlantı otomatik kontrol edilir.",
+        "Provider access uses your desktop session. Open or update Bycoda on this computer; availability is checked automatically.")}
+      onManageConnections={connectionsOpen ? manageConnections : undefined} />}
+    {scopeCurrent && readAllowed && privateRead ? <QueryState query={{...privateRead, data: undefined, refetch: refresh}}
+      onManageConnections={connectionsOpen ? manageConnections : undefined} /> : null}
+  </>;
+  return <>
+    {view.kind === "detail" ? <Sheet visible size="full" scroll={false} title={copy("Ayrıntılar", "Details")} onClose={() => dispatch({type:"close"})}>
+      <ProviderInboxDetail key={inboxItemKey(view.item)} item={view.item} origin={origin} availability={scopedAvailability}
+        onClose={message => dispatch({type:"close",notice:message})} />
+    </Sheet> : null}
+    {jiraBoards ? <ProviderJiraBoards origin={origin} canRead={available} canWrite={available} onClose={() => setJiraBoards(false)} /> : null}
+    <ScreenList {...scrollMemory.listProps} title={embedded ? undefined : copy("Servis gelen kutusu", "Provider inbox")}
+      query={available ? items : scopedAvailability} refresh={refresh} context={<Scope allowAll />}
+      data={rows} keyExtractor={inboxItemKey} renderItem={({item}) => <ProviderInboxRow item={item} onOpen={item => {
+        if (canBrowse() && latest.current.viewKey === viewKey) dispatch({type:"select",item});
+      }} />}
+      footer={available && (items.data?.items.length ?? 0) > limit ? <Button tone="quiet" label={copy("Daha fazla göster", "Show more")}
+        onPress={() => dispatch({type:"more"})} /> : undefined}
+      header={<>
+        {available && notice ? <Notice tone="success" message={notice} /> : null}
+        {view.kind === "browse" && !connectionsOpen ? accessFeedback : null}
+        {available ? <>
+          <SearchToolbar search={<SearchField label={copy("Ara", "Search")} value={search}
+            onChangeText={value => dispatch({type:"search",value})} autoCorrect={false} placeholder={copy("Issue veya PR ara", "Search issues or PRs")} />}
+            actions={<>
+              <FilterButton count={Number(assigned)+Number(all)} onPress={() => { if(canBrowse()) changeFilters({assigned,all}); }} />
+              <ActionMenu label={copy("Diğer işlemler", "More actions")} busy={items.isFetching && items.data !== undefined} actions={[
+                {key:"connections",label:copy("Bağlı servisler","Connected services"),onPress:()=>{if(canBrowse())setConnectionsOpen(true);}},
+                machine?.capabilities?.includes("inbox.jiraBoard.v1") && {key:"jira",label:copy("Jira panoları","Jira boards"),disabled:!origin.projectId,
+                  onPress:()=>{if(canBrowse()&&origin.projectId)setJiraBoards(true);}},
+                {key:"refresh",label:copy("Yenile","Refresh"),disabled:items.isFetching,onPress:()=>{void retryItems();}},
+              ]} />
+            </>} />
+          <AppliedFilters result={items.data ? `${items.data.items.length} ${copy("kayıt","items")}` : undefined}
+            filters={[assigned&&copy("Yalnız bana atananlar","Assigned to me only"),all&&copy("Kapalı kayıtları da göster","Include closed items")]} />
+          <QueryState query={{...items,refetch:retryItems}} empty={empty} emptyTitle={copy("Bu filtrede kayıt yok","No items match these filters")}
+            emptyAction={search.trim()||assigned||all?{label:copy("Filtreleri temizle","Clear filters"),onPress:()=>dispatch({type:"clear-filters"})}:undefined} />
+          {items.data ? <ProviderInboxFeedback result={items.data} retrying={items.isFetching} onRetry={retryItems} /> : null}
+        </> : null}
+      </>} />
+    {connectionsOpen ? <Sheet visible size="compact" title={copy("Bağlı servisler","Connected services")} onClose={() => setConnectionsOpen(false)}>
+      {accessFeedback}
+      {available ? <>
+        <QueryState query={{...providers,refetch:retryProviders}} onManageConnections={manageConnections} />
+        {providers.data ? <ProviderConnections providers={providers.data} retrying={providers.isFetching} onRetry={retryProviders} /> : null}
+      </> : null}
+    </Sheet> : null}
+    {filterDraft && available ? <FilterSheet visible onClose={()=>{if(filterOwner.current===filterDraft)closeFilters();}}
+      onReset={()=>{if(canBrowse()&&filterOwner.current===filterDraft)changeFilters({assigned:false,all:false});}}
+      onApply={()=>{
+        if(!canBrowse()||filterOwner.current!==filterDraft)return;
+        filterOwner.current=null;dispatch({type:"filter",key:"assigned",value:filterDraft.assigned});
+        dispatch({type:"filter",key:"all",value:filterDraft.all});setFilterDraft(null);
+      }}>
+      <NavigationGroup>
+        <ToggleField label={copy("Yalnız bana atananlar","Assigned to me only")} value={filterDraft.assigned}
+          onChange={assigned=>{if(canBrowse()&&filterOwner.current===filterDraft)changeFilters({...filterDraft,assigned});}} />
+        <ToggleField label={copy("Kapalı kayıtları da göster","Include closed items")} value={filterDraft.all}
+          onChange={all=>{if(canBrowse()&&filterOwner.current===filterDraft)changeFilters({...filterDraft,all});}} />
+      </NavigationGroup>
+    </FilterSheet> : null}
+  </>;
 }

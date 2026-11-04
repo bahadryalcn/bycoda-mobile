@@ -75,7 +75,12 @@ export function compareLinesAsync(original: string, current: string, options: Di
         timeout: Math.min(options.timeout ?? 120, 8),
         maxEditLength: options.maxEditLength ?? 8_000,
       });
-      if (quick) { cleanup(); resolve(quick); return; }
+      if (quick) {
+        // Keep the abort owner until publication, even when the comparison was
+        // synchronous. Closing/changing a review in the same turn must win.
+        queueMicrotask(() => { cleanup(); if (!signal?.aborted) resolve(quick); });
+        return;
+      }
     }
     // An aborted caller is released immediately. Abandoned library timer work is
     // still bounded by this timeout; its result cannot be applied or retained.
@@ -88,6 +93,9 @@ export function compareLinesAsync(original: string, current: string, options: Di
 }
 
 export async function diffLinesAsync(original: string, current: string, signal?: AbortSignal): Promise<DiffPreview> {
+  if (signal?.aborted) throw new Error("Diff cancelled.");
   if (original === current) return { lines: [], tooLarge: false, truncated: false, unchanged: true };
-  return previewChanges(await compareLinesAsync(original, current, {}, signal));
+  const changes = await compareLinesAsync(original, current, {}, signal);
+  if (signal?.aborted) throw new Error("Diff cancelled.");
+  return previewChanges(changes);
 }

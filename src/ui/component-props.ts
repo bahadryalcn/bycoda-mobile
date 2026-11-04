@@ -9,6 +9,7 @@ import type {
 } from "react-native";
 import type { SemanticTone } from "./tokens";
 import type { QueryLike } from "./query-presentation";
+import type { usePullRefresh } from "./use-pull-refresh";
 
 export type ContainerProps = PropsWithChildren<{ style?: StyleProp<ViewStyle> }>;
 
@@ -42,11 +43,19 @@ export type InputProps = TextInputProps & {
 export type ScreenProps = PropsWithChildren<{
   title?: string;
   subtitle?: string;
-  /** Trailing large-title actions, e.g. one add button or an overflow menu. */
+  /** Current task scope in the shared heading, preserved under a native title. */
+  context?: ReactNode;
+  /** Trailing actions in the shared page heading. */
   actions?: ReactNode;
   scroll?: boolean;
   query?: QueryLike;
   refresh?: () => unknown;
+  /** Share manual refresh state with the page toolbar; polling stays quiet. */
+  refreshState?: ReturnType<typeof usePullRefresh>;
+  /** Padded scrolling viewport, excluding fixed footer space. Consumers measure their own content. */
+  onContentViewport?: (size: { width: number; height: number }) => void;
+  /** Reachable page actions outside the page scroller; editors keep their own Sheet. */
+  footer?: ReactNode;
 }>;
 
 export type BodyProps = PropsWithChildren<TextProps & { muted?: boolean; mono?: boolean }>;
@@ -59,6 +68,8 @@ export type ChoiceChipProps = Omit<ButtonProps, "children" | "selected"> & { sel
 
 export type ToggleFieldProps = {
   label: string;
+  /** Deliberate list preview; the accessible label retains its full text. */
+  labelLines?: number;
   value: boolean;
   onChange: (value: boolean) => void;
   disabled?: boolean;
@@ -85,10 +96,11 @@ export type SelectRowProps = {
 export type IconButtonProps = PropsWithChildren<{
   label: string;
   onPress: () => void;
+  onLongPress?: () => void;
   disabled?: boolean;
   busy?: boolean;
   density?: "regular" | "compact";
-  tone?: "default" | "primary";
+  tone?: "default" | "primary" | "danger";
   expanded?: boolean;
 }>;
 
@@ -128,6 +140,8 @@ export type NoticeProps = PropsWithChildren<{
 
 export type QueryStateProps = {
   query: QueryLike;
+  /** Overrides the default nearest-Sheet guarded close and connection navigation. */
+  onManageConnections?: () => void;
   empty?: boolean | string;
   emptyTitle?: string;
   emptyDetail?: string;
@@ -137,7 +151,7 @@ export type QueryStateProps = {
 };
 
 export type MutationStateProps = {
-  mutation: { isPending?: boolean; isError?: boolean; isSuccess?: boolean; error?: unknown };
+  mutation: { isPending?: boolean; isError?: boolean; isSuccess?: boolean; error?: unknown; submittedAt?: number };
   pending?: string;
   success?: string;
 };
@@ -150,6 +164,8 @@ export type FormActionsProps = {
   onCancel?: () => void;
   cancelLabel?: string;
   cancelDisabled?: boolean;
+  /** Read-only recovery may close while a read is pending; mutations keep the default guard. */
+  allowCancelWhileBusy?: boolean;
   busy?: boolean;
   disabled?: boolean;
   tone?: ButtonProps["tone"];
@@ -175,9 +191,14 @@ export type SheetProps = PropsWithChildren<{
   onClose: () => void;
   footer?: ReactNode;
   headerAction?: ReactNode;
+  /** Form fits scrolling content up to 90% of the window; scroll=false reserves
+   * that viewport for caller-owned lists. Compact fits the available frame;
+   * full fills it. Body/action scroll ownership stays unchanged. */
   size?: "compact" | "form" | "full";
   scroll?: boolean;
   dismissible?: boolean;
   dirty?: boolean;
+  discardTitle?: string;
+  discardMessage?: string;
   returnFocusRef?: RefObject<View | TextInput | null>;
 }>;

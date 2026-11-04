@@ -245,6 +245,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             disabled={disabled}
             onCommand={onCommand}
             context={context}
+            onClose={() => setSubagentOpen(false)}
           />
         ) : null}
       </Sheet>
@@ -266,7 +267,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
         onClose={() => setOrchestrationOpen(false)}
       >
         {orchestrationOpen && value.orchestration ? (
-          <OrchestrationDetails block={value} scope={scope} context={context} />
+          <OrchestrationDetails block={value} scope={scope} context={context} onClose={() => setOrchestrationOpen(false)} />
         ) : null}
       </Sheet>
       <TranscriptStructured block={value} context={context} compactAgent compactOrchestration />

@@ -1,5 +1,5 @@
 import { useMobileTheme } from "./theme";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Badge as PanelBadge } from "panelui-native/components/badge";
 import { Spinner } from "panelui-native/components/spinner";
 import { Alert } from "panelui-native/components/alert";
@@ -68,16 +68,16 @@ export function Empty({ title, detail, compact = true, action }: EmptyProps) {
       entering={reveal}
       style={{
         gap: space.sm,
-        alignItems: "center",
-        paddingVertical: compact ? space.xl : space.xxl * 2,
-        paddingHorizontal: space.xl,
+        alignItems: compact ? "flex-start" : "center",
+        paddingVertical: compact ? space.lg : space.xxl * 2,
+        paddingHorizontal: compact ? 0 : space.xl,
       }}
     >
-      <Body style={[compact ? uiStyles.title : uiStyles.heading, { textAlign: "center" }]}>
+      <Body style={[compact ? uiStyles.title : uiStyles.heading, { textAlign: compact ? "left" : "center", maxWidth: "100%" }]}>
         {title}
       </Body>
       {detail ? (
-        <Body muted style={[uiStyles.caption, { textAlign: "center", maxWidth: 320 }]}>
+        <Body muted style={[uiStyles.caption, { textAlign: compact ? "left" : "center", maxWidth: 320 }, compact && { alignSelf: "stretch" }]}>
           {detail}
         </Body>
       ) : null}
@@ -86,7 +86,7 @@ export function Empty({ title, detail, compact = true, action }: EmptyProps) {
           label={action.label}
           onPress={action.onPress}
           tone="primary"
-          style={{ alignSelf: "center", marginTop: space.sm }}
+          style={{ alignSelf: compact ? "flex-start" : "center", marginTop: space.sm }}
         />
       ) : null}
     </Animated.View>
@@ -203,6 +203,7 @@ export function ErrorNotice({ error, onRetry, retryLabel, retrying, message, act
 
 export function Notice({ tone = "info", message, children, onRetry, retryLabel, retrying, action }: NoticeProps) {
   useMobileTheme();
+  const { fontScale } = useWindowDimensions();
   const copy = useCopy();
   const semantic = semanticColors[tone];
   const Icon =
@@ -223,7 +224,7 @@ export function Notice({ tone = "info", message, children, onRetry, retryLabel, 
       style={uiStyles.notice}
     >
       <View style={uiStyles.noticeRow}>
-        <View style={uiStyles.noticeMessage}>
+        <View style={[uiStyles.noticeMessage, { flexBasis: 128 * Math.max(1, fontScale) }]}>
           <Icon size={16} strokeWidth={2} color={semantic.text} style={{ marginTop: 1 }} />
           <Body style={[uiStyles.grow, uiStyles.caption, { color: quiet ? colors.muted : colors.text }]}>
             {message}

@@ -2,8 +2,9 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
   picker: vi.fn(), photos: vi.fn(), copy: vi.fn(), deleted: vi.fn(), write: vi.fn(), id: 0,
-  platform: { OS: "android" },
+  platform: { OS: "android" }, entries: [] as string[],
 }));
+vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 vi.mock("react-native", () => ({ Platform: fixture.platform }));
 vi.mock("expo-document-picker", () => ({ getDocumentAsync: fixture.picker }));
 vi.mock("expo-image-picker", () => ({ launchImageLibraryAsync: fixture.photos }));
@@ -18,6 +19,7 @@ vi.mock("expo-file-system", () => {
     size = 95;
     name = "native-attachment.md";
     create() {}
+    list() { return fixture.entries.map(uri => new Path(uri)); }
     write(bytes: Uint8Array) { fixture.write(this.uri, bytes); }
     delete() { fixture.deleted(this.uri); }
     copy(destination: { uri: string }) { return fixture.copy(this.uri, destination.uri); }
@@ -25,11 +27,11 @@ vi.mock("expo-file-system", () => {
   return { File: Path, Directory: Path, Paths: { document: { uri: "file:///private" } } };
 });
 
-import { pickAttachments, stageBrowserCapture } from "./attachment-files";
+import { pickAttachments, stageBrowserCapture, clearAttachmentDraftFiles } from "./attachment-files";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  fixture.id = 0;
+  fixture.id = 0; fixture.entries = [];
   fixture.write.mockReset();
   fixture.platform.OS = "android";
   fixture.copy.mockResolvedValue(undefined);
@@ -85,4 +87,28 @@ it("removes a partial staged browser file after write failure", () => {
   fixture.write.mockImplementation(() => { throw new Error("Disk full"); });
   expect(() => stageBrowserCapture(capture(), "", { machineId: "machine", projectId: "project", sessionId: "session", navigationId: "nav" })).toThrow("Disk full");
   expect(fixture.deleted).toHaveBeenCalledExactlyOnceWith("file:///private/chat-drafts/machine%3Asession/file-1");
+});
+
+it("sweeps only unprotected app-owned staging entries and leaves the root/recovery scope intact", () => {
+  fixture.entries = ["file:///private/chat-drafts/keep%3Asession", "file:///private/chat-drafts/drop%3Asession"];
+  clearAttachmentDraftFiles(["keep:session"]); expect(fixture.deleted).toHaveBeenCalledExactlyOnceWith("file:///private/chat-drafts/drop%3Asession");
+});
+it("refuses an out-of-root entry before deleting any staged files", () => {
+  fixture.entries = ["file:///private/chat-drafts/drop%3Asession", "file:///private/other-data"];
+  expect(() => clearAttachmentDraftFiles([])).toThrow("Invalid attachment draft directory"); expect(fixture.deleted).not.toHaveBeenCalled();
+});
+it("does not copy a picker result returned after its draft owner was cleared", async () => {
+  const { default: disk } = await import("@react-native-async-storage/async-storage"); const { withDraftStorageCleanup } = await import("@/state/local-draft-storage");
+  let reply!: (value: unknown) => void; fixture.picker.mockImplementationOnce(() => new Promise(resolve => { reply = resolve; }));
+  const picking = pickAttachments("document", "retired:session").catch(error => error as Error);
+  await withDraftStorageCleanup(disk, async retire => retire(new Set()));
+  reply({ canceled: false, assets: [{ uri: "content://provider/document", name: "new.txt", mimeType: "text/plain" }] });
+  expect(String(await picking)).toContain("saved draft was cleared"); expect(fixture.copy).not.toHaveBeenCalled();
+});
+it("drains an in-progress copy before allowing the attachment sweep", async () => {
+  const { default: disk } = await import("@react-native-async-storage/async-storage"); const { withDraftStorageCleanup } = await import("@/state/local-draft-storage");
+  let finish!: () => void; fixture.copy.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+  const picking = pickAttachments("document", "copying:session"); await vi.waitFor(() => expect(fixture.copy).toHaveBeenCalledOnce()); const sweep = vi.fn();
+  const cleanup = withDraftStorageCleanup(disk, async retire => { retire(new Set()); sweep(); });
+  expect(sweep).not.toHaveBeenCalled(); finish(); await picking; await cleanup; expect(sweep).toHaveBeenCalledOnce();
 });

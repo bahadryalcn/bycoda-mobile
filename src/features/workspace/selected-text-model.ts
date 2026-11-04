@@ -1,11 +1,13 @@
 export const EXCERPT_PAGE_SIZE = 12_000;
 export function excerptPage(text: string, page: number) {
   const index = Math.max(0, Math.min(Math.floor(page), Math.max(0, Math.ceil(text.length / EXCERPT_PAGE_SIZE) - 1)));
-  const boundary = (at: number) => at > 0 && at < text.length && /[\uDC00-\uDFFF]/.test(text[at]) && /[\uD800-\uDBFF]/.test(text[at - 1]) ? at - 1 : at;
+  const boundary = (at: number) => at > 0 && at < text.length && /[\uDC00-\uDFFF]/.test(text[at]) && /[\uD800-\uDBFF]/.test(text[at - 1]) ? at - 1 : text[at] === "\n" && text[at - 1] === "\r" ? at - 1 : at;
   const start = boundary(index * EXCERPT_PAGE_SIZE);
   const end = boundary(Math.min(text.length, (index + 1) * EXCERPT_PAGE_SIZE));
   return { start, end, text: text.slice(start, end), index, pages: Math.max(1, Math.ceil(text.length / EXCERPT_PAGE_SIZE)) };
 }
+/** Match the read-only native input value so its selection offsets index what is visible. */
+export function selectionDisplayText(text: string) { return text.replace(/\r\n?/g, "\n"); }
 export function selectedExcerpt(page: string, selection: { start: number; end: number }): string {
   const { start, end } = selection;
   if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || end > page.length || page.length > EXCERPT_PAGE_SIZE + 1)

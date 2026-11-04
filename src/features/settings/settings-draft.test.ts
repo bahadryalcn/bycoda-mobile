@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acknowledgeSettingsDraft, settingsFields, validSettingsFields } from "./settings-draft";
+import { acknowledgeSettingsDraft, readHostSettingsState, settingsFields, validSettingsFields } from "./settings-draft";
 
 describe("host settings draft snapshots", () => {
   it("derives a clean form from the current server values", () => {
@@ -33,4 +33,11 @@ describe("host settings draft snapshots", () => {
     ])
       expect(validSettingsFields(values)).toBe(false);
   });
+});
+
+it("accepts bounded host settings and rejects malformed numeric or usage data", () => {
+  const valid = { maxRunningTasks: 2, dailyAgentMinutes: 0, usedMinutes: 42.5, limitReached: false };
+  expect(readHostSettingsState(valid)).toEqual(valid);
+  for (const value of [null, { ...valid, maxRunningTasks: 9 }, { ...valid, dailyAgentMinutes: -1 }, { ...valid, usedMinutes: NaN }, { ...valid, usedMinutes: "42" }, { ...valid, limitReached: "false" }]) expect(() => readHostSettingsState(value)).toThrow("Invalid computer task settings");
+  for (const input of ["1e0", " 1", "+1"]) expect(validSettingsFields({ maxRunning: input, dailyMinutes: "0" })).toBe(false);
 });

@@ -6,6 +6,8 @@ import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Laptop from "lucide-react-native/icons/laptop";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
+import WifiOff from "lucide-react-native/icons/wifi-off";
+import CircleAlert from "lucide-react-native/icons/circle-alert";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { notifyManager, useQueryClient } from "@tanstack/react-query";
 import { useNetInfo } from "@react-native-community/netinfo";
@@ -20,6 +22,7 @@ import { useCopy } from "./copy";
 import { connectionPhase } from "./connection-presentation";
 import { Menu } from "panelui-native/components/menu";
 import { BusyIndicator as Spinner } from "./busy-indicator";
+import { decorativeSvgProps } from "./accessibility";
 
 /** Connection state for the active computer; mounting it also keeps the descriptor fresh. */
 function useMachineStatus() {
@@ -88,7 +91,7 @@ function useMachineStatus() {
           : phase === "permission" || phase === "locked" || phase === "storage"
             ? semanticColors.warning.text
             : colors.muted;
-  return { machine, copy, health, successAt, unlocked, status, statusColor, storageError };
+  return { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError };
 }
 
 /** Headless owner of the periodic connection check while the tab shell is mounted. */
@@ -97,11 +100,24 @@ export function MachineHealthMonitor() {
   return null;
 }
 
-/** Compact computer switcher shown beside large titles: status dot, name and a menu. */
-
-export function MachinePill() {
+/** Quiet while healthy; use the existing active-computer health owner for exceptional states. */
+export function MachineConnectionStatus() {
   useMobileTheme();
-  const { machine, copy, health, successAt, unlocked, status, statusColor, storageError } = useMachineStatus();
+  const { phase, status, statusColor } = useMachineStatus();
+  if (phase === "connected") return null;
+  const StatusIcon = phase === "offline" || phase === "disconnected" ? WifiOff : CircleAlert;
+  return <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, minWidth: 0 }}>
+    {phase === "checking" ? <Spinner size="sm" color={statusColor} />
+      : <StatusIcon {...decorativeSvgProps} size={14} color={statusColor} />}
+    <Body style={[uiStyles.caption, { color: statusColor, flexShrink: 1 }]}>{status}</Body>
+  </View>;
+}
+
+/** A page identity and computer selector share one stable touch target. */
+
+export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?: string } = {}) {
+  useMobileTheme();
+  const { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError } = useMachineStatus();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const [menuMachineId, setMenuMachineId] = useState(machine?.id);
@@ -112,12 +128,12 @@ export function MachinePill() {
   if (!unlocked && menuOpen) setMenuOpen(false);
   const name = machine?.name ?? copy("Bilgisayar bağla", "Connect a computer");
   return (
-    <View style={{ flexDirection: "row", alignItems: "center" }}>
+    <View style={{ minWidth: 0, flexShrink: 1, alignSelf: heading ? "stretch" : "flex-start" }}>
       <Menu open={menuOpen && unlocked} onOpenChange={(next) => setMenuOpen(unlocked && next)}>
         <Menu.Trigger>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={[name, machine ? status : undefined, copy("Bilgisayar seç", "Choose computer")]
+            accessibilityLabel={[heading, name, machine ? status : undefined, subtitle, copy("Bilgisayar seç", "Choose computer")]
               .filter(Boolean)
               .join(". ")}
             accessibilityState={{ expanded: menuOpen && unlocked }}
@@ -129,35 +145,36 @@ export function MachinePill() {
                 alignItems: "center",
                 gap: space.sm,
                 minHeight: metrics.touchTarget,
-                paddingStart: space.md,
-                paddingEnd: space.sm,
-                borderRadius: radii.pill,
-                backgroundColor: colors.fill,
-                maxWidth: 240,
+                paddingStart: heading ? 0 : space.md,
+                paddingEnd: heading ? 0 : space.sm,
+                paddingVertical: space.xs,
+                borderRadius: heading ? 0 : radii.pill,
+                backgroundColor: heading ? "transparent" : colors.fill,
+                maxWidth: "100%",
+                minWidth: 0,
+                flexShrink: 1,
               },
               pressed && { opacity: opacity.pressed },
             ]}
           >
-            {machine ? (
-              health.isFetching && !successAt ? (
-                <Spinner size="sm" color={statusColor} />
-              ) : (
-                <View
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: radii.pill,
-                    backgroundColor: statusColor,
-                  }}
-                />
-              )
-            ) : (
-              <Laptop size={15} strokeWidth={2} color={colors.muted} />
-            )}
-            <Text numberOfLines={1} style={[uiStyles.caption, { color: colors.text, fontWeight: "600", flexShrink: 1 }]}>
-              {storageError && unlocked ? status : name}
-            </Text>
-            <ChevronDown size={14} strokeWidth={2.6} color={colors.muted} />
+            <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
+              {heading ? <Text accessibilityRole="header" style={uiStyles.heading}>{heading}</Text> : null}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, minWidth: 0 }}>
+                {machine ? (
+                  health.isFetching && !successAt ? (
+                    <Spinner size="sm" color={statusColor} />
+                  ) : (
+                    <View accessible={false} style={{ width: 8, height: 8, borderRadius: radii.pill, backgroundColor: statusColor }} />
+                  )
+                ) : (
+                  <Laptop size={15} strokeWidth={2} color={colors.muted} />
+                )}
+                <Text style={[uiStyles.caption, { color: heading ? colors.muted : colors.text, flex: 1, minWidth: 0 }]}>
+                  {[name, subtitle, phase !== "unpaired" && phase !== "connected" && phase !== "checking" && unlocked ? status : undefined].filter(Boolean).join(" · ")}
+                </Text>
+                <ChevronDown size={14} strokeWidth={2.6} color={colors.muted} style={{ flexShrink: 0 }} />
+              </View>
+            </View>
           </Pressable>
         </Menu.Trigger>
         <Menu.Content

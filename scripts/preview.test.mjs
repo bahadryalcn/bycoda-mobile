@@ -34,6 +34,8 @@ function fixture(t) {
     "src/shared/model/host-contracts/index.ts",
     "packages/core/package.json",
     "public/brand/bycoda/mark-white.png",
+    "public/brand/bycoda/logo-horizontal-white.png",
+    "public/brand/bycoda/favicon-32.png",
   ];
   for (const name of mobileFiles)
     put(`mobile/${name}`, name === "app.json" ? '{"expo":{"extra":{"keep":true}}}' : "test-source");
@@ -198,6 +200,16 @@ test("incomplete and escaping archive inputs fail rather than producing a usable
     /Missing required/,
   );
 });
+
+for (const name of ["mark-white.png", "logo-horizontal-white.png", "favicon-32.png"])
+  test(`preview refuses missing runtime brand asset ${name}`, (t) => {
+    const value = fixture(t);
+    const missing = `public/brand/bycoda/${name}`;
+    assert.throws(
+      () => copyPreviewSource({ ...value, parentFiles: value.parentFiles.filter((entry) => entry !== missing) }),
+      (error) => error.message === `Missing required staged input ${missing}`,
+    );
+  });
 test("CLI and output validators reject arbitrary switches, traversal and link escapes", (t) => {
   assert.throws(() => options(["--profile", "production"], [], ["--platform"]));
   assert.throws(() => options(["--run", "--run"], ["--run"]));

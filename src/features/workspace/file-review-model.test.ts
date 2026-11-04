@@ -23,6 +23,27 @@ describe("read-only file inspection", () => {
     expect(reviewSource(text).lines[0].number).toBe(1);
   });
 
+  it("does not report a preview limit for an offset window that reaches the file end", () => {
+    const short = Array.from({ length: 10 }, (_, index) => `line-${index + 1}`).join("\n");
+    expect(reviewSource(short, 6)).toMatchObject({
+      targetLine: 6, truncated: false, locationUnavailable: false,
+    });
+    const text = Array.from({ length: 5000 }, (_, index) => `line-${index + 1}`).join("\n");
+    expect(reviewSource(text, 4500).truncated).toBe(false);
+    expect(reviewSource(text, 2000).truncated).toBe(true);
+    expect(reviewSource(text).truncated).toBe(true);
+  });
+
+  it("keeps actual character, visible-line and window-length limits explicit at a search hit", () => {
+    const line = "x".repeat(2001);
+    expect(reviewSource("first\nsecond\nthird\nfourth\nfifth\n" + line, 6).truncated).toBe(true);
+    expect(reviewSource("x".repeat(MAX_REVIEW_CHARACTERS) + "\ntail", 1).truncated).toBe(true);
+    const exact = Array.from({ length: 2003 }, () => "line").join("\n");
+    expect(reviewSource(exact, 7).lines).toHaveLength(2000);
+    expect(reviewSource(exact, 7).truncated).toBe(false);
+    expect(reviewSource(exact + "\nextra", 7).truncated).toBe(true);
+  });
+
   it("refuses missing, invalid and out-of-character-budget locations instead of inventing a destination", () => {
     for (const line of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 9999]) {
       expect(reviewSource("first\nsecond", line)).toMatchObject({

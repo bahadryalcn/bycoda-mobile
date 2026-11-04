@@ -25,7 +25,7 @@ export function ActivityBadge({ count }: { count?: number }) {
   }, [active, opacity]);
   const animated = useAnimatedStyle(() => ({ opacity: opacity.value }));
   const label = `${count === undefined ? "" : `${count} · `}${copy("Çalışıyor", "Running")}`;
-  return <View accessible accessibilityLabel={label} style={{ flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radii.control, backgroundColor: colors.panel }}>
+  return <View accessible accessibilityLabel={label} style={{ flexDirection: "row", alignItems: "center", minWidth: 0, maxWidth: "100%", flexShrink: 1, gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radii.control, backgroundColor: colors.panel }}>
     <Animated.View accessible={false} style={[{ width: 7, height: 7, borderRadius: radii.pill, backgroundColor: colors.live }, animated]} />
     <Body style={[uiStyles.caption, { color: colors.live }]}>{label}</Body>
   </View>;

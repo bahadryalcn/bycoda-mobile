@@ -1,7 +1,7 @@
 import type { FileEditorProps, FileEditorMode, FileEditorConfirmation } from "./file-editor-types";
 import { useCallback, useEffect, useState } from "react";
 import { BackHandler, useWindowDimensions } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine } from "@/state/machines";
@@ -43,6 +43,7 @@ const encodeFileDraft = (value: FileDraft | null) =>
 export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }: FileEditorProps) {
   useMobileTheme();
   const copy = useCopy();
+  const manageConnections = () => router.push("/machines");
   const { height } = useWindowDimensions();
   const machine = useActiveMachine();
   const client = useHostClient();
@@ -191,7 +192,7 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
           />
         </Sheet>
       ) : null}
-      {!media ? <QueryState query={file} loading="content" /> : null}
+      {!media ? <QueryState query={file} loading="content" onManageConnections={manageConnections} /> : null}
       {binary ? (
         context ? (
           <ProjectMedia path={path} context={context} />

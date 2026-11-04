@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useMobileTheme } from "@/ui/theme";
+import { useLayoutEffect, useRef, useState } from "react";
 import Constants from "expo-constants";
 import { findNodeHandle, Linking, Share, View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -25,12 +26,16 @@ function tile(Glyph: typeof Star, color: string) {
 
 /** User initiated public actions. This does not publish through connected social accounts. */
 export function EngagementSettings() {
+  useMobileTheme();
   const copy = useCopy();
   const platform = process.env.EXPO_OS ?? "unknown";
   const links = engagementLinks(Constants.expoConfig, platform);
   const identity = appIdentity(Constants, platform);
   const shareAnchor = useRef<View>(null);
   const pending = useRef(false);
+  const active = useRef(true);
+  useLayoutEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  const [feedbackFor, setFeedbackFor] = useState<"review" | "share" | "public" | null>(null);
   const [busy, setBusy] = useState<
     "review" | "share" | "public" | null
   >(null);
@@ -39,9 +44,10 @@ export function EngagementSettings() {
   const nativeSharing = platform === "ios" || platform === "android";
 
   async function perform(action: NonNullable<typeof busy>) {
-    if (pending.current) return;
+    if (!active.current || pending.current || (action === "share" && !nativeSharing) || (action === "review" && !links.reviewUrl)) return;
     pending.current = true;
     setBusy(action);
+    setFeedbackFor(action);
     setError(null);
     setNotice(null);
     try {
@@ -62,6 +68,7 @@ export function EngagementSettings() {
             });
           },
         );
+        if (!active.current) return;
         if (result === "dismissed")
           setNotice(copy("Paylaşım iptal edildi.", "Sharing was cancelled."));
         if (result === "failed" || result === "unavailable") {
@@ -77,6 +84,7 @@ export function EngagementSettings() {
         const result = await openPublicLink(url, (target) =>
           Linking.openURL(target),
         );
+        if (!active.current) return;
         if (result !== "opened") {
           setError(
             copy(
@@ -88,9 +96,14 @@ export function EngagementSettings() {
       }
     } finally {
       pending.current = false;
-      setBusy(null);
+      if (active.current) setBusy(null);
     }
   }
+
+  const feedback = (action: NonNullable<typeof busy>) => feedbackFor === action ? <Stack style={{ gap: space.sm }}>
+    {notice ? <Body accessibilityLiveRegion="polite" muted>{notice}</Body> : null}
+    <ErrorText error={error} />
+  </Stack> : null;
 
   return (
     <Stack style={{ gap: space.lg }}>
@@ -111,15 +124,18 @@ export function EngagementSettings() {
             busy={busy === "review"}
             onPress={() => { void perform("review"); }}
           />
+          {feedback("review")}
           <View ref={shareAnchor} collapsable={false}>
             <NavigationRow
               label={copy("Uygulamayı paylaş", "Share the app")}
+              intent="command"
               disabled={!!busy || !nativeSharing}
               icon={tile(Share2, colors.muted)}
               busy={busy === "share"}
               onPress={() => { void perform("share"); }}
             />
           </View>
+          {feedback("share")}
           <NavigationRow
             label={copy("Uygulama sayfası", "App page")}
             disabled={!!busy}
@@ -127,6 +143,7 @@ export function EngagementSettings() {
             busy={busy === "public"}
             onPress={() => { void perform("public"); }}
           />
+          {feedback("public")}
           <NavigationRow
             label={copy("Geri bildirim gönder", "Send feedback")}
             disabled={!!busy}
@@ -135,8 +152,6 @@ export function EngagementSettings() {
           />
         </NavigationGroup>
       </Animated.View>
-      {notice ? <Body accessibilityLiveRegion="polite" muted>{notice}</Body> : null}
-      <ErrorText error={error} />
       <NavigationGroup>
         <Disclosure label={copy("Bağlantılar", "Links")}>
           <Body muted selectable>{links.shareUrl}</Body>

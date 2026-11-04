@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useWindowDimensions } from "react-native";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import Check from "lucide-react-native/icons/check";
 import { NavigationGroup, NavigationRow, Sheet } from "@/ui/primitives";
@@ -13,6 +14,9 @@ export function TranscriptViewFilter({ value, onChange }: {
   onChange: (value: TranscriptView) => void;
 }) {
   const copy = useCopy();
+  const { width, fontScale } = useWindowDimensions();
+  // The navigator title and Back must retain room when labels grow.
+  const compact = width / Math.max(1, fontScale) < 600;
   const [open, setOpen] = useState(false);
   const options: { value: TranscriptView; label: string; detail: string }[] = [
     { value: "messages", label: copy("Mesajlar", "Messages"), detail: copy(
@@ -26,6 +30,7 @@ export function TranscriptViewFilter({ value, onChange }: {
   ];
   return <>
     <ChatToolbarAction label={options.find((option) => option.value === value)!.label}
+      hideLabel={compact}
       accessibilityLabel={`${copy("Sohbet görünümü", "Chat view")}: ${options.find((option) => option.value === value)!.label}`}
       tone={value === "details" ? "accent" : "muted"} onPress={() => setOpen(true)}>
       <SlidersHorizontal size={14} color={value === "details" ? colors.accent : colors.muted} />

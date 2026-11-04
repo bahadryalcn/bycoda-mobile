@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyReportDraft, limitReportText, maxReportExcerpt } from "./report-model";
 import { reportPayload, createFirebaseReportSender, reportEndpoint, type ReportReceipt } from "./report-delivery";
-import { discardContentReport, sendContentReport, startContentReport, updateContentReport, useContentReport } from "./report-store";
+import { discardContentReport, discardReviewedContentReport, isContentReportReviewCurrent, sendContentReport, startContentReport, updateContentReport, useContentReport } from "./report-store";
 
 const ready = () => {
   updateContentReport({ reason: "privacy", description: "Please review this response." });
@@ -113,4 +113,42 @@ describe("Firebase HTTP adapter", () => {
     const sender = createFirebaseReportSender("https://example.test/report", vi.fn<typeof fetch>().mockResolvedValue(response))!;
     await expect(sender("id", { reason: "other", description: "Concern" })).rejects.toThrow();
   });
+});
+
+
+describe("reviewed report actions",()=>{
+ it("discards only the reviewed draft and rejects changed content",()=>{
+  ready();const review=useContentReport.getState();updateContentReport({description:"A newer report"});
+  expect(isContentReportReviewCurrent(review)).toBe(false);expect(discardReviewedContentReport(review)).toBe(false);
+  expect(useContentReport.getState().draft.description).toBe("A newer report");
+  expect(discardReviewedContentReport(useContentReport.getState())).toBe(true);expect(useContentReport.getState().draft).toEqual(emptyReportDraft());
+ });
+ it("does not discard in-flight delivery or a later matching receipt",async()=>{
+  ready();const review=useContentReport.getState();let finish!:(value:ReportReceipt)=>void;
+  const opts={...options(),sender:vi.fn(()=>new Promise<ReportReceipt>(done=>{finish=done;}))};
+  const pending=sendContentReport({...opts,review});expect(discardReviewedContentReport(review)).toBe(false);
+  finish({requestId:"request-1",reportId:"confirmed-report"});await pending;
+  expect(discardReviewedContentReport(review)).toBe(false);expect(useContentReport.getState().receiptId).toBe("confirmed-report");
+ });
+ it("does not retarget a captured Send action to another consented report",async()=>{
+  ready();const review=useContentReport.getState();updateContentReport({description:"Another report"});updateContentReport({consent:true});
+  const opts=options();await sendContentReport({...opts,review});expect(opts.sender).not.toHaveBeenCalled();expect(opts.newRequestId).not.toHaveBeenCalled();
+  await sendContentReport({...opts,review:useContentReport.getState()});expect(opts.sender).toHaveBeenCalledTimes(1);
+ });
+ it("retains retry identity through a newly reviewed unchanged payload",async()=>{
+  ready();const opts=options();opts.sender.mockRejectedValueOnce(new Error("Unknown delivery"));
+  await sendContentReport({...opts,review:useContentReport.getState()});const retry=useContentReport.getState();
+  expect(discardReviewedContentReport({...retry,requestId:null})).toBe(false);
+  await sendContentReport({...opts,review:retry});expect(opts.newRequestId).toHaveBeenCalledTimes(1);expect(opts.sender).toHaveBeenNthCalledWith(2,"request-1",expect.any(Object));
+ });
+});
+
+
+it("retires reviewed actions across a failed retry even when visible values return unchanged",async()=>{
+ ready();const opts=options();opts.sender.mockRejectedValue(new Error("Unknown delivery"));
+ await sendContentReport(opts);const review=useContentReport.getState();
+ await sendContentReport({...opts,review});const current=useContentReport.getState();
+ expect(current.draft).toBe(review.draft);expect(current.requestId).toBe(review.requestId);expect(current.status).toBe(review.status);
+ expect(current.revision).toBeGreaterThan(review.revision);expect(discardReviewedContentReport(review)).toBe(false);
+ await sendContentReport({...opts,review});expect(opts.sender).toHaveBeenCalledTimes(2);expect(opts.newRequestId).toHaveBeenCalledTimes(1);
 });

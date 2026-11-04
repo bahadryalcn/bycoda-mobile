@@ -1,16 +1,15 @@
+import { scrollKeyboardDismissMode } from "./scroll-keyboard";
 import { useMobileTheme } from "./theme";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body, Heading } from "./typography";
 import {
-  AccessibilityInfo,
-  findNodeHandle,
   Pressable,
   ScrollView,
   View,
   useWindowDimensions,
 } from "react-native";
-import { createContext, useContext, useId, useLayoutEffect, useSyncExternalStore, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useId, useLayoutEffect, useSyncExternalStore, useCallback, useMemo, useRef, useState } from "react";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import X from "lucide-react-native/icons/x";
 import { Card, Row } from "./layout";
@@ -21,9 +20,10 @@ import { uiStyles } from "./styles";
 import { useCopy } from "./copy";
 import type { FormActionsProps, ConfirmationCardProps, SheetProps } from "./component-props";
 import { ScreenOverlay, useOverlayProgress } from "./overlays";
-import { SheetGuardContext, useSheetGuards } from "./sheet-guard";
-import { useSecurity } from "@/state/security";
+import { SheetGuardContext, useSheetDismissal, useSheetGuards } from "./sheet-guard";
+import { useNativeSheetFocus } from "./use-native-sheet-focus";
 import { createSheetActionsStore } from "./sheet-actions-store";
+import { FormActionRow } from "./form-action-row";
 
 const SheetActionsContext = createContext<ReturnType<typeof createSheetActionsStore> | null>(null);
 
@@ -55,7 +55,7 @@ function SheetActionArea({ store, footer, bottom, maxHeight }: {
       contentInsetAdjustmentBehavior="never"
       style={{ flexGrow: 0, flexShrink: 0, minHeight: content ? Math.min(maxHeight, metrics.touchTarget) : 0,
         maxHeight, borderTopWidth: 0,
-        borderTopColor: colors.separator, backgroundColor: colors.fill }}
+        borderTopColor: colors.separator, backgroundColor: colors.panel }}
       contentContainerStyle={{
       paddingStart: Math.max(space.screen, insets.left),
       paddingEnd: Math.max(space.screen, insets.right),
@@ -64,7 +64,7 @@ function SheetActionArea({ store, footer, bottom, maxHeight }: {
       gap: space.sm,
     }}>
       {footer}
-      {entries.map(([id, actions]) => <FormActionRow key={id} {...actions} scrollFeedback={false} />)}
+      {entries.map(([id, actions]) => <FormActionRow key={id} {...actions} scrollFeedback={false} feedbackPlacement="after" />)}
     </ScrollView>
   );
 }
@@ -84,44 +84,6 @@ function SheetSurface({
     transform: [{ translateY: (1 - (progress?.value ?? 1)) * (full ? 24 : height) }],
   }));
   return <Animated.View style={[style, animation]}>{children}</Animated.View>;
-}
-
-function FormActionRow({
-  feedback,
-  submitLabel,
-  onSubmit,
-  onCancel,
-  cancelLabel,
-  cancelDisabled,
-  busy,
-  disabled,
-  tone = "primary",
-  scrollFeedback = true,
-}: FormActionsProps & { scrollFeedback?: boolean }) {
-  useMobileTheme();
-  const copy = useCopy();
-  const { height } = useWindowDimensions();
-  return (
-    <View style={{ gap: space.sm }}>
-    {feedback ? scrollFeedback ? <ScrollView
-      style={{ maxHeight: Math.max(metrics.touchTarget, height * 0.25), flexShrink: 1 }}
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ gap: space.sm }}
-    >{feedback}</ScrollView> : <View>{feedback}</View> : null}
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-      <Button label={submitLabel} onPress={onSubmit} busy={busy} disabled={disabled} tone={tone} style={{ flexGrow: 1, flexShrink: 0, flexBasis: "auto" }} />
-      {onCancel ? (
-        <Button
-          label={cancelLabel ?? copy("Vazgeç", "Cancel")}
-          onPress={onCancel}
-          disabled={cancelDisabled || busy}
-          tone="quiet"
-          style={{ flexGrow: 1, flexShrink: 0, flexBasis: "auto" }}
-        />
-      ) : null}
-    </View>
-    </View>
-  );
 }
 
 export function ConfirmationCard({
@@ -167,9 +129,14 @@ export function Sheet({
   scroll = true,
   dismissible = true,
   dirty = false,
+  discardTitle,
+  discardMessage,
   returnFocusRef,
 }: SheetProps) {
   useMobileTheme();
+  const parentSheet = useContext(SheetGuardContext);
+  const parentSheetRef = useRef(parentSheet);
+  parentSheetRef.current = parentSheet;
   const insets = useSafeAreaInsets();
   const copy = useCopy();
   const { height, fontScale } = useWindowDimensions();
@@ -177,48 +144,42 @@ export function Sheet({
   const [headerHeight, setHeaderHeight] = useState(metrics.touchTarget);
   const heading = useRef<View>(null);
   const guards = useSheetGuards();
-  const [confirming, setConfirming] = useState(false);
   const [actionsStore] = useState(createSheetActionsStore);
   const canClose = dismissible && !guards.pending;
-  const requestClose = useCallback(() => {
-    if (!canClose) return;
-    if (dirty || guards.dirty) setConfirming(true);
-    else onClose();
-  }, [canClose, dirty, guards.dirty, onClose]);
+  const { confirming, requestClose, requestCloseThen, cancelClose, confirmClose } = useSheetDismissal({
+    visible, dirty: dirty || guards.dirty, pending: !canClose, onClose,
+  });
+  const blocked = !canClose || !!parentSheet?.blocked;
+  const blockedRef = useRef(blocked);
+  blockedRef.current = blocked;
+  const requestCloseStackThen = useCallback((afterClose: () => void) => {
+    if (blockedRef.current) return;
+    requestCloseThen(() => {
+      const parent = parentSheetRef.current;
+      if (parent) (parent.requestCloseStackThen ?? parent.requestCloseThen)(afterClose);
+      else afterClose();
+    });
+  }, [requestCloseThen]);
   const guardContext = useMemo(
-    () => ({ register: guards.register, requestClose }),
-    [guards.register, requestClose],
+    () => ({ register: guards.register, requestClose, requestCloseThen, requestCloseStackThen, blocked }),
+    [guards.register, requestClose, requestCloseThen, requestCloseStackThen, blocked],
   );
   const full = size === "full";
+  // A caller-owned list/reader needs a definite viewport for virtualization.
+  // Ordinary forms use our scroller and can fit their intrinsic content.
+  const fill = full || (size === "form" && !scroll);
   // The inner frame is measured after the existing keyboard owner applies its
   // padding. Reserve an input-sized body, sharing space when both regions need
   // to scroll, rather than allowing a tall footer to collapse the editor.
   const sheetHeight = Math.min(frameHeight, !full && size === "form" ? height * 0.9 : frameHeight);
   const topChrome = full ? insets.top : space.sm + 5 + space.xs;
+  // Long identities remain readable in their own viewport instead of consuming
+  // the body. Keep the close/action target at the top, even at large text sizes.
+  const headerMaximum = Math.max(metrics.touchTarget, Math.min(metrics.touchTarget * 2, Math.max(0, sheetHeight - topChrome) / 3));
   const usableHeight = Math.max(0, sheetHeight - topChrome - headerHeight);
   const bodyMinimum = Math.min(usableHeight / 2, metrics.inputHeight * Math.max(1, fontScale) + space.sm + space.lg);
   const actionsMaximum = Math.max(0, usableHeight - bodyMinimum);
-  if (!visible && confirming) setConfirming(false);
-  useEffect(() => {
-    if (!visible || process.env.EXPO_OS === "web") return;
-    let active = true;
-    void AccessibilityInfo.isScreenReaderEnabled().then((enabled) => {
-      if (!enabled || !active) return;
-      requestAnimationFrame(() => {
-        if (!active || useSecurity.getState().status !== "unlocked") return;
-        const tag = findNodeHandle(heading.current);
-        if (tag) AccessibilityInfo.setAccessibilityFocus(tag);
-      });
-    });
-    return () => {
-      active = false;
-      requestAnimationFrame(() => {
-        if (useSecurity.getState().status !== "unlocked") return;
-        const tag = returnFocusRef?.current && findNodeHandle(returnFocusRef.current);
-        if (tag) AccessibilityInfo.setAccessibilityFocus(tag);
-      });
-    };
-  }, [visible, returnFocusRef]);
+  useNativeSheetFocus(visible, heading, returnFocusRef);
   const bodyStyle = {
     paddingTop: space.sm,
     paddingStart: Math.max(space.screen, insets.left),
@@ -252,12 +213,16 @@ export function Sheet({
           full={full}
           style={{
             backgroundColor: colors.panel,
+            borderWidth: full ? 0 : 1,
+            borderColor: colors.border,
             paddingTop: full ? insets.top : space.sm,
             borderTopStartRadius: full ? 0 : radii.sheet,
             borderTopEndRadius: full ? 0 : radii.sheet,
             overflow: "hidden",
             maxHeight: sheetHeight,
-            height: full ? "100%" : size === "form" ? sheetHeight : undefined,
+            // Forms fit short content; their maximum still reserves the route
+            // context above. Caller-owned scrollers retain a definite viewport.
+            height: full ? "100%" : fill ? sheetHeight : undefined,
             flexShrink: 1,
             width: "100%",
             maxWidth: full ? undefined : metrics.contentWidth,
@@ -286,7 +251,7 @@ export function Sheet({
                 uiStyles.header,
                 {
                   flexDirection: "row",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   paddingVertical: space.xs,
                   paddingLeft: Math.max(space.screen, insets.left),
                   paddingRight: Math.max(space.sm, insets.right),
@@ -297,11 +262,15 @@ export function Sheet({
                 ref={heading}
                 accessible
                 accessibilityLabel={title}
-                style={uiStyles.grow}
+                style={[uiStyles.grow, { maxHeight: headerMaximum }]}
               >
-                <Heading style={[uiStyles.title, { fontWeight: "700" }]}>
-                  {title}
-                </Heading>
+                <ScrollView style={{ flexGrow: 0, flexShrink: 1, maxHeight: headerMaximum }}
+                  keyboardShouldPersistTaps="handled" nestedScrollEnabled
+                  contentContainerStyle={{ minHeight: metrics.touchTarget, justifyContent: "center" }}>
+                  <Heading style={[uiStyles.title, { fontWeight: "700" }]}>
+                    {title}
+                  </Heading>
+                </ScrollView>
               </View>
               {headerAction ?? (
                 <IconButton
@@ -328,10 +297,10 @@ export function Sheet({
               // The outer frame owns keyboard geometry. A second keyboard-aware
               // scroller would add the IME height again and scroll short forms away.
               <ScrollView
-                style={{ flexShrink: 1, flexGrow: size === "compact" ? 0 : 1,
-                  flexBasis: size === "compact" ? undefined : 0, minHeight: bodyMinimum }}
+                style={{ flexShrink: 1, flexGrow: fill ? 1 : 0,
+                  flexBasis: fill ? 0 : undefined, minHeight: bodyMinimum }}
                 keyboardShouldPersistTaps="handled"
-                keyboardDismissMode={process.env.EXPO_OS === "ios" ? "interactive" : "on-drag"}
+                keyboardDismissMode={scrollKeyboardDismissMode()}
                 automaticallyAdjustKeyboardInsets={false}
                 contentInsetAdjustmentBehavior="never"
                 contentContainerStyle={[uiStyles.content, bodyStyle]}
@@ -342,8 +311,8 @@ export function Sheet({
               <View
                 style={{
                   flexShrink: 1,
-                  flexGrow: size === "compact" ? 0 : 1,
-                  flexBasis: size === "compact" ? undefined : 0,
+                  flexGrow: fill ? 1 : 0,
+                  flexBasis: fill ? 0 : undefined,
                   minHeight: bodyMinimum,
                 }}
               >
@@ -359,12 +328,12 @@ export function Sheet({
       {confirming ? (
         <Sheet
           visible
-          title={copy("Değişiklikler kaydedilmedi", "Unsaved changes")}
+          title={discardTitle ?? copy("Değişiklikler kaydedilmedi", "Unsaved changes")}
           size="compact"
-          onClose={() => setConfirming(false)}
+          onClose={cancelClose}
         >
           <Body>
-            {copy(
+            {discardMessage ?? copy(
               "Kaydedilmemiş değişiklikleri silmek istiyor musun?",
               "Discard your unsaved changes?",
             )}
@@ -372,12 +341,10 @@ export function Sheet({
           <FormActions
             submitLabel={copy("Değişiklikleri sil", "Discard changes")}
             tone="danger"
-            onSubmit={() => {
-              setConfirming(false);
-              onClose();
-            }}
+            disabled={!canClose}
+            onSubmit={confirmClose}
             cancelLabel={copy("Düzenlemeye devam et", "Keep editing")}
-            onCancel={() => setConfirming(false)}
+            onCancel={cancelClose}
           />
         </Sheet>
       ) : null}

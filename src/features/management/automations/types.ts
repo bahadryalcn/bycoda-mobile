@@ -1,5 +1,6 @@
 import type { useHostMutation } from "@/state/queries";
 import type { HostAutomation, HostAutomationInput } from "@/domain/types";
+import type { AutomationRunSummary } from "./automation-feedback";
 export type AutomationEditorFlow =
   | { kind: "new"; initial: HostAutomationInput }
   | { kind: "edit"; id: string }
@@ -10,7 +11,14 @@ export type AutomationEditorProps = {
   busy: boolean;
   onClose: () => void;
 };
-export type AutomationHistoryProps = { automationId: string; projectId: string };
+export type AutomationHistoryProps = {
+  automationId: string;
+  projectId: string;
+  /** Latest summary is repeated inside history while the parent is concealed. */
+  summary?: AutomationRunSummary;
+  automationName?: string;
+  onClose: () => void;
+};
 export type AutomationCardProps = {
   item: HostAutomation;
   busy: boolean;

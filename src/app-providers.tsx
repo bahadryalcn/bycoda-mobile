@@ -11,13 +11,13 @@ import { colors } from "./ui/tokens";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BycodaUIProvider, MobileThemeController } from "./ui/provider";
 import { installMobileHostRuntime } from "./state/host-runtime";
-import { isProjectPrivacyQuery } from "./features/workspace/project-privacy-cache";
+import { isProjectPrivacyQuery, observeProjectPrivacy } from "./features/workspace/project-privacy-cache";
 
 export function AppProviders({ children }: PropsWithChildren) {
   useMobileTheme();
   const [cache] = useState(
     () =>
-      new QueryClient({
+      observeProjectPrivacy(new QueryClient({
         defaultOptions: {
           queries: {
             retry: false,
@@ -27,7 +27,7 @@ export function AppProviders({ children }: PropsWithChildren) {
           },
           mutations: { retry: false, networkMode: "always" },
         },
-      }),
+      })),
   );
   useEffect(() => {
     if (process.env.EXPO_OS === "web") return;

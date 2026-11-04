@@ -1,12 +1,15 @@
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useWindowDimensions } from "react-native";
-import { Body, Button, ErrorText, Field, Notice, Row, SelectField, Sheet } from "@/ui/primitives";
+import { Body, Button, Field, Notice, SelectField, Sheet } from "@/ui/primitives";
 import { LANGUAGES } from "@/localization";
 import { useLocale } from "@/i18n";
 import { useCopy } from "@/ui/copy";
+import { ReaderActionArea } from "@/ui/reader-actions";
+import { isAppAccessAllowed, useSecurity } from "@/state/security";
+import { usePrivateContentAccess } from "@/ui/private-access";
 import { useComposerTransfer } from "./composer-transfer";
 import type { ComposerTransferScope } from "./composer-transfer-model";
-import { excerptPage, quoteExcerpt, selectedExcerpt, translationDraft } from "./selected-text-model";
+import { excerptPage, quoteExcerpt, selectedExcerpt, selectionDisplayText, translationDraft } from "./selected-text-model";
 
 /** Deliberate native selection of bounded, read-only source; never an editor or send action. */
 export function SelectedText({ text, scope, onClose }: { text: string; scope: ComposerTransferScope; onClose: () => void }) {
@@ -17,37 +20,53 @@ export function SelectedText({ text, scope, onClose }: { text: string; scope: Co
   const [language, setLanguage] = useState(locale);
   const [error, setError] = useState<unknown>(null);
   const [transferred, setTransferred] = useState(false);
-  const transferFlight = useRef(false);
+  const transferFlight = useRef(false), live = useRef(false), retired = useRef(false);
+  const [wasRetired, setRetired] = useState(false);
+  const permission = usePrivateContentAccess(), access = useRef(permission); access.current = permission;
   const page = useMemo(() => excerptPage(opening.text, pageIndex), [opening.text, pageIndex]);
+  const pageOwner = useMemo(() => ({}), [page.index]);
+  const current = useRef({ selection, pageIndex, language, bridge, pageOwner: pageOwner as object | null });
+  current.current = { selection, pageIndex, language, bridge, pageOwner };
+  const allowed = () => { const state = useSecurity.getState(); return isAppAccessAllowed() && state.appState === "active" && state.windowFocused && access.current.allowed && access.current.check(); };
+  const retireAccess = () => { if (live.current && !allowed()) { retired.current = true; setRetired(true); } };
+  useLayoutEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
+  useLayoutEffect(() => useSecurity.subscribe(retireAccess), []);
+  useLayoutEffect(retireAccess, [permission]);
+  const displayed = useMemo(() => selectionDisplayText(page.text), [page.text]);
   const { height } = useWindowDimensions();
-  const changed = opening.text !== text || opening.scope.machineId !== scope.machineId || opening.scope.sessionId !== scope.sessionId;
+  const mismatch = opening.text !== text || opening.scope.machineId !== scope.machineId || opening.scope.sessionId !== scope.sessionId;
+  const changed = wasRetired || mismatch;
+  if (changed) { retired.current = true; if (!wasRetired) setRetired(true); }
   let excerpt = "";
-  try { excerpt = selectedExcerpt(page.text, selection); } catch { /* No implicit whole-message fallback. */ }
+  try { excerpt = selectedExcerpt(displayed, selection); } catch { /* No implicit whole-message fallback. */ }
+  const ownsPage = () => live.current && !retired.current && allowed() && current.current.pageOwner === pageOwner;
   const insert = (translate: boolean) => {
-    if (!bridge || changed || transferred || transferFlight.current) return;
+    if (!ownsPage() || current.current.selection !== selection || current.current.pageIndex !== pageIndex || current.current.language !== language || current.current.bridge !== bridge || !bridge || changed || transferred || transferFlight.current) return;
     try {
-      const selected = selectedExcerpt(page.text, selection);
+      const selected = selectedExcerpt(displayed, selection);
       const target = LANGUAGES.find((entry) => entry.value === language);
       if (!target) throw new Error("Select a target language.");
       transferFlight.current = true;
       bridge.transfer({ ...opening.scope, text: translate ? translationDraft(selected, target.label) : quoteExcerpt(selected) });
-      setTransferred(true); setError(null); onClose();
-    } catch (cause) { transferFlight.current = false; setError(cause); }
+      if (live.current) { setTransferred(true); setError(null); onClose(); }
+    } catch (cause) { transferFlight.current = false; if (live.current) setError(cause); }
   };
-  const move = (next: number) => { setSelection({ start: 0, end: 0 }); setPage(next); setError(null); };
+  const move = (next: number) => {
+    if (!ownsPage() || !Number.isInteger(next) || next < 0 || next >= page.pages) return;
+    const empty = { start: 0, end: 0 };
+    current.current.pageOwner = null; current.current.selection = empty; current.current.pageIndex = next;
+    setSelection(empty); setPage(next); setError(null);
+  };
   return <Sheet visible title={copy("Metin seç", "Select excerpt")} size="full" onClose={onClose}
-    footer={<Row>
+    footer={<ReaderActionArea page={page.index} pages={page.pages} onPage={move} navigationDisabled={changed || transferred}
+      error={error} status={<Body muted>{copy("Seçilen karakter: {p0}", "Selected characters: {p0}", { p0: excerpt.length })}</Body>}>
       <Button label={copy("Alıntıyı taslağa ekle", "Add quote to draft")} disabled={!excerpt || !bridge || changed || transferred} onPress={() => insert(false)} />
       <Button tone="quiet" label={copy("Çeviri taslağı hazırla", "Prepare translation draft")} disabled={!excerpt || !bridge || changed || transferred} onPress={() => insert(true)} />
-    </Row>}>
+    </ReaderActionArea>}>
     <Body muted>{copy("Yalnız seçtiğiniz metin mevcut taslağa eklenir. Çeviri isteği Gönder'e dokunana kadar çalışmaz.", "Only selected text is appended to your current draft. Translation does not run until you tap Send.")}</Body>
     {changed ? <Notice tone="warning" message={copy("Kaynak veya hedef değişti. Metin seçimini yeniden açın.", "The source or destination changed. Reopen text selection.")} /> : null}
-    <Row><Button tone="quiet" label={copy("Geri", "Back")} disabled={page.index === 0} onPress={() => move(page.index - 1)} />
-      <Body>{`${page.index + 1} / ${page.pages}`}</Body><Button tone="quiet" label={copy("Sonraki", "Next")} disabled={page.index + 1 >= page.pages} onPress={() => move(page.index + 1)} /></Row>
-    <Field key={page.index} label={copy("Salt okunur kaynak: metni seçin", "Read-only source: select text")} value={page.text} readOnly multiline showSoftInputOnFocus={false}
-      scrollEnabled onSelectionChange={(event) => setSelection(event.nativeEvent.selection)} style={{ height: Math.max(160, height * 0.32) }} />
-    <SelectField label={copy("Çeviri dili", "Translation language")} value={language} options={LANGUAGES} onChange={setLanguage} />
-    <Body muted>{copy("Seçilen karakter: {p0}", "Selected characters: {p0}", { p0: excerpt.length })}</Body>
-    <ErrorText error={error} />
+    <Field key={page.index} label={copy("Salt okunur kaynak: metni seçin", "Read-only source: select text")} value={displayed} readOnly multiline showSoftInputOnFocus={false}
+      scrollEnabled onSelectionChange={(event) => { if (!ownsPage()) return; current.current.selection = event.nativeEvent.selection; setSelection(event.nativeEvent.selection); }} style={{ height: Math.max(160, height * 0.32) }} />
+    <SelectField label={copy("Çeviri dili", "Translation language")} value={language} options={LANGUAGES} onChange={(value) => { if (!ownsPage()) return; current.current.language = value; setLanguage(value); }} />
   </Sheet>;
 }

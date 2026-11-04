@@ -1,13 +1,19 @@
 import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
+import { useKeyboardState } from "react-native-keyboard-controller";
+import { SessionHeader } from "./session-header";
 import { sessionIntent } from "@/domain/session-authority";
 import { useState } from "react";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import Square from "lucide-react-native/icons/square";
 import { router } from "expo-router";
-import { Body, NavigationGroup, NavigationRow, Row, Sheet } from "@/ui/primitives";
-import { colors, radii, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import {
+  Disclosure,
+  NavigationGroup,
+  NavigationRow,
+  Sheet,
+} from "@/ui/primitives";
+import { colors, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import type { SessionToolbarProps } from "./session-types";
 import { SessionArtifacts } from "./session-artifacts";
@@ -30,6 +36,7 @@ import { questionNeedsAttention, questionStatusLabel } from "./question-status";
 export function SessionToolbar({
   scope,
   projectId,
+  contextLabel,
   query,
   blocked,
   onSettings,
@@ -38,6 +45,7 @@ export function SessionToolbar({
 }: SessionToolbarProps) {
   useMobileTheme();
   const copy = useCopy();
+  const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const session = query.data;
   const [menu, setMenu] = useState(false);
   const [review, setReview] = useState(false);
@@ -50,7 +58,9 @@ export function SessionToolbar({
   const [desktopPreferences, setDesktopPreferences] = useState(false);
   const [mobilePty, setMobilePty] = useState(false);
   const [providerDesktop, setProviderDesktop] = useState(false);
-  const [contextual, setContextual] = useState<"handoff" | "secondOpinion" | null>(null);
+  const [contextual, setContextual] = useState<
+    "handoff" | "secondOpinion" | null
+  >(null);
   const [contextualCompact, setContextualCompact] = useState(false);
   const [stopping, setStopping] = useState(false);
   // The open view reports compact sizing; every open starts from the default so a previous
@@ -80,7 +90,9 @@ export function SessionToolbar({
       params: {
         id: projectId,
         machineId: scope.machineId,
-        ...(session?.session.worktreeCwd ? { cwd: session.session.worktreeCwd } : {}),
+        ...(session?.session.worktreeCwd
+          ? { cwd: session.session.worktreeCwd }
+          : {}),
       },
     });
   };
@@ -97,31 +109,20 @@ export function SessionToolbar({
           : colors.muted;
   return (
     <View style={{ paddingBottom: space.xs }}>
-      <Row style={{ flexWrap: "nowrap", gap: space.sm }}>
-        <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
-          <Row style={{ flexWrap: "nowrap", gap: space.xs }}>
-            <View
-              accessible
-              accessibilityLabel={status}
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: radii.pill,
-                backgroundColor: dotColor,
-              }}
-            />
-            <Body
-              style={[uiStyles.caption, { color: colors.text, fontWeight: "600", flexShrink: 1 }]}
-            >
-              {status}
-            </Body>
-          </Row>
-          <Body muted numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1 }]}>
-            {session
-              ? [session.session.harness, session.session.model.replace(/^[^:]+:/, "")].join(" · ")
-              : ""}
-          </Body>
-        </View>
+      <SessionHeader
+        status={status}
+        statusColor={dotColor}
+        compact={keyboardVisible}
+        context={
+          contextLabel ??
+          (session
+            ? [
+                session.session.harness,
+                session.session.model.replace(/^[^:]+:/, ""),
+              ].join(" · ")
+            : undefined)
+        }
+      >
         {session?.status === "running" && session.runId ? (
           <ChatToolbarAction
             label={copy("Durdur", "Stop")}
@@ -157,7 +158,7 @@ export function SessionToolbar({
         >
           <Ellipsis size={20} color={colors.muted} />
         </ChatAction>
-      </Row>
+      </SessionHeader>
       <Sheet
         size="compact"
         visible={menu}
@@ -167,6 +168,14 @@ export function SessionToolbar({
         <NavigationGroup>
           <NavigationRow
             label={copy("Oturum ayarları", "Session settings")}
+            detail={
+              session
+                ? [
+                    session.session.harness,
+                    session.session.model.replace(/^[^:]+:/, ""),
+                  ].join(" · ")
+                : undefined
+            }
             onPress={() => {
               setMenu(false);
               onSettings();
@@ -180,26 +189,6 @@ export function SessionToolbar({
               setReview(true);
             }}
           />
-          {session ? (
-            <NavigationRow
-              label={copy("Bağlamlı agent devri", "Contextual handoff")}
-              disabled={blocked || session.status === "running"}
-              onPress={() => {
-                setMenu(false);
-                openContextual("handoff");
-              }}
-            />
-          ) : null}
-          {session ? (
-            <NavigationRow
-              label={copy("İkinci görüş", "Second opinion")}
-              disabled={blocked || session.status === "running"}
-              onPress={() => {
-                setMenu(false);
-                openContextual("secondOpinion");
-              }}
-            />
-          ) : null}
           {projectId && session ? (
             <NavigationRow
               label={copy("Oturum notları", "Session notes")}
@@ -210,105 +199,134 @@ export function SessionToolbar({
               }}
             />
           ) : null}
-          {projectId && session ? (
-            <NavigationRow
-              label={copy("Konuşma geçmişini içe aktar", "Import conversation history")}
-              disabled={blocked}
-              onPress={() => {
-                setMenu(false);
-                setHistoryImport(true);
-              }}
-            />
-          ) : null}
-          {projectId && session ? (
-            <NavigationRow
-              label={copy("Etkileşimli terminal", "Interactive terminal")}
-              disabled={blocked}
-              onPress={() => {
-                setMenu(false);
-                setMobilePty(true);
-              }}
-            />
-          ) : null}
-          {projectId && session ? (
-            <NavigationRow
-              label={copy("Bilgisayar tercihleri", "Computer preferences")}
-              disabled={blocked}
-              onPress={() => {
-                setMenu(false);
-                setDesktopPreferences(true);
-              }}
-            />
-          ) : null}
-          {projectId && session ? (
-            <NavigationRow
-              label={copy("Proje organizasyonu", "Project organization")}
-              disabled={blocked}
-              onPress={() => {
-                setMenu(false);
-                setOrganization(true);
-              }}
-            />
-          ) : null}
-          {projectId && session ? (
-            <NavigationRow
-              label={copy("Hesaplar ve MCP", "Accounts and MCP")}
-              disabled={blocked}
-              onPress={() => {
-                setMenu(false);
-                setProviderDesktop(true);
-              }}
-            />
-          ) : null}
-          {projectId && session ? (
-            <NavigationRow
-              label={copy("Tarayıcı", "Browser")}
-              disabled={blocked}
-              onPress={() => {
-                setMenu(false);
-                setBrowser(true);
-              }}
-            />
-          ) : null}
-          {projectId && session ? (
-            <NavigationRow
-              label={copy("Çalışma klasörü kaldırma", "Worktree removal")}
-              disabled={blocked}
-              onPress={() => {
-                setMenu(false);
-                setWorktreeRemoval(true);
-              }}
-            />
-          ) : null}
-          {projectId && session ? (
-            <NavigationRow
-              label={copy("Bilgisayarda SSH", "SSH on the computer")}
-              disabled={blocked}
-              onPress={() => {
-                setMenu(false);
-                setSshWorkspace(true);
-              }}
-            />
-          ) : null}
           <NavigationRow
             label={copy("Yenile", "Refresh")}
+            intent="command"
             disabled={query.isFetching}
             onPress={() => {
               setMenu(false);
               onRefresh();
             }}
           />
-          {projectId ? (
-            <NavigationRow
-              label={copy("Proje", "Project")}
-              onPress={() => {
-                setMenu(false);
-                openProject();
-              }}
-            />
-          ) : null}
         </NavigationGroup>
-        {projectId ? <SessionArtifacts projectId={projectId} sessionId={scope.sessionId} /> : null}
+        {session ? (
+          <Disclosure label={copy("Agent", "Agent")}>
+            <NavigationGroup>
+              <NavigationRow
+                label={copy("Bağlamlı agent devri", "Contextual handoff")}
+                disabled={blocked || session.status === "running"}
+                onPress={() => {
+                  setMenu(false);
+                  openContextual("handoff");
+                }}
+              />
+              <NavigationRow
+                label={copy("İkinci görüş", "Second opinion")}
+                disabled={blocked || session.status === "running"}
+                onPress={() => {
+                  setMenu(false);
+                  openContextual("secondOpinion");
+                }}
+              />
+              {projectId ? (
+                <NavigationRow
+                  label={copy(
+                    "Konuşma geçmişini içe aktar",
+                    "Import conversation history",
+                  )}
+                  disabled={blocked}
+                  onPress={() => {
+                    setMenu(false);
+                    setHistoryImport(true);
+                  }}
+                />
+              ) : null}
+            </NavigationGroup>
+          </Disclosure>
+        ) : null}
+        {projectId ? (
+          <Disclosure label={copy("Proje", "Project")}>
+            <NavigationGroup>
+              <NavigationRow
+                label={copy("Proje", "Project")}
+                onPress={() => {
+                  setMenu(false);
+                  openProject();
+                }}
+              />
+              {session ? (
+                <>
+                  <NavigationRow
+                    label={copy("Proje organizasyonu", "Project organization")}
+                    disabled={blocked}
+                    onPress={() => {
+                      setMenu(false);
+                      setOrganization(true);
+                    }}
+                  />
+                  <NavigationRow
+                    label={copy("Tarayıcı", "Browser")}
+                    disabled={blocked}
+                    onPress={() => {
+                      setMenu(false);
+                      setBrowser(true);
+                    }}
+                  />
+                  <NavigationRow
+                    label={copy("Çalışma klasörü kaldırma", "Worktree removal")}
+                    disabled={blocked}
+                    onPress={() => {
+                      setMenu(false);
+                      setWorktreeRemoval(true);
+                    }}
+                  />
+                </>
+              ) : null}
+            </NavigationGroup>
+            <SessionArtifacts
+              projectId={projectId}
+              sessionId={scope.sessionId}
+            />
+          </Disclosure>
+        ) : null}
+        {projectId && session ? (
+          <Disclosure label={copy("Bilgisayar", "Computer")}>
+            <NavigationGroup>
+              <NavigationRow
+                label={copy("Etkileşimli terminal", "Interactive terminal")}
+                disabled={blocked}
+                onPress={() => {
+                  setMenu(false);
+                  setMobilePty(true);
+                }}
+              />
+              <NavigationRow
+                label={copy("Bilgisayar tercihleri", "Computer preferences")}
+                disabled={blocked}
+                onPress={() => {
+                  setMenu(false);
+                  setDesktopPreferences(true);
+                }}
+              />
+              <NavigationRow
+                label={copy("Hesaplar ve MCP", "Accounts and MCP")}
+                disabled={blocked}
+                onPress={() => {
+                  setMenu(false);
+                  setProviderDesktop(true);
+                }}
+              />
+              <NavigationRow
+                label={copy("Bilgisayarda SSH", "SSH on the computer")}
+                disabled={blocked}
+                onPress={() => {
+                  setMenu(false);
+                  setSshWorkspace(true);
+                }}
+              />
+            </NavigationGroup>
+          </Disclosure>
+        ) : null}
       </Sheet>
       {review && session ? (
         <SessionCheckpoints
@@ -357,6 +375,7 @@ export function SessionToolbar({
           key={JSON.stringify([scope.machineId, projectId, scope.sessionId])}
           scope={scope}
           projectId={projectId}
+          contextLabel={contextLabel}
           onClose={() => setHistoryImport(false)}
         />
       ) : null}

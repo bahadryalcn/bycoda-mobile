@@ -1,4 +1,4 @@
-import type { Dispatch } from "react";
+import type { Dispatch, ReactNode } from "react";
 import type { useHostMutation } from "@/state/queries";
 import type {
   HostProject,
@@ -29,7 +29,8 @@ export type FactChoicesProps = {
   onChange: (ids: string[]) => void;
   disabled?: boolean;
 };
-export type ThreadEditorProps = {
+export type SocialEditorAvailability = { available?: boolean; unavailableFeedback?: ReactNode };
+export type ThreadEditorProps = SocialEditorAvailability & {
   thread: SocialThread;
   recipientLabel?: string;
   accounts: SocialAccount[];
@@ -37,17 +38,20 @@ export type ThreadEditorProps = {
   profiles: SocialProfile[];
   onClose: () => void;
 };
-export type DraftEditorProps = {
+export type DraftEditorProps = SocialEditorAvailability & {
   draft: SocialDraft;
   thread?: SocialThread;
   profile?: SocialProfile;
   onClose: () => void;
+  recipientLabel?: string;
+  contextLabel?: string;
 };
-export type CampaignEditorProps = {
+export type CampaignEditorProps = SocialEditorAvailability & {
   account: SocialAccount;
   projectId: string;
   profile?: SocialProfile;
   onClose: () => void;
+  projectLabel?: string;
 };
 export type RuleEditorProps = CampaignEditorProps;
 export type AccountFormProps = { projectId: string | null; onClose: () => void };
@@ -92,19 +96,16 @@ export type SocialPanelContext = {
 export type AccountsPanelProps = Pick<SocialPanelContext, "state" | "projectId" | "action" | "run">;
 export type ThreadsPanelProps = Pick<
   SocialPanelContext,
-  "state" | "projectId" | "selectedThread" | "projects" | "closeEditor" | "dispatch" | "page"
+  "state" | "projectId" | "projects" | "dispatch" | "page"
 >;
 export type DraftsPanelProps = Pick<
   SocialPanelContext,
-  "state" | "projectId" | "selectedDraft" | "closeEditor" | "dispatch" | "action" | "run" | "page"
+  "state" | "projectId" | "dispatch" | "action" | "run" | "page"
 >;
 export type CampaignsPanelProps = Pick<
   SocialPanelContext,
   | "state"
   | "projectId"
-  | "campaignAccount"
-  | "editor"
-  | "closeEditor"
   | "dispatch"
   | "action"
   | "run"
@@ -112,6 +113,6 @@ export type CampaignsPanelProps = Pick<
 >;
 export type RulesPanelProps = Pick<
   SocialPanelContext,
-  "state" | "projectId" | "ruleAccount" | "editor" | "closeEditor" | "dispatch" | "action" | "run" | "page"
+  "state" | "projectId" | "dispatch" | "action" | "run" | "page"
 >;
 export type JobsPanelProps = Pick<SocialPanelContext, "state" | "projectId" | "action" | "run" | "page">;

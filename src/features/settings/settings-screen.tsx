@@ -16,7 +16,11 @@ import Flag from "lucide-react-native/icons/flag";
 import { IconTile } from "../../ui/icon-tile";
 import { LANGUAGES } from "../../localization";
 import { useActiveMachine, useMachines } from "../../state/machines";
+import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { useAppearance } from "../../state/appearance";
+import { useChatAppearance } from "../../state/chat-appearance";
+import { chatTextSizeOptions } from "./chat-appearance-options";
+import { chatAppearanceFeedback } from "./chat-appearance-feedback";
 import {
   NavigationGroup,
   NavigationRow,
@@ -25,7 +29,6 @@ import {
   Section,
   SelectField,
   Sheet,
-  Button,
 } from "../../ui/primitives";
 import { colors } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
@@ -48,9 +51,15 @@ export function SettingsScreen() {
   const setThemeMode = useAppearance((s) => s.setThemeMode);
   const appearanceHydrated = useAppearance((s) => s.hydrated);
   const appearanceError = useAppearance((s) => s.storageError);
+  const chatTextSize = useChatAppearance((s) => s.textSize);
+  const chatHydrated = useChatAppearance((s) => s.hydrated);
+  const chatStorageError = useChatAppearance((s) => s.storageError);
+  const chatSizeLabel = chatTextSizeOptions(copy).find((option) => option.value === chatTextSize)?.label;
+  const chatFeedback = chatAppearanceFeedback(chatStorageError, copy);
   const [panel, setPanel] = useState<
     "security" | "host" | "privacy" | "about" | "appearance" | "permissions" | null
   >(null);
+  const [hostTarget, setHostTarget] = useState<{ id: string; name: string; target: ReviewedMachine | undefined }>();
   const titles = {
     permissions: copy("Telefon izinleri", "Phone permissions"),
     security: copy("Güvenli erişim", "Secure access"),
@@ -66,14 +75,6 @@ export function SettingsScreen() {
   );
   return (
     <Screen title={copy("Ayarlar", "Settings")}>
-      <Section title={copy("Bilgisayar", "Computer")}><NavigationGroup>
-        <NavigationRow
-          label={machine?.name ?? copy("Bilgisayar seçilmedi", "No computer selected")}
-          detail={machine?.endpoint ?? copy("Bilgisayar bağla", "Connect a computer")}
-          icon={tile(Laptop)}
-          onPress={() => router.push("/machines")}
-        />
-      </NavigationGroup></Section>
       <Section title={copy("Tercihler", "Preferences")}>
         <NavigationGroup>
           <SelectField
@@ -82,6 +83,7 @@ export function SettingsScreen() {
             label={copy("Tema", "Theme")}
             value={themeMode}
             disabled={!appearanceHydrated}
+            error={appearanceError ? copy("Tema tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The theme preference could not be read or saved. Select it again to retry.") : undefined}
             options={[
               { value: "system" as const, label: copy("Sistem", "System") },
               { value: "light" as const, label: copy("Açık", "Light") },
@@ -100,26 +102,33 @@ export function SettingsScreen() {
             options={[{ value: "system" as const, label: copy("Sistem", "System") }, ...LANGUAGES]}
             onChange={setLanguage}
           />
+          {storageError ? <Notice tone="warning" message={storageError}
+            retryLabel={copy("Depolamayı kurtar", "Recover saved connections")} onRetry={() => router.push("/machines")} /> : null}
           <NavigationRow
-            label={titles.appearance}
+            label={copy("Mesaj yazı boyutu", "Message text size")}
+            detailLines={0}
+            detail={chatFeedback?.summary ?? (!chatHydrated ? copy("Yükleniyor…", "Loading…") : chatSizeLabel)}
             icon={tile(Type)}
             onPress={() => setPanel("appearance")}
           />
         </NavigationGroup>
-        {storageError ? <>
-          <Notice tone="warning" message={storageError} />
-          <Button tone="quiet" label={copy("Depolamayı kurtar", "Recover saved connections")} onPress={() => router.push("/machines")} />
-        </> : null}
-        {appearanceError ? (
-          <Notice
-            tone="warning"
-            message={copy(
-              "Tema tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.",
-              "The theme preference could not be read or saved. Select it again to retry.",
-            )}
-          />
-        ) : null}
+
       </Section>
+      <Section title={copy("Bilgisayar", "Computer")}><NavigationGroup>
+        <NavigationRow
+          label={copy("Bilgisayarlar", "Computers")}
+          detail={machine?.name ?? copy("Bilgisayar bağla", "Connect a computer")}
+          icon={tile(Laptop)}
+          onPress={() => router.push("/machines")}
+        />
+        {machine ? <>
+          <NavigationRow label={copy("Bilgisayar erişimi", "Host access")} icon={tile(ShieldCheck)}
+            onPress={() => router.push({ pathname: "/tools/[tool]", params: { tool: "access", machineId: machine.id } })} />
+          <NavigationRow label={copy("Sağlayıcı merkezi", "Provider center")} icon={tile(Server)}
+            onPress={() => router.push({ pathname: "/tools/[tool]", params: { tool: "providers", machineId: machine.id } })} />
+          <NavigationRow label={titles.host} icon={tile(SlidersHorizontal)} onPress={() => { setHostTarget({ id: machine.id, name: machine.name, target: reviewedMachine(machine) }); setPanel("host"); }} />
+        </> : null}
+      </NavigationGroup></Section>
       <Section title={copy("Erişim ve gizlilik", "Access & privacy")}><NavigationGroup>
         <NavigationRow
           label={titles.security}
@@ -134,23 +143,6 @@ export function SettingsScreen() {
           onPress={() => setPanel("privacy")}
         />
       </NavigationGroup></Section>
-      {machine ? <Section title={machine.name}><NavigationGroup>
-        {machine ? (
-          <NavigationRow label={copy("Bilgisayar erişimi", "Host access")} icon={tile(ShieldCheck)}
-            onPress={() => router.push({ pathname: "/tools/[tool]", params: { tool: "access", machineId: machine.id } })} />
-        ) : null}
-        {machine ? (
-          <NavigationRow label={copy("Sağlayıcı merkezi", "Provider center")} icon={tile(Server)}
-            onPress={() => router.push({ pathname: "/tools/[tool]", params: { tool: "providers", machineId: machine.id } })} />
-        ) : null}
-        {machine ? (
-          <NavigationRow
-            label={titles.host}
-            icon={tile(SlidersHorizontal)}
-            onPress={() => setPanel("host")}
-          />
-        ) : null}
-      </NavigationGroup></Section> : null}
       <Section title={copy("Destek", "Support")}><NavigationGroup>
         <NavigationRow
           label={copy("Yardım ve destek", "Help & support")}
@@ -178,8 +170,8 @@ export function SettingsScreen() {
             <ChatAppearanceSettings />
           ) : panel === "security" ? (
             <SecuritySettings />
-          ) : panel === "host" && machine ? (
-            <HostSettingsEditor key={machine.id} machineId={machine.id} />
+          ) : panel === "host" && hostTarget ? (
+            <HostSettingsEditor key={hostTarget.id} machineId={hostTarget.id} machineName={hostTarget.name} target={hostTarget.target} />
           ) : panel === "privacy" ? (
             <>
               <NavigationGroup>

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { HostWsError, MobileHostWsConnection } from "./ws-connection";
 import { binding, fakeNative } from "./ws-connection.test-fixture";
-import { HOST_RPC_METHODS } from "../../../src/shared/model/host-contracts";
+import { HOST_RPC_METHODS, RPC_ERROR_CODES } from "../../../src/shared/model/host-contracts";
 const connections: MobileHostWsConnection[] = [];
 async function connected(
   apply?: ConstructorParameters<typeof MobileHostWsConnection>[5],
@@ -21,6 +21,92 @@ afterEach(() => {
 });
 
 describe("mobile single-attempt native WS", () => {
+  it("reads handed-off session summaries without rejecting provider history", async () => {
+    const f = await connected(undefined, {
+      methods: ["sessions.list", "projects.list"],
+      capabilities: ["transport.ws.read.v2", "transport.ws.sessions.v2"],
+    });
+    const session = {
+      id: "session-a",
+      projectId: "project-a",
+      title: "Provider handoff",
+      harness: "claude",
+      status: "idle",
+      revision: 1,
+      updatedAt: 1,
+      providerHistory: {
+        providers: ["codex", "claude"],
+        activeHarness: "claude",
+        activeModel: "claude-model",
+        handedOffFrom: "codex",
+      },
+    };
+    f.respond((request) => (request.method === "sessions.list" ? [session] : []));
+    await expect(
+      f.connection.request("sessions.list", { projectId: "project-a" }),
+    ).resolves.toEqual([session]);
+    await expect(f.connection.request("projects.list")).resolves.toEqual([]);
+    expect(f.native.close).not.toHaveBeenCalled();
+  });
+  it.each([
+    [RPC_ERROR_CODES.deadlineExceeded, "deadline"],
+    [RPC_ERROR_CODES.cancelled, "cancelled"],
+    [RPC_ERROR_CODES.notReady, "unavailable"],
+    [RPC_ERROR_CODES.internalError, "internal"],
+    [RPC_ERROR_CODES.overloaded, "overload"],
+    [RPC_ERROR_CODES.methodNotFound, "unsupported"],
+    [RPC_ERROR_CODES.invalidParams, "validation"],
+    [RPC_ERROR_CODES.unauthorized, "authentication"],
+    [RPC_ERROR_CODES.wrongEnvironment, "identity"],
+  ] as const)(
+    "retains RPC error %s as %s without closing a healthy socket",
+    async (code, category) => {
+      const f = await connected();
+      const result = f.connection.request("projects.list");
+      const rejected = expect(result).rejects.toMatchObject({ category, uncertain: false });
+      f.emit({
+        jsonrpc: "2.0",
+        id: f.sent.at(-1)!.id,
+        error: { code, message: "Host read failed." },
+      });
+      await rejected;
+      expect(f.native.close).not.toHaveBeenCalled();
+      f.respond(() => []);
+      await expect(f.connection.request("projects.list")).resolves.toEqual([]);
+    },
+  );
+  it("preserves typed temporary failure and unknown command delivery without replay", async () => {
+    const f = await connected();
+    const result = f.connection.request("commands.dispatch", {
+      type: "send",
+      commandId: "command-a",
+      sessionId: "session-a",
+      text: "hello",
+    });
+    const rejected = expect(result).rejects.toMatchObject({
+      category: "unavailable",
+      uncertain: true,
+      commandId: "command-a",
+    });
+    f.emit({
+      jsonrpc: "2.0",
+      id: f.sent.at(-1)!.id,
+      error: {
+        code: RPC_ERROR_CODES.internalError,
+        message: "Host read failed.",
+        data: { category: "unavailable", retryable: false, delivery: "unknown" },
+      },
+    });
+    await rejected;
+    expect(f.sent.filter((request) => request.method === "commands.dispatch")).toHaveLength(1);
+  });
+  it("preserves native TLS failures for in-flight reads", async () => {
+    const f = await connected();
+    const result = f.connection.request("projects.list");
+    const rejected = expect(result).rejects.toMatchObject({ category: "tls", uncertain: false });
+    f.event("error", { code: "tls" });
+    await rejected;
+  });
   it("does not expose private Native or bridge operations even when hello advertises every registered method", async () => {
     const methods = Object.keys(HOST_RPC_METHODS).filter(
       (method) => method.startsWith("native.") || method.startsWith("devServers.bridge"),
@@ -296,7 +382,7 @@ describe("mobile single-attempt native WS", () => {
       text: JSON.stringify({ jsonrpc: "2.0", id: f.sent.at(-1)!.id, result: [] }),
     });
     f.event("message", { environmentId: "environment-b", text: "{}" });
-    await expect(result).rejects.toMatchObject({ category: "network", uncertain: false });
+    await expect(result).rejects.toMatchObject({ category: "identity", uncertain: false });
     expect(f.native.close).toHaveBeenCalled();
   });
   it("limits pending requests and cancellation stops waiting without sending Stop", async () => {

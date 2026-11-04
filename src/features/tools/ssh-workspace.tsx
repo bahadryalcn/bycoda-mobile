@@ -178,7 +178,7 @@ export function SshWorkspace({
     <Sheet
       visible
       title={copy("Bilgisayarda SSH", "SSH on the computer")}
-      size={initialUnavailable ? "compact" : "form"}
+      size={initialUnavailable || (!active && !review) ? "compact" : "form"}
       dismissible={!busy}
       onClose={onClose}
     >

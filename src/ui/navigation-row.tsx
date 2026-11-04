@@ -3,6 +3,7 @@ import { createContext, use, type ReactNode } from "react";
 import { View, type TextProps } from "react-native";
 import { Pressable } from "react-native";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
+import Check from "lucide-react-native/icons/check";
 import { Body } from "./typography";
 import { BusyIndicator } from "./busy-indicator";
 import { colors, opacity, semanticColors, space, type SemanticTone } from "./tokens";
@@ -40,20 +41,27 @@ export function NavigationRow({
   tone,
   variant,
   detailLines = 1,
+  labelLines,
   metadata,
+  supporting,
   metadataLines = 2,
   detailSelectable = true,
   detailEllipsizeMode,
   emphasized,
   accessibilityLabel,
+  intent = selected === undefined ? "navigate" : "select",
 }: {
   /** Bold label, e.g. an unread inbox item. */
   emphasized?: boolean;
   label: string;
+  /** Optional preview limit when the full label has an explicit reader. */
+  labelLines?: number;
   accessibilityLabel?: string;
   detail?: string;
   /** Secondary context gets its own space rather than displacing the main description. */
   metadata?: string;
+  /** Wrapping status/context below identity; reserve trailing for compact accessories. */
+  supporting?: ReactNode;
   metadataLines?: number;
   icon?: ReactNode;
   trailing?: ReactNode;
@@ -64,13 +72,14 @@ export function NavigationRow({
   selected?: boolean;
   tone?: SemanticTone;
   variant?: "card" | "plain";
+  /** Navigation reveals a destination; choices and commands have no chevron. */
+  intent?: "navigate" | "select" | "command";
   detailLines?: number;
   detailSelectable?: boolean;
   detailEllipsizeMode?: TextProps["ellipsizeMode"];
 }) {
   useMobileTheme();
-  const grouped = use(GroupedNavigation);
-  const plain = variant === "plain" || (variant !== "card" && grouped);
+  const plain = variant !== "card";
   const semantic = tone ? semanticColors[tone] : undefined;
   return (
     <Pressable
@@ -106,6 +115,7 @@ export function NavigationRow({
       ) : null}
       <View style={[uiStyles.grow, { gap: 2 }]}>
         <Body
+          numberOfLines={labelLines}
           style={[
             uiStyles.label,
             emphasized && { fontWeight: "600" },
@@ -128,9 +138,13 @@ export function NavigationRow({
         {metadata ? <Body muted numberOfLines={metadataLines} style={[uiStyles.caption, { lineHeight: 18 }]}>
           {metadata}
         </Body> : null}
+        {supporting}
       </View>
       {trailing ? <View style={{ flexShrink: 0 }}>{trailing}</View> : null}
-      {busy ? <BusyIndicator size="sm" color={colors.accent} /> : <ChevronRight size={17} strokeWidth={2.4} color={colors.tertiary} style={{ flexShrink: 0 }} />}
+      {busy ? <BusyIndicator size="sm" color={colors.accent} />
+        : intent === "navigate" ? <ChevronRight size={17} strokeWidth={2.4} color={colors.tertiary} style={{ flexShrink: 0 }} />
+        : intent === "select" && selected && !trailing ? <Check size={18} color={colors.accent} style={{ flexShrink: 0 }} />
+        : null}
     </Pressable>
   );
 }

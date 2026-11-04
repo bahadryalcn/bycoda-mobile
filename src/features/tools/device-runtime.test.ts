@@ -4,7 +4,11 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { DeviceRuntime } from "./device-runtime";
 const state = vi.hoisted(() => ({ id: "machine", requests: [] as { method: string; params: unknown }[], queries: [] as { method: string; params: unknown }[], running: false, uncertain: false }));
-vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: state.id, environmentId: "host", capabilities: ["device.host", "devices.preview.mobile.v1"] }), useMachines: { getState: () => ({ activeId: state.id }) } }));
+vi.mock("expo-crypto", () => { let id = 0; return { randomUUID: () => String(++id) }; });
+vi.mock("@/state/machines", () => {
+  const machine = () => ({ id: state.id, environmentId: "host", capabilities: ["device.host", "devices.preview.mobile.v1"] });
+  return { useActiveMachine: machine, useMachines: { getState: () => ({ activeId: state.id, machines: [machine()] }), subscribe: () => () => {} } };
+});
 vi.mock("@/state/queries", () => ({
   useHostQuery: (_key: unknown, method: string, params: unknown) => { state.queries.push({ method, params }); return { data: method === "devices.status" ? { installed: true, running: state.running } : method === "devices.preview.impact" ? { activeCount: 0, owned: [], otherActiveCount: 0 } : { checks: { sdk: true, device: false, tools: true, agentControl: false } }, refetch: vi.fn(), isFetching: false }; },
   useHostMutation: (method: string) => ({ isPending: false, mutateAsync: async (params: unknown) => { state.requests.push({ method, params }); if (state.uncertain) throw { uncertain: true }; return {}; } }),
@@ -13,7 +17,7 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
-  return {
+  return { StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children),
     Disclosure: Wrapper, Row: Wrapper, Stack: Wrapper,
     FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, "Confirm")), Body: Wrapper, Sheet: Wrapper, QueryState: () => null, MutationState: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message), Button,

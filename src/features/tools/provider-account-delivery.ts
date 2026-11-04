@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { randomUUID, digestStringAsync, CryptoDigestAlgorithm } from "expo-crypto";
 import { useHostClient } from "@/state/queries";
 import { useMachines } from "@/state/machines";
@@ -21,17 +21,22 @@ export function useProviderAccountDelivery(
 ) {
   const client = useHostClient();
   const opening = useRef(reviewedMachine(client?.machine));
+  const [context] = useState(() => ({ scope: { ...scope }, projectId, environmentId: report.environmentId,
+    accountRevision: report.accountRevision, account: { ...account } }));
+  const latest = useRef({ scope, projectId, report, account, client });
+  latest.current = { scope, projectId, report, account, client };
+  const invalidated = useRef(false);
   const mounted = useRef(true),
     occupied = useRef(false);
   const draft = useLocalDraft(
-    `bycoda.accountMetadata.v1:${JSON.stringify([scope.machineId, projectId, scope.sessionId, account.provider, account.id])}`,
+    `bycoda.accountMetadata.v1:${JSON.stringify([context.scope.machineId, context.projectId, context.scope.sessionId, context.account.provider, context.account.id])}`,
     decodeAccountDraft,
     encodeAccountDraft,
   );
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(),
     [receipt, setReceipt] = useState<AccountMetadataStatus>();
-  useEffect(() => {
+  useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
@@ -39,16 +44,23 @@ export function useProviderAccountDelivery(
   }, []);
   useEffect(() => {
     if (draft.ready && (!draft.valueRef.current || draft.valueRef.current.finished))
-      draft.setValue({ kind: "rename", label: account.label, color: account.color });
+      draft.setValue({ kind: "rename", label: context.account.label, color: context.account.color });
   }, [draft.ready]);
-  const current = () =>
-    mounted.current &&
-    !!client &&
-    client.machine.id === scope.machineId &&
-    client.machine.environmentId === report.environmentId &&
-    isReviewedMachine(opening.current, useMachines.getState()) &&
-    (client.machine.capabilities?.includes("providers.desktop.metadata.v1") ||
-      client.machine.capabilities?.includes("providers.desktop.quotaRefresh.v1"));
+  const current = () => {
+    const live = latest.current;
+    if (!isReviewedMachine(opening.current, useMachines.getState()) ||
+      live.scope.machineId !== context.scope.machineId || live.scope.sessionId !== context.scope.sessionId ||
+      live.projectId !== context.projectId || live.report.environmentId !== context.environmentId ||
+      live.report.sourceSessionId !== context.scope.sessionId ||
+      live.account.id !== context.account.id || live.account.provider !== context.account.provider ||
+      (live.client && !isReviewedMachine(opening.current, { activeId: live.client.machine.id, machines: [live.client.machine] }))) invalidated.current = true;
+    return mounted.current && !invalidated.current && !!live.client &&
+      live.client.machine.id === context.scope.machineId &&
+      live.client.machine.environmentId === context.environmentId &&
+      (live.client.machine.capabilities?.includes("providers.desktop.metadata.v1") ||
+        live.client.machine.capabilities?.includes("providers.desktop.quotaRefresh.v1"));
+  };
+  current(); // Retire an observed target change before an older callback can run.
   const targetDigest = () =>
     digestStringAsync(CryptoDigestAlgorithm.SHA256, JSON.stringify(opening.current));
   const settle = async (result: AccountMetadataStatus) => {
@@ -70,7 +82,7 @@ export function useProviderAccountDelivery(
       !pending ||
       !current() ||
       !client ||
-      pending.environmentId !== report.environmentId
+      pending.environmentId !== context.environmentId
     )
       return;
     occupied.current = true;
@@ -81,14 +93,14 @@ export function useProviderAccountDelivery(
         throw Error("The saved operation belongs to another paired computer identity");
       if (!current()) return;
       const value = await client.request("providers.desktop.status", {
-        projectId,
-        sessionId: scope.sessionId,
+        projectId: context.projectId,
+        sessionId: context.scope.sessionId,
         operationId: pending.operationId,
       });
       await settle(
         readAccountMetadataStatus(value, {
-          environmentId: report.environmentId,
-          sessionId: scope.sessionId,
+          environmentId: context.environmentId,
+          sessionId: context.scope.sessionId,
           operationId: pending.operationId,
         }),
       );
@@ -102,6 +114,10 @@ export function useProviderAccountDelivery(
   useEffect(() => {
     if (draft.ready && draft.value?.pending) void reconcile();
   }, [draft.ready, draft.value?.pending?.operationId, client]);
+  const supportsChange = (kind: AccountMetadataChange["kind"]) =>
+    !!latest.current.client?.machine.capabilities?.includes(kind === "quotaRefresh"
+      ? "providers.desktop.quotaRefresh.v1" : "providers.desktop.metadata.v1") &&
+    (kind !== "quotaRefresh" || context.account.provider === "claude");
   const submit = async (review: AccountMetadataChange) => {
     if (
       occupied.current ||
@@ -115,15 +131,7 @@ export function useProviderAccountDelivery(
       return;
     const before = draft.valueRef.current;
     if (!before) return;
-    if (
-      !client.machine.capabilities?.includes(
-        review.kind === "quotaRefresh"
-          ? "providers.desktop.quotaRefresh.v1"
-          : "providers.desktop.metadata.v1",
-      ) ||
-      (review.kind === "quotaRefresh" && account.provider !== "claude")
-    )
-      return;
+    if (!supportsChange(review.kind)) return;
     const actual = validateAccountChange(
       before.kind === "rename"
         ? { kind: "rename", label: before.label }
@@ -142,21 +150,21 @@ export function useProviderAccountDelivery(
     const operationId = randomUUID();
     try {
       const identity = await targetDigest();
-      if (!current() || draft.valueRef.current !== before)
+      if (!current() || !supportsChange(review.kind) || draft.valueRef.current !== before)
         throw Error("Account metadata source or draft changed");
       const saved = {
         ...before,
         pending: {
           operationId,
           targetDigest: identity,
-          environmentId: report.environmentId,
-          expectedAccountRevision: report.accountRevision,
+          environmentId: context.environmentId,
+          expectedAccountRevision: context.accountRevision,
           change: review,
         },
       };
       draft.setValue(saved);
       await draft.persist();
-      if (!current()) {
+      if (!current() || !supportsChange(review.kind)) {
         draft.setValue({ ...saved, pending: undefined });
         await draft.persist();
         return;
@@ -167,12 +175,12 @@ export function useProviderAccountDelivery(
           ? "providers.desktop.quota.refresh"
           : "providers.desktop.patch",
         {
-          projectId,
-          sessionId: scope.sessionId,
+          projectId: context.projectId,
+          sessionId: context.scope.sessionId,
           operationId,
-          expectedAccountRevision: report.accountRevision,
-          provider: account.provider,
-          accountId: account.id,
+          expectedAccountRevision: context.accountRevision,
+          provider: context.account.provider,
+          accountId: context.account.id,
           ...(review.kind === "quotaRefresh"
             ? { confirm: "REFRESH_PROVIDER_QUOTA" }
             : { change: review }),
@@ -180,8 +188,8 @@ export function useProviderAccountDelivery(
       );
       await settle(
         readAccountMetadataStatus(value, {
-          environmentId: report.environmentId,
-          sessionId: scope.sessionId,
+          environmentId: context.environmentId,
+          sessionId: context.scope.sessionId,
           operationId,
         }),
       );

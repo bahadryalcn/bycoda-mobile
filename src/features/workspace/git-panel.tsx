@@ -1,7 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { BackHandler, View } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
 import {
   ActionMenu,
@@ -45,6 +45,7 @@ import { registerWorkspaceDraft } from "./draft-guard";
 import { useLocalDraft } from "./use-local-draft";
 import { colors, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
+import { SearchToolbar } from "@/ui/search-field";
 import GitCommitHorizontal from "lucide-react-native/icons/git-commit-horizontal";
 import FileDiff from "lucide-react-native/icons/file-diff";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
@@ -65,6 +66,7 @@ const encodeDraft = (value: GitDraft | null) =>
 export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: ProjectGitProps) {
   useMobileTheme();
   const copy = useCopy();
+  const manageConnections = () => router.push("/machines");
   const machine = useActiveMachine();
   const navigation = useNavigation();
   const scope = useMemo<GitScope>(() => ({ projectId, cwd, root }), [projectId, cwd, root]);
@@ -282,7 +284,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
   if (!data || data.repository === false)
     return (
       <Screen>
-        <QueryState query={index} />
+        <QueryState query={index} onManageConnections={manageConnections} />
         {data?.repository === false ? (
           <Empty
             title={copy("Bu klasör bir Git deposu değil.", "This folder is not a Git repository.")}
@@ -316,71 +318,92 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
               onRefresh={() => {
                 void index.refetch();
               }}
-              onToggleBranches={() => dispatch({ type: "view", view: { kind: "branches" } })}
+              onToggleBranches={() =>
+                dispatch({ type: "view", view: { kind: "branches" } })
+              }
               onOpenActions={() => setActionsOpen(true)}
+              navigationActions={
+                <ActionMenu
+                  label={copy("Diğer işlemler", "More actions")}
+                  actions={[
+                    {
+                      key: "history",
+                      label: copy("Commit geçmişi", "Commit history"),
+                      disabled: busy || !root,
+                      onPress: () => setHistoryOpen(true),
+                    },
+                    {
+                      key: "stashes",
+                      label: copy("Stash’ler", "Stashes"),
+                      disabled: busy || !root,
+                      onPress: () => setStashesOpen(true),
+                    },
+                    {
+                      key: "management",
+                      label: copy("Git yönetimi", "Git management"),
+                      disabled: busy || !root,
+                      onPress: () => setManagementOpen(true),
+                    },
+                  ]}
+                />
+              }
             />
-            <QueryState query={index} />
-            <Button
-              label={copy("Commit geçmişi", "Commit history")}
-              tone="quiet"
-              disabled={busy || !root}
-              onPress={() => setHistoryOpen(true)}
-            />
-            <Button label={copy("Stash’ler", "Stashes")} tone="quiet" disabled={busy || !root} onPress={() => setStashesOpen(true)} />
-            <Button label={copy("Git yönetimi", "Git management")} tone="quiet" disabled={busy || !root} onPress={() => setManagementOpen(true)} />
+            <QueryState query={index} onManageConnections={manageConnections} />
             {draftStatus}
             {!state.confirmation && !branchPicker ? feedback : null}
             {!selection ? (
-              <Row style={{ flexWrap: "nowrap" }}>
-                <View style={uiStyles.grow}>
+              <SearchToolbar
+                search={
                   <SearchField
                     label={copy("Değişen dosyalarda ara", "Search changed files")}
                     value={fileQuery}
                     maxLength={200}
                     onChangeText={setFileQuery}
                   />
-                </View>
-                <ActionMenu
-                  label={copy("Değişiklik filtreleri", "Change filters")}
-                  active={fileFilter !== "all"}
-                  trigger={
-                    <SlidersHorizontal
-                      size={21}
-                      strokeWidth={2}
-                      color={fileFilter !== "all" ? colors.accent : colors.muted}
-                    />
-                  }
-                  actions={[
-                    {
-                      key: "all",
-                      label: copy("Tümü", "All"),
-                      selected: fileFilter === "all",
-                      onPress: () => setFileFilter("all"),
-                    },
-                    {
-                      key: "unstaged",
-                      label: copy("Stage dışında", "Unstaged"),
-                      selected: fileFilter === "unstaged",
-                      onPress: () => setFileFilter("unstaged"),
-                    },
-                    {
-                      key: "staged",
-                      label: copy("Stage’de", "Staged"),
-                      selected: fileFilter === "staged",
-                      onPress: () => setFileFilter("staged"),
-                    },
-                    {
-                      key: "reset",
-                      label: copy("Sıfırla", "Reset"),
-                      disabled: !filtered,
-                      onPress: () => {
-                        setFileQuery("");
-                        setFileFilter("all");
+                }
+                actions={
+                  <ActionMenu
+                    label={copy("Değişiklik filtreleri", "Change filters")}
+                    active={fileFilter !== "all"}
+                    trigger={
+                      <SlidersHorizontal
+                        size={21}
+                        strokeWidth={2}
+                        color={fileFilter !== "all" ? colors.accent : colors.muted}
+                      />
+                    }
+                    actions={[
+                      {
+                        key: "all",
+                        label: copy("Tümü", "All"),
+                        selected: fileFilter === "all",
+                        onPress: () => setFileFilter("all"),
                       },
-                    },
-                  ]}
-                />
-              </Row>
+                      {
+                        key: "unstaged",
+                        label: copy("Stage dışında", "Unstaged"),
+                        selected: fileFilter === "unstaged",
+                        onPress: () => setFileFilter("unstaged"),
+                      },
+                      {
+                        key: "staged",
+                        label: copy("Stage’de", "Staged"),
+                        selected: fileFilter === "staged",
+                        onPress: () => setFileFilter("staged"),
+                      },
+                      {
+                        key: "reset",
+                        label: copy("Sıfırla", "Reset"),
+                        disabled: !filtered,
+                        onPress: () => {
+                          setFileQuery("");
+                          setFileFilter("all");
+                        },
+                      },
+                    ]}
+                  />
+                }
+              />
             ) : null}
             {data.operation && root ? (
               <GitOperationPanel
@@ -437,7 +460,8 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
         contentContainerStyle={{ gap: 0 }}
         renderItem={({ item, index }) =>
           item.kind === "group" ? (
-            <Row style={{ paddingTop: space.md, paddingBottom: space.xs, flexWrap: "nowrap" }}>
+            <Row style={{ paddingTop: space.md, paddingBottom: space.xs }}>
+              <Row style={{ flexBasis: 140, flexGrow: 1, flexShrink: 1, minWidth: 0, flexWrap: "nowrap" }}>
               {item.staged ? (
                 <GitCommitHorizontal size={18} color={colors.success} />
               ) : (
@@ -449,6 +473,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
                   : copy("Değişen dosyalar", "Changed files")}
               </Body>
               <Badge label={String(item.count)} tone={item.staged ? "success" : "default"} />
+              </Row>
               {!filtered ? (
                 <Button
                   tone="quiet"

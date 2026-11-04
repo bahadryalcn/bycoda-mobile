@@ -6,15 +6,17 @@ import { pageNavigation } from "./workspace-query-model";
 import type { SocialCollectionPage } from "./types";
 
 /** A host page is already bounded; never apply a second local slice. */
-export function CollectionRows<T>({ items, renderItem, page }: {
+export function CollectionRows<T>({ items, renderItem, page, beforeRows }: {
   items: readonly T[];
   renderItem(item: T): ReactNode;
   page?: SocialCollectionPage;
+  beforeRows?: (visible: readonly T[]) => ReactNode;
 }) {
   const copy = useCopy();
-  if (!page) return <PagedRows items={items} renderItem={renderItem} />;
+  if (!page) return <PagedRows items={items} renderItem={renderItem} beforeRows={beforeRows} />;
   const navigation = page.page && pageNavigation(page.page);
   return <>
+    {beforeRows?.(page.loading ? [] : items)}
     {!page.loading && items.map(renderItem)}
     {navigation && !page.loading ? <>
       <Body muted>{copy("{p0}–{p1} / {p2}", "{p0}–{p1} / {p2}", { p0: navigation.first, p1: navigation.last, p2: page.page!.total })}</Body>

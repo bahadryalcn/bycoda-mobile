@@ -36,12 +36,136 @@ must be checked against installed source before implementation.
 | Message composer and transcript | `ai-input`, `message`, `message-scroller` | `src/ui/chat.tsx` plus workspace owners; preserve virtualized list, streaming, drafts, queue and measured composer |
 | Attachments and code | `attachment`, `code-block` | Chat/file preview facades; keep transfer ownership, cancel/error and readable wide-content handling |
 | Execution plan | `plan`, `planner`, `timeline` | Existing structured transcript/plan presentation; real progress and expandable details |
-| Dense structured data | `table` | Focused shared data presentation; use readable summaries/detail on narrow screens, preserve all fields/actions |
+| Dense structured data | `table` | Use `src/ui/metric-row.tsx` for fixed read-only label/reading summaries; use focused table presentation for richer collections. Preserve all fields/actions and readable narrow-screen details |
 | Pairing | `qr-code` | Existing connection flow; no QR credential/expiry/security contract changes |
 | Contextual help | `tooltip`, `accordion` | Shared disclosure/help; touch and screen-reader access, never hover-only explanation |
 | Appearance | `theme-selector` | Existing appearance setting and controller; preserve system mode and mounted drafts |
 
 ## Integration boundaries
+
+Project workspaces use `src/ui/workspace-frame.tsx` for measured header/body
+allocation. Growing context or feedback scrolls in the header's region while the
+selected list/editor retains a usable viewport and its mounted state owner.
+Keep active navigation first and overlays outside that scroller. Native inset,
+keyboard and navigator geometry remain with their current owners.
+
+For multiple structured query/mutation failures, reuse `IssueSummary.details`.
+Retain each source's real QueryState/MutationState node and precise recovery;
+never replace an auth repair or uncertain write with an inferred generic Retry.
+Move a working-folder query's feedback into its active picker and restore the
+header owner on close, so a modal cannot conceal its own required recovery.
+
+
+Use `NavigationRow.supporting` for status and contextual content that must wrap
+below the title. Reserve `trailing` for compact accessories; a running badge or
+long timestamp must not consume the title's readable width. Disclosure rows keep
+counts/status with the identity column. Preserve the full accessibility label
+and the initiating row's action and state.
+
+Hierarchical session rows use `src/ui/hierarchy-frame.tsx` to measure their cell
+and reserve readable identity space before indentation. The same result governs
+folder and session rows in both list families. When indentation is compressed,
+retain visible immediate-parent context and the full accessible ancestry; do not
+flatten the data graph or change search/collapse semantics to fit a narrow region.
+
+Shared `Row`, ScreenHeading actions and SearchToolbar actions own nested width
+constraints. Do not fix an escaping action by clipping it, shrinking its label,
+or setting a device-specific offset. Preserve readable labels and at least 48dp
+targets while groups wrap within the available width.
+
+
+`SegmentedControl` keeps up to three direct choices when the measured region
+has a readable width budget. Larger sets, large system text and labels taller
+than a touch target use the existing labeled `SelectField`. The value and
+change callback stay controlled by the consumer. Do not shrink labels, wrap the
+upstream moving indicator into several rows or add per-screen font thresholds.
+
+`MetricRow` keeps its label and full selectable reading, allowing either to wrap
+at large text sizes. Consumers own units and missing-value semantics; an unknown
+reading is not zero. Do not truncate or shrink essential readings to hold two
+columns on one line.
+
+Embedded readers may pass `onManageConnections` to `QueryState` and
+`ProjectDirectoryFeedback` so their existing close/dirty policy runs before
+connection-repair navigation. By default `QueryState` asks the nearest Sheet to
+close its stack, approving each ancestor's independent draft before `/machines`
+navigation. A pending ancestor refuses the transition without retaining it for
+automatic resumption. Outside a Sheet it preserves ordinary route navigation.
+Route editors with `usePreventRemove` explicitly retain their route action so
+their draft/recovery policy runs before they unmount.
+Custom editor flows can use `useSheetGuard().requestCloseThen` for recovery.
+The Sheet owns discard approval; cancel never retains the continuation for a
+later close. Pending, hidden and unmounted owners reject approval, and the
+continuation runs only after the approved close callback. Keep navigation in
+this continuation; it does not authorize a host mutation or a draft save.
+`Sheet.onClose` is the final approved callback, not another dismissal guard.
+Put dirty/pending policy on that Sheet or register it from its body. Footer
+Cancel uses a guard captured inside the same Sheet; descendant `FormActions`
+still register with its shared action area. Non-form selections may supply
+`discardTitle`/`discardMessage` to clarify that closing changes no files.
+Project selectors should use `ProjectDirectoryFeedback` for query, privacy-sync
+and reconnect state instead of stacking separate notices for the same directory.
+
+Stateful viewers/setup Sheets belong beside a virtualized list, not inside its
+header. Capture the computer/project and reviewed connection identity when they
+open; a scope or pairing change closes that reader and rejects late callbacks
+from its old instance. Appearance changes must not reset it. Keep reviewed key
+material in memory only, never in rendered labels, React keys or persistence.
+
+A monitor editor may retain an unsent address after a connection/project change,
+but its opening target and confirmation must remain fixed. Invalidate that
+instance until it is reopened, including if the original scope is restored.
+Keep the target visible and explain independent browser/process consequences
+at confirmation. Opening or refreshing an editor never starts a monitor.
+
+When a list toolbar and pull gesture refresh multiple queries, pass the same
+`usePullRefresh` controller through `ScreenList.refreshState` or
+`Screen.refreshState`. Both entry points
+share its busy indicator and flight guard; background polling stays quiet.
+Availability failures own contextual recovery and must not be presented as a
+successful empty collection. Staged filter feedback belongs to the open filter
+Sheet while it is active.
+
+Usage pagination belongs to the current project and reviewed computer
+connection. Reset its cursor before a new scope is read; a same-id pairing
+replacement also starts at the first page. Keep the chosen time range and UTC
+window explicit. A successful empty later page owns one first-page recovery
+action; an error keeps its retry instead of claiming an empty success. Refresh
+from the toolbar or pull gesture resets to the latest first-page window, while
+background reads never impersonate a user refresh.
+
+The shared browser separates unsent URL/text/comment drafts from its transport
+session. Reconnecting the same reviewed target may replace that session without
+discarding drafts; a different computer, pairing, project, conversation or start
+URL owns new drafts. Keep these identity keys opaque. Never retain the old
+lease, frame, review approval or selected-page snapshot as authority for the new
+session. Release late claims before the replacement session reads, and validate
+the reviewed connection again before dispatch. Browser details retain the full
+current URL and shared-browser explanation; preview content precedes its control
+actions so repeated chrome does not consume its viewport.
+Setup/close review replaces its initiating action in that same region; keep a
+close review beside the preview controls instead of moving it to the page top.
+
+Line-based terminals use one page scroller for output, not a fixed-height output
+scroller nested inside it. `Screen.footer` reserves real layout space for the
+command action outside that scroller and owns its bottom/side safe-area padding.
+Editors open in the existing Sheet body/action owners; closing a command editor
+keeps its per-terminal draft. Switching terminals does not send or discard it.
+If a terminal disappears, retain its draft in a read-only recovery view rather
+than targeting a different terminal. A reviewed connection/project change owns
+new terminal state and rejects old callbacks. Stop/close review names the exact
+terminal; uncertain operations keep drafts and require explicit reconciliation.
+
+Server start/detail overlays are siblings of their virtualized list. Keep form
+fields and detail state mounted when the header leaves view. A reviewed target
+owns each server operation; late responses must not reset a different target's
+draft or open a foreign-project detail. Detail/impact/log read failures have
+priority over successful-unavailable explanations. Manual reconciliation shares
+one flight with mutations, and only a successful current-scope read clears an
+uncertain result. During impact review, replace the initiating actions and keep
+the process list/consequence in the body, with concise footer actions. Embedded
+private preview reuses BrowserScreen with one outer title and shared inset
+ownership; read-only preview does not require process-mutation capability.
 
 Product screens import `@/ui/primitives`, `@/ui/chat` or focused product modules.
 Shared implementations use narrow upstream subpaths. Keep colors/metrics in
@@ -56,6 +180,26 @@ then verify at least one real consumer before migrating the whole family.
 No new dependency, native integration, service setup, permission or activation is
 implied by this plan. Optional components needing those remain deferred. Avoid
 unrequested package upgrades and do not edit `node_modules` as the deliverable.
+
+## Retained compatibility
+
+Current Expo routes use feature owners and focused product facades. The retained
+`src/screens/management/{shared,work-screens}.tsx`,
+`src/screens/workspace/{shared,session-screen,sessions-screen}.tsx` and
+`src/ui/components.tsx` have no runtime-module import path from the current app
+route roots. The copied `src/ui/gluestack/` subtree is also outside that graph.
+This is static application reachability, not a claim about external consumers.
+Keep these compatibility contracts; do not delete or wire them back into routes
+without reviewing their behavior and authority against current feature owners.
+
+Compatibility presentation remains a thin adapter: let shared ErrorNotice own
+the localized Retry fallback and shared Loading own its named loading fallback.
+Preserve callback forwarding, centered presentation and progress semantics;
+do not hardcode bilingual or fixed-language overrides in the adapter.
+
+Recheck route imports when adding a screen or changing these adapters. An
+unreferenced compatibility file is not a missing live route, and mapping a new
+route is not evidence that its product or device acceptance passed.
 
 ## Migration record and completion
 

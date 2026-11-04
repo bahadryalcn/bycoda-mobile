@@ -55,6 +55,9 @@ export function copyPreviewSource({
     "packages/core/package.json",
     "mobile/assets/brand/mobile-icon.png",
     "mobile/assets/brand/mobile-adaptive-foreground.png",
+    "public/brand/bycoda/mark-white.png",
+    "public/brand/bycoda/logo-horizontal-white.png",
+    "public/brand/bycoda/favicon-32.png",
     "src/shared/model/host-contracts/index.ts",
   ])
     if (!fs.existsSync(path.join(destination, name)))

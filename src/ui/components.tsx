@@ -39,5 +39,5 @@ export function SectionTitle({ title, detail }: { title: string; detail?: string
 }
 export function ErrorNotice(props: { error: unknown; onRetry?: () => void }) {
   useMobileTheme();
-  return <SharedErrorNotice {...props} retryLabel="Retry / Yeniden dene" />;
+  return <SharedErrorNotice {...props} />;
 }

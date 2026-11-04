@@ -34,7 +34,10 @@ export function AgentModelFields({ models, model, settings, disabled, onChange }
   if (model && !selected) options.unshift({ value: model, label: model, detail: model });
   const groups = groupedSettings(selected);
   // Reasoning, Fast and Thinking lead; the rarer model options and the groups below are secondary.
-  const primary = groups.model.filter(isPrimarySetting);
+  // The form reads downward; keep Reasoning first even when the mirrored desktop
+  // picker orders its controls toward an upward-opening trigger.
+  const primary = groups.model.filter(isPrimarySetting).sort((a, b) =>
+    Number(settingLabel(a) !== "Reasoning") - Number(settingLabel(b) !== "Reasoning"));
   const otherModel = groups.model.filter((setting) => !isPrimarySetting(setting));
   const { context, delegation } = groups;
   const caption = (group: "context" | "delegation") => {

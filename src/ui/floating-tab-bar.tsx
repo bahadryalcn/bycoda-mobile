@@ -1,33 +1,15 @@
 import { useMobileTheme } from "./theme";
-import { useEffect, useRef, useState, type ComponentProps } from "react";
-import { Keyboard, Pressable, ScrollView, Text, View, type LayoutChangeEvent } from "react-native";
+import { useState, type ComponentProps } from "react";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import { useKeyboardState } from "react-native-keyboard-controller";
 import type { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { colors, fontSize, metrics, opacity, radii, space } from "./tokens";
-import { haptic, indicatorSpring } from "./motion";
-import { useReducedMotionPreference } from "./use-reduced-motion";
+import { haptic } from "./motion";
 
-type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
-
-
-function useKeyboardVisible() {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const ios = process.env.EXPO_OS === "ios";
-    const show = Keyboard.addListener(ios ? "keyboardWillShow" : "keyboardDidShow", () =>
-      setVisible(true),
-    );
-    const hide = Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", () =>
-      setVisible(false),
-    );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return visible;
-}
+type TabBarProps = Parameters<
+  NonNullable<ComponentProps<typeof Tabs>["tabBar"]>
+>[0];
 
 function TabItem({
   label,
@@ -36,7 +18,7 @@ function TabItem({
   icon,
   onPress,
   onLongPress,
-  onLayout,
+  columns,
 }: {
   label: string;
   focused: boolean;
@@ -44,7 +26,7 @@ function TabItem({
   icon: React.ReactNode;
   onPress: () => void;
   onLongPress: () => void;
-  onLayout: (event: LayoutChangeEvent) => void;
+  columns: number;
 }) {
   return (
     <Pressable
@@ -54,39 +36,46 @@ function TabItem({
       aria-selected={focused}
       onPress={onPress}
       onLongPress={onLongPress}
-      onLayout={onLayout}
       style={({ pressed }) => [
         {
           flexGrow: 1,
-          flexShrink: 0,
+          flexShrink: 1,
+          flexBasis: `${100 / columns}%`,
           minWidth: metrics.touchTarget,
           minHeight: metrics.touchTarget,
           alignItems: "center",
           justifyContent: "center",
           gap: 2,
-          paddingHorizontal: space.xs,
+          borderRadius: radii.control,
+          backgroundColor: focused ? colors.selected : "transparent",
+          paddingHorizontal: space.xxs,
           paddingVertical: space.xs,
         },
         pressed && { opacity: opacity.pressed },
       ]}
     >
-      <View>
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 2,
+          maxWidth: "100%",
+        }}
+      >
         {icon}
         {badge ? (
           <View
             style={{
-              position: "absolute",
-              top: -4,
-              end: -10,
               minWidth: 17,
-              height: 17,
+              minHeight: 17,
+              maxWidth: "100%",
               paddingHorizontal: 4,
               borderRadius: radii.pill,
               backgroundColor: colors.accentSolid,
               alignItems: "center",
               justifyContent: "center",
-              borderWidth: 2,
-              borderColor: colors.panel,
             }}
           >
             <Text
@@ -106,6 +95,8 @@ function TabItem({
       <Text
         style={{
           alignSelf: "stretch",
+          minWidth: 0,
+          flexShrink: 1,
           textAlign: "center",
           color: focused ? colors.accent : colors.muted,
           fontSize: fontSize.micro,
@@ -120,28 +111,35 @@ function TabItem({
   );
 }
 
-/** Intrinsic labels share available room, then scroll instead of compressing scaled text. */
-export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) {
+/** Primary destinations stay visible; scaled labels grow vertically within equal columns. */
+export function FloatingTabBar({
+  state,
+  descriptors,
+  navigation,
+}: TabBarProps) {
   useMobileTheme();
   const insets = useSafeAreaInsets();
-  const keyboard = useKeyboardVisible();
-  const reducedMotion = useReducedMotionPreference();
-  const [width, setWidth] = useState(0);
-  const scroller = useRef<ScrollView>(null);
-  const [items, setItems] = useState<Record<string, { x: number; width: number }>>({});
-  const selected = items[state.routes[state.index]!.key];
-  const position = useSharedValue(0);
-  const indicatorWidth = useSharedValue(0);
-  useEffect(() => {
-    if (!selected) return;
-    position.value = reducedMotion ? selected.x : withSpring(selected.x, indicatorSpring);
-    indicatorWidth.value = reducedMotion ? selected.width : withSpring(selected.width, indicatorSpring);
-    scroller.current?.scrollTo({ x: Math.max(0, selected.x - (width - selected.width) / 2), animated: !reducedMotion });
-  }, [selected, width, keyboard, position, indicatorWidth, reducedMotion]);
-  const indicator = useAnimatedStyle(() => ({
-    width: indicatorWidth.value,
-    transform: [{ translateX: position.value }],
-  }));
+  const { width, fontScale } = useWindowDimensions();
+  const [measuredWidth, setMeasuredWidth] = useState(0);
+  const availableWidth =
+    measuredWidth ||
+    Math.min(
+      metrics.contentWidth,
+      width -
+        Math.max(insets.left, space.sm) -
+        Math.max(insets.right, space.sm),
+    );
+  const columns = Math.max(
+    1,
+    Math.min(
+      state.routes.length,
+      Math.floor(
+        (availableWidth - space.xxs * 2) /
+          (metrics.touchTarget * Math.max(1, fontScale)),
+      ),
+    ),
+  );
+  const keyboard = useKeyboardState((state) => state.isVisible);
   if (keyboard) return null;
   return (
     <View
@@ -156,7 +154,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
     >
       <View
         accessibilityRole="tablist"
-        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        onLayout={(event) => setMeasuredWidth(event.nativeEvent.layout.width)}
         style={{
           width: "100%",
           maxWidth: metrics.contentWidth,
@@ -169,64 +167,46 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
           boxShadow: undefined,
         }}
       >
-        <ScrollView
-          ref={scroller}
-          horizontal
-          showsHorizontalScrollIndicator
-          keyboardShouldPersistTaps="handled"
-          style={{ flexGrow: 0, flexShrink: 0, width: "100%" }}
-          contentContainerStyle={{ flexDirection: "row", flexGrow: 1, padding: 4 }}
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "stretch",
+            padding: space.xxs,
+          }}
         >
-        {selected ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              {
-                position: "absolute",
-                top: 4,
-                bottom: 4,
-                start: 0,
-                borderRadius: radii.control,
-                borderCurve: "continuous",
-                backgroundColor: colors.selected,
-              },
-              indicator,
-            ]}
-          />
-        ) : null}
-        {state.routes.map((route, index) => {
-          const options = descriptors[route.key]!.options;
-          const focused = state.index === index;
-          const label = typeof options.title === "string" ? options.title : route.name;
-          const color = focused ? colors.accent : colors.muted;
-          return (
-            <TabItem
-              key={route.key}
-              label={label}
-              focused={focused}
-              onLayout={({ nativeEvent: { layout } }) => setItems((current) => {
-                const previous = current[route.key];
-                if (previous?.x === layout.x && previous.width === layout.width) return current;
-                return { ...current, [route.key]: { x: layout.x, width: layout.width } };
-              })}
-              badge={options.tabBarBadge as string | number | undefined}
-              icon={options.tabBarIcon?.({ focused, color, size: 22 })}
-              onPress={() => {
-                const event = navigation.emit({
-                  type: "tabPress",
-                  target: route.key,
-                  canPreventDefault: true,
-                });
-                if (!focused && !event.defaultPrevented) {
-                  haptic.select();
-                  navigation.navigate(route.name, route.params);
+          {state.routes.map((route, index) => {
+            const options = descriptors[route.key]!.options;
+            const focused = state.index === index;
+            const label =
+              typeof options.title === "string" ? options.title : route.name;
+            const color = focused ? colors.accent : colors.muted;
+            return (
+              <TabItem
+                key={route.key}
+                label={label}
+                focused={focused}
+                columns={columns}
+                badge={options.tabBarBadge as string | number | undefined}
+                icon={options.tabBarIcon?.({ focused, color, size: 22 })}
+                onPress={() => {
+                  const event = navigation.emit({
+                    type: "tabPress",
+                    target: route.key,
+                    canPreventDefault: true,
+                  });
+                  if (!focused && !event.defaultPrevented) {
+                    haptic.select();
+                    navigation.navigate(route.name, route.params);
+                  }
+                }}
+                onLongPress={() =>
+                  navigation.emit({ type: "tabLongPress", target: route.key })
                 }
-              }}
-              onLongPress={() => navigation.emit({ type: "tabLongPress", target: route.key })}
-            />
-          );
-        })}
-        </ScrollView>
+              />
+            );
+          })}
+        </View>
       </View>
     </View>
   );

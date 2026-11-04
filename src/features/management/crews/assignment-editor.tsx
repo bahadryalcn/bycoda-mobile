@@ -49,6 +49,6 @@ export function CrewAssignmentEditor({ run, onClose }: { run: CrewRunView; onClo
     {sent && mutation.isError && <Notice tone="warning" message={copy("İsteğin durumu belirsiz olabilir. Yeniden görev oluşturmadan çalışma listesini yenileyin.", "Request delivery may be uncertain. Refresh work before creating another assignment.")} />}
     <FormActions submitLabel={copy("Görevi başlat", "Start task")} disabled={!valid || locked} busy={mutation.isPending} onCancel={requestClose} cancelDisabled={mutation.isPending}
       cancelLabel={copy("Vazgeç", "Cancel")} feedback={<MutationState mutation={mutation} />} onSubmit={() => confirmAction(copy("Ekip görevi başlat", "Start crew task"),
-        copy("Görev bilgisayarda çalışır; host kapsam, bütçe ve bağımsız inceleme kurallarını uygular.", "The task runs on the computer; the host enforces scope, budget and independent review."), copy("Başlat", "Start"), submit)} />
+        copy("Görev bilgisayarda çalışır; host kapsam, bütçe ve bağımsız inceleme kurallarını uygular.", "The task runs on the computer; the host enforces scope, budget and independent review."), copy("Başlat", "Start"), submit, undefined, "default")} />
   </Stack>;
 }

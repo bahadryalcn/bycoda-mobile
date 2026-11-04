@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import type { ReactElement, ReactNode } from "react";
+import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { DraftsPanel } from "./drafts-panel";
 import type { DraftsPanelProps, SocialDraft } from "./types";
 
@@ -46,7 +46,7 @@ function approval(pending?: { action: string; input: { id: string } }) {
     run,
   } as unknown as DraftsPanelProps;
   const panel = DraftsPanel(props) as ReactElement<{ children: ReactNode[] }>;
-  const rows = panel.props.children[2] as ReactElement<{
+  const rows = Children.toArray(panel.props.children).find(node => isValidElement(node) && node.type === "collection-rows") as ReactElement<{
     renderItem: (
       draft: SocialDraft,
     ) => ReactElement<{

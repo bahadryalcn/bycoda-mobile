@@ -15,6 +15,10 @@ export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
   const [limit, setLimit] = useState(200);
   const visible = lines.slice(0, limit);
   const remaining = lines.length - visible.length;
+  // Equal-width padded labels keep columns aligned while allowing large text
+  // and long line numbers to grow inside the horizontal viewport.
+  const digits = lines.reduce((width, line) => Math.max(width, String(line.oldLine ?? "").length, String(line.newLine ?? "").length), 1);
+  const numberLabel = (value: number | undefined) => String(value ?? "").padStart(digits, " ");
   return (
     <View style={{ gap: space.sm, minWidth: 0 }}>
       <ScrollView
@@ -48,7 +52,8 @@ export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
                 <CodeText
                   selectable={false}
                   style={{
-                    width: 42,
+                    minWidth: 42,
+                    flexShrink: 0,
                     textAlign: "right",
                     paddingEnd: space.sm,
                     fontSize: fontSize.micro,
@@ -56,12 +61,13 @@ export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
                     color: colors.subtle,
                   }}
                 >
-                  {line.oldLine ?? ""}
+                  {numberLabel(line.oldLine)}
                 </CodeText>
                 <CodeText
                   selectable={false}
                   style={{
-                    width: 42,
+                    minWidth: 42,
+                    flexShrink: 0,
                     textAlign: "right",
                     paddingEnd: space.sm,
                     fontSize: fontSize.micro,
@@ -69,7 +75,7 @@ export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
                     color: colors.subtle,
                   }}
                 >
-                  {line.newLine ?? ""}
+                  {numberLabel(line.newLine)}
                 </CodeText>
                 <CodeText
                   style={{

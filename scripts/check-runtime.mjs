@@ -8,6 +8,8 @@ const desktopSource = path.resolve(mobileRoot, "../src");
 // These contracts are deliberately free of desktop UI, browser storage and Tauri.
 const pureContracts = new Set([
   "shared/model/host-contracts",
+  // Assistant wire validation is pure; mobile still uses the paired transport and owner gates.
+  "shared/model/host-contracts/assistant",
   "shared/model/approvalOccurrence",
   // Portable session execution policy has no desktop runtime dependencies.
   "shared/lib/host-runtime/session-execution",

@@ -2,6 +2,7 @@
 import { act, createElement, type PropsWithChildren, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+vi.mock("@/ui/metric-row", () => ({ MetricRow: ({ label, value }: { label: string; value: string | number }) => createElement("div", null, label, ": ", value) }));
 
 const f = vi.hoisted(() => ({
   search: undefined as undefined | ((text: string) => void),
@@ -26,8 +27,11 @@ vi.mock("@/ui/theme", () => ({ useMobileTheme: vi.fn() }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { caption: {} } }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, space: {} }));
-vi.mock("@/ui/filter-sheet", () => ({ FilterButton: () => null, FilterSheet: () => null }));
+vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null,  FilterButton: () => null, FilterSheet: () => null }));
 vi.mock("./runtime-monitors", () => ({ RuntimeMonitors: () => null }));
+vi.mock("@/ui/issue-summary", () => ({
+  IssueSummary: ({ issues }: { issues: string[] }) => createElement("div", null, issues.join("\n")),
+}));
 vi.mock("../management/shared/format", () => ({ stamp: () => "Fixture time" }));
 vi.mock("./access-device", () => ({ AccessDevice: () => null }));
 vi.mock("./access-tunnels", () => ({ AccessTunnels: () => null }));
@@ -90,12 +94,13 @@ vi.mock("@/state/queries", () => ({
 }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return {
+  return { StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children),
     Body: Wrapper,
     Card: Wrapper,
     CodePanel: Wrapper,
     CodeText: Wrapper,
     Row: Wrapper,
+    ActionMenu: () => null,
     NavigationGroup: Wrapper,
     Disclosure: Wrapper,
     QueryState: () => null,
@@ -129,12 +134,14 @@ vi.mock("@/ui/primitives", () => {
       label,
       detail,
       trailing,
+      supporting,
       accessibilityLabel,
       onPress,
     }: {
       label: string;
       detail?: string;
       trailing?: ReactNode;
+      supporting?: ReactNode;
       accessibilityLabel?: string;
       onPress: () => void;
     }) =>
@@ -143,6 +150,7 @@ vi.mock("@/ui/primitives", () => {
         { onClick: onPress, "aria-label": accessibilityLabel },
         label,
         detail,
+        supporting,
         trailing,
       ),
     Button: ({
@@ -155,6 +163,7 @@ vi.mock("@/ui/primitives", () => {
       disabled?: boolean;
     }) => createElement("button", { onClick: onPress, disabled }, label),
     IconButton: () => null,
+    SearchToolbar: ({ search, actions }: any) => createElement("div", null, search, actions),
     SearchField: ({
       onChangeText,
       maxLength,

@@ -85,7 +85,11 @@ export function StewardEditor({
         onChange={update}
         disabled={save.isPending}
       />
-      <Disclosure label={copy("Gelişmiş seçenekler", "Advanced options")}>
+      <Disclosure label={copy("Gelişmiş seçenekler", "Advanced options")}
+        feedback={!integerInRange(proposals, 1, 10) || !integerInRange(open, 1, 30) ? <>
+          {!integerInRange(proposals, 1, 10) ? <ErrorText error={`${copy("Çalışma başına öneri (1–10)", "Proposals per run (1–10)")}: ${copy("1 ile 10 arasında bir sayı girin.", "Enter a number from 1 to 10.")}`} /> : null}
+          {!integerInRange(open, 1, 30) ? <ErrorText error={`${copy("Açık görev sınırı (1–30)", "Open task limit (1–30)")}: ${copy("1 ile 30 arasında bir sayı girin.", "Enter a number from 1 to 30.")}`} /> : null}
+        </> : null}>
         <Field
           label={copy("Çalışma başına öneri (1–10)", "Proposals per run (1–10)")}
           value={proposals}
@@ -93,11 +97,6 @@ export function StewardEditor({
           keyboardType="number-pad"
           editable={!save.isPending}
         />
-        {!integerInRange(proposals, 1, 10) ? (
-          <ErrorText
-            error={copy("1 ile 10 arasında bir sayı girin.", "Enter a number from 1 to 10.")}
-          />
-        ) : null}
         <Field
           label={copy("Açık görev sınırı (1–30)", "Open task limit (1–30)")}
           value={open}
@@ -105,11 +104,6 @@ export function StewardEditor({
           keyboardType="number-pad"
           editable={!save.isPending}
         />
-        {!integerInRange(open, 1, 30) ? (
-          <ErrorText
-            error={copy("1 ile 30 arasında bir sayı girin.", "Enter a number from 1 to 30.")}
-          />
-        ) : null}
         <NavigationGroup>
           <ToggleField
             label={copy("Önerilen görevleri otomatik başlat", "Automatically start proposed tasks")}

@@ -1,3 +1,5 @@
+import { matchesSearch } from "./search-matching";
+
 export type SelectionOption<T extends string = string> = {
   value: T;
   label: string;
@@ -13,10 +15,10 @@ export function selectionLabels<T extends string>(values: readonly T[], labels: 
 export function filterSelection<T extends SelectionOption>(
   options: readonly T[],
   search: string,
+  locale?: string,
 ) {
-  const term = search.trim().toLocaleLowerCase();
   return options.filter((option) =>
-    `${option.label} ${option.detail ?? ""}`.toLocaleLowerCase().includes(term),
+    matchesSearch(`${option.label} ${option.detail ?? ""}`, search, locale),
   );
 }
 

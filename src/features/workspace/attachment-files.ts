@@ -3,11 +3,14 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { randomUUID } from "expo-crypto";
 import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createDraftStorageOwner } from "@/state/local-draft-storage";
 import { ATTACHMENT_COUNT, base64ToBytes, validateAttachment, type StagedAttachment } from "./attachment-model";
 import { readBrowserCapture, type BrowserCaptureScope } from "../tools/browser-annotation-model";
 import { parseBrowserAnnotation } from "../../../../src/shared/lib/browserAnnotation";
 
 export async function pickAttachments(kind: "photo" | "document", scope: string): Promise<StagedAttachment[]> {
+  const owner = createDraftStorageOwner(AsyncStorage, `bycoda.mobile.draft.v1:${scope}`);
   const picked = kind === "photo"
     ? await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: ATTACHMENT_COUNT, quality: 1 })
     // Android's picker grants access to the content URI. Copy it directly into
@@ -15,6 +18,7 @@ export async function pickAttachments(kind: "photo" | "document", scope: string)
     // experience's readable FileSystem scope.
     : await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: Platform.OS !== "android" });
   if (picked.canceled) return [];
+  return owner.run(async () => {
   const directory = new Directory(Paths.document, "chat-drafts", encodeURIComponent(scope));
   directory.create({ idempotent: true, intermediates: true });
   const files: StagedAttachment[] = [];
@@ -31,6 +35,7 @@ export async function pickAttachments(kind: "photo" | "document", scope: string)
     }
     return files;
   } catch (error) { for (const file of files) removeStagedFile(file); throw error; }
+  });
 }
 export function removeStagedFile(file: StagedAttachment) {
   // Persisted URI is untrusted. Only our app-owned staging directory is removable.
@@ -38,6 +43,7 @@ export function removeStagedFile(file: StagedAttachment) {
   if (file.uri.startsWith(root) && !file.uri.includes("..")) { const local = new File(file.uri); if (local.exists) local.delete(); }
 }
 export function stageBrowserCapture(value: unknown, comment: string, scope: BrowserCaptureScope & { machineId: string }): StagedAttachment {
+  return createDraftStorageOwner(AsyncStorage, `bycoda.mobile.draft.v1:${scope.machineId}:${scope.sessionId}`).runSync(() => {
   const capture = readBrowserCapture(value, scope);
   const { screenshot, ...metadata } = capture;
   const browserAnnotation = parseBrowserAnnotation({ ...metadata, comment });
@@ -49,11 +55,23 @@ export function stageBrowserCapture(value: unknown, comment: string, scope: Brow
   validateAttachment(file);
   try { directory.create({ idempotent: true, intermediates: true }); const local = new File(file.uri); local.create(); local.write(bytes); return file; }
   catch (error) { removeStagedFile(file); throw error; }
+  });
 }
 export function isScopedStagedFile(file: StagedAttachment, scope: string) {
   return file.uri === new File(Paths.document, "chat-drafts", encodeURIComponent(scope), file.id).uri;
 }
-export function clearAttachmentDraftFiles() {
+export function clearAttachmentDraftFiles(retainedScopes: readonly string[]) {
   const directory = new Directory(Paths.document, "chat-drafts");
-  if (directory.exists) directory.delete();
+  if (!directory.exists) return;
+  const keep = new Set(retainedScopes.map(scope => new Directory(directory, encodeURIComponent(scope)).uri.replace(/\/+$/, "")));
+  const entries = directory.list();
+  const root = directory.uri.replace(/\/+$/, "") + "/";
+  if (entries.some(entry => {
+    const path = entry.uri.replace(/\/+$/, "");
+    if (!path.startsWith(root)) return true;
+    const child = path.slice(root.length);
+    try { return !child || child.includes("/") || decodeURIComponent(child).split(/[\\/]/).some(part => part === "." || part === ".."); }
+    catch { return true; }
+  })) throw new Error("Invalid attachment draft directory entry.");
+  for (const entry of entries) if (!keep.has(entry.uri.replace(/\/+$/, ""))) entry.delete();
 }

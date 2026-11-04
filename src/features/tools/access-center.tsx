@@ -1,6 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Stack } from "expo-router";
 import { View } from "react-native";
-import { useActiveMachine } from "@/state/machines";
+import { useActiveMachine, useMachines } from "@/state/machines";
+import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
+import { getQueryPresentation } from "@/ui/query-presentation";
+import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useHostQuery } from "@/state/queries";
 import {
   Badge,
@@ -10,6 +14,7 @@ import {
   Notice,
   QueryState,
   Row,
+  StatusRow,
   ScreenList,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -33,10 +38,12 @@ export function AccessCenter() {
   const supported = !!machine?.environmentId && machine.capabilities?.includes("host.access.read");
   const [selected, setSelected] = useState<{
     target: AccessTarget;
+    reviewed: ReviewedMachine | undefined;
     device?: PairedDevice;
     tunnel?: AccessTunnel;
     create?: boolean;
   }>();
+  const selection = useRef(selected); selection.current = selected;
   const query = useHostQuery<HostAccessReport>(
     ["host-access"],
     "host.access.read",
@@ -51,6 +58,7 @@ export function AccessCenter() {
     },
   );
   const report = supported ? query.data : undefined;
+  const refresh = usePullRefresh(supported ? () => query.refetch() : undefined);
   const target = machine?.environmentId
     ? { machineId: machine.id, environmentId: machine.environmentId }
     : undefined;
@@ -76,23 +84,28 @@ export function AccessCenter() {
     "install-required": copy("Kurulum gerekli", "Installation required"),
     "sign-in-required": copy("Oturum açılması gerekli", "Sign-in required"),
     offline: copy("Çevrimdışı", "Offline"),
-    "approval-required": copy("Onay gerekli", "Approval required"),
-    "permission-required": copy("İzin gerekli", "Permission required"),
+    "approval-required": copy("Onay gerekiyor", "Approval required"),
+    "permission-required": copy("İzin gerekiyor", "Permission required"),
     unavailable: copy("Kullanılamıyor", "Unavailable"),
   };
   const changed =
     selected &&
-    (selected.target.machineId !== machine?.id ||
-      selected.target.environmentId !== machine?.environmentId);
+    (!supported || !isReviewedMachine(selected.reviewed, { activeId: machine?.id ?? null, machines: machine ? [machine] : [] }));
+  useEffect(() => { if (changed) setSelected(undefined); }, [changed]);
   return (
     <>
       <ScreenList<AccessRow>
         title={copy("Bilgisayar erişimi", "Host access")}
         subtitle={machine?.name}
+        query={supported ? query : undefined}
+        refreshState={supported ? refresh : undefined}
+        actions={<Button tone="quiet" label={copy("Yenile", "Refresh")} busy={refresh.refreshing}
+          disabled={!supported || query.isFetching} onPress={() => { void refresh.onRefresh(); }} />}
         data={rows}
         keyExtractor={(row) => row.id}
         header={
           <View style={{ gap: space.sm }}>
+            <Stack.Screen options={{ title: copy("Bilgisayar erişimi", "Host access") }} />
             {!machine ? (
               <Notice message={copy("Önce bir bilgisayar bağla", "Connect a computer first")} />
             ) : !supported ? (
@@ -107,8 +120,8 @@ export function AccessCenter() {
             )}
             {report ? (
               <>
-                <Row><Body style={{ flex: 1 }}>{copy("Yerel ağ", "Local network")}</Body><Badge label={states[report.lan.state]} /></Row>
-                <Row><Body style={{ flex: 1 }}>{copy("Özel ağ", "Private network")}</Body><Badge label={states[report.privateNetwork.state]} /></Row>
+                <StatusRow label={copy("Yerel ağ", "Local network")}><Badge label={states[report.lan.state]} /></StatusRow>
+                <StatusRow label={copy("Özel ağ", "Private network")}><Badge label={states[report.privateNetwork.state]} /></StatusRow>
                 {report.devicesTruncated ? (
                   <Notice
                     message={copy(
@@ -117,21 +130,13 @@ export function AccessCenter() {
                     )}
                   />
                 ) : null}
-                {report.tunnels === null ? (
+                {report.tunnels === null && getQueryPresentation(query) === "ready" ? (
                   <Notice
                     message={copy("Tünel durumu kullanılamıyor.", "Tunnel status is unavailable.")}
                   />
                 ) : null}
               </>
             ) : null}
-            <Button busy={query.isFetching}
-              tone="quiet"
-              label={copy("Yenile", "Refresh")}
-              disabled={!supported || query.isFetching}
-              onPress={() => {
-                void query.refetch();
-              }}
-            />
           </View>
         }
         renderItem={({ item }) =>
@@ -156,7 +161,7 @@ export function AccessCenter() {
                       !machine?.capabilities?.includes("tunnels.manage") || query.isFetching
                     }
                     onPress={() => {
-                      if (target) setSelected({ target, create: true });
+                      if (target) setSelected({ target, reviewed: reviewedMachine(machine), create: true });
                     }}
                   />
                 </>
@@ -171,14 +176,15 @@ export function AccessCenter() {
                   : copy("Eşleştirilmiş cihaz", "Paired device")
               }
               onPress={() => {
-                if (target) setSelected({ target, device: item.device });
+                if (target) setSelected({ target, reviewed: reviewedMachine(machine), device: item.device });
               }}
             />
           ) : (
             <NavigationRow
               label={`${item.tunnel.provider} · ${item.tunnel.target}`}
               detail={item.tunnel.publicUrl ?? item.tunnel.localUrl}
-              trailing={
+              detailLines={2}
+              supporting={<Row>
                 <Badge
                   label={copy(
                     tunnelPresentation(item.tunnel.state).label[0],
@@ -186,10 +192,10 @@ export function AccessCenter() {
                   )}
                   tone={tunnelPresentation(item.tunnel.state).tone}
                 />
-              }
+              </Row>}
               accessibilityLabel={`${item.tunnel.provider} · ${item.tunnel.target}. ${copy(tunnelPresentation(item.tunnel.state).label[0], tunnelPresentation(item.tunnel.state).label[1])}. ${item.tunnel.publicUrl ?? item.tunnel.localUrl}`}
               onPress={() => {
-                if (target) setSelected({ target, tunnel: item.tunnel });
+                if (target) setSelected({ target, reviewed: reviewedMachine(machine), tunnel: item.tunnel });
               }}
             />
           )
@@ -200,9 +206,9 @@ export function AccessCenter() {
           key={`${selected.target.machineId}:${selected.device.id}`}
           target={selected.target}
           device={selected.device}
-          onClose={() => setSelected(undefined)}
+          onClose={() => setSelected(value => value === selected ? undefined : value)}
           onUpdated={() => {
-            void query.refetch();
+            if (selection.current === selected && isReviewedMachine(selected.reviewed, useMachines.getState())) void query.refetch();
           }}
         />
       ) : null}
@@ -212,9 +218,9 @@ export function AccessCenter() {
           target={selected.target}
           overview={report.tunnels}
           tunnel={selected.tunnel}
-          onClose={() => setSelected(undefined)}
+          onClose={() => setSelected(value => value === selected ? undefined : value)}
           onUpdated={() => {
-            void query.refetch();
+            if (selection.current === selected && isReviewedMachine(selected.reviewed, useMachines.getState())) void query.refetch();
           }}
         />
       ) : null}

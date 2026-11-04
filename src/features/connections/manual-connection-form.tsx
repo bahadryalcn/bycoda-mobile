@@ -1,3 +1,4 @@
+import { ConnectionFeedback } from "./connection-feedback";
 import { Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { Body, FormActions, Disclosure, Field, IdentifierField, Stack } from "@/ui/primitives";
@@ -81,6 +82,7 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
         </Disclosure>
       ) : null}
       <FormActions
+        feedback={<ConnectionFeedback operation={controller.operation} />}
         submitLabel={copy("Bağlan", "Connect")}
         onSubmit={() => {
           void controller.connect();

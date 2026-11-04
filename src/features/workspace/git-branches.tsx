@@ -1,4 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
+import { router } from "expo-router";
 import {
   Body,
   Button,
@@ -99,7 +100,14 @@ export function GitBranchesPanel({
               value={search}
               onChangeText={setSearch}
             />
-            <QueryState query={branches} />
+            <QueryState query={branches} empty={!rows.length}
+              emptyTitle={search.trim() ? copy("Aramana uyan dal yok.", "No branches match your search.") : copy("Dal bulunamadı.", "No branches found.")}
+              emptyAction={search.trim() ? { label: copy("Aramayı temizle", "Clear search"), onPress: () => setSearch("") } : undefined}
+              onManageConnections={() => {
+                if (creating) return;
+                onClose();
+                router.push("/machines");
+              }} />
             <Disclosure label={copy("Dal değiştirme hakkında", "About switching branches")}>
               <Body muted>
                 {copy(

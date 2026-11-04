@@ -1,4 +1,5 @@
 import type { Block } from "./wire";
+import { normalizeSearch } from "../management/shared/search";
 
 export type SessionFile = {
   key: string;
@@ -56,12 +57,13 @@ export function filterSessionFiles(
   files: readonly SessionFile[],
   search: string,
   filters: SessionFileFilters,
+  locale = "en",
 ): SessionFile[] {
-  const words = search.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const words = normalizeSearch(search, locale).split(" ").filter(Boolean);
   return files.filter((file) => {
     if (filters.source !== "all" && file.source !== filters.source) return false;
     if (filters.kind !== "all" && file.kind !== filters.kind) return false;
-    const text = `${file.name}\n${file.path ?? ""}\n${file.mimeType}`.toLowerCase();
+    const text = normalizeSearch(`${file.name}\n${file.path ?? ""}\n${file.mimeType}`, locale);
     return words.every((word) => text.includes(word));
   });
 }

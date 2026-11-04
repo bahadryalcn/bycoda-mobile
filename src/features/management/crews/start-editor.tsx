@@ -33,6 +33,6 @@ export function StartCrewEditor({ definition, projectId, onClose }: { definition
     {submitted && !start.isPending && start.isError && <Notice tone="warning" message={copy("İstek yinelenmedi. Çalışmalar listesini yenileyip bu işin oluşup oluşmadığını kontrol edin.", "The request was not repeated. Refresh the work list to check whether this run was created.")} />}
     <FormActions feedback={<MutationState mutation={start} />} submitLabel={copy("Ekip çalışmasını başlat", "Start crew work")} busy={start.isPending}
       disabled={!supported || submitted || start.isPending || !prompt.trim() || prompt.length > 12000} cancelDisabled={start.isPending} cancelLabel={copy("Kapat", "Close")} onCancel={requestClose}
-      onSubmit={() => confirmAction(copy("Ekip çalışmasını başlat", "Start crew work"), copy("Koordinatör bilgisayarda yeni bir oturum açacak ve işi ekibe dağıtabilecek.", "The coordinator will start a new conversation on the computer and may delegate work to crew members."), copy("Başlat", "Start"), submit)} />
+      onSubmit={() => confirmAction(copy("Ekip çalışmasını başlat", "Start crew work"), copy("Koordinatör bilgisayarda yeni bir oturum açacak ve işi ekibe dağıtabilecek.", "The coordinator will start a new conversation on the computer and may delegate work to crew members."), copy("Başlat", "Start"), submit, undefined, "default")} />
   </Stack>;
 }

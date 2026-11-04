@@ -1,6 +1,8 @@
 import { useEditorRecord } from "./shared/use-editor-record";
 import { ScreenList } from "@/ui/screen-list";
-import { useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
+import { useLocale } from "@/i18n";
+import { matchesSearch } from "./shared/search";
 import Plus from "lucide-react-native/icons/plus";
 
 import {
@@ -25,11 +27,15 @@ import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite"
 
 import { AutomationEditor } from "./automations/automation-editor";
 import { AutomationCard } from "./automations/automation-card";
+import { savedAutomationId } from "./automations/automation-feedback";
 import type { AutomationEditorFlow } from "./automations/types";
 
 export function AutomationsScreen() {
   const copy = useCopy();
+  const locale = useLocale();
   const [search, setSearch] = useState("");
+  const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
+  const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
   const machine = useActiveMachine();
   const projectId = useMachines((state) => state.selectedProjectId);
   const query = useHostQuery<HostAutomation[]>(
@@ -54,19 +60,15 @@ export function AutomationsScreen() {
   );
   const [historyId, setHistoryId] = useState<string | null>(null);
   const busy = save.isPending || run.isPending || remove.isPending;
-  const visible = query.data?.filter(
-    (item) =>
-      (!projectId || item.projectId === projectId) &&
-      (item.name + " " + item.prompt)
-        .toLocaleLowerCase()
-        .includes(search.trim().toLocaleLowerCase()),
-  );
+  const scoped = query.data?.filter(item => !projectId || item.projectId === projectId);
+  const visible = scoped?.filter(item => matchesSearch(item.name + " " + item.prompt, search, locale));
   return (
     <ScreenList<HostAutomation>
       title={copy("Otomasyonlar", "Automations")}
       query={query}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
+      context={<Scope allowAll />}
       actions={
         <IconButton
           label={copy("Yeni otomasyon", "New automation")}
@@ -99,7 +101,6 @@ export function AutomationsScreen() {
       }
       header={
         <>
-          <Scope allowAll />
           {!projectId ? (
             <Body muted>
               {copy(
@@ -110,19 +111,19 @@ export function AutomationsScreen() {
           ) : !machine?.providers?.length ? (
             <AgentProviderPrerequisite />
           ) : null}
-          <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
+          <SearchField ref={searchInput} label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
 
-          {!editor && (
+          {!editor && !visible?.some(item => item.id === savedAutomationId(save.variables)) && (
             <MutationState
               mutation={save}
               success={copy("Otomasyon kaydedildi.", "Automation saved.")}
             />
           )}
-          <MutationState mutation={run} success={copy("Çalıştırma istendi.", "Run requested.")} />
-          <MutationState
+          {!visible?.some(item => item.id === run.variables?.automationId) && <MutationState mutation={run} success={copy("Çalıştırma istendi.", "Run requested.")} />}
+          {!visible?.some(item => item.id === remove.variables?.automationId) && <MutationState
             mutation={remove}
             success={copy("Otomasyon silindi.", "Automation deleted.")}
-          />
+          />}
           {editor?.kind === "edit" && query.isSuccess && !draft && (
             <Notice
               tone="warning"
@@ -156,18 +157,12 @@ export function AutomationsScreen() {
             query={query}
             empty={visible?.length === 0}
             emptyTitle={
-              search.trim()
+              search.trim() && scoped?.length
                 ? copy("Eşleşen sonuç yok", "No matching results")
                 : copy("Henüz otomasyon yok", "No automations yet")
             }
+            emptyAction={search.trim() && scoped?.length ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
           />
-          {search.trim() && visible?.length === 0 ? (
-            <Button
-              tone="quiet"
-              label={copy("Aramayı temizle", "Clear search")}
-              onPress={() => setSearch("")}
-            />
-          ) : null}
         </>
       }
       renderItem={({ item: item }) => (

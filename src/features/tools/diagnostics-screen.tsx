@@ -1,8 +1,11 @@
 import { useState } from "react";
+import { Stack as RouterStack } from "expo-router";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
-import { Body, Button, Disclosure, NavigationGroup, Notice, QueryState, Row, Screen, Section, Stack, ToggleField } from "@/ui/primitives";
+import { Body, Button, Disclosure, NavigationGroup, QueryState, Screen, Section, Stack, ToggleField } from "@/ui/primitives";
+import { MetricRow } from "@/ui/metric-row";
 import { useCopy } from "@/ui/copy";
+import { usePullRefresh } from "@/ui/use-pull-refresh";
 import type { HostProject } from "@/domain/types";
 import { memoryLabel, readDiagnostics, type ResourceDiagnostics, type ResourceSample } from "./diagnostics-model";
 import { stamp } from "../management/shared/format";
@@ -16,17 +19,21 @@ export function DiagnosticsScreen({ project }: { project: HostProject }) {
     queryFn: async (client, signal) => readDiagnostics(await client.request("resources.read", {}, { signal })),
   });
   const sample = query.data?.samples.at(-1);
+  const refresh = usePullRefresh(() => query.refetch());
   return <Screen title={copy("Tanılama", "Diagnostics")} subtitle={`${machine?.name ?? ""} · ${project.name}`}
-    actions={<Button busy={query.isFetching} tone="quiet" label={copy("Yenile", "Refresh")} disabled={query.isFetching} onPress={() => { void query.refetch(); }} />}>
-    <QueryState query={query} />
+    query={query}
+    refreshState={refresh}
+    actions={<Button busy={refresh.refreshing} tone="quiet" label={copy("Yenile", "Refresh")} disabled={query.isFetching} onPress={() => { void refresh.onRefresh(); }} />}>
+    <RouterStack.Screen options={{ title: copy("Tanılama", "Diagnostics") }} />
+    <QueryState query={query} empty={query.data?.samples.length === 0} emptyTitle={copy("Henüz örnek yok.", "No samples yet.")} />
     <NavigationGroup><ToggleField label={copy("Otomatik yenile", "Auto refresh")} value={autoRefresh} onChange={setAutoRefresh} /></NavigationGroup>
-    {sample ? <DiagnosticsDetails sample={sample} /> : <DiagnosticsScope />}
+    {sample ? <DiagnosticsDetails sample={sample} /> : <Disclosure label={copy("Ayrıntılar", "Details")}><DiagnosticsScope /></Disclosure>}
   </Screen>;
 }
 
 function DiagnosticsScope() {
   const copy = useCopy();
-  return <Notice message={copy("Bilgisayar ve bycoda Node işlemi istek üzerine örneklenir. Sağlayıcı alt işlemleri dahil değildir.", "Computer and bycoda Node process sampled on demand. Provider child processes are excluded.")} />;
+  return <Body muted>{copy("Bilgisayar ve bycoda Node işlemi istek üzerine örneklenir. Sağlayıcı alt işlemleri dahil değildir.", "Computer and bycoda Node process sampled on demand. Provider child processes are excluded.")}</Body>;
 }
 
 /** Fixed-field presentation also used by the isolated layout fixture. */
@@ -35,17 +42,22 @@ export function DiagnosticsDetails({ sample }: { sample: ResourceSample }) {
   return <>
       <Body muted>{stamp(sample.at)}</Body>
       <Section title={copy("Bilgisayar", "Computer")}><Stack>
-        <Row><Body style={{ flex: 1 }}>{copy("Toplam bellek", "Total memory")}</Body><Body mono>{memoryLabel(sample.host.totalMemoryBytes)}</Body></Row>
-        <Row><Body style={{ flex: 1 }}>{copy("Boş bellek", "Free memory")}</Body><Body mono>{memoryLabel(sample.host.freeMemoryBytes)}</Body></Row>
-        <Row><Body style={{ flex: 1 }}>{copy("Mantıksal işlemciler", "Logical CPUs")}</Body><Body mono>{sample.host.logicalCpus}</Body></Row>
+        <MetricRow label={copy("Toplam bellek", "Total memory")} value={memoryLabel(sample.host.totalMemoryBytes)} />
+        <MetricRow label={copy("Boş bellek", "Free memory")} value={memoryLabel(sample.host.freeMemoryBytes)} />
+        <MetricRow label={copy("Mantıksal işlemciler", "Logical CPUs")} value={sample.host.logicalCpus} />
       </Stack></Section>
       <Section title={copy("İşlem", "Process")}><Stack>
-        <Row><Body style={{ flex: 1 }}>{copy("İşlem belleği", "Process memory")}</Body><Body mono>{memoryLabel(sample.process.rssBytes)}</Body></Row>
-        <Row><Body style={{ flex: 1 }}>{copy("Heap kullanımı", "Heap used")}</Body><Body mono>{memoryLabel(sample.process.heapUsedBytes)}</Body></Row>
-        <Row><Body style={{ flex: 1 }}>{copy("İşlem CPU", "Process CPU")}</Body><Body mono>{sample.process.cpuPercent === null ? "—" : `${sample.process.cpuPercent.toFixed(1)}%`}</Body></Row>
-        <Row><Body style={{ flex: 1 }}>{copy("Çalışma süresi", "Uptime")}</Body><Body mono>{Math.floor(sample.process.uptimeSeconds / 60)} min</Body></Row>
-        <Row><Body style={{ flex: 1 }}>PID</Body><Body mono>{sample.process.pid}</Body></Row>
+        <MetricRow label={copy("İşlem belleği", "Process memory")} value={memoryLabel(sample.process.rssBytes)} />
+        <MetricRow label={copy("Heap kullanımı", "Heap used")} value={memoryLabel(sample.process.heapUsedBytes)} />
+        <MetricRow label={copy("İşlem CPU", "Process CPU")} value={sample.process.cpuPercent === null ? "—" : `${sample.process.cpuPercent.toFixed(1)}%`} />
+        <MetricRow label={copy("Çalışma süresi", "Uptime")} value={`${Math.floor(sample.process.uptimeSeconds / 60)} min`} />
+        <MetricRow label="PID" value={sample.process.pid} />
       </Stack></Section>
-      <Disclosure label={copy("Ayrıntılar", "Details")}><DiagnosticsScope /></Disclosure>
+      <Disclosure label={copy("Ayrıntılar", "Details")}>
+        <MetricRow label={copy("Harici bellek", "External memory")} value={memoryLabel(sample.process.externalBytes)} />
+        <MetricRow label={copy("Yük ortalaması (1 / 5 / 15 dk)", "Load average (1 / 5 / 15 min)")}
+          value={sample.host.loadAverage === null ? "—" : sample.host.loadAverage.map((value) => value.toFixed(2)).join(" · ")} />
+        <DiagnosticsScope />
+      </Disclosure>
     </>;
 }

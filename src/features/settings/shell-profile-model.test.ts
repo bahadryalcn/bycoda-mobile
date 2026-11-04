@@ -10,3 +10,11 @@ it("refuses malformed and duplicate shell responses", () => {
   for (const value of [null, { ...snapshot, defaultId: "missing" }, { ...snapshot, profiles: [snapshot.profiles[0], snapshot.profiles[0]] }, { ...snapshot, chosenId: "bad\nvalue" }])
     expect(() => readShellChoices(value)).toThrow(/Invalid/);
 });
+
+it("accepts installed Unix executable-path IDs without altering their identity", () => {
+  const unix = { profiles: [{ id: "/bin/bash", name: "Bash", path: "/bin/bash", kind: "bash" }], defaultId: "/bin/bash", chosenId: "/opt/old shell/bin/zsh" };
+  expect(shellChoiceRequest(readShellChoices(unix), "/bin/bash")).toEqual({ profile: "/bin/bash", expectedChosenId: "/opt/old shell/bin/zsh" });
+});
+it.each(["", " ", "bad\tvalue", "bad\u007fvalue", "x".repeat(4097)])("rejects invalid shell IDs %j", id => {
+  expect(() => readShellChoices({ ...snapshot, chosenId: id })).toThrow("Invalid command shell preferences");
+});

@@ -105,7 +105,11 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
       <View style={{ paddingHorizontal: space.screen, paddingVertical: space.sm, gap: space.xs }}>
         <Row>
           <Button tone="quiet" label={copy("Dosyalara dön", "Back to files")} onPress={onBack} />
-          <Body muted>{copy("Salt okunur", "Read only")}</Body>
+          <Body muted>
+            {source === "draft"
+              ? copy("Korunan taslak · salt okunur", "Preserved draft · read only")
+              : copy("Bilgisayardaki dosya · salt okunur", "Computer file · read only")}
+          </Body>
         </Row>
         <Body mono selectable>
           {path}
@@ -136,11 +140,6 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
             />
           </>
         ) : null}
-        <Body muted>
-          {source === "draft"
-            ? copy("Korunan taslak · salt okunur", "Preserved draft · read only")
-            : copy("Bilgisayardaki dosya · salt okunur", "Computer file · read only")}
-        </Body>
         {source === "computer" && !media ? <QueryState query={file} loading="inline" /> : null}
         <ErrorText error={active ? draft.error : null} />
         {draft.isError && active ? (
@@ -229,17 +228,24 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
           )}
         />
       ) : null}
-      {initialLine !== undefined && !source.locationUnavailable ? (
+      <Row>
+        {initialLine !== undefined && !source.locationUnavailable ? (
+          <Button
+            tone="quiet"
+            label={
+              atResult
+                ? copy("Dosyanın başını göster", "Show file beginning")
+                : copy("Arama sonucuna dön", "Back to search result")
+            }
+            onPress={() => setAtResult(!atResult)}
+          />
+        ) : null}
         <Button
           tone="quiet"
-          label={
-            atResult
-              ? copy("Dosyanın başını göster", "Show file beginning")
-              : copy("Arama sonucuna dön", "Back to search result")
-          }
-          onPress={() => setAtResult(!atResult)}
+          label={selecting ? copy("Satır görünümü", "Line view") : copy("Metin seç", "Select text")}
+          onPress={() => setSelecting(!selecting)}
         />
-      ) : null}
+      </Row>
       {source.truncated ? (
         <Body muted>
           {copy(
@@ -248,11 +254,6 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
           )}
         </Body>
       ) : null}
-      <Button
-        tone="quiet"
-        label={selecting ? copy("Satır görünümü", "Line view") : copy("Metin seç", "Select text")}
-        onPress={() => setSelecting(!selecting)}
-      />
       {selecting ? (
         <ScrollView key={atResult ? "selection-result" : "selection-beginning"} style={{ flex: 1 }}>
           {/* One native text owner lets selection handles cross newlines. Keep line

@@ -1,9 +1,10 @@
+import { useLocalDraftEpoch } from "@/state/use-local-draft-epoch";
 import { useMobileTheme } from "@/ui/theme";
 import { useLocale } from "@/i18n";
 import { ScreenList } from "@/ui/screen-list";
 import { Sheet } from "@/ui/primitives";
 import { useProjectList } from "../workspace/use-project-directory";
-import { useMemo, useReducer, useState } from "react";
+import { useLayoutEffect, useMemo, useReducer, useRef, useState, type ComponentRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import History from "lucide-react-native/icons/rotate-ccw-clock";
@@ -13,7 +14,6 @@ import {
   ActionMenu,
   Body,
   Heading,
-  Button,
   IconButton,
   MutationState,
   Notice,
@@ -28,7 +28,7 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { identifier } from "./shared/format";
 import { colors } from "@/ui/tokens";
 import { Scope } from "./shared/scope";
-import { createNoteDraftStore, type LocalNoteDraft } from "./note-drafts";
+import { createNoteDraftStore, noteDraftKey, type LocalNoteDraft } from "./note-drafts";
 import { initialNoteFlow, noteFlowReducer } from "./note-flow";
 
 import type { Note } from "@/domain/types";
@@ -45,9 +45,15 @@ export function NotesScreen() {
   const copy = useCopy();
   const locale = useLocale();
   const [search, setSearch] = useState("");
+  const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
+  const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
   const [grouping, setGrouping] = useState<NoteGrouping>("none");
   const [ordering, setOrdering] = useState<NoteOrdering>("updated");
   const machine = useActiveMachine();
+  const lastDraftMachine = useRef(machine?.id); if (machine?.id) lastDraftMachine.current = machine.id;
+  const draftKey = lastDraftMachine.current ? noteDraftKey(lastDraftMachine.current) : "no-note-draft";
+  const draftEpoch = useLocalDraftEpoch(draftKey);
+  const localDraft = useMemo(() => machine ? draftStore.bind(machine.id) : null, [machine?.id, draftEpoch]);
   const projectId = useMachines((state) => state.selectedProjectId);
   const projects = useProjectList();
   const query = useHostQuery<NoteList>(
@@ -61,18 +67,29 @@ export function NotesScreen() {
   const recovery = useAsyncAction<LocalNoteDraft | null>();
   const [flow, dispatch] = useReducer(noteFlowReducer, initialNoteFlow);
   const sourceCwd = projects.data?.find((project) => project.id === projectId)?.cwd;
-  const storage = useMutation<void, Error, StorageOperation>({
+  const storageAction = useMutation<void, Error, StorageOperation & { owner?: ReturnType<typeof draftStore.bind> | null }>({
     mutationFn: (operation) => {
-      if (!machine)
+      if (!operation.owner)
         return Promise.reject(new Error(copy("Bir bilgisayar seçin.", "Choose a computer.")));
       // The store serializes every keystroke. A single-flight gate would discard newer edits.
       return operation.kind === "save"
-        ? draftStore.save(machine.id, operation.draft)
-        : draftStore.clearSaved(machine.id, operation.draft);
+        ? operation.owner.save(operation.draft)
+        : operation.owner.clearSaved(operation.draft);
     },
     retry: false,
     networkMode: "always",
   });
+  const storage = { ...storageAction,
+    mutate: (operation: StorageOperation) => storageAction.mutate({ ...operation, owner: localDraft }),
+    mutateAsync: (operation: StorageOperation) => storageAction.mutateAsync({ ...operation, owner: localDraft }),
+  };
+  const seenDraft = useRef({ key: draftKey, epoch: draftEpoch });
+  useLayoutEffect(() => {
+    const previous = seenDraft.current; seenDraft.current = { key: draftKey, epoch: draftEpoch };
+    if (previous.key === draftKey && previous.epoch !== draftEpoch) {
+      dispatch({ type: "close", expected: flow }); storageAction.reset();
+    }
+  }, [draftKey, draftEpoch]);
   const close = () => dispatch({ type: "close", expected: flow });
   const editorProps = { save, remove, storage, onClose: close };
   const editorOpen = flow.kind !== "closed";
@@ -80,6 +97,7 @@ export function NotesScreen() {
   const visible = useMemo(() => noteDirectory(query.data?.notes ?? [], search, grouping, ordering, locale), [query.data?.notes, search, grouping, ordering, locale]);
   return (
     <ScreenList<NoteDirectoryRow> title={copy("Notlar", "Notes")} query={query} data={visible} keyExtractor={(row) => row.key}
+      context={!editorOpen ? <Scope allowAll /> : undefined}
       actions={!editorOpen ? (
         <>
           <ActionMenu label={copy("Not görünümü", "Note view")} trigger={<SlidersHorizontal size={22} color={colors.accent} />} actions={[
@@ -102,7 +120,7 @@ export function NotesScreen() {
                 onPress: () => {
                   storage.reset();
                   void recovery.run(async () => {
-                    const draft = machine ? await draftStore.recover(machine.id) : null;
+                    const draft = localDraft ? await localDraft.recover() : null;
                     if (draft) dispatch({ type: "recover", initial: draft, expected: flow });
                     return draft;
                   });
@@ -138,8 +156,7 @@ export function NotesScreen() {
       header={<>
       {!editorOpen ? (
         <>
-          <Scope allowAll />
-          <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
+          <SearchField ref={searchInput} label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
         </>
       ) : null}
       <MutationState mutation={recovery} />
@@ -168,6 +185,7 @@ export function NotesScreen() {
             query={query}
             empty={visible?.length === 0}
             emptyTitle={search.trim() && query.data?.notes.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz not yok", "No notes yet")}
+            emptyAction={search.trim() && query.data?.notes.length ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
           />
           {!!query.data && query.data.total > query.data.notes.length && (
             <Body muted>
@@ -179,7 +197,6 @@ export function NotesScreen() {
           )}
         </>
       ) : null}
-      {search.trim() && visible?.length === 0 ? <Button tone="quiet" label={copy("Aramayı temizle", "Clear search")} onPress={() => setSearch("")} /> : null}
     </>}
       renderItem={({ item }) => item.kind === "heading" ? <Heading>{item.group === null ? (item.grouping === "tag" ? copy("Etiketsiz", "Untagged") : copy("Projesiz notlar", "Notes without a project")) : item.grouping === "tag" ? `#${item.group}` : projects.data?.find((project) => project.cwd === item.group)?.name ?? item.group} · {item.count}</Heading>
         : <NoteSummaryRow note={item.note} disabled={editorOpen || busy} onPress={() => { recovery.reset(); storage.reset(); save.reset(); remove.reset(); dispatch({ type: "open", id: item.note.id }); }} />}

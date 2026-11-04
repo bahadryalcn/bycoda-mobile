@@ -1,6 +1,10 @@
-import type { Dispatch, SetStateAction } from "react";
+import type { ComponentProps, Dispatch, SetStateAction } from "react";
+import { useSheetGuard } from "@/ui/sheet-guard";
 import { useCopy } from "@/ui/copy";
-import { Body, Button, ErrorText, Field, FormActions, SelectField, Sheet, Stack } from "@/ui/primitives";
+import { Body, Button, ErrorText, Field, FormActions, Notice, SelectField, Sheet, Stack } from "@/ui/primitives";
+import { TemplateInsertAction } from "@/features/management/templates/template-insert-action";
+import { TemplateActionsMenu } from "@/features/management/templates/template-actions-menu";
+import { DesktopPreferenceContext } from "./desktop-preference-context";
 import type {
   ComputerTemplate,
   DesktopPreferencesSnapshot,
@@ -10,6 +14,11 @@ import type {
 export type PreferenceEditor =
   | { kind: "template"; revision: string; template: ComputerTemplate; creating: boolean }
   | { kind: "provider"; revision: string; harness: string; scope: "project" | "global" };
+
+function PreferenceEditorActions(props: ComponentProps<typeof FormActions>) {
+  const { requestClose } = useSheetGuard({});
+  return <FormActions {...props} onCancel={requestClose} />;
+}
 
 /** The editable values of the open editor; the owner keeps them so closing can be guarded. */
 export type PreferenceEditorForm = {
@@ -28,6 +37,7 @@ export type PreferenceEditorForm = {
 
 /** Template and provider-default editor for computer preferences; the owner applies changes. */
 export function DesktopPreferenceEditorSheet({
+  computerName,
   editor,
   snapshot,
   form,
@@ -42,6 +52,7 @@ export function DesktopPreferenceEditorSheet({
   onClose,
   onCloseEditor: closeEditor,
 }: {
+  computerName: string;
   editor: PreferenceEditor | null;
   snapshot: DesktopPreferencesSnapshot | undefined;
   form: PreferenceEditorForm;
@@ -70,11 +81,19 @@ export function DesktopPreferenceEditorSheet({
     !!body.trim() &&
     body.length <= 20000 &&
     (!trigger || /^[a-z0-9][a-z0-9-]{0,23}$/.test(trigger.replace(/^;/, "")));
+  const templateChanged = editor?.kind === "template" && !!snapshot && snapshot.revision !== editor.revision;
+  const templateActions = editor?.kind === "template" && !editor.creating ? (
+    <TemplateActionsMenu templateId={editor.template.id} name={editor.template.name} revision={editor.revision}
+      disabled={disabled || templateChanged} busy={busy && pendingAction === "delete-template"} isCurrent={current}
+      onDelete={() => apply(
+        { kind: "templateDelete", templateId: editor.template.id }, editor.revision, "delete-template",
+      )} />
+  ) : null;
   const footer =
     editor?.kind === "template" ? (
-      <FormActions
+      <PreferenceEditorActions
         submitLabel={copy("Şablonu kaydet", "Save template")}
-        disabled={disabled || !templateValid}
+        disabled={disabled || templateChanged || !templateValid}
         busy={busy && pendingAction === "primary"}
         onSubmit={() =>
           apply(
@@ -88,11 +107,14 @@ export function DesktopPreferenceEditorSheet({
             editor.revision,
           )
         }
-        onCancel={closeEditor}
-        feedback={<ErrorText error={error} />}
+        feedback={<><ErrorText error={error} />
+          {templateChanged ? <Notice tone="warning" message={copy(
+            "Şablonlar değişti. Taslağını koru ve kaydetmeden önce güncel listeyi yeniden aç.",
+            "Templates changed. Keep your draft and reopen the current list before saving.",
+          )} /> : null}</>}
       />
     ) : (
-      <FormActions
+      <PreferenceEditorActions
         submitLabel={copy("Varsayılanları kaydet", "Save defaults")}
         disabled={disabled || !modelId}
         busy={busy && pendingAction === "primary"}
@@ -109,7 +131,6 @@ export function DesktopPreferenceEditorSheet({
               editor.revision,
             );
         }}
-        onCancel={closeEditor}
         feedback={<ErrorText error={error} />}
       />
     );
@@ -122,9 +143,12 @@ export function DesktopPreferenceEditorSheet({
         : copy("Gelecekteki konuşma varsayılanları", "Future conversation defaults")
     }
     size="full"
+    dirty={dirty}
+    dismissible={!busy}
     onClose={closeEditor}
-    footer={footer}
   >
+    {footer}
+    {snapshot ? <DesktopPreferenceContext computerName={computerName} snapshot={snapshot} /> : null}
     {editor?.kind === "template" && snapshot ? (
       <Stack>
         <Field
@@ -150,21 +174,10 @@ export function DesktopPreferenceEditorSheet({
         />
         {!editor.creating ? (
           <>
-            <Button
-              busy={busy && pendingAction === "delete-template"}
-                label={copy("Şablonu sil", "Delete template")}
-              tone="danger"
-              disabled={disabled}
-              onPress={() =>
-                apply(
-                  { kind: "templateDelete", templateId: editor.template.id },
-                  editor.revision,
-                )
-              }
-            />
             {onInsert ? (
-              <Button
-                label={copy("Mesaja ekle", "Insert into message")}
+              <TemplateInsertAction
+                key={editor.template.id}
+                secondaryAction={templateActions}
                 disabled={
                   disabled ||
                   snapshot.revision !== editor.revision ||
@@ -172,14 +185,16 @@ export function DesktopPreferenceEditorSheet({
                   body !== editor.template.body ||
                   trigger !== (editor.template.trigger ?? "")
                 }
-                onPress={() => {
-                  if (current()) {
-                    onInsert(editor.template.body);
-                    onClose();
-                  }
+                onInsert={() => {
+                  if (!current()) throw new Error(copy(
+                    "Bu konuşmaya şu anda ekleme yapılamıyor. Taslağınız değişmedi.",
+                    "This conversation is not available for insertion. Your draft is unchanged.",
+                  ));
+                  onInsert(editor.template.body);
+                  onClose();
                 }}
               />
-            ) : null}
+            ) : templateActions}
           </>
         ) : null}
       </Stack>

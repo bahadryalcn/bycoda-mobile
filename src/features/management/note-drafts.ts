@@ -1,3 +1,4 @@
+import { createDraftStorageOwner } from "@/state/local-draft-storage";
 export type LocalNoteDraft = {
   id: string;
   title: string;
@@ -11,7 +12,7 @@ type Storage = {
   setItem: (key: string, value: string) => Promise<unknown>;
   removeItem: (key: string) => Promise<unknown>;
 };
-const keyFor = (machineId: string) => `bycoda.mobile.note-draft.${machineId}`;
+export const noteDraftKey = (machineId: string) => `bycoda.mobile.note-draft.${machineId}`;
 function parse(raw: string | null): LocalNoteDraft | null {
   if (!raw) return null;
   const value: unknown = JSON.parse(raw);
@@ -37,34 +38,22 @@ const matches = (a: LocalNoteDraft, b: LocalNoteDraft) =>
   a.sourceCwd === b.sourceCwd &&
   a.expectedUpdatedAt === b.expectedUpdatedAt;
 export function createNoteDraftStore(storage: Storage) {
-  const queues = new Map<string, Promise<unknown>>();
-  const enqueue = <T>(machineId: string, action: (key: string) => Promise<T>) => {
-    const key = keyFor(machineId);
-    const pending = (queues.get(key) ?? Promise.resolve())
-      .catch(() => undefined)
-      .then(() => action(key));
-    queues.set(key, pending);
-    void pending.then(
-      () => {
-        if (queues.get(key) === pending) queues.delete(key);
-      },
-      () => {
-        if (queues.get(key) === pending) queues.delete(key);
-      },
-    );
-    return pending;
-  };
-  return {
-    save: (machineId: string, draft: LocalNoteDraft) =>
-      enqueue(machineId, async (key) => {
-        await storage.setItem(key, JSON.stringify(draft));
-      }),
-    recover: (machineId: string) =>
-      enqueue(machineId, async (key) => parse(await storage.getItem(key))),
-    clearSaved: (machineId: string, saved: LocalNoteDraft) =>
-      enqueue(machineId, async (key) => {
+  const bind = (machineId: string) => {
+    const key = noteDraftKey(machineId), owner = createDraftStorageOwner(storage, key);
+    return {
+      save: (draft: LocalNoteDraft) => owner.run(async () => { await storage.setItem(key, JSON.stringify(draft)); }),
+      recover: () => owner.run(async () => parse(await storage.getItem(key))),
+      clearSaved: (saved: LocalNoteDraft) => owner.run(async () => {
         const current = parse(await storage.getItem(key));
         if (current && matches(current, saved)) await storage.removeItem(key);
       }),
+    };
+  };
+  const owners = new Map<string, ReturnType<typeof bind>>();
+  const existing = (machineId: string) => { let owner = owners.get(machineId); if (!owner) { owner = bind(machineId); owners.set(machineId, owner); } return owner; };
+  return { bind,
+    save: (machineId: string, draft: LocalNoteDraft) => existing(machineId).save(draft),
+    recover: (machineId: string) => existing(machineId).recover(),
+    clearSaved: (machineId: string, saved: LocalNoteDraft) => existing(machineId).clearSaved(saved),
   };
 }

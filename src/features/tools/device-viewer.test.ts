@@ -7,9 +7,11 @@ const state = vi.hoisted(() => ({ id: "machine", writes: [] as { method: string;
 vi.mock("lucide-react-native/icons/house", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("@/state/machines", () => {
-  const useMachines = Object.assign(() => state.id, { getState: () => ({ activeId: state.id }) });
-  return { useMachines, useActiveMachine: () => ({ id: state.id, environmentId: "host" }) };
+  const machine = () => ({ id: state.id, environmentId: "host" });
+  const useMachines = Object.assign(() => state.id, { getState: () => ({ activeId: state.id, machines: [machine()] }), subscribe: () => () => {} });
+  return { useMachines, useActiveMachine: machine };
 });
+vi.mock("expo-crypto", () => { let id = 0; return { randomUUID: () => String(++id) }; });
 vi.mock("@/state/queries", () => ({
   useHostQuery: () => ({ data: { mime: "image/png", base64: "YWJj" }, isFetching: false, refetch: state.refresh }),
   useHostMutation: (method: string) => ({ isPending: false, mutateAsync: async (params: unknown) => { state.writes.push({ method, params }); if (method === "devices.boot") return new Promise((resolve) => { state.finishBoot = resolve; }); return "ok"; } }),

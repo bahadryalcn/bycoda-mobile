@@ -1,12 +1,17 @@
+import { ProjectDirectoryFeedback } from "./project-directory-feedback";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
+import { View } from "react-native";
+import Search from "lucide-react-native/icons/search";
+import { ChatAction } from "@/ui/chat-controls";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useActiveMachine } from "@/state/machines";
 import { Empty, Notice, QueryState, Screen } from "@/ui/primitives";
 import { PrivateContentBoundary } from "@/ui/private-content";
 import { hostKey } from "@/state/queries";
-import { metrics, space } from "@/ui/tokens";
+import { colors, metrics, space } from "@/ui/tokens";
+import { WorkspaceFrame } from "@/ui/workspace-frame";
 import { useCopy } from "@/ui/copy";
 import { SessionComposer } from "./session-composer";
 import { ComposerTransferProvider } from "./composer-transfer";
@@ -47,11 +52,12 @@ export function SessionScreen({ id, projectId }: SessionScreenProps) {
       id={id}
       projectId={projectId}
       machineId={machine.id}
+      machineName={machine.name}
     />
   );
 }
 
-function SessionWorkspace({ id, projectId: routeProjectId, machineId }: SessionWorkspaceProps) {
+function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineName }: SessionWorkspaceProps) {
   const copy = useCopy();
   const insets = useSafeAreaInsets();
   const scope = useMemo<SessionScope>(() => ({ machineId, sessionId: id }), [machineId, id]);
@@ -101,6 +107,7 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId }: SessionW
   const projectId = privacy.projectId ?? session?.projectId;
   const command = useCommands();
   const [settings, setSettings] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
   const [transcriptView, setTranscriptView] = useState<TranscriptView>("messages");
   const blocked = !visible || command.isPending || command.error instanceof UncertainCommand;
   const sendCommand = command.mutateAsync;
@@ -143,38 +150,21 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId }: SessionW
               ? session?.session.title || copy("Oturum", "Session")
               : copy("Oturum", "Session"),
             headerRight: visible
-              ? () => <TranscriptViewFilter value={transcriptView} onChange={setTranscriptView} />
+              ? () => <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <ChatAction label={copy("Mesajlarda bul", "Find in messages")}
+                    onPress={() => setFindOpen(true)}>
+                    <Search size={18} color={findOpen ? colors.accent : colors.muted} />
+                  </ChatAction>
+                  <TranscriptViewFilter value={transcriptView} onChange={setTranscriptView} />
+                </View>
               : undefined,
           }}
         />
         {!visible ? (
           !projects.directoryReady ? (
-            <>
-              <QueryState
-                query={projects}
-                loading="content"
-                loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")}
-              />
-              {projects.privacyUnavailable ? (
-                <Notice
-                  message={copy(
-                    "Oturumları görmek için bilgisayarda bycoda’yı aç ve proje listesini eşitle.",
-                    "Open bycoda on the computer and sync the project directory to see sessions.",
-                  )}
-                  onRetry={() => {
-                    void projects.refetch();
-                  }}
-                />
-              ) : projects.readiness === "waiting" ? (
-                <Notice
-                  message={copy("Bağlantı bekleniyor", "Waiting for a connection")}
-                  action={{
-                    label: copy("Bağlantıları yönet", "Manage connections"),
-                    onPress: () => router.push("/machines"),
-                  }}
-                />
-              ) : null}
-            </>
+            <ProjectDirectoryFeedback query={projects} readiness={projects.readiness}
+              privacyUnavailable={projects.privacyUnavailable} loading="content"
+              loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
           ) : privacy.canRead ? (
             <QueryState
               query={snapshot}
@@ -226,10 +216,11 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId }: SessionW
               paddingTop: space.xs,
             }}
           >
-            {session ? (
+            <WorkspaceFrame headerInset="none" toolbar={session ? (
               <SessionToolbar
                 scope={scope}
                 projectId={projectId}
+                contextLabel={[machineName, projects.data?.find((project) => project.id === projectId)?.name ?? projectId].filter(Boolean).join(" · ")}
                 query={{ ...snapshot, data: session }}
                 command={command}
                 blocked={blocked}
@@ -237,9 +228,10 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId }: SessionW
                 onRefresh={refresh}
                 onCommand={dispatch}
               />
-            ) : null}
-            {visible ? <QueryState query={snapshot} /> : null}
+            ) : null} feedback={visible ? <QueryState query={snapshot} /> : null}>
             <SessionTranscript
+              findOpen={findOpen}
+              onFindOpenChange={setFindOpen}
               navigation={navigation.current}
               view={transcriptView}
               scope={scope}
@@ -249,6 +241,7 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId }: SessionW
               onCommand={dispatch}
               onReceiptHandled={receiptHandled}
             />
+            </WorkspaceFrame>
           </SessionKeyboardFrame>
           {settings && session && projectId ? (
             <SessionSettings

@@ -1,4 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
+import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { View } from "react-native";
 import { BusyIndicator } from "@/ui/busy-indicator";
@@ -142,8 +143,6 @@ export function ProjectFolderBrowser({
               </IconButton>
               <Body
                 mono
-                numberOfLines={1}
-                ellipsizeMode="middle"
                 style={[uiStyles.grow, uiStyles.caption]}
               >
                 {current ?? path ?? copy("Bir klasör seç", "Choose a folder")}
@@ -163,6 +162,15 @@ export function ProjectFolderBrowser({
             <QueryState
               query={folders}
               empty={!!folders.data && !entries.length}
+              emptyAction={search ? {
+                label: copy("Aramayı temizle", "Clear search"),
+                onPress: () => setSearch(""),
+              } : undefined}
+              onManageConnections={() => {
+                if (mutation.isPending) return;
+                onClose();
+                router.push("/machines");
+              }}
               emptyTitle={
                 search
                   ? copy("Aramana uyan klasör yok.", "No folders match your search.")

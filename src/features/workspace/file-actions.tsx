@@ -38,7 +38,7 @@ export function FileActions({
   return (
     <Sheet
       visible
-      size="form"
+      size={operation === "delete_path" ? "compact" : "form"}
       title={entry.name}
       dirty={form.dirty}
       dismissible={!action.isPending}
@@ -47,7 +47,7 @@ export function FileActions({
       }}
     >
       <View style={workspaceStyles.stack}>
-        <Body mono muted selectable numberOfLines={3}>
+        <Body mono muted selectable>
           {path}
         </Body>
         <SegmentedControl

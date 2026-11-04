@@ -428,8 +428,8 @@ async function createMobileHostRuntime(options: {
     }
     if (
       previous &&
-      JSON.stringify([oldTls, previous.capabilities]) !==
-        JSON.stringify([currentTls, descriptor.capabilities])
+      JSON.stringify([oldTls, [...new Set(previous.capabilities)].sort()]) !==
+        JSON.stringify([normalizedTls, [...new Set(descriptor.capabilities)].sort()])
     )
       registry.invalidateMachine(machine.id);
     const saved = {

@@ -269,6 +269,30 @@ reach. Tools groups destinations by Project, Work, Communication, Development an
 Computer; search also finds a group name. Settings separates preferences, access
 and privacy, computer controls and support.
 
+Global **Sessions** and each project's **Sessions** use the same compact row:
+project and status above the title, branch below it, and provider icon at the
+end. A pin identifies pinned conversations. The full title remains available to
+screen readers and in the conversation; the list preview stays on one line.
+**Ready** means the session is idle, not that its work was completed successfully.
+
+Swipe a conversation left to reveal **Archive** (or **Unarchive**), **Delete**
+and **Details**. The row's **Session options** button exposes the same actions
+without a gesture. Swiping only reveals controls; tap an action to use it.
+Archive keeps the conversation available through the Archive filter. Delete
+opens a confirmation explaining that the conversation and its history will be
+permanently removed; stop a running session before deleting it.
+
+**Details** shows the complete title, computer, project, folder, agent, model,
+status and available timestamps. Created and Updated are record timestamps, not
+execution duration. Older records may use their update time as the creation
+time, and last activity appears only when supplied by the Host. Execution
+duration is not reported by this list.
+
+Row actions retain the computer and session you reviewed. A changed connection,
+hidden project or changed session requires a fresh review before a write. An
+uncertain archive or delete result blocks another write from that row; check
+the session on the computer before attempting the operation again.
+
 The message composer gives text a full-width editing row and keeps attachment,
 mode and send controls together below it. Its surface stays steady while typing.
 Long forms and operation reviews use a scrolling body with a shared action area;

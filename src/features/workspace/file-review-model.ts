@@ -33,7 +33,9 @@ export function reviewSource(text: string, requestedLine?: number) {
     requestedLine <= allLines.length;
   // Stay inside the existing character budget, even for a distant search hit.
   const start = targetAvailable ? Math.max(0, requestedLine - 4) : 0;
-  let truncated = text.length > bounded.length || start > 0 || allLines.length > MAX_SOURCE_LINES;
+  // Earlier context is reachable with Show file beginning; an offset alone is
+  // not a safety limit. Report only content omitted by a preview budget.
+  let truncated = text.length > bounded.length || allLines.length - start > MAX_SOURCE_LINES;
   const lines = allLines.slice(start, start + MAX_SOURCE_LINES).map((line, index) => {
     if (line.length > MAX_LINE_CHARACTERS) truncated = true;
     return { number: start + index + 1, text: line.slice(0, MAX_LINE_CHARACTERS) };

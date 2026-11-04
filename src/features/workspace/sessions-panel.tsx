@@ -1,12 +1,11 @@
-import { ActivityBadge } from "@/ui/activity-badge";
-import { isRunningSession } from "./activity-model";
+import { HierarchyFrame } from "@/ui/hierarchy-frame";
 import { useMobileTheme } from "@/ui/theme";
+import { IssueSummary } from "@/ui/issue-summary";
+import { sameSessionListConnectionFailure } from "./session-list-feedback";
 import type { ProjectSessionsProps, SessionCreationDraft } from "./sessions-panel-types";
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
-import MessageSquare from "lucide-react-native/icons/message-square";
-import Plus from "lucide-react-native/icons/plus";
-import { colors, space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import { uiStyles } from "@/ui/styles";
 import { router } from "expo-router";
 import { useFormDraft } from "@/state/form-draft";
@@ -16,27 +15,22 @@ import { useHostQuery } from "@/state/queries";
 import { useModelCatalog } from "@/state/model-catalog";
 import { haptic } from "@/ui/motion";
 import {
-  ActionMenu,
   Body,
   FormActions,
-  IconButton,
   SelectField,
   Sheet,
   SearchField,
-  NavigationRow,
   ScreenList,
   QueryState,
-  Row,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { providerSelectionOption } from "@/ui/provider-identity";
+import { SessionListRow } from "./session-list-row";
 import {
   CommandError,
   ErrorText,
   GroupedListRow,
-  relativeTime,
   rowInset,
-  sessionStatus,
   useCommands,
   workspaceStyles,
 } from "./shared";
@@ -46,7 +40,7 @@ import type { HostSessionSummary } from "./wire";
 import { filterSessionDirectory, sessionDirectoryRows, toggleSessionDirectoryFolder, type SessionDirectoryRow } from "./session-directory";
 import { SessionFolderRow } from "./session-folder-row";
 
-export function ProjectSessions({ projectId, cwd, initialCreating = false, sessionLayout }: ProjectSessionsProps) {
+export function ProjectSessions({ projectId, cwd, initialCreating = false, sessionLayout, directoryQuery, projectName, projectCwd, canReadProject, renderFrame }: ProjectSessionsProps) {
   useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
@@ -66,6 +60,7 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
     });
   };
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [archived, setArchived] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [creating, setCreating] = useState(initialCreating);
@@ -97,52 +92,28 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
     search,
   );
   const rows = sessionDirectoryRows(visible, sessionLayout, collapsed, !!search.trim());
-  return (
+  const sharedConnectionFailure = sameSessionListConnectionFailure(directoryQuery?.error, sessions.error);
+  const listQuery = sharedConnectionFailure ? {
+    ...sessions,
+    isFetching: sessions.isFetching || directoryQuery?.isFetching,
+    refetch: () => Promise.all([sessions.refetch(), directoryQuery?.refetch?.()]),
+  } : sessions;
+  const current = () => mounted.current && !!machine && useMachines.getState().activeId === machine.id && canReadProject();
+  const content = (
     <ScreenList<SessionDirectoryRow>
       grouped
       data={rows}
       keyExtractor={(row) => row.key}
       query={sessions}
       contentContainerStyle={{ gap: 0 }}
-      header={
-        <View style={[workspaceStyles.stack, { gap: space.sm, paddingBottom: space.sm }]}>
-          <Row style={{ flexWrap: "nowrap", gap: space.xs }}>
-            <View style={uiStyles.grow}>
-              <SearchField
+      ListHeaderComponent={
+        <View style={[workspaceStyles.stack, { gap: space.sm }]}>
+          {searchOpen ? <SearchField
                 label={copy("Oturum ara", "Search sessions")}
+                autoFocus
                 value={search}
                 onChangeText={setSearch}
-              />
-            </View>
-            <IconButton
-              label={copy("Yeni oturum", "New session")}
-              disabled={locked}
-              tone="default"
-              onPress={() => setCreating(true)}
-            >
-              <Plus size={20} strokeWidth={2} color={colors.accent} />
-            </IconButton>
-            <ActionMenu
-              label={copy("Oturum seçenekleri", "Session options")}
-              active={archived}
-              actions={[
-                {
-                  key: "archive",
-                  label: archived ? copy("Etkin oturumlar", "Active sessions") : copy("Arşiv", "Archive"),
-                  selected: archived,
-                  onPress: () => setArchived((value) => !value),
-                },
-                {
-                  key: "refresh",
-                  label: copy("Yenile", "Refresh"),
-                  disabled: sessions.isFetching,
-                  onPress: () => {
-                    void sessions.refetch();
-                  },
-                },
-              ]}
-            />
-          </Row>
+              /> : null}
           {creating ? (
             <Sheet
               visible
@@ -258,8 +229,15 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
               </View>
             </Sheet>
           ) : null}
-          <QueryState
-            query={sessions}
+          {directoryQuery?.error && !sharedConnectionFailure ? <IssueSummary
+            issues={[copy("Projeler", "Projects"), sessions.error ? copy("Oturumlar", "Sessions") : null]}
+            details={<>
+              <QueryState query={directoryQuery} loading="none" />
+              {sessions.error ? <QueryState query={sessions} loading="none" /> : null}
+            </>}
+          /> : null}
+          {!directoryQuery?.error || sharedConnectionFailure || !sessions.error ? <QueryState
+            query={listQuery}
             loading="list"
             loadingLabel={copy("Oturumlar yükleniyor…", "Loading sessions…")}
             empty={
@@ -275,43 +253,37 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
               label: copy("Aramayı temizle", "Clear search"),
               onPress: () => setSearch(""),
             } : undefined}
-          />
+          /> : null}
         </View>
       }
       renderItem={({ item, index }) => {
         if (item.kind === "folder") return <SessionFolderRow row={item}
           onToggle={() => setCollapsed((current) => toggleSessionDirectoryFolder(current, item, !!search.trim()))} />;
         const session = item.session;
-        const status = sessionStatus(session, copy);
         return (
           <GroupedListRow first={index === 0 || rows[index - 1]?.kind === "folder"}
             last={index === rows.length - 1 || rows[index + 1]?.kind === "folder"} inset={rowInset}>
-            <View style={{ paddingStart: item.depth * space.md }}>
-            <NavigationRow
-              variant="plain"
-              label={session.title || copy("Yeni oturum", "New session")}
-              detail={[status.label, session.harness, session.branch || session.model]
-                .filter(Boolean)
-                .join(" · ")}
-              icon={
-                <View accessible={false} style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}>
-                  <MessageSquare size={20} strokeWidth={1.8} color={colors.muted} />
-                </View>
-              }
-              trailing={
-                <View style={{ alignItems: "flex-end", gap: space.xs }}>
-                  {isRunningSession(session) ? <ActivityBadge /> : null}
-                  <Body muted style={uiStyles.caption}>
-                    {relativeTime(session.updatedAt, copy)}
-                  </Body>
-                </View>
-              }
+            <HierarchyFrame depth={item.depth} reservedWidth={metrics.touchTarget + space.sm * 2}>{({indent,compressed}) => <View style={{ paddingStart: indent }}>
+            <SessionListRow machineId={machine?.id ?? ""} projectId={projectId} projectName={projectName}
+              projectCwd={projectCwd ?? cwd} session={session} ancestors={item.ancestors} compressed={compressed}
+              canRead={canReadProject}
               onPress={() => openSession(session.id)}
             />
-            </View>
+            </View>}</HierarchyFrame>
           </GroupedListRow>
         );
       }}
     />
   );
+  return renderFrame(content, {
+    searchOpen,
+    hasSearch: !!search.trim(),
+    toggleSearch: () => { if (current()) setSearchOpen(value => !value); },
+    createDisabled: locked,
+    create: () => { if (current() && !locked) setCreating(true); },
+    archived,
+    toggleArchived: () => { if (current()) setArchived(value => !value); },
+    refreshing: sessions.isFetching,
+    refresh: () => { if (current() && !sessions.isFetching) void sessions.refetch(); },
+  });
 }

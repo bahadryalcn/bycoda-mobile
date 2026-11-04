@@ -1,55 +1,55 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SessionArtifacts } from "./session-artifacts";
-
-const state = vi.hoisted(() => ({ machine: { id: "machine-a", capabilities: [] as string[] }, queries: [] as { method: string; enabled?: boolean }[] }));
-vi.mock("@/state/machines", () => ({ useActiveMachine: () => state.machine }));
-vi.mock("@/state/queries", () => ({ useHostQuery: (_key: unknown, method: string, _params: unknown, options: { enabled?: boolean }) => {
-  state.queries.push({ method, enabled: options.enabled });
-  return { data: undefined, isSuccess: false };
-} }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/document-preview", () => ({ DocumentPreview: () => createElement("div", null, "preview") }));
-vi.mock("@/ui/primitives", () => ({
-  Body: ({ children }: PropsWithChildren) => createElement("p", null, children),
-  Button: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
-  Sheet: ({ visible, children }: PropsWithChildren<{ visible: boolean }>) => visible ? createElement("section", null, children) : null,
-  QueryState: () => null, ScreenList: () => null, NavigationRow: () => null,
-}));
-const container = document.createElement("div");
-let root: ReturnType<typeof createRoot>;
-afterEach(async () => { await act(async () => root?.unmount()); state.machine = { id: "machine-a", capabilities: [] }; state.queries = []; vi.unstubAllGlobals(); });
-
-async function render(messageId?: string) {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  root ??= createRoot(container);
-  await act(async () => root.render(createElement(SessionArtifacts, { projectId: "project-a", sessionId: "session-a", messageId })));
-}
-
-it("explains unsupported saved artifacts only after an explicit action without querying the host", async () => {
-  root = createRoot(container);
-  await render();
-  expect(container.textContent).toBe("Saved artifacts");
-  await act(async () => container.querySelector("button")!.click());
-  expect(container.textContent).toContain("This computer does not support sharing saved HTML artifacts.");
-  expect(container.textContent).toContain("from Files.");
-  expect(state.queries.every((query) => query.enabled === false)).toBe(true);
+const f=vi.hoisted(()=>({machine:{id:"machine-a",name:"Computer",capabilities:[] as string[]},epoch:{token:"a",isCurrent:()=>true},allowed:true,listError:null as unknown,detailError:null as unknown,fetching:false,paused:false,enabled:true,queries:[] as any[],callbacks:new Map<string,()=>void>(),data:undefined as any,detail:undefined as any,refetch:vi.fn(),accessChecks:[] as Array<()=>boolean>}));
+vi.mock("@/i18n",()=>({useLocale:()=>"en"}));
+vi.mock("react-native",()=>({View:({children}:PropsWithChildren)=>createElement("div",null,children)}));
+vi.mock("@/state/machines",()=>({useActiveMachine:()=>f.machine,useMachines:{getState:()=>({activeId:f.machine.id,machines:[f.machine]})}}));
+vi.mock("@/state/connection-scope",()=>({useConnectionScope:()=>f.epoch}));
+vi.mock("@/ui/private-access",()=>({usePrivateContentAccess:()=>({allowed:f.allowed,check:()=>f.allowed}),PrivateContentAccessProvider:({children,value}:PropsWithChildren<{value:any}>)=>{f.accessChecks.push(value.check);return children;}}));
+vi.mock("@/ui/use-list-scroll-memory",()=>({useFilteredListScrollMemory:()=>({listProps:{}})}));
+vi.mock("@/state/queries",()=>({useHostQuery:(_key:unknown,method:string,_params:unknown,options:any)=>{f.queries.push({method,enabled:options.enabled,read:options.queryFn});const error=method.endsWith("list")?f.listError:f.detailError;return{data:method.endsWith("list")?f.data:f.detail,isSuccess:!error,isError:!!error,error,isFetching:f.fetching,isEnabled:f.enabled&&options.enabled,fetchStatus:f.paused?"paused":"idle",refetch:f.refetch};}}));
+vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string,values?:any)=>en.replace("{p0}",values?.p0??"")}));
+vi.mock("./artifact-reader",()=>({ArtifactReader:({artifact,summary,onBack,query}:any)=>{f.callbacks.set("Back to list",onBack);f.callbacks.set("Retry detail",query.refetch);return createElement("section",null,artifact?createElement("article",null,artifact.html):null,createElement("button",{onClick:onBack},"Back to list"));}}));
+vi.mock("@/ui/primitives",()=>{
+ const wrap=({children}:PropsWithChildren)=>createElement("div",null,children);
+ const button=({label,onPress,disabled}:any)=>{f.callbacks.set(label,onPress);return createElement("button",{onClick:onPress,disabled},label);};
+ return{Body:wrap,Stack:wrap,SearchField:({label,value,onChangeText,editable}:any)=>{f.callbacks.set(label,onChangeText);return createElement("input",{value,disabled:!editable,onInput:(event:any)=>onChangeText(event.currentTarget.value)});},Notice:({message}:any)=>createElement("div",null,message),Button:button,FormActions:({submitLabel,onSubmit}:any)=>button({label:submitLabel,onPress:onSubmit}),
+ Sheet:({visible,children,footer,scroll}:any)=>visible?createElement("section",{"data-scroll":String(scroll)},children,footer):null,QueryState:({empty,emptyTitle,emptyAction}:any)=>empty?createElement("div",null,emptyTitle,emptyAction?createElement("button",{onClick:emptyAction.onPress},emptyAction.label):null):null,
+ ScreenList:({data,header,renderItem}:any)=>createElement("main",null,header,...data.map((item:any)=>createElement("div",{key:item.id},renderItem({item})))),
+ NavigationRow:({label,onPress,labelLines}:any)=>createElement("div",{"data-lines":labelLines},button({label,onPress})),};
 });
+let root:ReturnType<typeof createRoot>,container:HTMLDivElement;
+const props={projectId:"project-a",sessionId:"session-a"};
+const summary={id:"artifact-a",sessionId:"session-a",messageId:"message-a",title:"Saved title",createdAt:"2026-10-21T12:00:00Z",bytes:20};
+const artifact={...summary,html:"Private complete HTML"};
+async function render(messageId?:string){await act(async()=>root.render(createElement(SessionArtifacts,{...props,messageId})));}
+async function click(label:string){await act(async()=>f.callbacks.get(label)!());}
+async function open(messageId?:string){f.machine.capabilities=["html.artifacts"];f.data=[summary];f.detail=artifact;await render(messageId);await click(messageId?"Artifacts (1)":"Artifacts (…)");}
+async function select(){await click("Saved title");}
+beforeEach(()=>{vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);container=document.createElement("div");root=createRoot(container);});
+afterEach(async()=>{await act(async()=>root.unmount());f.machine={id:"machine-a",name:"Computer",capabilities:[]};f.epoch={token:"a",isCurrent:()=>true};f.allowed=true;f.data=undefined;f.detail=undefined;f.listError=null;f.detailError=null;f.fetching=false;f.paused=false;f.enabled=true;f.queries=[];f.callbacks.clear();f.accessChecks=[];vi.clearAllMocks();vi.unstubAllGlobals();});
+it("explains unsupported artifacts only after an explicit action without Host reads",async()=>{await render();expect(container.textContent).toBe("Saved artifacts");await click("Saved artifacts");expect(container.textContent).toContain("from Files.");expect(f.queries.every(q=>q.enabled===false)).toBe(true);});
+it("keeps unsupported message rows empty and closes readers on a computer change",async()=>{await render("message-a");expect(container.textContent).toBe("");await open();await select();f.machine={...f.machine,id:"machine-b"};await render();expect(container.querySelector("section")).toBeNull();expect(container.textContent).not.toContain("Private complete HTML");});
+it("shows one sheet and two-line row previews, with explicit list return",async()=>{await open();expect(container.querySelectorAll("section")).toHaveLength(1);expect(container.querySelector('[data-lines="2"]')).not.toBeNull();await select();expect(container.querySelectorAll("section")).toHaveLength(1);expect(container.textContent).toContain("Private complete HTML");await click("Back to list");expect(container.textContent).toContain("Saved title");expect(container.querySelectorAll("section")).toHaveLength(1);});
+it("filters message artifacts before opening and never previews a different message",async()=>{f.machine.capabilities=["html.artifacts"];f.data=[summary,{...summary,id:"other",title:"Other message",messageId:"message-b"}];f.detail={...artifact,messageId:"message-b"};await render("message-a");await click("Artifacts (1)");expect(container.textContent).not.toContain("Other message");await select();expect(container.textContent).not.toContain("Private complete HTML");});
+for(const mode of ["auth","identity","paused","disabled","private","capability","epoch"]){it(`conceals or closes a selected artifact after ${mode}`,async()=>{await open();await select();const stale=f.callbacks.get("Back to list")!;if(mode==="auth"||mode==="identity")f.detailError={kind:mode};if(mode==="paused")f.paused=true;if(mode==="disabled")f.enabled=false;if(mode==="private")f.allowed=false;if(mode==="capability")f.machine.capabilities=[];if(mode==="epoch")f.epoch={token:"new",isCurrent:()=>true};await render();expect(container.textContent).not.toContain("Private complete HTML");await act(async()=>stale());expect(container.textContent).not.toContain("Private complete HTML");});}
+it("keeps denied HTML concealed through network failure and retry until fresh success",async()=>{await open();await select();f.detailError={kind:"auth"};await render();f.detailError={kind:"network"};await render();expect(container.textContent).not.toContain("Private complete HTML");f.detailError=null;f.fetching=true;await render();expect(container.textContent).not.toContain("Private complete HTML");f.fetching=false;await render();expect(container.textContent).toContain("Private complete HTML");});
+it("does not reopen a reader when private access returns",async()=>{await open();await select();f.allowed=false;await render();f.allowed=true;await render();expect(container.querySelector("section")).toBeNull();});
+it("keeps a message reader mounted when an empty background list removes its trigger",async()=>{await open("message-a");await select();f.data=[];await render("message-a");expect(container.textContent).toContain("Private complete HTML");expect(container.querySelectorAll("section")).toHaveLength(1);});
+it("does not present unavailable cached rows as a successful empty collection",async()=>{await open();f.paused=true;await render();expect(container.textContent).not.toContain("Saved title");expect(container.textContent).not.toContain("No saved artifacts");expect(container.querySelector("section")?.getAttribute("data-scroll")).toBe("false");});
+it("pins validated reads to the original session and project",async()=>{await open();const request=vi.fn(async()=>[summary]);await f.queries.filter(q=>q.method.endsWith("list")&&q.enabled).at(-1).read({request});expect(request).toHaveBeenCalledWith("html.artifacts.list",props,{signal:undefined});await select();request.mockResolvedValueOnce(artifact as never);await f.queries.filter(q=>q.method.endsWith("read")&&q.enabled).at(-1).read({request});expect(request).toHaveBeenLastCalledWith("html.artifacts.read",{...props,id:"artifact-a"},{signal:undefined});});
+it("rejects a late response after returning to the list",async()=>{await open();await select();const read=f.queries.filter(q=>q.method.endsWith("read")&&q.enabled).at(-1).read;let finish!:(v:unknown)=>void;const pending=read({request:()=>new Promise(resolve=>{finish=resolve;})});await click("Back to list");finish(artifact);await expect(pending).rejects.toThrow("selected artifact changed");});
+it("rejects cached stale row and retry callbacks after closure",async()=>{await open();const row=f.callbacks.get("Saved title")!;await select();const retry=f.callbacks.get("Retry detail")!;await click("Back to list");await click("Close");await act(async()=>{row();retry();});expect(f.refetch).not.toHaveBeenCalled();expect(container.querySelector("section")).toBeNull();});
+it("rejects a late response after connection access is lost",async()=>{await open();const read=f.queries.filter(q=>q.method.endsWith("list")&&q.enabled).at(-1).read;let finish!:(v:unknown)=>void;const pending=read({request:()=>new Promise(resolve=>{finish=resolve;})});f.allowed=false;finish([summary]);await expect(pending).rejects.toThrow("connection is unavailable");});
 
-it("keeps unsupported message rows empty and resets open state when the computer changes", async () => {
-  root = createRoot(container);
-  await render("message-a");
-  expect(container.textContent).toBe("");
-  await render();
-  await act(async () => container.querySelector("button")!.click());
-  state.machine = { id: "machine-b", capabilities: ["html.artifacts"] };
-  state.queries = [];
-  await render();
-  expect(container.querySelector("section")).toBeNull();
-  expect(state.queries.every((query) => query.enabled === false)).toBe(true);
-  await act(async () => container.querySelector("button")!.click());
-  expect(state.queries.at(-2)).toEqual({ method: "html.artifacts.list", enabled: true });
-  expect(state.queries.at(-1)).toEqual({ method: "html.artifacts.read", enabled: false });
-});
+const search=(value:string)=>act(async()=>(f.callbacks.get("Search loaded records") as (value:string)=>void)(value));
+it("keeps message filtering before search and clearing",async()=>{f.machine.capabilities=["html.artifacts"];f.data=[summary,{...summary,id:"other",title:"Other message",messageId:"message-b"}];await render("message-a");await click("Artifacts (1)");await search("Other message");expect(container.textContent).toContain("No matching results");expect(container.textContent).not.toContain("Other message");await act(async()=>[...container.querySelectorAll("button")].find(b=>b.textContent==="Clear search")!.click());expect(container.textContent).toContain("Saved title");expect(container.textContent).not.toContain("Other message");});
+it("searches loaded artifact IDs and preserves the filter after reader return",async()=>{await open();await search("artifact-a");await select();await click("Back to list");expect(container.querySelector("input")?.value).toBe("artifact-a");expect(container.textContent).toContain("Saved title");});
+it("retires a captured nonmatching row after search changes",async()=>{await open();const row=f.callbacks.get("Saved title")!;await search("not-loaded");await act(async()=>row());expect(container.textContent).toContain("No matching results");expect(container.textContent).not.toContain("Private complete HTML");});
+it("accepts batched native input without replacing the input element",async()=>{await open();const input=container.querySelector("input"),change=f.callbacks.get("Search loaded records") as (value:string)=>void;await act(async()=>{change("missing");change("saved");});expect(container.querySelector("input")).toBe(input);expect(input?.value).toBe("saved");expect(container.textContent).toContain("Saved title");});
+it("ignores captured input changes after the collection closes",async()=>{await open();await search("saved");const change=f.callbacks.get("Search loaded records") as (value:string)=>void;await click("Close");await act(async()=>change("late"));await click("Artifacts (…)");expect(container.querySelector("input")?.value).toBe("saved");});
+
+it("retires the list presentation itself when its original connection unmounts",async()=>{await open();const check=f.accessChecks.at(-1)!;expect(check()).toBe(true);f.epoch={token:"new",isCurrent:()=>true};await render();expect(check()).toBe(false);});

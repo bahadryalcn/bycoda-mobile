@@ -2,8 +2,10 @@ import { RecordCard } from "@/ui/record-card";
 import { PlanSteps } from "@/ui/plan-steps";
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
+import MessageSquare from "lucide-react-native/icons/message-square";
 import { uiStyles } from "@/ui/styles";
-import { ActionMenu, Body, Button, Disclosure, ErrorText, Row } from "@/ui/primitives";
+import { ActionMenu, Body, Button, Disclosure, ErrorText, IconButton, MutationState, Row } from "@/ui/primitives";
+import { colors } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
@@ -26,7 +28,24 @@ export function GoalCard({
   const machine = useActiveMachine();
   const canCancel = !["done", "cancelled"].includes(goal.status);
   const canDelete = ["done", "cancelled"].includes(goal.status);
-  // Revise and cancel are secondary to approval, so they move into the overflow menu.
+  const active = goal.status === "planning" || goal.status === "running";
+  const cancelling = cancel.isPending && cancel.variables?.goalId === goal.id;
+  const stop = () => confirmAction(
+    copy("Hedefi durdur", "Cancel goal"),
+    copy(
+      "Hedef ve devam eden görevleri durdurulacak; çalışma dosyaları korunacak.",
+      "The goal and its active tasks will stop; work files will be retained.",
+    ),
+    copy("Durdur", "Stop"),
+    () => cancel.mutate({ goalId: goal.id }),
+  );
+  const openPlanner = () => {
+    if (machine && goal.plannerSessionId)
+      router.push({ pathname: "/session/[id]", params: {
+        id: goal.plannerSessionId, machineId: machine.id, projectId: goal.leadProjectId,
+      } });
+  };
+  // Active work keeps Stop direct; inactive cancellation remains secondary.
   const menu = [
     canCancel && {
       key: "settings",
@@ -40,21 +59,12 @@ export function GoalCard({
       disabled: busy || editorOpen,
       onPress: () => onReplan(goal.id),
     },
-    canCancel && {
+    canCancel && !active && {
       key: "cancel",
       label: copy("Hedefi durdur", "Cancel goal"),
       destructive: true,
       disabled: busy,
-      onPress: () =>
-        confirmAction(
-          copy("Hedefi durdur", "Cancel goal"),
-          copy(
-            "Hedef ve devam eden görevleri durdurulacak; çalışma dosyaları korunacak.",
-            "The goal and its active tasks will stop; work files will be retained.",
-          ),
-          copy("Durdur", "Stop"),
-          () => cancel.mutate({ goalId: goal.id }),
-        ),
+      onPress: stop,
     },
     canDelete && {
       key: "delete",
@@ -79,10 +89,24 @@ export function GoalCard({
       status={<Status value={goal.status} />}
       metadata={goal.taskIds.length + " " + copy("görev", "tasks")}
       defaultExpanded={goal.status === "awaiting-approval"}
-      menu={<ActionMenu label={copy("Hedef işlemleri", "Goal actions")}
-        busy={(cancel.isPending && cancel.variables?.goalId === goal.id) || (remove.isPending && remove.variables?.goalId === goal.id)} actions={menu} />}
-      footer={goal.status === "awaiting-approval" || goal.plannerSessionId ? (
+      menu={<Row style={{ gap: 0, flexWrap: "nowrap" }}>
+        {goal.plannerSessionId ? <IconButton label={copy("Planlayıcı oturumu", "Planner session")} onPress={openPlanner}>
+          <MessageSquare size={18} color={colors.accent} />
+        </IconButton> : null}
+        <ActionMenu label={copy("Hedef işlemleri", "Goal actions")}
+          busy={(!active && cancelling) || (remove.isPending && remove.variables?.goalId === goal.id)} actions={menu} />
+      </Row>}
+      footer={active || goal.status === "awaiting-approval" ? (
         <Row>
+          {active && (
+            <Button
+              label={copy("Hedefi durdur", "Cancel goal")}
+              tone="danger"
+              busy={cancelling}
+              disabled={busy}
+              onPress={stop}
+            />
+          )}
           {goal.status === "awaiting-approval" && (
             <Button
               label={copy("Planı onayla", "Approve plan")}
@@ -97,26 +121,9 @@ export function GoalCard({
                     "The planned tasks will start running on the computer.",
                   ),
                   copy("Onayla", "Approve"),
-                  () => approve.mutate({ goalId: goal.id }),
+                  () => approve.mutate({ goalId: goal.id }), undefined, "default",
                 )
               }
-            />
-          )}
-          {goal.plannerSessionId && (
-            <Button
-              label={copy("Planlayıcı oturumu", "Planner session")}
-              tone="quiet"
-              onPress={() => {
-                if (machine && goal.plannerSessionId)
-                  router.push({
-                    pathname: "/session/[id]",
-                    params: {
-                      id: goal.plannerSessionId,
-                      machineId: machine.id,
-                      projectId: goal.leadProjectId,
-                    },
-                  });
-              }}
             />
           )}
         </Row>
@@ -139,7 +146,9 @@ export function GoalCard({
     >
       <ErrorText error={goal.error} />
       <ErrorText error={goal.planError} />
-
+      {approve.variables?.goalId === goal.id ? <MutationState mutation={approve} /> : null}
+      {cancel.variables?.goalId === goal.id ? <MutationState mutation={cancel} /> : null}
+      {remove.variables?.goalId === goal.id ? <MutationState mutation={remove} /> : null}
     </RecordCard>
   );
 }

@@ -1,6 +1,5 @@
-import type { UseQueryResult } from "@tanstack/react-query";
+import type { QueryLike } from "@/ui/query-presentation";
 import type {
-  RemoteInboxAvailability,
   RemoteInboxComment,
   RemoteInboxDetails,
   RemoteInboxItem,
@@ -9,24 +8,28 @@ import type {
   RemoteInboxProviderState,
   RemoteInboxThread,
 } from "../../../../src/features/inbox/model/remoteInbox";
-import type { InboxCommentParams, InboxOrigin, InboxWriteStatus } from "./provider-protocol";
+import type { InboxAvailabilityState, InboxCommentParams, InboxOrigin, InboxWriteStatus } from "./provider-protocol";
 import type { InboxCommentDraft } from "./provider-state";
 
 export type ProviderInboxBrowseProps = { origin: InboxOrigin; embedded?: boolean };
 
-export type ProviderConnectionsProps = { providers: RemoteInboxProviderState[] };
+export type ProviderConnectionsProps = { providers: RemoteInboxProviderState[]; onRetry?: () => void; retrying?: boolean };
 
-export type ProviderInboxItemsProps = {
+export type ProviderInboxFeedbackProps = {
   result: RemoteInboxList;
-  limit: number;
+  onRetry?: () => void;
+  retrying?: boolean;
+};
+
+export type ProviderInboxRowProps = {
+  item: RemoteInboxItem;
   onOpen: (item: RemoteInboxItem) => void;
-  onMore: () => void;
 };
 
 export type ProviderInboxDetailProps = {
   item: RemoteInboxItem;
   origin: InboxOrigin;
-  availability: UseQueryResult<RemoteInboxAvailability, Error>;
+  availability: InboxAvailabilityState & QueryLike & { refetch: () => unknown };
   onClose: (notice?: string) => void;
 };
 
@@ -34,9 +37,11 @@ export type ProviderInboxDescriptionProps = { details: RemoteInboxDetails };
 
 export type ProviderInboxConversationProps = {
   provider: RemoteInboxProvider;
-  thread: UseQueryResult<RemoteInboxThread, Error>;
+  thread: QueryLike & { data?: RemoteInboxThread };
+  hideFeedback?: boolean;
   onReply: (comment: RemoteInboxComment) => void;
   disabled: boolean;
+  onManageConnections?: () => void;
 };
 
 export type ProviderInboxCommentProps = {
@@ -53,7 +58,7 @@ export type ConfirmedInboxComment = {
 };
 
 export type ProviderInboxComposerProps = {
-  item: Pick<RemoteInboxItem, "provider" | "title">;
+  item: Pick<RemoteInboxItem, "provider" | "title" | "repo" | "number" | "identifier">;
   draft: InboxCommentDraft;
   onChange: (change: Partial<InboxCommentDraft>) => void;
   onConfirm: (comment: ConfirmedInboxComment) => void;

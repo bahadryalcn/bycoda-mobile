@@ -1,0 +1,60 @@
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import { View } from "react-native";
+import type { HostModelCatalog, RemoteProvider } from "@/domain/types";
+import { useLocale } from "@/i18n";
+import { useCopy } from "@/ui/copy";
+import { Body, Button, NavigationRow, QueryState, ScreenList, SearchField, Sheet } from "@/ui/primitives";
+import { ScreenChromeProvider } from "@/ui/layout";
+import type { QueryLike } from "@/ui/query-presentation";
+import { space } from "@/ui/tokens";
+import { normalizeSearch } from "@/ui/search-matching";
+import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
+import { agentModelChoices } from "./agent-model-selection";
+
+/** One catalogue opening; the form still owns free entry and model defaults. */
+export function AgentModelPicker({ catalog, harness, selected, disabled, query, onSelect, onClose, returnFocusRef }: {
+  catalog?: HostModelCatalog;
+  harness: RemoteProvider;
+  selected: string;
+  disabled?: boolean;
+  query: QueryLike;
+  onSelect: (model: string) => void;
+  onClose: () => void;
+  returnFocusRef: ComponentProps<typeof Sheet>["returnFocusRef"];
+}) {
+  const copy = useCopy(), locale = useLocale();
+  const [openingHarness] = useState(harness);
+  const [search, setSearch] = useState("");
+  const retired = useRef(false), mounted = useRef(false);
+  if (disabled || harness !== openingHarness) retired.current = true;
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { if (retired.current) onClose(); }, [disabled, harness, onClose]);
+  const choices = useMemo(() => agentModelChoices(catalog, harness, search, locale), [catalog, harness, search, locale]);
+  const current = useRef({ choices, onSelect, onClose });
+  current.current = { choices, onSelect, onClose };
+  const active = () => mounted.current && !retired.current;
+  const close = () => { if (!active()) return; retired.current = true; current.current.onClose(); };
+  const filter = search.trim() ? JSON.stringify([locale, normalizeSearch(search, locale)]) : "";
+  const position = useFilteredListScrollMemory<(typeof choices)[number]>(filter, !!catalog, choices.length, { suspended: !catalog });
+  return <Sheet visible={!retired.current} title={copy("Model seç", "Choose model")} size="full" scroll={false}
+    onClose={close} returnFocusRef={returnFocusRef}
+    footer={<Button tone="quiet" label={copy("Kapat", "Close")} onPress={close} />}>
+    <View style={{ paddingHorizontal: space.screen, paddingVertical: space.sm }}>
+      <SearchField label={copy("Model ara", "Search models")} value={search}
+        onChangeText={text => { if (active()) setSearch(text); }} />
+    </View>
+    <ScreenChromeProvider nativeTitle bottomSafeArea={false}>
+      <ScreenList {...position.listProps} grouped data={choices} keyExtractor={item => item.value}
+        header={<QueryState query={query} loading="inline" />}
+        ListEmptyComponent={catalog ? <Body muted>{copy("Eşleşen model yok. Model kimliğini doğrudan girmek için bu listeyi kapatın.", "No matching models. Close this list to enter a model ID directly.")}</Body> : null}
+        renderItem={({ item }) => <NavigationRow label={item.label} detail={item.detail} detailLines={0} selected={selected === item.value}
+          onPress={() => {
+            if (!active() || !current.current.choices.includes(item)) return;
+            retired.current = true;
+            current.current.onSelect(item.value);
+            current.current.onClose();
+          }} />}
+      />
+    </ScreenChromeProvider>
+  </Sheet>;
+}

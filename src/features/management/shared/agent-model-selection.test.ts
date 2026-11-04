@@ -16,6 +16,11 @@ const catalog: HostModelCatalog = {
 const initial: AgentDraft = { harness: "codex", model: "first", modelSettings: { reasoning: "medium", stale: "old" }, providerAccountId: "codex-account", maxRunMinutes: 12, runtimeMode: "supervised" };
 
 describe("agent model selection", () => {
+  it("uses the active locale when matching model names and keeps IDs unchanged", () => {
+    const local: HostModelCatalog = { models: { codex: [{ id: "exact-ID", name: "ISTANBUL", harness: "codex", settings: [] }] }, errors: {} };
+    expect(agentModelChoices(local, "codex", "ıstanbul", "tr")[0]?.value).toBe("exact-ID");
+    expect(agentModelChoices(local, "codex", "ıstanbul", "en")).toEqual([]);
+  });
   it("resets provider-specific settings and account only on an explicit provider change", () => {
     expect(selectAgentProvider(initial, "codex", catalog)).toBe(initial);
     const next = selectAgentProvider(initial, "claude", catalog);

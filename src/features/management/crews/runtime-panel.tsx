@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
+import { router } from "expo-router";
 import type { CrewPendingInput, CrewRunDetail, CrewRunView } from "@/remote/contracts/crews";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
@@ -38,6 +39,24 @@ function PendingInput({
   const respond = useHostMutation("crews.respond", ["crews", run.projectId]);
   const [requestId] = useState(identifier);
   const sending = useRef(false);
+  const needsMemberSession = !input.targetRunId || !run.definition.policy.delegateApprovals;
+  // Retire retained navigation callbacks when their displayed owner or access changes.
+  const navigation = useMemo(() => ({ active: false }), [
+    disabled, machineId, run.id, run.projectId, input.sessionId, input.targetRunId, needsMemberSession,
+  ]);
+  useLayoutEffect(() => {
+    navigation.active = true;
+    return () => { navigation.active = false; };
+  }, [navigation]);
+  const recoveryAction = !disabled && machineId && input.sessionId ? {
+    label: copy("Oturumu aç", "Open session"),
+    onPress: () => {
+      if (!navigation.active || useMachines.getState().activeId !== machineId) return;
+      router.push({ pathname: "/session/[id]", params: {
+        id: input.sessionId, machineId, projectId: run.projectId,
+      } });
+    },
+  } : undefined;
   const blocked =
     disabled ||
     sending.current ||
@@ -61,15 +80,13 @@ function PendingInput({
   return (
     <Stack>
       <Body muted>{run.tasks.find((task) => task.id === input.taskId)?.title ?? input.taskId}</Body>
-      {!run.definition.policy.delegateApprovals && (
+      {needsMemberSession && (run.definition.policy.delegateApprovals ? (
         <Notice
           tone="info"
-          message={copy(
-            "Bu çalışma için devredilmiş onay izni yok. Üye oturumundan yanıtlayın.",
-            "Delegated approval is unavailable for this work. Respond in the member session.",
-          )}
+          message={copy("Bu isteği üye oturumundan yanıtlayın.", "Respond to this request in the member session.")}
+          action={recoveryAction}
         />
-      )}
+      ) : recoveryAction && <Button tone="quiet" {...recoveryAction} />)}
       {input.question && (
         <QuestionCard
           question={input.question}
@@ -138,7 +155,8 @@ function PendingInput({
   );
 }
 
-export function CrewRuntimePanel({ run }: { run: CrewRunView }) {
+/** One runtime query owns required inputs; task content follows them without entering its data gate. */
+export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: CrewRunView }>) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const [machineId] = useState(machine?.id);
@@ -164,6 +182,21 @@ export function CrewRuntimePanel({ run }: { run: CrewRunView }) {
   return (
     <Stack>
       <QueryState query={query} />
+      {!!detail?.pendingInputs?.length && !detail.definition.policy.delegateApprovals && (
+        <Notice tone="info" message={copy(
+          "Bu çalışma için devredilmiş onay izni yok. Üye oturumundan yanıtlayın.",
+          "Delegated approval is unavailable for this work. Respond in the member session.",
+        )} />
+      )}
+      {detail && (detail.pendingInputs ?? []).map((input) => (
+        <PendingInput
+          key={`${input.sessionId}:${input.targetRunId}:${input.question?.requestId ?? input.approval?.requestId}`}
+          input={input}
+          run={detail}
+          disabled={!available()}
+        />
+      ))}
+      {children}
       {detail && (
         <>
           <Disclosure
@@ -233,7 +266,7 @@ export function CrewRuntimePanel({ run }: { run: CrewRunView }) {
                             runId: run.id,
                             taskId: task.id,
                           });
-                      },
+                      }, undefined, "default",
                     )
                   }
                 />
@@ -298,14 +331,6 @@ export function CrewRuntimePanel({ run }: { run: CrewRunView }) {
               />
             </Disclosure>
           )}
-          {(detail.pendingInputs ?? []).map((input) => (
-            <PendingInput
-              key={`${input.sessionId}:${input.targetRunId}:${input.question?.requestId ?? input.approval?.requestId}`}
-              input={input}
-              run={detail}
-              disabled={!available()}
-            />
-          ))}
           <Button
             tone="quiet"
             label={copy("Ekip çalışmasını tamamla", "Finish crew work")}
@@ -320,7 +345,7 @@ export function CrewRuntimePanel({ run }: { run: CrewRunView }) {
                 copy("Tamamla", "Finish"),
                 () => {
                   if (available()) finish.mutate({ projectId: run.projectId, runId: run.id });
-                },
+                }, undefined, "default",
               )
             }
           />

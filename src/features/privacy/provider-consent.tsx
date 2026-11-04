@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
 import { useActiveMachine, useMachines } from "../../state/machines";
+import { reviewedMachine } from "../../state/reviewed-machine";
 import { assertAppAccess } from "../../state/security";
 import { useAsyncAction } from "../../state/actions";
 import {
@@ -232,10 +233,11 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                     disabled={action.isPending}
                     onPress={() => {
                       if (!machine || action.isPending) return;
+                      const expected = reviewedMachine(machine)!;
                       setDisconnecting(true);
                       void action.run(async () => {
                         assertAppAccess();
-                        await useMachines.getState().removeMachine(machine.id);
+                        await useMachines.getState().removeMachine(expected.id, expected);
                       });
                     }}
                     style={{ alignSelf: "center" }}

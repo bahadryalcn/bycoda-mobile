@@ -120,3 +120,10 @@ describe("mobile session organization", () => {
     expect(sessionDirectoryRows(sessions).map((row) => row.key)).toEqual(["session:four", "session:three", "session:two", "session:one"]);
   });
 });
+
+it("retains full folder ancestry for compressed layout and accessible identity",()=>{
+ const rows=sessionDirectoryRows(sessions,layout,{},true);
+ expect(rows.find(r=>r.key==="folder:child")).toMatchObject({ancestors:["Parent"]});
+ expect(rows.find(r=>r.key==="session:two")).toMatchObject({ancestors:["Parent","Child"]});
+ expect(rows.find(r=>r.key==="session:three")?.ancestors).toBeUndefined();
+});

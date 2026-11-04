@@ -98,3 +98,15 @@ it("keeps drafts isolated between sessions and computers across navigation", asy
     await leave();
   }
 });
+
+it("drops mounted debounce/unmount writers and stale callbacks after an explicit draft purge", async () => {
+  const { default: disk } = await import("@react-native-async-storage/async-storage");
+  const { withDraftStorageCleanup } = await import("@/state/local-draft-storage");
+  const key = "bycoda.mobile.draft.v1:purged:session"; await mount(key);
+  await act(async () => draft.setValue({ ...emptyComposerDraft(), text: "delete this" }));
+  const old = draft;
+  await act(async () => { await withDraftStorageCleanup(disk, async retire => { retire(new Set()); storage.values.delete(key); }); });
+  expect(draft.value).toBeNull(); expect(() => old.setValue({ ...emptyComposerDraft(), text: "old callback" })).toThrow("saved draft was cleared");
+  await expect(old.persist()).rejects.toThrow("saved draft was cleared");
+  await act(async () => { await vi.advanceTimersByTimeAsync(280); }); await leave(); expect(storage.values.has(key)).toBe(false);
+});

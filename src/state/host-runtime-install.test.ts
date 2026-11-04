@@ -142,4 +142,55 @@ describe("mobile app lifecycle and authenticated trust composition", () => {
       }),
     ).toThrow(/generation/);
   });
+  it.each(["http://192.168.1.2:8888", "http://100.100.1.2:8888"])(
+    "keeps %s live across equivalent authenticated descriptor refreshes",
+    async (endpoint) => {
+      const installed = await installMobileHostRuntime();
+      releases.push(installed.dispose);
+      const provider = getHostWsRuntimeProvider()!;
+      const machine = {
+        id: binding.machineId,
+        name: "Host",
+        environmentId: binding.environmentId,
+        endpoint,
+        lanKey: "a".repeat(64),
+        capabilities: descriptor.capabilities,
+      };
+      const lease = await provider.acquire(
+        machine,
+        async () => descriptor,
+        () => undefined,
+      );
+      releases.push(lease.release);
+      await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+      const closed = vi.mocked(fixture.native!.close).mock.calls.length;
+      const tls = descriptor.mobileTls;
+      provider.remember(machine, {
+        ...descriptor,
+        capabilities: [...descriptor.capabilities].reverse(),
+        mobileTls: {
+          endpoint: tls.endpoint,
+          bulkBaseUrl: tls.bulkBaseUrl,
+          caSpkiPin: tls.caSpkiPin,
+          caCertificatePem: tls.caCertificatePem,
+          caGeneration: tls.caGeneration,
+          environmentId: tls.environmentId,
+          version: tls.version,
+        },
+      });
+      expect(lease.state()).toBe("ready");
+      expect(fixture.native!.close).toHaveBeenCalledTimes(closed);
+      expect(fixture.native!.open).toHaveBeenCalledTimes(1);
+      provider.remember(machine, {
+        ...descriptor,
+        mobileTls: {
+          ...tls,
+          endpoint: "wss://host.example:8443/ws",
+          bulkBaseUrl: "https://host.example:8443/ws-bulk/",
+        },
+      });
+      expect(lease.state()).toBe("closed");
+      expect(fixture.native!.close).toHaveBeenCalledTimes(closed + 1);
+    },
+  );
 });

@@ -1,0 +1,13 @@
+# Assistant presence and conversations
+
+Open **Tools → Communication → Assistant** on a paired computer that supports the assistant. The screen always identifies the selected computer. Unlock mobile access and keep the existing provider/privacy consent; changing computers changes the destination rather than moving conversation data.
+
+**Here**, **Away** and **Do not disturb** save the owner's manual presence on that computer. They do not enable microphone capture or grant computer-input authority. Automatic computer activity/lock checks and quiet-hour policies remain separate. A failed write is not resent automatically. If its result is uncertain, read the current state before choosing another manual state; a current-state read does not prove delivery of an earlier request.
+
+Choose **Global** or a visible project, then **Open conversation** to read its canonical assistant thread. Recent conversations also link directly to their existing threads. Messages retain their voice/text labels. Earlier history includes messages recorded at the same instant and retains canonical page identity/version checks. A deleted or changed page source requires reloading the same conversation; a failed page read keeps your loaded history visible. A changed history version invalidates retained older pages; refresh and load them again. No local plaintext history database or arbitrary local session ID is substituted.
+
+Only messages whose complete project scope is verified and currently visible are shown. An unknown scope or one hidden participant conceals the whole message. A summary is shown only with the Host's verified artifact and all contributors visible. Access loss or a changed paired connection prevents stale results from becoming the current conversation. Hidden material is not used to infer that a thread is empty or globally scoped.
+
+This mobile consumer reads history and changes manual presence. It does not start a provider turn, answer an approval, operate desktop input, or add push notifications, Telegram or a wake word. Those capabilities retain their existing owners and permission contracts.
+
+Source verification uses the nested repository's normal `pnpm typecheck` and focused tests for paired identity, capability/version validation, actual temporary Host data, lost acknowledgements, privacy, navigation and rendered recovery. Fake transports and web renderers do not establish physical mobile, audio, remote-network, APK/IPA or release acceptance.

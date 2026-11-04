@@ -22,15 +22,18 @@ export function ProviderInboxConversation({
   thread,
   onReply,
   disabled,
+  onManageConnections,
+  hideFeedback = false,
 }: ProviderInboxConversationProps) {
   const copy = useCopy();
   return (
     <Section title={copy("Konuşma", "Conversation")}>
-      <QueryState
+      {!hideFeedback ? <QueryState
         query={thread}
+        onManageConnections={onManageConnections}
         empty={thread.data?.comments.length === 0}
         emptyTitle={copy("Henüz yorum yok.", "No comments yet.")}
-      />
+      /> : null}
       {thread.data?.truncated ? (
         <Notice
           tone="warning"

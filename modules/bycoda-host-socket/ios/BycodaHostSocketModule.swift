@@ -91,7 +91,7 @@ private final class SocketDelegate: TrustDelegate, URLSessionWebSocketDelegate {
   init(owner: BycodaHostSocketModule, id: String, generation: Double, binding: HostBinding) throws {
     self.owner = owner; self.id = id; self.generation = generation; try super.init(binding: binding)
   }
-  func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) { owner?.opened(id, generation, protocol) }
+  func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol negotiatedProtocol: String?) { owner?.opened(id, generation, negotiatedProtocol) }
   func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) { owner?.ended(id, generation, "remote_closed", false) }
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
     owner?.completedJob(id, generation)

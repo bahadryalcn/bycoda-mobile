@@ -24,6 +24,7 @@ export type GitMutationStatus = {
 };
 
 export type GitHeaderProps = {
+  navigationActions?: ReactNode;
   busy?: boolean;
   index: GitDiffIndex;
   refreshing: boolean;

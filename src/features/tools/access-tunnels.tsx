@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
 import { useHostMutation } from "@/state/queries";
 import { Body, Button, Disclosure, FormActions, ErrorText, Field, MutationState, Notice, SelectField, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { localTunnelUrl, type AccessTarget, type HostAccessReport } from "./access-center-model";
 import { claimTunnelIntent, clearTunnelIntent, reconcileTunnelIntent } from "./access-tunnel-intent";
+import { tunnelPresentation } from "./tunnel-presentation";
 type Overview = NonNullable<HostAccessReport["tunnels"]>;
 export type AccessTunnel = Overview["tunnels"][number];
 export function AccessTunnels({ target, overview, tunnel, onClose, onUpdated }: { target: AccessTarget; overview: Overview; tunnel?: AccessTunnel; onClose: () => void; onUpdated: () => void }) {
   const copy = useCopy(); const machine = useActiveMachine();
-  const [opening] = useState(() => ({ target: { ...target }, tunnel: tunnel ? { ...tunnel } : undefined }));
+  const [opening] = useState(() => ({ target: { ...target }, reviewed: reviewedMachine(machine), tunnel: tunnel ? { ...tunnel } : undefined }));
   const [provider, setProvider] = useState<"cloudflare" | "ngrok">("cloudflare"); const [kind, setKind] = useState<"host" | "dev-server">("host");
   const [localUrl, setLocalUrl] = useState("http://127.0.0.1:3000"); const [review, setReview] = useState<Record<string, unknown>>();
   const [error, setError] = useState<unknown>(); const [uncertain, setUncertain] = useState(false); const occupied = useRef(false);
@@ -21,7 +23,11 @@ export function AccessTunnels({ target, overview, tunnel, onClose, onUpdated }: 
     return () => { mounted = false; };
   }, [opening, overview]);
   const method = opening.tunnel ? "tunnels.stop" : "tunnels.start"; const write = useHostMutation(method, ["host-access"]);
-  const current = () => useMachines.getState().activeId === opening.target.machineId && machine?.id === opening.target.machineId && machine.environmentId === opening.target.environmentId;
+  const invalidated = useRef(false);
+  const current = () => {
+    if (opening.reviewed?.id !== opening.target.machineId || opening.reviewed.environmentId !== opening.target.environmentId || !isReviewedMachine(opening.reviewed, useMachines.getState())) invalidated.current = true;
+    return !invalidated.current;
+  };
   const supported = machine?.capabilities?.includes("tunnels.manage"); const busy = write.isPending;
   const providerState = overview.providers.find((entry) => entry.provider === provider);
   const canStart = !!providerState?.installed && ["saved", "not-required"].includes(providerState.credential);
@@ -46,7 +52,7 @@ export function AccessTunnels({ target, overview, tunnel, onClose, onUpdated }: 
   };
   return <Sheet visible title={opening.tunnel ? copy("Tüneli incele", "Review tunnel") : copy("Tünel başlat", "Start tunnel")} size="form" dismissible={!busy} dirty={!opening.tunnel && (provider !== "cloudflare" || kind !== "host" || localUrl !== "http://127.0.0.1:3000")} onClose={onClose}>
     <Body muted>{machine?.name}</Body>
-    {opening.tunnel ? <><Body>{opening.tunnel.provider} · {opening.tunnel.target} · {opening.tunnel.state}</Body><Body mono>{opening.tunnel.localUrl}</Body>{opening.tunnel.publicUrl ? <Body mono>{opening.tunnel.publicUrl}</Body> : null}</> : <>
+    {opening.tunnel ? <><Body>{opening.tunnel.provider} · {opening.tunnel.target} · {copy(tunnelPresentation(opening.tunnel.state).label[0], tunnelPresentation(opening.tunnel.state).label[1])}</Body><Body mono>{opening.tunnel.localUrl}</Body>{opening.tunnel.publicUrl ? <Body mono>{opening.tunnel.publicUrl}</Body> : null}</> : <>
       <SelectField label={copy("Tünel sağlayıcısı", "Tunnel provider")} value={provider} options={[{ value: "cloudflare", label: "Cloudflare" }, { value: "ngrok", label: "ngrok" }]} disabled={busy || !!review || uncertain} onChange={setProvider} />
       <SelectField label={copy("Hedef", "Target")} value={kind} options={[{ value: "host", label: copy("Bilgisayar erişimi", "Host access") }, { value: "dev-server", label: copy("Geliştirme sunucusu", "Dev server") }]} disabled={busy || !!review || uncertain} onChange={setKind} />
       {kind === "dev-server" ? <Field label={copy("Bilgisayardaki yerel adres", "Local address on the computer")} value={localUrl} onChangeText={setLocalUrl} autoCapitalize="none" autoCorrect={false} editable={!busy && !review && !uncertain} /> : null}
@@ -57,12 +63,14 @@ export function AccessTunnels({ target, overview, tunnel, onClose, onUpdated }: 
     {uncertain ? <Notice tone="warning" message={copy("Tünel işleminin sonucu bilinmiyor. Tekrar göndermeden bilgisayardaki durumu kontrol edin.", "The tunnel operation outcome is unknown. Check the computer state before sending again.")} /> : null}
 
     {review ? <><Body>{opening.tunnel ? `${opening.tunnel.provider} · ${opening.tunnel.id}` : `${String(review.provider)} · ${review.target === "host" ? copy("Bilgisayar erişimi", "Host access") : copy("Geliştirme sunucusu", "Dev server")}`}</Body>
-      {review.localUrl ? <Body mono>{String(review.localUrl)}</Body> : null}<FormActions feedback={<> <Body>{opening.tunnel ? copy("İncelenen tüneli durdur?", "Stop the reviewed tunnel?") : copy("İncelenen sağlayıcı ve hedefle tünel başlat?", "Start a tunnel with the reviewed provider and target?")}</Body> <ErrorText error={error} /><MutationState mutation={write} /> </>}
-      submitLabel={opening.tunnel ? copy("Durdur", "Stop") : copy("Başlat", "Start")} cancelLabel={copy("Vazgeç", "Cancel")} busy={busy} disabled={!current() || !supported || uncertain} onSubmit={submit} onCancel={() => setReview(undefined)} /></> :
+      {review.localUrl ? <Body mono>{String(review.localUrl)}</Body> : null}
+      <Body>{opening.tunnel ? copy("İncelenen tüneli durdur?", "Stop the reviewed tunnel?") : copy("İncelenen sağlayıcı ve hedefle tünel başlat?", "Start a tunnel with the reviewed provider and target?")}</Body>
+      <FormActions feedback={<><ErrorText error={error === write.error ? undefined : error} /><MutationState mutation={write} /></>}
+      submitLabel={opening.tunnel ? copy("Durdur", "Stop") : copy("Başlat", "Start")} tone={opening.tunnel ? "danger" : "primary"} cancelLabel={copy("Vazgeç", "Cancel")} busy={busy} disabled={!current() || !supported || uncertain} onSubmit={submit} onCancel={() => setReview(undefined)} /></> :
       <FormActions submitLabel={copy("Değişiklikleri incele", "Review changes")} disabled={!intentReady || !current() || !supported || busy || uncertain || (opening.tunnel ? !opening.tunnel.canStop : !canStart)} onSubmit={() => {
         try { setReview(opening.tunnel ? { id: opening.tunnel.id } : { provider, target: kind, ...(kind === "dev-server" ? { localUrl: localTunnelUrl(localUrl) } : {}) }); setError(undefined); }
         catch (cause) { setError(cause); }
-      }} feedback={<><ErrorText error={error} /><MutationState mutation={write} /></>} />}
+      }} feedback={<><ErrorText error={error === write.error ? undefined : error} /><MutationState mutation={write} /></>} />}
     <Disclosure label={copy("Ayrıntılar", "Details")}><Body mono>{opening.target.machineId}</Body></Disclosure>
   </Sheet>;
 }

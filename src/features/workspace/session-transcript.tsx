@@ -1,3 +1,4 @@
+import { scrollKeyboardDismissMode } from "@/ui/scroll-keyboard";
 import { useMobileTheme } from "@/ui/theme";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Keyboard, View } from "react-native";
@@ -39,6 +40,8 @@ import {
 import { TranscriptFindScroll } from "./transcript-find-scroll";
 
 export function SessionTranscript({
+  findOpen,
+  onFindOpenChange,
   navigation,
   view,
   scope,
@@ -90,7 +93,6 @@ export function SessionTranscript({
   const reduceMotion = useReducedMotionPreference();
   const [awayFromLatest, setAwayFromLatest] = useState(false);
   const [inspection, setInspection] = useState<ActivityInspection | null>(null);
-  const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
   const deferredQuery = useDeferredValue(findQuery);
   const [activeFindId, setActiveFindId] = useState<string | null>(null);
@@ -231,7 +233,7 @@ export function SessionTranscript({
         onToggle={() => {
           cancelFindScroll();
           if (findOpen) Keyboard.dismiss();
-          setFindOpen((current) => !current);
+          onFindOpenChange(!findOpen);
           setActiveFindId(null);
           setFindScrollFailed(false);
         }}
@@ -284,7 +286,7 @@ export function SessionTranscript({
           inverted
           keyExtractor={(block) => block.id}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={process.env.EXPO_OS === "ios" ? "interactive" : "on-drag"}
+          keyboardDismissMode={scrollKeyboardDismissMode()}
           contentInsetAdjustmentBehavior="never"
           maintainVisibleContentPosition={anchored ? { minIndexForVisible: 0 } : undefined}
           contentContainerStyle={{ gap: space.row, paddingVertical: space.sm }}

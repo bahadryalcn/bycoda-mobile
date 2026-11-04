@@ -1,4 +1,6 @@
+import { scrollKeyboardDismissMode } from "@/ui/scroll-keyboard";
 import { useMobileTheme } from "@/ui/theme";
+import { ProjectDirectoryFeedback } from "./project-directory-feedback";
 import { useMemo, useState } from "react";
 import { FlatList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,12 +14,11 @@ import {
   Body,
   Button,
   IconButton,
-  LargeTitle,
+  ScreenHeading,
   MutationState,
   NavigationRow,
   Notice,
   PressableCard,
-  QueryState,
   Screen,
   SearchField,
   Row,
@@ -126,7 +127,7 @@ export function ProjectsScreen() {
   if (!machine) return <WelcomeScreen />;
   const header = (
     <View style={{ gap: space.sm, paddingBottom: space.xs }}>
-      <LargeTitle
+      <ScreenHeading
         title={copy("Projeler", "Projects")}
         subtitle={
           !directoryReady ? undefined : search.trim()
@@ -182,30 +183,11 @@ export function ProjectsScreen() {
           retryLabel={copy("Bilgisayarlar", "Computers")}
         />
       ) : null}
-      {readiness === "waiting" ? (
-        <Notice
-          tone="info"
-          message={copy("Bağlantı bekleniyor. Bağlantı geri geldiğinde yeniden denenecek.", "Waiting for a connection. Loading will resume when it returns.")}
-          onRetry={() => router.push("/machines")}
-          retryLabel={copy("Bağlantıları yönet", "Manage connections")}
-        />
-      ) : null}
-      {privacyUnavailable ? (
-        <Notice
-          tone="info"
-          message={copy(
-            "Proje listesini eşitlemek için bu bilgisayarda bycoda’yı aç. Korunan gruplar gizli kalır.",
-            "Open bycoda on this computer to sync the project directory. Protected groups stay hidden.",
-          )}
-          onRetry={() => {
-            void query.refetch();
-          }}
-          retryLabel={copy("Yenile", "Refresh")}
-        />
-      ) : null}
       {!adding ? <MutationState mutation={open} /> : null}
-      <QueryState
+      <ProjectDirectoryFeedback
         query={query}
+        readiness={readiness}
+        privacyUnavailable={privacyUnavailable}
         loadingLabel={copy("Projeler yükleniyor…", "Loading projects…")}
         empty={directoryReady && !matching}
         emptyTitle={
@@ -256,13 +238,13 @@ export function ProjectsScreen() {
                     size={16}
                     appearance={section.group?.appearance ?? { color: section.group?.color }}
                   />
-                  <Body style={[uiStyles.grow, uiStyles.sectionLabel, { paddingHorizontal: 0 }]}>
-                    {name}
-                  </Body>
-                  <Body muted style={uiStyles.caption}>
-                    {count}
-                  </Body>
-                  {section.running > 0 ? <ActivityBadge count={section.running} /> : null}
+                  <View style={[uiStyles.grow, { gap: space.xxs }]}>
+                    <Body style={[uiStyles.sectionLabel, { paddingHorizontal: 0 }]}>{name}</Body>
+                    <Row style={{ gap: space.xs }}>
+                      <Body muted style={uiStyles.caption}>{count}</Body>
+                      {section.running > 0 ? <ActivityBadge count={section.running} /> : null}
+                    </Row>
+                  </View>
                 </View>
               );
             return (
@@ -294,13 +276,13 @@ export function ProjectsScreen() {
                   size={16}
                   appearance={section.group?.appearance ?? { color: section.group?.color }}
                 />
-                <Body style={[uiStyles.grow, uiStyles.sectionLabel, { paddingHorizontal: 0 }]}>
-                  {name}
-                </Body>
-                <Body muted style={uiStyles.caption}>
-                  {count}
-                </Body>
-                {section.running > 0 ? <ActivityBadge count={section.running} /> : null}
+                <View style={[uiStyles.grow, { gap: space.xxs }]}>
+                  <Body style={[uiStyles.sectionLabel, { paddingHorizontal: 0 }]}>{name}</Body>
+                  <Row style={{ gap: space.xs }}>
+                    <Body muted style={uiStyles.caption}>{count}</Body>
+                    {section.running > 0 ? <ActivityBadge count={section.running} /> : null}
+                  </Row>
+                </View>
                 <DisclosureChevron expanded={expanded} color={colors.tertiary} size={14} />
               </PressableCard>
             );
@@ -312,6 +294,7 @@ export function ProjectsScreen() {
                 <NavigationRow
                   variant="plain"
                   label={project.name}
+                  labelLines={1}
                   accessibilityLabel={[
                     project.name,
                     projectPathLabel(project.cwd, preferences.fullPaths),
@@ -327,7 +310,7 @@ export function ProjectsScreen() {
                   detailEllipsizeMode="middle"
                   disabled={open.isPending}
                   icon={<ProjectIcon appearance={project.appearance} />}
-                  trailing={
+                  supporting={
                     openingId === project.id ? (
                       <Badge label={copy("Açılıyor…", "Opening…")} tone="info" />
                     ) : running[project.id] ? (
@@ -351,7 +334,7 @@ export function ProjectsScreen() {
           return activity.refetch().finally(() => setRefreshing(false));
         }}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+        keyboardDismissMode={scrollKeyboardDismissMode("on-drag")}
         automaticallyAdjustKeyboardInsets={false}
         contentInsetAdjustmentBehavior="never"
       />

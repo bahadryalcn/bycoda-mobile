@@ -1,72 +1,108 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMachines } from "@/state/machines";
-import { Badge, Body, Button, Notice, Row, Stack } from "@/ui/primitives";
+import { useConnectionScope } from "@/state/connection-scope";
+import { Badge, Body, Disclosure, FormActions, NavigationRow, Notice, Row, Sheet, Stack } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
+import { CollectionToolbar } from "@/ui/search-field";
+import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import { useCopy } from "@/ui/copy";
+import { useSheetGuard } from "@/ui/sheet-guard";
 import { MessageText } from "@/ui/message-text";
 import { space } from "@/ui/tokens";
-import { confirmAction } from "@/ui/confirm";
 import { ErrorText } from "./shared";
 import { TranscriptToolPreview } from "./transcript-tool-preview";
+import { SubagentStopReview } from "./subagent-stop-review";
 import type { TranscriptBlockProps } from "./session-types";
 import { activeSubagent, subagentSteps, subagentStopCommand, subagentTarget } from "./subagent-model";
 import { stamp } from "../management/shared/format";
 
-export function SubagentDetails({ block, scope, runId, disabled, onCommand, context, parentProvider }:
-  Pick<TranscriptBlockProps, "block" | "scope" | "runId" | "disabled" | "onCommand" | "context" | "parentProvider">) {
-  const copy = useCopy();
+export function SubagentDetails({ block, scope, runId, disabled, onCommand, context, parentProvider, onClose }:
+  Pick<TranscriptBlockProps, "block" | "scope" | "runId" | "disabled" | "onCommand" | "context" | "parentProvider"> & {onClose?:()=>void}) {
+  const copy = useCopy(), connection = useConnectionScope(), access = usePrivateContentAccess();
   const [target] = useState(() => subagentTarget(scope, block, runId));
-  const [opening] = useState(block);
-  const [provider] = useState(parentProvider);
-  const latest = useRef({ block, scope, runId, disabled });
-  latest.current = { block, scope, runId, disabled };
-  const [pending, setPending] = useState(false);
-  const [requested, setRequested] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const attempted = useRef(false);
-  const machine = useMachines((state) => state.machines.find((entry) => entry.id === target.machineId));
-  const { steps, report } = subagentSteps(block);
+  const machine = useMachines(state => state.machines.find(entry => entry.id === target.machineId));
+  const [opening] = useState(() => ({ connection, provider:parentProvider, machineName:machine?.name ?? machine?.id ?? "" }));
+  const mounted = useRef(false);
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const latest = useRef({ block, scope, runId, disabled, onCommand, parentProvider, access });
+  latest.current = { block, scope, runId, disabled, onCommand, parentProvider, access };
+  const [pending, setPending] = useState(false), [requested, setRequested] = useState(false), [attempted, setAttempted] = useState(false), [error, setError] = useState<unknown>(null);
+  const attemptedNow = useRef(false);
+  const pendingNow = useRef(false);
+  const {requestClose}=useSheetGuard({pending,onClose});
   const matches = target.blockId === block.id && target.callId === block.tool?.callId && target.machineId === scope.machineId && target.sessionId === scope.sessionId;
+  const scopeCurrent = matches && connection === opening.connection && opening.connection.isCurrent() && useMachines.getState().activeId === target.machineId && parentProvider === opening.provider;
+  const readable = scopeCurrent && access.allowed && access.check();
+  const readLease = useMemo(() => ({active:false}), [readable]);
+  useLayoutEffect(() => { readLease.active = true; return () => { readLease.active = false; }; }, [readLease]);
+  const current = () => mounted.current && readable && readLease.active && opening.connection.isCurrent() &&
+    useMachines.getState().activeId === target.machineId && latest.current.access.allowed && latest.current.access.check();
   const running = matches && activeSubagent(block);
-  const shown = matches ? block : opening;
-  const canStop = running && target.runId === runId && !!runId && runId !== "desktop" && !!target.callId &&
-    provider === "claude" && parentProvider === provider && machine?.capabilities?.includes("sessions.stopItem.claude") === true && !disabled;
-  const stop = async () => {
-    if (attempted.current || pending) return;
-    const current = latest.current;
-    if (current.disabled || useMachines.getState().activeId !== target.machineId || !canStop) return;
-    try {
-      const command = subagentStopCommand(target, current.scope, current.block, current.runId);
-      attempted.current = true;
-      setPending(true);
-      await onCommand(command);
-      setRequested(true);
-    } catch (cause) { setError(cause); }
-    finally { setPending(false); }
+  const canStop = readable && running && target.runId === runId && !!runId && runId !== "desktop" && !!target.callId &&
+    opening.provider === "claude" && parentProvider === opening.provider && machine?.capabilities?.includes("sessions.stopItem.claude") === true && !disabled;
+  const lease = useMemo(() => ({active:false}), [canStop,runId,block.agentRun?.name]);
+  useLayoutEffect(() => { lease.active = true; return () => { lease.active = false; }; }, [lease]);
+  type Approval = {name:string;lease:typeof lease};
+  const [approval,setApproval] = useState<Approval>(), issued = useRef<Approval|undefined>(undefined);
+  useLayoutEffect(() => { if(issued.current && issued.current.lease !== lease) {issued.current=undefined;setApproval(undefined);} },[lease]);
+  useLayoutEffect(() => () => { issued.current=undefined; },[]);
+  const openStop = () => {
+    if(!current() || !lease.active || !canStop || attemptedNow.current || issued.current) return;
+    const value={name:block.agentRun?.name || target.blockId,lease};issued.current=value;setApproval(value);
   };
-  return <ScreenList data={matches ? steps : []} keyExtractor={(step) => step.id}
-    header={<Stack>
-      <Row><Body>{shown.agentRun?.name}</Body><Badge label={running ? copy("Çalışıyor", "Running") : shown.tool?.status || copy("Tamamlandı", "Completed")} /></Row>
-      <Body muted>{[shown.agentRun?.agentType, shown.agentRun?.model].filter(Boolean).join(" · ")}</Body>
-      {shown.agentRun?.startedAt !== undefined ? <Body muted>{copy("Başlangıç", "Started")}: {stamp(shown.agentRun.startedAt)}</Body> : null}
-      {shown.agentRun?.endedAt !== undefined ? <Body muted>{copy("Bitiş", "Finished")}: {stamp(shown.agentRun.endedAt)}</Body> : null}
-      {shown.tool?.agentContext ? <Body muted>{copy("Bağlam: %{p0}", "Context: {p0}%", { p0: Math.round(shown.tool.agentContext.used) })}</Body> : null}
-      <Body muted>{copy("Ana oturum", "Parent session")}: {target.sessionId}</Body>
-      {!matches ? <Notice tone="warning" message={copy("Seçili alt ajan değişti. Ayrıntıları yeniden açın.", "The selected subagent changed. Reopen its details.")} /> : null}
-      {shown.agentRun?.prompt ? <><Body>{copy("Görev", "Assignment")}</Body><MessageText text={shown.agentRun.prompt} context={context} compactMedia /></> : null}
-      <ErrorText error={error} />
-      {requested && running ? <Notice tone="info" message={copy("Durdurma isteği kabul edildi. Alt ajanın durumunu kontrol edin.", "The stop request was accepted. Check the subagent’s status.")} /> : null}
-      {canStop ? <Button label={copy("Bu alt ajanı durdur", "Stop this subagent")} tone="danger" disabled={pending || attempted.current} busy={pending}
-        onPress={() => confirmAction(copy("Bu alt ajanı durdur", "Stop this subagent"), block.agentRun?.name ?? target.blockId,
-          copy("Durdur", "Stop"), () => { void stop(); })} /> : null}
-    </Stack>}
-    renderItem={({ item: step }) => <Stack style={{ gap: space.xs }}>
-      <Row><Body muted>{step.kind}</Body>{step.status ? <Badge label={step.status} /> : null}</Row>
-      <MessageText text={step.text} context={context} compactMedia />
-      {step.detail ? <MessageText text={step.detail} context={context} compactMedia /> : null}
-      {step.output && step.output !== step.detail ? <MessageText text={step.output} context={context} compactMedia /> : null}
-      {step.preview ? <TranscriptToolPreview preview={step.preview} status={step.status} context={context} /> : null}
-      {step.outputTruncated ? <Body muted>{copy("Çıktı kısaltıldı.", "Output was truncated.")}</Body> : null}
-    </Stack>}
-    footer={report && matches ? <Stack><Body>{copy("Sonuç", "Report")}</Body><MessageText text={report} context={context} compactMedia /></Stack> : undefined} />;
+  const cancelStop = () => {if(approval && issued.current===approval){issued.current=undefined;setApproval(undefined);}};
+  const stop = async () => {
+    if(!approval || issued.current!==approval || approval.lease!==lease || !lease.active || !current() || !canStop || attemptedNow.current) return;
+    const value=latest.current, liveMachine=useMachines.getState().machines.find(entry=>entry.id===target.machineId);
+    if(value.disabled || value.parentProvider!==opening.provider || !liveMachine?.capabilities?.includes("sessions.stopItem.claude")) {issued.current=undefined;setApproval(undefined);return;}
+    issued.current=undefined;setApproval(undefined);
+    try {
+      const command=subagentStopCommand(target,value.scope,value.block,value.runId);
+      attemptedNow.current=true;pendingNow.current=true;setAttempted(true);setPending(true);setError(null);
+      await value.onCommand(command);
+      if(mounted.current)setRequested(true);
+    } catch(cause) {if(mounted.current)setError(cause);}
+    finally {pendingNow.current=false;if(mounted.current)setPending(false);}
+  };
+  const {steps,report}=subagentSteps(block);
+  const [reader,setReader]=useState<"assignment"|"report">();
+  const readerLease=useMemo(()=>({active:false}),[readable,reader]);
+  useLayoutEffect(()=>{readerLease.active=true;return()=>{readerLease.active=false;};},[readerLease]);
+  useLayoutEffect(()=>{if(!readable)setReader(undefined);},[readable]);
+  const read=(value:"assignment"|"report")=>{if(current() && readerLease.active)setReader(value);};
+  const closeReader=()=>{if(mounted.current && readerLease.active)setReader(undefined);};
+  const close=()=>{if(mounted.current && readLease.active && !pendingNow.current)requestClose();};
+  const feedback=<><ErrorText error={error}/>{requested && running ? <Notice tone="info" message={copy("Durdurma isteği kabul edildi. Alt ajanın durumunu kontrol edin.", "The stop request was accepted. Check the subagent’s status.")}/> : null}</>;
+  return <>
+    <ScreenList data={readable?steps:[]} keyExtractor={step=>step.id} header={<Stack>
+      {readable ? <>
+        <CollectionToolbar field={<Body selectable>{opening.machineName}</Body>} actions={<Badge label={running?copy("Çalışıyor", "Running"):block.tool?.status || copy("Tamamlandı", "Completed")}/>} />
+        {[block.agentRun?.agentType,block.agentRun?.model].filter(Boolean).length ? <Body muted>{[block.agentRun?.agentType,block.agentRun?.model].filter(Boolean).join(" · ")}</Body> : null}
+        {block.agentRun?.prompt ? <NavigationRow label={copy("Görev", "Assignment")} onPress={()=>read("assignment")}/> : null}
+        {report ? <NavigationRow label={copy("Sonuç", "Report")} onPress={()=>read("report")}/> : null}
+        <Disclosure label={copy("Ayrıntılar", "Details")}>
+          {block.agentRun?.startedAt!==undefined ? <Body muted>{copy("Başlangıç", "Started")}: {stamp(block.agentRun.startedAt)}</Body> : null}
+          {block.agentRun?.endedAt!==undefined ? <Body muted>{copy("Bitiş", "Finished")}: {stamp(block.agentRun.endedAt)}</Body> : null}
+          {block.tool?.agentContext ? <Body muted>{copy("Bağlam: %{p0}", "Context: {p0}%", {p0:Math.round(block.tool.agentContext.used)})}</Body> : null}
+          <Body muted>{copy("Ana oturum", "Parent session")}</Body><Body mono selectable>{target.sessionId}</Body><Body mono selectable>{target.runId}</Body><Body mono selectable>{target.blockId}</Body><Body mono selectable>{target.callId}</Body>
+        </Disclosure>
+        {!onClose && (!canStop || attempted) ? feedback : null}
+      </> : <Notice tone="warning" message={!matches ? copy("Seçili alt ajan değişti. Ayrıntıları yeniden açın.", "The selected subagent changed. Reopen its details.") : copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />}
+    </Stack>} renderItem={({item:step})=><Stack style={{gap:space.xs}}>
+      <Row><Body muted>{step.kind}</Body>{step.status?<Badge label={step.status}/>:null}</Row>
+      <MessageText text={step.text} context={context} compactMedia/>
+      {step.detail?<MessageText text={step.detail} context={context} compactMedia/>:null}
+      {step.output && step.output!==step.detail?<MessageText text={step.output} context={context} compactMedia/>:null}
+      {step.preview?<TranscriptToolPreview preview={step.preview} status={step.status} context={context}/>:null}
+      {step.outputTruncated?<Body muted>{copy("Çıktı kısaltıldı.", "Output was truncated.")}</Body>:null}
+    </Stack>}/>
+    {readable && canStop && (!attempted || pending) ? <FormActions submitLabel={copy("Bu alt ajanı durdur", "Stop this subagent")} tone="danger" disabled={pending || attempted || !!approval} busy={pending} onSubmit={openStop} feedback={feedback}/> : onClose ? <FormActions submitLabel={copy("Kapat", "Close")} onSubmit={close} disabled={pending} feedback={readable?feedback:undefined}/> : null}
+    <PrivateContentAccessProvider value={{allowed:readable,check:current}}>
+      {approval && approval.lease===lease && canStop ? <SubagentStopReview name={approval.name} machineName={opening.machineName} target={target} onClose={cancelStop} onConfirm={()=>{void stop();}}/>:null}
+      {reader && readable ? <Sheet visible title={reader==="assignment"?copy("Görev", "Assignment"):copy("Sonuç", "Report")} size="form" onClose={closeReader}>
+        <MessageText text={reader==="assignment"?block.agentRun?.prompt || "":report || ""} context={context} compactMedia/>
+        <FormActions submitLabel={copy("Kapat", "Close")} onSubmit={closeReader}/>
+      </Sheet>:null}
+    </PrivateContentAccessProvider>
+  </>;
 }

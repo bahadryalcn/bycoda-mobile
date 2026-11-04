@@ -3,16 +3,26 @@ import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useRef } from "react";
 import { router } from "expo-router";
 import MessageSquare from "lucide-react-native/icons/message-square";
+import Square from "lucide-react-native/icons/square";
+import Cpu from "lucide-react-native/icons/cpu";
+import Bot from "lucide-react-native/icons/bot";
 import { uiStyles } from "@/ui/styles";
-import { ActionMenu, Body, Button, Disclosure, ErrorText, IconButton, Row } from "@/ui/primitives";
-import { colors } from "@/ui/tokens";
+import { ActionMenu, Body, Button, Disclosure, ErrorText, IconButton, MutationState, Row } from "@/ui/primitives";
+import { colors, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
-import { Status } from "../shared/status";
+import { statusLabel } from "../shared/status";
+import { ProviderIcon } from "@/ui/provider-identity";
+import { REMOTE_PROVIDERS } from "@/domain/providers";
+import type { RemoteProvider } from "@/domain/types";
+import { Hint } from "@/ui/hint";
+import { decorativeSvgProps } from "@/ui/accessibility";
 import { taskActions } from "../task-actions";
 import { ReviewNotes } from "./review-notes";
 import type { TaskCardProps } from "./types";
+import { TaskStatusIcon } from "./task-status-icon";
+import { TaskDeclineFeedback } from "./task-feedback";
 
 export function TaskCard({
   task,
@@ -71,7 +81,7 @@ export function TaskCard({
     task.status === "review" && task.branch
       ? copy("Bu işlem görev dalını bilgisayardaki hedef dala birleştirebilir.", "This can merge the task branch into the target branch on the computer.")
       : copy("Görev tamamlandı olarak işaretlenecek.", "The task will be marked complete."),
-    copy("Tamamla", "Complete"), () => move.mutate({ taskId: task.id, to: "done" }),
+    copy("Tamamla", "Complete"), () => move.mutate({ taskId: task.id, to: "done" }), undefined, "default",
   );
   // Rare or secondary actions live in the overflow menu; the card keeps only the next step.
   const queueLabel =
@@ -161,18 +171,44 @@ export function TaskCard({
         ),
     },
   ];
+  const stopAction = moves.stop ? (
+            <Hint label={copy("Durdur", "Stop")}><IconButton
+              label={copy("Durdur", "Stop")}
+              busy={moving && move.variables?.to === "blocked"}
+              tone="danger"
+              disabled={busy}
+              onPress={() =>
+                confirmAction(
+                  copy("Görevi durdur", "Stop task"),
+                  copy(
+                    "Aktif çalışma durdurulacak, çalışma dosyaları korunacak.",
+                    "Active work will stop and work files will be retained.",
+                  ),
+                  copy("Durdur", "Stop"),
+                  () => move.mutate({ taskId: task.id, to: "blocked" }),
+                )
+              }
+            ><Square size={18} color={colors.danger} /></IconButton></Hint>
+  ) : null;
   return (
     <RecordCard
       title={task.title}
-      status={<Status value={task.status} />}
-      metadata={[task.harness, task.model].filter(Boolean).join(" · ")}
+      hint={[statusLabel(task.status, copy), task.harness, task.model].filter(Boolean).join(" · ")}
+      status={<Row style={{ gap: space.sm }}>
+        <TaskStatusIcon value={task.status} />
+        {task.harness ? REMOTE_PROVIDERS.includes(task.harness as RemoteProvider)
+          ? <ProviderIcon provider={task.harness as RemoteProvider} size={16} />
+          : <Bot size={16} color={colors.muted} {...decorativeSvgProps} /> : null}
+        {task.model ? <Cpu size={16} color={colors.muted} {...decorativeSvgProps} /> : null}
+      </Row>}
       menu={<Row style={{ gap: 0, flexWrap: "nowrap" }}>
         {task.sessionId ? <IconButton label={copy("Oturumu aç", "Open session")} onPress={openSession}>
           <MessageSquare size={18} color={colors.accent} />
         </IconButton> : null}
+        {stopAction}
         <ActionMenu label={copy("Görev işlemleri", "Task actions")} busy={menuBusy} actions={menu} />
       </Row>}
-      footer={moves.stop || starting || (canStart && !task.sessionId) || (moving && ["done", "queued"].includes(String(move.variables?.to))) ?
+      footer={starting || (canStart && !task.sessionId) || (moving && ["done", "queued"].includes(String(move.variables?.to))) ?
         <Row>
           {(starting || (canStart && !task.sessionId)) && (
               <Button
@@ -192,25 +228,6 @@ export function TaskCard({
               onPress={() => move.mutate({ taskId: task.id, to: "queued" })}
             />
           )}
-          {moves.stop && (
-            <Button
-              label={copy("Durdur", "Stop")}
-              busy={moving && move.variables?.to === "blocked"}
-              tone="danger"
-              disabled={busy}
-              onPress={() =>
-                confirmAction(
-                  copy("Görevi durdur", "Stop task"),
-                  copy(
-                    "Aktif çalışma durdurulacak, çalışma dosyaları korunacak.",
-                    "Active work will stop and work files will be retained.",
-                  ),
-                  copy("Durdur", "Stop"),
-                  () => move.mutate({ taskId: task.id, to: "blocked" }),
-                )
-              }
-            />
-          )}
           {moving && move.variables?.to === "done" && (
             <Button
               label={copy("Tamamla", "Complete")}
@@ -225,6 +242,7 @@ export function TaskCard({
       details={
         <>
           <Body>{task.prompt}</Body>
+          {task.harness || task.model ? <Body muted selectable style={uiStyles.caption}>{[task.harness, task.model].filter(Boolean).join(" · ")}</Body> : null}
           {supported && lifecycleReady && (task.status === "todo" || task.status === "queued") && (
             <Body muted style={uiStyles.caption}>
               {copy("Bilgisayardaki sıra", "Queue position on computer")}: {position + 1}
@@ -251,6 +269,11 @@ export function TaskCard({
     >
       <ErrorText error={task.error} />
       <ErrorText error={task.mergeError} />
+      {move.variables?.taskId === task.id ? <MutationState mutation={move} /> : null}
+      {remove.variables?.taskId === task.id ? <MutationState mutation={remove} /> : null}
+      {recheck.variables?.taskId === task.id ? <MutationState mutation={recheck} /> : null}
+      {decline.variables?.taskId === task.id ? <TaskDeclineFeedback mutation={decline} /> : null}
+      {start.variables?.taskId === task.id ? <MutationState mutation={start} /> : null}
       {!!waiting.length && (
         <Body muted style={uiStyles.caption}>
           {copy("Beklenen görevler", "Waiting for tasks")}:{" "}

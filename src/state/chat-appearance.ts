@@ -6,6 +6,7 @@ import {
   DEFAULT_CHAT_TEXT_SIZE,
   encodeChatTextSize,
   normalizeChatTextSize,
+  ChatAppearanceStorageError,
 } from "./chat-appearance-model";
 import type { ChatTextSize } from "./chat-appearance-model";
 export type { ChatTextSize } from "./chat-appearance-model";
@@ -18,6 +19,7 @@ export type ChatAppearanceState = {
   hydrated: boolean;
   storageError: Error | null;
   hydrate: () => Promise<void>;
+  retryStorage: (expectedError: Error) => Promise<void>;
   setTextSize: (textSize: ChatTextSize) => Promise<void>;
 };
 
@@ -28,13 +30,12 @@ export function createChatAppearanceStore(storage: PreferenceStorage) {
   let hydration: Promise<void> | undefined;
   let persistence = Promise.resolve();
   let selectionVersion = 0;
-  return create<ChatAppearanceState>((set, get) => ({
-    textSize: DEFAULT_CHAT_TEXT_SIZE,
-    hydrated: false,
-    storageError: null,
-    hydrate: () => {
-      if (get().hydrated) return Promise.resolve();
+  return create<ChatAppearanceState>((set, get) => {
+    const read = (retry = false): Promise<void> => {
       if (hydration) return hydration;
+      if (!retry && get().hydrated) return Promise.resolve();
+      const error = get().storageError;
+      if (retry && !(error instanceof ChatAppearanceStorageError && error.operation === "read")) return Promise.resolve();
       const version = selectionVersion;
       hydration = Promise.resolve()
         .then(() => storage.getItem(CHAT_APPEARANCE_STORAGE_KEY))
@@ -44,32 +45,44 @@ export function createChatAppearanceStore(storage: PreferenceStorage) {
         })
         .catch(() => {
           if (version === selectionVersion)
-            set({ storageError: new Error("Chat appearance could not be loaded.") });
+            set({ storageError: new ChatAppearanceStorageError("read") });
         })
         .finally(() => {
+          hydration = undefined;
           set({ hydrated: true });
         });
       return hydration;
-    },
-    setTextSize: async (value) => {
-      // A preference chosen during hydration wins over the older stored value.
-      if (!get().hydrated) void get().hydrate();
-      const version = ++selectionVersion;
-      const textSize = normalizeChatTextSize(value);
-      set({ textSize, storageError: null });
-      const write = persistence
-        .catch(() => undefined)
-        .then(() => storage.setItem(CHAT_APPEARANCE_STORAGE_KEY, encodeChatTextSize(textSize)));
-      persistence = write;
-      try {
-        await write;
-        if (version === selectionVersion) set({ storageError: null });
-      } catch {
-        if (version === selectionVersion)
-          set({ storageError: new Error("Chat appearance could not be saved.") });
-      }
-    },
-  }));
+    };
+    return {
+      textSize: DEFAULT_CHAT_TEXT_SIZE,
+      hydrated: false,
+      storageError: null,
+      hydrate: () => read(),
+      retryStorage: (expectedError) => {
+        const error = get().storageError;
+        if (error !== expectedError || !(error instanceof ChatAppearanceStorageError)) return Promise.resolve();
+        return error.operation === "read" ? read(true) : get().setTextSize(get().textSize);
+      },
+      setTextSize: async (value) => {
+        // A preference chosen during hydration wins over the older stored value.
+        if (!get().hydrated) void get().hydrate();
+        const version = ++selectionVersion;
+        const textSize = normalizeChatTextSize(value);
+        set({ textSize, storageError: null });
+        const write = persistence
+          .catch(() => undefined)
+          .then(() => storage.setItem(CHAT_APPEARANCE_STORAGE_KEY, encodeChatTextSize(textSize)));
+        persistence = write;
+        try {
+          await write;
+          if (version === selectionVersion) set({ storageError: null });
+        } catch {
+          if (version === selectionVersion)
+            set({ storageError: new ChatAppearanceStorageError("save") });
+        }
+      },
+    };
+  });
 }
 
 export const chatAppearanceStore = createChatAppearanceStore(AsyncStorage);

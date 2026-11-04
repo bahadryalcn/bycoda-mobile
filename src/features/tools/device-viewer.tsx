@@ -3,6 +3,8 @@ import House from "lucide-react-native/icons/house";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useConnectionScope } from "@/state/connection-scope";
+import { isReviewedMachine } from "@/state/reviewed-machine";
 import {
   Badge, Body, Button, Disclosure, Field, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, Sheet, ToggleField, NavigationGroup,
 } from "@/ui/primitives";
@@ -24,8 +26,11 @@ export function DeviceViewer({ projectId, device, canControl, onDevice, onClose 
   const copy = useCopy();
   const machineId = useMachines((state) => state.activeId);
   const machine = useActiveMachine();
+  const connection = useConnectionScope();
+  const [openingConnection] = useState(connection);
   const [opening] = useState(() => ({ machineId, environmentId: machine?.environmentId, projectId, deviceId: device.id }));
-  const current = () => !!opening.machineId && !!opening.environmentId && machine?.environmentId === opening.environmentId && useMachines.getState().activeId === opening.machineId && machineId === opening.machineId && projectId === opening.projectId && device.id === opening.deviceId;
+  const current = () => openingConnection.isCurrent() && isReviewedMachine(openingConnection.review, useMachines.getState()) &&
+    !!opening.machineId && !!opening.environmentId && machine?.environmentId === opening.environmentId && useMachines.getState().activeId === opening.machineId && machineId === opening.machineId && projectId === opening.projectId && device.id === opening.deviceId;
   const [runtime, setRuntime] = useState(false);
   const [preview, setPreview] = useState(false);
   const [control, setControl] = useState(false);
@@ -52,7 +57,7 @@ export function DeviceViewer({ projectId, device, canControl, onDevice, onClose 
   return (
     <Sheet visible title={device.name} size="full" dismissible={!busy} onClose={onClose}>
       <Row>
-        <Body muted style={[uiStyles.caption, uiStyles.grow]}>{`${device.platform} ${device.version}`}</Body>
+        <Body muted style={[uiStyles.caption, uiStyles.grow]}>{[device.platform, device.version].filter(Boolean).join(" ")}</Body>
         <Badge label={device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off")} tone={device.booted ? "active" : "default"} />
       </Row>
       <Disclosure label={copy("Araçlar", "Tools")}>

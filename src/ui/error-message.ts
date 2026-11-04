@@ -8,6 +8,10 @@ export function remoteErrorKind(error: unknown) {
 }
 
 function remoteMessage(error: RemoteHostError, copy: ErrorCopy): string {
+  if (["auth", "host", "protocol"].includes(error.kind)) {
+    const known = knownConnectionMessage(error.message, copy);
+    if (known) return known;
+  }
   switch (error.kind) {
     case "network":
       return error.uncertain
@@ -70,6 +74,30 @@ function remoteMessage(error: RemoteHostError, copy: ErrorCopy): string {
     // Preserve detailed host validation/protocol errors, including status and field details.
     default:
       return error.message;
+  }
+}
+
+/** Only exact transport-owned messages are translated; Host details pass through. */
+function knownConnectionMessage(message: string, copy: ErrorCopy): string | undefined {
+  switch (message) {
+    case "Computer access was denied. Reconnect this computer.":
+      return copy("Bilgisayara erişim reddedildi. Bu bilgisayarı yeniden bağla.", "Computer access was denied. Reconnect this computer.");
+    case "The mobile app and Host use incompatible data. Update both and reconnect.":
+      return copy("Mobil uygulama ile Host verileri uyumsuz. İkisini de güncelleyip yeniden bağlan.", "The mobile app and Host use incompatible data. Update both and reconnect.");
+    case "The computer certificate could not be verified. Reconnect this computer.":
+      return copy("Bilgisayarın sertifikası doğrulanamadı. Bu bilgisayarı yeniden bağla.", "The computer certificate could not be verified. Reconnect this computer.");
+    case "This computer is busy. Try again shortly.":
+      return copy("Bilgisayar meşgul. Biraz sonra yeniden dene.", "This computer is busy. Try again shortly.");
+    case "This computer is not ready for this request. Try again shortly.":
+      return copy("Bilgisayar bu isteğe hazır değil. Biraz sonra yeniden dene.", "This computer is not ready for this request. Try again shortly.");
+    case "The computer could not complete this request. Try again.":
+      return copy("Bilgisayar bu isteği tamamlayamadı. Yeniden dene.", "The computer could not complete this request. Try again.");
+    case "The computer rejected this request. Check its details and try again.":
+      return copy("Bilgisayar bu isteği reddetti. Ayrıntılarını kontrol edip yeniden dene.", "The computer rejected this request. Check its details and try again.");
+    case "Connection interrupted. Check this command's result before trying again.":
+      return copy("Bağlantı kesildi. Yeniden denemeden önce bu komutun sonucunu kontrol et.", "Connection interrupted. Check this command's result before trying again.");
+    default:
+      return undefined;
   }
 }
 

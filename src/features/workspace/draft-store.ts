@@ -1,3 +1,5 @@
+import { createDraftStorageOwner, RetiredDraftError } from "@/state/local-draft-storage";
+
 type Storage = {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
@@ -6,51 +8,39 @@ type Storage = {
 
 // Navigation creates a new store while the outgoing editor can still be flushing.
 // Share pending writes by storage/key so its replacement cannot read stale data.
-const storageWrites = new WeakMap<Storage, Map<string, Promise<void>>>();
 
 /** Failed reads never grant permission to overwrite or remove an unread draft. */
 export class DraftStore<T> {
   private loaded = false;
-  private readonly writes: Map<string, Promise<void>>;
+  private readonly owner: ReturnType<typeof createDraftStorageOwner>;
   constructor(
     private readonly storage: Storage,
     readonly key: string,
     private readonly decode: (raw: string) => T,
     private readonly encode: (value: T | null) => string | null,
   ) {
-    let writes = storageWrites.get(storage);
-    if (!writes) {
-      writes = new Map();
-      storageWrites.set(storage, writes);
-    }
-    this.writes = writes;
+    this.owner = createDraftStorageOwner(storage, key);
   }
   get ready() {
-    return this.loaded;
+    return this.loaded && this.owner.current();
   }
+  get retired() { return !this.owner.current(); }
   async load(): Promise<T | null> {
     this.loaded = false;
-    await this.writes.get(this.key)?.catch(() => undefined);
-    const raw = await this.storage.getItem(this.key);
+    const raw = await this.owner.run(() => this.storage.getItem(this.key));
+    if (this.retired) throw new RetiredDraftError();
     const value = raw === null ? null : this.decode(raw);
     this.loaded = true;
     return value;
   }
   persist(value: T | null): Promise<void> {
+    if (this.retired) return Promise.reject(new RetiredDraftError());
     if (!this.loaded)
       return Promise.reject(new Error("Read the saved draft successfully before changing it."));
     const raw = this.encode(value);
-    const write = (this.writes.get(this.key) ?? Promise.resolve())
-      .catch(() => undefined)
-      .then(() =>
+    return this.owner.run(() =>
         raw === null ? this.storage.removeItem(this.key) : this.storage.setItem(this.key, raw),
       );
-    this.writes.set(this.key, write);
-    const settled = () => {
-      if (this.writes.get(this.key) === write) this.writes.delete(this.key);
-    };
-    void write.then(settled, settled);
-    return write;
   }
 }
 
@@ -61,6 +51,7 @@ export async function flushLatestDraft<T>(
   saved?: (value: T | null) => void,
 ): Promise<void> {
   for (;;) {
+    if (store.retired) throw new RetiredDraftError();
     const value = current();
     await store.persist(value);
     saved?.(value);

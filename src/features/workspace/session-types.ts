@@ -43,6 +43,7 @@ export type SessionComposerProps = {
 export type SessionToolbarProps = {
   scope: SessionScope;
   projectId?: string;
+  contextLabel?: string;
   query: SessionQueryStatus;
   command: SessionCommandStatus;
   blocked: boolean;
@@ -51,9 +52,11 @@ export type SessionToolbarProps = {
   onCommand: SessionCommand;
 };
 
-export type SessionWorkspaceProps = SessionScreenProps & { machineId: string };
+export type SessionWorkspaceProps = SessionScreenProps & { machineId: string; machineName: string };
 
 export type SessionTranscriptProps = {
+  findOpen: boolean;
+  onFindOpenChange: (open: boolean) => void;
   navigation?: import("./transcript-scroll").TranscriptScrollPosition;
   view: import("./transcript-model").TranscriptView;
   scope: SessionScope;

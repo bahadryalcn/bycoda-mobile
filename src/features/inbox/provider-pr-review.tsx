@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   RemoteInboxItem,
   RemoteInboxReviewComment,
+  RemoteInboxReview,
 } from "../../../../src/features/inbox/model/remoteInbox";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import {
@@ -18,14 +19,14 @@ import {
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
-import { useSheetGuard } from "@/ui/sheet-guard";
 import { ErrorText } from "../workspace/shared";
 import { useInboxRead } from "./provider-queries";
-import { inboxItemInput, isInboxOriginCurrent } from "./provider-model";
+import { inboxItemInput, isInboxOriginCurrent, isInboxPrivateFailure } from "./provider-model";
 import type { InboxOrigin } from "./provider-protocol";
 import { prReviewLines, reviewedPrSubmission, type PrReviewLine } from "./provider-review-model";
 import { usePrReviewDelivery } from "./provider-review-delivery";
-import { emptyPrReviewDraft } from "./provider-review-draft";
+import { emptyPrReviewDraft, sameReviewedPrDraft } from "./provider-review-draft";
+import { ProviderPrReviewPreflight } from "./provider-pr-review-preflight";
 import { prReviewDecisionLabel } from "./provider-labels";
 
 export function ProviderPrReview({
@@ -47,19 +48,29 @@ export function ProviderPrReview({
   const [item] = useState(suppliedItem);
   const writeAllowed = useRef(canWrite);
   writeAllowed.current = canWrite;
+  const [preflight, setPreflight] = useState<RemoteInboxReview | null>(null);
+  const reviewOwner = useRef(preflight); reviewOwner.current = preflight;
+  const mounted = useRef(false);
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; reviewOwner.current = null; }; }, []);
   const [editor, setEditor] = useState<number | null>(null);
   const supported =
     item.kind === "pr" &&
     item.provider === "github" &&
     machine?.id === opening.machineId &&
     !!machine.capabilities?.includes("inbox.review.v1");
+  const originCurrent = isInboxOriginCurrent(opening, useMachines.getState());
+  const readAllowed = supported && canRead && originCurrent;
+  const readAccess = useRef(readAllowed); readAccess.current = readAllowed;
   const input = inboxItemInput(item, opening.projectId);
-  const query = useInboxRead({ action: "review-context", input }, supported && canRead);
+  const query = useInboxRead({ action: "review-context", input }, readAllowed);
+  const privateFailure = isInboxPrivateFailure(query.error);
+  const contentAvailable = readAllowed && !privateFailure;
+  const context = contentAvailable ? query.data : undefined;
   const delivery = usePrReviewDelivery(opening, item, input);
   const { draft, value, busy, error } = delivery;
-  const stale = !!value.commitId && value.commitId !== query.data?.commitId;
+  const stale = !!value.commitId && value.commitId !== context?.commitId;
   const locked =
-    !supported ||
+    !contentAvailable ||
     !canWrite ||
     !draft.ready ||
     !!draft.error ||
@@ -68,8 +79,8 @@ export function ProviderPrReview({
     !!value.completed;
   const rows = useMemo(() => {
     try {
-      const lines = query.data?.truncated
-        ? query.data.patch
+      const lines = context?.truncated
+        ? context.patch
             .split("\n")
             .slice(0, 50_000)
             .flatMap((line, at) =>
@@ -83,7 +94,7 @@ export function ProviderPrReview({
                 commentable: false,
               })),
             )
-        : (query.data ? prReviewLines(query.data) : []).map((line) => ({
+        : (context ? prReviewLines(context) : []).map((line) => ({
             ...line,
             commentable: true,
           }));
@@ -91,21 +102,29 @@ export function ProviderPrReview({
     } catch (cause) {
       return { lines: [] as Array<PrReviewLine & { commentable: boolean }>, error: cause };
     }
-  }, [query.data]);
-  const current = () => isInboxOriginCurrent(opening, useMachines.getState());
-  const { requestClose } = useSheetGuard({
-    dirty: !!value.body || !!value.comments.length,
-    pending: busy,
-    onClose,
-  });
+  }, [context]);
+  const current = () => mounted.current && isInboxOriginCurrent(opening, useMachines.getState());
+  const refreshContext = () => {
+    if (readAccess.current && current()) return query.refetch();
+  };
+  const readyToReview = !locked && !stale && !!context && !query.isFetching && !query.error && !rows.error;
+  const latest = useRef({ locked, readyToReview, value, context, contentAvailable, busy });
+  latest.current = { locked, readyToReview, value, context, contentAvailable, busy };
+  const closePreflight = () => { reviewOwner.current = null; setPreflight(null); };
+  useLayoutEffect(() => {
+    if (preflight && (!readyToReview || !sameReviewedPrDraft(value, preflight))) closePreflight();
+  }, [preflight, readyToReview, value]);
   const patch = (change: Partial<typeof value>) => {
-    if (!locked && current())
+    if (!latest.current.locked && !reviewOwner.current && current())
       draft.setValue((latest) => ({ ...(latest ?? emptyPrReviewDraft()), ...change }));
   };
   const bindHead = () => {
-    if (!query.data || locked || !current()) return;
+    if (!context || latest.current.locked || reviewOwner.current || !current()) return;
+    const reviewedValue = value, reviewedHead = context.commitId;
     const apply = () => {
-      patch({ commitId: query.data!.commitId, comments: [] });
+      if (!current() || latest.current.locked || reviewOwner.current || latest.current.value !== reviewedValue ||
+        latest.current.context?.commitId !== reviewedHead) return;
+      patch({ commitId: context!.commitId, comments: [] });
       setEditor(null);
     };
     if (value.comments.length)
@@ -122,7 +141,7 @@ export function ProviderPrReview({
     else apply();
   };
   const addComment = (line: PrReviewLine) => {
-    if (locked || stale || !value.commitId || !current() || value.comments.length >= 50) return;
+    if (latest.current.locked || reviewOwner.current || stale || !value.commitId || !current() || value.comments.length >= 50) return;
     const existing = value.comments.findIndex(
       (comment) =>
         comment.path === line.path && comment.side === line.side && comment.line === line.line,
@@ -140,36 +159,24 @@ export function ProviderPrReview({
     setEditor(value.comments.length);
   };
   const send = () => {
-    if (
-      locked ||
-      stale ||
-      !query.data ||
-      query.isFetching ||
-      query.error ||
-      rows.error ||
-      !current()
-    )
-      return;
-    let review;
+    if (!latest.current.readyToReview || latest.current.value !== value || latest.current.context !== context ||
+      reviewOwner.current || !context || !current()) return;
     try {
-      review = reviewedPrSubmission(query.data, value.event, value.body, value.comments);
-    } catch {
-      return;
-    }
-    confirmAction(
-      copy("Pull request incelemesini gönder", "Submit pull request review"),
-      `${item.repo} #${item.number}\n${review.commitId}\n${prReviewDecisionLabel(review.event, copy)}\n${review.body}\n${copy("{p0} satır yorumu", "{p0} inline comments", { p0: review.comments.length })}`,
-      copy("Gönder", "Submit"),
-      () => {
-        if (current() && writeAllowed.current) void delivery.submit(review);
-      },
-      copy("Vazgeç", "Cancel"),
-    );
+      const reviewed = reviewedPrSubmission(context, value.event, value.body, value.comments);
+      reviewOwner.current = reviewed; setPreflight(reviewed);
+    } catch { /* Existing validation owns invalid or stale drafts. */ }
+  };
+  const confirmPreflight = () => {
+    if (!preflight || reviewOwner.current !== preflight || !current() || !writeAllowed.current ||
+      !latest.current.readyToReview || latest.current.context?.commitId !== preflight.commitId ||
+      !sameReviewedPrDraft(latest.current.value, preflight)) return;
+    reviewOwner.current = null; setPreflight(null);
+    void delivery.submit(preflight);
   };
   let valid = false;
   try {
-    if (query.data && value.commitId === query.data.commitId) {
-      reviewedPrSubmission(query.data, value.event, value.body, value.comments);
+    if (context && value.commitId === context.commitId) {
+      reviewedPrSubmission(context, value.event, value.body, value.comments);
       valid = true;
     }
   } catch {
@@ -185,29 +192,34 @@ export function ProviderPrReview({
     });
   };
   return (
+    <>
     <Sheet
       visible
       title={copy("Pull request incelemesi", "Pull request review")}
       size="full"
       scroll={false}
-      onClose={requestClose}
+      dirty={!!value.body || !!value.comments.length}
+      onClose={onClose}
       dismissible={!busy}
       footer={
         <Button
           label={copy("İncelemeyi gönder", "Submit review")}
           busy={busy}
-          disabled={locked || stale || !valid || query.isFetching || !!query.error || !!rows.error}
+          disabled={!!preflight || locked || stale || !valid || query.isFetching || !!query.error || !!rows.error}
           onPress={send}
         />
       }
     >
       <ScreenList<PrReviewLine & { commentable: boolean }>
-        data={supported ? rows.lines : []}
+        data={contentAvailable ? rows.lines : []}
         keyExtractor={(line) => line.id}
         header={
           <Stack>
-            <Body>{`${item.repo} #${item.number}`}</Body>
-            {!supported ? (
+            {contentAvailable ? <Body>{`${item.repo} #${item.number}`}</Body> : null}
+            {!originCurrent || !canRead ? (
+              <Notice message={copy("İnceleme erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
+                "Review access is unavailable. Check the original computer and project connection.")} />
+            ) : !supported ? (
               <Notice
                 message={copy(
                   "Pull request incelemesi için bilgisayardaki bycoda’yı güncelle.",
@@ -215,10 +227,10 @@ export function ProviderPrReview({
                 )}
               />
             ) : (
-              <QueryState query={query} />
+              <QueryState query={{ ...query, data: context, refetch: refreshContext }} />
             )}
-            <ErrorText error={draft.error || error || rows.error} />
-            {draft.error ? (
+            <ErrorText error={contentAvailable ? draft.error || error || rows.error : undefined} />
+            {contentAvailable && draft.error ? (
               <Button
                 label={copy("Taslağı yeniden yükle", "Retry loading draft")}
                 onPress={() => {
@@ -237,8 +249,9 @@ export function ProviderPrReview({
                 <Button
                   label={copy("İnceleme sonucunu kontrol et", "Check review result")}
                   busy={busy}
+                  disabled={!contentAvailable}
                   onPress={() => {
-                    void delivery.reconcile();
+                    if (latest.current.contentAvailable && current()) void delivery.reconcile();
                   }}
                 />
               </>
@@ -251,18 +264,19 @@ export function ProviderPrReview({
                 />
                 <Button
                   label={copy("Yeni bir inceleme hazırla", "Prepare another review")}
-                  disabled={busy}
+                  disabled={!contentAvailable || busy}
                   onPress={() => {
-                    if (current()) draft.setValue(emptyPrReviewDraft());
+                    if (latest.current.contentAvailable && !latest.current.busy && current()) draft.setValue(emptyPrReviewDraft());
                   }}
                 />
               </>
             ) : null}
-            {supported && query.data ? (
+            {contentAvailable ? <>
+            {context ? (
               <>
-                <Body mono>{query.data.commitId}</Body>
-                <Body>{`+${query.data.additions} −${query.data.deletions} · ${query.data.files.length}`}</Body>
-                {query.data.truncated ? (
+                <Body mono>{context.commitId}</Body>
+                <Body>{`+${context.additions} −${context.deletions} · ${context.files.length}`}</Body>
+                {context.truncated ? (
                   <Notice
                     tone="warning"
                     message={copy(
@@ -284,14 +298,14 @@ export function ProviderPrReview({
                   <Button busy={query.isFetching}
                     tone="quiet"
                     label={copy("Diff’i yenile", "Refresh diff")}
-                    disabled={busy || !!value.pending || !current()}
+                    disabled={!!preflight || busy || !!value.pending || !current()}
                     onPress={() => {
-                      void query.refetch();
+                      void refreshContext();
                     }}
                   />
                   <Button
                     label={copy("Güncel commit’i incele", "Review current head")}
-                    disabled={locked || query.isFetching || !!query.error}
+                    disabled={!!preflight || locked || query.isFetching || !!query.error}
                     onPress={bindHead}
                   />
                 </Row>
@@ -300,7 +314,7 @@ export function ProviderPrReview({
             <SelectField
               label={copy("İnceleme kararı", "Review decision")}
               value={value.event}
-              disabled={locked}
+              disabled={!!preflight || locked}
               onChange={(event) => patch({ event: event as typeof value.event })}
               options={(["COMMENT", "APPROVE", "REQUEST_CHANGES"] as const).map((event) => ({
                 value: event,
@@ -312,7 +326,7 @@ export function ProviderPrReview({
               value={value.body}
               multiline
               maxLength={30_000}
-              editable={!locked}
+              editable={!preflight && !locked}
               onChangeText={(body) => patch({ body })}
             />
             {value.comments.map((comment, index) => (
@@ -320,7 +334,7 @@ export function ProviderPrReview({
                 key={`${comment.path}:${comment.side}:${comment.line}:${index}`}
                 tone="quiet"
                 label={`${comment.path}:${comment.side}:${comment.line}`}
-                disabled={locked}
+                disabled={!!preflight || locked}
                 onPress={() => setEditor(index)}
               />
             ))}
@@ -332,13 +346,13 @@ export function ProviderPrReview({
                   value={selected.body}
                   maxLength={30_000}
                   multiline
-                  editable={!locked}
+                  editable={!preflight && !locked}
                   onChangeText={(body) => updateComment({ body })}
                 />
                 <Button
                   tone="quiet"
                   label={copy("Satır yorumunu kaldır", "Remove inline comment")}
-                  disabled={locked}
+                  disabled={!!preflight || locked}
                   onPress={() => {
                     patch({ comments: value.comments.filter((_, index) => index !== editor) });
                     setEditor(null);
@@ -346,6 +360,7 @@ export function ProviderPrReview({
                 />
               </Stack>
             ) : null}
+            </> : null}
           </Stack>
         }
         renderItem={({ item: line }) => (
@@ -360,7 +375,7 @@ export function ProviderPrReview({
               <Button
                 tone="quiet"
                 label={copy("Bu satıra yorum ekle", "Comment on this line")}
-                disabled={locked || stale || !value.commitId || value.comments.length >= 50}
+                disabled={!!preflight || locked || stale || !value.commitId || value.comments.length >= 50}
                 onPress={() => addComment(line)}
               />
             ) : null}
@@ -368,5 +383,8 @@ export function ProviderPrReview({
         )}
       />
     </Sheet>
+    {preflight && readyToReview ? <ProviderPrReviewPreflight item={item} review={preflight}
+      onClose={() => { if (reviewOwner.current === preflight) closePreflight(); }} onConfirm={confirmPreflight} /> : null}
+    </>
   );
 }

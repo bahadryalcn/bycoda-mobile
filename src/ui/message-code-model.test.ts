@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codePreview, sourceSlice } from "./message-code-model";
+import { codePreview, codePreviewKind, sourceSlice } from "./message-code-model";
 
 describe("code preview", () => {
   it("preserves Unicode at adjacent page and preview boundaries", () => {
@@ -18,4 +18,9 @@ describe("code preview", () => {
     expect(codePreview("  first\n  second\n", 24)).toEqual({ text: "  first\n  second\n", lineCount: 2, truncated: false });
     expect(codePreview("").lineCount).toBe(1);
   });
+});
+
+it("keeps complete-source preview limits independent from reader page size",()=>{
+ expect(codePreviewKind("x".repeat(12001),"HTML")).toBe("html");expect(codePreviewKind("x".repeat(2*1024*1024+1),"html")).toBeNull();
+ expect(codePreviewKind("graph TD; A-->B","mermaid",false)).toBeNull();expect(codePreviewKind("graph TD; A-->B","mermaid",true)).toBe("diagram");
 });

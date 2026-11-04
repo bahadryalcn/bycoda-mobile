@@ -52,6 +52,23 @@ connection after verifying its environment identity. It does not automatically
 switch networks or bypass the app lock, provider consent, host credential
 revocation, or social sending approval rules.
 
+## Incompatible data or repeated disconnections
+
+An older phone build may show `Host connection: schema`; newer builds explain
+that the mobile app and Host use incompatible data. This is a protocol failure,
+not proof that Wi-Fi or Tailscale is unavailable. Verify the installed mobile
+build and the running computer Host, then update both to builds containing the
+relevant compatibility fixes and reconnect. A matching version number or a
+recent build date does not prove that a particular source fix is included;
+compare the build's source identity and package inclusion records.
+
+If lists show cached rows but opening a session fails, those rows only prove an
+earlier read succeeded. Check the current connection and exact error. Use the
+connection-management recovery for denied access or changed computer identity;
+repeated list refreshes cannot repair those states. A network Retry refreshes
+reads; it does not resend a message whose delivery is uncertain. Preserve the
+draft and check the existing operation result before sending again.
+
 Source checks, native configuration validation and loopback integration tests are
 separate from installed desktop and physical-phone acceptance. A new native mobile
 build is needed for changed network settings; an OTA JavaScript update alone is

@@ -82,7 +82,7 @@ export function QuestionCard({ question, draftScope, deliveryVersion, disabled, 
   };
   const customField = (item: QuestionCardProps["question"]["questions"][number]) => (
     <Field
-      label={copy("Kendi yanıtın", "Your own answer")}
+      label={item.options.length ? copy("Kendi yanıtın", "Your own answer") : item.prompt}
       value={custom[item.id] ?? ""}
       editable={!held}
       onChangeText={(text) => form.patch((current) => ({ custom: { ...current.custom, [item.id]: text } }))}
@@ -105,7 +105,7 @@ export function QuestionCard({ question, draftScope, deliveryVersion, disabled, 
         ) : null}
         {question.questions.map((item) => (
           <View key={item.id} style={workspaceStyles.stack}>
-            {item.multiSelect ? (
+            {item.options.length || !item.allowCustom ? item.multiSelect ? (
               <MultiSelectField
                 label={item.prompt}
                 values={answers[item.id] ?? []}
@@ -133,7 +133,7 @@ export function QuestionCard({ question, draftScope, deliveryVersion, disabled, 
                   form.patch((current) => ({ answers: { ...current.answers, [item.id]: [next] } }))
                 }
               />
-            )}
+            ) : null}
             {item.allowCustom ? (
               !item.options.length || answers[item.id]?.includes("__custom__")
                 ? customField(item)

@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useConnectionScope } from "@/state/connection-scope";
+import { isReviewedMachine } from "@/state/reviewed-machine";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { Body, Button, Disclosure, FormActions, MutationState, Notice, QueryState, Row, Sheet, Stack, ToggleField } from "@/ui/primitives";
+import { Body, Button, Disclosure, FormActions, MutationState, Notice, QueryState, StatusRow, Sheet, Stack, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
 import type { DeviceHostStatus } from "./types";
@@ -10,10 +12,13 @@ import { readPreviewImpact, type PreviewImpact } from "./device-preview-model";
 type Preflight = { checks: { sdk: boolean; device: boolean; tools: boolean; agentControl: boolean } };
 export function DeviceRuntime({ projectId, deviceId, onClose }: { projectId: string; deviceId?: string; onClose: () => void }) {
   const copy = useCopy(); const machine = useActiveMachine();
+  const connection = useConnectionScope();
+  const [openingConnection] = useState(connection);
   const [opening] = useState(() => ({ machineId: machine?.id, environmentId: machine?.environmentId, projectId, deviceId }));
   const [review, setReview] = useState<"setup" | "start" | "stop">(); const [agentAccess, setAgentAccess] = useState(false);
   const [uncertain, setUncertain] = useState(false); const occupied = useRef(false);
-  const current = () => !!opening.machineId && !!opening.environmentId && machine?.id === opening.machineId && machine.environmentId === opening.environmentId &&
+  const current = () => openingConnection.isCurrent() && isReviewedMachine(openingConnection.review, useMachines.getState()) &&
+    !!opening.machineId && !!opening.environmentId && machine?.id === opening.machineId && machine.environmentId === opening.environmentId &&
     useMachines.getState().activeId === opening.machineId && projectId === opening.projectId && deviceId === opening.deviceId;
   const supported = current() && machine?.capabilities?.includes("device.host");
   const params = { projectId: opening.projectId, ...(opening.deviceId ? { deviceId: opening.deviceId } : {}) };
@@ -44,10 +49,10 @@ export function DeviceRuntime({ projectId, deviceId, onClose }: { projectId: str
     <Body muted>{machine?.name}</Body>
     {!supported ? <Notice message={copy("Seçili bilgisayar değişti veya bu özelliği desteklemiyor.", "The selected computer changed or does not support this feature.")} /> : <><QueryState query={preflight} /><QueryState query={status} loading="none" /></>}
     {checks ? <Stack style={{ gap: space.xs }}>
-      <Row><Body style={{ flex: 1 }}>SDK</Body><Body muted>{checks.sdk ? copy("Hazır", "Ready") : copy("Kullanılamıyor", "Unavailable")}</Body></Row>
-      <Row><Body style={{ flex: 1 }}>{copy("Cihazlar", "Devices")}</Body><Body muted>{checks.device ? copy("Hazır", "Ready") : copy("Kullanılamıyor", "Unavailable")}</Body></Row>
-      <Row><Body style={{ flex: 1 }}>{copy("Araçlar", "Tools")}</Body><Body muted>{checks.tools ? copy("Hazır", "Ready") : copy("Kurulum gerekli", "Setup required")}</Body></Row>
-      <Row><Body style={{ flex: 1 }}>{copy("Ajan kontrolü", "Agent control")}</Body><Body muted>{checks.agentControl ? copy("Etkin", "Enabled") : copy("Kapalı", "Off")}</Body></Row>
+      <StatusRow label="SDK"><Body muted>{checks.sdk ? copy("Hazır", "Ready") : copy("Kullanılamıyor", "Unavailable")}</Body></StatusRow>
+      <StatusRow label={copy("Cihazlar", "Devices")}><Body muted>{checks.device ? copy("Hazır", "Ready") : copy("Kullanılamıyor", "Unavailable")}</Body></StatusRow>
+      <StatusRow label={copy("Araçlar", "Tools")}><Body muted>{checks.tools ? copy("Hazır", "Ready") : copy("Kurulum gerekli", "Setup required")}</Body></StatusRow>
+      <StatusRow label={copy("Ajan kontrolü", "Agent control")}><Body muted>{checks.agentControl ? copy("Etkin", "Enabled") : copy("Kapalı", "Off")}</Body></StatusRow>
     </Stack> : null}
     <Button busy={preflight.isFetching || status.isFetching || (impactSupported && impact.isFetching)} tone="quiet" label={copy("Yenile", "Refresh")} disabled={!supported || busy || preflight.isFetching} onPress={() => { void preflight.refetch(); void status.refetch(); if (impactSupported) void impact.refetch(); }} />
     {impactSupported ? <><QueryState query={impact} loading="none" />{impact.data ? <>

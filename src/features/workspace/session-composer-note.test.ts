@@ -7,12 +7,15 @@ import { emptyComposerDraft, type ComposerDraft } from "./composer-draft";
 import type { ComposerTransfer } from "./composer-transfer-model";
 
 const state = vi.hoisted(() => ({ activeId: "machine", supported: true, browserSupported: false, stageBrowser: vi.fn(), removeStaged: vi.fn(), draft: null as ComposerDraft | null,
+  templateInsert: null as null | ((body: string) => void),
+  selection: { start: 0, end: 0 }, select: null as null | ((selection: { start: number; end: number }) => void),
   receiver: null as null | ((request: ComposerTransfer) => void), renderDraft: null as null | (() => void),
   onCommand: vi.fn(async () => undefined), persist: vi.fn(async () => undefined), enqueue: vi.fn(),
   register: (receiver: (request: ComposerTransfer) => void) => { state.receiver = receiver; return () => { state.receiver = null; }; },
 }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children), useWindowDimensions: () => ({ height: 800, fontScale: 1 }) }));
 vi.mock("lucide-react-native/icons/arrow-up", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/x", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/image", () => ({ default: () => null }));
@@ -20,7 +23,7 @@ vi.mock("lucide-react-native/icons/file", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "request" }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => null }));
-vi.mock("@/ui/tokens", () => ({ colors: {}, metrics: { touchTarget: 48 }, space: { sm: 8, xs: 4 } }));
+vi.mock("@/ui/tokens", async () => ({ ...await vi.importActual<typeof import("@/ui/tokens")>("@/ui/tokens"), colors: {} }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/motion", () => ({ haptic: { success: vi.fn() } }));
@@ -51,14 +54,24 @@ vi.mock("./attachment-ownership", () => ({ composerDraftKey: () => "key", suppor
   attachmentReleases: { stage: vi.fn(async () => undefined), flush: vi.fn(async () => undefined) } }));
 vi.mock("./use-session-queue", () => ({ useSessionQueue: () => ({ supported: true, enqueue: state.enqueue }) }));
 vi.mock("./session-queue", () => ({ SessionQueue: () => null }));
-vi.mock("@/features/management/templates/template-library", () => ({ TemplateLibrary: () => null }));
+vi.mock("@/features/management/templates/template-library", () => ({ TemplateLibrary: ({ onInsert }: { onInsert: (body: string) => void }) => {
+  state.templateInsert = onInsert;
+  return createElement("p", null, "Template panel");
+} }));
 vi.mock("@/features/management/templates/template-store", () => ({ useTemplateHydration: () => null, useTemplates: { getState: () => ({ hydrated: false }) } }));
 vi.mock("./shared", () => ({ ErrorText: () => null }));
 vi.mock("@/ui/chat-controls", () => {
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
   return { ChatCircleAction: Button, ChatToolbarAction: Button };
 });
-vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, submit, mode }: { value: string; submit: ReactNode; mode: ReactNode }) => createElement("div", null, createElement("textarea", { value, readOnly: true }), mode, submit) }));
+vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, submit, mode, leading, field }: {
+  value: string; submit: ReactNode; mode: ReactNode; leading: ReactNode;
+  field: { selection: { start: number; end: number }; onSelectionChange: (event: unknown) => void };
+}) => {
+  state.selection = field.selection;
+  state.select = (selection) => field.onSelectionChange({ nativeEvent: { selection } });
+  return createElement("div", null, createElement("textarea", { value, readOnly: true }), leading, mode, submit);
+} }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Wrap, Stack: Wrap, Row: Wrap, NavigationGroup: Wrap,
@@ -74,7 +87,27 @@ const container = document.createElement("div");
 let root: ReturnType<typeof createRoot>;
 async function mount() { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); root = createRoot(container); await act(async () => root.render(createElement(SessionComposer, props as never))); }
 async function click(label: string) { await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === label)!.click()); }
-afterEach(async () => { await act(async () => root?.unmount()); state.draft = null; state.supported = true; state.browserSupported = false; state.activeId = "machine"; state.receiver = null; state.stageBrowser.mockReset(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root?.unmount()); state.draft = null; state.supported = true; state.browserSupported = false; state.activeId = "machine"; state.receiver = null; state.templateInsert = null; state.select = null; state.stageBrowser.mockReset(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
+
+it("reports refused template insertion without changing the composer draft or selection, then inserts only at the retained selection", async () => {
+  const original = { ...emptyComposerDraft(), text: "x".repeat(256_000), noteCard: note };
+  state.draft = original; await mount();
+  await act(async () => state.select!({ start: 3, end: 5 }));
+  await click("Add to message"); await click("Phone templates");
+  expect(() => state.templateInsert!("too long")).toThrow("The message is too long.");
+  expect(state.draft).toBe(original); expect(state.selection).toEqual({ start: 3, end: 5 });
+  expect(container.textContent).toContain("Template panel");
+  state.activeId = "other";
+  expect(() => state.templateInsert!("ok")).toThrow("This conversation is not available for insertion. Your draft is unchanged.");
+  expect(state.draft).toBe(original); expect(state.selection).toEqual({ start: 3, end: 5 });
+  state.activeId = "machine";
+  state.draft = { ...original, text: "ab cd" }; await act(async () => state.renderDraft!());
+  await act(async () => state.templateInsert!("ok"));
+  expect(state.draft?.text).toBe("ab ok"); expect(state.draft?.noteCard).toBe(original.noteCard);
+  expect(state.draft?.attachments).toBe(original.attachments);
+  expect(state.selection).toEqual({ start: 5, end: 5 });
+  expect(state.onCommand).not.toHaveBeenCalled(); expect(state.enqueue).not.toHaveBeenCalled();
+});
 it("inserts through the existing draft owner, preserves prose/mentions and sends the exact snapshot only on Send", async () => {
   const mentions = [{ label: "src/file", path: "src/file" }];
   state.draft = { ...emptyComposerDraft(), text: "Owner prose", selectedMentionRefs: mentions };

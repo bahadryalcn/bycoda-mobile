@@ -37,6 +37,13 @@ const comment = {
 } satisfies RemoteInboxComment;
 
 describe("provider inbox browsing and confirmed comment snapshots", () => {
+  it("clears search and filters together without changing the initial assigned-to-me default", () => {
+    const state = { ...initialInboxBrowseState, selected: item, search: "parser", committedSearch: "parser", all: true, limit: 120, notice: "Saved" };
+    expect(inboxBrowseReducer(state, { type: "clear-filters" })).toMatchObject({
+      assigned: false, all: false, search: "", committedSearch: "", selected: null, limit: 40, notice: null,
+    });
+    expect(initialInboxBrowseState.assigned).toBe(true);
+  });
   it("resets detail and pagination atomically when a filter changes", () => {
     const selected = { ...initialInboxBrowseState, selected: item, limit: 120, notice: "Saved" };
     expect(inboxBrowseReducer(selected, { type: "filter", key: "all", value: true })).toMatchObject(

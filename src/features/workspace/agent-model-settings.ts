@@ -6,24 +6,23 @@ import type { AgentModel, ModelSetting } from "../../../../src/features/sessions
  * mobile cannot import it). agent-model-settings.test.ts compares both on the real catalogs;
  * change the two together.
  *
- * Order: Model, Reasoning, Fast, remaining model options, then the Context group and the
- * Advisor/subagent group. The order never depends on usage.
+ * Preserve the desktop order within each group. The order never depends on usage.
  */
 const SETTING_ORDER = [
-  "effort",
-  "reasoning",
-  "reasoningEffort",
+  "subagentPolicy",
+  "subagentModel",
+  "advisor",
+  "autoCompactWindow",
+  "autoCompact",
+  "context",
   "fast",
   "serviceTier",
+  "agent",
   "thinking",
   "variant",
-  "agent",
-  "context",
-  "autoCompact",
-  "autoCompactWindow",
-  "advisor",
-  "subagentModel",
-  "subagentPolicy",
+  "reasoningEffort",
+  "reasoning",
+  "effort",
 ];
 const REASONING_IDS = new Set(["effort", "reasoning", "reasoningEffort"]);
 const FAST_IDS = new Set(["fast", "serviceTier"]);

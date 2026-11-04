@@ -1,9 +1,9 @@
 import { useMobileTheme } from "./theme";
-import { useState, type PropsWithChildren } from "react";
+import { useState, type PropsWithChildren, type ReactNode } from "react";
 import { View } from "react-native";
 import { Pressable } from "react-native";
 import { Body } from "./typography";
-import { colors, metrics, opacity, space } from "./tokens";
+import { colors, metrics, opacity, semanticColors, space, type SemanticTone } from "./tokens";
 import { uiStyles } from "./styles";
 import Animated from "react-native-reanimated";
 import { resize } from "./motion";
@@ -13,8 +13,10 @@ export function Disclosure({
   label,
   children,
   detail,
+  feedback,
   defaultExpanded = false,
-}: PropsWithChildren<{ label: string; detail?: string; defaultExpanded?: boolean }>) {
+  tone,
+}: PropsWithChildren<{ label: string; detail?: string; feedback?: ReactNode; defaultExpanded?: boolean; tone?: SemanticTone }>) {
   useMobileTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [visited, setVisited] = useState(defaultExpanded);
@@ -40,7 +42,7 @@ export function Disclosure({
         })}
       >
         <View style={[uiStyles.grow, { gap: 2 }]}>
-          <Body style={[uiStyles.buttonLabel, { fontWeight: "500" }]}>
+          <Body style={[uiStyles.buttonLabel, { fontWeight: "500" }, tone && { color: semanticColors[tone].text }]}>
             {label}
           </Body>
           {detail && !expanded ? (
@@ -52,6 +54,7 @@ export function Disclosure({
         <DisclosureChevron expanded={expanded} size={16} color={colors.muted} />
       </Pressable>
       {visited ? <DisclosureBody expanded={expanded}>{children}</DisclosureBody> : null}
+      {feedback ? <View style={{ paddingTop: expanded ? 0 : space.sm }}>{feedback}</View> : null}
     </Animated.View>
   );
 }

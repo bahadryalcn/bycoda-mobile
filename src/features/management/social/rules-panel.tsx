@@ -1,11 +1,11 @@
+import { SocialCollectionFeedback, SocialRecordFeedback } from "./action-feedback";
 import { socialLabel } from "./labels";
 import { RecordCard } from "@/ui/record-card";
 import { CollectionRows } from "./collection-rows";
-import { NavigationGroup, SelectField, Sheet, Body, Button, Row } from "@/ui/primitives";
+import { NavigationGroup, SelectField, Body, Button, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 
-import { RuleEditor } from "./rule-editor";
 import type { RulesPanelProps } from "./types";
 import { accountIdentity } from "./review-presentation";
 import { CollectionSearch, useCollectionSearch } from "./collection-search";
@@ -13,9 +13,6 @@ import { CollectionSearch, useCollectionSearch } from "./collection-search";
 export function RulesPanel({
   state,
   projectId,
-  ruleAccount,
-  editor,
-  closeEditor,
   dispatch,
   action,
   run,
@@ -41,19 +38,9 @@ export function RulesPanel({
           />
         </NavigationGroup>
       )}
-      {ruleAccount && editor.kind === "rule" && (
-        <Sheet visible size="form" title={copy("Yeni yanıt kuralı", "New reply rule")} onClose={closeEditor}>
-        <RuleEditor
-          key={editor.accountId + "/" + editor.projectId}
-          account={ruleAccount}
-          projectId={editor.projectId}
-          profile={state.profiles.find((profile) => profile.projectId === editor.projectId)}
-          onClose={closeEditor}
-        />
-        </Sheet>
-      )}
       <CollectionSearch {...collection} />
-      <CollectionRows page={page} key={projectId ?? "all"} items={collection.visible} renderItem={(rule) => (
+
+      <CollectionRows page={page} beforeRows={(visible) => <SocialCollectionFeedback action={action} collection="rules" visible={visible} />} key={projectId ?? "all"} items={collection.visible} renderItem={(rule) => (
           <RecordCard key={rule.id} title={rule.name}
             metadata={`${accountIdentity(state.accounts, rule.accountId)} · ${copy("Proje", "Project")}: ${rule.projectId} · ${socialLabel(rule.mode, copy)} · ${socialLabel(rule.trigger, copy)} · ${rule.dailyLimit} ${copy("/ gün", "/ day")}`}
       footer={
@@ -83,7 +70,7 @@ export function RulesPanel({
                             ...(rule.mode === "automatic"
                               ? { confirm: "ENABLE_AUTOMATIC_REPLIES" }
                               : {}),
-                          }),
+                          }), undefined, "default",
                       )
                 }
               />
@@ -93,6 +80,7 @@ export function RulesPanel({
           >
             {rule.pausedReason && <Body>{rule.pausedReason}</Body>}
 
+          <SocialRecordFeedback action={action} collection="rules" id={rule.id} />
           </RecordCard>
         )} />
     </>

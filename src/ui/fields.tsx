@@ -10,7 +10,7 @@ import { uiStyles } from "./styles";
 import type { ToggleFieldProps, InputProps } from "./component-props";
 import { useInNavigationGroup } from "./navigation-row";
 
-export function ToggleField({ label, detail, value, onChange, disabled }: ToggleFieldProps) {
+export function ToggleField({ label, labelLines, detail, value, onChange, disabled }: ToggleFieldProps) {
   useMobileTheme();
   const grouped = useInNavigationGroup();
   return (
@@ -25,7 +25,7 @@ export function ToggleField({ label, detail, value, onChange, disabled }: Toggle
       }}
     >
       <View style={[uiStyles.grow, { gap: 2 }]}>
-        <Body style={uiStyles.label}>{label}</Body>
+        <Body style={uiStyles.label} numberOfLines={labelLines}>{label}</Body>
         {detail ? (
           <Body muted style={uiStyles.caption}>
             {detail}
@@ -94,7 +94,7 @@ export function Input({
         placeholderTextColor={colors.muted}
         selectionColor={colors.accent}
         cursorColor={colors.accent}
-        className="h-auto text-foreground bg-fill rounded-control border-transparent"
+        className="h-auto text-foreground bg-fill rounded-control border-border"
         containerClassName="gap-0"
         onFocus={(event: Parameters<NonNullable<TextInputProps["onFocus"]>>[0]) => {
           setFocused(true);

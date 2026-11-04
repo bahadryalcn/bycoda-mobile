@@ -2,7 +2,7 @@ import { ScreenList } from "@/ui/screen-list";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "./shared/search";
 import { useProjectList } from "../workspace/use-project-directory";
-import { useReducer, useState } from "react";
+import { useReducer, useRef, useState, type ComponentRef } from "react";
 import Plus from "lucide-react-native/icons/plus";
 
 import {
@@ -32,6 +32,8 @@ export function GoalsScreen() {
   const copy = useCopy();
   const locale = useLocale();
   const [search, setSearch] = useState("");
+  const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
+  const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
   const machine = useActiveMachine();
   const projectId = useMachines((state) => state.selectedProjectId);
   const query = useHostQuery<HostGoal[]>(["goals"], "goals.list", {}, { interval: 5000 });
@@ -57,6 +59,7 @@ export function GoalsScreen() {
     <ScreenList<HostGoal> title={copy("Hedefler", "Goals")} query={query}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
+      context={<Scope allowAll />}
       actions={
         <IconButton
           label={copy("Yeni hedef", "New goal")}
@@ -67,15 +70,14 @@ export function GoalsScreen() {
         </IconButton>
       }
       header={<>
-      <Scope allowAll />
-      <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
-      <MutationState
+      <SearchField ref={searchInput} label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
+      {flow.kind === "closed" && <MutationState
         mutation={create}
         success={copy("Hedef planlaması istendi.", "Goal planning requested.")}
-      />
-      <MutationState mutation={approve} />
-      <MutationState mutation={cancel} />
-      <MutationState mutation={remove} />
+      />}
+      {!visible?.some(goal => goal.id === approve.variables?.goalId) && <MutationState mutation={approve} />}
+      {!visible?.some(goal => goal.id === cancel.variables?.goalId) && <MutationState mutation={cancel} />}
+      {!visible?.some(goal => goal.id === remove.variables?.goalId) && <MutationState mutation={remove} />}
       {flow.kind === "closed" && <MutationState mutation={replan} />}
       {flow.kind === "new" && (
         <Sheet
@@ -130,8 +132,8 @@ export function GoalsScreen() {
         query={query}
         empty={visible?.length === 0}
         emptyTitle={search.trim() && scoped?.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz hedef yok", "No goals yet")}
+        emptyAction={search.trim() && scoped?.length ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
       />
-      {search.trim() && visible?.length === 0 ? <Button tone="quiet" label={copy("Aramayı temizle", "Clear search")} onPress={() => setSearch("")} /> : null}
       </>}
       renderItem={({ item: goal }) => (
         <GoalCard

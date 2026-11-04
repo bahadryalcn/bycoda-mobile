@@ -102,6 +102,21 @@ async function press() {
     container.querySelector("button")!.dispatchEvent(new Event("pointerup", { bubbles: true }));
   });
 }
+it("keeps the same accessible toolbar target and callback when its visible label is compacted", async () => {
+  const props = { label: "Messages", accessibilityLabel: "Chat view: Messages", onPress: state.action };
+  await render(createElement(ChatToolbarAction, props, createElement("span", { "data-icon": true })));
+  const trigger = container.querySelector("button")!;
+  expect(trigger.textContent).toBe("Messages");
+  await render(createElement(ChatToolbarAction, { ...props, hideLabel: true }, createElement("span", { "data-icon": true })));
+  expect(container.querySelector("button")).toBe(trigger);
+  expect(trigger.getAttribute("aria-label")).toBe("Chat view: Messages");
+  expect(trigger.textContent).toBe("");
+  expect(trigger.querySelector("[data-icon]")).not.toBeNull();
+  expect(trigger.dataset.width).toBe("48");
+  expect(trigger.dataset.height).toBe("48");
+  await act(async () => trigger.click());
+  expect(state.action).toHaveBeenCalledTimes(1);
+});
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = undefined;

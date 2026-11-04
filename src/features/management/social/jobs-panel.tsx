@@ -1,3 +1,4 @@
+import { SocialCollectionFeedback, SocialRecordFeedback } from "./action-feedback";
 import { CollectionRows } from "./collection-rows";
 import { ContentExcerpt } from "./content-excerpt";
 import { Body, Button, ErrorText, Row } from "@/ui/primitives";
@@ -19,7 +20,8 @@ export function JobsPanel({ state, projectId, action, run, page }: JobsPanelProp
       recipientIdentity([...(state.contacts ?? []), ...(state.related?.contacts ?? [])], job.accountId, job.contactId || job.payload.recipientId || ""),
       job.projectIds.join(" "), statusLabel(job.status, copy), stamp(job.scheduledAt), job.payload.text, job.error,
     ].filter(Boolean).join(" "), page);
-  return <><CollectionSearch {...collection} /><CollectionRows page={page} key={projectId ?? "all"} items={page ? collection.visible : collection.visible
+  return <><CollectionSearch {...collection} />
+      <CollectionRows page={page} beforeRows={(visible) => <SocialCollectionFeedback action={action} collection="jobs" visible={visible} />} key={projectId ?? "all"} items={page ? collection.visible : collection.visible
     .sort((a, b) => b.scheduledAt - a.scheduledAt)
     } renderItem={(job) => (
       <RecordCard key={job.id}
@@ -67,13 +69,14 @@ export function JobsPanel({ state, projectId, action, run, page }: JobsPanelProp
                       "The host checks the previous result; uncertain sends require review.",
                     )}`,
                     copy("Tekrar dene", "Retry"),
-                    () => run("jobs.retry", { id: job.id }),
+                    () => run("jobs.retry", { id: job.id }), undefined, "default",
                   )
                 }
               />
             )}
           </Row>
         ) : null}
-      </RecordCard>
+      <SocialRecordFeedback action={action} collection="jobs" id={job.id} />
+          </RecordCard>
     )} /></>;
 }

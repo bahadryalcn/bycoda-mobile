@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { randomUUID } from "expo-crypto";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useConnectionScope } from "@/state/connection-scope";
+import { isReviewedMachine } from "@/state/reviewed-machine";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { Body, Button, Disclosure, FormActions, ErrorText, Field, Loading, MutationState, Notice, QueryState, Sheet, Stack, ToggleField } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
@@ -18,8 +20,11 @@ const READ: IntentRead = { status: "ready" };
 
 export function DevicePreviewSheet({ projectId, device, onClose }: { projectId: string; device: DeviceSummary; onClose: () => void }) {
   const copy = useCopy(); const machine = useActiveMachine();
+  const connection = useConnectionScope();
+  const [openingConnection] = useState(connection);
   const [opening] = useState(() => ({ machineId: machine?.id ?? "", environmentId: machine?.environmentId ?? "", projectId, deviceId: device.id }));
-  const current = () => !!opening.machineId && !!opening.environmentId && machine?.id === opening.machineId && machine.environmentId === opening.environmentId &&
+  const current = () => openingConnection.isCurrent() && isReviewedMachine(openingConnection.review, useMachines.getState()) &&
+    !!opening.machineId && !!opening.environmentId && machine?.id === opening.machineId && machine.environmentId === opening.environmentId &&
     useMachines.getState().activeId === opening.machineId && projectId === opening.projectId && device.id === opening.deviceId;
   const supported = current() && machine?.capabilities?.includes("devices.preview.mobile.v1");
   const [read, setRead] = useState<IntentRead>(READING); const [readAttempt, setReadAttempt] = useState(0); const loaded = read.status === "ready"; const [intent, setIntent] = useState<PreviewIntent | null>(null); const [review, setReview] = useState<PreviewIntent>();

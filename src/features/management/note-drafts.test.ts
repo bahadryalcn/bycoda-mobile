@@ -57,3 +57,14 @@ describe("note draft recovery", () => {
     );
   });
 });
+
+it("retires an old note owner after cleanup but permits a freshly opened owner", async () => {
+  const { withDraftStorageCleanup } = await import("@/state/local-draft-storage");
+  const values = new Map<string, string>();
+  const disk = { getItem: async (key: string) => values.get(key) ?? null, setItem: async (key: string, value: string) => { values.set(key, value); }, removeItem: async (key: string) => { values.delete(key); } };
+  const store = createNoteDraftStore(disk), old = store.bind("computer-a");
+  const value: LocalNoteDraft = { id: "note", title: "old", body: "draft", tags: "", expectedUpdatedAt: 0 };
+  await old.save(value); await withDraftStorageCleanup(disk, async retire => { retire(new Set()); values.clear(); });
+  await expect(old.save(value)).rejects.toThrow("saved draft was cleared"); expect(values.size).toBe(0);
+  const fresh = store.bind("computer-a"); expect(await fresh.recover()).toBeNull(); await fresh.save({ ...value, body: "new edit" }); expect(values.size).toBe(1);
+});

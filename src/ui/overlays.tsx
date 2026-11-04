@@ -28,6 +28,7 @@ import { canRemoveOverlay, closeOverlay, showOverlay, type OverlayState } from "
 import { motionTiming } from "./motion";
 import { motion } from "./tokens";
 import { asWebElement, createOverlayWebFocus } from "./overlay-web-focus";
+import { OverlayWebMenuContext } from "./overlay-web-menu-context";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "./private-content";
 
 const Context = createContext<OverlayRegistry | null>(null);
@@ -121,6 +122,8 @@ export function OverlayProvider({ children }: PropsWithChildren) {
     });
   }, []);
   const registry = useMemo(() => ({ update, remove }), [update, remove]);
+  const menuFocus = useMemo(() => ({ register: (menu: import("./overlay-web-focus").WebMenuLayer) =>
+    webFocus.current?.registerMenu(menu) ?? (() => {}) }), []);
   const layers = unlocked
     ? [...entries.entries()].sort((a, b) => a[1].value.priority - b[1].value.priority)
     : [];
@@ -159,7 +162,7 @@ export function OverlayProvider({ children }: PropsWithChildren) {
     return () => subscription.remove();
   }, [active]);
   return (
-    <Context.Provider value={registry}>
+    <Context.Provider value={registry}><OverlayWebMenuContext.Provider value={menuFocus}>
       <View style={uiStyles.screen}>
         <View
           ref={background}
@@ -181,7 +184,7 @@ export function OverlayProvider({ children }: PropsWithChildren) {
           />
         ))}
       </View>
-    </Context.Provider>
+    </OverlayWebMenuContext.Provider></Context.Provider>
   );
 }
 

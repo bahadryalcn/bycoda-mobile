@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMobileTheme } from "@/ui/theme";
+import { useLayoutEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { randomUUID } from "expo-crypto";
 import { reportSender } from "./report-config";
@@ -8,7 +9,7 @@ import { useCopy } from "@/ui/copy";
 import { ConsentField } from "@/ui/consent-field";
 import Animated from "react-native-reanimated";
 import Flag from "lucide-react-native/icons/flag";
-import { Body, Button, Disclosure, ErrorText, Field, NavigationGroup, Screen, SelectField, Sheet, ConfirmationCard, ToggleField } from "@/ui/primitives";
+import { Body, Button, Disclosure, ErrorText, Field, NavigationGroup, Screen, SelectField, Sheet, FormActions, Notice, ToggleField } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
 import { uiStyles } from "@/ui/styles";
@@ -20,7 +21,9 @@ import {
   reportReasons,
 } from "./report-model";
 import {
-  discardContentReport,
+  discardReviewedContentReport,
+  isContentReportReviewCurrent,
+  type ReportReview,
   sendContentReport,
   updateContentReport,
   useContentReport,
@@ -35,12 +38,21 @@ function tile(Glyph: typeof Flag, color: string) {
 }
 
 export function ContentReportScreen() {
+  useMobileTheme();
   const copy = useCopy();
-  const { draft, status, error, receiptId } = useContentReport();
-  const [discarding, setDiscarding] = useState(false);
+  const { draft, status, error, receiptId, requestId, revision } = useContentReport();
+  const [discarding, setDiscarding] = useState<ReportReview | null>(null);
+  const active = useRef(true);
+  const reviewOwner = useRef<ReportReview | null>(null);
+  const retired = useRef(false);
+  const reviewCurrent = !discarding || isContentReportReviewCurrent(discarding);
+  useLayoutEffect(() => { if (discarding && !reviewCurrent) retired.current = true; }, [discarding, reviewCurrent]);
+  useLayoutEffect(() => { active.current = true; return () => { active.current = false; reviewOwner.current = null; }; }, []);
+  const closeReview = () => { reviewOwner.current = null; retired.current = true; setDiscarding(null); };
+  const staleReview = !!discarding && (!reviewCurrent || retired.current);
   const busy = status === "sending";
   const validation = reportDraftError(draft);
-  const visibleError = error ?? ((draft.description.length > 0 || draft.consent) ? validation : null);
+  const visibleError = status === "sent" ? null : error ?? (draft.consent ? validation : null);
   const reasonLabels = {
     unsafe: copy("Zararlı veya tehlikeli içerik", "Unsafe or dangerous content"),
     hate: copy("Nefret veya taciz", "Hate or harassment"),
@@ -67,8 +79,23 @@ export function ContentReportScreen() {
     ),
   };
   return (
-    <Screen>
+    <Screen footer={<FormActions
+      submitLabel={status === "sent" ? copy("Gönderildi", "Sent") : copy("Gönder", "Send")}
+      disabled={!reportSender || status === "sent" || !!validation} busy={busy}
+      feedback={visibleError === "send" ? <ErrorText error message={errorLabels.send} /> : status === "sent" ? <View style={{ gap: space.sm }}>
+        <Notice tone="success" message={copy("Bildirim alındı.", "Report received.")} />
+        {receiptId ? <Body selectable muted>{receiptId}</Body> : null}
+      </View> : null}
+      onSubmit={() => { if (!active.current || busy) return; void sendContentReport({ review: { draft, status, requestId, receiptId, revision }, sender: reportSender, newRequestId: randomUUID, assertAccess: assertAppAccess }).catch(() => {}); }}
+      cancelLabel={copy("Taslağı sil", "Discard draft")} cancelDisabled={busy}
+      onCancel={() => {
+        if (busy || !active.current) return;
+        const review = { draft, status, requestId, receiptId, revision };
+        retired.current = false; reviewOwner.current = review; setDiscarding(review);
+      }}
+    />}>
       <RouterStack.Screen options={{ title: copy("İçerik bildir", "Report content") }} />
+      {!reportSender || error === "service" ? <Notice tone="info" message={errorLabels.service} /> : null}
       <Animated.View entering={enterItem(0)}>
         <NavigationGroup>
           <SelectField
@@ -86,6 +113,7 @@ export function ContentReportScreen() {
         <View style={{ gap: space.sm }}>
           <Field
             label={copy("Açıklama", "Description")}
+            error={visibleError === "description" ? errorLabels.description : undefined}
             value={draft.description}
             multiline
             editable={!busy}
@@ -128,6 +156,7 @@ export function ContentReportScreen() {
         )}
         value={draft.consent} disabled={busy}
         onChange={(consent) => updateContentReport({ consent })} />
+      <ErrorText error={visibleError === "consent"} message={errorLabels.consent} />
       <Disclosure label={copy("Bildirim ve gizlilik", "Reporting & privacy")}>
         <Body>
           {copy(
@@ -147,41 +176,17 @@ export function ContentReportScreen() {
           onPress={() => router.push("/legal/privacy")}
         />
       </Disclosure>
-      <ErrorText error={visibleError} message={visibleError ? errorLabels[visibleError] : undefined} />
-      {!reportSender ? <Body accessibilityLiveRegion="polite">{errorLabels.service}</Body> : null}
-      {status === "sent" ? (
-        <Body accessibilityLiveRegion="polite">
-          {copy(
-            "Bildirim alındı.",
-            "Report received.",
-          )}
-        </Body>
-      ) : null}
-      {receiptId ? <Body selectable muted>{receiptId}</Body> : null}
-      <Button
-        label={status === "sent" ? copy("Gönderildi", "Sent") : copy("Gönder", "Send")}
-        tone="primary"
-        fullWidth
-        busy={busy}
-        disabled={!reportSender || status === "sent" || !!reportDraftError(draft)}
-        onPress={() => {
-          void sendContentReport({
-            sender: reportSender,
-            newRequestId: randomUUID,
-            assertAccess: assertAppAccess,
-          }).catch(() => {});
-        }}
-      />
-      <Button
-        label={copy("Taslağı sil", "Discard draft")}
-        tone="quiet"
-        disabled={busy}
-        onPress={() => setDiscarding(true)}
-        style={{ alignSelf: "center" }}
-      />
-        <Sheet visible={discarding} size="compact" title={copy("Taslağı sil", "Discard draft")} onClose={() => setDiscarding(false)}>
-          <ConfirmationCard message={copy("Bu bildirim taslağı silinsin mi?", "Discard this report draft?")} cancelLabel={copy("Taslağı koru", "Keep draft")} confirmLabel={copy("Taslağı sil", "Discard draft")} onCancel={() => setDiscarding(false)} onConfirm={() => { discardContentReport(); setDiscarding(false); }} />
-        </Sheet>
+      <Sheet visible={!!discarding} size="compact" title={copy("Taslağı sil", "Discard draft")} onClose={closeReview}>
+        <Body>{copy("Bu bildirim taslağı silinsin mi?", "Discard this report draft?")}</Body>
+        {staleReview ? <Notice tone="warning" message={copy("Taslak değişti. Silmeden önce yeniden incele.", "The draft changed. Review it again before discarding.")} /> : null}
+        <FormActions submitLabel={copy("Taslağı sil", "Discard draft")} tone="danger" disabled={busy || staleReview}
+          cancelLabel={copy("Taslağı koru", "Keep draft")} onCancel={closeReview}
+          onSubmit={() => {
+            if (!discarding || reviewOwner.current !== discarding || retired.current) return;
+            try { assertAppAccess(); } catch { return; }
+            if (discardReviewedContentReport(discarding)) closeReview();
+          }} />
+      </Sheet>
     </Screen>
   );
 }

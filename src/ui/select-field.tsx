@@ -1,17 +1,22 @@
+import { scrollKeyboardDismissMode } from "./scroll-keyboard";
 import { useMobileTheme } from "./theme";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ChevronsUpDown from "lucide-react-native/icons/chevrons-up-down";
 import { FlatList, Text, View } from "react-native";
 import { Pressable } from "react-native";
 import Check from "lucide-react-native/icons/check";
 import { DisclosureChevron } from "./disclosure-motion";
-import Search from "lucide-react-native/icons/search";
 import Square from "lucide-react-native/icons/square";
 import CheckSquare from "lucide-react-native/icons/square-check-big";
 import { Sheet } from "./dialogs";
 import { Body } from "./typography";
 import { Button } from "./buttons";
-import { Input } from "./fields";
+import { SearchField } from "./search-field";
+import { Empty } from "./feedback";
+import { useLocale } from "@/i18n";
+import { usePrivateContentAccess, type PrivateContentAccess } from "./private-access";
+import { normalizeSearch } from "./search-matching";
+import { useFilteredListScrollMemory } from "./use-list-scroll-memory";
 import { useCopy } from "./copy";
 import { colors, metrics, opacity, radii, semanticColors, space } from "./tokens";
 import { uiStyles } from "./styles";
@@ -76,8 +81,12 @@ function SelectionField<T extends string>({
 }: MultiSelectProps<T> & { multiple?: boolean }) {
   useMobileTheme();
   const copy = useCopy();
+  const locale = useLocale(), access = usePrivateContentAccess();
   const trigger = useRef<View>(null);
-  const [open, setOpen] = useState(false);
+  const mounted = useRef(false);
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const [opening, setOpening] = useState<{ access: PrivateContentAccess } | null>(null);
+  const open = !!opening;
   const [search, setSearch] = useState("");
   const optionLabels = useMemo(
     () => new Map(options.map((option) => [option.value, option.label])),
@@ -91,8 +100,34 @@ function SelectionField<T extends string>({
   const summary = labels.length
     ? `${labels.slice(0, limit).join(", ")}${labels.length > limit ? ` +${labels.length - limit}` : ""}`
     : (placeholder ?? copy("Seç…", "Select…"));
-  const filtered = useMemo(() => filterSelection(options, search), [options, search]);
-  const searchEnabled = searchable ?? options.length > 6;
+  const filtered = useMemo(() => filterSelection(options, search, locale), [options, search, locale]);
+  const searchEnabled = (searchable ?? options.length > 6) || !!search;
+  const available = !disabled && access.allowed && access.check() && (!opening || opening.access.allowed && opening.access.check());
+  const searchKey = normalizeSearch(search, locale);
+  const signature = JSON.stringify([searchKey, locale, values, options.map(option => [option.value, option.label, option.detail, option.disabled])]);
+  const view = useMemo(() => ({}), [opening, available, signature, multiple, max]);
+  const input = useMemo(() => ({}), [opening, available]);
+  const live = useRef({ opening, view, input, available, access, values, onChange, filtered });
+  live.current = { opening, view, input, available, access, values, onChange, filtered };
+  const current = () => mounted.current && !!opening && live.current.opening === opening && live.current.available &&
+    live.current.access.allowed && live.current.access.check() && opening.access.allowed && opening.access.check();
+  const openPanel = () => {
+    if (!mounted.current || live.current.opening || !live.current.available || !live.current.access.allowed || !live.current.access.check()) return;
+    const next = { access: live.current.access }; live.current.opening = next; setSearch(""); setOpening(next);
+  };
+  const close = () => { if (mounted.current && opening && live.current.opening === opening) { live.current.opening = null; setOpening(null); } };
+  useLayoutEffect(() => { if (opening && !available) close(); }, [opening, available]);
+  const changeSearch = (value: string) => { if (current() && live.current.input === input) setSearch(value); };
+  const clearSearch = () => { if (live.current.view === view) changeSearch(""); };
+  const clearSelection = () => { if (current() && live.current.view === view) live.current.onChange([]); };
+  const choose = (value: T) => {
+    if (!current() || live.current.view !== view) return;
+    const item = live.current.filtered.find(option => option.value === value);
+    if (!item || item.disabled || multiple && !live.current.values.includes(value) && max !== undefined && live.current.values.length >= max) return;
+    live.current.onChange(multiple ? toggleSelection(live.current.values, value, max) : [value]);
+    if (!multiple) close();
+  };
+  const position = useFilteredListScrollMemory<SelectionFieldOption<T>>(searchKey, open && available, filtered.length, { suspended: !open || !available });
   const row = variant === "row";
   return (
     <View style={row ? undefined : uiStyles.field}>
@@ -103,14 +138,11 @@ function SelectionField<T extends string>({
           accessibilityRole="combobox"
           accessibilityLabel={`${label}: ${labels.length ? labels.join(", ") : summary}`}
           accessibilityHint={error ?? hint}
-          accessibilityState={{ expanded: open, disabled: !!disabled }}
-          aria-expanded={open}
-          aria-disabled={!!disabled}
-          disabled={disabled}
-          onPress={() => {
-            setSearch("");
-            setOpen(true);
-          }}
+          accessibilityState={{ expanded: open && available, disabled: !available }}
+          aria-expanded={open && available}
+          aria-disabled={!available}
+          disabled={!available}
+          onPress={openPanel}
           style={({ pressed }) => ({
             minHeight: metrics.touchTarget,
             flexDirection: "row",
@@ -119,7 +151,7 @@ function SelectionField<T extends string>({
             paddingHorizontal: 0,
             paddingVertical: space.sm,
             backgroundColor: pressed ? colors.raised : "transparent",
-            opacity: disabled ? opacity.disabled : 1,
+            opacity: !available ? opacity.disabled : 1,
           })}
         >
           {icon}
@@ -140,15 +172,12 @@ function SelectionField<T extends string>({
         accessibilityRole="combobox"
         accessibilityLabel={`${label}: ${labels.length ? labels.join(", ") : summary}`}
         accessibilityHint={error ?? hint}
-        accessibilityState={{ expanded: open, disabled: !!disabled }}
-        aria-expanded={open}
-        aria-disabled={!!disabled}
-        disabled={disabled}
+        accessibilityState={{ expanded: open && available, disabled: !available }}
+        aria-expanded={open && available}
+        aria-disabled={!available}
+        disabled={!available}
         hitSlop={compact ? { top: 4, bottom: 4, left: 0, right: 0 } : undefined}
-        onPress={() => {
-          setSearch("");
-          setOpen(true);
-        }}
+        onPress={openPanel}
         style={({ pressed }) => [
           uiStyles.input,
           compact && {
@@ -162,7 +191,7 @@ function SelectionField<T extends string>({
             flexDirection: "row",
             alignItems: "center",
             gap: space.sm,
-            opacity: disabled ? opacity.disabled : pressed ? opacity.pressed : 1,
+            opacity: !available ? opacity.disabled : pressed ? opacity.pressed : 1,
           },
         ]}
       >
@@ -170,20 +199,6 @@ function SelectionField<T extends string>({
         <Body selectable={false} muted={!labels.length} style={uiStyles.grow}>
           {summary}
         </Body>
-        {multiple && values.length ? (
-          <Text
-            style={[
-              uiStyles.badge,
-              {
-                color: colors.accent,
-                backgroundColor: colors.selected,
-                borderColor: semanticColors.info.border,
-              },
-            ]}
-          >
-            {values.length}
-          </Text>
-        ) : null}
         <DisclosureChevron
           expanded={open}
           size={16}
@@ -203,51 +218,24 @@ function SelectionField<T extends string>({
         </Text>
       ) : null}
       <Sheet
-        visible={open}
-        onClose={() => setOpen(false)}
+        visible={open && available}
+        onClose={close}
         title={label}
         size={searchEnabled ? "full" : "compact"}
         scroll={false}
         returnFocusRef={trigger}
         headerAction={
           multiple ? (
-            <Button label={copy("Tamam", "Done")} tone="quiet" onPress={() => setOpen(false)} />
+            <Button label={copy("Tamam", "Done")} tone="quiet" onPress={close} />
           ) : undefined
         }
       >
         <View style={{ flexShrink: 1, flexGrow: searchEnabled ? 1 : 0, minHeight: 0 }}>
-          <FlatList
-            ListHeaderComponent={searchEnabled || multiple ? (
-            <View style={[uiStyles.header, { paddingHorizontal: 0 }]}>
-              {searchEnabled ? (
-                <View
-                  style={[
-                    uiStyles.input,
-                    {
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: space.sm,
-                      paddingVertical: 0,
-                    },
-                  ]}
-                >
-                  <Search color={colors.muted} size={18} />
-                  <Input
-                    label={copy("Seçenek ara", "Search options")}
-                    placeholder={copy("Seçenek ara", "Search options")}
-                    value={search}
-                    onChangeText={setSearch}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="search"
-                    clearButtonMode="while-editing"
-                    style={[
-                      uiStyles.grow,
-                      { borderWidth: 0, backgroundColor: "transparent", paddingHorizontal: 0 },
-                    ]}
-                  />
-                </View>
-              ) : null}
+          {searchEnabled || multiple ? (
+            <View style={[uiStyles.header, { paddingHorizontal: space.screen, flexShrink: 0 }]}>
+              {searchEnabled ? <SearchField
+                label={copy("Seçenek ara", "Search options")}
+                value={search} onChangeText={changeSearch} /> : null}
               {multiple ? (
                 <View
                   style={{
@@ -269,39 +257,37 @@ function SelectionField<T extends string>({
                   {values.length ? (
                     <Button
                       density="compact"
-                      disabled={disabled}
+                      disabled={!available}
                       label={copy("Seçimi temizle", "Clear selection")}
-                      onPress={() => onChange([])}
+                      onPress={clearSelection}
                     />
                   ) : null}
                 </View>
               ) : null}
             </View>
           ) : null}
+          <FlatList
+            {...position.listProps}
             data={filtered}
             extraData={values}
             style={{ flexGrow: searchEnabled ? 1 : 0, flexShrink: 1 }}
             removeClippedSubviews={false}
             keyExtractor={(option) => option.value}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={searchEnabled ? "none" : "on-drag"}
+            keyboardDismissMode={searchEnabled ? "none" : scrollKeyboardDismissMode("on-drag")}
             automaticallyAdjustKeyboardInsets={false}
             contentInsetAdjustmentBehavior="never"
             contentContainerStyle={{ paddingHorizontal: space.screen, paddingBottom: space.lg }}
             ItemSeparatorComponent={() => (
               <View style={[uiStyles.separator, { marginHorizontal: space.sm }]} />
             )}
-            ListEmptyComponent={
-              <Body muted>
-                {options.length
-                  ? copy("Eşleşen seçenek yok.", "No matching options.")
-                  : copy("Kullanılabilir seçenek yok.", "No options available.")}
-              </Body>
-            }
+            ListEmptyComponent={<Empty compact
+              title={options.length ? copy("Eşleşen seçenek yok.", "No matching options.") : copy("Kullanılabilir seçenek yok.", "No options available.")}
+              action={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined} />}
             renderItem={({ item }) => {
               const selected = values.includes(item.value);
               const off =
-                !!disabled ||
+                !available ||
                 !!item.disabled ||
                 (!!multiple && !selected && max !== undefined && values.length >= max);
               return (
@@ -312,10 +298,7 @@ function SelectionField<T extends string>({
                   aria-checked={selected}
                   aria-disabled={off}
                   disabled={off}
-                  onPress={() => {
-                    onChange(multiple ? toggleSelection(values, item.value, max) : [item.value]);
-                    if (!multiple) setOpen(false);
-                  }}
+                  onPress={() => choose(item.value)}
                   style={({ pressed }) => ({
                     minHeight: metrics.selectionHeight,
                     flexDirection: "row",
@@ -336,7 +319,7 @@ function SelectionField<T extends string>({
                       {item.label}
                     </Body>
                     {item.detail ? (
-                      <Body muted numberOfLines={2} style={uiStyles.caption}>
+                      <Body muted style={uiStyles.caption}>
                         {item.detail}
                       </Body>
                     ) : null}

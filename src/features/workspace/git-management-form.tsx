@@ -1,4 +1,5 @@
 import { useCopy } from "@/ui/copy";
+import { useSheetGuard } from "@/ui/sheet-guard";
 import { Body, Field, FormActions, Notice, SelectField, Stack, ToggleField } from "@/ui/primitives";
 import type { GitManagementAction, GitManagementDraft } from "./git-management-model";
 
@@ -21,6 +22,7 @@ export function GitManagementForm({ value, onChange, busy, disabled, error, bran
 }) {
   const copy = useCopy();
   const labels = useGitManagementLabels();
+  const { requestClose } = useSheetGuard({ pending: busy, onClose: onCancel });
   const action = value.action;
   const patch = (values: Partial<GitManagementDraft>) => onChange({ ...value, ...values });
   const locked = busy || disabled;
@@ -45,7 +47,7 @@ export function GitManagementForm({ value, onChange, busy, disabled, error, bran
       <Field label={copy("Kaynak dal (head)", "Head branch")} value={value.head} editable={!locked} onChangeText={(head) => patch({ head })} />
     </>}
     {error && <Body muted>{error}</Body>}
-    <FormActions submitLabel={labels[action]} disabled={locked || !!error} busy={busy} onSubmit={onSubmit} onCancel={onCancel}
+    <FormActions submitLabel={labels[action]} disabled={locked || !!error} busy={busy} onSubmit={onSubmit} onCancel={requestClose}
       cancelDisabled={busy} cancelLabel={copy("Vazgeç", "Cancel")} feedback={feedback} />
   </Stack>;
 }

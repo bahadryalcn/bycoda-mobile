@@ -66,3 +66,9 @@ describe("drafts before switching computers", () => {
     expect(current).toHaveBeenCalledOnce();
   });
 });
+
+it("skips a deliberately retired draft registration without suppressing real storage failures", async () => {
+  const { RetiredDraftError } = await import("@/state/local-draft-storage");
+  const next = vi.fn(async () => {}), old = registerWorkspaceDraft("retired", async () => { throw new RetiredDraftError(); }), fresh = registerWorkspaceDraft("fresh", next);
+  try { await flushWorkspaceDrafts(); expect(next).toHaveBeenCalledOnce(); } finally { old(); fresh(); }
+});

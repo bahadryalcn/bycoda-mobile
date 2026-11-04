@@ -1,6 +1,6 @@
 import { useMobileTheme } from "./theme";
-import { useImperativeHandle, useRef, useState } from "react";
-import { View, type TextInput } from "react-native";
+import { useImperativeHandle, useRef, useState, type ReactNode } from "react";
+import { View, useWindowDimensions, type TextInput } from "react-native";
 import Search from "lucide-react-native/icons/search";
 import X from "lucide-react-native/icons/x";
 import { Input } from "./fields";
@@ -9,6 +9,21 @@ import { useCopy } from "./copy";
 import { colors, metrics, radii, space } from "./tokens";
 import type { InputProps } from "./component-props";
 import { decorativeSvgProps } from "./accessibility";
+
+/** Search keeps useful room; secondary actions wrap together instead of squeezing it. */
+export function SearchToolbar({ search, actions }: { search: ReactNode; actions: ReactNode }) {
+  return <CollectionToolbar field={search} actions={actions} />;
+}
+
+/** A collection's primary search or scope field keeps room beside wrapping actions. */
+export function CollectionToolbar({ field, actions }: { field: ReactNode; actions: ReactNode }) {
+  useMobileTheme();
+  const { fontScale } = useWindowDimensions();
+  return <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }}>
+    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 180 * Math.max(1, fontScale), minWidth: 0 }}>{field}</View>
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginStart: "auto", minWidth: 0, flexShrink: 1, maxWidth: "100%" }}>{actions}</View>
+  </View>;
+}
 
 /** A single search surface with a visible focus boundary and a spoken label. */
 export function SearchField({
@@ -45,7 +60,7 @@ export function SearchField({
         paddingStart: space.md,
         backgroundColor: colors.fill,
         borderWidth: 1.5,
-        borderColor: focused ? colors.accent : "transparent",
+        borderColor: focused ? colors.accent : colors.border,
         borderRadius: radii.control,
         minHeight: metrics.touchTarget,
       }}

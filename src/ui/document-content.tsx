@@ -1,78 +1,20 @@
 import { mediaQueryKey, visibleMediaData } from "./media-policy";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { File } from "expo-file-system";
 import { useQuery } from "@tanstack/react-query";
-import * as Sharing from "expo-sharing";
-import { Body, Button, CodePanel, CodeText, ErrorText, Loading, Row } from "./primitives";
+import { Body, Button, ErrorText, Loading, Row } from "./primitives";
+import { MessageCode } from "./message-code";
+import { documentDisplayName } from "./document-display-name";
 import { MessageContent } from "./message-content";
 import { MessageImage } from "./message-image";
 import { HtmlDocument } from "./html-document";
 import { mediaMime, type MessageContext, type OpenDocument } from "./media-policy";
-import { loadProjectMedia } from "./media-loader";
 import { useCopy } from "./copy";
+import { useMediaSharing } from "./use-media-sharing";
 import { space } from "./tokens";
 
-export function ProjectMediaContent({
-  path,
-  context,
-  onOpenFile,
-}: {
-  path: string;
-  context: MessageContext;
-  onOpenFile?: OpenDocument;
-}) {
-  const copy = useCopy();
-  const query = useQuery({
-    queryKey: mediaQueryKey(context, [
-      "project-media",
-      context.machineId,
-      context.projectId,
-      context.sessionId,
-      context.cwd,
-      context.basePath,
-      path,
-    ]),
-    queryFn: ({ signal }) => loadProjectMedia(context, path, signal),
-    retry: false,
-    networkMode: "always",
-  });
-  const data = visibleMediaData(query);
-  return (
-    <View style={{ gap: space.sm }}>
-      {query.isFetching && !query.error ? <Loading /> : null}
-      <ErrorText error={query.error} />
-      {query.error ? (
-        <Button busy={query.isFetching}
-          label={copy("Yeniden dene", "Retry")}
-          onPress={() => {
-            void query.refetch();
-          }}
-        />
-      ) : null}
-      {data ? (
-        <DocumentContent
-          onOpenFile={onOpenFile}
-          {...data}
-          name={path}
-          context={context}
-          onReload={() => {
-            void query.refetch();
-          }}
-        />
-      ) : null}
-    </View>
-  );
-}
-export function DocumentContent({
-  name,
-  text,
-  uri,
-  mimeType = mediaMime(name),
-  context,
-  onReload,
-  onOpenFile,
-}: {
+type DocumentContentProps = {
   name: string;
   text?: string;
   uri?: string;
@@ -80,11 +22,27 @@ export function DocumentContent({
   context?: MessageContext;
   onReload?: () => void;
   onOpenFile?: OpenDocument;
-}) {
+};
+
+/** Reader-local view and callbacks belong to this file in this Host/project scope. */
+export function DocumentContent(props: DocumentContentProps) {
+  const identity = JSON.stringify(mediaQueryKey(props.context, ["document-reader", props.name, props.uri, props.mimeType ?? mediaMime(props.name)]));
+  return <DocumentContentBody key={identity} {...props} />;
+}
+
+function DocumentContentBody({ name, text, uri, mimeType = mediaMime(name), context, onReload, onOpenFile }: DocumentContentProps) {
   const copy = useCopy();
   const [source, setSource] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const readable = /^(?:text\/|application\/json)/.test(mimeType);
+  const sharing = useMediaSharing({ uri, name, mimeType });
+  const mediaType = mimeType.split(";")[0]!.trim().toLowerCase();
+  const readable = /^(?:text\/|application\/json)/.test(mediaType);
+  const html = mediaType === "text/html";
+  const markdown = mediaType === "text/markdown" || /\.(?:md|markdown)$/i.test(name.split(/[?#]/)[0]!);
+  const canPreview = html || markdown;
+  const extension = /\.([a-z0-9]+)$/i.exec(name.split(/[?#]/)[0]!)?.[1]?.toLowerCase();
+  const language = html ? "html" : markdown ? "markdown" : mediaType === "application/json" ? "json" : extension || "text";
+  const live = useRef(true);
+  useLayoutEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const query = useQuery({
     queryKey: mediaQueryKey(context, [
       "local-document",
@@ -99,64 +57,33 @@ export function DocumentContent({
   });
   const data = visibleMediaData(query);
   const body = text ?? data;
-  if (mimeType.startsWith("image/") && uri)
-    return <MessageImage source={uri} alt={name} localFile onReload={onReload} />;
+  if (mediaType.startsWith("image/") && uri)
+    return <MessageImage source={uri} alt={name} context={context} localFile onReload={onReload} />;
   return (
     <View style={{ gap: space.sm }}>
+      {(body !== undefined && canPreview) || uri ? <Row>
+        {body !== undefined && canPreview ? <Button tone="quiet" density="compact"
+          label={source ? copy("Önizle", "Preview") : copy("Kaynağı göster", "Show source")}
+          onPress={() => { if (live.current) setSource(value => !value); }} /> : null}
+        {uri ? <Button tone="quiet" label={copy("Paylaş / kaydet", "Share / save")}
+          busy={sharing.busy} onPress={sharing.share} /> : null}
+      </Row> : null}
+      <ErrorText error={sharing.error} />
+      {(query.error || sharing.error) && onReload ? <Button tone="quiet"
+        label={copy("Dosyayı yeniden yükle", "Reload file")} disabled={sharing.busy}
+        onPress={() => { if (sharing.reset()) onReload(); }} /> : null}
+      <ErrorText error={query.error} />
+      {query.error && !onReload ? <Button tone="quiet" label={copy("Yeniden dene", "Retry")}
+        busy={query.isFetching} onPress={() => { if (live.current) void query.refetch({ cancelRefetch: false }); }} /> : null}
       {body !== undefined ? (
-        <>
-          <Row>
-            {/html|markdown/.test(mimeType) ? (
-              <Button
-                tone="quiet"
-                density="compact"
-                label={source ? copy("Önizle", "Preview") : copy("Kaynağı göster", "Show source")}
-                onPress={() => setSource(!source)}
-              />
-            ) : null}
-          </Row>
-          {!source && mimeType === "text/html" ? (
-            <HtmlDocument html={body} name={name} context={context} />
-          ) : !source && (mimeType === "text/markdown" || /\.md$/i.test(name)) ? (
-            <MessageContent
-              onOpenFile={onOpenFile}
-              text={body}
-              context={context ? { ...context, basePath: name } : undefined}
-            />
-          ) : (
-            <CodePanel>
-              <CodeText>{body}</CodeText>
-            </CodePanel>
-          )}
-        </>
-      ) : query.isFetching ? (
-        <Loading />
-      ) : (
-        <Body muted>
-          {copy("Bu dosyayı başka bir uygulamada açabilirsin.", "Open this file in another app.")}
-        </Body>
-      )}
-      {uri ? (
-        <Button
-          tone="quiet"
-          label={copy("Paylaş / kaydet", "Share / save")}
-          onPress={() => {
-            void Sharing.isAvailableAsync()
-              .then((available) => {
-                if (!available)
-                  throw new Error(copy("Paylaşım kullanılamıyor.", "Sharing is unavailable."));
-                return Sharing.shareAsync(uri, { mimeType, dialogTitle: name });
-              })
-              .catch(setError);
-          }}
-        />
-      ) : null}
-      <ErrorText error={query.error || error} />
-      {(query.error || error) && onReload ? <Button
-        tone="quiet"
-        label={copy("Dosyayı yeniden yükle", "Reload file")}
-        onPress={() => { setError(null); onReload(); }}
-      /> : null}
+        !source && html ? <HtmlDocument html={body} name={name} context={context} />
+          : !source && markdown ? <MessageContent onOpenFile={onOpenFile} text={body}
+            context={context ? { ...context, basePath: name } : undefined} />
+          : <MessageCode code={body} language={language} context={context}
+            allowPreview={false} readerTitle={documentDisplayName(name)} copyLabel={copy("Kopyala", "Copy")} />
+      ) : query.isFetching ? <Loading /> : !query.error ? <Body muted>
+        {copy("Bu dosyayı başka bir uygulamada açabilirsin.", "Open this file in another app.")}
+      </Body> : null}
     </View>
   );
 }

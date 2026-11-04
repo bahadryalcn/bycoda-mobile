@@ -5,6 +5,7 @@ import {
   ConnectionHelloResultSchema,
   JsonValueSchema,
   RpcResponseSchema,
+  RPC_ERROR_CODES,
   SubscriptionEventSchema,
   SubscriptionOpenResultSchema,
   WS_LIMITS,
@@ -31,7 +32,53 @@ export type HostWsFailure =
   | "network"
   | "deadline"
   | "cancelled"
-  | "overload";
+  | "overload"
+  | "unavailable"
+  | "internal"
+  | "validation"
+  | "unsupported";
+const failureMessages: Record<HostWsFailure, string> = {
+  authentication: "Computer access was denied. Reconnect this computer.",
+  identity: "Host identity changed. Pair this computer again.",
+  schema: "The mobile app and Host use incompatible data. Update both and reconnect.",
+  tls: "The computer certificate could not be verified. Reconnect this computer.",
+  network: "This computer could not be reached. Check its connection and try again.",
+  deadline: "This computer took too long to answer. Try again.",
+  cancelled: "Request cancelled.",
+  overload: "This computer is busy. Try again shortly.",
+  unavailable: "This computer is not ready for this request. Try again shortly.",
+  internal: "The computer could not complete this request. Try again.",
+  validation: "The computer rejected this request. Check its details and try again.",
+  unsupported: "This Host does not support this operation. Update the Host and reconnect.",
+};
+/** A rejected RPC is not evidence of malformed wire data or a broken socket. */
+function rpcFailure(code: number, category?: string): HostWsFailure {
+  if (category && Object.hasOwn(failureMessages, category)) return category as HostWsFailure;
+  switch (code) {
+    case RPC_ERROR_CODES.unauthorized:
+      return "authentication";
+    case RPC_ERROR_CODES.wrongEnvironment:
+      return "identity";
+    case RPC_ERROR_CODES.overloaded:
+      return "overload";
+    case RPC_ERROR_CODES.deadlineExceeded:
+      return "deadline";
+    case RPC_ERROR_CODES.cancelled:
+      return "cancelled";
+    case RPC_ERROR_CODES.notReady:
+    case RPC_ERROR_CODES.resyncRequired:
+      return "unavailable";
+    case RPC_ERROR_CODES.methodNotFound:
+      return "unsupported";
+    case RPC_ERROR_CODES.parseError:
+    case RPC_ERROR_CODES.invalidRequest:
+      return "schema";
+    case RPC_ERROR_CODES.invalidParams:
+      return "validation";
+    default:
+      return "internal";
+  }
+}
 export class HostWsError extends Error {
   constructor(
     readonly category: HostWsFailure,
@@ -41,7 +88,7 @@ export class HostWsError extends Error {
     super(
       uncertain
         ? "Connection interrupted. Check this command's result before trying again."
-        : `Host connection: ${category}.`,
+        : failureMessages[category],
     );
   }
 }
@@ -389,18 +436,8 @@ export class MobileHostWsConnection {
     pending.resolving = true;
     if ("error" in response) {
       const rejected = this.take(response.id)!;
-      const category = response.error.data?.category;
       rejected.reject(
-        this.pendingError(
-          rejected,
-          category === "authentication"
-            ? "authentication"
-            : category === "identity"
-              ? "identity"
-              : category === "overload"
-                ? "overload"
-                : "schema",
-        ),
+        this.pendingError(rejected, rpcFailure(response.error.code, response.error.data?.category)),
       );
       return;
     }
@@ -493,10 +530,10 @@ export class MobileHostWsConnection {
   }
   private fail(error: HostWsError): void {
     if (this.closed) return;
-    this.close();
+    this.close(error.category);
     this.onFailure(error);
   }
-  close(): void {
+  close(reason: HostWsFailure = "network"): void {
     if (this.closed) return;
     this.closed = true;
     this.ready = false;
@@ -509,7 +546,7 @@ export class MobileHostWsConnection {
     this.listener = undefined;
     for (const id of this.pending.keys()) {
       const pending = this.take(id)!;
-      pending.reject(this.pendingError(pending, "network"));
+      pending.reject(this.pendingError(pending, reason));
     }
     void this.native.close(this.connectionId, this.generation).catch(() => undefined);
   }

@@ -1,34 +1,25 @@
 import { providerStateLabel } from "./provider-labels";
-import type { ProviderConnectionsProps, ProviderInboxItemsProps } from "./provider-component-types";
+import type { ProviderConnectionsProps, ProviderInboxFeedbackProps, ProviderInboxRowProps } from "./provider-component-types";
 import {
   Badge,
   Body,
-  Button,
-  Disclosure,
-  NavigationRow,
-  Notice,
   Row,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { inboxItemKey, providerName } from "./provider-model";
+import { IssueSummary } from "@/ui/issue-summary";
+import { providerName } from "./provider-model";
+import { IssueRecordRow } from "./issue-record-row";
 
 export {
   type ProviderConnectionsProps,
-  type ProviderInboxItemsProps,
+  type ProviderInboxFeedbackProps,
+  type ProviderInboxRowProps,
 } from "./provider-component-types";
 
-export function ProviderConnections({ providers }: ProviderConnectionsProps) {
+export function ProviderConnections({ providers, onRetry, retrying }: ProviderConnectionsProps) {
   const copy = useCopy();
   return (
-    <Disclosure
-      label={copy("Bağlı servisler", "Connected services")}
-      detail={
-        providers
-          .filter((provider) => provider.connected)
-          .map((provider) => providerName(provider.provider))
-          .join(" · ") || copy("Bağlı hesap yok", "No connected accounts")
-      }
-    >
+    <>
       <Row>
         {providers.map((provider) => (
           <Badge
@@ -41,15 +32,8 @@ export function ProviderConnections({ providers }: ProviderConnectionsProps) {
           />
         ))}
       </Row>
-      {providers
-        .filter((provider) => provider.error)
-        .map((provider) => (
-          <Notice
-            tone="warning"
-            key={provider.provider}
-            message={`${providerName(provider.provider)}: ${provider.error}`}
-          />
-        ))}
+      <IssueSummary issues={providers.filter((provider) => provider.error).map((provider) => `${providerName(provider.provider)}: ${provider.error}`)}
+        onRetry={onRetry} retrying={retrying} />
       {!providers.some((provider) => provider.connected) ? (
         <Body muted>
           {copy(
@@ -58,30 +42,24 @@ export function ProviderConnections({ providers }: ProviderConnectionsProps) {
           )}
         </Body>
       ) : null}
-    </Disclosure>
+    </>
   );
 }
 
-export function ProviderInboxItems({ result, limit, onOpen, onMore }: ProviderInboxItemsProps) {
+export function ProviderInboxFeedback({ result, onRetry, retrying }: ProviderInboxFeedbackProps) {
   const copy = useCopy();
   return (
     <>
-      {Object.entries(result.errors).map(([provider, error]) => (
-        <Notice tone="warning" key={provider} message={`${providerName(provider)}: ${error}`}>
-          <Body muted>
-            {copy(
-              "Bu servisin kayıtları güncel olmayabilir.",
-              "This provider’s items may be out of date.",
-            )}
-          </Body>
-        </Notice>
-      ))}
-      <Body muted>
-        {result.items.length} {copy("kayıt", "items")}
-      </Body>
-      {result.items.slice(0, limit).map((item) => (
-        <NavigationRow
-          key={inboxItemKey(item)}
+      <IssueSummary issues={Object.entries(result.errors).map(([provider, error]) =>
+        `${providerName(provider)}: ${error}\n${copy("Bu servisin kayıtları güncel olmayabilir.", "This provider’s items may be out of date.")}`)}
+        onRetry={onRetry} retrying={retrying} />
+    </>
+  );
+}
+
+export function ProviderInboxRow({ item, onOpen }: ProviderInboxRowProps) {
+  const copy = useCopy();
+  return <IssueRecordRow
           label={item.title}
           detail={[
             providerName(item.provider),
@@ -90,14 +68,7 @@ export function ProviderInboxItems({ result, limit, onOpen, onMore }: ProviderIn
           ]
             .filter(Boolean)
             .join(" · ")}
-          detailLines={2}
-          trailing={<Badge label={providerStateLabel(item.state, copy)} />}
+          state={providerStateLabel(item.state, copy)}
           onPress={() => onOpen(item)}
-        />
-      ))}
-      {result.items.length > limit ? (
-        <Button tone="quiet" label={copy("Daha fazla göster", "Show more")} onPress={onMore} />
-      ) : null}
-    </>
-  );
+        />;
 }

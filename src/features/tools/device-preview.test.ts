@@ -10,7 +10,10 @@ vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
   setItem: async (key: string, value: string) => { if (state.failStorage) throw new Error("Storage failed"); state.values.set(key, value); },
   removeItem: async (key: string) => { state.values.delete(key); },
 } }));
-vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: state.id, environmentId: "host", capabilities: ["devices.preview.mobile.v1"] }), useMachines: { getState: () => ({ activeId: state.id }) } }));
+vi.mock("@/state/machines", () => {
+  const machine = () => ({ id: state.id, environmentId: "host", capabilities: ["devices.preview.mobile.v1"] });
+  return { useActiveMachine: machine, useMachines: { getState: () => ({ activeId: state.id, machines: [machine()] }), subscribe: () => () => {} } };
+});
 vi.mock("@/state/queries", () => ({
   useHostQuery: (_key: unknown, method: string, params: Record<string, unknown>, options: { enabled: boolean }) => { state.reads.push({ method, params, enabled: options.enabled }); return { data: undefined, isError: state.readError, isFetching: false, refetch: vi.fn() }; },
   useHostMutation: (method: string) => ({ isPending: false, mutateAsync: async (params: Record<string, unknown>) => { state.writes.push({ method, params }); if (state.uncertain) throw { uncertain: true }; return { id: "job", requestId: params.requestId, deviceId: params.deviceId, state: "queued", verification: "launch-only", updatedAt: "2026-10-22T00:00:00Z", stages: [] }; } }),

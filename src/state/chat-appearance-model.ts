@@ -2,6 +2,13 @@ export const CHAT_TEXT_SIZES = ["compact", "standard", "large"] as const;
 export type ChatTextSize = (typeof CHAT_TEXT_SIZES)[number];
 export const DEFAULT_CHAT_TEXT_SIZE: ChatTextSize = "standard";
 
+export class ChatAppearanceStorageError extends Error {
+  constructor(readonly operation: "read" | "save") {
+    super(operation === "read" ? "Chat appearance could not be loaded." : "Chat appearance could not be saved.");
+    this.name = "ChatAppearanceStorageError";
+  }
+}
+
 export function normalizeChatTextSize(value: unknown): ChatTextSize {
   if (typeof value !== "string") return DEFAULT_CHAT_TEXT_SIZE;
   switch (value.trim().toLowerCase()) {

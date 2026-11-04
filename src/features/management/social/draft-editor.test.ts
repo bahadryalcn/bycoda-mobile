@@ -9,6 +9,11 @@ const calls = vi.hoisted(() => ({
   mutate: vi.fn().mockResolvedValue({}),
   form: undefined as undefined | (() => Promise<unknown>),
 }));
+vi.mock("expo-crypto",()=>({randomUUID:()=>"draft-editor-epoch"}));
+vi.mock("@/state/machines",()=>({useMachines:{
+  getState:()=>({activeId:"machine",machines:[{id:"machine",endpoint:"https://fixture.invalid"}]}),
+  subscribe:()=>()=>{},
+}}));
 vi.mock("@/ui/motion", () => ({ haptic: { success: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestClose: vi.fn() }) }));

@@ -4,8 +4,10 @@ import { Image } from "expo-image";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useCopy } from "./copy";
 import { colors, fontSize, metrics, opacity, space } from "./tokens";
+import { uiStyles } from "./styles";
 
 const logo = require("../../../public/brand/bycoda/logo-horizontal-white.png");
+const mark = require("../../../public/brand/bycoda/mark-white.png");
 
 export type LegalLinkTarget = "privacy" | "terms" | "help";
 
@@ -25,6 +27,16 @@ export function BrandLogo({ compact = false }: { compact?: boolean }) {
 }
 
 export const Brand = BrandLogo;
+
+/** The product mark accompanies the current workspace title without replacing its identity. */
+export function BrandTitle({ title }: { title: string }) {
+  useMobileTheme();
+  return <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, minWidth: 0, flexShrink: 1 }}>
+    <Image source={mark} tintColor={colors.brand} contentFit="contain" accessible={false}
+      style={{ width: 24, height: 24, flexShrink: 0 }} />
+    <Text accessibilityRole="header" numberOfLines={1} style={[uiStyles.heading, { flexShrink: 1 }]}>{title}</Text>
+  </View>;
+}
 
 /** Receives navigation so the same links also work before the router is mounted. */
 export function LegalLinks({ onOpen }: { onOpen: (document: LegalLinkTarget) => void }) {

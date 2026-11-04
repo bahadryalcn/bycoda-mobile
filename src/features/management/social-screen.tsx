@@ -5,12 +5,13 @@ import {
   Body,
   Badge,
   Button,
+  ContextControls,
   SelectField,
-  MutationState,
   Notice,
   QueryState,
   Row,
   Screen,
+  Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useHostMutation } from "@/state/queries";
@@ -20,12 +21,17 @@ import { Scope } from "./shared/scope";
 import { socialRequest as request } from "./social/request";
 import { AccountsPanel } from "./social/accounts-panel";
 import { ThreadsPanel } from "./social/threads-panel";
+import { ThreadEditor } from "./social/thread-editor";
+import { DraftEditor } from "./social/draft-editor";
+import { CampaignEditor } from "./social/campaign-editor";
+import { RuleEditor } from "./social/rule-editor";
+import { accountIdentity, recipientIdentity } from "./social/review-presentation";
 import { DraftsPanel } from "./social/drafts-panel";
 import { CampaignsPanel } from "./social/campaigns-panel";
 import { RulesPanel } from "./social/rules-panel";
 import { JobsPanel } from "./social/jobs-panel";
 import { useSocialWorkspace } from "./social/use-workspace-query";
-import { campaignApprovalError } from "./social/review-presentation";
+import { socialActionTarget, SocialActionFeedback } from "./social/action-feedback";
 
 export function SocialScreen() {
   const copy = useCopy();
@@ -70,6 +76,8 @@ export function SocialScreen() {
   const closeEditor = () => dispatch({ type: "close", editor });
   const run = (name: string, input: Record<string, unknown> = {}) =>
     action.mutate(request(name, input));
+  const feedbackTarget = socialActionTarget(action.variables);
+  const collectionOwnsFeedback = !!state && !!feedbackTarget && feedbackTarget.collection === collection;
   const itemCount = state ? collection ? state.pages?.[collection]?.total : state.accounts.length : undefined;
   const emptyTitles: Record<SocialTab, string> = {
     inbox: copy("Henüz konuşma yok", "No conversations yet"),
@@ -93,10 +101,11 @@ export function SocialScreen() {
     drafts: copy("Taslaklar", "Drafts"),
   };
   return (
-    <Screen title={copy("Sosyal medya", "Social media")} query={query}>
-      <Scope allowAll />
+    <Screen title={copy("Sosyal medya", "Social media")} query={query}
+      context={<ContextControls scope={<Scope allowAll />} view={
         <SelectField
           compact
+          hideLabel
           label={copy("Görünüm", "View")}
           value={tab}
           options={[
@@ -109,6 +118,7 @@ export function SocialScreen() {
           ]}
           onChange={(tab) => dispatch({ type: "tab", tab })}
         />
+      } />}>
       {missingEnvironment ? <Notice tone="warning" message={copy(
         "Sosyal medya geçmişini görüntülemek için bilgisayardaki bycoda’yı güncelleyin.",
         "Update bycoda on the computer to view social history.",
@@ -116,8 +126,36 @@ export function SocialScreen() {
       {editor.kind === "closed" && !page?.loading && !page?.search.trim() && itemCount === 0 && emptyDestination && <Button tone="secondary"
         label={destinationLabels[emptyDestination]}
         onPress={() => dispatch({ type: "tab", tab: emptyDestination })} />}
-      <MutationState mutation={action.variables?.action === "campaigns.approveReviewed"
-        ? { ...action, error: campaignApprovalError(action.error, copy) } : action} />
+      {!collectionOwnsFeedback ? <SocialActionFeedback action={action} /> : null}
+      {selectedThread && (
+        <Sheet visible size="form" title={copy("Konuşma", "Conversation")} onClose={closeEditor}>
+          <ThreadEditor key={selectedThread.id} thread={selectedThread}
+            recipientLabel={recipientIdentity([...(state?.contacts ?? []), ...(state?.related?.contacts ?? [])], selectedThread.accountId, selectedThread.contactId)}
+            accounts={state?.accounts ?? []} projects={projects.data ?? []} profiles={state?.profiles ?? []}
+            available={!!state} unavailableFeedback={<QueryState query={query} loading="content" />}
+            onClose={closeEditor} />
+        </Sheet>
+      )}
+      {selectedDraft && <Sheet visible size="form" title={copy("Taslağı düzenle", "Edit draft")} onClose={closeEditor}>
+        <DraftEditor key={selectedDraft.id} draft={selectedDraft}
+          recipientLabel={recipientIdentity([...(state?.contacts ?? []), ...(state?.related?.contacts ?? [])], selectedDraft.accountId, selectedDraft.contactId)}
+          contextLabel={[accountIdentity(state?.accounts ?? [], selectedDraft.accountId), projects.data?.find(project => project.id === selectedDraft.projectId)?.name ?? selectedDraft.projectId].filter(Boolean).join(" · ")}
+          thread={[...(state?.threads ?? []), ...(state?.related?.threads ?? [])].find(thread => thread.id === selectedDraft.threadId)}
+          profile={state?.profiles.find(profile => profile.projectId === selectedDraft.projectId)}
+          available={!!state} unavailableFeedback={<QueryState query={query} loading="content" />} onClose={closeEditor} />
+      </Sheet>}
+      {campaignAccount && editor.kind === "campaign" && <Sheet visible size="form" title={copy("Yeni içerik taslağı", "New content draft")} onClose={closeEditor}>
+        <CampaignEditor key={editor.accountId + "/" + editor.projectId} account={campaignAccount} projectId={editor.projectId}
+          projectLabel={projects.data?.find(project => project.id === editor.projectId)?.name}
+          profile={state?.profiles.find(profile => profile.projectId === editor.projectId)}
+          available={!!state} unavailableFeedback={<QueryState query={query} loading="content" />} onClose={closeEditor} />
+      </Sheet>}
+      {ruleAccount && editor.kind === "rule" && <Sheet visible size="form" title={copy("Yeni yanıt kuralı", "New reply rule")} onClose={closeEditor}>
+        <RuleEditor key={editor.accountId + "/" + editor.projectId} account={ruleAccount} projectId={editor.projectId}
+          projectLabel={projects.data?.find(project => project.id === editor.projectId)?.name}
+          profile={state?.profiles.find(profile => profile.projectId === editor.projectId)}
+          available={!!state} unavailableFeedback={<QueryState query={query} loading="content" />} onClose={closeEditor} />
+      </Sheet>}
       {state && (
         <>
           <Row>
@@ -161,9 +199,7 @@ export function SocialScreen() {
               page={page}
               state={state}
               projectId={projectId}
-              selectedThread={selectedThread}
               projects={projects.data ?? []}
-              closeEditor={closeEditor}
               dispatch={dispatch}
             />
           )}
@@ -172,8 +208,6 @@ export function SocialScreen() {
               page={page}
               state={state}
               projectId={projectId}
-              selectedDraft={selectedDraft}
-              closeEditor={closeEditor}
               dispatch={dispatch}
               action={action}
               run={run}
@@ -184,9 +218,6 @@ export function SocialScreen() {
               page={page}
               state={state}
               projectId={projectId}
-              campaignAccount={campaignAccount}
-              editor={editor}
-              closeEditor={closeEditor}
               dispatch={dispatch}
               action={action}
               run={run}
@@ -197,9 +228,6 @@ export function SocialScreen() {
               page={page}
               state={state}
               projectId={projectId}
-              ruleAccount={ruleAccount}
-              editor={editor}
-              closeEditor={closeEditor}
               dispatch={dispatch}
               action={action}
               run={run}

@@ -1,19 +1,19 @@
 export const darkColors = {
-  // Neutral work surfaces; information and operation states keep semantic color.
-  background: "#151515",
-  panel: "#1C1C1C",
-  raised: "#262626",
+  // Pure work surfaces; boundaries and semantic states carry the hierarchy.
+  background: "#000000",
+  panel: "#000000",
+  raised: "#000000",
   border: "#414141",
   separator: "#303030",
-  text: "#F5F5F5",
+  text: "#FFFFFF",
   muted: "#B0B0B0",
   subtle: "#B0B0B0",
   /** Decorative glyphs only (chevrons, grabbers); never body text. */
   tertiary: "#767676",
-  /** Borderless control and search fills. */
-  fill: "#292929",
-  /** Floating menus and the selected segment, lifted above fills. */
-  elevated: "#363636",
+  /** Controls share the canvas; editable fields retain their boundary. */
+  fill: "#000000",
+  /** Floating surfaces use boundaries instead of gray fills. */
+  elevated: "#000000",
   accent: "#64B0FF",
   accentSolid: "#0071E3",
   primaryText: "#FFFFFF",
@@ -23,8 +23,8 @@ export const darkColors = {
   danger: "#FF6961",
   warning: "#FFD60A",
   brand: "#FFFFFF",
-  selected: "#303030",
-  userMessage: "#292929",
+  selected: "#16273B",
+  userMessage: "#000000",
   scrim: "#00000099",
 };
 
@@ -33,14 +33,14 @@ export type MobileColors = typeof darkColors;
 export const lightColors: MobileColors = {
   background: "#FFFFFF",
   panel: "#FFFFFF",
-  raised: "#F5F5F5",
+  raised: "#FFFFFF",
   border: "#D4D4D4",
   separator: "#E8E8E8",
-  text: "#202020",
+  text: "#000000",
   muted: "#656565",
   subtle: "#656565",
   tertiary: "#8A8A8A",
-  fill: "#F2F2F2",
+  fill: "#FFFFFF",
   elevated: "#FFFFFF",
   accent: "#0066CC",
   accentSolid: "#0066CC",
@@ -51,8 +51,8 @@ export const lightColors: MobileColors = {
   danger: "#C4141E",
   warning: "#8F5200",
   brand: "#000000",
-  selected: "#EBEBEB",
-  userMessage: "#F2F2F2",
+  selected: "#E6EFFA",
+  userMessage: "#FFFFFF",
   scrim: "#00000059",
 };
 

@@ -1,13 +1,13 @@
+import { SocialCollectionFeedback, SocialRecordFeedback } from "./action-feedback";
 import { ContentExcerpt } from "./content-excerpt";
 import { RecordCard } from "@/ui/record-card";
 import { CollectionRows } from "./collection-rows";
-import { ActionMenu, Sheet, Body, Button, NavigationGroup, Row, SelectField, Stack } from "@/ui/primitives";
+import { ActionMenu, Body, Button, NavigationGroup, Row, SelectField, Stack } from "@/ui/primitives";
 import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { stamp } from "../shared/format";
 
-import { CampaignEditor } from "./campaign-editor";
 import type { CampaignsPanelProps } from "./types";
 import { accountIdentity, campaignReview, captureCampaignReview, variantReviewLines } from "./review-presentation";
 import { CollectionSearch, useCollectionSearch } from "./collection-search";
@@ -15,9 +15,6 @@ import { CollectionSearch, useCollectionSearch } from "./collection-search";
 export function CampaignsPanel({
   state,
   projectId,
-  campaignAccount,
-  editor,
-  closeEditor,
   dispatch,
   action,
   run,
@@ -40,19 +37,9 @@ export function CampaignsPanel({
           />
         </NavigationGroup>
       )}
-      {campaignAccount && editor.kind === "campaign" && (
-        <Sheet visible size="form" title={copy("Yeni içerik taslağı", "New content draft")} onClose={closeEditor}>
-        <CampaignEditor
-          key={editor.accountId + "/" + editor.projectId}
-          account={campaignAccount}
-          projectId={editor.projectId}
-          profile={state.profiles.find((profile) => profile.projectId === editor.projectId)}
-          onClose={closeEditor}
-        />
-        </Sheet>
-      )}
       <CollectionSearch {...collection} />
-      <CollectionRows page={page} key={projectId ?? "all"} items={collection.visible} renderItem={(campaign) => (
+
+      <CollectionRows page={page} beforeRows={(visible) => <SocialCollectionFeedback action={action} collection="campaigns" visible={visible} />} key={projectId ?? "all"} items={collection.visible} renderItem={(campaign) => (
           <RecordCard key={campaign.id} title={campaign.name}
             menu={<ActionMenu label={copy("Diğer işlemler", "More actions")}
               busy={action.isPending && action.variables?.action === "campaigns.pause" && (action.variables?.input as { id?: string } | undefined)?.id === campaign.id}
@@ -75,7 +62,7 @@ export function CampaignsPanel({
                       "Sending approval will be recorded for this content and its target accounts.",
                     )}\n\n${campaignReview(reviewed.snapshot, state.accounts, copy, stamp)}`,
                     copy("Onayla", "Approve"),
-                    () => run("campaigns.approveReviewed", reviewed.input),
+                    () => run("campaigns.approveReviewed", reviewed.input), undefined, "default",
                   );
                 }}
               />
@@ -93,7 +80,7 @@ export function CampaignsPanel({
                       "Approved content will publish externally at its scheduled time. The host rejects unapproved sending.",
                     )}\n\n${campaignReview(campaign, state.accounts, copy, stamp)}`,
                     copy("Sıraya al", "Queue"),
-                    () => run("campaigns.schedule", { id: campaign.id }),
+                    () => run("campaigns.schedule", { id: campaign.id }), undefined, "default",
                   )
                 }
               />
@@ -114,6 +101,7 @@ export function CampaignsPanel({
             ))}</>}
           >
 
+          <SocialRecordFeedback action={action} collection="campaigns" id={campaign.id} />
           </RecordCard>
         )} />
     </>

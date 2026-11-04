@@ -1,9 +1,9 @@
 import { useEditorRecord } from "./shared/use-editor-record";
 import { ScreenList } from "@/ui/screen-list";
-import { useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "./shared/search";
-import { FilterButton, FilterSheet } from "@/ui/filter-sheet";
+import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import Plus from "lucide-react-native/icons/plus";
 
 import {
@@ -12,6 +12,7 @@ import {
   Card,
   IconButton,
   SearchField,
+  SearchToolbar,
   SelectField,
   Sheet,
   MutationState,
@@ -34,6 +35,7 @@ import { colors } from "@/ui/tokens";
 import { TaskEditor } from "./tasks/task-editor";
 import { DeliveryEditor } from "./tasks/delivery-editor";
 import { TaskCard } from "./tasks/task-card";
+import { TaskDeclineFeedback } from "./tasks/task-feedback";
 import { TaskBulkActions } from "./tasks/bulk-actions";
 import type { TaskEditorFlow } from "./tasks/types";
 
@@ -41,6 +43,8 @@ export function TasksScreen() {
   const copy = useCopy();
   const locale = useLocale();
   const [search, setSearch] = useState("");
+  const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
+  const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
   const [bulkBusy, setBulkBusy] = useState(false);
   const machine = useActiveMachine();
   const projectId = useMachines((state) => state.selectedProjectId);
@@ -129,18 +133,16 @@ export function TasksScreen() {
       taskMatchesFilter(task, filter) &&
       matchesSearch(task.title + " " + task.prompt, search, locale),
   );
+  const filterContext = <AppliedFilters filters={[`${copy("Durum", "Status")}: ${filterOptions.find(option => option.value === filter)?.label ?? filter}`]} />;
   return (
     <ScreenList<HostTask>
       title={copy("Görevler", "Tasks")}
       query={query}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
+      context={<Scope allowAll />}
       actions={
         <>
-          <FilterButton
-            count={filter !== "active" ? 1 : 0}
-            onPress={() => setFilterDraft(filter)}
-          />
           <IconButton
             label={copy("Yeni görev", "New task")}
             disabled={!projectId || !machine?.providers?.length || busy || !!editor}
@@ -168,10 +170,10 @@ export function TasksScreen() {
               onChange={setFilterDraft}
             />
           </FilterSheet>
-          <Scope allowAll />
-          <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
+          <SearchToolbar search={<SearchField ref={searchInput} label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />}
+            actions={<FilterButton count={filter !== "active" ? 1 : 0} onPress={() => setFilterDraft(filter)} />} />
           {machine ? <TaskBulkActions key={`${machine.id}:${projectId ?? "all"}`} tasks={visible ?? []} machineId={machine.id} disabled={busy && !bulkBusy || !!editor || !!deliveryTask}
-            onBusy={setBulkBusy} onComplete={async () => { await query.refetch(); if (projectId) await allTasks.refetch(); }} /> : null}
+            context={filterContext} onBusy={setBulkBusy} onComplete={async () => { await query.refetch(); if (projectId) await allTasks.refetch(); }} /> : filterContext}
           {!projectId && (
             <Body muted>
               {copy("Görev eklemek için projesini seçin.", "Select a project to add a task.")}
@@ -181,21 +183,11 @@ export function TasksScreen() {
           {!editor && (
             <MutationState mutation={save} success={copy("Görev kaydedildi.", "Task saved.")} />
           )}
-          <MutationState mutation={move} />
-          <MutationState mutation={remove} success={copy("Görev silindi.", "Task deleted.")} />
-          <MutationState mutation={recheck} />
-          {decline.error?.message.includes("Unsupported host method") ? (
-            <Notice
-              tone="info"
-              message={copy(
-                "Önerileri reddetmek için bilgisayardaki bycoda uygulamasını güncelleyin.",
-                "Update bycoda on this computer to decline suggestions.",
-              )}
-            />
-          ) : (
-            <MutationState mutation={decline} />
-          )}
-          <MutationState mutation={manualStart} />
+          {!visible?.some((task) => task.id === move.variables?.taskId) ? <MutationState mutation={move} /> : null}
+          {!visible?.some((task) => task.id === remove.variables?.taskId) ? <MutationState mutation={remove} success={copy("Görev silindi.", "Task deleted.")} /> : null}
+          {!visible?.some((task) => task.id === recheck.variables?.taskId) ? <MutationState mutation={recheck} /> : null}
+          {!visible?.some((task) => task.id === decline.variables?.taskId) ? <TaskDeclineFeedback mutation={decline} /> : null}
+          {!visible?.some((task) => task.id === manualStart.variables?.taskId) ? <MutationState mutation={manualStart} /> : null}
           <MutationState mutation={reorder} />
           {lifecycleSupported && projectId &&
             !(query.error && allTasks.error?.message === query.error.message) &&
@@ -250,15 +242,12 @@ export function TasksScreen() {
           <QueryState
             query={query}
             empty={visible?.length === 0}
-            emptyTitle={copy("Bu görünümde görev yok", "No tasks in this view")}
+            emptyTitle={search.trim() && query.data?.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Bu görünümde görev yok", "No tasks in this view")}
+            emptyAction={query.data?.length ? search.trim()
+              ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+              : filter !== "all" ? { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") } : undefined
+              : undefined}
           />
-          {search.trim() && visible?.length === 0 ? (
-            <Button
-              tone="quiet"
-              label={copy("Aramayı temizle", "Clear search")}
-              onPress={() => setSearch("")}
-            />
-          ) : null}
         </>
       }
       renderItem={({ item: task }) => (

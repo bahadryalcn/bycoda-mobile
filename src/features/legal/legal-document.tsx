@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Linking } from "react-native";
-import { Body, ErrorText, Section, Stack, NavigationGroup, NavigationRow } from "@/ui/primitives";
+import { useAsyncAction } from "@/state/actions";
+import { useLayoutEffect, useRef, useState } from "react";
+import { Linking, View } from "react-native";
+import { Body, Disclosure, MutationState, Section, Stack, NavigationGroup, NavigationRow } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { uiStyles } from "@/ui/styles";
@@ -20,53 +21,55 @@ export type { LegalDocumentId } from "./legal-content";
 /** Offline content that also works before the protected navigation tree mounts. */
 export function LegalDocument({ document }: { document: LegalDocumentId }) {
   const copy = useCopy();
+  const sections = legalSections[document].map((section, index) => {
+    const paragraphs = <Stack style={{ gap: space.md }}>
+      {section.paragraphs.map((paragraph, paragraphIndex) => (
+        <Body key={paragraphIndex} selectable style={{ lineHeight: 24 }}>
+          {copy(...paragraph)}
+        </Body>
+      ))}
+    </Stack>;
+    return document === "help"
+      ? <Disclosure key={index} label={copy(...section.title)}>{paragraphs}</Disclosure>
+      : <Section key={index} title={copy(...section.title)}>{paragraphs}</Section>;
+  });
   return (
     <Stack style={{ gap: space.xl }}>
       <Body muted>
         {copy("Son güncelleme: ", "Last updated: ")}
         {copy(...legalUpdatedDate)}
       </Body>
-      {legalSections[document].map((section, index) => (
-        <Section key={index} title={copy(...section.title)}>
-          <Stack style={{ gap: space.md }}>
-            {section.paragraphs.map((paragraph, paragraphIndex) => (
-              <Body key={paragraphIndex} selectable style={{ lineHeight: 24 }}>
-                {copy(...paragraph)}
-              </Body>
-            ))}
-          </Stack>
-        </Section>
-      ))}
+      {document === "help" ? <DocumentLinks key={document} document={document} /> : null}
+      {document === "help" ? <NavigationGroup>{sections}</NavigationGroup> : sections}
       {document === "terms" ? (
         <Section title={copy("MIT lisansı", "MIT license")}>
           <Body selectable style={{ lineHeight: 24 }}>{mitLicense}</Body>
         </Section>
       ) : null}
-      <DocumentLinks key={document} document={document} />
+      {document !== "help" ? <DocumentLinks key={document} document={document} /> : null}
     </Stack>
   );
 }
 
 function DocumentLinks({ document }: { document: LegalDocumentId }) {
   const copy = useCopy();
-  const [opening, setOpening] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  async function open(url: string) {
-    if (opening) return;
-    setError(null);
-    setOpening(url);
-    try {
-      await Linking.openURL(url);
-    } catch {
-      setError(
-        copy(
+  const action = useAsyncAction();
+  const [target, setTarget] = useState<string | null>(null);
+  const active = useRef(true);
+  useLayoutEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  function open(url: string) {
+    if (!active.current) return;
+    void action.run(async () => {
+      if (!active.current) return;
+      setTarget(url);
+      try { await Linking.openURL(url); }
+      catch {
+        throw new Error(copy(
           "Bağlantı açılamadı. Tarayıcını veya e-posta uygulamanı kontrol et; ekrandaki destek adresini kopyalayabilirsin.",
           "The link could not be opened. Check your browser or email app; you can copy the support address shown here.",
-        ),
-      );
-    } finally {
-      setOpening(null);
-    }
+        ));
+      }
+    });
   }
   const links =
     document === "privacy"
@@ -120,23 +123,12 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
   return (
     <Section title={copy("İletişim ve bağlantılar", "Contact & links")}>
       <NavigationGroup>
-        <NavigationRow
-          label={copy("E-posta uygulamasını aç", "Open email app")}
-          detail={supportEmail}
-          disabled={opening !== null}
-          onPress={() => {
-            void open(`mailto:${supportEmail}`);
-          }}
-        />
-        {links.map(({ label, url }) => (
-          <NavigationRow
-            key={url}
-            label={label}
-            disabled={opening !== null}
-            onPress={() => {
-              void open(url);
-            }}
-          />
+        {[{ label: copy("E-posta uygulamasını aç", "Open email app"), url: `mailto:${supportEmail}`, detail: supportEmail }, ...links].map(({ label, url, ...rest }) => (
+          <View key={url}>
+            <NavigationRow label={label} detail={"detail" in rest ? rest.detail : undefined} detailLines={0}
+              disabled={action.isPending} busy={action.isPending && target === url} onPress={() => open(url)} />
+            {target === url ? <MutationState mutation={action} /> : null}
+          </View>
         ))}
       </NavigationGroup>
       <Body muted style={uiStyles.caption}>
@@ -145,7 +137,6 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
           "Links open in another app when you tap them.",
         )}
       </Body>
-      <ErrorText error={error} />
     </Section>
   );
 }

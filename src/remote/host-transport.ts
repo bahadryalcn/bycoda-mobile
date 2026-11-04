@@ -694,7 +694,13 @@ export class HostTransport {
                   ? "timeout"
                   : error.category === "cancelled"
                     ? "aborted"
-                    : "network";
+                    : error.category === "unsupported"
+                      ? "unsupported"
+                      : ["internal", "unavailable", "overload", "validation"].includes(
+                            error.category,
+                          )
+                        ? "host"
+                        : "network";
         throw new RemoteHostError(this.machine.id, kind, error.message, error.uncertain);
       }
       throw new RemoteHostError(

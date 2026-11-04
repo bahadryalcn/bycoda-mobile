@@ -1,6 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
+import { useState } from "react";
 import Animated from "react-native-reanimated";
-import { Body, Stack, Notice, Section, SegmentedControl } from "@/ui/primitives";
+import { Body, Stack, Loading, Notice, Section, SegmentedControl } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { colors, space } from "@/ui/tokens";
@@ -9,6 +10,9 @@ import { chatTextStyles } from "@/ui/chat-styles";
 import { useChatAppearance } from "@/state/chat-appearance";
 import { ChatMessage, ChatResponse, chatUserBubbleStyle } from "@/ui/chat";
 import type { UIMessage } from "ai";
+import { chatTextSizeOptions } from "./chat-appearance-options";
+import { chatAppearanceFeedback } from "./chat-appearance-feedback";
+import { useAsyncAction } from "@/state/actions";
 
 export function ChatAppearanceSettings() {
   useMobileTheme();
@@ -17,6 +21,11 @@ export function ChatAppearanceSettings() {
   const hydrated = useChatAppearance((state) => state.hydrated);
   const setTextSize = useChatAppearance((state) => state.setTextSize);
   const storageError = useChatAppearance((state) => state.storageError);
+  const retryStorage = useChatAppearance((state) => state.retryStorage);
+  const retry = useAsyncAction();
+  const [retryError, setRetryError] = useState<Error | null>(null);
+  const retrying = retryError !== null;
+  const feedback = chatAppearanceFeedback(storageError ?? retryError, copy);
   const text = chatTextStyles(size);
   const messages = [
     {
@@ -61,25 +70,27 @@ export function ChatAppearanceSettings() {
       <Section title={copy("Mesaj yazı boyutu", "Message text size")}>
         <SegmentedControl
           label={copy("Mesaj yazı boyutu", "Message text size")}
+          hideLabel
           value={size}
-          disabled={!hydrated}
-          options={[
-            { value: "compact", label: copy("Küçük", "Small") },
-            { value: "standard", label: copy("Normal", "Standard") },
-            { value: "large", label: copy("Büyük", "Large") },
-          ]}
+          disabled={!hydrated || retrying}
+          options={chatTextSizeOptions(copy)}
           onChange={(value) => {
             void setTextSize(value);
           }}
         />
       </Section>
-      {storageError ? (
+      {!hydrated ? <Loading label={copy("Yükleniyor…", "Loading…")} /> : null}
+      {feedback ? (
         <Notice
           tone="warning"
-          message={copy(
-            "Yazı boyutu değişti, ancak tercih bu telefona kaydedilemedi. Yeniden seçerek dene.",
-            "Text size changed, but the preference could not be saved on this phone. Select it again to retry.",
-          )}
+          message={feedback.message}
+          retrying={retrying}
+          onRetry={feedback.retryable && (storageError ?? retryError) ? () => {
+            const expectedError = storageError ?? retryError;
+            if (!expectedError || retrying) return;
+            setRetryError(expectedError);
+            void retry.run(() => retryStorage(expectedError)).finally(() => setRetryError(null));
+          } : undefined}
         />
       ) : null}
       <Section title={copy("Önizleme", "Preview")}>

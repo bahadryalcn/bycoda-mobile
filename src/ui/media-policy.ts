@@ -23,6 +23,10 @@ export const mediaQueryKey = (context: MessageContext | undefined, key: readonly
     context?.basePath,
     ...key,
   ]);
+
+export const projectMediaQueryKey = (context: MessageContext, path: string) => mediaQueryKey(context, [
+  "project-media", context.machineId, context.projectId, context.sessionId, context.cwd, context.basePath, path,
+]);
 export function mediaAccessRevoked(error: unknown) {
   const kind = error && typeof error === "object" && "kind" in error ? error.kind : undefined;
   return kind === "auth" || kind === "identity";

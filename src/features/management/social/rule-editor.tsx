@@ -12,10 +12,11 @@ import {
   MutationState,
   QueryState,
   Row,
+  Notice,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useHostMutation } from "@/state/queries";
-import { useFormDraft } from "@/state/form-draft";
+import { useSocialEditorAccess, useSocialEditorContext, useSocialEditorForm } from "./editor-access";
 import { useAsyncAction } from "@/state/actions";
 
 import { socialRequest as request } from "./request";
@@ -24,11 +25,13 @@ import { usePolicy, freshPolicy, PolicyInfo } from "./policy";
 
 import type { RuleEditorProps, RuleFormDraft } from "./types";
 
-export function RuleEditor({ account, projectId, profile, onClose }: RuleEditorProps) {
+export function RuleEditor({ available = true, unavailableFeedback, ...input }: RuleEditorProps) {
   const copy = useCopy();
-  const policy = usePolicy(account.id);
+  const access = useSocialEditorAccess(available);
+  const { account, projectId, profile, onClose, projectLabel } = useSocialEditorContext(input, access.blocked);
+  const policy = usePolicy(account.id, { key: access.key, enabled: !access.blocked, assert: access.assert });
   const action = useHostMutation("social.request", ["social"]);
-  const form = useFormDraft<RuleFormDraft>({
+  const form = useSocialEditorForm<RuleFormDraft>({
     name: "",
     keyword: "",
     factId: "",
@@ -42,9 +45,16 @@ export function RuleEditor({ account, projectId, profile, onClose }: RuleEditorP
   const submission = useAsyncAction();
   const busy = submission.isPending || action.isPending;
   const { requestClose } = useSheetGuard({ dirty: form.dirty, pending: busy, onClose });
-  const save = () =>
-    submission.run(async () => {
+  const save = () => {
+    if (!access.isCurrent()) return Promise.resolve();
+    const submitted = form.latest.current;
+    return submission.run(async () => {
+      access.assert();
       const latest = await freshPolicy(policy, copy);
+      access.assert();
+      const { name, keyword, factId, mode, trigger, dailyLimit } = submitted;
+      const fact = profile?.facts.find(value => value.id === factId);
+      const validLimit = /^\d+$/.test(dailyLimit) && Number(dailyLimit) >= 1 && Number(dailyLimit) <= 100;
       if (!fact) throw new Error(copy("Doğrulanmış bir bilgi seçin.", "Choose a verified fact."));
       if (!validLimit) throw new Error(copy("1 ile 100 arasında bir sınır girin.", "Enter a limit from 1 to 100."));
       const limit = Number(dailyLimit);
@@ -61,22 +71,27 @@ export function RuleEditor({ account, projectId, profile, onClose }: RuleEditorP
           answers: [{ keyword, factId }],
           ...(latest.effective.agent ? { agent: latest.effective.agent } : {}),
         }),
-        { onSuccess: () => { haptic.success(); onClose(); } },
+        { onSuccess: () => { if (!access.isCurrent()) return; haptic.success(); form.complete(submitted, onClose); } },
       );
+      access.assert();
     });
+  };
   return (
     <Stack>
+      <Heading>{account.name}</Heading>
+      <Body muted>{copy("Proje", "Project")}: {projectLabel ?? projectId}</Body>
+      {access.blocked ? !available && unavailableFeedback ? unavailableFeedback : <Notice tone="warning" message={access.message} /> : null}
       <Field
         label={copy("Ad", "Name")}
         value={name}
         onChangeText={(value) => form.setField("name", value)}
-        editable={!busy}
+        editable={!busy && !access.blocked}
       />
       <Field
         label={copy("Tetikleyici ifade", "Trigger phrase")}
         value={keyword}
         onChangeText={(value) => form.setField("keyword", value)}
-        editable={!busy}
+        editable={!busy && !access.blocked}
       />
       <SelectField
         label={copy("Tetikleyici", "Trigger")}
@@ -85,7 +100,7 @@ export function RuleEditor({ account, projectId, profile, onClose }: RuleEditorP
           { value: "comment", label: copy("Yorum", "Comment") },
           { value: "message", label: copy("Mesaj", "Message") },
         ]}
-        disabled={busy}
+        disabled={busy || access.blocked}
         onChange={(value) => form.setField("trigger", value)}
       />
       <SelectField
@@ -96,7 +111,7 @@ export function RuleEditor({ account, projectId, profile, onClose }: RuleEditorP
           { value: "approval", label: copy("Onay iste", "Ask for approval") },
           { value: "automatic", label: copy("Otomatik", "Automatic") },
         ]}
-        disabled={busy}
+        disabled={busy || access.blocked}
         onChange={(value) => form.setField("mode", value)}
       />
       <SelectField
@@ -108,7 +123,7 @@ export function RuleEditor({ account, projectId, profile, onClose }: RuleEditorP
           label: fact.topic,
           detail: fact.text,
         }))}
-        disabled={busy}
+        disabled={busy || access.blocked}
         onChange={(value) => form.setField("factId", value)}
       />
       {!profile?.facts.length && (
@@ -123,7 +138,7 @@ export function RuleEditor({ account, projectId, profile, onClose }: RuleEditorP
         label={copy("Günlük yanıt sınırı (1–100)", "Daily reply limit (1–100)")}
         value={dailyLimit}
         onChangeText={(value) => form.setField("dailyLimit", value)}
-        editable={!busy}
+        editable={!busy && !access.blocked}
         keyboardType="number-pad"
       />
       {!validLimit && <ErrorText error={copy("1 ile 100 arasında bir sınır girin.", "Enter a limit from 1 to 100.")} />}
@@ -133,7 +148,7 @@ export function RuleEditor({ account, projectId, profile, onClose }: RuleEditorP
         feedback={<><MutationState mutation={submission} /></>}
         submitLabel={copy("Duraklatılmış kural oluştur", "Create paused rule")}
         busy={busy}
-        disabled={!validLimit || !name.trim() || !keyword.trim() || !fact || !policy.data}
+        disabled={access.blocked || !validLimit || !name.trim() || !keyword.trim() || !fact || !policy.data}
         onSubmit={save}
         cancelLabel={copy("Vazgeç", "Cancel")}
         cancelDisabled={busy}

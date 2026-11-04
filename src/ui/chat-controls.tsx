@@ -19,6 +19,7 @@ export function ChatToolbarAction({
   disabled,
   busy,
   tone = "muted",
+  hideLabel = false,
   children,
 }: PropsWithChildren<{
   label: string;
@@ -27,6 +28,8 @@ export function ChatToolbarAction({
   disabled?: boolean;
   busy?: boolean;
   tone?: "muted" | "accent" | "danger";
+  /** Bounded navigator accessories retain their spoken label and icon target. */
+  hideLabel?: boolean;
 }>) {
   useMobileTheme();
   const reducedMotion = useReducedMotionPreference();
@@ -76,7 +79,7 @@ export function ChatToolbarAction({
         ]}
       >
         {busy ? <Spinner size="sm" color={color} /> : children}
-        <Body
+        {!hideLabel ? <Body
           selectable={false}
           style={{
             color,
@@ -87,7 +90,7 @@ export function ChatToolbarAction({
           }}
         >
           {label}
-        </Body>
+        </Body> : null}
       </Animated.View>
     </Pressable>
   );
@@ -199,6 +202,7 @@ export function ChatSummary({
   color = colors.muted,
   icon,
   onPress,
+  disabled = false,
 }: {
   label: string;
   detail?: string;
@@ -206,12 +210,16 @@ export function ChatSummary({
   color?: string;
   icon: import("react").ReactNode;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   useMobileTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={[label, detail, status].filter(Boolean).join(". ")}
+      accessibilityState={{ disabled }}
+      aria-disabled={disabled}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => ({
         minHeight: metrics.touchTarget,
@@ -222,6 +230,7 @@ export function ChatSummary({
         gap: space.sm,
         backgroundColor: pressed ? colors.raised : "transparent",
         borderRadius: radii.control,
+        opacity: disabled ? opacity.disabled : 1,
       })}
     >
       <View accessible={false} style={{ width: 20, alignItems: "center" }}>

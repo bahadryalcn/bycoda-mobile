@@ -1,6 +1,7 @@
 import { router, type Href } from "expo-router";
 import { useState } from "react";
 import { ProjectPicker } from "../workspace/project-picker";
+import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import FolderOpen from "lucide-react-native/icons/folder-open";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import MessageSquare from "lucide-react-native/icons/message-square";
@@ -38,6 +39,7 @@ type Tool = {
 
 /** One directory feeds the global tools screen and each project's tools sheet. */
 const tools: readonly Tool[] = [
+  { id: "assistant", label: ["Asistan", "Assistant"], icon: MessageCircle },
   { id: "sessions", label: ["Oturumlar", "Sessions"], icon: MessageSquare, projectView: "sessions" },
   { id: "files", label: ["Dosyalar", "Files"], icon: FolderOpen, projectView: "files" },
   { id: "git", label: ["Değişiklikler", "Changes"], icon: GitBranch, projectView: "git" },
@@ -65,7 +67,7 @@ const tools: readonly Tool[] = [
 const groups: readonly { title: CopyPair; ids: readonly string[] }[] = [
   { title: ["Proje", "Project"], ids: ["sessions", "files", "git", "notes"] },
   { title: ["İşler", "Work"], ids: ["tasks", "goals", "crews", "automations", "stewards"] },
-  { title: ["İletişim", "Communication"], ids: ["inbox", "social"] },
+  { title: ["İletişim", "Communication"], ids: ["assistant", "inbox", "social"] },
   { title: ["Geliştirme", "Development"], ids: ["terminals", "servers", "logs", "diagnostics", "usage", "browser", "devices"] },
   { title: ["Bilgisayar", "Computer"], ids: ["providers", "access", "computers"] },
 ];
@@ -75,28 +77,30 @@ export function ToolDirectory({
   query = "",
   onNavigate,
   onProjectView,
+  onClearSearch,
 }: {
   projectId?: string | null;
   query?: string;
   onNavigate?: (navigate: () => void) => void;
   onProjectView?: (view: "sessions" | "files" | "git") => void;
+  onClearSearch?: () => void;
 }) {
   useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
-  const [pendingTool, setPendingTool] = useState<Tool | null>(null);
+  const connection = useConnectionScope();
+  const [pending, setPendingTool] = useState<{ tool: Tool; connection: ConnectionScope } | null>(null);
+  const pendingTool = pending?.connection === connection && connection.isCurrent() ? pending.tool : null;
   const normalized = query.trim().toLocaleLowerCase();
   const visible = tools.filter((tool) => {
     const group = groups.find((group) => group.ids.includes(tool.id));
     return [copy(...tool.label), group ? copy(...group.title) : ""]
       .join(" ").toLocaleLowerCase().includes(normalized);
   });
-  if (!visible.length)
-    return <Empty title={copy("Aramana uyan araç yok.", "No tools match your search.")} />;
   const open = (tool: Tool, targetProjectId = projectId) => {
-    if (!machine || useMachines.getState().activeId !== machine.id) return;
+    if (!machine || !connection.isCurrent() || useMachines.getState().activeId !== machine.id) return;
     if ((tool.hostTool || (tool.projectView && tool.id !== "sessions")) && !targetProjectId) {
-      setPendingTool(tool);
+      setPendingTool({ tool, connection });
       return;
     }
     if (tool.projectView && targetProjectId) {
@@ -106,7 +110,7 @@ export function ToolDirectory({
       }
     }
     const navigate = () => {
-      if (useMachines.getState().activeId !== machine.id) return;
+      if (!connection.isCurrent() || useMachines.getState().activeId !== machine.id) return;
       if (targetProjectId) useMachines.getState().selectProject(targetProjectId);
       if (tool.projectView && targetProjectId)
         router.push({
@@ -116,6 +120,7 @@ export function ToolDirectory({
       else if (tool.hostTool && targetProjectId)
         router.push({ pathname: "/tools/[tool]", params: { tool: tool.hostTool, projectId: targetProjectId, machineId: machine.id } } as Href);
       else if (tool.managementSection) router.push(`/manage/${tool.managementSection}`);
+      else if (tool.id === "assistant") router.push("/assistant" as Href);
       else if (tool.id === "sessions") router.push("/(tabs)/chats" as Href);
       else if (tool.id === "inbox") router.push("/inbox");
       else if (tool.id === "computers") router.push("/machines");
@@ -136,6 +141,8 @@ export function ToolDirectory({
         setPendingTool(null);
         open(tool, project.id);
       }} /> : null}
+      {!visible.length ? <Empty compact title={copy("Aramana uyan araç yok.", "No tools match your search.")}
+        action={onClearSearch ? { label: copy("Aramayı temizle", "Clear search"), onPress: onClearSearch } : undefined} /> : null}
       {rendered.map((group) => (
         <Section key={group.title[1]} title={copy(...group.title)}>
           <NavigationGroup>

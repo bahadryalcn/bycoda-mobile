@@ -19,6 +19,7 @@ import { noteTags, noteTagIssue, noteTitleTooLong } from "./note-tags";
 export function ExistingNote({ id, ...props }: ExistingNoteProps) {
   useMobileTheme();
   const query = useHostQuery<Note | null>(["notes", "detail", id], "notes.get", { id });
+  useSheetGuard({ pending: props.save.isPending || props.remove.isPending || props.storage.isPending });
   const copy = useCopy();
   const note = useEditorRecord(id, query.data ?? undefined);
   if (!note)

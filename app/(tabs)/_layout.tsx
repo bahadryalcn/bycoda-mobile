@@ -10,13 +10,16 @@ import { MachineHealthMonitor, MachinePill } from "../../src/ui/machine-bar";
 import { colors } from "../../src/ui/tokens";
 import { useCopy } from "../../src/ui/copy";
 import { useMachines } from "../../src/state/machines";
-import { ScreenChromeProvider } from "../../src/ui/layout";
+import { ScreenChromeProvider, type HeaderIdentityProps } from "../../src/ui/layout";
 import { FloatingTabBar } from "../../src/ui/floating-tab-bar";
 import { useMobileTheme } from "../../src/ui/theme";
 import { useProjectActivity } from "../../src/features/workspace/use-project-activity";
 import type { ComponentType } from "react";
 
 type IconProps = { color: ColorValue; focused: boolean };
+function ComputerPageIdentity({ title, subtitle }: HeaderIdentityProps) {
+  return <MachinePill heading={title} subtitle={subtitle} />;
+}
 const icon = (Glyph: ComponentType<{ color: string; size: number; strokeWidth: number }>) =>
   function TabIcon({ color, focused }: IconProps) {
     return <Glyph color={String(color)} size={22} strokeWidth={focused ? 2.1 : 1.8} />;
@@ -36,7 +39,7 @@ export default function TabsLayout() {
   return (
     <ScreenChromeProvider
       bottomSafeArea={false}
-      headerAccessory={!isWelcome && machineId ? <MachinePill /> : undefined}
+      headerIdentity={!isWelcome && machineId ? ComputerPageIdentity : undefined}
     >
       {machineId ? <MachineHealthMonitor /> : null}
       <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: colors.background }}>

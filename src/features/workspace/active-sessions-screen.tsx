@@ -1,39 +1,34 @@
-import { ActivityBadge } from "@/ui/activity-badge";
-import { isRunningSession } from "./activity-model";
+import { HierarchyFrame } from "@/ui/hierarchy-frame";
 import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { useAsyncAction } from "@/state/actions";
 import { View } from "react-native";
 import Plus from "lucide-react-native/icons/plus";
-import { FilterButton, FilterSheet } from "@/ui/filter-sheet";
+import ListFilter from "lucide-react-native/icons/list-filter";
+import { AppliedFilters, FilterSheet } from "@/ui/filter-sheet";
 import {
-  Body,
   Empty,
   FormActions,
   IconButton,
-  NavigationRow,
   Notice,
   QueryState,
-  Row,
   ScreenList,
   SearchField,
+  SearchToolbar,
   SegmentedControl,
   ToggleField,
   SelectField,
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { colors, space } from "@/ui/tokens";
+import { colors, metrics, space } from "@/ui/tokens";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useProjectActivity } from "./use-project-activity";
-import { uiStyles } from "@/ui/styles";
 import { useMobileTheme } from "@/ui/theme";
-import { ProjectIcon } from "@/ui/project-icon";
+import { SessionListRow } from "./session-list-row";
 import {
   GroupedListRow,
-  relativeTime,
   rowInset,
-  sessionStatus,
 } from "./shared";
 import { toggleSessionDirectoryFolder } from "./session-directory";
 import { SessionFolderRow } from "./session-folder-row";
@@ -94,13 +89,13 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
       <Plus size={20} strokeWidth={2} color={colors.accent} />
     </IconButton>
   ) : null;
-  const actions = overview ? (
-    <Row style={{ gap: space.xs, flexWrap: "nowrap" }}>
-      <FilterButton count={Number(!archived && filter !== "all") + Number(archived) + Number(!!projectFilter)}
-        onPress={() => setFilterDraft({ filter, archived, projectId: projectFilter })} />
-      {newSessionButton}
-    </Row>
-  ) : undefined;
+  const filterCount = Number(!archived && filter !== "all") + Number(archived) + Number(!!projectFilter);
+  const filters = overview ? <IconButton label={copy("Filtreler", "Filters")}
+    tone={filterCount > 0 ? "primary" : "default"}
+    expanded={filterDraft !== null}
+    onPress={() => setFilterDraft({ filter, archived, projectId: projectFilter })}>
+    <ListFilter size={20} color={filterCount ? colors.primaryText : colors.muted} />
+  </IconButton> : null;
   if (!hydrated || storageError || (!machine && connectionPending))
     return <ScreenList
       data={[]}
@@ -135,21 +130,22 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
       grouped
       keyExtractor={(row) => row.key}
       title={title}
-      actions={actions}
+      actions={newSessionButton}
       refresh={activity.refetch}
       query={{ ...activity.projects, isFetching: activity.refreshing, isPending: activity.pending }}
       header={
         <>
           <Stack.Screen options={{ title }} />
-          <SearchField
+          <SearchToolbar search={<SearchField
             label={copy("Oturum ara", "Search sessions")}
             value={search}
             onChangeText={setSearch}
-            placeholder={copy("Proje, klasör veya oturum", "Project, folder or session")}
-          />
-          {projectFilter ? <Body muted style={uiStyles.caption}>
-            {projectOptions.find((project) => project.value === projectFilter)?.label ?? projectFilter}
-          </Body> : null}
+          />} actions={filters} />
+          <AppliedFilters filters={[
+            projectFilter && `${copy("Proje", "Project")}: ${projectOptions.find(project => project.value === projectFilter)?.label ?? projectFilter}`,
+            overview && archived && copy("Arşiv", "Archive"),
+            !archived && filter !== "all" && (filter === "running" ? copy("Çalışıyor", "Running") : copy("Yanıt bekleyenler", "Awaiting reply")),
+          ]} />
           {filterDraft ? <FilterSheet visible onClose={() => setFilterDraft(null)}
             onReset={() => setFilterDraft({ filter: "all", archived: false, projectId: "" })}
             onApply={() => {
@@ -179,7 +175,7 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
             loading="list"
             loadingLabel={copy("Oturumlar yükleniyor…", "Loading sessions…")}
           />
-          {activity.privacyUnavailable ? (
+          {!activity.error && activity.privacyUnavailable ? (
             <Notice
               tone="info"
               message={copy(
@@ -189,7 +185,7 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
               retrying={retry.isPending}
               onRetry={retryActivity}
             />
-          ) : activity.readiness === "waiting" ? (
+          ) : !activity.error && activity.readiness === "waiting" ? (
             <Notice message={copy("Bağlantı bekleniyor.", "Waiting for a connection.")}
               action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: () => router.push("/machines") }} />
           ) : !activity.complete && !activity.pending && !activity.error ? (
@@ -265,28 +261,16 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
               [scope]: toggleSessionDirectoryFolder(current[scope] ?? {}, item, !!search.trim()) }))} />;
         }
         const session = item.session;
-        const status = sessionStatus(session, copy);
         return (
           <GroupedListRow
             first={index === 0 || rows[index - 1]?.kind !== "session" || rows[index - 1]?.project.id !== project.id}
             last={index === rows.length - 1 || rows[index + 1]?.kind !== "session" || rows[index + 1]?.project.id !== project.id}
             inset={rowInset}
           >
-            <View style={{ paddingStart: item.depth * space.md }}>
-            <NavigationRow
-              variant="plain"
-              label={session.title || copy("Yeni oturum", "New session")}
-              accessibilityLabel={[session.title || copy("Yeni oturum", "New session"), status.label, !overview ? project.name : undefined, session.harness, session.branch || session.model, relativeTime(session.updatedAt, copy)].filter(Boolean).join(". ")}
-              detail={[isRunningSession(session) && !session.needsInput ? undefined : status.label, !overview ? project.name : undefined, session.harness, session.branch || session.model].filter(Boolean).join(" · ")}
-              icon={!overview ? <ProjectIcon appearance={project.appearance} /> : undefined}
-              trailing={
-                <View style={{ alignItems: "flex-end", gap: space.xs }}>
-                  {isRunningSession(session) ? <ActivityBadge /> : null}
-                  <Body muted style={uiStyles.caption}>
-                    {relativeTime(session.updatedAt, copy)}
-                  </Body>
-                </View>
-              }
+            <HierarchyFrame depth={item.depth} reservedWidth={metrics.touchTarget + space.sm * 2}>{({indent,compressed}) => <View style={{ paddingStart: indent }}>
+            <SessionListRow machineId={machine.id} projectId={project.id} projectName={project.name}
+              projectCwd={project.cwd} session={session} ancestors={item.ancestors} compressed={compressed}
+              canRead={() => activity.projects.isProjectVisible(project.id)}
               onPress={() => {
                 if (useMachines.getState().activeId === machine.id)
                   router.push({
@@ -295,7 +279,7 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
                   });
               }}
             />
-            </View>
+            </View>}</HierarchyFrame>
           </GroupedListRow>
         );
       }}

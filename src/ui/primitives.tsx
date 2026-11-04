@@ -1,6 +1,6 @@
 /** Public shared UI surface. Implementation lives in focused component modules. */
 export { Body, Heading, CodeText } from "./typography";
-export { Screen, ScreenHeader, LargeTitle, Card, Row, Stack, Section, CodePanel } from "./layout";
+export { Screen, ScreenHeader, ScreenHeading, ContextControls, LargeTitle, Card, Row, StatusRow, Stack, Section, CodePanel } from "./layout";
 export { Button, ChoiceChip, PressableCard, SelectRow, IconButton } from "./buttons";
 export { ToggleField, Input, Field, IdentifierField } from "./fields";
 export { Badge, Empty, Loading, ErrorText, ErrorNotice, Notice } from "./feedback";
@@ -11,7 +11,7 @@ export { SegmentedControl } from "./segmented-control";
 export { NavigationRow, NavigationGroup, Separator, useInNavigationGroup } from "./navigation-row";
 export { Disclosure } from "./disclosure";
 export { ScreenList } from "./screen-list";
-export { SearchField } from "./search-field";
+export { SearchField, SearchToolbar } from "./search-field";
 export { ActionMenu, type MenuAction } from "./overflow-menu";
 export { useSheetGuard } from "./sheet-guard";
 export type { ButtonProps, InputProps } from "./component-props";

@@ -1,0 +1,302 @@
+// @vitest-environment happy-dom
+import { act, createElement, type PropsWithChildren } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { SessionRowActionsProps } from "./session-row-actions";
+import type { HostSessionSummary } from "./wire";
+import { RemoteHostError } from "@/remote/host-error";
+
+const f = vi.hoisted(() => ({
+  allowed: true,
+  epoch: true,
+  activeId: "machine",
+  active: true,
+  capabilities: ["sessions"],
+  read: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
+  invalidate: vi.fn(async () => undefined),
+  confirm: undefined as (() => void) | undefined,
+  cancel: undefined as (() => void) | undefined,
+  actions: new Map<string, () => void>(),
+}));
+vi.mock("lucide-react-native/icons/archive", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/archive-restore", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/trash", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/info", () => ({ default: () => null }));
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: f.invalidate }),
+}));
+vi.mock("@/state/machines", () => {
+  const machine = {
+    id: "machine",
+    name: "Original computer",
+    endpoint: "https://host.example",
+    environmentId: "environment",
+  };
+  return {
+    useActiveMachine: () => ({ ...machine, capabilities: f.capabilities }),
+    useMachines: { getState: () => ({ activeId: f.activeId, machines: [machine] }) },
+  };
+});
+vi.mock("@/state/connection-scope", () => {
+  const scope = {
+    review: { id: "machine", endpoint: "https://host.example", environmentId: "environment" },
+    isCurrent: () => f.epoch,
+  };
+  return { useConnectionScope: () => scope };
+});
+vi.mock("@/state/queries", () => {
+  const client = { machine: { id: "machine" } };
+  return {
+    useHostClient: () => client,
+    useHostReadActive: () => f.active,
+    hostKey: (id: string, key: unknown[]) => ["machine", id, ...key],
+    useHostMutation: (method: string) => ({
+      mutateAsync: method === "sessions.update" ? f.update : f.remove,
+    }),
+  };
+});
+vi.mock("@/ui/private-access", () => ({
+  usePrivateContentAccess: () => ({ allowed: f.allowed, check: () => f.allowed }),
+  PrivateContentAccessProvider: ({ children }: PropsWithChildren) => children,
+}));
+vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/styles", () => ({ uiStyles: { title: {}, caption: {} } }));
+vi.mock("@/ui/tokens", () => ({ colors: { muted: "muted" } }));
+vi.mock("@/ui/provider-identity", () => ({ ProviderIcon: () => null }));
+vi.mock("./shared", () => ({ relativeTime: () => "Now" }));
+vi.mock("../management/shared/format", () => ({
+  stamp: (value?: number) => (value === undefined ? "—" : `date-${value}`),
+}));
+vi.mock("./wire", () => ({ readTail: (...args: unknown[]) => f.read(...args) }));
+type Action = { key: string; label: string; onPress(): void; disabled?: boolean };
+vi.mock("@/ui/swipe-actions", () => ({
+  SwipeActions: ({ children, actions }: PropsWithChildren<{ actions: Action[] }>) => {
+    for (const action of actions) f.actions.set(action.key, action.onPress);
+    return createElement("main", null, children);
+  },
+}));
+vi.mock("@/ui/primitives", () => {
+  const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
+  const button = ({
+    label,
+    onPress,
+    disabled,
+  }: {
+    label: string;
+    onPress(): void;
+    disabled?: boolean;
+  }) => createElement("button", { onClick: onPress, disabled }, label);
+  return {
+    Body: wrapper,
+    Stack: wrapper,
+    Row: wrapper,
+    Disclosure: wrapper,
+    Button: button,
+    Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    Sheet: ({
+      children,
+      title,
+      onClose,
+    }: PropsWithChildren<{ title: string; onClose(): void }>) => {
+      f.cancel = onClose;
+      return createElement("aside", null, title, children);
+    },
+    StatusRow: ({ children, label }: PropsWithChildren<{ label: string }>) =>
+      createElement("section", null, label, children),
+    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    ErrorText: ({ error }: { error?: Error }) =>
+      error ? createElement("p", null, error.message) : null,
+    FormActions: ({
+      submitLabel,
+      onSubmit,
+      disabled,
+    }: {
+      submitLabel: string;
+      onSubmit(): void;
+      disabled?: boolean;
+    }) => {
+      f.confirm = onSubmit;
+      return button({ label: submitLabel, onPress: onSubmit, disabled });
+    },
+  };
+});
+import { SessionRowActions } from "./session-row-actions";
+const initial = (): HostSessionSummary => ({
+  id: "session",
+  projectId: "project",
+  title: "A long full session title",
+  harness: "codex",
+  model: "model",
+  status: "idle",
+  revision: 3,
+  updatedAt: 20,
+  createdAt: 10,
+  authorityGeneration: 2,
+  cwd: "/project",
+  branch: "main",
+});
+let session = initial(),
+  root: ReturnType<typeof createRoot>,
+  node: HTMLDivElement;
+const render = async (overrides: Partial<SessionRowActionsProps> = {}) =>
+  act(() =>
+    root.render(
+      createElement(SessionRowActions, {
+        machineId: "machine",
+        projectId: "project",
+        projectName: "Original project",
+        session,
+        canRead: () => f.allowed,
+        children: (open) => createElement("button", { onClick: open }, "Row menu"),
+        ...overrides,
+      }),
+    ),
+  );
+beforeEach(async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  f.allowed = true;
+  f.epoch = true;
+  f.activeId = "machine";
+  f.active = true;
+  f.capabilities = ["sessions"];
+  session = initial();
+  f.actions.clear();
+  f.update.mockReset().mockResolvedValue({});
+  f.remove.mockReset().mockResolvedValue({ deleted: true });
+  f.read.mockReset().mockImplementation(async () => ({
+    ...session,
+    session: { id: session.id, title: session.title },
+  }));
+  f.invalidate.mockClear();
+  node = document.createElement("div");
+  document.body.append(node);
+  root = createRoot(node);
+  await render();
+});
+afterEach(() => {
+  act(() => root.unmount());
+  node.remove();
+  vi.unstubAllGlobals();
+});
+it("opens full cached details without a Host read and keeps them visible during live revision changes", async () => {
+  await act(() => f.actions.get("details")!());
+  expect(node.textContent).toContain("A long full session title");
+  expect(node.textContent).toContain("Original project");
+  expect(node.textContent).toContain("/project");
+  expect(node.textContent).toContain("date-10");
+  expect(node.textContent).toContain("date-20");
+  expect(node.textContent).not.toContain("Duration");
+  session = { ...session, revision: 4, status: "running" };
+  await render();
+  expect(node.querySelector("aside")).not.toBeNull();
+  expect(node.textContent).toContain("Running");
+  expect(f.read).not.toHaveBeenCalled();
+});
+it("reviews deletion, cancel does nothing, and confirmation sends once", async () => {
+  await act(() => f.actions.get("delete")!());
+  expect(f.remove).not.toHaveBeenCalled();
+  const cancelled = f.confirm!;
+  await act(() => f.cancel!());
+  await act(() => cancelled());
+  expect(f.remove).not.toHaveBeenCalled();
+  await act(() => f.actions.get("delete")!());
+  const confirm = f.confirm!;
+  await act(async () => {
+    confirm();
+    confirm();
+  });
+  expect(f.remove).toHaveBeenCalledExactlyOnceWith({
+    projectId: "project",
+    sessionId: "session",
+    authorityGeneration: 2,
+  });
+  expect(f.invalidate).toHaveBeenCalledWith({
+    queryKey: ["machine", "machine", "project-summaries"],
+  });
+});
+it.each(["authority", "epoch", "privacy", "machine"])(
+  "retires deletion on %s changes",
+  async (change) => {
+    await act(() => f.actions.get("delete")!());
+    const confirm = f.confirm!;
+    if (change === "authority") session = { ...session, authorityGeneration: 3 };
+    if (change === "epoch") f.epoch = false;
+    if (change === "privacy") f.allowed = false;
+    if (change === "machine") f.activeId = "other";
+    await render();
+    await act(() => confirm());
+    expect(f.remove).not.toHaveBeenCalled();
+  },
+);
+it("blocks archive duplicates and rejects authority drift during preflight", async () => {
+  let resolve!: (value: unknown) => void;
+  f.read.mockImplementation(
+    () =>
+      new Promise((value) => {
+        resolve = value;
+      }),
+  );
+  await act(() => {
+    f.actions.get("archive")!();
+    f.actions.get("archive")!();
+  });
+  expect(f.read).toHaveBeenCalledOnce();
+  await act(() =>
+    resolve({
+      ...session,
+      authorityGeneration: 8,
+      session: { id: session.id, title: session.title },
+    }),
+  );
+  expect(f.update).not.toHaveBeenCalled();
+  expect(node.textContent).toContain("Refresh the list");
+});
+it("retains unknown archive outcome and refuses a second dispatch", async () => {
+  f.update.mockRejectedValue(new RemoteHostError("machine", "timeout", "Unknown", true));
+  await act(async () => f.actions.get("archive")!());
+  expect(node.textContent).toContain("The result is uncertain");
+  await act(async () => f.actions.get("archive")!());
+  expect(f.update).toHaveBeenCalledOnce();
+});
+it("does not revive a delete confirmation after access disappears and returns", async () => {
+  await act(() => f.actions.get("delete")!());
+  const confirm = f.confirm!;
+  f.allowed = false;
+  await render();
+  f.allowed = true;
+  await render();
+  await act(() => confirm());
+  expect(f.remove).not.toHaveBeenCalled();
+  expect(f.read).not.toHaveBeenCalled();
+});
+it("keeps uncertain feedback visible after the summary revision advances during a write", async () => {
+  let reject!: (error: unknown) => void;
+  f.update.mockImplementation(
+    () =>
+      new Promise((_resolve, refuse) => {
+        reject = refuse;
+      }),
+  );
+  await act(() => f.actions.get("archive")!());
+  session = { ...session, revision: 4 };
+  await render();
+  await act(() => reject(new RemoteHostError("machine", "timeout", "Unknown", true)));
+  expect(node.querySelector("aside")).not.toBeNull();
+  expect(node.textContent).toContain("The result is uncertain");
+  await act(() => f.actions.get("archive")!());
+  expect(f.update).toHaveBeenCalledOnce();
+});
+it("does not mutate read-only capability sets or wrong project rows", async () => {
+  f.capabilities = ["transport.ws.read.v2"];
+  await render();
+  await act(() => f.actions.get("archive")!());
+  expect(f.read).not.toHaveBeenCalled();
+  f.capabilities = ["sessions"];
+  await render({ projectId: "wrong" });
+  await act(() => f.actions.get("archive")!());
+  expect(f.read).not.toHaveBeenCalled();
+});
