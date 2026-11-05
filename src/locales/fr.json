@@ -1,4 +1,5 @@
 {
+  "Additional note (optional)": "Note supplémentaire (facultative)",
   "This Host cannot verify which request you are answering. Update the Host before responding.": "Cet hôte ne peut pas vérifier à quelle demande vous répondez. Mettez-le à jour avant de répondre.",
   "This request cannot be verified. Refresh the conversation or update its execution client.": "Cette demande ne peut pas être vérifiée. Actualisez la conversation ou mettez à jour le client qui l’exécute.",
   "Sending answer…": "Envoi de la réponse…",

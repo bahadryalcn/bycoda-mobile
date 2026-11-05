@@ -95,6 +95,7 @@ export type QuestionCardProps = {
 export type QuestionDraft = {
   answers: Record<string, string[]>;
   custom: Record<string, string>;
+  notes?: Record<string, string>;
 };
 
 export type SessionBlockRequest = {

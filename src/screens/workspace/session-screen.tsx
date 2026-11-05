@@ -9,83 +9,12 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHostClient } from "../../state/host-context";
-import type { Block, HostCommand, HostSession, UserQuestionReply } from "../../domain/types";
-import { Button, Card, Empty, ErrorNotice, Field, Screen, SectionTitle } from "../../ui/components";
+import type { Block, HostCommand, HostSession } from "../../domain/types";
+import { Button, Card, Empty, ErrorNotice, Screen, SectionTitle } from "../../ui/components";
 import { colors } from "../../ui/theme";
-import { ChoiceChip, Input } from "../../ui/primitives";
+import { Input } from "../../ui/primitives";
+import { QuestionCard } from "../../features/workspace/question-card";
 import { commandId, Loading, ProjectScreenProps, styles, workspaceKey } from "./shared";
-
-type QuestionPrompt = NonNullable<HostSession["session"]["pendingQuestion"]>;
-function Questions({
-  prompt,
-  busy,
-  onReply,
-}: {
-  prompt: QuestionPrompt;
-  busy: boolean;
-  onReply: (reply: UserQuestionReply) => void;
-}) {
-  useMobileTheme();
-  const [answers, setAnswers] = useState<Record<string, string[]>>({});
-  const [custom, setCustom] = useState<Record<string, string>>({});
-  const complete = prompt.questions.every((q) => {
-    const selected = answers[q.id] ?? [];
-    return selected.length
-      ? selected.every((id) => id !== "__custom__" || !!custom[q.id]?.trim())
-      : q.allowCustom && !!custom[q.id]?.trim();
-  });
-  return (
-    <Card>
-      <View style={styles.stack}>
-        <SectionTitle title={prompt.title || "Yanıtınız gerekiyor"} />
-        {prompt.questions.map((q) => (
-          <View style={styles.stack} key={q.id}>
-            <Text selectable style={styles.body}>
-              {q.prompt}
-            </Text>
-            {q.multiSelect && <Text style={styles.muted}>Birden fazla seçim yapabilirsiniz.</Text>}
-            <View style={styles.row}>
-              {q.options.map((o) => (
-                <ChoiceChip
-                  key={o.id}
-                  label={o.label}
-                  selected={answers[q.id]?.includes(o.id) ?? false}
-                  disabled={busy}
-                  onPress={() =>
-                    setAnswers((previous) => ({
-                      ...previous,
-                      [q.id]: q.multiSelect
-                        ? previous[q.id]?.includes(o.id)
-                          ? previous[q.id].filter((id) => id !== o.id)
-                          : [...(previous[q.id] ?? []), o.id]
-                        : [o.id],
-                    }))
-                  }
-                />
-              ))}
-            </View>
-            {q.allowCustom && (
-              <Field
-                label="Kendi yanıtınız"
-                value={custom[q.id] ?? ""}
-                onChangeText={(text) => setCustom((v) => ({ ...v, [q.id]: text }))}
-                multiline
-                editable={!busy}
-              />
-            )}
-          </View>
-        ))}
-        <Button
-          title="Yanıtla"
-          disabled={!complete}
-          busy={busy}
-          onPress={() => onReply({ kind: "answered", answers, custom })}
-        />
-        <Button title="Soruyu atla" disabled={busy} onPress={() => onReply({ kind: "skipped" })} />
-      </View>
-    </Card>
-  );
-}
 
 function TranscriptBlock({
   block,
@@ -350,12 +279,20 @@ export function SessionScreen({
             />
           ))}
           {value?.session.pendingQuestion && value.runId && (
-            <Questions
-              key={value.session.pendingQuestion.requestId}
-              prompt={value.session.pendingQuestion}
-              busy={busy}
-              onReply={(reply) =>
-                dispatch.mutate({
+            <QuestionCard
+              key={JSON.stringify([
+                identity,
+                value.runId,
+                value.session.pendingQuestion.requestId,
+                value.session.pendingQuestion.callId,
+                value.session.pendingQuestion.questions,
+              ])}
+              question={value.session.pendingQuestion}
+              draftScope={`${identity}:${value.runId}`}
+              deliveryVersion={value.revision}
+              disabled={busy}
+              onAnswer={async (reply) => {
+                await dispatch.mutateAsync({
                   type: "answer",
                   ...captureSessionAuthority(value),
                   commandId: commandId(),
@@ -363,8 +300,8 @@ export function SessionScreen({
                   runId: value.runId!,
                   requestId: value.session.pendingQuestion!.requestId,
                   reply,
-                })
-              }
+                });
+              }}
             />
           )}
           {value && !value.session.blocks.length && (
