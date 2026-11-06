@@ -5,11 +5,12 @@ import { useCopy } from "@/ui/copy";
 import { modelDefaults } from "./catalog";
 
 /** The same model and capability controls for creation and existing sessions. */
-export function AgentModelFields({ models, model, settings, disabled, onChange }: {
+export function AgentModelFields({ models, model, settings, disabled, onChange, sparseSettings = false }: {
   models: AgentModel[];
   model: string;
   settings: Record<string, string>;
   disabled?: boolean;
+  sparseSettings?: boolean;
   onChange: (model: string, settings: Record<string, string>) => void;
 }) {
   const copy = useCopy();
@@ -47,8 +48,11 @@ export function AgentModelFields({ models, model, settings, disabled, onChange }
   const renderSetting = (setting: NonNullable<AgentModel["settings"]>[number]) => <SelectField
     key={setting.id}
     label={labels[settingLabel(setting)] ?? settingLabel(setting)}
-    value={settings[setting.id] ?? setting.value}
-    options={setting.options.map((option) => ({ ...option, label: labels[option.label] ?? option.label }))}
+    value={settings[setting.id] ?? (sparseSettings && delegation.includes(setting) ? "" : setting.value)}
+    options={[
+      ...(sparseSettings && delegation.includes(setting) ? [{ value: "", label: copy("Ürün varsayılanı", "Product default") }] : []),
+      ...setting.options.map((option) => ({ ...option, label: labels[option.label] ?? option.label })),
+    ]}
     hint={setting.description}
     disabled={disabled}
     onChange={(value) => onChange(model, { ...settings, [setting.id]: value })}
@@ -60,7 +64,7 @@ export function AgentModelFields({ models, model, settings, disabled, onChange }
       options={options}
       searchable
       disabled={disabled || !options.length}
-      onChange={(id) => onChange(id, modelDefaults(models.find((entry) => entry.id === id)))}
+      onChange={(id) => onChange(id, sparseSettings ? {} : modelDefaults(models.find((entry) => entry.id === id)))}
     />
     {selected?.nativeId ? <Body muted mono>{selected.nativeId}</Body> : null}
     {primary.map(renderSetting)}
@@ -76,7 +80,7 @@ export function AgentModelFields({ models, model, settings, disabled, onChange }
         editable={!disabled}
         onChangeText={(id) => {
           const target = models.find((entry) => entry.id === id || entry.nativeId === id);
-          onChange(id, modelDefaults(target));
+          onChange(id, sparseSettings ? {} : modelDefaults(target));
         }}
       />
     </Disclosure>

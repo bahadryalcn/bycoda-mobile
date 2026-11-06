@@ -10,7 +10,7 @@ import { Button, Card, Empty, ErrorNotice, Field, Screen, SectionTitle } from ".
 import { colors } from "../../ui/theme";
 import { Body, ChoiceChip, IdentifierField, NavigationRow, PressableCard, ScreenList, SearchField, SelectField, Sheet } from "../../ui/primitives";
 import { commandId, Loading, ProjectScreenProps, styles, workspaceKey } from "./shared";
-import { modelDefaults } from "../../features/workspace/catalog";
+import { creationModel, creationSettings } from "../../features/workspace/catalog";
 import { filterSelection } from "@/ui/selection-model";
 
 export function SessionsScreen({
@@ -47,8 +47,8 @@ export function SessionsScreen({
   );
   const selectedProvider = provider ?? providers[0];
   const models = selectedProvider ? (catalog.data?.models[selectedProvider] ?? []) : [];
-  const selectedModel = model.trim() || models[0]?.id || "";
-  const exactModel = models.find((item) => item.id === model.trim());
+  const exactModel = creationModel(catalog.data, selectedProvider, model);
+  const selectedModel = model.trim() || exactModel?.id || "";
   const modelChoices = filterSelection(
     models.map((item) => ({
       value: item.id,
@@ -66,7 +66,7 @@ export function SessionsScreen({
         projectId,
         harness: selectedProvider,
         model: selectedModel,
-        modelSettings: Object.keys(modelSettings).length ? modelSettings : (exactModel ? modelDefaults(exactModel) : {}),
+        modelSettings: creationSettings(exactModel, modelSettings, selectedProvider, models),
         runtimeMode,
       });
     },
@@ -157,8 +157,7 @@ export function SessionsScreen({
                 value={model}
                 onChangeText={(next) => {
                   setModel(next);
-                  const target = models.find((item) => item.id === next);
-                  if (target) setModelSettings(modelDefaults(target));
+                  setModelSettings({});
                 }}
                 editable={!catalog.isPending}
                 placeholder="Bilgisayardaki model kimliği"
@@ -201,8 +200,7 @@ export function SessionsScreen({
                       selected={model === item.value}
                       onPress={() => {
                         setModel(item.value);
-                        const target = models.find((entry) => entry.id === item.value);
-                        if (target) setModelSettings(modelDefaults(target));
+                        setModelSettings({});
                         setChoosingModel(false);
                       }}
                     />
@@ -213,8 +211,11 @@ export function SessionsScreen({
                 <SelectField
                   key={setting.id}
                   label={setting.label}
-                  value={modelSettings[setting.id] ?? setting.value}
-                  options={setting.options}
+                  value={modelSettings[setting.id] ?? (["advisor", "subagentModel", "subagentPolicy"].includes(setting.id) ? "" : setting.value)}
+                  options={[
+                    ...(["advisor", "subagentModel", "subagentPolicy"].includes(setting.id) ? [{ value: "", label: "Ürün varsayılanı" }] : []),
+                    ...setting.options,
+                  ]}
                   onChange={(option) =>
                     setModelSettings((current) => ({ ...current, [setting.id]: option }))
                   }

@@ -34,7 +34,7 @@ import {
   useCommands,
   workspaceStyles,
 } from "./shared";
-import { catalogProvider, catalogProviders, sessionCatalog, sessionModel, sessionSettings } from "./catalog";
+import { catalogProvider, catalogProviders, sessionCatalog, creationModel, creationSettings } from "./catalog";
 import { AgentModelFields } from "./agent-model-fields";
 import type { HostSessionSummary } from "./wire";
 import { filterSessionDirectory, sessionDirectoryRows, toggleSessionDirectoryFolder, type SessionDirectoryRow } from "./session-directory";
@@ -83,7 +83,7 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
   const availableCatalog = sessionCatalog(catalog.data, providers);
   const selectedProvider = catalogProvider(providers, availableCatalog, provider);
   const models = selectedProvider ? availableCatalog.models[selectedProvider] ?? [] : [];
-  const selectedModelValue = sessionModel(availableCatalog, selectedProvider, model);
+  const selectedModelValue = creationModel(availableCatalog, selectedProvider, model);
   const selectedModel = model.trim() || selectedModelValue?.id || "";
   const bundled = !!models.length && !catalog.data?.models[selectedProvider!]?.length;
   const visible = filterSessionDirectory(
@@ -158,7 +158,8 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
                 <AgentModelFields
                   models={models}
                   model={selectedModel}
-                  settings={sessionSettings(selectedModelValue, modelSettings)}
+                  settings={modelSettings}
+                  sparseSettings
                   disabled={locked}
                   onChange={(next, settings) => {
                     form.setField("model", next);
@@ -218,7 +219,7 @@ export function ProjectSessions({ projectId, cwd, initialCreating = false, sessi
                         ...(cwd ? { worktreeCwd: cwd } : {}),
                         harness: selectedProvider,
                         model: selectedModel,
-                        modelSettings: sessionSettings(selectedModelValue, modelSettings),
+                        modelSettings: creationSettings(selectedModelValue, modelSettings, selectedProvider, models),
                         runtimeMode,
                       });
                       haptic.success();

@@ -1,4 +1,5 @@
 import { REMOTE_PROVIDERS } from "../../../../src/features/connections/model/protocol";
+import { productProviderDefaults } from "../../../../src/shared/model/productProviderDefaults";
 import type { HostModelCatalog, RemoteProvider } from "./wire";
 import { BUNDLED_CLAUDE_MODELS, CODEX_MODEL_CATALOG } from "./bundled-models";
 
@@ -35,6 +36,28 @@ export function sessionSettings(model: ReturnType<typeof sessionModel>, values: 
   return Object.fromEntries((model.settings ?? []).map((setting) => [setting.id,
     setting.options.some((option) => option.value === values[setting.id]) ? values[setting.id] : setting.value,
   ]));
+}
+
+/** New sessions use product defaults; explicit model IDs and setting choices win. */
+export function creationModel(catalog: HostModelCatalog | undefined, provider: RemoteProvider | undefined, requested: string) {
+  if (requested.trim() || !provider) return sessionModel(catalog, provider, requested);
+  const models = catalog?.models[provider] ?? [];
+  const preferred = productProviderDefaults(provider, models).model;
+  return models.find((model) => model.id === preferred);
+}
+
+export function creationSettings(model: ReturnType<typeof sessionModel>, values: Record<string, string>, provider?: RemoteProvider, models: NonNullable<HostModelCatalog["models"][RemoteProvider]> = []): Record<string, string> {
+  const explicit = Object.fromEntries((model?.settings ?? []).flatMap((setting) => {
+    const value = values[setting.id];
+    return value !== undefined && setting.options.some((option) => option.value === value)
+      ? [[setting.id, value]] : [];
+  }));
+  const result = { ...(provider ? productProviderDefaults(provider, models).extras : {}), ...explicit };
+  if (explicit.advisor !== undefined) result.crossAdvisor = explicit.advisor === "off" ? "null" : "";
+  if (explicit.subagentModel !== undefined || explicit.subagentPolicy !== undefined) {
+    result.crossSubagents = explicit.subagentModel === "off" || explicit.subagentPolicy === "off" ? "[]" : "";
+  }
+  return result;
 }
 
 /** Older saved connections may lack a descriptor; infer only providers returned by the host. */

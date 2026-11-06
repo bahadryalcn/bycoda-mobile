@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogModel, catalogProvider, catalogProviders, modelDefaults, sessionCatalog, sessionModel, sessionSettings } from "./catalog";
+import { catalogModel, catalogProvider, catalogProviders, creationModel, creationSettings, modelDefaults, sessionCatalog, sessionModel, sessionSettings } from "./catalog";
 import type { HostModelCatalog } from "./wire";
 
 const catalog: HostModelCatalog = {
@@ -55,6 +55,32 @@ it("keeps advertised pending discovery providers available before their model re
 });
 
 describe("immediate session configuration", () => {
+  it("uses the product model for creation while preserving explicit and custom choices", () => {
+    const models = [
+      { id: "other", name: "Other", harness: "codex" as const },
+      { id: "codex:gpt-6.1-sol", name: "Sol", harness: "codex" as const },
+    ];
+    const result: HostModelCatalog = { models: { codex: models }, errors: {} };
+    expect(creationModel(result, "codex", "")?.id).toBe("codex:gpt-6.1-sol");
+    expect(creationModel(result, "codex", "other")?.id).toBe("other");
+    expect(creationModel(result, "codex", "custom")).toBeUndefined();
+  });
+
+  it("sends only explicit valid settings, including Off", () => {
+    const model = { id: "m", name: "M", harness: "codex" as const, settings: [
+      { id: "advisor", label: "Advisor", kind: "select" as const, value: "off", options: [{ value: "off", label: "Off" }, { value: "opus", label: "Opus" }] },
+      { id: "subagentPolicy", label: "Subagents", kind: "select" as const, value: "off", options: [{ value: "off", label: "Off" }, { value: "on", label: "On" }] },
+    ] };
+    expect(creationSettings(model, {})).toEqual({});
+    expect(creationSettings(model, { advisor: "off" })).toEqual({ advisor: "off", crossAdvisor: "null" });
+    expect(creationSettings(model, { advisor: "invalid" })).toEqual({});
+    expect(creationSettings(model, {}, "codex", [model])).toMatchObject({ crossAdvisor: expect.any(String), crossSubagents: expect.any(String) });
+    expect(creationSettings(model, { advisor: "off" }, "codex", [model])).toMatchObject({ advisor: "off", crossAdvisor: "null" });
+    expect(creationSettings(model, { advisor: "opus" }, "codex", [model])).toMatchObject({ advisor: "opus", crossAdvisor: "" });
+    expect(creationSettings(model, { subagentPolicy: "off" }, "codex", [model])).toMatchObject({ subagentPolicy: "off", crossSubagents: "[]" });
+    expect(creationSettings(model, { subagentPolicy: "on" }, "codex", [model])).toMatchObject({ subagentPolicy: "on", crossSubagents: "" });
+    expect(creationSettings(model, { advisor: "" }, "codex", [model])).toEqual(creationSettings(model, {}, "codex", [model]));
+  });
   it("shows bundled Codex and Claude models with reasoning before discovery completes", () => {
     const result = sessionCatalog(undefined, ["codex", "claude"]);
     for (const provider of ["codex", "claude"] as const) {
