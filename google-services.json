@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "347273835376",
+    "project_id": "bycoda-mobile",
+    "storage_bucket": "bycoda-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:347273835376:android:0812cbd6826b962a0cd5b5",
+        "android_client_info": {
+          "package_name": "com.bycoda.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB8u4cPipWTrVSlTetsx2FH1Df8PduhEAc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,20 +1,19 @@
 import { memo, useState } from "react";
 import { captureApprovalCommand } from "@/domain/approval-command";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import Terminal from "lucide-react-native/icons/terminal";
 import ListChecks from "lucide-react-native/icons/list-checks";
 import { Badge, Body, Button, CodePanel, CodeText, QueryState, Row, Sheet } from "@/ui/primitives";
 import { ChatAction, ChatSummary } from "@/ui/chat-controls";
-import { ChatMessage } from "@/ui/chat";
+import { ChatMessage, chatUserBubbleStyle } from "@/ui/chat";
 import { ChatActivity, ChatPlan, ChatStreaming } from "@/ui/chat-activity";
 import { MessageText } from "@/ui/message-text";
-import { chatTextStyles } from "@/ui/chat-styles";
+import { useChatTextStyles } from "@/ui/chat-styles";
 import { useChatAppearance } from "@/state/chat-appearance";
-import { colors, radii, semanticColors, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { radii, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
-import { workspaceStyles } from "./shared";
+import { friendlyProviderFailure } from "@/ui/error-message";
 import { useSessionBlock } from "./session-queries";
 import type { TranscriptBlockProps } from "./session-types";
 import { TranscriptAttachments } from "./transcript-attachments";
@@ -30,14 +29,14 @@ import {
 } from "./transcript-model";
 import { useMobileTheme } from "@/ui/theme";
 import { PlanReview } from "@/features/management/plans/plan-review";
-import { SubagentDetails } from "./subagent-details";
+import { SubagentCard } from "./subagent-card";
 import { OrchestrationDetails } from "./orchestration-details";
 
 export const TranscriptBlock = memo(function TranscriptBlock({
   block,
   author,
   scope,
-  revision,
+  getRevision,
   runId,
   disabled,
   onCommand,
@@ -47,18 +46,18 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   parentProvider,
 }: TranscriptBlockProps) {
   const copy = useCopy();
-  useMobileTheme();
+  const { colors, semanticColors, uiStyles } = useMobileTheme();
   const [reviewPlan, setReviewPlan] = useState(false);
-  const [subagentOpen, setSubagentOpen] = useState(false);
   const [orchestrationOpen, setOrchestrationOpen] = useState(false);
-  const typography = chatTextStyles(useChatAppearance((state) => state.textSize));
+  const typography = useChatTextStyles(useChatAppearance((state) => state.textSize));
   const [open, setOpen] = useState(false);
   const [actions, setActions] = useState(false);
   const [requested, setRequested] = useState(false);
   const detail = useSessionBlock({
     scope,
     blockId: block.id,
-    revision,
+    getRevision,
+    digest: block.remoteContent?.digest,
     enabled:
       (requested || open || activityDetail || !!block.plan || !!block.taskList) &&
       !!block.remoteContent,
@@ -98,7 +97,9 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                   : value.role === "handoff"
                     ? copy("Agent devri", "Agent handoff")
                     : value.role;
-  const text = value.text || value.tool?.detail || value.tool?.output || "";
+  const rawText = value.text || value.tool?.detail || value.tool?.output || "";
+  const text =
+    value.role === "system" && isError ? friendlyProviderFailure(rawText, copy) : rawText;
   const toolResults = toolResultTexts(value);
   const label =
     value.agentRun?.name ||
@@ -197,6 +198,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
         <MessageText
           text={text}
           context={context}
+          cacheId={value.id}
           error={isError}
           compactMedia
           role={
@@ -222,33 +224,17 @@ export const TranscriptBlock = memo(function TranscriptBlock({
         <Body muted>{copy("Çıktı kısaltıldı.", "Output was truncated.")}</Body>
       ) : null}
       {value.agentRun ? (
-        <Button
-          label={copy("Alt ajan ayrıntıları", "Subagent details")}
-          tone="quiet"
-          disabled={!!value.remoteContent && !detail.data}
-          onPress={() => setSubagentOpen(true)}
+        <SubagentCard
+          block={value}
+          scope={scope}
+          runId={runId}
+          parentProvider={parentProvider}
+          disabled={disabled}
+          onCommand={onCommand}
+          context={context}
+          detailsDisabled={!!value.remoteContent && !detail.data}
         />
       ) : null}
-      <Sheet
-        visible={subagentOpen}
-        title={value.agentRun?.name || copy("Alt ajan ayrıntıları", "Subagent details")}
-        size="full"
-        scroll={false}
-        onClose={() => setSubagentOpen(false)}
-      >
-        {subagentOpen && value.agentRun ? (
-          <SubagentDetails
-            block={value}
-            scope={scope}
-            runId={runId}
-            parentProvider={parentProvider}
-            disabled={disabled}
-            onCommand={onCommand}
-            context={context}
-            onClose={() => setSubagentOpen(false)}
-          />
-        ) : null}
-      </Sheet>
       {value.orchestration ? (
         <Button
           label={copy("Koordinasyon ayrıntıları", "Coordination details")}
@@ -289,7 +275,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
         />
       ) : null}
       {value.approval && !value.approval.decided ? (
-        <View style={workspaceStyles.stack}>
+        <View style={uiStyles.stack}>
           <Body>{copy("Bu işlem için onayın gerekiyor.", "This action needs your approval.")}</Body>
           {runId ? (
             <Row>
@@ -333,7 +319,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
         />
       ) : null}
       {value.draft ? (
-        <View style={workspaceStyles.stack}>
+        <View style={uiStyles.stack}>
           <Badge label={copy("Bilgisayarda taslak", "Draft on your computer")} tone="warning" />
           {value.followUpDelivery === "uncertain" ? (
             <Body muted>
@@ -459,30 +445,23 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             }
             style={{
               alignSelf: "stretch",
-              backgroundColor:
-                semantic?.surface ?? (value.role === "user" ? colors.userMessage : "transparent"),
+              ...(value.role === "user"
+                ? { ...chatUserBubbleStyle(colors), alignSelf: "stretch", maxWidth: "100%" }
+                : {
+                    backgroundColor: semantic?.surface ?? "transparent",
+                    paddingHorizontal: semantic && !activityDetail ? space.md : 0,
+                    paddingVertical: semantic && !activityDetail ? space.sm : 0,
+                    borderRadius: semantic ? radii.card : 0,
+                  }),
               borderColor: semantic?.border ?? colors.separator,
-              borderWidth: semantic ? 1 : 0,
-              paddingHorizontal:
-                activityDetail || (!semantic && value.role !== "user")
-                  ? 0
-                  : value.role === "user"
-                    ? space.lg
-                    : space.md,
-              paddingVertical:
-                activityDetail || (!semantic && value.role !== "user")
-                  ? 0
-                  : value.role === "user"
-                    ? space.sm
-                    : space.md,
-              borderRadius: semantic || value.role === "user" ? radii.card : 0,
+              borderWidth: semantic ? StyleSheet.hairlineWidth * 2 : 0,
               gap: space.xs,
             }}
           >
             {value.role !== "user" ? (
-              <Row style={{ flexWrap: "nowrap", gap: space.sm, minHeight: 32 }}>
+              <Row style={{ flexWrap: "nowrap", gap: space.sm, minHeight: 24 }}>
                 {value.role === "assistant" ? (
-                  <AgentAvatar author={author} size={22} />
+                  <AgentAvatar author={author} size={20} />
                 ) : (
                   <Terminal size={15} color={semantic?.text ?? colors.muted} />
                 )}
@@ -562,7 +541,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                 block,
                 author,
                 scope,
-                revision,
+                getRevision,
                 runId,
                 disabled,
                 onCommand,

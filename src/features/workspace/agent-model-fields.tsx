@@ -1,38 +1,36 @@
 import type { AgentModel } from "../../../../src/features/sessions/model/models";
 import { groupedSettings, isPrimarySetting, SETTING_GROUP_TITLE, settingLabel } from "./agent-model-settings";
-import { Body, Disclosure, IdentifierField, SelectField } from "@/ui/primitives";
+import { View } from "react-native";
+import { Disclosure, IdentifierField, SectionHeader, SelectField } from "@/ui/primitives";
+import { space } from "@/ui/tokens";
+import { SettingIcon } from "./agent-option-icons";
 import { useCopy } from "@/ui/copy";
 import { modelDefaults } from "./catalog";
+import { settingLabels } from "./setting-labels";
+import { ModelPickerField } from "./model-picker-field";
+import type { ProviderChoice } from "./provider-choices";
+import type { HostModelCatalog } from "./wire";
 
 /** The same model and capability controls for creation and existing sessions. */
-export function AgentModelFields({ models, model, settings, disabled, onChange, sparseSettings = false }: {
+export function AgentModelFields({ models, model, settings, disabled, onChange, sparseSettings = false, provider, catalog }: {
   models: AgentModel[];
   model: string;
   settings: Record<string, string>;
   disabled?: boolean;
   sparseSettings?: boolean;
+  /** Provider and account choices; with them the model and its reasoning open in one picker sheet. */
+  provider?: { choices: readonly ProviderChoice[]; value: ProviderChoice | undefined; onChange: (choice: ProviderChoice) => void };
+  /** The computer's models; enables bycoda's own advisor, subagents and image models in the picker. */
+  catalog?: HostModelCatalog;
   onChange: (model: string, settings: Record<string, string>) => void;
 }) {
   const copy = useCopy();
-  const labels: Record<string, string> = {
-    Reasoning: copy("Akıl yürütme", "Reasoning"),
-    "Service Tier": copy("Hız katmanı", "Service Tier"),
-    Fast: copy("Hızlı", "Fast"),
-    Thinking: copy("Düşünme", "Thinking"),
-    Context: copy("Bağlam", "Context"),
-    "Advisor and subagents": copy("Danışman ve alt ajanlar", "Advisor and subagents"),
-    Low: copy("Düşük", "Low"),
-    Medium: copy("Orta", "Medium"),
-    High: copy("Yüksek", "High"),
-    "Extra High": copy("Çok yüksek", "Extra High"),
-    Xhigh: copy("Çok yüksek", "Extra High"),
-    On: copy("Açık", "On"),
-    Off: copy("Kapalı", "Off"),
-    Standard: copy("Standart", "Standard"),
-  };
+  const labels = settingLabels(copy);
   const selected = models.find((entry) => entry.id === model || entry.nativeId === model);
-  const options = models.map((entry) => ({ value: entry.id, label: entry.name, detail: entry.nativeId || entry.id }));
-  if (model && !selected) options.unshift({ value: model, label: model, detail: model });
+  // The id is only a second line when it adds something the name does not already say.
+  const detailFor = (name: string, id: string) => name.trim().toLowerCase() === id.trim().toLowerCase() ? undefined : id;
+  const options = models.map((entry) => ({ value: entry.id, label: entry.name, detail: detailFor(entry.name, entry.nativeId || entry.id) }));
+  if (model && !selected) options.unshift({ value: model, label: model, detail: undefined });
   const groups = groupedSettings(selected);
   // Reasoning, Fast and Thinking lead; the rarer model options and the groups below are secondary.
   // The form reads downward; keep Reasoning first even when the mirrored desktop
@@ -40,10 +38,12 @@ export function AgentModelFields({ models, model, settings, disabled, onChange, 
   const primary = groups.model.filter(isPrimarySetting).sort((a, b) =>
     Number(settingLabel(a) !== "Reasoning") - Number(settingLabel(b) !== "Reasoning"));
   const otherModel = groups.model.filter((setting) => !isPrimarySetting(setting));
-  const { context, delegation } = groups;
+  // With a provider the picker sheet already carries the Context and Advisor groups.
+  const context = provider ? [] : groups.context;
+  const delegation = provider ? [] : groups.delegation;
   const caption = (group: "context" | "delegation") => {
     const title = SETTING_GROUP_TITLE[group];
-    return <Body muted>{labels[title] ?? title}</Body>;
+    return <SectionHeader title={labels[title] ?? title} />;
   };
   const renderSetting = (setting: NonNullable<AgentModel["settings"]>[number]) => <SelectField
     key={setting.id}
@@ -54,20 +54,33 @@ export function AgentModelFields({ models, model, settings, disabled, onChange, 
       ...setting.options.map((option) => ({ ...option, label: labels[option.label] ?? option.label })),
     ]}
     hint={setting.description}
+    icon={<SettingIcon id={setting.id} />}
     disabled={disabled}
     onChange={(value) => onChange(model, { ...settings, [setting.id]: value })}
   />;
-  return <>
-    <SelectField
-      label={copy("Model", "Model")}
-      value={selected?.id ?? model}
-      options={options}
-      searchable
-      disabled={disabled || !options.length}
-      onChange={(id) => onChange(id, sparseSettings ? {} : modelDefaults(models.find((entry) => entry.id === id)))}
-    />
-    {selected?.nativeId ? <Body muted mono>{selected.nativeId}</Body> : null}
-    {primary.map(renderSetting)}
+  return <View style={{ gap: space.lg }}>
+    {provider ? <ModelPickerField
+      choices={provider.choices}
+      choice={provider.value}
+      onChooseProvider={provider.onChange}
+      models={models}
+      model={model}
+      settings={settings}
+      sparseSettings={sparseSettings}
+      disabled={disabled}
+      catalog={catalog}
+      onChange={onChange}
+    /> : <>
+      <SelectField
+        label={copy("Model", "Model")}
+        value={selected?.id ?? model}
+        options={options}
+        searchable
+        disabled={disabled || !options.length}
+        onChange={(id) => onChange(id, sparseSettings ? {} : modelDefaults(models.find((entry) => entry.id === id)))}
+      />
+      {primary.map(renderSetting)}
+    </>}
     {context.length ? <>{caption("context")}{context.map(renderSetting)}</> : null}
     {otherModel.length || delegation.length ? <Disclosure label={copy("Ajan ayarları", "Agent settings")}>
       {otherModel.map(renderSetting)}
@@ -84,5 +97,5 @@ export function AgentModelFields({ models, model, settings, disabled, onChange, 
         }}
       />
     </Disclosure>
-  </>;
+  </View>;
 }

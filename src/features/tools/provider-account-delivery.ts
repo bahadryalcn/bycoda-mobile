@@ -21,8 +21,13 @@ export function useProviderAccountDelivery(
 ) {
   const client = useHostClient();
   const opening = useRef(reviewedMachine(client?.machine));
-  const [context] = useState(() => ({ scope: { ...scope }, projectId, environmentId: report.environmentId,
-    accountRevision: report.accountRevision, account: { ...account } }));
+  const [context] = useState(() => ({
+    scope: { ...scope },
+    projectId,
+    environmentId: report.environmentId,
+    accountRevision: report.accountRevision,
+    account: { ...account },
+  }));
   const latest = useRef({ scope, projectId, report, account, client });
   latest.current = { scope, projectId, report, account, client };
   const invalidated = useRef(false);
@@ -44,21 +49,40 @@ export function useProviderAccountDelivery(
   }, []);
   useEffect(() => {
     if (draft.ready && (!draft.valueRef.current || draft.valueRef.current.finished))
-      draft.setValue({ kind: "rename", label: context.account.label, color: context.account.color });
+      draft.setValue({
+        kind: "rename",
+        label: context.account.label,
+        color: context.account.color,
+        accountKind: context.account.kind ?? null,
+      });
   }, [draft.ready]);
   const current = () => {
     const live = latest.current;
-    if (!isReviewedMachine(opening.current, useMachines.getState()) ||
-      live.scope.machineId !== context.scope.machineId || live.scope.sessionId !== context.scope.sessionId ||
-      live.projectId !== context.projectId || live.report.environmentId !== context.environmentId ||
+    if (
+      !isReviewedMachine(opening.current, useMachines.getState()) ||
+      live.scope.machineId !== context.scope.machineId ||
+      live.scope.sessionId !== context.scope.sessionId ||
+      live.projectId !== context.projectId ||
+      live.report.environmentId !== context.environmentId ||
       live.report.sourceSessionId !== context.scope.sessionId ||
-      live.account.id !== context.account.id || live.account.provider !== context.account.provider ||
-      (live.client && !isReviewedMachine(opening.current, { activeId: live.client.machine.id, machines: [live.client.machine] }))) invalidated.current = true;
-    return mounted.current && !invalidated.current && !!live.client &&
+      live.account.id !== context.account.id ||
+      live.account.provider !== context.account.provider ||
+      (live.client &&
+        !isReviewedMachine(opening.current, {
+          activeId: live.client.machine.id,
+          machines: [live.client.machine],
+        }))
+    )
+      invalidated.current = true;
+    return (
+      mounted.current &&
+      !invalidated.current &&
+      !!live.client &&
       live.client.machine.id === context.scope.machineId &&
       live.client.machine.environmentId === context.environmentId &&
       (live.client.machine.capabilities?.includes("providers.desktop.metadata.v1") ||
-        live.client.machine.capabilities?.includes("providers.desktop.quotaRefresh.v1"));
+        live.client.machine.capabilities?.includes("providers.desktop.quotaRefresh.v1"))
+    );
   };
   current(); // Retire an observed target change before an older callback can run.
   const targetDigest = () =>
@@ -115,8 +139,13 @@ export function useProviderAccountDelivery(
     if (draft.ready && draft.value?.pending) void reconcile();
   }, [draft.ready, draft.value?.pending?.operationId, client]);
   const supportsChange = (kind: AccountMetadataChange["kind"]) =>
-    !!latest.current.client?.machine.capabilities?.includes(kind === "quotaRefresh"
-      ? "providers.desktop.quotaRefresh.v1" : "providers.desktop.metadata.v1") &&
+    !!latest.current.client?.machine.capabilities?.includes(
+      kind === "quotaRefresh"
+        ? "providers.desktop.quotaRefresh.v1"
+        : kind === "accountKind"
+          ? "providers.desktop.accountKind.v1"
+          : "providers.desktop.metadata.v1",
+    ) &&
     (kind !== "quotaRefresh" || context.account.provider === "claude");
   const submit = async (review: AccountMetadataChange) => {
     if (
@@ -137,9 +166,11 @@ export function useProviderAccountDelivery(
         ? { kind: "rename", label: before.label }
         : before.kind === "color"
           ? { kind: "color", color: before.color }
-          : before.kind === "quotaRefresh"
-            ? { kind: "quotaRefresh", confirm: "REFRESH_PROVIDER_QUOTA" }
-            : { kind: "default", confirm: "DEFAULT_FOR_FUTURE_SESSIONS" },
+          : before.kind === "accountKind"
+            ? { kind: "accountKind", accountKind: before.accountKind ?? null }
+            : before.kind === "quotaRefresh"
+              ? { kind: "quotaRefresh", confirm: "REFRESH_PROVIDER_QUOTA" }
+              : { kind: "default", confirm: "DEFAULT_FOR_FUTURE_SESSIONS" },
     );
     if (JSON.stringify(actual) !== JSON.stringify(review))
       throw Error("Account metadata draft changed; review again");

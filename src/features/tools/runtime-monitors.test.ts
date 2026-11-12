@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { RuntimeMonitors } from "./runtime-monitors";
 const state = vi.hoisted(() => ({ machineId: "machine-a", endpoint: "https://synthetic.invalid", active: true, data: [{ id: "monitor", projectId: "project", url: "http://localhost:3000/", sourceId: "source" }], error: null as unknown, pending: false, methods: [] as string[], requests: [] as unknown[], refetch: vi.fn(async () => ({ isError: false })) }));
+vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/state/machines", () => {
   const machine = () => ({ id: state.machineId, name: "Computer", endpoint: state.endpoint });
   return { useActiveMachine: machine, useMachines: { getState: () => ({ activeId: state.machineId, machines: [machine()] }) } };
@@ -17,8 +19,10 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
+    Badge: Wrapper, Row: Wrapper,
+    IconButton: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label),
     FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, submitLabel)), Body: Wrapper, Disclosure: Wrapper, NavigationGroup: Wrapper, Sheet: Wrapper, QueryState: () => null, MutationState: () => null, ErrorText: () => null,
-    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: { message: string }) => createElement("p", null, message),
     Button: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label),
     NavigationRow: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label),
     Field: ({ value, onChangeText, error, editable }: any) => createElement("label", null, error, createElement("input", { value, disabled: !editable, onChange: (event: import("react").ChangeEvent<HTMLInputElement>) => onChangeText(event.target.value) })),

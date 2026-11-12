@@ -6,7 +6,7 @@ import { Image } from "expo-image";
 import { useQuery } from "@tanstack/react-query";
 import { Body, Button, ErrorText, Loading, PressableCard } from "./primitives";
 import { useCopy } from "./copy";
-import { colors, radii, space } from "./tokens";
+import { radii, space } from "./tokens";
 import { externalImageUrl, type MessageContext } from "./media-policy";
 import { loadProjectMedia, loadSessionMedia } from "./media-loader";
 import { MediaViewer } from "./media-viewer";
@@ -20,7 +20,7 @@ export function MessageImage({
   deferred = false,
   ...props
 }: Parameters<typeof InlineMessageImage>[0] & { deferred?: boolean }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   const identity = `${props.attachmentId ?? ""}:${props.source}`;
@@ -58,7 +58,7 @@ function InlineMessageImage({
   localFile?: boolean;
   onReload?: () => void;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);

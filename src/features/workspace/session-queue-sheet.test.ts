@@ -5,6 +5,14 @@ import { afterEach,expect,it,vi } from "vitest";
 import { SessionQueueSheet,type QueueSheetActions,type QueueSheetState } from "./session-queue-sheet";
 const f=vi.hoisted(()=>({allowed:true,epoch:true,activeId:"m",commands:new Map<string,()=>void>()}));
 vi.mock("react-native",()=>({View:({children}:PropsWithChildren)=>createElement("div",null,children)}));
+vi.mock("lucide-react-native/icons/refresh-cw",()=>({default:()=>null}));
+vi.mock("lucide-react-native/icons/pause",()=>({default:()=>null}));
+vi.mock("lucide-react-native/icons/play",()=>({default:()=>null}));
+vi.mock("lucide-react-native/icons/pencil",()=>({default:()=>null}));
+vi.mock("lucide-react-native/icons/arrow-up",()=>({default:()=>null}));
+vi.mock("lucide-react-native/icons/arrow-down",()=>({default:()=>null}));
+vi.mock("lucide-react-native/icons/trash-2",()=>({default:()=>null}));
+vi.mock("@/ui/theme",()=>({useMobileTheme:()=>({uiStyles:{caption:{}},colors:{danger:"d",muted:"m"}})}));
 vi.mock("@/state/machines",()=>({useMachines:Object.assign((select:any)=>select({machines:[{id:"m",name:"Original computer"}]}),{getState:()=>({activeId:f.activeId})})}));
 vi.mock("@/state/connection-scope",()=>{const value={isCurrent:()=>f.epoch};return{useConnectionScope:()=>value};});
 vi.mock("@/ui/private-access",()=>({usePrivateContentAccess:()=>({allowed:f.allowed,check:()=>f.allowed}),PrivateContentAccessProvider:({children}:PropsWithChildren)=>children}));
@@ -15,7 +23,7 @@ vi.mock("@/ui/search-field",()=>({CollectionToolbar:({field,actions}:any)=>creat
 vi.mock("@/ui/primitives",()=>{
  const content=({children}:any)=>createElement("div",null,children);
  const button=({label,onPress,disabled}:any)=>{f.commands.set(label,onPress);return createElement("button",{disabled,onClick:onPress},label);};
- return{Body:content,Row:content,Stack:content,Badge:({label}:any)=>createElement("span",null,label),Empty:({title}:any)=>createElement("p",null,title),ErrorText:({error,message}:any)=>error?createElement("p",null,message||error.message):null,Notice:({message}:any)=>createElement("p",null,message),Sheet:({visible,title,children}:any)=>visible?createElement("article",{"aria-label":title},children):null,NavigationRow:button,
+ return{Body:content,Row:content,Stack:content,Badge:({label}:any)=>createElement("span",null,label),Empty:({title}:any)=>createElement("p",null,title),ErrorText:({error,message}:any)=>error?createElement("p",null,message||error.message):null,Notice:({message}:any)=>createElement("p",null,message), StateView: ({ title }:any) => createElement("p",null,title),Sheet:({visible,title,children}:any)=>visible?createElement("article",{"aria-label":title},children):null,NavigationRow:button,
  ActionMenu:({actions}:any)=>createElement("nav",null,...actions.filter(Boolean).map((action:any)=>createElement("section",{key:action.key},button(action)))),
  FormActions:({submitLabel,onSubmit,disabled,onCancel,cancelLabel,feedback}:any)=>createElement("footer",null,feedback,button({label:submitLabel,onPress:onSubmit,disabled}),onCancel?button({label:cancelLabel,onPress:onCancel}):null)};
 });

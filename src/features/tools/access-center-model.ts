@@ -1,4 +1,4 @@
-import type { HostAccessReport } from "../../../../host/access-center";
+import type { HostAccessReport } from "../../../../host/security/access/access-center";
 export type { HostAccessReport };
 export type PairedDevice = HostAccessReport["devices"][number];
 export type AccessTarget = { machineId: string; environmentId: string };

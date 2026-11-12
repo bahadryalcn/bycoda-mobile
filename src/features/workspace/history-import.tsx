@@ -6,9 +6,12 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useReviewedOperation } from "@/state/use-reviewed-operation";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
+import { formatAttachmentSize } from "./attachment-presentation";
 import { useConnectionScope } from "@/state/connection-scope";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import { CollectionToolbar } from "@/ui/search-field";
+import { RecordAccessUnavailable } from "./unavailable-state";
 import { HistoryImportReview } from "./history-import-review";
 import {
   ActionMenu,
@@ -16,6 +19,7 @@ import {
   Button,
   ErrorText,
   Notice,
+  StateView,
   QueryState,
   ScreenList,
   Sheet,
@@ -44,6 +48,7 @@ export function HistoryImport({
   onClose: () => void;
 }) {
   const copy = useCopy();
+  const locale = useLocale();
   const machine = useActiveMachine(), connection = useConnectionScope(), access = usePrivateContentAccess();
   const mounted = useRef(false);
   useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -229,12 +234,7 @@ export function HistoryImport({
               readable && { key: "details", label: copy("Ayrıntılar", "Details"), onPress: () => { if (canRead()) setDetails(true); } },
             ]} />} />
             {privateFailure ? <QueryState query={{ ...(previewQuery.error ? previewQuery : statusQuery), data: undefined }} /> : !readable ? (
-              <Notice
-                message={copy(
-                  "Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
-                  "Record access is unavailable. Check the original computer and project connection.",
-                )}
-              />
+<RecordAccessUnavailable />
             ) : null}
             {readable ? <ErrorText error={error} /> : null}
             {attempt && !privateFailure ? <QueryState query={statusQuery} /> : null}
@@ -288,8 +288,10 @@ export function HistoryImport({
               />
             ) : null}
             {readable && review && !review.candidates.length ? (
-              <Notice
-                message={copy(
+              <StateView
+                compact
+                illustration="inbox-empty"
+                title={copy(
                   "Bu proje için içe aktarılabilir geçmiş bulunamadı.",
                   "No importable history was found for this project.",
                 )}
@@ -310,7 +312,7 @@ export function HistoryImport({
           <ToggleField
             label={item.prompt || item.provider}
             labelLines={2}
-            detail={`${item.provider} · ${item.kind} · ${item.sizeBytes} B${item.imported ? ` · ${copy("Zaten içe aktarıldı", "Already imported")}` : !item.resumable ? ` · ${copy("Salt okunur", "Read-only")}` : ""}`}
+            detail={`${item.provider} · ${item.kind} · ${formatAttachmentSize(item.sizeBytes, locale)}${item.imported ? ` · ${copy("Zaten içe aktarıldı", "Already imported")}` : !item.resumable ? ` · ${copy("Salt okunur", "Read-only")}` : ""}`}
             value={selected.has(item.id)}
             disabled={disabled || item.imported}
             onChange={(value) => {

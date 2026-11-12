@@ -8,6 +8,8 @@ vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem
 vi.mock("expo-crypto", () => ({ randomUUID: () => "new-template" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/tokens", () => ({ space: {} }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { accent: "#000" } }) }));
+vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: fixture.confirm }));
 vi.mock("@/features/workspace/desktop-preferences", () => ({ DesktopPreferences: () => null }));
 vi.mock("react-native", () => ({ ScrollView: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
@@ -18,13 +20,14 @@ vi.mock("@/state/actions", async () => {
   } }; } };
 });
 vi.mock("@/ui/search-field", () => ({ SearchToolbar: ({ search, actions }: { search: unknown; actions: unknown }) => createElement("div", null, search as never, actions as never) }));
-vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, data, renderItem }: any) => createElement("div", null, header, ...data.map((item: unknown) => renderItem({ item }))) }));
+vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, data, renderItem, ListEmptyComponent }: any) => createElement("div", null, header, ...data.map((item: unknown) => renderItem({ item })), data.length ? null : ListEmptyComponent ?? null) }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: any) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);
   const Field = ({ label, value, onChangeText, editable, error }: any) => createElement("label", null, label,
     createElement("input", { "aria-label": label, value, disabled: editable === false, onChange: (event: any) => onChangeText(event.target.value) }), error);
-  return { Body: Wrap, Stack: Wrap, Row: Wrap, Field, SearchField: Field, Button,
+  const IconButton = ({ label, onPress, disabled }: any) => createElement(Button, { label, onPress, disabled });
+  return { Body: Wrap, Stack: Wrap, Row: Wrap, Section: Wrap, Badge: () => null, IconButton, Field, SearchField: Field, Button,
     Loading: () => createElement("p", null, "Loading"),
     NavigationRow: Button,
     Notice: ({ message }: any) => createElement("p", null, message),
@@ -99,10 +102,10 @@ it("inserts only an unchanged template and does not write or send anything on re
 });
 it("searches name, trigger and body, retains search after closing a pristine editor and provides empty-filter recovery", async () => {
   await act(async () => root.render(createElement(TemplateLibrary, { onClose: close, onInsert: insert })));
-  await field("Search", "selected changes"); expect(button("Review")).toBeDefined();
+  await field("Search template names, triggers and text", "selected changes"); expect(button("Review")).toBeDefined();
   await click("Review"); await click("Cancel");
-  expect(container.querySelector<HTMLInputElement>('input[aria-label="Search"]')!.value).toBe("selected changes");
-  await field("Search", "no match 123"); expect(container.textContent).toContain("No matching results");
+  expect(container.querySelector<HTMLInputElement>('input[aria-label="Search template names, triggers and text"]')!.value).toBe("selected changes");
+  await field("Search template names, triggers and text", "no match 123"); expect(container.textContent).toContain("No matching results");
   await click("Clear search"); expect(button("Review")).toBeDefined();
 });
 

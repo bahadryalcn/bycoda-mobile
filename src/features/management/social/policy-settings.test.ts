@@ -8,9 +8,10 @@ vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: state.machin
 vi.mock("@/state/queries", () => ({ useHostQuery: () => ({}), useHostMutation: () => ({ isPending: false, mutateAsync: async (input: unknown) => { state.writes.push(input); if (state.uncertain) throw { uncertain: true }; return {}; } }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: (_a: string, _b: string, _c: string, run: () => void) => state.confirmations.push(run) }));
+vi.mock("@/ui/number-field", async () => ({ NumberField: (await import("@/ui/primitives")).Field }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Wrapper, Sheet: Wrapper, QueryState: () => null, ErrorText: () => null, Button: () => null,
+  return { Body: Wrapper, Sheet: Wrapper, Section: Wrapper, QueryState: () => null, ErrorText: () => null, Button: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message),
     SelectField: () => null,
     Field: ({ value, onChangeText, label, editable }: { value: string; onChangeText: (value: string) => void; label: string; editable: boolean }) => createElement("input", { "aria-label": label, value, disabled: !editable, onInput: (event: import("react").FormEvent<HTMLInputElement>) => onChangeText(event.currentTarget.value) }),

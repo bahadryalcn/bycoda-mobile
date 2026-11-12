@@ -3,6 +3,7 @@ import type { HostStewardInput } from "@/remote/types";
 import { useFormDraft } from "@/state/form-draft";
 import { useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
+import { NumberField } from "@/ui/number-field";
 import {
   Disclosure,
   ErrorText,
@@ -10,6 +11,7 @@ import {
   FormActions,
   MutationState,
   NavigationGroup,
+  Section,
   Stack,
   ToggleField,
 } from "@/ui/primitives";
@@ -62,46 +64,52 @@ export function StewardEditor({
   };
   return (
     <Stack>
-      <Field
-        label={copy("Odak", "Focus")}
-        value={draft.focus}
-        multiline
-        maxLength={4000}
-        editable={!save.isPending}
-        onChangeText={(focus) => update({ focus })}
-      />
-      <AgentFields
-        value={normalized}
-        projectId={draft.projectId}
-        disabled={save.isPending}
-        showRunLimit={false}
-        onValidityChange={setAgentValid}
-        onChange={({ maxRunMinutes: _minutes, ...agent }) => update(agent)}
-      />
-      <ScheduleFields
-        value={draft}
-        minute={minute}
-        onMinuteChange={setMinute}
-        onChange={update}
-        disabled={save.isPending}
-      />
+      <Section title={copy("Odak", "Focus")}>
+        <Field
+          label={copy("Neye odaklanmalı?", "What should it focus on?")}
+          value={draft.focus}
+          multiline
+          maxLength={4000}
+          editable={!save.isPending}
+          onChangeText={(focus) => update({ focus })}
+        />
+      </Section>
+      <Section title={copy("Ajan", "Agent")}>
+        <AgentFields
+          value={normalized}
+          projectId={draft.projectId}
+          disabled={save.isPending}
+          showRunLimit={false}
+          onValidityChange={setAgentValid}
+          onChange={({ maxRunMinutes: _minutes, ...agent }) => update(agent)}
+        />
+      </Section>
+      <Section title={copy("Zamanlama", "Schedule")}>
+        <ScheduleFields
+          value={draft}
+          minute={minute}
+          onMinuteChange={setMinute}
+          onChange={update}
+          disabled={save.isPending}
+        />
+      </Section>
       <Disclosure label={copy("Gelişmiş seçenekler", "Advanced options")}
         feedback={!integerInRange(proposals, 1, 10) || !integerInRange(open, 1, 30) ? <>
           {!integerInRange(proposals, 1, 10) ? <ErrorText error={`${copy("Çalışma başına öneri (1–10)", "Proposals per run (1–10)")}: ${copy("1 ile 10 arasında bir sayı girin.", "Enter a number from 1 to 10.")}`} /> : null}
           {!integerInRange(open, 1, 30) ? <ErrorText error={`${copy("Açık görev sınırı (1–30)", "Open task limit (1–30)")}: ${copy("1 ile 30 arasında bir sayı girin.", "Enter a number from 1 to 30.")}`} /> : null}
         </> : null}>
-        <Field
+        <NumberField
           label={copy("Çalışma başına öneri (1–10)", "Proposals per run (1–10)")}
+          unit={copy("görev", "tasks")}
           value={proposals}
           onChangeText={setProposals}
-          keyboardType="number-pad"
           editable={!save.isPending}
         />
-        <Field
+        <NumberField
           label={copy("Açık görev sınırı (1–30)", "Open task limit (1–30)")}
+          unit={copy("görev", "tasks")}
           value={open}
           onChangeText={setOpen}
-          keyboardType="number-pad"
           editable={!save.isPending}
         />
         <NavigationGroup>
@@ -113,14 +121,16 @@ export function StewardEditor({
           />
         </NavigationGroup>
       </Disclosure>
-      <NavigationGroup>
-        <ToggleField
-          label={copy("Etkin", "Enabled")}
-          value={draft.enabled}
-          disabled={save.isPending}
-          onChange={(enabled) => update({ enabled })}
-        />
-      </NavigationGroup>
+      <Section title={copy("Durum", "Status")}>
+        <NavigationGroup>
+          <ToggleField
+            label={copy("Etkin", "Enabled")}
+            value={draft.enabled}
+            disabled={save.isPending}
+            onChange={(enabled) => update({ enabled })}
+          />
+        </NavigationGroup>
+      </Section>
       <FormActions
         feedback={
           <>

@@ -39,10 +39,9 @@ export function PlanReview({ block, scope, disabled, onCommand, onClose }:
     } finally { setPending(false); }
   };
   return <Stack>
-    <Body muted>{copy("Planı okumak çalışmayı başlatmaz. Uygula eylemi bu metni onaylar ve çalışmayı başlatır.", "Reading does not start work. Build approves this text and starts implementation.")}</Body>
     {!supported ? <Notice tone="warning" message={copy("Bu bilgisayarda plan düzenleme desteklenmiyor. Kayıtlı planı inceleyip uygulayabilirsiniz.", "This computer does not support editing plans. You can review and build the stored plan.")} /> : null}
     {changed ? <Notice tone="warning" message={copy("Plan değişti. Güncel planı incelemek için kapatıp yeniden açın.", "The plan changed. Close and reopen to review the current plan.")} /> : null}
-    <Field label={copy("Onaylanacak plan", "Plan to approve")} value={text} onChangeText={setText}
+    <Field label={copy("Onaylanacak plan", "Plan to approve")} hint={copy("Planı okumak çalışmayı başlatmaz. Uygula eylemi bu metni onaylar ve çalışmayı başlatır.", "Reading does not start work. Build approves this text and starts implementation.")} value={text} onChangeText={setText}
       multiline maxLength={256_000} editable={supported && !disabled && !pending && !attempted.current}
       style={{ minHeight: 220 }} />
     <FormActions submitLabel={copy("Planı uygula", "Build this plan")} onSubmit={() => { void build(); }}

@@ -24,7 +24,7 @@ vi.mock("@/ui/primitives", () => {
   return { Stack: content, Row: content, Body: content,Disclosure:content,Sheet:({children,title}:any)=>createElement("article",null,title,children),
     NavigationRow:button,FormActions:({submitLabel,onSubmit,disabled,busy,feedback}:any)=>createElement("footer",null,feedback,button({label:submitLabel,onPress:onSubmit,disabled,busy})),
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
-    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    Notice: ({ message }: { message: string }) => createElement("p", null, message), StateView: ({ title }: { title: string }) => createElement("p", null, title),
     Button: ({ label, onPress, disabled, busy }: { label: string; onPress: () => void; disabled: boolean; busy: boolean }) => createElement("button", { disabled: disabled || busy, onClick: onPress }, label) };
 });
 vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, footer,data,renderItem }:any) => createElement("main",null,header,...data.map((item:any,index:number)=>createElement("section",{key:index},renderItem({item}))),footer) }));

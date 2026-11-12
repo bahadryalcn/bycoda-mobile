@@ -16,9 +16,10 @@ vi.mock("./shared/agent", () => ({ useEffectiveAgent: (value: unknown) => value 
 vi.mock("./shared/schedule-fields", () => ({ ScheduleFields: () => null }));
 vi.mock("./automations/schedule-preview", () => ({ SchedulePreview: () => null }));
 vi.mock("./shared/agent-fields", () => ({ AgentFields: ({ onChange }: { onChange: (value: Record<string, unknown>) => void }) => { calls.agent = onChange; return null; } }));
+vi.mock("@/ui/number-field", async () => ({ NumberField: (await import("@/ui/primitives")).Field }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Stack: wrapper, Body: wrapper, Disclosure: wrapper, NavigationGroup: wrapper,
+  return { Stack: wrapper, Section: wrapper, NumberField: () => null, Body: wrapper, Disclosure: wrapper, NavigationGroup: wrapper,
     ErrorText: () => null, MutationState: () => null, ToggleField: () => null,
     Field: ({ label, onChangeText }: { label: string; onChangeText: (value: string) => void }) => { calls.fields.set(label, onChangeText); return null; },
     FormActions: ({ onSubmit }: { onSubmit: () => void }) => { calls.submit = onSubmit; return null; } };

@@ -5,7 +5,6 @@ import {
   withTiming,
   Easing,
   FadeIn,
-  FadeInDown,
   FadeOut,
   LinearTransition,
   ReduceMotion,
@@ -20,31 +19,27 @@ export const pressSpring = {
   mass: 0.6,
   reduceMotion: ReduceMotion.System,
 };
-export const indicatorSpring = {
-  damping: 22,
-  stiffness: 260,
-  mass: 0.8,
+/** Selection indicators glide and settle without overshoot: no bounce past the target. */
+export const indicatorTiming = {
+  duration: motion.reveal,
+  easing: Easing.bezier(0.2, 0, 0, 1),
   reduceMotion: ReduceMotion.System,
 };
 export const reveal = FadeIn.duration(motion.reveal).reduceMotion(ReduceMotion.System);
 export const dismiss = FadeOut.duration(motion.press).reduceMotion(ReduceMotion.System);
-export const enterSheet = FadeInDown.duration(motion.sheet).reduceMotion(ReduceMotion.System);
-export const resize = LinearTransition.springify()
-  .damping(22)
-  .stiffness(240)
+export const enterSheet = FadeIn.duration(motion.sheet).reduceMotion(ReduceMotion.System);
+/** Layout changes ease into place; a spring here made content bounce up and down. */
+export const resize = LinearTransition.duration(motion.reveal)
+  .easing(Easing.bezier(0.2, 0, 0, 1))
   .reduceMotion(ReduceMotion.System);
 
-/** Staggered entrance for short, non-virtualized lists and screen sections. */
+/** Staggered fade-in for short, non-virtualized lists and screen sections. */
 export function enterItem(index = 0) {
   // Custom web entering keyframes restore an absolute snapshot after cleanup.
   // A built-in fade keeps sections in normal flow when the viewport changes.
-  if (process.env.EXPO_OS === "web")
-    return FadeIn.duration(motion.reveal)
-      .delay(Math.min(index, 8) * 28)
-      .reduceMotion(ReduceMotion.System);
-  return FadeInDown.duration(motion.reveal)
-    .delay(Math.min(index, 8) * 28)
-    .withInitialValues({ transform: [{ translateY: 8 }] })
+  // A quiet fade only: sliding rows in from below read as the list jumping on every refresh.
+  return FadeIn.duration(motion.reveal)
+    .delay(Math.min(index, 8) * 20)
     .reduceMotion(ReduceMotion.System);
 }
 

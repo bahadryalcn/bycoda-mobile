@@ -87,6 +87,12 @@ vi.mock("./provider-review-delivery", async () => {
 vi.mock("@/ui/dialogs", async () => {
   const ui = await import("@/ui/primitives"); return { Sheet: ui.Sheet, FormActions: ui.FormActions };
 });
+vi.mock("./provider-pr-review-summary", () => ({
+  PrReviewSummary: ({ item, context }: { item: { repo: string; number: number }; context?: { commitId: string; files: { path: string }[] } }) =>
+    createElement("div", null, `${item.repo} #${item.number}`, context?.commitId, context?.files.map((file) => file.path).join(",")),
+  PrDiffLine: ({ line }: { line: { kind: string; text: string } }) =>
+    createElement("div", null, `${line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "}${line.text}`),
+}));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
@@ -94,6 +100,7 @@ vi.mock("@/ui/primitives", () => {
     Stack: Wrap,
     Row: Wrap,
     QueryState: () => null,
+    SectionHeader: ({ title }: { title: string }) => createElement("div", null, title),
     Sheet: ({ children, footer, title }: PropsWithChildren<{ footer?: ReactNode; title: string }>) =>
       createElement("div", { role: "dialog", "aria-label": title }, children, footer),
     FormActions: ({submitLabel, cancelLabel, onSubmit, onCancel}: {submitLabel: string; cancelLabel: string; onSubmit: () => void; onCancel: () => void}) => {
@@ -101,6 +108,7 @@ vi.mock("@/ui/primitives", () => {
       return createElement("div",null,createElement("button",{onClick:onSubmit},submitLabel),createElement("button",{onClick:onCancel},cancelLabel));
     },
     Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    StateView: ({ title, description }: any) => createElement("p", null, title, description), 
     Button: ({
       label,
       onPress,

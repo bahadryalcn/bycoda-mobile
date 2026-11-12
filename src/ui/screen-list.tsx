@@ -4,8 +4,7 @@ import { FlatList, RefreshControl, View, type FlatListProps } from "react-native
 import type { ReactNode } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useScreenHeading, useScreenChrome } from "./layout";
-import { colors, metrics, space } from "./tokens";
-import { uiStyles } from "./styles";
+import { metrics, space } from "./tokens";
 import type { QueryLike } from "./query-presentation";
 import { usePullRefresh } from "./use-pull-refresh";
 
@@ -22,6 +21,8 @@ export type ScreenListProps<T> = FlatListProps<T> & {
   refreshState?: ReturnType<typeof usePullRefresh>;
   /** Actions owned by the compact page heading (e.g. an IconButton or ActionMenu). */
   actions?: ReactNode;
+  /** In-screen back control, shown only when no native header owns navigation. */
+  onBack?: () => void;
   /** Adjacent rows own their shared surface and separators. */
   grouped?: boolean;
 };
@@ -37,6 +38,7 @@ export function ScreenList<T>({
   refresh,
   refreshState,
   actions,
+  onBack,
   grouped = false,
   style,
   contentContainerStyle,
@@ -45,10 +47,10 @@ export function ScreenList<T>({
   refreshControl,
   ...props
 }: ScreenListProps<T>) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const insets = useSafeAreaInsets();
   const chrome = useScreenChrome();
-  const heading = useScreenHeading({ title, subtitle, context, actions });
+  const heading = useScreenHeading({ title, subtitle, context, actions, onBack });
   const onRefresh = refresh ?? query?.refetch;
   const ownRefresh = usePullRefresh(refreshState ? undefined : onRefresh);
   const pullRefresh = refreshState ?? ownRefresh;
@@ -67,11 +69,11 @@ export function ScreenList<T>({
           width: "100%",
           maxWidth: metrics.contentWidth,
           alignSelf: "center",
-          gap: grouped ? 0 : space.sm,
+          gap: grouped ? 0 : space.xs,
           paddingStart: Math.max(insets.left, space.screen),
           paddingEnd: Math.max(insets.right, space.screen),
-          paddingTop: space.sm,
-          paddingBottom: space.lg + (chrome.bottomSafeArea ? insets.bottom : 0),
+          paddingTop: space.xs,
+          paddingBottom: space.lg + chrome.bottomInset + (chrome.bottomSafeArea ? insets.bottom : 0),
           flexGrow: 1,
         },
         contentContainerStyle,
@@ -88,7 +90,7 @@ export function ScreenList<T>({
       }
       ListHeaderComponent={
         header !== undefined || heading ? (
-          <View style={{ gap: space.sm, paddingBottom: space.sm }}>
+          <View style={{ gap: space.xs, paddingBottom: space.xs }}>
             {heading}
             {header}
           </View>

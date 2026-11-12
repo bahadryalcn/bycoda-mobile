@@ -5,11 +5,10 @@ import * as Crypto from "expo-crypto";
 import { useHostClient } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { Body, Button, Card, ErrorText, MutationState, Notice } from "@/ui/primitives";
-import { colors, radii, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { radii, space, type MobileColors } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { stamp } from "../management/shared/format";
+import { shortDate } from "../management/shared/format";
 import type { CommandReceipt, HostSessionSummary } from "./wire";
 import { dispatchCommand, UncertainCommand } from "./commands";
 import { isProjectWorkspaceQuery } from "./project-cache";
@@ -21,19 +20,19 @@ export { SelectRow, ErrorText } from "@/ui/primitives";
 export type CopyFn = ReturnType<typeof useCopy>;
 
 /** Leading inset of hairlines that sit after a 32pt IconTile row. */
-export const rowInset = space.lg + 32 + space.row;
+export const rowInset = 32 + space.row;
 
-/** Short relative stamps; anything older than a week falls back to the absolute date. */
-export function relativeTime(value: number | undefined, copy: CopyFn) {
+/** Short relative stamps; anything older than a week becomes a short date without time. */
+export function relativeTime(value: number | undefined, copy: CopyFn, now = Date.now()) {
   if (!value || !Number.isFinite(value)) return "";
-  const minutes = Math.round((Date.now() - value) / 60_000);
+  const minutes = Math.round((now - value) / 60_000);
   if (minutes < 1) return copy("Şimdi", "Now");
   if (minutes < 60) return copy("{p0} dk", "{p0} min", { p0: minutes });
   const hours = Math.round(minutes / 60);
   if (hours < 24) return copy("{p0} sa", "{p0} h", { p0: hours });
   const days = Math.round(hours / 24);
   if (days < 7) return copy("{p0} g", "{p0} d", { p0: days });
-  return stamp(value);
+  return shortDate(value, now);
 }
 
 export type SessionStatus = { label: string; color: string };
@@ -42,6 +41,7 @@ export type SessionStatus = { label: string; color: string };
 export function sessionStatus(
   session: Pick<HostSessionSummary, "needsInput" | "status" | "pinned">,
   copy: CopyFn,
+  colors: MobileColors,
 ): SessionStatus {
   if (session.needsInput)
     return { label: copy("Yanıt bekliyor", "Needs reply"), color: colors.warning };
@@ -63,40 +63,21 @@ export function StatusDot({ color, size = 8 }: { color: string; size?: number })
   );
 }
 
-/** Collection rhythm belongs to the row, without a second card or clipped focus owner. */
+/** Flat row with an inset hairline; no panel fill, so lists read as one surface. */
 export function GroupedListRow({
   children,
+  last,
+  inset = 0,
 }: PropsWithChildren<{ first: boolean; last: boolean; inset?: number }>) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   return (
-    <View
-      style={{
-        backgroundColor: colors.panel,
-      }}
-    >
+    <View>
       {children}
+      {last ? null : <View accessible={false} style={[uiStyles.separator, { marginStart: inset }]} />}
     </View>
   );
 }
 
-export const palette = {
-  base: colors.background,
-  panel: colors.panel,
-  raised: colors.raised,
-  text: colors.text,
-  muted: colors.muted,
-  accent: colors.accent,
-  active: colors.live,
-  border: colors.border,
-  good: colors.success,
-  bad: colors.danger,
-};
-export const workspaceStyles = {
-  stack: uiStyles.stack,
-  row: uiStyles.row,
-  mono: uiStyles.mono,
-  press: uiStyles.press,
-};
 
 export function useProjectRefresh(projectId: string) {
   const cache = useQueryClient();
@@ -147,7 +128,7 @@ export function useCommands(invalidate: readonly unknown[] = []) {
 }
 
 export function CommandError({ error, onRecovered, onDismiss }: CommandErrorProps) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const client = error instanceof UncertainCommand ? error.client : null;
   const check = useMutation({
@@ -171,7 +152,7 @@ export function CommandError({ error, onRecovered, onDismiss }: CommandErrorProp
       : null;
   return (
     <Card>
-      <View style={workspaceStyles.stack}>
+      <View style={uiStyles.stack}>
         <ErrorText
           error={error}
           message={

@@ -4,11 +4,13 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine } from "@/state/reviewed-machine";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { Body, Button, Disclosure, FormActions, ErrorText, Field, Loading, MutationState, Notice, QueryState, Sheet, Stack, ToggleField } from "@/ui/primitives";
+import { Body, Button, Disclosure, FormActions, ErrorText, Field, IconButton, Loading, MutationState, Notice, QueryState, Row, Sheet, StateView, Stack, ToggleField } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import { RemoteFrame } from "@/ui/remote-frame";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useCopy } from "@/ui/copy";
+import { useMobileTheme } from "@/ui/theme";
+import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { claimPreviewIntent, clearPreviewIntent, discardInvalidPreviewIntent, isInvalidPreviewIntentError, loadPreviewIntent } from "./device-preview-intent";
 import { readDevicePreview, readPreviewIntent, type DevicePreview, type PreviewIntent } from "./device-preview-model";
 import type { DeviceSummary } from "./types";
@@ -19,7 +21,7 @@ const READING: IntentRead = { status: "loading" };
 const READ: IntentRead = { status: "ready" };
 
 export function DevicePreviewSheet({ projectId, device, onClose }: { projectId: string; device: DeviceSummary; onClose: () => void }) {
-  const copy = useCopy(); const machine = useActiveMachine();
+  const copy = useCopy(); const { colors } = useMobileTheme(); const machine = useActiveMachine();
   const connection = useConnectionScope();
   const [openingConnection] = useState(connection);
   const [opening] = useState(() => ({ machineId: machine?.id ?? "", environmentId: machine?.environmentId ?? "", projectId, deviceId: device.id }));
@@ -74,9 +76,10 @@ export function DevicePreviewSheet({ projectId, device, onClose }: { projectId: 
     void discardInvalidPreviewIntent(opening).then(() => { if (current()) { setDiscard(false); setError(undefined); setReadAttempt((value) => value + 1); } })
       .catch((cause: unknown) => { if (current()) setError(cause); }).finally(() => { occupied.current = false; if (current()) setLocalBusy(false); });
   };
-  return <Sheet visible title={copy("Expo önizlemesi", "Expo preview")} size="form" dismissible={!busy} onClose={onClose}>
+  const drafting = !intent && !review && loaded && (url.trim() !== "" || expectedText.trim() !== "");
+  return <Sheet visible title={copy("Expo önizlemesi", "Expo preview")} size="form" dirty={drafting} dismissible={!busy} onClose={onClose}>
     <Body>{device.name}</Body>
-    {!supported ? <Notice message={copy("Seçili bilgisayar değişti veya bu özelliği desteklemiyor.", "The selected computer changed or does not support this feature.")} /> : null}
+    {!supported ? <StateView illustration="permission" title={copy("Güncelleme gerekiyor", "Update needed")} description={copy("Seçili bilgisayar değişti veya bu özelliği desteklemiyor.", "The selected computer changed or does not support this feature.")} /> : null}
     <Notice message={copy("Önizleme cihazı başlatabilir ve uygulamayı açabilir. İşletim sistemi izinleri ayrıca onaylanmalıdır.", "Preview may boot the device and open the app. Operating system permissions require separate approval.")} />
     {intent ? <>
       <Body mono>{intent.url}</Body><QueryState query={status} />
@@ -84,7 +87,12 @@ export function DevicePreviewSheet({ projectId, device, onClose }: { projectId: 
         <Body>{job.state}</Body><Body>{job.verification === "expected-text" ? copy("Beklenen metin denetimi", "Expected text verification") : copy("Yalnızca başlatma denetimi", "Launch-only verification")}</Body>
         <Stack style={{ gap: space.xs }}>{job.stages.map((stage, index) => <Body key={index}>{stage.name}: {stage.state}{stage.code ? ` · ${stage.code}` : ""}{stage.message ? `\n${stage.message}` : ""}</Body>)}</Stack>
       </>}
-      <Button busy={refresh.refreshing} tone="quiet" label={copy("Yenile", "Refresh")} disabled={!supported || busy || status.isFetching} onPress={() => { void refresh.onRefresh(); }} />
+      <Row>
+        <Body muted style={{ flex: 1, minWidth: 0 }}>{copy("Önizleme durumu", "Preview status")}</Body>
+        <IconButton label={copy("Yenile", "Refresh")} busy={refresh.refreshing} disabled={!supported || busy || status.isFetching} onPress={() => { void refresh.onRefresh(); }}>
+          <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
+        </IconButton>
+      </Row>
       {!job && status.isError ? <>
         {forget ? <><Notice tone="warning" message={copy("Bu işlem yalnızca telefondaki takibi kaldırır; bilgisayardaki işi iptal etmez. Önce cihazı ve bilgisayarı kontrol edin. Yeni önizleme ayrıca incelenip onaylanmalıdır.", "This only removes tracking from the phone; it does not cancel the host job. Inspect the device and computer first. A new preview requires separate review and confirmation.")} />
           <FormActions feedback={<> <Body>{copy("Cihazı kontrol ettikten sonra kullanılamayan takibi kaldır?", "After inspecting the device, remove unavailable tracking?")}</Body> <ErrorText error={error} /><MutationState mutation={start} /> </>}

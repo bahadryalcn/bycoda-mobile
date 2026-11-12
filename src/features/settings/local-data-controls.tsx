@@ -9,14 +9,14 @@ import Trash2 from "lucide-react-native/icons/trash";
 import type { ReactNode } from "react";
 import { IconTile } from "../../ui/icon-tile";
 import { enterItem } from "../../ui/motion";
-import { colors, space } from "../../ui/tokens";
+import { space } from "../../ui/tokens";
 import { useMachines, withDisconnectedComputers } from "../../state/machines";
 import { assertAppAccess } from "../../state/security";
 import { useAsyncAction } from "../../state/actions";
 import {
   Body,
   Button,
-  Loading,
+  Skeleton,
   FormActions,
   Notice,
   ScreenList,
@@ -26,6 +26,7 @@ import {
   NavigationRow,
   Sheet,
   Stack,
+  StateView,
 } from "../../ui/primitives";
 import { useCopy } from "../../ui/copy";
 import { flushWorkspaceDrafts } from "../workspace/draft-guard";
@@ -37,6 +38,7 @@ import { clearMediaCache } from "@/ui/media-loader";
 import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { RecordCard } from "@/ui/record-card";
 import { useSheetGuard } from "@/ui/sheet-guard";
+import { useMobileTheme } from "../../ui/theme";
 
 type CleanupReview = { kind: "connections" | "drafts" | "consent"; machines: (ReviewedMachine & { name: string })[] };
 
@@ -49,6 +51,7 @@ function tile(Glyph: typeof Trash2, color: string): ReactNode {
 }
 
 export function LocalDataControls() {
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const state = useMachines();
   const deleteDraftsLabel = copy("Kaydedilmiş taslakları sil", "Delete saved drafts");
@@ -159,8 +162,8 @@ export function LocalDataControls() {
                       "Workspace access from this phone will pause until you grant permission again. Work already running on your computer and data already sent to providers are unaffected.",
                     ) : "";
   const storageIssue = !state.hydrated || (state.connectionPending && !busy)
-    ? <Loading label={copy("Kaydedilmiş bağlantılar yükleniyor…", "Loading saved connections…")} />
-    : state.storageError ? <Stack><Notice tone="warning" message={copy("Kaydedilmiş bağlantılar kullanılamıyor. Yeniden yüklemek için Bilgisayarlar’ı açın.", "Saved connections are unavailable. Open Computers to reload them.")} /><Button tone="quiet" label={copy("Bilgisayarlar", "Computers")} disabled={busy} onPress={() => requestCloseThen(() => router.push("/machines"))} /></Stack> : null;
+    ? <Skeleton label={copy("Kaydedilmiş bağlantılar yükleniyor…", "Loading saved connections…")} />
+    : state.storageError ? <StateView compact tone="warning" illustration="error" title={copy("Kaydedilmiş bağlantılar kullanılamıyor", "Saved connections are unavailable")} description={copy("Yeniden yüklemek için Bilgisayarlar’ı açın.", "Open Computers to reload them.")} action={{ label: copy("Bilgisayarlar", "Computers"), busy, onPress: () => requestCloseThen(() => router.push("/machines")) }} /> : null;
   const longReview = confirmation?.kind === "connections" && confirmation.machines.length > 6;
   const remainingComputers = confirmation?.machines.filter(machine => state.machines.some(current => current.id === machine.id)) ?? [];
   const reviewIntro = <Stack>{storageIssue}<Body>{consequence}</Body>{stale ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden açın.", "Saved computers changed. Reopen this review to continue.")} /> : null}</Stack>;

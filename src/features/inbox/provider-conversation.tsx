@@ -7,10 +7,10 @@ import type {
   ProviderInboxCommentProps,
 } from "./provider-component-types";
 import { inboxReplyTarget } from "../../../../src/features/inbox/model/remoteInbox";
-import { Badge, Body, Button, Notice, QueryState, Row, Section, Stack } from "@/ui/primitives";
-import { uiStyles } from "@/ui/styles";
+import { Badge, Body, Button, QueryState, Row, Section, Stack } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { useMobileTheme } from "@/ui/theme";
 
 export {
   type ProviderInboxConversationProps,
@@ -34,15 +34,6 @@ export function ProviderInboxConversation({
         empty={thread.data?.comments.length === 0}
         emptyTitle={copy("Henüz yorum yok.", "No comments yet.")}
       /> : null}
-      {thread.data?.truncated ? (
-        <Notice
-          tone="warning"
-          message={copy(
-            "Servis konuşmanın bir bölümünü döndürdü. Tamamını serviste açabilirsin.",
-            "The provider returned part of this conversation. Open the provider for the full thread.",
-          )}
-        />
-      ) : null}
       <PagedRows items={thread.data?.comments ?? []} renderItem={(comment) => (
         <ProviderInboxComment
           key={comment.id}
@@ -63,6 +54,7 @@ export function ProviderInboxComment({
   depth = 0,
   disabled,
 }: ProviderInboxCommentProps) {
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const [expanded, setExpanded] = useState(false);
   return (

@@ -7,8 +7,7 @@ import { router } from "expo-router";
 import Animated from "react-native-reanimated";
 import type { HostSettingsState } from "../../remote/types";
 import { hostKey, useHostMutation, useHostQuery } from "../../state/queries";
-import { Body, Disclosure, FormActions, Field, QueryState, MutationState, Notice, Stack, ErrorText } from "../../ui/primitives";
-import { uiStyles } from "../../ui/styles";
+import { Body, Disclosure, FormActions, NumberField, QueryState, MutationState, Notice, Stack, StateView, ErrorText } from "../../ui/primitives";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
 import { useSheetGuard } from "@/ui/sheet-guard";
@@ -25,8 +24,10 @@ import {
 } from "./settings-draft";
 import type { HostSettingsEditorProps } from "./settings-types";
 import { ShellProfileSettings } from "./shell-profile-settings";
+import { useMobileTheme } from "../../ui/theme";
 
 export function HostSettingsEditor({ machineId, machineName, target }: HostSettingsEditorProps) {
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const cache = useQueryClient();
@@ -109,29 +110,27 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
   return (
     <Stack style={{ gap: space.lg }}>
       <Body>{opening.name}</Body>
-      {!validScope ? <Notice tone="warning" message={copy("Seçili bilgisayar değişti. Ayarları yeniden açın.", "The selected computer changed. Reopen the settings.")} /> : !supported ? <Notice message={copy("Görev sınırlarını düzenlemek için bu bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to edit task limits.")} /> : <QueryState query={uncertain ? { ...settings, refetch: undefined } : settings} onManageConnections={() => requestCloseThen(() => router.push("/machines"))} />}
+      {!validScope ? <Notice tone="warning" message={copy("Seçili bilgisayar değişti. Ayarları yeniden açın.", "The selected computer changed. Reopen the settings.")} /> : !supported ? <StateView compact illustration="error" title={copy("Görev sınırları kullanılamıyor", "Task limits unavailable")} description={copy("Görev sınırlarını düzenlemek için bu bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to edit task limits.")} /> : <QueryState query={uncertain ? { ...settings, refetch: undefined } : settings} onManageConnections={() => requestCloseThen(() => router.push("/machines"))} />}
       {snapshot ? (
         <>
           <Animated.View entering={enterItem(0)}>
             <Stack>
-              <Field
+              <NumberField
                 label={copy("Aynı anda çalışan görev (1–8)", "Concurrent tasks (1–8)")}
                 value={fields.maxRunning}
                 onChangeText={(value) => update("maxRunning", value)}
-                keyboardType="number-pad"
                 editable={supported && !uncertain && !reading}
               />
               {!validMax ? (
                 <ErrorText error={copy("Aynı anda 1–8 görev çalışabilir.", "Choose 1–8 concurrent tasks.")} />
               ) : null}
-              <Field
+              <NumberField
                 label={copy(
                   "Günlük agent süresi (dakika, 0 sınırsız)",
                   "Daily agent time (minutes, 0 unlimited)",
                 )}
                 value={fields.dailyMinutes}
                 onChangeText={(value) => update("dailyMinutes", value)}
-                keyboardType="number-pad"
                 editable={supported && !uncertain && !reading}
               />
               {!validMinutes ? (

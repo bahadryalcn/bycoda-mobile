@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
-import { Body, Button, ErrorText, Notice, QueryState, Row, ScreenList, Sheet, Stack } from "@/ui/primitives";
+import { Body, Button, ErrorText, QueryState, Row, ScreenList, Sheet, Stack, StateView } from "@/ui/primitives";
 import { ScreenChromeProvider } from "@/ui/layout";
-import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
@@ -12,8 +11,10 @@ import { stamp } from "../shared/format";
 import { Status } from "../shared/status";
 import type { AutomationHistoryProps } from "./types";
 import { summarizedAutomationRun } from "./automation-feedback";
+import { useMobileTheme } from "@/ui/theme";
 
 export function AutomationHistory({ automationId, projectId, summary, automationName, onClose }: AutomationHistoryProps) {
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy(), machine = useActiveMachine(), connection = useConnectionScope();
   const [opening] = useState(() => ({ automationId, projectId, connection, machineId: machine?.id, machineName: machine?.name }));
   const mounted = useRef(false), retired = useRef(false);
@@ -31,7 +32,7 @@ export function AutomationHistory({ automationId, projectId, summary, automation
   const close = () => { if (!mounted.current || retired.current) return; retired.current = true; onClose(); };
   return <Sheet visible title={copy("Geçmiş", "History")} size="full" scroll={false} onClose={close}
     footer={<Button tone="quiet" label={copy("Kapat", "Close")} onPress={close} />}>
-    {!readable ? <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} /> :
+    {!readable ? <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")} description={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} /> :
       <ScreenChromeProvider nativeTitle bottomSafeArea={false}>
         <ScreenList data={runs ?? []} keyExtractor={run => run.id}
           header={<>

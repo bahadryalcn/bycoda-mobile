@@ -20,7 +20,7 @@ vi.mock("expo-file-system", () => {
     name = "native-attachment.md";
     create() {}
     list() { return fixture.entries.map(uri => new Path(uri)); }
-    write(bytes: Uint8Array) { fixture.write(this.uri, bytes); }
+    writeSync(bytes: Uint8Array) { fixture.write(this.uri, bytes); }
     delete() { fixture.deleted(this.uri); }
     copy(destination: { uri: string }) { return fixture.copy(this.uri, destination.uri); }
   }

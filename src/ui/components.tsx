@@ -6,7 +6,6 @@ import {
   ErrorNotice as SharedErrorNotice,
   Heading,
 } from "./primitives";
-import { uiStyles } from "./styles";
 
 // Compatibility names retain the legacy screens' public component contracts.
 export { Screen, Card, Row, Field, Empty, Body as Label } from "./primitives";
@@ -29,7 +28,7 @@ export function Button({
   );
 }
 export function SectionTitle({ title, detail }: { title: string; detail?: string }) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   return (
     <View style={uiStyles.titleGroup}>
       <Heading>{title}</Heading>

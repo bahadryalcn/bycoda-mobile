@@ -284,7 +284,12 @@ const deviceCases = [
   ],
   [
     "devices.action",
-    { deviceId: "simulator", action: { type: "press", x: 1, y: 2 } },
+    {
+      deviceId: "simulator",
+      leaseId: "control-lease",
+      requestId: "original-action",
+      action: { type: "press", x: 1, y: 2 },
+    },
     '{"ok":true}',
   ],
   [

@@ -4,6 +4,29 @@ The Expo application in `mobile/` controls existing Bycoda Hosts on Windows,
 macOS and Linux. Agent processes, files, Git repositories and scheduled work stay
 on the computer. The phone has no local agent runtime or local project checkout.
 
+## Open a conversation link
+
+Links under `https://link.bycoda.codes/session/v1/` open the installed companion
+through Android App Links or iOS Universal Links once the signed app and domain
+association are installed. The existing `bycoda://session/v1/` addresses are also
+accepted. A browser can show the installation page when the app is absent.
+
+Unlock the app and choose the paired computer that owns the conversation. A Host
+reference only offers computers with its exact environment identity. Native
+references keep their original store and profile identity and are resolved by the
+selected computer; an unrelated conversation with the same ID is never substituted.
+The computer must advertise `sessions.references.v1`; update its Host if prompted.
+Opening a link does not migrate, unarchive, send a message or start an agent.
+
+Links citing a specific message offer **Open conversation** before opening the
+full conversation; mobile does not yet jump to that cited turn. Existing widget
+links retain their computer/project route and continue to work.
+
+Domain configuration alone does not prove installed-app acceptance. The website's
+Apple association needs the real signing Team ID and bundle ID; Android association
+needs the installed app's signing certificate fingerprint. Store and installation
+destinations must refer to published, verified artifacts.
+
 ## Run the application
 
 For development, read the [design system](../reference/design-system.md),
@@ -18,7 +41,7 @@ pnpm --dir mobile install
 pnpm --dir mobile start
 ```
 
-Open the project in an Expo Go version compatible with SDK 57, or an existing
+Open the project in an Expo Go version compatible with SDK 58, or an existing
 development build. Use `pnpm --dir mobile web` to preview layout in a browser.
 Real host connections use native HTTP: `/rpc` intentionally rejects browser
 origins, and the preview does not persist device credentials.
@@ -89,10 +112,37 @@ attachments use system pickers with access limited to the selected items.
 
 Tap **Notifications** to request system notification access, then **Test
 notification** to verify a local notification. Android creates its notification
-channel before requesting permission. This does not register a push token or
-enable delivery of computer/session alerts while the application is closed.
-Camera, microphone and storage access are not requested together on startup;
-microphone recording is not used by the QR scanner.
+channel before requesting permission. Camera, microphone and storage access are
+not requested together on startup; microphone recording is not used by the QR
+scanner.
+
+### Computer notifications
+
+With notification access allowed, the phone registers an Expo push token with
+the active computer (Hosts that advertise `push.expo.v1`). The computer then
+notifies the phone, even while the app is closed, when a conversation waits for
+an approval or answer, finishes, or fails. **Computer notifications** under
+Phone permissions turns this off or chooses the moments; **Send a test from the
+computer** checks the whole path. Each paired computer is registered when it is
+the active computer; revoking the phone's pairing on the computer stops its
+notifications.
+
+- Nothing is sent while someone is using the bycoda desktop app on that
+  computer (focused window with input in the last two minutes); its own
+  banners already reach them.
+- A push about the conversation on screen is listed without a banner or sound.
+- Messages contain this phone's wording and the computer name only, never
+  project or conversation names. Tapping one switches to that computer and
+  opens the conversation.
+
+The app is linked to the EAS project `@bahadryalcn/bycoda-mobile`
+(`expo.extra.eas.projectId`). Android uses the Firebase project `bycoda-mobile`:
+`google-services.json` is referenced by `expo.android.googleServicesFile`, and
+the FCM V1 service account key is stored in Expo's Android credentials, not in
+this repository. iOS delivery additionally needs an APNs key in the EAS iOS
+credentials. Native builds made before this configuration cannot receive pushes;
+without the project ID the setting reports that remote notifications are not
+configured.
 
 Native configuration must be regenerated after plugin changes before building
 an APK. `expo-image-picker.cameraPermission: false` blocks CAMERA globally,

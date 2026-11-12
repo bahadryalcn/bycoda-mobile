@@ -38,25 +38,48 @@ export function ProviderAccountEditor({
   const value = draft.value;
   const current = !!delivery.current();
   const canMetadata = !!machine?.capabilities?.includes("providers.desktop.metadata.v1");
-  const canQuota = account.provider === "claude" && !!machine?.capabilities?.includes("providers.desktop.quotaRefresh.v1");
-  const changeSupported = value?.kind === "quotaRefresh" ? canQuota : canMetadata;
+  const canKind =
+    canMetadata && !!machine?.capabilities?.includes("providers.desktop.accountKind.v1");
+  const canQuota =
+    account.provider === "claude" &&
+    !!machine?.capabilities?.includes("providers.desktop.quotaRefresh.v1");
+  const changeSupported =
+    value?.kind === "quotaRefresh"
+      ? canQuota
+      : value?.kind === "accountKind"
+        ? canKind
+        : canMetadata;
   const [showSavedSettings, setShowSavedSettings] = useState(false);
   const wasAvailable = useRef(current);
   wasAvailable.current ||= current;
-  const showFields = current || wasAvailable.current || showSavedSettings || !!value?.pending || !!value?.finished || !!review || !!receipt;
-  const unavailableMessage = !machine ? copy(
-    "Önce bu hesabın bilgisayarına bağlanın, ardından hesap ayarlarını yeniden açın.",
-    "Connect this account's computer first, then reopen account settings.",
-  ) : machine.id !== scope.machineId || machine.environmentId !== report.environmentId ? copy(
-    "Seçili bilgisayar bu hesapla eşleşmiyor. Doğru bilgisayarı ve projeyi seçip hesap ayarlarını yeniden açın.",
-    "The selected computer does not match this account. Select the correct computer and project, then reopen account settings.",
-  ) : !machine.capabilities?.includes("providers.desktop.metadata.v1") && !machine.capabilities?.includes("providers.desktop.quotaRefresh.v1") ? copy(
-    "Bu bilgisayar hesap ayarlarını değiştirmeyi desteklemiyor. Bilgisayardaki bycoda’yı güncelleyin.",
-    "This computer does not support account settings changes. Update bycoda on the computer.",
-  ) : copy(
-    "Bu hesabın bağlantısı değişti veya kullanılamıyor. Bilgisayar bağlantısını kontrol edip hesap ayarlarını yeniden açın.",
-    "This account's connection changed or is unavailable. Check the computer connection and reopen account settings.",
-  );
+  const showFields =
+    current ||
+    wasAvailable.current ||
+    showSavedSettings ||
+    !!value?.pending ||
+    !!value?.finished ||
+    !!review ||
+    !!receipt;
+  const unavailableMessage = !machine
+    ? copy(
+        "Önce bu hesabın bilgisayarına bağlanın, ardından hesap ayarlarını yeniden açın.",
+        "Connect this account's computer first, then reopen account settings.",
+      )
+    : machine.id !== scope.machineId || machine.environmentId !== report.environmentId
+      ? copy(
+          "Seçili bilgisayar bu hesapla eşleşmiyor. Doğru bilgisayarı ve projeyi seçip hesap ayarlarını yeniden açın.",
+          "The selected computer does not match this account. Select the correct computer and project, then reopen account settings.",
+        )
+      : !machine.capabilities?.includes("providers.desktop.metadata.v1") &&
+          !machine.capabilities?.includes("providers.desktop.quotaRefresh.v1")
+        ? copy(
+            "Bu bilgisayar hesap ayarlarını değiştirmeyi desteklemiyor. Bilgisayardaki bycoda’yı güncelleyin.",
+            "This computer does not support account settings changes. Update bycoda on the computer.",
+          )
+        : copy(
+            "Bu hesabın bağlantısı değişti veya kullanılamıyor. Bilgisayar bağlantısını kontrol edip hesap ayarlarını yeniden açın.",
+            "This account's connection changed or is unavailable. Check the computer connection and reopen account settings.",
+          );
   const disabled =
     !current || !draft.ready || !!draft.error || busy || !!value?.pending || !!value?.finished;
   return (
@@ -67,7 +90,6 @@ export function ProviderAccountEditor({
       onClose={onClose}
       dismissible={!busy}
       dirty={!!value && !value.pending && !value.finished}
-
     >
       <Stack>
         <Body>
@@ -75,127 +97,184 @@ export function ProviderAccountEditor({
           {account.provider} · {account.label}
         </Body>
         {!current ? <Notice tone="warning" message={unavailableMessage} /> : null}
-        {!showFields && value ? <Button tone="quiet" label={copy("Kaydedilmiş ayarları göster", "Show saved settings")}
-          onPress={() => setShowSavedSettings(true)} /> : null}
-        {showFields ? <>
-
-
-        {value ? (
+        {!showFields && value ? (
+          <Button
+            tone="quiet"
+            label={copy("Kaydedilmiş ayarları göster", "Show saved settings")}
+            onPress={() => setShowSavedSettings(true)}
+          />
+        ) : null}
+        {showFields ? (
           <>
-            <SelectField
-              label={copy("Değişiklik", "Change")}
-              value={value.kind}
-              options={[
-                { value: "rename", disabled: !canMetadata, label: copy("Görünen ad", "Display name") },
-                { value: "color", disabled: !canMetadata, label: copy("Renk", "Color") },
-                {
-                  value: "default",
-                  disabled: !canMetadata,
-                  label: copy(
-                    "Gelecek konuşmalar için varsayılan",
-                    "Default for future conversations",
-                  ),
-                },
-                ...(account.provider === "claude" && (canQuota || value.kind === "quotaRefresh")
-                  ? [
-                      {
-                        value: "quotaRefresh",
-                        disabled: !canQuota,
-                        label: copy("Claude kotasını yenile", "Refresh Claude quota"),
-                      },
-                    ]
-                  : []),
-              ]}
-              disabled={disabled || !!review}
-              onChange={(kind) => draft.setValue({ ...value, kind: kind as typeof value.kind })}
+            {value ? (
+              <>
+                <SelectField
+                  label={copy("Değişiklik", "Change")}
+                  value={value.kind}
+                  options={[
+                    {
+                      value: "rename",
+                      disabled: !canMetadata,
+                      label: copy("Görünen ad", "Display name"),
+                    },
+                    { value: "color", disabled: !canMetadata, label: copy("Renk", "Color") },
+                    {
+                      value: "accountKind",
+                      disabled: !canKind,
+                      label: copy("Hesap türü", "Account kind"),
+                    },
+                    {
+                      value: "default",
+                      disabled: !canMetadata,
+                      label: copy(
+                        "Gelecek konuşmalar için varsayılan",
+                        "Default for future conversations",
+                      ),
+                    },
+                    ...(account.provider === "claude" && (canQuota || value.kind === "quotaRefresh")
+                      ? [
+                          {
+                            value: "quotaRefresh",
+                            disabled: !canQuota,
+                            label: copy("Claude kotasını yenile", "Refresh Claude quota"),
+                          },
+                        ]
+                      : []),
+                  ]}
+                  disabled={disabled || !!review}
+                  onChange={(kind) => draft.setValue({ ...value, kind: kind as typeof value.kind })}
+                />
+                {value.kind === "rename" ? (
+                  <Field
+                    label={copy("Görünen ad", "Display name")}
+                    value={value.label}
+                    maxLength={48}
+                    editable={!disabled && canMetadata && !review}
+                    onChangeText={(label) => draft.setValue({ ...value, label })}
+                  />
+                ) : value.kind === "color" ? (
+                  <SelectField
+                    label={copy("Renk", "Color")}
+                    value={value.color ?? "auto"}
+                    options={[
+                      { value: "auto", label: copy("Otomatik", "Automatic") },
+                      ...[
+                        ["blue", copy("Mavi", "Blue")],
+                        ["coral", copy("Mercan", "Coral")],
+                        ["amber", copy("Kehribar", "Amber")],
+                        ["green", copy("Yeşil", "Green")],
+                        ["pink", copy("Pembe", "Pink")],
+                        ["purple", copy("Mor", "Purple")],
+                        ["teal", copy("Turkuaz", "Teal")],
+                        ["slate", copy("Arduvaz", "Slate")],
+                        ["orange", copy("Turuncu", "Orange")],
+                      ].map(([color, label]) => ({ value: color, label })),
+                    ]}
+                    disabled={disabled || !canMetadata || !!review}
+                    onChange={(color) =>
+                      draft.setValue({ ...value, color: color === "auto" ? null : color })
+                    }
+                  />
+                ) : value.kind === "accountKind" ? (
+                  <SelectField
+                    label={copy("Hesap türü", "Account kind")}
+                    value={value.accountKind ?? "auto"}
+                    options={[
+                      { value: "auto", label: copy("Otomatik", "Automatic") },
+                      { value: "personal", label: copy("Kişisel", "Personal") },
+                      { value: "work", label: copy("İş", "Work") },
+                    ]}
+                    disabled={disabled || !canMetadata || !!review}
+                    onChange={(kind) =>
+                      draft.setValue({
+                        ...value,
+                        accountKind: kind === "auto" ? null : (kind as "personal" | "work"),
+                      })
+                    }
+                  />
+                ) : value.kind === "quotaRefresh" ? (
+                  <Body muted>
+                    {copy(
+                      "Bilgisayar Claude kotasını bir kez sorgular. Oturum açılmaz veya kimlik yenilenmez; otomatik tekrar yoktur. Hesap başına beş dakika bekleme uygulanır.",
+                      "The computer reads Claude quota once. It does not sign in or renew authentication, and does not retry automatically. Each account has a five-minute cooldown.",
+                    )}
+                  </Body>
+                ) : (
+                  <Body muted>
+                    {copy(
+                      "Bu hesap bundan sonra yeni konuşmalarda varsayılan olacak.",
+                      "This account will be the default for new conversations.",
+                    )}
+                  </Body>
+                )}
+              </>
+            ) : null}
+            {current && !changeSupported && !value?.pending && !value?.finished ? (
+              <Notice
+                message={copy(
+                  "Bu bilgisayar hesap ayarlarını değiştirmeyi desteklemiyor. Bilgisayardaki bycoda’yı güncelleyin.",
+                  "This computer does not support account settings changes. Update bycoda on the computer.",
+                )}
+              />
+            ) : null}
+            <ProviderAccountReview
+              review={value?.pending || value?.finished ? undefined : review}
             />
-            {value.kind === "rename" ? (
-              <Field
-                label={copy("Görünen ad", "Display name")}
-                value={value.label}
-                maxLength={48}
-                editable={!disabled && canMetadata && !review}
-                onChangeText={(label) => draft.setValue({ ...value, label })}
-              />
-            ) : value.kind === "color" ? (
-              <SelectField
-                label={copy("Renk", "Color")}
-                value={value.color ?? "auto"}
-                options={[
-                  { value: "auto", label: copy("Otomatik", "Automatic") },
-                  ...[
-                    ["blue", copy("Mavi", "Blue")],
-                    ["coral", copy("Mercan", "Coral")],
-                    ["amber", copy("Kehribar", "Amber")],
-                    ["green", copy("Yeşil", "Green")],
-                    ["pink", copy("Pembe", "Pink")],
-                    ["purple", copy("Mor", "Purple")],
-                    ["teal", copy("Turkuaz", "Teal")],
-                    ["slate", copy("Arduvaz", "Slate")],
-                    ["orange", copy("Turuncu", "Orange")],
-                  ].map(([color, label]) => ({ value: color, label })),
-                ]}
-                disabled={disabled || !canMetadata || !!review}
-                onChange={(color) =>
-                  draft.setValue({ ...value, color: color === "auto" ? null : color })
-                }
-              />
-            ) : value.kind === "quotaRefresh" ? (
+            <Disclosure label={copy("Ayrıntılar", "Details")}>
               <Body muted>
                 {copy(
-                  "Bilgisayar Claude kotasını bir kez sorgular. Oturum açılmaz veya kimlik yenilenmez; otomatik tekrar yoktur. Hesap başına beş dakika bekleme uygulanır.",
-                  "The computer reads Claude quota once. It does not sign in or renew authentication, and does not retry automatically. Each account has a five-minute cooldown.",
+                  "Görünen ad ve renk bilgisayardaki hesap ayarlarını değiştirir. Varsayılan seçimi yalnız gelecekteki konuşmalar içindir; açık konuşmaların hesabı değişmez.",
+                  "Display name and color change the computer's account settings. The default applies only to future conversations; open conversations keep their accounts.",
                 )}
               </Body>
-            ) : (
-              <Body muted>{copy(
-                "Bu hesap bundan sonra yeni konuşmalarda varsayılan olacak.",
-                "This account will be the default for new conversations.",
-              )}</Body>
-            )}
-
+              <Body muted>
+                {copy(
+                  "Başka bir pencerede yapılan değişikliklerle çakışma olabilir. Kaydetmeden önce ayarlar yeniden kontrol edilir.",
+                  "Changes in another window may conflict. Settings are checked again before saving.",
+                )}
+              </Body>
+            </Disclosure>
           </>
         ) : null}
-        {current && !changeSupported && !value?.pending && !value?.finished ? <Notice message={copy(
-          "Bu bilgisayar hesap ayarlarını değiştirmeyi desteklemiyor. Bilgisayardaki bycoda’yı güncelleyin.",
-          "This computer does not support account settings changes. Update bycoda on the computer.",
-        )} /> : null}
-        <ProviderAccountReview review={value?.pending || value?.finished ? undefined : review} />
-        <Disclosure label={copy("Ayrıntılar", "Details")}>
-        <Body muted>
-          {copy(
-            "Görünen ad ve renk bilgisayardaki hesap ayarlarını değiştirir. Varsayılan seçimi yalnız gelecekteki konuşmalar içindir; açık konuşmaların hesabı değişmez.",
-            "Display name and color change the computer's account settings. The default applies only to future conversations; open conversations keep their accounts.",
-          )}
-        </Body>
-          <Body muted>
-          {copy(
-            "Başka bir pencerede yapılan değişikliklerle çakışma olabilir. Kaydetmeden önce ayarlar yeniden kontrol edilir.",
-            "Changes in another window may conflict. Settings are checked again before saving.",
-          )}
-        </Body>
-        </Disclosure>
-        </> : null}
-
-
       </Stack>
-      <ProviderAccountActions value={value} review={review} applied={receipt?.state === "applied"}
-        current={current} disabled={disabled || !changeSupported} busy={busy} error={error ?? delivery.error ?? draft.error}
-        onClose={onClose} onCancelReview={() => setReview(undefined)}
-        onConfirm={() => { if (review) void delivery.submit(review).catch(setError); }}
-        onReconcile={() => { void delivery.reconcile(); }}
+      <ProviderAccountActions
+        value={value}
+        review={review}
+        applied={receipt?.state === "applied"}
+        current={current}
+        disabled={disabled || !changeSupported}
+        busy={busy}
+        error={error ?? delivery.error ?? draft.error}
+        onClose={onClose}
+        onCancelReview={() => setReview(undefined)}
+        onConfirm={() => {
+          if (review) void delivery.submit(review).catch(setError);
+        }}
+        onReconcile={() => {
+          void delivery.reconcile();
+        }}
         onReview={() => {
           try {
             if (!value || disabled || !changeSupported || !delivery.current()) return;
-            setReview(validateAccountChange(
-              value.kind === "rename" ? { kind: "rename", label: value.label }
-                : value.kind === "color" ? { kind: "color", color: value.color }
-                : value.kind === "quotaRefresh" ? { kind: "quotaRefresh", confirm: "REFRESH_PROVIDER_QUOTA" }
-                : { kind: "default", confirm: "DEFAULT_FOR_FUTURE_SESSIONS" },
-            ));
+            setReview(
+              validateAccountChange(
+                value.kind === "rename"
+                  ? { kind: "rename", label: value.label }
+                  : value.kind === "color"
+                    ? { kind: "color", color: value.color }
+                    : value.kind === "accountKind"
+                      ? { kind: "accountKind", accountKind: value.accountKind ?? null }
+                      : value.kind === "quotaRefresh"
+                        ? { kind: "quotaRefresh", confirm: "REFRESH_PROVIDER_QUOTA" }
+                        : { kind: "default", confirm: "DEFAULT_FOR_FUTURE_SESSIONS" },
+              ),
+            );
             setError(undefined);
-          } catch (cause) { setError(cause); }
-        }} />
+          } catch (cause) {
+            setError(cause);
+          }
+        }}
+      />
     </Sheet>
   );
 }

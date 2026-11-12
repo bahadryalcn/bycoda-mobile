@@ -4,6 +4,10 @@ import Archive from "lucide-react-native/icons/archive";
 import ArchiveRestore from "lucide-react-native/icons/archive-restore";
 import Trash from "lucide-react-native/icons/trash";
 import Info from "lucide-react-native/icons/info";
+import Pin from "lucide-react-native/icons/pin";
+import PinOff from "lucide-react-native/icons/pin-off";
+import CircleCheck from "lucide-react-native/icons/circle-check";
+import Undo2 from "lucide-react-native/icons/undo-2";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
@@ -13,8 +17,6 @@ import { RemoteHostError } from "@/remote/host-error";
 import {
   Badge,
   Body,
-  Button,
-  Disclosure,
   ErrorText,
   FormActions,
   Notice,
@@ -28,8 +30,6 @@ import { SwipeActions, type SwipeRowAction } from "@/ui/swipe-actions";
 import { useCopy } from "@/ui/copy";
 import { ProviderIcon } from "@/ui/provider-identity";
 import { decorativeSvgProps } from "@/ui/accessibility";
-import { colors } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
 import { useMobileTheme } from "@/ui/theme";
 import { stamp } from "../management/shared/format";
 import { readTail, type HostSessionSummary } from "./wire";
@@ -39,6 +39,11 @@ import {
   sessionRowReviewMatches,
 } from "./session-row-action-model";
 import { relativeTime } from "./shared";
+import { captureSessionAuthority } from "@/domain/session-authority";
+import { SessionActionList } from "./session-action-list";
+import { sessionDisplayTitle } from "./session-title";
+
+type RowAction = SwipeRowAction & { detail?: string; opens?: boolean };
 
 export type SessionRowActionsProps = {
   machineId: string;
@@ -47,12 +52,14 @@ export type SessionRowActionsProps = {
   projectCwd?: string;
   session: HostSessionSummary;
   canRead(): boolean;
+  /** The Host lists this session as settled; the action becomes "Unsettle". */
+  settled?: boolean;
   children(openActions: () => void): ReactNode;
 };
 
 export function SessionRowActions(props: SessionRowActionsProps) {
-  useMobileTheme();
-  const { machineId, projectId, projectName, projectCwd, session, canRead, children } = props;
+  const { colors, uiStyles } = useMobileTheme();
+  const { machineId, projectId, projectName, projectCwd, session, canRead, settled, children } = props;
   const copy = useCopy(),
     machine = useActiveMachine(),
     connection = useConnectionScope();
@@ -62,6 +69,10 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     cache = useQueryClient();
   const update = useHostMutation<HostSessionSummary>("sessions.update", ["sessions", projectId]);
   const remove = useHostMutation<{ deleted: true }>("sessions.delete", ["sessions", projectId]);
+  const lifecycle = useHostMutation<unknown>(
+    settled ? "sessions.lifecycle.unsettle" : "sessions.lifecycle.settle",
+    ["sessions-lifecycle"],
+  );
   const mounted = useRef(false),
     occupied = useRef(false),
     readController = useRef<AbortController | null>(null);
@@ -93,6 +104,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     client,
     update: update.mutateAsync,
     remove: remove.mutateAsync,
+    lifecycle: lifecycle.mutateAsync,
   });
   type Review = ReturnType<typeof capture>;
   const issued = useRef<Review | null>(null);
@@ -210,33 +222,97 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     setPanel("actions");
     void run("archive", value);
   };
+  const quick = async (kind: "pin" | "settle") => {
+    if (!writable || occupied.current || held.current) return;
+    const value = capture();
+    if (!current(value, true)) return;
+    occupied.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      if (kind === "pin")
+        await value.update({
+          projectId,
+          sessionId: session.id,
+          pinned: !session.pinned,
+          ...captureSessionAuthority(session),
+        });
+      else await value.lifecycle({ sessionId: session.id });
+      // The Sessions tab reads batched project summaries, not the per-project list.
+      await Promise.all([
+        cache.invalidateQueries({ queryKey: hostKey(value.row.machineId, ["project-summaries"]) }),
+        cache.invalidateQueries({ queryKey: hostKey(value.row.machineId, ["sessions-lifecycle"]) }),
+      ]);
+      if (mounted.current) {
+        setPanel(null);
+        setReview(null);
+      }
+    } catch (cause) {
+      if (mounted.current) {
+        setError(cause);
+        if (cause instanceof RemoteHostError && cause.uncertain) {
+          held.current = true;
+          setUncertain(true);
+        }
+        issued.current = value;
+        setReview(value);
+        setPanel("actions");
+      }
+    } finally {
+      occupied.current = false;
+      if (mounted.current) setBusy(false);
+    }
+  };
   const archiveLabel = session.archived
     ? copy("Arşivden çıkar", "Unarchive")
     : copy("Arşivle", "Archive");
-  const actions: SwipeRowAction[] = [
-    {
-      key: "archive",
-      label: archiveLabel,
-      icon: session.archived ? <ArchiveRestore /> : <Archive />,
-      disabled: !writable || busy || uncertain,
-      onPress: archive,
-    },
-    {
-      key: "delete",
-      label: copy("Sil", "Delete"),
-      icon: <Trash />,
-      destructive: true,
-      disabled: !writable || busy || uncertain || session.status === "running",
-      onPress: () => open("delete"),
-    },
-    {
-      key: "details",
-      label: copy("Ayrıntılar", "Details"),
-      icon: <Info />,
-      disabled: busy,
-      onPress: () => open("details"),
-    },
-  ];
+  const blocked = !writable || busy || uncertain;
+  const pin: RowAction = {
+    key: "pin",
+    label: session.pinned ? copy("Sabiti kaldır", "Unpin") : copy("Sabitle", "Pin"),
+    icon: session.pinned ? <PinOff /> : <Pin />,
+    disabled: blocked,
+    onPress: () => void quick("pin"),
+  };
+  const settle: RowAction = {
+    key: "settle",
+    label: settled ? copy("Yerleşikten çıkar", "Unsettle") : copy("Yerleştir", "Settle"),
+    icon: settled ? <Undo2 /> : <CircleCheck />,
+    detail: !settled && session.status === "running"
+      ? copy("Oturum çalışırken kullanılamaz.", "Unavailable while the session is running.")
+      : undefined,
+    disabled: blocked || (!settled && session.status === "running"),
+    onPress: () => void quick("settle"),
+  };
+  const archiveAction: RowAction = {
+    key: "archive",
+    label: archiveLabel,
+    icon: session.archived ? <ArchiveRestore /> : <Archive />,
+    disabled: blocked,
+    onPress: archive,
+  };
+  const deleteAction: RowAction = {
+    key: "delete",
+    label: copy("Sil", "Delete"),
+    icon: <Trash />,
+    destructive: true,
+    opens: true,
+    detail: session.status === "running"
+      ? copy("Oturum çalışırken kullanılamaz.", "Unavailable while the session is running.")
+      : undefined,
+    disabled: blocked || session.status === "running",
+    onPress: () => open("delete"),
+  };
+  const detailsAction: RowAction = {
+    key: "details",
+    label: copy("Ayrıntılar", "Details"),
+    icon: <Info />,
+    opens: true,
+    disabled: busy,
+    onPress: () => open("details"),
+  };
+  const swipeActions = [pin, settle, deleteAction];
+  const sheetActions = [pin, settle, archiveAction, detailsAction, deleteAction];
   const valid = !!review && current(review);
   const fresh = !!review && current(review, true);
   const status = session.needsInput
@@ -246,10 +322,11 @@ export function SessionRowActions(props: SessionRowActionsProps) {
       : session.status === "interrupted"
         ? copy("Durduruldu", "Interrupted")
         : copy("Hazır", "Ready");
+  const title = sessionDisplayTitle(session.title, copy("Yeni oturum", "New session"));
   const details = (
     <Stack>
       <Body selectable style={uiStyles.title}>
-        {session.title}
+        {title}
       </Body>
       <Stack>
         <Body>{projectName || projectId}</Body>
@@ -267,10 +344,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
       ) : null}
       <Row>
         <ProviderIcon provider={session.harness} size={18} />
-        <Body style={uiStyles.caption}>
-          {session.harness}
-          {session.model ? ` · ${session.model}` : ""}
-        </Body>
+        <Body style={uiStyles.caption}>{session.model || session.harness}</Body>
       </Row>
       <Row>
         <Badge
@@ -287,8 +361,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
           {copy("Güncellendi", "Updated")} · {relativeTime(session.updatedAt, copy)}
         </Body>
       </Row>
-      <Disclosure label={copy("Ayrıntılar", "Details")}>
-        <Stack>
+      <Stack>
           <StatusRow label={copy("Bilgisayar", "Computer")}>
             <Body>{machine?.name || machineId}</Body>
           </StatusRow>
@@ -306,13 +379,12 @@ export function SessionRowActions(props: SessionRowActionsProps) {
           <StatusRow label={copy("Oturum kimliği", "Session ID")}>
             <Body mono>{session.id}</Body>
           </StatusRow>
-        </Stack>
-      </Disclosure>
+      </Stack>
     </Stack>
   );
   return (
     <>
-      <SwipeActions actions={actions} disabled={!available || busy}>
+      <SwipeActions actions={swipeActions} disabled={!available || busy}>
         {children(() => open("actions"))}
       </SwipeActions>
       <PrivateContentAccessProvider
@@ -331,7 +403,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
             onClose={close}
             dismissible={!busy}
           >
-            {panel === "details" ? details : <Body selectable>{session.title}</Body>}
+            {panel === "details" ? details : <Body selectable numberOfLines={2}>{title}</Body>}
             {panel === "delete" ? (
               <>
                 <Notice
@@ -365,18 +437,12 @@ export function SessionRowActions(props: SessionRowActionsProps) {
                 />
               </>
             ) : panel === "actions" ? (
-              <Stack>
-                {actions.map((action) => (
-                  <Button
-                    key={action.key}
-                    label={action.label}
-                    tone={action.destructive ? "danger" : "quiet"}
-                    disabled={action.disabled}
-                    busy={busy && action.key === "archive"}
-                    onPress={action.onPress}
-                  />
-                ))}
-              </Stack>
+              <SessionActionList
+                actions={sheetActions.map((action) => ({
+                  ...action,
+                  busy: busy && action.key === "archive",
+                }))}
+              />
             ) : null}
             {uncertain ? (
               <Notice

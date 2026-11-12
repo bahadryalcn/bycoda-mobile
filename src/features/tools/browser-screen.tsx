@@ -14,7 +14,6 @@ import { ActionField } from "@/ui/action-field";
 import { ActionMenu } from "@/ui/overflow-menu";
 import Keyboard from "lucide-react-native/icons/keyboard";
 import { useCopy } from "@/ui/copy";
-import { colors } from "@/ui/tokens";
 import { useMobileTheme } from "@/ui/theme";
 import type { BrowserState } from "./types";
 import { readBrowserCapture } from "./browser-annotation-model";
@@ -80,7 +79,7 @@ function BrowserDraftOwner({ project, initialUrl = "", sessionId, embedded }: Br
 function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, embedded }: BrowserProps & {
   client: ReturnType<typeof useHostClient>; drafts: BrowserDrafts; updateDraft: (field: keyof BrowserDrafts, value: string) => void;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const active = useHostReadActive();
   const machine = useActiveMachine();
@@ -269,7 +268,7 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
         label={copy("Tarayıcı araçlarını kur", "Set up browser tools")} busy={state.runtime.installing} disabled={busy || state.runtime.installing}
         onPress={() => { if (visibleScope && current(visibleScope)) setReview({ scope: visibleScope, method: "browser.setup" }); }} /> : null}
       {review?.method === "browser.setup" ? reviewCard : null}
-      <MutationState mutation={actionScope === visibleScope ? action : {}} pending={copy("Yükleniyor", "Loading")} />
+      <MutationState mutation={actionScope === visibleScope ? action : {}} pending={review?.scope === visibleScope ? undefined : copy("Yükleniyor", "Loading")} />
       {state && state.runtime?.installed !== false ? <>
         <ActionField label={copy("Adres", "URL")} value={url} placeholder={state?.url ?? "https://"}
           autoCapitalize="none" autoCorrect={false} keyboardType="url" onChangeText={setUrl}

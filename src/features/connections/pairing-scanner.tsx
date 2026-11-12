@@ -1,8 +1,8 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Stack } from "expo-router";
-import { AppState, BackHandler, Linking, StyleSheet, View } from "react-native";
-import ChevronLeft from "lucide-react-native/icons/chevron-left";
+import { AppState, Linking, StyleSheet, View } from "react-native";
+import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useAsyncAction } from "@/state/actions";
@@ -11,20 +11,20 @@ import {
   Body,
   Button,
   ErrorNotice,
-  IconButton,
+  HeaderBackButton,
   Loading,
   MutationState,
-  Notice,
   Screen,
+  StateView,
 } from "@/ui/primitives";
-import { colors, metrics, radii, space } from "@/ui/tokens";
+import { metrics, radii, space } from "@/ui/tokens";
 import { enterItem } from "@/ui/motion";
 import Animated from "react-native-reanimated";
 import { useCopy } from "@/ui/copy";
 import type { PairingScannerProps } from "./connection-types";
 
 export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const focused = useIsFocused();
   const [viewport, setViewport] = useState<{ width: number; height: number } | null>(null);
@@ -77,11 +77,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
     session.current++;
     next();
   };
-  useEffect(() => {
-    if (!focused) return;
-    const listener = BackHandler.addEventListener("hardwareBackPress", () => { leave(onClose); return true; });
-    return () => listener.remove();
-  }, [focused, onClose]);
+  useBackHandler(focused, () => leave(onClose));
 
   // Native camera sessions are mounted only while this screen can receive input.
   useEffect(() => {
@@ -107,10 +103,10 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
 
   return (
     <Screen onContentViewport={measureViewport} footer={<Button
-      label={copy("Kodu yapıştır", "Paste pairing code")}
+      label={copy("Bunun yerine yapıştır", "Paste instead")}
       tone="quiet" onPress={() => leave(onPaste)}
     />}>
-      <Stack.Screen options={{ title: copy("QR kodu tara", "Scan QR code"), headerLeft: () => <IconButton label={copy("Geri", "Back")} onPress={() => leave(onClose)}><ChevronLeft size={22} color={colors.text} /></IconButton> }} />
+      <Stack.Screen options={{ title: copy("QR kodu tara", "Scan QR code"), headerLeft: () => <HeaderBackButton onPress={() => leave(onClose)} /> }} />
       <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <Body muted onLayout={event => setIntroHeight(event.nativeEvent.layout.height)} style={{ textAlign: "center" }}>
         {copy(
@@ -120,32 +116,28 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
       </Body>
       {!permission && !permissionAction.isError ? <Loading label={copy("Kamera hazırlanıyor…", "Preparing camera…")} /> : null}
       {permission && !permission.granted ? (
-        <>
-          <Notice
-            tone="info"
-            message={copy(
-              "QR kodunu okumak için kamera izni gerekiyor.",
-              "Camera access is needed to read the QR code.",
-            )}
-          />
-          <Button
-            label={
-              permission.canAskAgain
-                ? copy("Kameraya izin ver", "Allow camera")
-                : copy("Kamera ayarlarını aç", "Open camera settings")
-            }
-            busy={permissionAction.isPending}
-            tone="primary"
-            onPress={() => {
+        <StateView
+          illustration="permission"
+          title={copy("Erişim gerekli", "Access needed")}
+          description={copy(
+            "QR kodunu okumak için kamera izni gerekiyor.",
+            "Camera access is needed to read the QR code.",
+          )}
+          action={{
+            label: permission.canAskAgain
+              ? copy("Kameraya izin ver", "Allow camera")
+              : copy("Kamera ayarlarını aç", "Open camera settings"),
+            busy: permissionAction.isPending,
+            onPress: () => {
               const owner = session.current;
               void permissionAction.run(async () => {
                 if (!active.current || owner !== session.current) return;
                 if (permission.canAskAgain) { requested.current = true; await requestPermission(); }
                 else await Linking.openSettings();
               });
-            }}
-          />
-        </>
+            },
+          }}
+        />
       ) : null}
       {permission?.granted && foreground && unlocked && focused && !cameraFailed && !scan.isError ? (
         <View

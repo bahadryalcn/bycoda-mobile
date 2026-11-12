@@ -29,3 +29,6 @@ export type CrewPendingInput = {
   question?: import("../../features/workspace/wire").UserQuestionPrompt;
 };
 export type CrewRunDetail = CrewRunView & { pendingInputs: CrewPendingInput[] };
+
+export type ActiveCrewMember = import("../../../../src/shared/model/host-contracts/crews").ActiveCrewMember;
+export type ActiveCrewList = { items: ActiveCrewMember[]; truncated?: true };

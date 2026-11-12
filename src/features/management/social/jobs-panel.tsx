@@ -3,7 +3,6 @@ import { CollectionRows } from "./collection-rows";
 import { ContentExcerpt } from "./content-excerpt";
 import { Body, Button, ErrorText, Row } from "@/ui/primitives";
 import { RecordCard } from "@/ui/record-card";
-import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { stamp } from "../shared/format";
@@ -12,8 +11,10 @@ import { accountIdentity, recipientIdentity } from "./review-presentation";
 
 import type { JobsPanelProps } from "./types";
 import { CollectionSearch, useCollectionSearch } from "./collection-search";
+import { useMobileTheme } from "@/ui/theme";
 
 export function JobsPanel({ state, projectId, action, run, page }: JobsPanelProps) {
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const collection = useCollectionSearch(page ? state.jobs : state.jobs.filter((job) => !projectId || job.projectIds.includes(projectId)),
     (job) => [accountIdentity(state.accounts, job.accountId, job.provider),

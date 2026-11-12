@@ -1,7 +1,6 @@
 import { Image } from "expo-image";
 import { Image as WebImage } from "react-native";
 import type { RemoteProvider } from "@/domain/types";
-import { colors } from "./tokens";
 import { useMobileTheme } from "./theme";
 
 // Reuse the product's shipped provider artwork; no desktop UI/runtime is imported.
@@ -38,7 +37,7 @@ const monochromeProviders = new Set<RemoteProvider>([
 
 /** Decorative identity beside an existing provider label, never an icon-only choice. */
 export function ProviderIcon({ provider, size = 24 }: { provider: RemoteProvider; size?: number }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   // RN Web keeps a single measured image surface; Expo's animated web image wrapper
   // can paint an empty surface for small static SVG assets. Native keeps Expo decoding.
   if (process.env.EXPO_OS === "web") return (

@@ -4,8 +4,8 @@ import { Stack, MutationState, SegmentedControl } from "@/ui/primitives";
 import { MessageText } from "@/ui/message-text";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useRef, useState } from "react";
-import { uiStyles } from "@/ui/styles";
-import { ActionMenu, Body, Button, Card, Field, FormActions, Heading, QueryState, Row } from "@/ui/primitives";
+import Trash2 from "lucide-react-native/icons/trash-2";
+import { ActionMenu, Body, Button, Card, Field, FormActions, QueryState, Row, Section } from "@/ui/primitives";
 import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
@@ -54,7 +54,7 @@ export function ExistingNote({ id, ...props }: ExistingNoteProps) {
 }
 
 export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEditorProps) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const base = useRef(initial).current;
   const form = useFormDraft(base);
@@ -83,6 +83,7 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
     <Stack>
       <SegmentedControl label={copy("Görünüm", "View")} value={mode} options={[{value:"edit",label:copy("Düzenle","Edit")},{value:"preview",label:copy("Önizleme","Preview")}]} onChange={setMode} />
       {mode === "preview" ? <MessageText text={draft.body || copy("Not henüz boş.", "The note is empty.")} role="assistant" /> : <>
+      <Section title={copy("Not", "Note")}>
       <Field
         label={copy("Başlık", "Title")}
         error={titleError}
@@ -98,13 +99,17 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
         style={{ minHeight: 160, textAlignVertical: "top" }}
         editable={!busy}
       />
+      </Section>
+      <Section title={copy("Düzen", "Organize")}>
       <Field
-        label={copy("Etiketler (virgülle ayırın)", "Tags (comma separated)")}
+        label={copy("Etiketler", "Tags")}
+        hint={copy("Virgülle ayırın", "Separate with commas")}
         error={tagError}
         value={draft.tags}
         onChangeText={(tags) => update({ tags })}
         editable={!busy}
       />
+      </Section>
       </>}
       {mode === "preview" && titleError ? <Body accessibilityRole="alert" style={uiStyles.error}>{titleError}</Body> : null}
       {mode === "preview" && tagError ? <Body accessibilityRole="alert" style={uiStyles.error}>{tagError}</Body> : null}
@@ -149,6 +154,7 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
             actions={[
               {
                 key: "delete",
+                icon: <Trash2 size={18} color={colors.danger} />,
                 label: copy("Notu sil", "Delete note"),
                 destructive: true,
                 disabled: busy,

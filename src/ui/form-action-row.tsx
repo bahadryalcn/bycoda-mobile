@@ -1,8 +1,9 @@
 import { use, useCallback, useState } from "react";
 import { ScrollView, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { Button } from "./buttons";
-import { FormActionScrollOwner } from "./form-action-context";
+import { FormActionBusy, FormActionScrollOwner } from "./form-action-context";
 import { useCopy } from "./copy";
+import { UnsavedBadge } from "./unsaved-badge";
 import { useMobileTheme } from "./theme";
 import { metrics, space } from "./tokens";
 import type { FormActionsProps } from "./component-props";
@@ -10,7 +11,7 @@ import type { FormActionsProps } from "./component-props";
 /** Presentation only: the editor keeps its values, guards and current callbacks. */
 export function FormActionRow({
   feedback, submitLabel, onSubmit, onCancel, cancelLabel, cancelDisabled, allowCancelWhileBusy = false,
-  busy, disabled, tone = "primary", scrollFeedback,
+  busy, disabled, tone = "primary", dirty, scrollFeedback,
   feedbackPlacement,
 }: FormActionsProps & { scrollFeedback?: boolean; feedbackPlacement?: "before" | "after" }) {
   useMobileTheme();
@@ -26,7 +27,9 @@ export function FormActionRow({
   }, []);
   const spacing = feedbackHeight > 0 ? space.sm : 0;
   const feedbackStyle = placement === "after" ? { marginTop: spacing } : { marginBottom: spacing };
-  const feedbackContent = <View onLayout={measureFeedback} style={{ gap: space.sm }}>{feedback}</View>;
+  const feedbackContent = <View onLayout={measureFeedback} style={{ gap: space.sm }}>
+    <FormActionBusy value={!!busy}>{feedback}</FormActionBusy>
+  </View>;
   const feedbackRegion = feedback ? scrollsFeedback ? (
     <ScrollView
       style={{ maxHeight: Math.max(metrics.touchTarget, height * 0.25), flexShrink: 1, ...feedbackStyle }}
@@ -36,12 +39,13 @@ export function FormActionRow({
   return (
     <View>
       {placement === "before" ? feedbackRegion : null}
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-        <Button label={submitLabel} onPress={onSubmit} busy={busy} disabled={disabled} tone={tone}
-          style={{ flexGrow: 1, flexShrink: 0, flexBasis: "auto" }} />
+      {dirty ? <View style={{ marginBottom: space.sm }}><UnsavedBadge /></View> : null}
+      {/* Mobile action stack: full-width primary, centered quiet cancel below it. */}
+      <View style={{ gap: space.xs, alignItems: "stretch" }}>
+        <Button label={submitLabel} onPress={onSubmit} busy={busy} disabled={disabled} tone={tone} fullWidth />
         {onCancel ? <Button label={cancelLabel ?? copy("Vazgeç", "Cancel")} onPress={onCancel}
           disabled={cancelDisabled || busy && !allowCancelWhileBusy} tone="quiet"
-          style={{ flexGrow: 1, flexShrink: 0, flexBasis: "auto" }} /> : null}
+          style={{ alignSelf: "center" }} /> : null}
       </View>
       {placement === "after" ? feedbackRegion : null}
     </View>

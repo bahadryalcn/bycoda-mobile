@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMessage, messageDisplaySource, messageNodeText, type MessageNode } from "./message-model";
+import { messageCacheKey, messageDigest, parseMessage, messageDisplaySource, messageNodeText, type MessageNode } from "./message-model";
 import { highlightCode } from "./message-highlight";
 const flatten = (nodes: MessageNode[]): MessageNode[] => nodes.flatMap((node) => [node, ...flatten(node.children)]);
 describe("native rich message model", () => {
@@ -62,5 +62,32 @@ describe("native rich message model", () => {
     expect(highlightCode(source, "ts").map((token) => token.text).join("")).toBe(source);
     expect(highlightCode(source, "unknown")).toEqual([{ text: source, kind: "plain" }]);
     expect(parseMessage("x".repeat(300_000)).map(messageNodeText).join("").length).toBe(256_000);
+  });
+});
+
+describe("markdown parse cache", () => {
+  it("keys by block id and content digest, not by the full text", () => {
+    expect(messageCacheKey(true, "block-1")).toBe(messageCacheKey(true, "block-1", "any text"));
+    expect(messageCacheKey(true, "block-1")).not.toBe(messageCacheKey(false, "block-1"));
+    expect(messageCacheKey(true, "block-1")).not.toBe(messageCacheKey(true, "block-2"));
+    expect(messageDigest("abc")).toBe(messageDigest("abc"));
+    expect(messageDigest("abc")).not.toBe(messageDigest("abd"));
+    expect(messageDigest("abc")).not.toBe(messageDigest("abcd"));
+  });
+  it("reuses a parse for unchanged text and reparses when the digest changes", () => {
+    const first = parseMessage("hello **world**", true, "cache-a");
+    expect(parseMessage("hello **world**", true, "cache-a")).toBe(first);
+    const next = parseMessage("hello **world** again", true, "cache-a");
+    expect(next).not.toBe(first);
+    expect(parseMessage("hello **world** again", true, "cache-a")).toBe(next);
+  });
+  it("lets one streaming message churn without evicting the others", () => {
+    const others = Array.from({ length: 40 }, (_, i) => parseMessage(`message ${i}`, true, `other-${i}`));
+    let text = "";
+    for (let i = 0; i < 600; i++) {
+      text += "token ";
+      parseMessage(text, true, "streaming");
+    }
+    others.forEach((nodes, i) => expect(parseMessage(`message ${i}`, true, `other-${i}`)).toBe(nodes));
   });
 });

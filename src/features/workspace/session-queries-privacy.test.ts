@@ -55,7 +55,7 @@ function BlockProbe() {
   block = useSessionBlock({
     scope: { machineId: "machine", sessionId: "session" },
     blockId: "block",
-    revision: 1,
+    getRevision: () => 1,
     enabled: true,
   });
   return null;

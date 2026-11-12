@@ -11,6 +11,7 @@ import { useSheetGuard } from "@/ui/sheet-guard";
 import type { MessageContext } from "@/ui/media-policy";
 import { useCopy } from "@/ui/copy";
 import { OrchestrationReader, type CoordinationReader } from "./orchestration-readers";
+import { RecordAccessUnavailable } from "./unavailable-state";
 
 /** Read-only proposal projection. No controller or command port is exposed. */
 export function OrchestrationDetails({block,scope,context,onClose}:{block:Block;scope:SessionScope;context?:MessageContext;onClose?:()=>void}){
@@ -48,7 +49,7 @@ export function OrchestrationDetails({block,scope,context,onClose}:{block:Block;
       {proposal.error?<Notice tone="danger" message={proposal.error}/>:null}
       <NavigationRow label={copy("İstek", "Request")} onPress={()=>open({kind:"request"})}/>
       {proposal.summary?<NavigationRow label={copy("Özet", "Summary")} onPress={()=>open({kind:"summary"})}/>:null}
-    </>:<Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")}/>}
+    </>:<RecordAccessUnavailable />}
   </Stack>} renderItem={({item:task})=><NavigationRow label={task.title} detail={`${task.harness} · ${task.model}`} onPress={()=>open({kind:"task",task})}/>}/>
   {onClose?<FormActions submitLabel={copy("Kapat", "Close")} onSubmit={close}/>:null}
   <PrivateContentAccessProvider value={{allowed:readable,check:current}}>

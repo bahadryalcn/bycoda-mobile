@@ -20,8 +20,6 @@ import {
 import { useCopy } from "@/ui/copy";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useMobileTheme } from "@/ui/theme";
-import { colors } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
 import { haptic } from "@/ui/motion";
 import { projectTerminals, terminalCommandInput, terminalDisplayOutput, TERMINAL_COMMAND_LIMIT } from "./terminal-model";
 import { useTerminalOutput } from "./use-terminal-output";
@@ -34,7 +32,7 @@ export function TerminalScreen({ project }: { project: HostProject }) {
 }
 
 function TerminalScreenBody({ project }: { project: HostProject }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const manageConnections = () => router.push("/machines");
   const machine = useActiveMachine();
@@ -140,7 +138,7 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
       }
     >
       <Stack.Screen options={{ title: copy("Terminaller", "Terminals") }} />
-      <QueryState query={list} loading={selected ? "none" : "list"} empty={!terminals.length} emptyTitle={copy("Bu projede terminal yok.", "No terminals in this project.")} onManageConnections={manageConnections} />
+      <QueryState query={list} loading={selected ? "none" : "list"} empty={!terminals.length} emptyIllustration="no-sessions" emptyTitle={copy("Bu projede terminal yok.", "No terminals in this project.")} onManageConnections={manageConnections} />
       {list.data?.writable === false ? <Notice message={copy("Bu bağlantıda terminaller salt okunur.", "Terminals are read-only on this connection.")} /> : null}
       {terminals.length ? <Row>
         <View style={uiStyles.grow}>

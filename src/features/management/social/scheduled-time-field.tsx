@@ -19,7 +19,7 @@ export function ScheduledTimeField({ value, onChange, disabled, onValidityChange
   }
   return <>
     <NavigationGroup>
-      <ToggleField label={copy("Yayın zamanı seç", "Choose a publish time")} value={!!value} disabled={disabled} onChange={(enabled) => { onValidityChange?.(!enabled || !!parseLocalPublishTime(parts.date, parts.time)); onChange(enabled ? (parseLocalPublishTime(parts.date, parts.time) ?? nextPublishTime()).toISOString() : ""); }} />
+      <ToggleField label={copy("Yayın zamanı seç", "Choose a publish time")} help={copy("Yayınlamak için taslağı ayrıca onaylayıp sıraya almalısın.", "Approve and queue the draft separately to publish it.")} value={!!value} disabled={disabled} onChange={(enabled) => { onValidityChange?.(!enabled || !!parseLocalPublishTime(parts.date, parts.time)); onChange(enabled ? (parseLocalPublishTime(parts.date, parts.time) ?? nextPublishTime()).toISOString() : ""); }} />
     </NavigationGroup>
     {value && <>
       <Field label={copy("Tarih (YYYY-AA-GG)", "Date (YYYY-MM-DD)")} value={parts.date} editable={!disabled} onChangeText={(date) => update({ date })} />
@@ -27,6 +27,5 @@ export function ScheduledTimeField({ value, onChange, disabled, onValidityChange
       {!valid && <ErrorText error={copy("Geçerli bir tarih ve saat girin.", "Enter a valid date and time.")} />}
       <Body muted>{copy("Telefonun saat dilimi", "Phone time zone")}: {Intl.DateTimeFormat().resolvedOptions().timeZone}</Body>
     </>}
-    <Body muted>{copy("Yayınlamak için taslağı ayrıca onaylayıp sıraya almalısın.", "Approve and queue the draft separately to publish it.")}</Body>
   </>;
 }

@@ -5,7 +5,7 @@ import { afterEach,beforeEach,expect,it,vi } from "vitest";
 const f=vi.hoisted(()=>({writes:[] as string[],buttons:[] as {label:string;press:()=>void}[]}));
 vi.mock("lucide-react-native/icons/file",()=>({default:()=>null}));
 vi.mock("@/state/chat-appearance",()=>({useChatAppearance:(select:(v:{textSize:string})=>unknown)=>select({textSize:"standard"})}));
-vi.mock("@/ui/theme",()=>({useMobileTheme:()=>{}}));
+vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));
 vi.mock("@/state/security",()=>({isAppAccessAllowed:()=>true,useSecurity:{getState:()=>({appState:"active",windowFocused:true}),subscribe:()=>()=>{}}}));
 vi.mock("react-native",()=>({View:({children}:PropsWithChildren)=>createElement("div",null,children),ScrollView:({children}:PropsWithChildren)=>createElement("main",null,children),Text:({children}:PropsWithChildren)=>createElement("span",null,children)}));
 vi.mock("expo-clipboard",()=>({setStringAsync:async(value:string)=>{f.writes.push(value);}}));

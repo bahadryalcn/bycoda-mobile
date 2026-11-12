@@ -19,8 +19,9 @@ vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => sta
 vi.mock("@/ui/primitives", () => ({
   Screen: "section", QueryState: ({ query, loadingLabel }: { query: { isPending?: boolean; error?: Error }; loadingLabel?: string }) =>
     query.error ? createElement("p", null, query.error.message) : query.isPending ? createElement("p", null, loadingLabel) : null,
-  Empty: ({ title }: { title: string }) => createElement("p", null, title),
-  Notice: ({ message }: { message: string }) => createElement("p", null, message),
+  Empty: ({ title, detail, action }: { title: string; detail?: string; action?: { label: string } }) =>
+    createElement("p", null, title, detail, action?.label),
+  StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: { message: string }) => createElement("p", null, message),
   Button: ({ label }: { label: string }) => createElement("button", null, label),
 }));
 vi.mock("./dev-servers-screen", () => ({ DevServersScreen: () => null }));

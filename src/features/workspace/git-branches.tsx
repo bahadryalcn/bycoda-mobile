@@ -1,6 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
 import {
+  Badge,
   Body,
   Button,
   Disclosure,
@@ -13,9 +14,7 @@ import {
 } from "@/ui/primitives";
 import { useMemo, useState } from "react";
 import GitBranch from "lucide-react-native/icons/git-branch";
-import Check from "lucide-react-native/icons/check";
 import { IconTile } from "@/ui/icon-tile";
-import { colors } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { GroupedListRow, rowInset } from "./shared";
 import { useGitBranches } from "./git-queries";
@@ -31,7 +30,7 @@ export function GitBranchesPanel({
   onClose,
   children,
 }: GitBranchesPanelProps) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const branches = useGitBranches(scope);
   const [search, setSearch] = useState("");
@@ -148,15 +147,10 @@ export function GitBranchesPanel({
               }
               trailing={
                 !item.remote && branches.data?.current === item.branch ? (
-                  <Check size={18} color={colors.success} />
+                  <Badge label={copy("Geçerli", "Current")} tone="success" />
                 ) : undefined
               }
               disabled={creating || (!item.remote && branches.data?.current === item.branch)}
-              detail={
-                !item.remote && branches.data?.current === item.branch
-                  ? copy("Geçerli dal", "Current branch")
-                  : undefined
-              }
               onPress={() => onChoose({ kind: "switch", branch: item.branch, remote: item.remote })}
             />
           </GroupedListRow>

@@ -20,7 +20,7 @@ vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
   return { Stack:wrapper, Body: wrapper, Button: button, ErrorText: () => null, QueryState: () => null,
-    Notice: ({ message }: { message: string }) => createElement("div", null, message),
+    Notice: ({ message }: { message: string }) => createElement("div", null, message), StateView: ({ title }: { title: string }) => createElement("div", null, title),
     Sheet: ({ visible, children, footer }: PropsWithChildren<{ visible: boolean; footer: React.ReactNode }>) => visible ? createElement("div", null, children, footer) : null,
     ToggleField: ({ label, value, disabled, onChange }: { label: string; value: boolean; disabled: boolean; onChange: (value: boolean) => void }) => { state.callbacks.set(label,onChange); return createElement("input", { type: "checkbox", "aria-label": label, checked: value, disabled, onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChange(event.target.checked) }); },
     ScreenList: ({ header, data, renderItem }: { header: React.ReactNode; data: unknown[]; renderItem: (args: { item: unknown }) => React.ReactNode }) => createElement("div", null, header, ...data.map((item, key) => createElement("div", { key }, renderItem({ item })))),

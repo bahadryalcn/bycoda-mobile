@@ -1,22 +1,26 @@
 import { Linking } from "react-native";
 import { requestDevicePermission, type DevicePermission } from "./permission-flow";
+import { isViewingSession } from "../push/push-viewing";
 
 export type DevicePermissionKind = "camera" | "notifications";
 let handlerReady = false;
 
-async function notifications() {
+/** Loads expo-notifications with its foreground handler and Android channel in place. */
+export async function notifications() {
   const api = await import("expo-notifications");
   if (!handlerReady) {
-    api.setNotificationHandler({ handleNotification: async () => ({
-      shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false,
-    }) });
+    api.setNotificationHandler({ handleNotification: async (notification) => {
+      // The conversation is already on screen: list it, but do not interrupt.
+      const show = !isViewingSession(notification.request.content.data);
+      return { shouldShowBanner: show, shouldShowList: true, shouldPlaySound: show, shouldSetBadge: false };
+    } });
     handlerReady = true;
   }
   // Android 13+ requires a channel before requesting notification permission.
   if (process.env.EXPO_OS === "android") {
     await api.setNotificationChannelAsync("bycoda", {
       name: "bycoda",
-      importance: api.AndroidImportance.DEFAULT,
+      importance: api.AndroidImportance.HIGH,
       lockscreenVisibility: api.AndroidNotificationVisibility.PRIVATE,
     });
   }

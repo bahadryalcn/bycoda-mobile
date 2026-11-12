@@ -13,7 +13,7 @@ export function ScheduledTimeField({ value, onChange, disabled }: ScheduledTimeP
   const date = Number.isFinite(parsed.getTime()) ? parsed : nextPublishTime();
   return <>
     <NavigationGroup>
-      <ToggleField label={copy("Yayın zamanı seç", "Choose a publish time")} value={!!value} disabled={disabled} onChange={(enabled) => { setMode(null); onChange(enabled ? nextPublishTime().toISOString() : ""); }} />
+      <ToggleField label={copy("Yayın zamanı seç", "Choose a publish time")} help={copy("Yayınlamak için taslağı ayrıca onaylayıp sıraya almalısın.", "Approve and queue the draft separately to publish it.")} value={!!value} disabled={disabled} onChange={(enabled) => { setMode(null); onChange(enabled ? nextPublishTime().toISOString() : ""); }} />
     </NavigationGroup>
     {value && <>
       <Row>
@@ -24,6 +24,5 @@ export function ScheduledTimeField({ value, onChange, disabled }: ScheduledTimeP
       {mode && process.env.EXPO_OS === "ios" && <Button tone="quiet" label={copy("Bitti", "Done")} onPress={() => setMode(null)} />}
       <Body muted>{copy("Telefonun saat dilimi", "Phone time zone")}: {Intl.DateTimeFormat().resolvedOptions().timeZone}</Body>
     </>}
-    <Body muted>{copy("Yayınlamak için taslağı ayrıca onaylayıp sıraya almalısın.", "Approve and queue the draft separately to publish it.")}</Body>
   </>;
 }

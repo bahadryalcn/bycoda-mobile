@@ -9,7 +9,7 @@ vi.mock("expo-camera", () => ({ Camera: { getCameraPermissionsAsync: mocks.camer
 vi.mock("expo-notifications", () => ({
   setNotificationChannelAsync: mocks.channel, getPermissionsAsync: mocks.notificationRead,
   requestPermissionsAsync: mocks.notificationRequest, scheduleNotificationAsync: mocks.schedule,
-  setNotificationHandler: mocks.handler, AndroidImportance: { DEFAULT: 3 },
+  setNotificationHandler: mocks.handler, AndroidImportance: { DEFAULT: 3, HIGH: 4 },
   AndroidNotificationVisibility: { PRIVATE: 0 }, IosAuthorizationStatus: { PROVISIONAL: 3, EPHEMERAL: 4 },
   SchedulableTriggerInputTypes: { TIME_INTERVAL: "timeInterval" },
 }));

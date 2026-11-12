@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   storage: { getItem: vi.fn(async () => "stored draft"), getAllKeys: vi.fn(async () => ["bycoda.mobile.draft.v1:a:s", "sdk.setting"]), multiRemove: vi.fn(async () => {}) },
 }));
 function store() { return { machines: state.machines, hydrated: state.hydrated, storageError: state.storageError, connectionPending: state.connectionPending, removeMachine: state.remove }; }
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/state/machines", () => ({ useMachines: Object.assign(() => store(), { getState: store }), withDisconnectedComputers: async (operation: () => Promise<unknown>) => {
   state.cleanup(); if (state.machines.length) throw new Error("Disconnect computers before deleting saved drafts."); return operation();
 } }));
@@ -33,7 +34,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean }) => createElement("button", { disabled: disabled || busy, onClick: onPress }, label);
   return { Stack: Wrap, Body: Wrap, Button, Loading: ({ label }: { label: string }) => createElement("p", null, label), NavigationGroup: Wrap, NavigationRow: Button, Disclosure: Wrap,
-    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    StateView: ({ title, description, action }: { title: string; description?: string; action?: { label: string; onPress: () => void } }) => createElement("div", null, createElement("p", null, title), description ? createElement("p", null, description) : null, action ? createElement("button", { onClick: action.onPress }, action.label) : null), Notice: ({ message }: { message: string }) => createElement("p", null, message),
     Sheet: ({ children, title }: PropsWithChildren<{ title: string }>) => createElement("section", { "data-review": true }, createElement("h2", null, title), children),
     FormActions: ({ submitLabel, cancelLabel, onSubmit, onCancel, disabled, busy, feedback }: import("@/ui/component-props").FormActionsProps) => createElement("footer", null, feedback, createElement(Button, { label: submitLabel, onPress: onSubmit, disabled, busy }), onCancel ? createElement(Button, { label: cancelLabel ?? "Cancel", onPress: onCancel, disabled: busy }) : null),
     ScreenList: ({ data, header, renderItem }: { data: unknown[]; header: import("react").ReactNode; renderItem: (value: { item: unknown }) => import("react").ReactNode }) => createElement("div", null, header, ...data.map(item => renderItem({ item }))),

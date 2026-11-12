@@ -11,15 +11,15 @@ import {
   Button,
   Card,
   Disclosure,
-  Loading,
   NavigationGroup,
   NavigationRow,
   Screen,
   SegmentedControl,
   Section,
+  Skeleton,
 } from "../../ui/primitives";
 import { IconTile } from "../../ui/icon-tile";
-import { colors, space } from "../../ui/tokens";
+import { space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
 
 const ComponentGallery = lazy(() =>
@@ -32,7 +32,7 @@ const SampleChat = lazy(() =>
 type TourPage = "projects" | "session" | "controls";
 
 export function DemoScreen() {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const [page, setPage] = useState<TourPage>("projects");
   return (
@@ -95,12 +95,12 @@ export function DemoScreen() {
           </Section>
         </>
       ) : page === "session" ? (
-        <Suspense fallback={<Loading />}>
+        <Suspense fallback={<Skeleton variant="content" />}>
           <SampleChat scenario="tour" />
         </Suspense>
       ) : (
         <>
-          <Suspense fallback={<Loading />}>
+          <Suspense fallback={<Skeleton variant="content" />}>
             <ComponentGallery />
           </Suspense>
           <Section title={copy("Erişim senin kontrolünde", "You control access")}>

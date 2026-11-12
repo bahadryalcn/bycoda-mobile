@@ -7,15 +7,14 @@ vi.mock("expo-router", () => ({ router: navigation, Stack: { Screen: "stack-scre
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => ({ Body: "body", Button: "button", Card: "card", Empty: "empty", Screen: "screen" }));
 vi.mock("./legal-document", () => ({ isLegalDocument: () => false }));
+vi.mock("./legal-reader", () => ({ LegalReader: "legal-reader" }));
 beforeEach(() => vi.clearAllMocks());
 
 it.each([true, false])("recovers an unknown legal document (history: %s)", (history) => {
   navigation.canGoBack.mockReturnValue(history);
   const screen = LegalScreen() as ReactElement<{ children: ReactElement[] }>;
-  const button = screen.props.children.find((child) =>
-    (child.props as { label?: string }).label === "Go back",
-  ) as ReactElement<{ onPress: () => void }>;
-  button.props.onPress();
+  const empty = screen.props.children.find((child) => child.type === "empty") as ReactElement<{ action: { onPress: () => void } }>;
+  empty.props.action.onPress();
   if (history) { expect(navigation.back).toHaveBeenCalledOnce(); expect(navigation.replace).not.toHaveBeenCalled(); }
   else { expect(navigation.back).not.toHaveBeenCalled(); expect(navigation.replace).toHaveBeenCalledWith("/"); }
 });

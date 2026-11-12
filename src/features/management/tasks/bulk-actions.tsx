@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Body, Button, Disclosure, Loading, MultiSelectField, Row, Sheet } from "@/ui/primitives";
+import { ActionMenu, Body, Button, Disclosure, Loading, MultiSelectField, Row, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useHostMutation } from "@/state/queries";
@@ -129,11 +129,11 @@ export function TaskBulkActions({
     ) : null}
   </>;
   return <>
-    <Row style={{ justifyContent: "space-between" }}>
+    <Row style={{ justifyContent: "space-between", alignItems: "center" }}>
       {context}
       <Button label={copy("Toplu işlemler", "Bulk actions") + (selected.length ? ` · ${selected.length}` : "")}
         accessibilityLabel={copy("Toplu işlemler", "Bulk actions")}
-        tone="quiet" disabled={disabled} onPress={show} />
+        tone="secondary" disabled={disabled} onPress={show} />
     </Row>
     {!open ? feedback : null}
     <Sheet visible={open} title={copy("Toplu işlemler", "Bulk actions")} size="full"
@@ -162,15 +162,23 @@ export function TaskBulkActions({
         />
       </Row>
       <Row>
-        {(["start", "stop", "retry", "delete"] as const).map((operation) => (
-          <Button
-            key={operation}
-            label={labels[operation]}
-            tone={operation === "delete" ? "danger" : "quiet"}
-            disabled={busy || disabled || !selected.length}
-            onPress={() => request(operation)}
-          />
-        ))}
+        <Button
+          label={labels.start}
+          tone="primary"
+          style={{ flex: 1 }}
+          disabled={busy || disabled || !selected.length}
+          onPress={() => request("start")}
+        />
+        <ActionMenu
+          label={copy("Diğer işlemler", "More actions")}
+          actions={(["stop", "retry", "delete"] as const).map((operation) => ({
+            key: operation,
+            label: labels[operation],
+            destructive: operation === "delete",
+            disabled: busy || disabled || !selected.length,
+            onPress: () => request(operation),
+          }))}
+        />
       </Row>
       {open ? feedback : null}
     </Sheet>

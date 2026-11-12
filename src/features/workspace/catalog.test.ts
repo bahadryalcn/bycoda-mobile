@@ -38,8 +38,9 @@ describe("host model selection", () => {
     expect(catalogProviders(undefined, undefined)).toEqual([]);
   });
 
-  it("respects a populated descriptor instead of offering unrelated provider models", () => {
-    expect(catalogProviders(["claude", "claude"], catalog)).toEqual(["claude"]);
+  it("adds providers the live catalog reports to a stale descriptor", () => {
+    expect(catalogProviders(["claude", "claude", "codex"], catalog)).toEqual(["claude", "codex", "cursor"]);
+    expect(catalogProviders(["claude", "codex"], { models: { grok: [], opencode: [] }, errors: {}, pending: ["gemini" as never] })).toEqual(["claude", "codex", "grok", "opencode"]);
   });
 
   it("falls back from a removed model and carries provider-supplied defaults", () => {
@@ -124,5 +125,18 @@ describe("immediate session configuration", () => {
     expect(explicit.models.codex![0].settings).toEqual([]);
     const unknown = sessionCatalog({ models: { codex: [{ ...missing, id: "custom", nativeId: "custom" }] }, errors: {} }, ["codex"]);
     expect(unknown.models.codex![0].settings).toBeUndefined();
+  });
+});
+
+describe("reserved delegation keys", () => {
+  const model = sessionModel(catalog, "codex", "current");
+  const chosen = { effort: "high", crossAdvisor: "", crossSubagents: '[{"harness":"claude","model":"sonnet"}]', imageModels: '["codex"]', stray: "x" };
+  it("keeps the owner's advisor, subagents and image models when session settings are rebuilt", () => {
+    const next = sessionSettings(model, chosen);
+    expect(next).toMatchObject({ crossAdvisor: "", crossSubagents: chosen.crossSubagents, imageModels: chosen.imageModels });
+    expect(next).not.toHaveProperty("stray");
+  });
+  it("lets an explicit choice win over the value derived for a new session", () => {
+    expect(creationSettings(model, chosen, "codex")).toMatchObject({ crossSubagents: chosen.crossSubagents, imageModels: chosen.imageModels });
   });
 });

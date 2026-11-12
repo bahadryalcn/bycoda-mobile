@@ -1,23 +1,31 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { BackHandler } from "react-native";
-import { useFocusEffect } from "expo-router";
+import ArrowLeft from "lucide-react-native/icons/arrow-left";
+import ArrowDownToLine from "lucide-react-native/icons/arrow-down-to-line";
+import Info from "lucide-react-native/icons/info";
+import Plus from "lucide-react-native/icons/plus";
+import RefreshCw from "lucide-react-native/icons/refresh-cw";
+import Trash2 from "lucide-react-native/icons/trash-2";
+import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useIsFocused } from "expo-router/react-navigation";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { ActionMenu, Body, Button, Field, FormActions, MutationState, NavigationRow, Notice, QueryState, Row, ScreenList, SelectField, Sheet } from "@/ui/primitives";
+import { useMobileTheme } from "@/ui/theme";
+import { ActionMenu, Body, Field, IconButton, FormActions, MutationState, NavigationRow, Notice, QueryState, Row, ScreenList, SelectField, Sheet } from "@/ui/primitives";
 import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import { confirmAction } from "@/ui/confirm";
 import { readStashes, stashRequest, uncertainStashWrite, type GitStash, type StashMode, type StashOperation } from "./git-stash-model";
 import { GitStashIdentity, GitStashReview, type StashReviewOperation } from "./git-stash-review";
 import type { GitScope } from "./git-types";
+import { FeatureUnavailable, RecordAccessUnavailable } from "./unavailable-state";
 
 export function GitStashes({ scope, onClose, onBusyChange, registerExit }: {
   scope: GitScope; onClose: () => void; onBusyChange: (busy: boolean) => void;
   registerExit: (exit: (() => void) | null) => void;
 }) {
-  const copy = useCopy(), machine = useActiveMachine(), connection = useConnectionScope();
+  const { colors } = useMobileTheme(), copy = useCopy(), machine = useActiveMachine(), connection = useConnectionScope();
   const [opening] = useState(() => ({ machineId: machine?.id, machineName: machine?.name ?? "", scope: { ...scope }, connection }));
   const access = usePrivateContentAccess(), accessNow = useRef(access); accessNow.current = access;
   const mounted = useRef(false), occupied = useRef(false);
@@ -82,7 +90,8 @@ export function GitStashes({ scope, onClose, onBusyChange, registerExit }: {
     } else onClose();
   }, [draft, onClose, copy, readable, readLease]);
   useEffect(() => { registerExit(close); return () => registerExit(null); }, [close, registerExit]);
-  useFocusEffect(useCallback(() => { const subscription = BackHandler.addEventListener("hardwareBackPress", () => { close(); return true; }); return () => subscription.remove(); }, [close]));
+  const focused = useIsFocused();
+  useBackHandler(focused, close);
   const openReview = (operation: StashReviewOperation) => {
     if (!current() || latest.current.unavailable || occupied.current || !reviewLease.active || reviewOwner.current) return;
     if (operation.kind === "clear" ? !latest.current.clear || operation.stashes !== latest.current.data : !targetCurrent(operation.stash) || selectedNow.current !== operation.stash) return;
@@ -106,20 +115,20 @@ export function GitStashes({ scope, onClose, onBusyChange, registerExit }: {
     <ScreenList title={copy("Stash’ler", "Stashes")} subtitle={readable ? opening.machineName : undefined}
       context={readable ? <Body muted>{opening.scope.root?.split(/[\\/]/).filter(Boolean).at(-1)}</Body> : null}
       actions={<Row>
-        <Button label={copy("Stash oluştur", "Create stash")} disabled={unavailable} onPress={() => { if (current() && !latest.current.unavailable && !occupied.current) setCreating(true); }} />
+        <IconButton label={copy("Stash oluştur", "Create stash")} disabled={unavailable} onPress={() => { if (current() && !latest.current.unavailable && !occupied.current) setCreating(true); }}><Plus size={20} color={colors.accent} /></IconButton>
         <ActionMenu label={copy("Stash işlemleri", "Stash actions")} actions={[
-          { key: "back", label: copy("Geri", "Back"), disabled: mutation.isPending, onPress: close },
-          { key: "refresh", label: copy("Yenile", "Refresh"), disabled: !inScope || query.isEnabled === false || query.isFetching, onPress: () => { void refresh(); } },
-          readable && { key: "details", label: copy("Ayrıntılar", "Details"), onPress: () => { if (current()) setDetails(true); } },
-          { key: "clear", label: copy("Tüm stash’leri sil", "Delete all stashes"), destructive: true,
+          { key: "back", icon: <ArrowLeft size={18} color={colors.muted} />, label: copy("Geri", "Back"), disabled: mutation.isPending, onPress: close },
+          { key: "refresh", icon: <RefreshCw size={18} color={colors.muted} />, label: copy("Yenile", "Refresh"), disabled: !inScope || query.isEnabled === false || query.isFetching, onPress: () => { void refresh(); } },
+          readable && { key: "details", icon: <Info size={18} color={colors.muted} />, label: copy("Ayrıntılar", "Details"), onPress: () => { if (current()) setDetails(true); } },
+          { key: "clear", icon: <Trash2 size={18} color={colors.danger} />, label: copy("Tüm stash’leri sil", "Delete all stashes"), destructive: true,
             disabled: unavailable || !rows.length || !latest.current.clear, onPress: () => { if (data) openReview({ kind: "clear", stashes: data }); } },
         ]} />
       </Row>}
       data={rows} keyExtractor={item => `${item.sha}:${item.index}`} query={{ ...query, data }} refresh={refresh}
       header={<>
-        {!scopeCurrent ? <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />
-          : !supported ? <Notice message={copy("Stash yönetimi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer to manage stashes.")} />
-          : !readable && !query.error ? <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />
+        {!scopeCurrent ? <RecordAccessUnavailable />
+          : !supported ? <FeatureUnavailable message={copy("Stash yönetimi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer to manage stashes.")} />
+          : !readable && !query.error ? <RecordAccessUnavailable />
           : <QueryState query={{ ...query, data }} empty={readable && query.isSuccess && data?.length === 0} emptyTitle={copy("Kaydedilmiş stash yok.", "No saved stashes.")} />}
         <MutationState mutation={mutation} />
         {uncertain ? <Notice tone="warning" message={copy("İşlem sonucu belirsiz. Yeniden denemeden önce bu bilgisayardaki değişiklikleri ve stash listesini incele.", "The result is uncertain. Review this computer’s changes and stash list before trying again.")} /> : null}
@@ -132,8 +141,8 @@ export function GitStashes({ scope, onClose, onBusyChange, registerExit }: {
       onClose={() => { if (!occupied.current && selectedNow.current === selected) { cancelReview(); setSelected(null); } }}>
       {selectionAvailable && selected ? <>
         <CollectionToolbar field={<Body selectable>{opening.machineName}</Body>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
-          { key: "pop", label: copy("Uygula ve kaldır", "Apply and remove"), disabled: unavailable, onPress: () => openReview({ kind: "pop", stash: selected }) },
-          { key: "drop", label: copy("Stash’i sil", "Delete stash"), destructive: true, disabled: unavailable, onPress: () => openReview({ kind: "drop", stash: selected }) },
+          { key: "pop", icon: <ArrowDownToLine size={18} color={colors.muted} />, label: copy("Uygula ve kaldır", "Apply and remove"), disabled: unavailable, onPress: () => openReview({ kind: "pop", stash: selected }) },
+          { key: "drop", icon: <Trash2 size={18} color={colors.danger} />, label: copy("Stash’i sil", "Delete stash"), destructive: true, disabled: unavailable, onPress: () => openReview({ kind: "drop", stash: selected }) },
         ]} />} />
         <Body mono selectable>{opening.scope.root}</Body><GitStashIdentity stash={selected} />
         <FormActions submitLabel={copy("Uygula", "Apply")} disabled={unavailable} busy={mutation.isPending} onSubmit={() => openReview({ kind: "apply", stash: selected })}
@@ -141,7 +150,7 @@ export function GitStashes({ scope, onClose, onBusyChange, registerExit }: {
       </> : null}
     </Sheet>
     <Sheet visible={creating && readable} size="form" title={copy("Stash oluştur", "Create stash")}
-      dismissible={!mutation.isPending} onClose={() => { if (!occupied.current && draftNow.current === draft) setCreating(false); }}>
+      dismissible={!mutation.isPending} dirty={draft.message !== "" || draft.mode !== "untracked"} onClose={() => { if (!occupied.current && draftNow.current === draft) setCreating(false); }}>
       {readable ? <>
       {context}
       <Field label={copy("Açıklama (isteğe bağlı)", "Description (optional)")} value={draft.message} maxLength={1000} multiline editable={!mutation.isPending} onChangeText={message => updateDraft({ message })} />

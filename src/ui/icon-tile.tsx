@@ -1,7 +1,6 @@
 import { useMobileTheme } from "./theme";
 import { View } from "react-native";
 import type { ReactNode } from "react";
-import { colors } from "./tokens";
 
 /** A neutral icon well; semantic meaning belongs to its glyph and label. */
 export function IconTile({
@@ -13,7 +12,7 @@ export function IconTile({
   color?: string;
   size?: number;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   return (
     <View
       accessible={false}

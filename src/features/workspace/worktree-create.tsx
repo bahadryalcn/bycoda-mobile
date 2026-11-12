@@ -9,6 +9,7 @@ import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/priv
 import type { HostBranches, HostWorktree, HostWorktrees } from "@/remote/types";
 import { availableWorktreeBranches, readCreatedWorktree, unknownWorktreeResult, worktreeCreateRequest, type WorktreeCreateDraft, type WorktreeCreateScope } from "./worktree-create-model";
 import { WorktreeCreateReview } from "./worktree-create-review";
+import { FeatureUnavailable } from "./unavailable-state";
 
 /** Hidden owners retain drafts and accepted results; hidden UI cannot authorize another action. */
 export function WorktreeCreate({ scope, visible, blocked, beforeChange, onSelect, onClose }: {
@@ -99,10 +100,10 @@ export function WorktreeCreate({ scope, visible, blocked, beforeChange, onSelect
         : copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.");
   const initialUnavailable = !available && !busy && !draft.branch && draft.base === "HEAD" && !draft.existing && !created && !uncertain && !error && !submitted.current;
   if (initialUnavailable) return <Sheet visible={visible} title={copy("Worktree oluştur", "Create worktree")} size="compact" onClose={close}>
-    <Notice message={unavailableMessage} /><Button tone="quiet" label={copy("Kapat", "Close")} onPress={close} />
+    <FeatureUnavailable message={unavailableMessage} /><Button tone="quiet" label={copy("Kapat", "Close")} onPress={close} />
   </Sheet>;
   const feedback = <>{!uncertain ? <ErrorText error={error} /> : <Notice tone="warning" message={copy("Oluşturma sonucu belirsiz. Tekrar göndermeden çalışma klasörlerini yenileyip bilgisayarda kontrol et.", "The create result is uncertain. Refresh working folders and check the computer before sending again.")} />}</>;
-  return <><Sheet visible={visible} title={copy("Worktree oluştur", "Create worktree")} size="form" dismissible={!busy} onClose={close}>
+  return <><Sheet visible={visible} title={copy("Worktree oluştur", "Create worktree")} size="form" dismissible={!busy} dirty={draft.branch !== "" || draft.existing || draft.base !== "HEAD"} onClose={close}>
     {readable ? <>
       <CollectionToolbar field={<Body selectable>{opening.machineName}</Body>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
         { key: "refresh", label: copy("Çalışma klasörlerini yenile", "Refresh working folders"), disabled: busy || !enabled, onPress: refresh },
@@ -125,7 +126,7 @@ export function WorktreeCreate({ scope, visible, blocked, beforeChange, onSelect
       </>}
       <Disclosure label={copy("Ayrıntılar", "Details")}>{trees.data?.defaultRoot ? <Body muted mono selectable>{trees.data.defaultRoot}</Body> : null}{uncertain ? <ErrorText error={error} /> : null}</Disclosure>
     </> : <>
-      {privateFailureQuery ? <QueryState query={{ ...privateFailureQuery, data: undefined, refetch: refresh }} /> : <Notice message={unavailableMessage} />}
+      {privateFailureQuery ? <QueryState query={{ ...privateFailureQuery, data: undefined, refetch: refresh }} /> : <FeatureUnavailable message={unavailableMessage} />}
       <FormActions submitLabel={copy("Çalışma klasörlerini yenile", "Refresh working folders")} disabled={!available || !enabled || busy} onSubmit={refresh} onCancel={close} cancelLabel={copy("Kapat", "Close")} />
     </>}
   </Sheet>

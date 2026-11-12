@@ -2,7 +2,6 @@ import { View } from "react-native";
 import { Input } from "./fields";
 import { Button } from "./buttons";
 import { Body } from "./typography";
-import { uiStyles } from "./styles";
 import { space } from "./tokens";
 import { useMobileTheme } from "./theme";
 import type { InputProps } from "./component-props";
@@ -14,7 +13,7 @@ export function ActionField({ actionLabel, onAction, actionDisabled, actionBusy,
   actionDisabled?: boolean;
   actionBusy?: boolean;
 }) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   return <View style={uiStyles.field}>
     <Body style={uiStyles.fieldLabel}>{input.label}</Body>
     <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }}>

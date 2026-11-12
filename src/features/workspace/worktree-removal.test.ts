@@ -20,7 +20,7 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/confirm", () => ({ confirmAction: (_a: string, _b: string, _c: string, done: () => void) => { f.confirmation = done; } }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Sheet: wrapper, Stack:wrapper,Disclosure:wrapper,Body: wrapper, Notice: ({ message }: { message: string }) => createElement("div", null, message), ErrorText: ({error}:any) => error?createElement("p",null,error.message):null, QueryState: () => null,
+  return { Sheet: wrapper, Stack:wrapper,Disclosure:wrapper,Body: wrapper, Notice: ({ message }: { message: string }) => createElement("div", null, message), StateView: ({ title }: { title: string }) => createElement("div", null, title), ErrorText: ({error}:any) => error?createElement("p",null,error.message):null, QueryState: () => null,
     ScreenList:({data,header,renderItem}:any)=>createElement("section",null,header,...data.map((item:any,index:number)=>createElement("div",{key:index},renderItem({item})))),
     ActionMenu:({actions}:any)=>createElement("nav",null,...actions.filter(Boolean).map((action:any)=>{f.commands.set(action.label,action.onPress);return createElement("button",{key:action.key,disabled:action.disabled,onClick:action.onPress},action.label);})),
     FormActions:({submitLabel,disabled,onSubmit,onCancel,cancelLabel,feedback}:any)=>{f.commands.set(submitLabel,onSubmit);return createElement("footer",null,feedback,createElement("button",{disabled,onClick:onSubmit},submitLabel),onCancel?createElement("button",{onClick:onCancel},cancelLabel):null);},

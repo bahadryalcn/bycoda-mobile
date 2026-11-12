@@ -11,7 +11,7 @@ import {
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { useProjectRefresh, workspaceStyles } from "./shared";
+import { useProjectRefresh } from "./shared";
 
 function joinHostPath(root: string, path: string) {
   return `${root.replace(/\\/g, "/").replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
@@ -25,7 +25,7 @@ export function FileActions({
   onCompleted,
   action,
 }: FileActionsProps) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const form = useFormDraft<FileActionDraft>({
     operation: "rename_path",
@@ -46,7 +46,7 @@ export function FileActions({
         if (!action.isPending) onClose();
       }}
     >
-      <View style={workspaceStyles.stack}>
+      <View style={uiStyles.stack}>
         <Body mono muted selectable>
           {path}
         </Body>

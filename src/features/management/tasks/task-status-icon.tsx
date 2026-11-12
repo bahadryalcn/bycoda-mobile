@@ -1,4 +1,3 @@
-import { colors } from "@/ui/tokens";
 import { decorativeSvgProps } from "@/ui/accessibility";
 import Circle from "lucide-react-native/icons/circle";
 import Clock from "lucide-react-native/icons/clock-3";
@@ -9,9 +8,11 @@ import Check from "lucide-react-native/icons/circle-check";
 import Cancel from "lucide-react-native/icons/circle-x";
 import Pause from "lucide-react-native/icons/pause";
 import Help from "lucide-react-native/icons/circle-question-mark";
+import { useMobileTheme } from "@/ui/theme";
 
 /** Meaning is announced by the task identity; long press reveals its full label. */
 export function TaskStatusIcon({ value }: { value: string }) {
+  const { colors } = useMobileTheme();
   const Icon = ({ todo: Circle, queued: Clock, running: Play, verifying: Eye, review: Eye,
     blocked: Alert, failed: Alert, done: Check, succeeded: Check, completed: Check,
     finished: Check, cancelled: Cancel, paused: Pause } as Record<string, typeof Circle>)[value] ?? Help;

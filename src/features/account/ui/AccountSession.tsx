@@ -1,0 +1,95 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { AccountApiError, type Device } from "../contracts";
+import { createAccountRuntime } from "../model/account-runtime";
+import { accountConfig } from "../model/config";
+import { deviceRegistration } from "../model/device-registration";
+import { readDeviceInfo } from "../model/device-info";
+import { secureDeviceIdStore, securePushMarkStore } from "../model/device-store";
+import { useAccountPushSync } from "../model/push-account";
+import { useAccountPushReads } from "../model/push-read";
+import { AccountContext, type AccountAuth, type AccountState } from "./account-context";
+
+/**
+ * Turns a sign-in provider into the app-wide account state: builds the API client (device header,
+ * revoked-device handling), registers this phone after sign-in and signs out cleanly.
+ */
+export function AccountSession({
+  auth,
+  fetchImpl,
+  mockSignIn,
+  children,
+}: PropsWithChildren<{ auth: AccountAuth; fetchImpl?: typeof fetch; mockSignIn?: () => void }>) {
+  const queries = useQueryClient();
+  const authRef = useRef(auth);
+  authRef.current = auth;
+  const [device, setDevice] = useState<Device | null>(null);
+  const [registerError, setRegisterError] = useState<Error | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  const runtime = useMemo(
+    () =>
+      createAccountRuntime({
+        baseUrl: accountConfig.apiUrl,
+        getToken: () => authRef.current.getToken(),
+        fetch: fetchImpl ?? ((input, init) => fetch(input, init)),
+        store: secureDeviceIdStore,
+        // Local data, drafts and pairings stay; only the account session ends.
+        onDeviceRevoked: async () => {
+          setDevice(null);
+          await securePushMarkStore.clear().catch(() => undefined);
+          queries.removeQueries({ queryKey: ["account"] });
+          await authRef.current.signOut().catch(() => undefined);
+        },
+      }),
+    [fetchImpl, queries],
+  );
+
+  useEffect(() => {
+    if (!auth.loaded || !auth.signedIn) {
+      setDevice(null);
+      return;
+    }
+    let cancelled = false;
+    setRegisterError(null);
+    runtime
+      .registerDevice((id) => deviceRegistration(readDeviceInfo(), id))
+      .then((registered) => {
+        if (!cancelled) setDevice(registered);
+      })
+      .catch((error: unknown) => {
+        // device_revoked already signed this phone out inside the runtime.
+        if (cancelled || (error instanceof AccountApiError && error.code === "device_revoked")) return;
+        setRegisterError(error instanceof Error ? error : new Error(String(error)));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.loaded, auth.signedIn, runtime, attempt]);
+
+  useAccountPushSync(auth.signedIn ? runtime : null, device);
+  useAccountPushReads(auth.signedIn ? runtime : null, device);
+
+  const signOut = useCallback(async () => {
+    await runtime.releaseDevice();
+    await securePushMarkStore.clear().catch(() => undefined);
+    setDevice(null);
+    queries.removeQueries({ queryKey: ["account"] });
+    await authRef.current.signOut();
+  }, [runtime, queries]);
+
+  const value = useMemo<AccountState>(
+    () => ({
+      status: !auth.loaded ? "loading" : auth.signedIn ? "signedIn" : "signedOut",
+      config: accountConfig,
+      runtime,
+      device,
+      registerError,
+      retryRegistration: () => setAttempt((count) => count + 1),
+      signOut,
+      mockSignIn,
+    }),
+    [auth.loaded, auth.signedIn, runtime, device, registerError, signOut, mockSignIn],
+  );
+  return <AccountContext value={value}>{children}</AccountContext>;
+}

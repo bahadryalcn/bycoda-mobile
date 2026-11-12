@@ -27,7 +27,7 @@ export async function uploadAttachment(client: HostTransport, file: StagedAttach
       try {
         while (remaining > 0) {
           if (signal.aborted) throw new Error("Upload cancelled.");
-          const bytes = handle.readBytes(Math.min(192 * 1024, remaining));
+          const bytes = await handle.readBytes(Math.min(192 * 1024, remaining));
           if (!bytes.length) throw new Error("The selected file is incomplete.");
           digest.update(bytes);
           remaining -= bytes.length;
@@ -43,7 +43,7 @@ export async function uploadAttachment(client: HostTransport, file: StagedAttach
     do {
       if (signal.aborted) throw new Error("Upload cancelled.");
       handle.offset = offset;
-      const bytes = handle.readBytes(Math.min(192 * 1024, file.size - offset));
+      const bytes = await handle.readBytes(Math.min(192 * 1024, file.size - offset));
       const expected = offset + bytes.length;
       if (expected === offset && offset < file.size) throw new Error("The selected file is incomplete.");
       const acknowledgement = await client.request<{ offset: number }>("attachments.upload", { id: file.id, size: file.size, offset, data: bytesToBase64(bytes), ...ownership }, { signal });

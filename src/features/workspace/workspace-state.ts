@@ -1,6 +1,6 @@
 import type { FileEntry } from "./wire";
 
-export type WorkspaceSegment = "sessions" | "files" | "git";
+export type WorkspaceSegment = "sessions" | "files" | "git" | "preferences";
 export type ProjectView = {
   segment: WorkspaceSegment;
   cwd?: string;

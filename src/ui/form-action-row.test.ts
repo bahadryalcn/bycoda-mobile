@@ -13,6 +13,7 @@ vi.mock("react-native",()=>({
 }));
 vi.mock("./theme",()=>({useMobileTheme:()=>null}));
 vi.mock("./copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
+vi.mock("./unsaved-badge",()=>({UnsavedBadge:()=>createElement("i",null,"Unsaved changes")}));
 vi.mock("./buttons",()=>({Button:({label,onPress,busy,disabled}:any)=>createElement("button",{onClick:onPress,disabled:busy||disabled},label)}));
 import { FormActionRow } from "./form-action-row";
 import { FormActionScrollOwner } from "./form-action-context";
@@ -43,7 +44,7 @@ it("adds spacing only for rendered feedback and removes it when a fragment becom
  const host=mount({submitLabel:"Save",onSubmit:vi.fn(),feedback:createElement("span",{id:"feedback"},"Failure"),feedbackPlacement:"after",scrollFeedback:false});
  const region=()=>host.querySelector("#feedback")!.parentElement!.parentElement!;
  expect(region().style.marginTop).toBe("0px");
- act(()=>state.measure?.({nativeEvent:{layout:{height:22}}}));expect(region().style.marginTop).toBe("8px");
+ act(()=>state.measure?.({nativeEvent:{layout:{height:22}}}));expect(region().style.marginTop).toBe("6px");
  act(()=>state.measure?.({nativeEvent:{layout:{height:0}}}));expect(region().style.marginTop).toBe("0px");
 });
 
@@ -60,4 +61,10 @@ it("allows explicit read-only close while busy and retains an explicit cancel gu
  act(()=>buttons[1].click());expect(close).toHaveBeenCalledOnce();
  act(()=>root!.render(createElement(FormActionRow,{...props,cancelDisabled:true})));
  expect([...host.querySelectorAll("button")].every(button=>button.disabled)).toBe(true);
+});
+it("shows the unsaved pill above the actions only while dirty",()=>{
+ const props={submitLabel:"Save",onSubmit:vi.fn()};
+ const host=mount(props);expect(host.textContent).toBe("Save");
+ act(()=>root!.render(createElement(FormActionRow,{...props,dirty:true})));
+ expect(host.textContent).toBe("Unsaved changesSave");
 });

@@ -1,21 +1,26 @@
 import "../src/global.css";
 import { Stack } from "expo-router/stack";
-import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
+import { DarkTheme, DefaultTheme, ThemeProvider, router } from "expo-router";
 import { NavigationBar } from "expo-navigation-bar";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
+import { startDiagnostics } from "../src/features/diagnostics/diagnostics-runtime";
 import { AppProviders } from "../src/app-providers";
-import { colors, fontSize } from "../src/ui/tokens";
+import { fontSize } from "../src/ui/tokens";
 import { ScreenChromeProvider } from "../src/ui/layout";
+import { HeaderBackButton } from "../src/ui/header-back-button";
 import { useCopy } from "../src/ui/copy";
 import { useReducedMotionPreference } from "../src/ui/use-reduced-motion";
 import { useMobileTheme } from "../src/ui/theme";
 import { useEffect } from "react";
 
+// Module scope: capture starts before the first render so early warnings and crashes are kept.
+startDiagnostics();
+
 function RootNavigation() {
   const copy = useCopy();
   const reducedMotion = useReducedMotionPreference();
-  const { mode } = useMobileTheme();
+  const { mode, colors } = useMobileTheme();
   const baseTheme = mode === "dark" ? DarkTheme : DefaultTheme;
   const navigationTheme = {
     ...baseTheme,
@@ -39,6 +44,8 @@ function RootNavigation() {
               headerTintColor: colors.text,
               headerTitleStyle: { fontSize: fontSize.title, fontWeight: "600" },
               headerBackButtonDisplayMode: "minimal",
+              // One back presentation for every stack header; the native arrow is replaced, not mixed in.
+              headerLeft: ({ canGoBack }) => canGoBack ? <HeaderBackButton onPress={() => router.back()} /> : null,
               contentStyle: { backgroundColor: colors.background },
               headerShadowVisible: false,
             }}
@@ -48,8 +55,12 @@ function RootNavigation() {
               name="machines"
               options={{ title: copy("Bilgisayarlar", "Computers"), presentation: "card" }}
             />
+            <Stack.Screen name="account" options={{ title: copy("Hesap", "Account") }} />
+            <Stack.Screen name="account-notifications" options={{ title: copy("Bildirim ayarları", "Notification settings") }} />
             <Stack.Screen name="project/[id]" options={{ title: copy("Proje", "Project") }} />
-            <Stack.Screen name="session/[id]" options={{ title: copy("Oturum", "Session") }} />
+            {/* The chat screen draws its own compact 48dp header so the first frame never shifts. */}
+            <Stack.Screen name="session/[id]" options={{ title: copy("Oturum", "Session"), headerShown: false }} />
+            <Stack.Screen name="session-reference" options={{ title: copy("Oturum", "Session") }} />
             <Stack.Screen
               name="sessions"
               options={{ title: copy("Oturumlar", "Sessions") }}
@@ -72,7 +83,7 @@ function RootNavigation() {
 }
 
 export default function RootLayout() {
-  const { mode } = useMobileTheme();
+  const { mode, colors } = useMobileTheme();
   const barStyle = mode === "dark" ? "light" : "dark";
   const background = colors.background;
   useEffect(() => {

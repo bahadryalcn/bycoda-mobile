@@ -1,115 +1,121 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useState } from "react";
-import { ScrollView, View, useWindowDimensions } from "react-native";
-import { Body, Button, CodeText } from "@/ui/primitives";
+import { useCallback, useState } from "react";
+import { FlatList, ScrollView, View, useWindowDimensions } from "react-native";
+import { CodeText } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { colors, space, fontSize, radii, semanticColors } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { space, fontSize, lineHeight, radii } from "@/ui/tokens";
 import type { DiffLine } from "./wire-types";
 
-/** A bounded two-axis diff viewport keeps file actions reachable on a phone. */
+/** Monospace advance as a fraction of font size; sizes the shared horizontal scroll width. */
+const MONO_ADVANCE = 0.62;
+const MARKER = { add: "+ ", remove: "− ", context: "  " } as const;
+
+/**
+ * One horizontal scroll owner wraps a virtualized vertical list, so wide lines scroll together
+ * and long diffs only mount the visible rows.
+ */
 export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
-  useMobileTheme();
+  const { colors, semanticColors } = useMobileTheme();
   const copy = useCopy();
   const { height } = useWindowDimensions();
-  const [limit, setLimit] = useState(200);
-  const visible = lines.slice(0, limit);
-  const remaining = lines.length - visible.length;
-  // Equal-width padded labels keep columns aligned while allowing large text
-  // and long line numbers to grow inside the horizontal viewport.
-  const digits = lines.reduce((width, line) => Math.max(width, String(line.oldLine ?? "").length, String(line.newLine ?? "").length), 1);
+  const [viewport, setViewport] = useState(0);
+  const digits = lines.reduce(
+    (width, line) => Math.max(width, String(line.oldLine ?? "").length, String(line.newLine ?? "").length),
+    1,
+  );
+  const longest = lines.reduce((width, line) => Math.max(width, line.text.length), 0);
+  const numberWidth = Math.ceil(digits * fontSize.micro * MONO_ADVANCE) + space.sm * 2;
+  const textWidth = Math.ceil((longest + 2) * fontSize.caption * MONO_ADVANCE) + space.md;
+  const contentWidth = Math.max(viewport, numberWidth * 2 + textWidth);
+  const boxHeight = Math.min(
+    lines.length * lineHeight.heading + space.xs * 2,
+    Math.max(160, Math.min(360, height * 0.42)),
+  );
   const numberLabel = (value: number | undefined) => String(value ?? "").padStart(digits, " ");
-  return (
-    <View style={{ gap: space.sm, minWidth: 0 }}>
-      <ScrollView
-        nestedScrollEnabled
-        keyboardShouldPersistTaps="handled"
-        accessibilityLabel={copy("Dosya farkı", "File diff")}
+  const renderItem = useCallback(
+    ({ item }: { item: DiffLine }) => (
+      <View
         style={{
-          maxHeight: Math.max(160, Math.min(360, height * 0.42)),
-          borderRadius: radii.control,
-          backgroundColor: colors.fill,
+          flexDirection: "row",
+          height: lineHeight.heading,
+          backgroundColor:
+            item.kind === "add"
+              ? semanticColors.success.surface
+              : item.kind === "remove"
+                ? semanticColors.danger.surface
+                : item.kind === "context"
+                  ? colors.raised
+                  : colors.panel,
         }}
       >
-        <ScrollView horizontal nestedScrollEnabled contentContainerStyle={{ flexGrow: 1 }}>
-          <View style={{ flexGrow: 1, paddingVertical: space.xs }}>
-            {visible.map((line, position) => (
-              <View
-                key={position}
-                style={{
-                  flexDirection: "row",
-                  minHeight: 24,
-                  backgroundColor:
-                    line.kind === "add"
-                      ? semanticColors.success.surface
-                      : line.kind === "remove"
-                        ? semanticColors.danger.surface
-                        : line.kind === "context"
-                          ? colors.raised
-                          : colors.panel,
-                }}
-              >
-                <CodeText
-                  selectable={false}
-                  style={{
-                    minWidth: 42,
-                    flexShrink: 0,
-                    textAlign: "right",
-                    paddingEnd: space.sm,
-                    fontSize: fontSize.micro,
-                    lineHeight: 24,
-                    color: colors.subtle,
-                  }}
-                >
-                  {numberLabel(line.oldLine)}
-                </CodeText>
-                <CodeText
-                  selectable={false}
-                  style={{
-                    minWidth: 42,
-                    flexShrink: 0,
-                    textAlign: "right",
-                    paddingEnd: space.sm,
-                    fontSize: fontSize.micro,
-                    lineHeight: 24,
-                    color: colors.subtle,
-                  }}
-                >
-                  {numberLabel(line.newLine)}
-                </CodeText>
-                <CodeText
-                  style={{
-                    fontSize: fontSize.caption,
-                    lineHeight: 24,
-                    paddingEnd: space.md,
-                    color: line.kind === "context" ? colors.muted : colors.text,
-                  }}
-                >
-                  {`${line.kind === "add" ? "+ " : line.kind === "remove" ? "− " : "  "}${line.text}`}
-                </CodeText>
-              </View>
-            ))}
-          </View>
-        </ScrollView>
+        {[item.oldLine, item.newLine].map((value, column) => (
+          <CodeText
+            key={column}
+            selectable={false}
+            style={{
+              width: numberWidth,
+              textAlign: "right",
+              paddingEnd: space.sm,
+              fontSize: fontSize.micro,
+              lineHeight: lineHeight.heading,
+              color: colors.subtle,
+            }}
+          >
+            {numberLabel(value)}
+          </CodeText>
+        ))}
+        <CodeText
+          numberOfLines={1}
+          style={{
+            fontSize: fontSize.caption,
+            lineHeight: lineHeight.heading,
+            paddingEnd: space.md,
+            color:
+              item.kind === "add"
+                ? semanticColors.success.text
+                : item.kind === "remove"
+                  ? semanticColors.danger.text
+                  : item.kind === "context"
+                    ? colors.muted
+                    : colors.text,
+          }}
+        >
+          {`${MARKER[item.kind as keyof typeof MARKER] ?? MARKER.context}${item.text}`}
+        </CodeText>
+      </View>
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- numberLabel closes over digits only
+    [colors, semanticColors, numberWidth, digits],
+  );
+  return (
+    <View
+      accessibilityLabel={copy("Dosya farkı", "File diff")}
+      onLayout={(event) => setViewport(event.nativeEvent.layout.width)}
+      style={{
+        minWidth: 0,
+        height: boxHeight,
+        borderRadius: radii.control,
+        backgroundColor: colors.fill,
+        overflow: "hidden",
+      }}
+    >
+      <ScrollView horizontal nestedScrollEnabled style={{ height: boxHeight }}>
+        <FlatList
+          data={lines}
+          renderItem={renderItem}
+          keyExtractor={(_, position) => String(position)}
+          nestedScrollEnabled
+          style={{ width: contentWidth, height: boxHeight }}
+          contentContainerStyle={{ paddingVertical: space.xs }}
+          getItemLayout={(_, position) => ({
+            length: lineHeight.heading,
+            offset: lineHeight.heading * position,
+            index: position,
+          })}
+          initialNumToRender={40}
+          windowSize={7}
+        />
       </ScrollView>
-      {remaining > 0 ? (
-        <>
-          <Body muted style={uiStyles.caption}>
-            {copy("{p0} / {p1} diff satırı", "{p0} / {p1} diff lines", {
-              p0: visible.length,
-              p1: lines.length,
-            })}
-          </Body>
-          <Button
-            density="compact"
-            label={copy("Sonraki {p0} satırı göster", "Show next {p0} lines", {
-              p0: Math.min(200, remaining),
-            })}
-            onPress={() => setLimit((current) => current + 200)}
-            style={{ alignSelf: "flex-start" }}
-          />
-        </>
-      ) : null}
     </View>
   );
 }

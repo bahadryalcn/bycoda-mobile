@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
-import { Body, Button, FormActions, NavigationRow, Notice, QueryState, Sheet, Stack, type QueryLike } from "@/ui/primitives";
+import { Body, Button, FormActions, NavigationRow, QueryState, Sheet, Stack, type QueryLike } from "@/ui/primitives";
 import { HtmlDocument } from "@/ui/html-document";
 import { CodeSource } from "@/ui/code-source";
 import { ReaderActions } from "@/ui/reader-actions";
@@ -11,6 +11,7 @@ import { useChatAppearance } from "@/state/chat-appearance";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
 import type { HtmlArtifact, HtmlArtifactSummary } from "@/remote/types";
+import { RecordAccessUnavailable } from "./unavailable-state";
 
 /** One full reader: bounded source pages copy the complete original HTML. */
 export function ArtifactReader({ artifact, summary, machineName, query, unavailable, onBack }: {
@@ -29,7 +30,7 @@ export function ArtifactReader({ artifact, summary, machineName, query, unavaila
   const back = () => { if (current()) onBack(); };
   const page = (next: number) => { if (current() && artifact && mode === "source" && Number.isInteger(next) && next >= 0 && next < pagination.pages) pagination.setPage(next); };
   const feedback = <QueryState query={query} />;
-  const missing = unavailable ? <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} /> : null;
+  const missing = unavailable ? <RecordAccessUnavailable /> : null;
   return <Sheet visible title={mode === "details" ? copy("Ayrıntılar", "Details") : copy("HTML önizleme", "HTML preview")} size="full" scroll={false} onClose={back}
     footer={artifact ? mode === "source" ? <ReaderActions page={pagination.page} pages={pagination.pages} onPage={page}
       copyLabel={clipboard.copied ? copy("Kopyalandı", "Copied") : copy("Kopyala", "Copy")} onCopy={clipboard.copy} busy={clipboard.busy} error={clipboard.error}>

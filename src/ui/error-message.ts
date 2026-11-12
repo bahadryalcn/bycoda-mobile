@@ -18,7 +18,7 @@ function remoteMessage(error: RemoteHostError, copy: ErrorCopy): string {
         ? copy("Bilgisayara ulaşılamadı.", "The computer could not be reached.")
         : copy(
             "Bilgisayara ulaşılamadı. Bağlantıyı kontrol edip yeniden dene.",
-            "The computer could not be reached. Check the connection and retry.",
+            "The computer could not be reached. Check that it is on and bycoda is running, and that Wi-Fi or Tailscale is connected on both devices, then retry.",
           );
     case "timeout":
       return copy(
@@ -73,8 +73,18 @@ function remoteMessage(error: RemoteHostError, copy: ErrorCopy): string {
       return error.message;
     // Preserve detailed host validation/protocol errors, including status and field details.
     default:
-      return error.message;
+      return looksLikeSchemaError(error.message)
+        ? copy(
+            "Bilgisayardan gelen veri anlaşılamadı. Bycoda'yı bilgisayarda ve telefonda güncelle.",
+            "The computer sent data this app could not read. Update Bycoda on both devices.",
+          )
+        : error.message;
   }
+}
+
+/** Zod issue dumps (`[{"code":"unrecognized_keys",...}]`) are never user-facing. */
+function looksLikeSchemaError(message: string): boolean {
+  return /^\s*\[\s*\{\s*"(code|expected|origin)"/.test(message) && /"path"\s*:/.test(message);
 }
 
 /** Only exact transport-owned messages are translated; Host details pass through. */
@@ -119,7 +129,12 @@ export function errorMessage(error: unknown, copy: ErrorCopy, override?: string)
       : error instanceof RemoteHostError
         ? remoteMessage(error, copy) || fallback()
         : error instanceof Error
-          ? error.message || fallback()
+          ? looksLikeSchemaError(error.message)
+            ? copy(
+                "Bilgisayardan gelen veri anlaşılamadı. Bycoda'yı bilgisayarda ve telefonda güncelle.",
+                "The computer sent data this app could not read. Update Bycoda on both devices.",
+              )
+            : error.message || fallback()
           : typeof error === "string" && error
             ? error
             : fallback());
@@ -129,4 +144,14 @@ export function errorMessage(error: unknown, copy: ErrorCopy, override?: string)
     "The action may have been applied. Check the result before trying again.",
   );
   return text.includes(caution) ? text : `${text}\n\n${caution}`;
+}
+
+/** Provider CLI failures shown in the transcript: calm wording instead of raw command hints. */
+export function friendlyProviderFailure(text: string, copy: ErrorCopy): string {
+  if (/is archived/i.test(text) && /unarchive/i.test(text))
+    return copy(
+      "Bu oturum sağlayıcıda arşivlenmiş. Devam etmek için masaüstünde arşivden çıkar, sonra yeniden gönder.",
+      "This session is archived with the provider. Unarchive it on your computer, then send again.",
+    );
+  return text;
 }

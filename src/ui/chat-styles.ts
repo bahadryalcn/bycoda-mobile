@@ -1,4 +1,4 @@
-import { createThemedStyles } from "./themed-styles";
+import { createThemedStyles, useThemedStyles } from "./themed-styles";
 import { colors, monoFont } from "./tokens";
 import type { ChatTextSize } from "@/state/chat-appearance-model";
 
@@ -8,18 +8,18 @@ const sizes = {
     user: 14,
     line: 19,
     userLine: 20,
-    code: 12,
-    codeLine: 18,
+    code: 11,
+    codeLine: 17,
     heading: 16,
     headingLine: 22,
   },
   standard: {
     assistant: 15,
-    user: 16,
+    user: 15,
     line: 22,
-    userLine: 23,
-    code: 13,
-    codeLine: 20,
+    userLine: 22,
+    code: 12,
+    codeLine: 18,
     heading: 18,
     headingLine: 25,
   },
@@ -28,8 +28,8 @@ const sizes = {
     user: 18,
     line: 25,
     userLine: 26,
-    code: 15,
-    codeLine: 23,
+    code: 14,
+    codeLine: 21,
     heading: 20,
     headingLine: 28,
   },
@@ -68,6 +68,6 @@ const presets = {
 };
 
 /** Shared with Settings preview; native accessibility font scaling remains enabled. */
-export function chatTextStyles(textSize: ChatTextSize) {
-  return presets[textSize];
+export function useChatTextStyles(textSize: ChatTextSize) {
+  return useThemedStyles(presets[textSize]);
 }

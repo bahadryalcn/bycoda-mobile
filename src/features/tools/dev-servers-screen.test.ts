@@ -10,7 +10,7 @@ vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/server", () => ({ default: () => null }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/tokens", () => ({ colors: {} }));
 vi.mock("@/ui/motion", () => ({ haptic: { success: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));

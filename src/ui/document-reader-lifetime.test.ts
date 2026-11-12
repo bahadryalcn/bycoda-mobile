@@ -13,7 +13,7 @@ const s = vi.hoisted(() => {
   return Object.assign(value, { client: { machine: value.machine, request } });
 });
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children), FlatList: ({ data, renderItem, ListHeaderComponent, ListEmptyComponent }: any) => h("div", null, ListHeaderComponent, data.length ? data.map((item: any) => h("div", { key: item.path }, renderItem({ item }))) : ListEmptyComponent) }));
-vi.mock("./theme", () => ({ useMobileTheme: () => {} }));
+vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("./tokens", () => ({ colors: {}, space: {} }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));

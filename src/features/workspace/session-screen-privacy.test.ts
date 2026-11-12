@@ -21,7 +21,6 @@ const state = vi.hoisted(() => ({
   command: vi.fn(async (_input: Record<string, unknown>) => ({})),
   onCommand: undefined as undefined | ((input: Record<string, unknown>) => Promise<unknown>),
 }));
-vi.mock("@/ui/workspace-frame", () => ({ WorkspaceFrame: ({ toolbar, feedback, children }: any) => createElement("div", null, toolbar, feedback, children) }));
 vi.mock("react-native", () => ({
   View: ({ children, style, ...props }: PropsWithChildren<Record<string, unknown>>) => {
     const {
@@ -35,12 +34,7 @@ vi.mock("react-native", () => ({
 }));
 vi.mock("expo-router", () => ({
   router: { push: state.navigate },
-  Stack: {
-    Screen: ({ options }: { options: { title: string; headerRight?: () => import("react").ReactNode } }) => {
-      state.title = options.title;
-      return options.headerRight?.() ?? null;
-    },
-  },
+  useFocusEffect: () => undefined,
 }));
 vi.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ left: 0, right: 0 }),
@@ -52,8 +46,6 @@ vi.mock("@/state/queries", () => ({
   hostKey: (machine: string, key: unknown[]) => ["machine", machine, ...key],
 }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, metrics: { contentWidth: 800 }, space: { screen: 16, xs: 4 } }));
-vi.mock("lucide-react-native/icons/search", () => ({ default: () => null }));
-vi.mock("@/ui/chat-controls", () => ({ ChatAction: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./use-project-directory", () => ({
   useProjectList: () => ({
@@ -130,25 +122,40 @@ vi.mock("./session-keyboard-frame", () => ({
   }: PropsWithChildren<{ composer: import("react").ReactNode }>) =>
     createElement("div", null, children, composer),
 }));
+vi.mock("./session-header", () => ({
+  SessionHeader: ({ title, context, actions }: { title: string; context?: string; actions?: import("react").ReactNode }) => {
+    state.title = title;
+    return createElement("header", null, title, context, actions);
+  },
+}));
 vi.mock("./session-toolbar", () => ({
-  SessionToolbar: ({ contextLabel }: { contextLabel?: string }) => createElement("p", null, "Private toolbar", contextLabel),
+  SessionToolbar: ({ contextLabel, onFind }: { contextLabel?: string; onFind: () => void }) =>
+    createElement("p", null, "Private toolbar", contextLabel, createElement("button", { onClick: onFind }, "Find in messages")),
 }));
 vi.mock("./session-transcript", () => ({
   SessionTranscript: ({ session, findOpen, onFindOpenChange }: { session?: unknown; findOpen: boolean; onFindOpenChange: (open: boolean) => void }) =>
     session ? createElement("div", { "data-find-open": findOpen }, "Secret transcript", findOpen ? createElement("button", { onClick: () => onFindOpenChange(false) }, "Close find") : null) : null,
 }));
+vi.mock("./session-parent-bar", () => ({ SessionParentBar: () => null }));
+vi.mock("./session-agents", () => ({ SessionAgents: ({ children }: { children: (chip: null) => import("react").ReactNode }) => children(null) }));
 vi.mock("./session-settings", () => ({ SessionSettings: () => null }));
-vi.mock("./transcript-view-filter", () => ({ TranscriptViewFilter: () => null }));
+vi.mock("./transcript-skeleton", () => ({
+  TranscriptSkeleton: ({ label }: { label?: string }) => createElement("div", { "data-query": "loading" }, label ?? "Loading"),
+}));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const feedback = ({
     message,
     title,
+    detail,
+    description,
     onRetry,
     action,
   }: {
     message?: string;
     title?: string;
+    detail?: string;
+    description?: string;
     onRetry?: () => void;
     action?: { label: string; onPress: () => void };
   }) =>
@@ -156,6 +163,8 @@ vi.mock("@/ui/primitives", () => {
       "div",
       null,
       message ?? title,
+      detail,
+      description,
       onRetry ? createElement("button", { onClick: onRetry }, "Retry") : null,
       action ? createElement("button", { onClick: action.onPress }, action.label) : null,
     );
@@ -163,6 +172,7 @@ vi.mock("@/ui/primitives", () => {
     Screen: Wrapper,
     Empty: feedback,
     Notice: feedback,
+    StateView: feedback,
     QueryState: ({
       query,
       loadingLabel,

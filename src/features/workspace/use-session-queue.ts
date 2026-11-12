@@ -12,6 +12,20 @@ import { appendMobileQueue, freshMobileQueue, mobileDrainsQueue } from "./queue-
 // One consumer identity per app process. Restarting never resumes an unattended queue.
 const mobileQueueClient = `mobile:${randomUUID()}`;
 type QueueChange = (queue: SharedQueue) => SharedQueue;
+const ACTIVE_POLL_MS = 2500;
+const IDLE_POLL_MS = 15_000;
+// Keep the fast poll briefly after an enqueue so the drain state shows up quickly.
+const ENQUEUE_FAST_WINDOW_MS = 15_000;
+
+/** Fast polling only while rows are queued or just after the user enqueued one. */
+export function queuePollInterval(
+  queue: Pick<SharedQueue, "messages"> | undefined,
+  lastEnqueueAt: number,
+  now: number,
+): number {
+  if (queue?.messages.length) return ACTIVE_POLL_MS;
+  return now - lastEnqueueAt < ENQUEUE_FAST_WINDOW_MS ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+}
 
 export function useSessionQueue(scope: SessionScope) {
   const client = useHostClient();
@@ -25,13 +39,14 @@ export function useSessionQueue(scope: SessionScope) {
   };
   // The visible queue owns the drain loop; an accepted fresh enqueue turns it on.
   const [automatic, setAutomatic] = useState(false);
+  const lastEnqueueAt = useRef(0);
   const query = useHostQuery<SharedQueue>(
     ["session-queue", scope.sessionId],
     "sessions.queue.get",
     params,
     {
       enabled: supported,
-      interval: 2500,
+      interval: (data) => queuePollInterval(data, lastEnqueueAt.current, Date.now()),
       queryFn: (target, signal) =>
         queueAttachmentOwner(target, scope.sessionId).request(
           target,
@@ -121,6 +136,7 @@ export function useSessionQueue(scope: SessionScope) {
     changeError: change.error,
     change: mutate,
     enqueue: async (row: QueuedMessage) => {
+      lastEnqueueAt.current = Date.now();
       const accepted = (queue: SharedQueue) => {
         if (mobileDrainsQueue(queue, mobileQueueClient)) setAutomatic(true);
         return queue;

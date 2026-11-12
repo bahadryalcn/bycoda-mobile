@@ -10,6 +10,7 @@ import {
   utf8Bytes,
   safeHostMessage,
 } from "./transport-validation";
+import { logDiagnostic } from "../features/diagnostics/diagnostic-log";
 import { readonlyRequest } from "./request-policy";
 import { RemoteHostError } from "./host-error";
 import { nativeHostFetch } from "./native-fetch";
@@ -19,6 +20,8 @@ import { boundedResponseText } from "./response-body";
 import { mobileWsMethodEnabled, selectMobileHostTransport } from "./lan-ws";
 import { getHostWsRuntimeProvider, type HostWsConsumer } from "./ws-runtime-port";
 import { HostWsError } from "./ws-connection";
+import { focusManager, onlineManager } from "@tanstack/react-query";
+import { backoffDelayMs } from "./backoff";
 import { requestSessionExecution, sessionExecutionMethod } from "./session-execution";
 import {
   getHostRpcMethod,
@@ -36,6 +39,14 @@ import {
 } from "../../../src/shared/model/host-contracts";
 
 const DEFAULT_TIMEOUT_MS = 12_000;
+/** Access, identity and capability failures cannot be cured by reconnecting. */
+function terminalStreamError(error: unknown): boolean {
+  if (error instanceof HostWsError)
+    return ["authentication", "identity", "tls", "unsupported"].includes(error.category);
+  return (
+    error instanceof RemoteHostError && ["auth", "identity", "unsupported"].includes(error.kind)
+  );
+}
 const deviceHttpMethods = new Set<string>([
   ...NATIVE_DEVICE_METHODS,
   ...DEVICE_LIFECYCLE_METHODS,
@@ -140,6 +151,26 @@ export class HostTransport {
     method: string,
     params: Record<string, unknown> = {},
     options: RemoteRequestOptions = {},
+  ): Promise<T> {
+    const started = Date.now();
+    try {
+      return await this.dispatchRequest<T>(method, params, options);
+    } catch (error) {
+      // Method name, error kind and duration only; never parameters or bodies.
+      if (!(error instanceof RemoteHostError && error.kind === "aborted"))
+        logDiagnostic("warn", "mobile.rpc", "host request failed", {
+          method,
+          error: error instanceof RemoteHostError ? error.kind : error instanceof Error ? error.name : "unknown",
+          ms: Date.now() - started,
+        });
+      throw error;
+    }
+  }
+
+  private async dispatchRequest<T>(
+    method: string,
+    params: Record<string, unknown>,
+    options: RemoteRequestOptions,
   ): Promise<T> {
     if (method === "commands.dispatch" || method === "crews.respond")
       assertApprovalCommand(
@@ -329,6 +360,9 @@ export class HostTransport {
     let opening: Promise<void> | undefined;
     let detachState: () => void = () => undefined;
     let detachEvents: () => void = () => undefined;
+    let detachReprobe: () => void = () => undefined;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
     const assertCurrent = (expected: number) => {
       this.requireAccess();
       if (closed || fence !== expected || consumer.state() !== "ready")
@@ -370,8 +404,10 @@ export class HostTransport {
       opening = pending;
       void pending
         .catch((error) => {
-          if (!closed && fence === expected)
-            onError(error instanceof Error ? error : new HostWsError("schema"));
+          if (closed || fence !== expected) return;
+          onError(error instanceof Error ? error : new HostWsError("schema"));
+          if (terminalStreamError(error)) return;
+          scheduleRetry();
         })
         .finally(() => {
           if (opening === pending) opening = undefined;
@@ -393,17 +429,37 @@ export class HostTransport {
           }
         })
         .catch((error) => {
-          if (!closed && fence === expected) {
-            onError(error instanceof Error ? error : new HostWsError("network"));
-            subscription.close();
-          }
+          if (closed || fence !== expected) return;
+          onError(error instanceof Error ? error : new HostWsError("network"));
+          if (terminalStreamError(error)) subscription.close();
+          else scheduleRetry();
         });
+    };
+    // A failed open/apply re-subscribes with exponential backoff and full jitter
+    // (cap 30s) instead of closing the stream for good. `attempt` resets once an
+    // event applies. Reprobe skips the wait on foreground and network regain.
+    const scheduleRetry = () => {
+      if (closed || retryTimer) return;
+      retryTimer = setTimeout(() => {
+        retryTimer = undefined;
+        if (!closed && consumer.state() === "ready") restart();
+      }, backoffDelayMs(attempt++));
+    };
+    const reprobe = () => {
+      if (closed || consumer.state() !== "ready" || streamId !== undefined || opening) return;
+      clearTimeout(retryTimer);
+      retryTimer = undefined;
+      attempt = 0;
+      restart();
     };
     const subscription: MobileStreamSubscription = {
       close: () => {
         if (closed) return;
         closed = true;
         fence++;
+        clearTimeout(retryTimer);
+        retryTimer = undefined;
+        detachReprobe();
         detachEvents();
         detachState();
         this.streams.delete(subscription);
@@ -489,12 +545,20 @@ export class HostTransport {
             restart();
             return false;
           }
-          if (applied) cursor = event.params.cursor;
+          if (applied) {
+            cursor = event.params.cursor;
+            attempt = 0;
+          }
           return applied;
         } catch (error) {
           if (!closed && fence === expected) {
             onError(error instanceof Error ? error : new HostWsError("schema"));
-            subscription.close();
+            if (terminalStreamError(error)) subscription.close();
+            else {
+              // Re-subscribe from a fresh snapshot rather than leaving the view stale.
+              cursor = undefined;
+              scheduleRetry();
+            }
           }
           return false;
         }
@@ -514,8 +578,18 @@ export class HostTransport {
               "The live Host stream is disconnected. Cached data may be out of date.",
             ),
           );
-        if (state === "ready") open();
+        if (state === "ready") {
+          clearTimeout(retryTimer);
+          retryTimer = undefined;
+          open();
+        }
       });
+      const detachFocus = focusManager.subscribe((focused) => focused && reprobe());
+      const detachOnline = onlineManager.subscribe((online) => online && reprobe());
+      detachReprobe = () => {
+        detachFocus();
+        detachOnline();
+      };
       open();
       return subscription;
     } catch (error) {
@@ -701,7 +775,11 @@ export class HostTransport {
                           )
                         ? "host"
                         : "network";
-        throw new RemoteHostError(this.machine.id, kind, error.message, error.uncertain);
+        const failure = new RemoteHostError(this.machine.id, kind, error.message, error.uncertain);
+        // A busy or not-yet-ready Host answers again shortly; reads retry quietly.
+        if (error.category === "overload" || error.category === "unavailable")
+          Object.assign(failure, { transient: true });
+        throw failure;
       }
       throw new RemoteHostError(
         this.machine.id,

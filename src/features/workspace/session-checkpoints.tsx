@@ -14,6 +14,7 @@ import { SessionCheckpointReview, type CheckpointReview } from "./session-checkp
 import type { HostSession } from "./wire";
 import type { SessionCommand, SessionScope } from "./session-types";
 import { checkpointChange, checkpointRead, checkpointReviewMatches, reviewRewind, rewindCommand, validateCheckpointDiff, validateCheckpointStatus, type ReviewedCheckpoint, type ReviewedCheckpointDiff } from "./session-checkpoint-model";
+import { FeatureUnavailable, RecordAccessUnavailable } from "./unavailable-state";
 
 /** Captured checkpoint content and session authority survive presentation changes. */
 export function SessionCheckpoints({ scope, session, blocked, onCommand, onRefresh, onClose }: {
@@ -101,7 +102,7 @@ export function SessionCheckpoints({ scope, session, blocked, onCommand, onRefre
           !!selected && {key:"undo",label:copy("Dosya değişikliklerini geri al", "Undo file changes"),destructive:true,disabled:disabled || !guarded || !selectedCurrent || !selected.status.files.find(file=>file.relative===selected.diff.relative)?.undoable,onPress:()=>change(true)},
         ]} />} />
         <Body mono selectable>{target.cwd}</Body>
-        {!guarded ? <Notice message={copy("Güvenli checkpoint işlemleri için bilgisayardaki bycoda’yı güncelle. Checkpoint incelemesi salt okunurdur.", "Update bycoda on this computer for guarded checkpoint actions. Checkpoint review is read-only.")} /> : null}
+        {!guarded ? <FeatureUnavailable message={copy("Güvenli checkpoint işlemleri için bilgisayardaki bycoda’yı güncelle. Checkpoint incelemesi salt okunurdur.", "Update bycoda on this computer for guarded checkpoint actions. Checkpoint review is read-only.")} /> : null}
         {selected ? <>
           <Body mono selectable>{selected.diff.relative}</Body>
           {selected.diff.binary || selected.diff.tooLarge || preview?.tooLarge ? <Notice message={copy("Bu dosya için satır farkı gösterilemiyor.", "Line diff is unavailable for this file.")} /> : preview ? <GitDiffViewer lines={preview.lines} /> : <Body muted>{copy("Diff hesaplanıyor…", "Computing diff…")}</Body>}
@@ -111,7 +112,7 @@ export function SessionCheckpoints({ scope, session, blocked, onCommand, onRefre
         </> : <>{feedback}<QueryState query={query} empty={query.isSuccess && !query.data?.files.length} emptyTitle={copy("İncelenecek oturum değişikliği yok.", "No session changes to review.")} /></>}
         {uncertain ? <Disclosure label={copy("Ayrıntılar", "Details")}><ErrorText error={error} /></Disclosure> : null}
       </> : <>
-        {kind === "auth" || kind === "identity" ? <QueryState query={{...query,data:undefined,refetch:refresh}} /> : <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />}
+        {kind === "auth" || kind === "identity" ? <QueryState query={{...query,data:undefined,refetch:refresh}} /> : <RecordAccessUnavailable />}
         <FormActions submitLabel={copy("Yenile", "Refresh")} disabled={!available || query.isEnabled===false || busy} onSubmit={refresh} onCancel={close} cancelLabel={copy("Kapat", "Close")} />
       </>}
     </Stack>} renderItem={({item})=>item.kind==="file" ? <NavigationRow label={item.file.relative} detail={`${item.file.status} · +${item.file.additions} −${item.file.deletions}`} disabled={busy || blocked || !supported || !item.file.exact}

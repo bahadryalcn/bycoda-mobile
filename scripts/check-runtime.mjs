@@ -10,6 +10,9 @@ const pureContracts = new Set([
   "shared/model/host-contracts",
   // Assistant wire validation is pure; mobile still uses the paired transport and owner gates.
   "shared/model/host-contracts/assistant",
+  // Delegation and image-model keys are pure wire contracts (zod and each other only).
+  "shared/model/host-contracts/delegation",
+  "shared/model/host-contracts/image-models",
   "shared/model/approvalOccurrence",
   "shared/model/productProviderDefaults",
   // Portable session execution policy has no desktop runtime dependencies.
@@ -20,6 +23,7 @@ const pureContracts = new Set([
   "shared/i18n/languages",
   "integrations/mobile-pairing",
   "integrations/mobile-lan",
+  "integrations/account-pair-crypto",
   "features/connections/model/protocol",
   "features/connections/model/sharedQueue",
   "features/sessions/model/queuePersistence",
@@ -27,6 +31,12 @@ const pureContracts = new Set([
   "features/tasks/model/taskRules",
   "features/tasks/model/taskBulkActions",
   "features/crews/model/crew",
+  // Crew identity: pure traits, link state and pixel-art rects (no DOM); mobile draws them with react-native-svg.
+  "features/crews/model/crewIdentity",
+  "features/crews/model/crewLink",
+  "features/crews/model/memberAvatars",
+  "features/crews/model/memberAvatarTraits",
+  "features/crews/model/memberAvatarArt",
   "features/sessions/model/conversationRewind",
   "features/skills/model/cliCommandCatalog",
   "features/social/model/socialLimits",

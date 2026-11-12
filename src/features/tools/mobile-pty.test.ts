@@ -15,7 +15,20 @@ const f = vi.hoisted(() => ({
 }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
+  Modal: ({ children }: PropsWithChildren) => createElement("div", null, children),
 }));
+vi.mock("react-native-keyboard-controller", () => ({
+  KeyboardAvoidingView: ({ children }: PropsWithChildren) => createElement("div", null, children),
+  KeyboardController: { dismiss: async () => {} },
+  useKeyboardState: (select: (state: { isVisible: boolean }) => unknown) => select({ isVisible: false }),
+}));
+vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+vi.mock("@/ui/tokens", () => ({ metrics: { touchTarget: 48 }, space: { xs: 4, sm: 6, screen: 16 } }));
+vi.mock("lucide-react-native/icons/keyboard", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/chevron-up", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/chevron-left", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
 vi.mock("expo-crypto", () => ({
   randomUUID: () => "operation",
   CryptoDigestAlgorithm: { SHA256: "SHA256" },
@@ -95,9 +108,12 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/theme", () => ({
   useMobileTheme: () => ({
     mode: "dark",
-    colors: { background: "#000", text: "#fff", selected: "#123" },
+    colors: { border: "#222", background: "#000", text: "#fff", selected: "#123", accent: "#00f", muted: "#888", danger: "#f00" },
   }),
 }));
+vi.mock("lucide-react-native/icons/play", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
 vi.mock("@/ui/terminal-viewport", () => ({
   TerminalViewport: forwardRef(({onPacket}:{onPacket:(packet:Record<string,unknown>)=>void}) => {f.packet=onPacket;return createElement("div", { "data-viewport": true });}),
 }));
@@ -114,13 +130,20 @@ vi.mock("@/ui/primitives", () => {
   }) => createElement("button", { disabled, onClick: onPress }, label);
   return {
     Body: box,
+    Heading: box,
+    HeaderBackButton: ({ onPress }: { onPress: () => void }) => createElement("button", { onClick: onPress }, "Back"),
+    ActionMenu: ({ actions }: { actions: ({ label: string; disabled?: boolean; onPress: () => void } | false)[] }) =>
+      createElement("div", null, ...actions.filter(Boolean).map((a) =>
+        createElement("button", { disabled: a && a.disabled, onClick: a && a.onPress }, a && a.label))),
     Row: box,
     Stack: box,
     Disclosure: box,
     Sheet: box,
     Button: button,
+    IconButton: button,
+    Loading: ({ label }: { label: string }) => createElement("p", null, label),
     NavigationRow: button,
-    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: { message: string }) => createElement("p", null, message),
     ErrorText: () => null,
     ScreenList: ({
       data,
@@ -241,4 +264,12 @@ it("reopened unknown creation refuses status after the same machine was re-paire
 it("a second renderer-ready event latches screen loss and disables protocol input",async()=>{
  await mount();await click("New interactive terminal");await act(async()=>{f.packet?.({type:"ready",cols:80,rows:24});f.packet?.({type:"ready",cols:80,rows:24});});
  expect([...container.querySelectorAll("button")].find(button=>button.textContent==="Ctrl-C")?.disabled).toBe(true);expect(f.calls.every(call=>call.method!=="terminals.pty.desktop.write")).toBe(true);
+});
+it("shows a loading state over the terminal until the renderer is ready", async () => {
+  await mount();
+  await click("New interactive terminal");
+  expect(container.textContent).toContain("Opening terminal…");
+  expect(container.textContent).not.toContain("Real PTY requires");
+  await act(async () => f.packet?.({ type: "ready", cols: 80, rows: 24 }));
+  expect(container.textContent).not.toContain("Opening terminal…");
 });

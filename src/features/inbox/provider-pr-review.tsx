@@ -14,8 +14,10 @@ import {
   Row,
   ScreenList,
   SelectField,
+  SectionHeader,
   Sheet,
   Stack,
+  StateView,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
@@ -27,6 +29,7 @@ import { prReviewLines, reviewedPrSubmission, type PrReviewLine } from "./provid
 import { usePrReviewDelivery } from "./provider-review-delivery";
 import { emptyPrReviewDraft, sameReviewedPrDraft } from "./provider-review-draft";
 import { ProviderPrReviewPreflight } from "./provider-pr-review-preflight";
+import { PrDiffLine, PrReviewSummary } from "./provider-pr-review-summary";
 import { prReviewDecisionLabel } from "./provider-labels";
 
 export function ProviderPrReview({
@@ -215,13 +218,16 @@ export function ProviderPrReview({
         keyExtractor={(line) => line.id}
         header={
           <Stack>
-            {contentAvailable ? <Body>{`${item.repo} #${item.number}`}</Body> : null}
+            {contentAvailable ? <PrReviewSummary item={item} context={context} /> : null}
             {!originCurrent || !canRead ? (
-              <Notice message={copy("İnceleme erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
+              <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
+                description={copy("İnceleme erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
                 "Review access is unavailable. Check the original computer and project connection.")} />
             ) : !supported ? (
-              <Notice
-                message={copy(
+              <StateView
+                illustration="permission"
+                title={copy("Güncelleme gerekiyor", "Update needed")}
+                description={copy(
                   "Pull request incelemesi için bilgisayardaki bycoda’yı güncelle.",
                   "Update bycoda on this computer to review pull requests.",
                 )}
@@ -274,8 +280,6 @@ export function ProviderPrReview({
             {contentAvailable ? <>
             {context ? (
               <>
-                <Body mono>{context.commitId}</Body>
-                <Body>{`+${context.additions} −${context.deletions} · ${context.files.length}`}</Body>
                 {context.truncated ? (
                   <Notice
                     tone="warning"
@@ -360,6 +364,7 @@ export function ProviderPrReview({
                 />
               </Stack>
             ) : null}
+            {context ? <SectionHeader flush title={copy("Fark", "Diff")} /> : null}
             </> : null}
           </Stack>
         }
@@ -368,9 +373,7 @@ export function ProviderPrReview({
             {line.commentable ? (
               <Body mono>{`${line.path} · ${line.side}:${line.line}`}</Body>
             ) : null}
-            <Body
-              mono
-            >{`${line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "}${line.text}`}</Body>
+            <PrDiffLine line={line} />
             {line.commentable ? (
               <Button
                 tone="quiet"

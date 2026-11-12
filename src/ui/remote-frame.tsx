@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Image } from "expo-image";
 import { Pressable, View } from "react-native";
-import { colors, radii } from "./tokens";
+import { radii } from "./tokens";
 import { useMobileTheme } from "./theme";
 import { framePoint, type FrameSize } from "./remote-frame-model";
 
@@ -14,7 +14,7 @@ export function RemoteFrame({ uri, label, width, height, onPress, disabled }: {
   onPress?: (point: { x: number; y: number }) => void;
   disabled?: boolean;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const [natural, setNatural] = useState<FrameSize>({ width: 0, height: 0 });
   const [display, setDisplay] = useState<FrameSize>({ width: 0, height: 0 });
   const source = width && height ? { width, height } : natural;

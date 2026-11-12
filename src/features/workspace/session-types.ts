@@ -65,6 +65,8 @@ export type SessionTranscriptProps = {
   command: SessionCommandStatus;
   onCommand: SessionCommand;
   onReceiptHandled: () => void;
+  /** Measured composer and keyboard space; list padding and the jump pill clear it. */
+  bottomInset?: number;
 };
 
 export type TranscriptBlockProps = {
@@ -74,7 +76,8 @@ export type TranscriptBlockProps = {
   block: Block;
   author?: string;
   scope: SessionScope;
-  revision: number;
+  /** Stable getter (identity never changes); read at fetch time so revision bumps do not re-render rows. */
+  getRevision: () => number | undefined;
   runId?: string;
   disabled: boolean;
   onCommand: SessionCommand;
@@ -101,6 +104,9 @@ export type QuestionDraft = {
 export type SessionBlockRequest = {
   scope: SessionScope;
   blockId: string;
-  revision: number;
+  /** Read inside the query function at fetch time; the Host rejects a stale revision. */
+  getRevision: () => number | undefined;
+  /** Stable content identity (`remoteContent.digest`); keys the cache when the Host supplies it. */
+  digest?: string;
   enabled: boolean;
 };

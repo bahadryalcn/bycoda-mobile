@@ -1,10 +1,9 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import Animated from "react-native-reanimated";
 import { space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
 import { useAsyncAction } from "@/state/actions";
-import { Body, FormActions, IdentifierField, MutationState } from "@/ui/primitives";
+import { Body, FormActions, Heading, IdentifierField, MutationState } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { MOBILE_PAIRING_MAX_BYTES } from "../../../../src/integrations/mobile-pairing";
@@ -19,13 +18,7 @@ export function PairingPaste({ disabled, onCode, onCancel }: PairingPasteProps) 
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <View style={{ gap: space.sm }}>
-        <Text
-          selectable
-          accessibilityRole="header"
-          style={uiStyles.heading}
-        >
-          {copy("Bağlantı kodunu yapıştır", "Paste pairing code")}
-        </Text>
+        <Heading>{copy("Bağlantı kodunu yapıştır", "Paste pairing code")}</Heading>
         <Body muted>
           {copy(
             "Bilgisayarındaki Bycoda’dan bağlantı kodunu kopyalayıp buraya yapıştır.",

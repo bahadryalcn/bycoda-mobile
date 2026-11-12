@@ -1,6 +1,8 @@
-import { Body, ErrorText, Field, SelectField } from "@/ui/primitives";
+import { Body, ErrorText, NumberField, SelectField } from "@/ui/primitives";
 import { TimeField } from "@/ui/time-field";
 import { useCopy } from "@/ui/copy";
+import { HoursOverview } from "@/ui/week-hours";
+import { WEEK_ORDER, weekRunBlocks } from "@/ui/week-hours-model";
 import { integerInRange, validScheduleTime } from "../automations/schedule-model";
 import type { HostAutomationInput } from "@/domain/types";
 
@@ -15,8 +17,10 @@ export function ScheduleFields({ value, minute, onMinuteChange, onChange, disabl
   disabled?: boolean;
 }) {
   const copy = useCopy();
+  const dayNames = [copy("Paz", "Sun"), copy("Pzt", "Mon"), copy("Sal", "Tue"), copy("Çar", "Wed"), copy("Per", "Thu"), copy("Cum", "Fri"), copy("Cmt", "Sat")];
+  const runs = weekRunBlocks({ ...value, minute: Number(minute) });
   return <>
-    <SelectField label={copy("Zamanlama", "Schedule")} value={value.scheduleKind} disabled={disabled}
+    <SelectField label={copy("Sıklık", "Frequency")} value={value.scheduleKind} disabled={disabled}
       options={[
         { value: "hourly", label: copy("Saatlik", "Hourly") },
         { value: "daily", label: copy("Günlük", "Daily") },
@@ -24,9 +28,9 @@ export function ScheduleFields({ value, minute, onMinuteChange, onChange, disabl
         { value: "weekly", label: copy("Haftalık", "Weekly") },
       ]} onChange={(scheduleKind) => onChange({ scheduleKind })} />
     {value.scheduleKind === "hourly" ? <>
-      <Field editable={!disabled} label={copy("Her saatin dakikası (0–59)", "Minute of each hour (0–59)")}
-        value={minute} keyboardType="number-pad" onChangeText={onMinuteChange} />
-      {!integerInRange(minute, 0, 59) ? <ErrorText error={copy("0 ile 59 arasında bir dakika girin.", "Enter a minute from 0 to 59.")} /> : null}
+      <NumberField editable={!disabled} label={copy("Her saatin dakikası", "Minute of each hour")} unit={copy("dk", "min")}
+        hint="0–59" value={minute} onChangeText={onMinuteChange}
+        error={!integerInRange(minute, 0, 59) ? copy("0 ile 59 arasında bir dakika girin.", "Enter a minute from 0 to 59.") : undefined} />
     </> : <>
       <TimeField disabled={disabled} label={copy("Saat (SS:DD)", "Time (HH:MM)")} value={value.time}
         onChange={(time) => onChange({ time })} />
@@ -42,6 +46,7 @@ export function ScheduleFields({ value, minute, onMinuteChange, onChange, disabl
         { value: "5", label: copy("Cuma", "Friday") },
         { value: "6", label: copy("Cumartesi", "Saturday") },
       ]} onChange={(day) => onChange({ dayOfWeek: Number(day) })} /> : null}
+    <HoursOverview rows={WEEK_ORDER.map((day) => ({ key: String(day), label: dayNames[day], blocks: runs[day] }))} />
     <Body muted>{copy("Bilgisayarın yerel saati kullanılır; sonraki çalışma telefondaki saatle gösterilir.", "Schedules use computer local time; the next run is shown in phone time.")}</Body>
   </>;
 }

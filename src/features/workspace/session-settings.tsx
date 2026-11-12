@@ -1,6 +1,6 @@
 import type { SessionSettingsProps, SessionSettingsDraft } from "./session-settings-types";
 import { View } from "react-native";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormDraft } from "@/state/form-draft";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine } from "@/state/machines";
@@ -8,8 +8,6 @@ import { useHostMutation } from "@/state/queries";
 import { useModelCatalog } from "@/state/model-catalog";
 import {
   Button,
-  FormActions,
-  SelectField,
   Field,
   MutationState,
   Notice,
@@ -19,7 +17,6 @@ import {
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { providerSelectionOption } from "@/ui/provider-identity";
 import {
   catalogProviders,
   modelDefaults,
@@ -28,9 +25,17 @@ import {
   sessionSettings,
 } from "./catalog";
 import { AgentModelFields } from "./agent-model-fields";
+import { PermissionField } from "./agent-option-icons";
+import { providerChoices, selectedChoice } from "./provider-choices";
 import type { HostSession } from "./wire";
-import { SelectRow, workspaceStyles } from "./shared";
 import { captureSessionAuthority } from "@/domain/session-authority";
+import { useMobileTheme } from "@/ui/theme";
+
+/** Agent settings save themselves once picking or typing settles. */
+const AUTOSAVE_MS = 500;
+
+/** Equal-width pair aligned to the field edges; wraps to full-width rows at large text. */
+const ACTION_BUTTON = { flexGrow: 1, flexBasis: 140, alignSelf: "stretch" } as const;
 
 export function SessionSettings({
   onClose,
@@ -40,17 +45,19 @@ export function SessionSettings({
   onCommand,
   onUpdated,
 }: SessionSettingsProps) {
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const [initialDraft] = useState<SessionSettingsDraft>(() => ({
     title: value.session.title,
     provider: value.session.harness,
+    accountId: value.session.providerAccountId,
     model: value.session.model,
     mode: value.session.runtimeMode,
     modelSettings: value.session.modelSettings,
   }));
   const form = useFormDraft(initialDraft);
-  const { title, provider, model, mode, modelSettings } = form.values;
+  const { title, provider, accountId, model, mode, modelSettings } = form.values;
   const configure = useAsyncAction();
   const [configurationAction, setConfigurationAction] = useState<"configure" | "compact">(
     "configure",
@@ -64,52 +71,98 @@ export function SessionSettings({
   const models = availableCatalog.models[provider] ?? [];
   const selectedModel = sessionModel(availableCatalog, provider, model);
   const switchAllowed = machine?.capabilities?.includes("sessions.harnessSwitch");
+  const choices = providerChoices(
+    providers.filter((item) => switchAllowed || item === value.session.harness),
+    catalog.data?.accounts,
+    copy("Varsayılan hesap", "Default account"),
+  );
+  const choice = selectedChoice(choices, provider, accountId);
   const running = value.status === "running";
   const pending = disabled || configure.isPending || update.isPending;
+
+  const agentKey = JSON.stringify([provider, accountId ?? null, model, mode, modelSettings]);
+  const [savedAgentKey, setSavedAgentKey] = useState(agentKey);
+  const [savedTitle, setSavedTitle] = useState(value.session.title);
+  const failedKey = useRef<string | null>(null);
+  const agentDirty = agentKey !== savedAgentKey;
+  const titleDirty = !!title.trim() && title.trim() !== savedTitle;
+
+  const saveAgent = async () => {
+    const submitted = agentKey;
+    setConfigurationAction("configure");
+    try {
+      await configure.run(async () =>
+        onCommand({
+          type: "configure",
+          sessionId: value.session.id,
+          harness: provider,
+          ...(provider === "claude" || provider === "codex"
+            ? { providerAccountId: accountId ?? null }
+            : {}),
+          model,
+          modelSettings: selectedModel ? sessionSettings(selectedModel, modelSettings) : modelSettings,
+          runtimeMode: mode,
+        }),
+      );
+      setSavedAgentKey(submitted);
+    } catch {
+      failedKey.current = submitted;
+    }
+  };
+  const saveTitle = async () => {
+    if (!titleDirty || pending) return;
+    const submitted = title.trim();
+    try {
+      await update.mutateAsync({
+        projectId,
+        sessionId: value.session.id,
+        title: submitted,
+        ...captureSessionAuthority(value),
+      });
+      setSavedTitle(submitted);
+      onUpdated();
+    } catch {
+      /* The mutation state shows the failure. */
+    }
+  };
+  const saveAgentRef = useRef(saveAgent);
+  saveAgentRef.current = saveAgent;
+  useEffect(() => {
+    if (!agentDirty || !model || running || disabled || configure.isPending) return;
+    if (failedKey.current === agentKey) return;
+    const timer = setTimeout(() => void saveAgentRef.current(), AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [agentKey, agentDirty, model, running, disabled, configure.isPending]);
+
   return (
     <Sheet
       visible
-      onClose={onClose}
+      onClose={() => {
+        // Closing flushes whatever the delay has not saved yet.
+        void saveTitle();
+        if (agentDirty && model && !running && !disabled && failedKey.current !== agentKey) void saveAgent();
+        onClose();
+      }}
       title={copy("Oturum ayarları", "Session settings")}
       size="form"
-      dirty={form.dirty}
       dismissible={!configure.isPending && !update.isPending && !disabled}
     >
       <Section title={copy("Oturum", "Session")}>
-        <View style={workspaceStyles.stack}>
+        <View style={uiStyles.stack}>
           <Field
             label={copy("Başlık", "Title")}
             value={title}
             onChangeText={(text) => form.setField("title", text)}
+            onBlur={() => void saveTitle()}
+            onSubmitEditing={() => void saveTitle()}
+            returnKeyType="done"
           />
-          <FormActions
-            submitLabel={copy("Başlığı kaydet", "Save title")}
-            tone="secondary"
-            disabled={!title.trim() || pending || title.trim() === value.session.title}
-            busy={update.isPending && update.variables?.title !== undefined}
-            feedback={<MutationState mutation={update} success={copy("Oturum güncellendi.", "Session updated.")} />}
-            onSubmit={() => {
-              const submitted = title;
-              void update
-                .mutateAsync({
-                  projectId,
-                  sessionId: value.session.id,
-                  title: title.trim(),
-                  ...captureSessionAuthority(value),
-                })
-                .then(() => {
-                  form.markSaved({ ...initialDraft, title: submitted.trim() });
-                  form.patch((current) => current.title === submitted ? { title: submitted.trim() } : {});
-                  onUpdated();
-                })
-                .catch(() => {});
-            }}
-          />
+          <MutationState mutation={update} success={copy("Kaydedildi.", "Saved.")} />
           <Row>
             <Button
               label={value.pinned ? copy("Sabitlemeyi kaldır", "Unpin") : copy("Sabitle", "Pin")}
-              density="compact"
-              tone="quiet"
+              tone="secondary"
+              style={ACTION_BUTTON}
               disabled={pending}
               busy={update.isPending && update.variables?.pinned !== undefined}
               onPress={() => {
@@ -128,8 +181,8 @@ export function SessionSettings({
               label={
                 value.archived ? copy("Arşivden çıkar", "Unarchive") : copy("Arşivle", "Archive")
               }
-              density="compact"
-              tone="quiet"
+              tone="secondary"
+              style={ACTION_BUTTON}
               disabled={pending}
               busy={update.isPending && update.variables?.archived !== undefined}
               onPress={() => {
@@ -149,88 +202,44 @@ export function SessionSettings({
       </Section>
       <Section title={copy("Agent ve model", "Agent and model")}>
         <QueryState query={catalog} />
-        <SelectField
-          label={copy("Agent", "Agent")}
-          value={provider}
-          options={providers
-            .filter((item) => switchAllowed || item === value.session.harness)
-            .map(providerSelectionOption)}
-          disabled={disabled || running}
-          onChange={(item) => {
-            const next = sessionModel(availableCatalog, item, "");
-            form.patch({
-              provider: item,
-              model: next?.id ?? "",
-              modelSettings: modelDefaults(next),
-            });
-          }}
-        />
         {catalog.data?.errors[provider] ? (
           <Notice tone="danger" message={catalog.data.errors[provider]} />
         ) : null}
-        {models.length > 0 && !catalog.data?.models[provider]?.length ? (
-          <Notice
-            tone="info"
-            message={copy(
-              "Yerleşik model listesi gösteriliyor. Kullanılabilirlik bilgisayarındaki sağlayıcıya bağlıdır.",
-              "Showing bundled models. Availability depends on the provider on your computer.",
-            )}
-          />
-        ) : null}
         <AgentModelFields
+          catalog={availableCatalog}
           models={models}
           model={model}
           settings={modelSettings}
+          provider={{
+            choices,
+            value: choice,
+            onChange: (next) => {
+              if (next.provider === provider) {
+                form.patch({ accountId: next.accountId });
+                return;
+              }
+              const first = sessionModel(availableCatalog, next.provider, "");
+              form.patch({
+                provider: next.provider,
+                accountId: next.accountId,
+                model: first?.id ?? "",
+                modelSettings: modelDefaults(first),
+              });
+            },
+          }}
           disabled={pending || running}
           onChange={(next, settings) => form.patch({ model: next, modelSettings: settings })}
         />
+        <PermissionField
+          value={mode}
+          disabled={disabled || running}
+          onChange={(next) => form.setField("mode", next)}
+        />
+        <MutationState
+          mutation={configure}
+          success={copy("Agent ayarları kaydedildi.", "Agent settings saved.")}
+        />
       </Section>
-      <SelectField
-        label={copy("İzinler", "Permissions")}
-        value={mode}
-        disabled={disabled || running}
-        options={[
-          { value: "supervised", label: copy("Onay iste", "Ask for approval") },
-          {
-            value: "auto-accept-edits",
-            label: copy("Düzenlemeleri otomatik kabul et", "Auto-accept edits"),
-          },
-          { value: "auto", label: copy("Otomatik inceleme", "Automatic review") },
-          {
-            value: "full-access",
-            label: copy("Tam erişim", "Full access"),
-            detail: copy(
-              "Agent komutları ve düzenlemeleri onay beklemeden uygulayabilir.",
-              "The agent may run commands and edits without waiting for approval.",
-            ),
-          },
-        ]}
-        onChange={(next) => form.setField("mode", next)}
-      />
-      <FormActions
-        feedback={<MutationState mutation={configure} />}
-        submitLabel={copy("Agent ayarlarını kaydet", "Save agent settings")}
-        tone="primary"
-        disabled={pending || !model || running}
-        busy={configure.isPending && configurationAction === "configure"}
-        onSubmit={() => {
-          setConfigurationAction("configure");
-          void configure.run(async () => {
-            const receipt = await onCommand({
-              type: "configure",
-              sessionId: value.session.id,
-              harness: provider,
-              model,
-              modelSettings: selectedModel
-                ? sessionSettings(selectedModel, modelSettings)
-                : modelSettings,
-              runtimeMode: mode,
-            });
-            onClose();
-            return receipt;
-          });
-        }}
-      />
       {running ? (
         <Notice
           tone="info"
@@ -242,9 +251,8 @@ export function SessionSettings({
       ) : null}
       <Button
         label={copy("Bağlamı sıkıştır", "Compact context")}
-        tone="quiet"
-        density="compact"
-        disabled={pending || running}
+        tone="secondary"
+        disabled={pending || running || agentDirty}
         busy={configure.isPending && configurationAction === "compact"}
         onPress={() => {
           setConfigurationAction("compact");

@@ -1,0 +1,48 @@
+diff --git a/android/src/main/java/expo/modules/securestore/SecureStoreModule.kt b/android/src/main/java/expo/modules/securestore/SecureStoreModule.kt
+--- a/android/src/main/java/expo/modules/securestore/SecureStoreModule.kt
++++ b/android/src/main/java/expo/modules/securestore/SecureStoreModule.kt
+@@ -84,8 +84,15 @@
+       this@SecureStoreModule.keyStore = keyStore
+     }
+   }
+ 
++  // Native-only bycoda CredentialProvider seam. Never registered in ModuleDefinition.
++  suspend fun bycodaHostReadNative(key: String): String? = getItemImpl(key, SecureStoreOptions())
++  suspend fun bycodaHostWriteNative(key: String, value: String) {
++    setItemImpl(key, value, SecureStoreOptions(), false)
++  }
++  fun bycodaHostDeleteNative(key: String) { deleteItemImpl(key, SecureStoreOptions()) }
++
+   private suspend fun getItemImpl(key: String, options: SecureStoreOptions): String? {
+     // We use a SecureStore-specific shared preferences file, which lets us do things like enumerate
+     // its entries or clear all of them
+     val prefs: SharedPreferences = getSharedPreferences()
+diff --git a/ios/SecureStoreModule.swift b/ios/SecureStoreModule.swift
+--- a/ios/SecureStoreModule.swift
++++ b/ios/SecureStoreModule.swift
+@@ -73,8 +73,25 @@
+       #endif
+     }
+   }
+ 
++  // Native-only bycoda CredentialProvider seam. Never registered in ModuleDefinition.
++  public func bycodaHostReadNative(_ key: String) throws -> String? {
++    return try get(with: key, options: SecureStoreOptions())
++  }
++  public func bycodaHostWriteNative(_ key: String, value: String) throws {
++    var options = SecureStoreOptions()
++    options.keychainAccessible = .whenUnlockedThisDeviceOnly
++    _ = try set(value: value, with: key, options: options)
++  }
++  public func bycodaHostDeleteNative(_ key: String) throws {
++    let options = SecureStoreOptions()
++    for authentication: Bool? in [nil, false, true] {
++      let status = SecItemDelete(query(with: key, options: options, requireAuthentication: authentication) as CFDictionary)
++      if status != errSecSuccess && status != errSecItemNotFound { throw KeyChainException(status) }
++    }
++  }
++
+   private func get(with key: String, options: SecureStoreOptions) throws -> String? {
+     guard let key = validate(for: key) else {
+       throw InvalidKeyException()
+     }

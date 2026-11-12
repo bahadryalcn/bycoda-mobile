@@ -37,7 +37,7 @@ it("requires native selection on readonly source and transfers only the exact qu
   expect(state.transfer).toHaveBeenCalledExactlyOnceWith({ machineId: "machine", sessionId: "session", text: "> EXACT" });
 });
 it("prepares a language-specific translation draft without sending or including unselected text", async () => {
-  await render(); await select(7, 12); await click("Prepare translation draft");
+  await render(); await select(7, 12); await click("Prepare translation");
   const request = state.transfer.mock.calls[0][0]; expect(request.text).toContain("Türkçe"); expect(request.text).toContain("> EXACT"); expect(request.text).not.toContain("before");
 });
 it("clears selection when paging instead of applying old offsets to another page", async () => {

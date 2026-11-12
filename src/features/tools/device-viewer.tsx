@@ -10,11 +10,10 @@ import {
 } from "@/ui/primitives";
 import { RemoteFrame } from "@/ui/remote-frame";
 import { useCopy } from "@/ui/copy";
-import { colors } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
 import type { DeviceAction, DeviceFrame, DeviceSummary } from "./types";
 import { DeviceRuntime } from "./device-runtime";
 import { DevicePreviewSheet } from "./device-preview";
+import { useMobileTheme } from "@/ui/theme";
 
 export function DeviceViewer({ projectId, device, canControl, onDevice, onClose }: {
   projectId: string;
@@ -23,6 +22,7 @@ export function DeviceViewer({ projectId, device, canControl, onDevice, onClose 
   onDevice: (device: DeviceSummary) => void;
   onClose: () => void;
 }) {
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machineId = useMachines((state) => state.activeId);
   const machine = useActiveMachine();

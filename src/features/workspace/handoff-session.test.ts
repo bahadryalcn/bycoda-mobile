@@ -39,7 +39,7 @@ vi.mock("@/ui/primitives", () => {
   const content = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const button = ({ label, onPress, disabled, busy }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean }) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);
   return { Body: content, Stack: content, Disclosure: content, QueryState: () => null, MutationState: () => null,
-    Notice: ({ message }: { message: string }) => createElement("p", null, message), Button: button,
+    Notice: ({ message }: { message: string }) => createElement("p", null, message), StateView: ({ title }: { title: string }) => createElement("p", null, title), Button: button,
     SelectField: ({ label, value, options, onChange, disabled }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void; disabled: boolean }) =>
       createElement("select", { "aria-label": label, value, disabled, onChange: (event) => onChange((event.currentTarget as HTMLSelectElement).value) },
         createElement("option", { value: "" }, "Choose"), ...options.map((option) => createElement("option", { key: option.value, value: option.value }, option.label))),

@@ -94,7 +94,7 @@ vi.mock("@/ui/primitives", () => {
     ActionMenu:({actions}:any)=>createElement("nav",null,...actions.filter(Boolean).map((a:any)=>{f.commands.set(a.label,a.onPress);return createElement("button",{key:a.key,disabled:a.disabled,onClick:a.onPress},a.label);})),
     Sheet: ({ children, footer, visible = true }: PropsWithChildren<{ footer: unknown;visible?:boolean }>) =>
       visible?createElement("div", null, children, footer as never):null,
-    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    Notice: ({ message }: { message: string }) => createElement("p", null, message), StateView: ({ title }: { title: string }) => createElement("p", null, title),
     QueryState: () => null,
     ErrorText: () => null,
     ScreenList: ({

@@ -13,7 +13,7 @@ vi.mock("panelui-native/components/swipe", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Swipe: Object.assign(wrapper, { End: wrapper, Action: () => null, Group: wrapper }) };
 });
-vi.mock("./theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("./private-access", () => ({
   usePrivateContentAccess: () => ({ allowed: true, check: () => true }),
 }));

@@ -1,10 +1,9 @@
 import { useAsyncAction } from "@/state/actions";
 import { useLayoutEffect, useRef, useState } from "react";
-import { Linking, View } from "react-native";
-import { Body, Disclosure, MutationState, Section, Stack, NavigationGroup, NavigationRow } from "@/ui/primitives";
-import { space } from "@/ui/tokens";
+import { Linking, View, type LayoutChangeEvent } from "react-native";
+import { Body, Disclosure, Heading, MutationState, Section, Stack, NavigationGroup, NavigationRow } from "@/ui/primitives";
+import { lineHeight, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
-import { uiStyles } from "@/ui/styles";
 import {
   legalSections,
   legalUpdatedDate,
@@ -14,24 +13,35 @@ import {
   supportEmail,
   type LegalDocumentId,
 } from "./legal-content";
+import { useMobileTheme } from "@/ui/theme";
 
+export const legalSectionId = (index: number) => `section-${index}`;
 export { legalDocumentTitle, isLegalDocument } from "./legal-content";
 export type { LegalDocumentId } from "./legal-content";
 
 /** Offline content that also works before the protected navigation tree mounts. */
-export function LegalDocument({ document }: { document: LegalDocumentId }) {
+export function LegalDocument({ document, sectionLayout }: {
+  document: LegalDocumentId;
+  /** Reader hook: reports each section wrapper's layout for in-page navigation. */
+  sectionLayout?: (id: string) => (event: LayoutChangeEvent) => void;
+}) {
   const copy = useCopy();
   const sections = legalSections[document].map((section, index) => {
     const paragraphs = <Stack style={{ gap: space.md }}>
       {section.paragraphs.map((paragraph, paragraphIndex) => (
-        <Body key={paragraphIndex} selectable style={{ lineHeight: 24 }}>
+        <Body key={paragraphIndex} selectable style={{ lineHeight: lineHeight.message }}>
           {copy(...paragraph)}
         </Body>
       ))}
     </Stack>;
     return document === "help"
       ? <Disclosure key={index} label={copy(...section.title)}>{paragraphs}</Disclosure>
-      : <Section key={index} title={copy(...section.title)}>{paragraphs}</Section>;
+      : <View key={index} onLayout={sectionLayout?.(legalSectionId(index))}>
+        <Stack style={{ gap: space.md }}>
+          <Heading>{copy(...section.title)}</Heading>
+          {paragraphs}
+        </Stack>
+      </View>;
   });
   return (
     <Stack style={{ gap: space.xl }}>
@@ -42,9 +52,10 @@ export function LegalDocument({ document }: { document: LegalDocumentId }) {
       {document === "help" ? <DocumentLinks key={document} document={document} /> : null}
       {document === "help" ? <NavigationGroup>{sections}</NavigationGroup> : sections}
       {document === "terms" ? (
-        <Section title={copy("MIT lisansı", "MIT license")}>
-          <Body selectable style={{ lineHeight: 24 }}>{mitLicense}</Body>
-        </Section>
+        <Stack style={{ gap: space.md }}>
+          <Heading>{copy("MIT lisansı", "MIT license")}</Heading>
+          <Body selectable style={{ lineHeight: lineHeight.message }}>{mitLicense}</Body>
+        </Stack>
       ) : null}
       {document !== "help" ? <DocumentLinks key={document} document={document} /> : null}
     </Stack>
@@ -52,6 +63,7 @@ export function LegalDocument({ document }: { document: LegalDocumentId }) {
 }
 
 function DocumentLinks({ document }: { document: LegalDocumentId }) {
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const action = useAsyncAction();
   const [target, setTarget] = useState<string | null>(null);
@@ -125,7 +137,7 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
       <NavigationGroup>
         {[{ label: copy("E-posta uygulamasını aç", "Open email app"), url: `mailto:${supportEmail}`, detail: supportEmail }, ...links].map(({ label, url, ...rest }) => (
           <View key={url}>
-            <NavigationRow label={label} detail={"detail" in rest ? rest.detail : undefined} detailLines={0}
+            <NavigationRow label={label} intent="command" detail={"detail" in rest ? rest.detail : undefined} detailLines={0}
               disabled={action.isPending} busy={action.isPending && target === url} onPress={() => open(url)} />
             {target === url ? <MutationState mutation={action} /> : null}
           </View>

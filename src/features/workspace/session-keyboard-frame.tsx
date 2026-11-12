@@ -1,77 +1,51 @@
 import { useMobileTheme } from "@/ui/theme";
-import {
-  createContext,
-  useCallback,
-  useState,
-  type PropsWithChildren,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useState, type PropsWithChildren, type ReactNode } from "react";
 import { View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
-import {
-  KeyboardStickyView,
-  useKeyboardState,
-  useReanimatedKeyboardAnimation,
-} from "react-native-keyboard-controller";
-import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { useKeyboardState, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 
 export const SessionKeyboardSpace = createContext<number | null>(null);
 
-/** Pin the composer to the IME itself; its measured footprint belongs to the viewport once. */
+/**
+ * Transcript above, composer below, in one column. The keyboard's native animation drives a single
+ * bottom padding on the UI thread, so the composer rides the IME and the transcript viewport
+ * shrinks with it without a JS frame or a measured composer height (no first-frame 0 -> N jump).
+ */
 export function SessionKeyboardFrame({
   children,
   composer,
   style,
 }: PropsWithChildren<{ composer: ReactNode; style?: StyleProp<ViewStyle> }>) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const insets = useSafeAreaInsets();
   const { height, progress } = useReanimatedKeyboardAnimation();
   const keyboardHeight = useKeyboardState((state) => state.height);
   const [frameHeight, setFrameHeight] = useState(0);
   const onFrameLayout = useCallback((event: LayoutChangeEvent) => {
     const next = event.nativeEvent.layout.height;
-    if (Number.isFinite(next) && next > 0) setFrameHeight(previous => previous === next ? previous : next);
+    if (Number.isFinite(next) && next > 0) setFrameHeight((previous) => (previous === next ? previous : next));
   }, []);
   const availableHeight = frameHeight > 0 ? Math.max(0, frameHeight - keyboardHeight) : null;
-  const composerHeight = useSharedValue(0);
-  const onComposerLayout = useCallback(
-    (event: LayoutChangeEvent) => {
-      composerHeight.value = event.nativeEvent.layout.height;
-    },
-    [composerHeight],
-  );
-  const viewportStyle = useAnimatedStyle(() => ({
-    paddingBottom: Math.max(0, -height.value) + composerHeight.value,
-  }));
+  const columnStyle = useAnimatedStyle(() => ({ paddingBottom: Math.max(0, -height.value) }));
   const safeBottomStyle = useAnimatedStyle(
     () => ({
-      // Composer already owns its compact 8dp footer. The navigation inset disappears with the IME.
-      paddingBottom:
-        Math.max(0, insets.bottom - space.sm) * (1 - Math.min(1, Math.max(0, progress.value))),
+      // The navigation inset is replaced by the IME while it is open.
+      paddingBottom: insets.bottom * (1 - Math.min(1, Math.max(0, progress.value))),
     }),
     [insets.bottom],
   );
-
   return (
     <View onLayout={onFrameLayout} style={[{ flex: 1, minHeight: 0 }, style]}>
-      <Animated.View style={[{ flex: 1, minHeight: 0 }, viewportStyle]}>{children}</Animated.View>
-      <KeyboardStickyView
-        onLayout={onComposerLayout}
-        style={{
-          position: "absolute",
-          left: Math.max(insets.left, space.screen),
-          right: Math.max(insets.right, space.screen),
-          bottom: 0,
-          zIndex: 1,
-        }}
-      >
-        <Animated.View style={[{ backgroundColor: colors.background }, safeBottomStyle]}>
+      <Animated.View style={[{ flex: 1, minHeight: 0 }, columnStyle]}>
+        <View style={{ flex: 1, minHeight: 0 }}>{children}</View>
+        <Animated.View style={[{ backgroundColor: colors.background, paddingTop: space.sm, paddingBottom: 0 }, safeBottomStyle]}>
           <SessionKeyboardSpace.Provider value={availableHeight}>
-            {composer}
+            <View style={{ paddingBottom: space.sm }}>{composer}</View>
           </SessionKeyboardSpace.Provider>
         </Animated.View>
-      </KeyboardStickyView>
+      </Animated.View>
     </View>
   );
 }

@@ -8,7 +8,14 @@ vi.mock("expo-clipboard",()=>({setStringAsync:f.clipboard}));vi.mock("expo-crypt
 vi.mock("@/remote/transport",async()=>({RemoteHostError:(await import("@/remote/host-error")).RemoteHostError}));
 vi.mock("@/state/security",()=>({isAppAccessAllowed:()=>f.allowed,useSecurity:{getState:()=>f.state,subscribe:(fn:()=>void)=>{f.listeners.add(fn);return()=>f.listeners.delete(fn);}}}));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));vi.mock("../reporting/report-store",()=>({startContentReport:f.report}));vi.mock("./composer-transfer",()=>({useComposerTransfer:()=>({transfer:vi.fn()})}));vi.mock("./selected-text",()=>({SelectedText:()=>createElement("p",null,"Selection open")}));
-vi.mock("@/ui/primitives",()=>{const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);const Action=({label,onPress,disabled,intent}:{label:string;onPress:()=>void;disabled?:boolean;intent?:string})=>{f.rows.push({label,press:onPress});return createElement("button",{onClick:onPress,disabled,"data-intent":intent},label);};return {Body:Wrapper,NavigationGroup:Wrapper,NavigationRow:Action,Button:Action,ErrorText:({error}:{error:unknown})=>error?createElement("p",{role:"alert"},String(error)):null,Notice:({message}:{message:string})=>createElement("p",null,message),Sheet:({children,dismissible}:PropsWithChildren<{dismissible?:boolean}>)=>createElement("section",{"data-dismissible":String(dismissible)},children)};});
+vi.mock("@/ui/primitives",()=>{const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);const Action=({label,onPress,disabled,intent}:{label:string;onPress:()=>void;disabled?:boolean;intent?:string})=>{f.rows.push({label,press:onPress});return createElement("button",{onClick:onPress,disabled,"data-intent":intent},label);};return {Body:Wrapper,NavigationGroup:Wrapper,NavigationRow:Action,Button:Action,ErrorText:({error}:{error:unknown})=>error?createElement("p",{role:"alert"},String(error)):null,Notice:({message}:{message:string})=>createElement("p",null,message), Sheet:({children,dismissible}:PropsWithChildren<{dismissible?:boolean}>)=>createElement("section",{"data-dismissible":String(dismissible)},children)};});
+vi.mock("lucide-react-native/icons/copy", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/flag", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/notebook-pen", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/quote", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/share-2", () => ({ default: () => null }));
+vi.mock("@/ui/icon-tile", () => ({ IconTile: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { muted: "#888" } }) }));
 import { TranscriptActions } from "./transcript-actions";
 import { RemoteHostError } from "@/remote/host-error";
 import type { MessageContext } from "@/ui/media-policy";

@@ -1,23 +1,23 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useRef, useState, type PropsWithChildren } from "react";
-import { BackHandler, Modal, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, View } from "react-native";
+import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import Animated from "react-native-reanimated";
 import { enterItem } from "../../ui/motion";
-import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import { useSecurity } from "../../state/security";
 import {
   Body,
   Button,
-  ErrorText,
+  ErrorNotice,
   Heading,
   IconButton,
   Loading,
   Row,
   Screen,
 } from "../../ui/primitives";
-import { uiStyles } from "../../ui/styles";
-import { colors, fontSize, metrics, radii, space } from "../../ui/tokens";
+import { Illustration } from "../../ui/illustrations";
+import { fontSize, metrics, space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LegalLinks, type LegalLinkTarget } from "../../ui/brand";
@@ -52,7 +52,7 @@ export function useSecurityError() {
 }
 
 export function SecurityGate({ children }: PropsWithChildren) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const security = useSecurity();
   const copy = useCopy();
   const describeError = useSecurityError();
@@ -65,14 +65,8 @@ export function SecurityGate({ children }: PropsWithChildren) {
   useEffect(() => {
     if (security.status !== "locked") setDocument(null);
   }, [security.status]);
-  useEffect(() => {
-    if (process.env.EXPO_OS !== "android") return;
-    const back = BackHandler.addEventListener(
-      "hardwareBackPress",
-      () => useSecurity.getState().status !== "unlocked",
-    );
-    return () => back.remove();
-  }, []);
+  // Locked screens consume back; unlocked ones pass it through (listener removed).
+  useBackHandler(security.status !== "unlocked", () => {});
   if (security.status === "unlocked") opened.current = true;
   const content = (
     <View style={uiStyles.screen}>
@@ -102,32 +96,13 @@ export function SecurityGate({ children }: PropsWithChildren) {
             <Loading label={copy("Güvenlik kontrol ediliyor…", "Checking security…")} centered />
           ) : (
             <>
-              <View
-                accessible={false}
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: radii.pill,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <LockKeyhole
-                  size={28}
-                  strokeWidth={2}
-                  color={security.status === "suspended" ? colors.muted : colors.accent}
-                />
-              </View>
+              <Illustration name="locked" size={96} />
               <View style={{ alignItems: "center", gap: space.sm }}>
-                <Text
-                  selectable
-                  accessibilityRole="header"
-                  style={[uiStyles.heading, { fontSize: fontSize.hero, lineHeight: 34, textAlign: "center" }]}
-                >
+                <Heading style={{ fontSize: fontSize.hero, lineHeight: 34, textAlign: "center" }}>
                   {security.status === "suspended"
                     ? copy("Çalışma alanın gizlendi", "Your workspace is hidden")
                     : copy("bycoda kilitli", "bycoda is locked")}
-                </Text>
+                </Heading>
                 <Body muted style={{ textAlign: "center" }}>
                   {security.status === "suspended"
                     ? copy(
@@ -141,8 +116,8 @@ export function SecurityGate({ children }: PropsWithChildren) {
                 </Body>
               </View>
               {security.status !== "suspended" ? (
-                <View style={{ width: "100%", gap: space.sm }}>
-                  <ErrorText
+                <View style={{ width: "100%", gap: space.sm, alignItems: "center" }}>
+                  <ErrorNotice
                     error={security.error}
                     message={describeError(security.error) ?? undefined}
                   />
@@ -153,7 +128,7 @@ export function SecurityGate({ children }: PropsWithChildren) {
                         : copy("Kilidi aç", "Unlock")
                     }
                     tone="primary"
-                    fullWidth
+                    style={uiStyles.stateAction}
                     busy={security.busy}
                     onPress={() => {
                       if (security.error === "storage") void security.initialize();

@@ -2,17 +2,16 @@ import { ScreenList } from "@/ui/screen-list";
 import type { HostAttentionInbox, MobileInboxItem } from "@/domain/types";
 import { router } from "expo-router";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActionMenu, Body, NavigationRow, Notice, QueryState, Row, Screen, ScreenHeader, SegmentedControl, Sheet } from "@/ui/primitives";
+import { ActionMenu, Body, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, Sheet, StateView } from "@/ui/primitives";
 import { CollectionToolbar } from "@/ui/search-field";
 import { useCopy } from "@/ui/copy";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { getLocales } from "expo-localization";
 import { resolveLocale } from "@/localization";
-import { colors, radii, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
 import { Scope } from "./shared/scope";
-import { Status, statusLabel } from "./shared/status";
+import { AttentionRow } from "../inbox/attention-row";
+import { groupAttention, isUrgentAttention } from "../inbox/attention-groups";
 import { InboxBrowseMemoryProvider, useInboxBrowseMemory } from "../inbox/inbox-browse-memory-provider";
 import { useInboxScrollMemory } from "../inbox/use-inbox-scroll-memory";
 import { ProviderInboxScreen } from "../inbox/provider-inbox-screen";
@@ -21,7 +20,6 @@ import { inboxRelativeTime } from "./inbox-time";
 import { isInboxOriginCurrent, isInboxPrivateFailure } from "../inbox/provider-model";
 
 const attentionRoutes = { task: "tasks", goal: "goals", automation: "automations", social: "social", "pull-request": "tasks", session: "inbox" } as const;
-const attentionStatuses = ["review", "awaiting-approval", "blocked", "failed"];
 
 /** Mail-style relative time ("5 dk", "2 sa", "dün") in the app language. */
 function relativeTime(value: number, copy: ReturnType<typeof useCopy>) {
@@ -71,7 +69,8 @@ function AttentionInboxScreen() {
   );
   const readable = scopeCurrent && query.isEnabled !== false && query.fetchStatus !== "paused" && !isInboxPrivateFailure(query.error);
   const data = readable ? query.data : undefined;
-  const rows = data?.items ?? [];
+  const groups = useMemo(() => groupAttention(data?.items ?? []), [data]);
+  const rows = groups.ordered;
   const lease = useMemo(() => ({ active: false }), [readable, origin.machineId, origin.projectId]);
   useLayoutEffect(() => { lease.active = true; return () => { lease.active = false; }; }, [lease]);
   const [help, setHelp] = useState<typeof lease | null>(null);
@@ -122,45 +121,26 @@ function AttentionInboxScreen() {
       ) : null} />}
       header={
         <>
-          {!machine ? <Notice message={copy("Bir bilgisayar seçin", "Choose a computer")} /> : !scopeCurrent || query.isEnabled === false && !query.error ? (
-            <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
+          {!machine ? <StateView illustration="connect-computer" title={copy("Bir bilgisayar seçin", "Choose a computer")} /> : !scopeCurrent || query.isEnabled === false && !query.error ? (
+            <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
+              description={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
               "Record access is unavailable. Check the original computer and project connection.")} />
           ) : <QueryState query={{...query, data, refetch: refresh}} empty={data?.items.length === 0}
-            emptyTitle={copy("Bekleyen bir iş yok", "Nothing needs your attention")} />}
+            emptyIllustration="inbox-empty"
+            emptyTitle={copy("Her şey yolunda", "You're all caught up")}
+            emptyDetail={copy("Dikkat gerektiren bir şey olduğunda burada görünür.", "Anything that needs your attention will show up here.")} />}
         </>
       }
-      renderItem={({ item }) => {
-        const needsAttention = !!item.status && attentionStatuses.includes(item.status);
-        const time = relativeTime(item.updatedAt, copy);
+      renderItem={({ item, index }) => {
+        const urgent = isUrgentAttention(item);
+        const first = index === 0 || isUrgentAttention(rows[index - 1]!) !== urgent;
         return (
-          <NavigationRow
-            label={item.title}
-            accessibilityLabel={[item.title, item.detail, time, item.status ? statusLabel(item.status, copy) : undefined].filter(Boolean).join(". ")}
-            detail={item.detail}
-            detailLines={2}
-            emphasized={needsAttention}
-            icon={
-              <View
-                accessible={false}
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: radii.pill,
-                  backgroundColor: needsAttention ? colors.accent : "transparent",
-                  marginEnd: space.xxs,
-                }}
-              />
-            }
-            supporting={
-              <Row>
-                <Body muted style={uiStyles.caption}>
-                  {time}
-                </Body>
-                {item.status ? <Status value={item.status} /> : null}
-              </Row>
-            }
-            onPress={() => open(item)}
-          />
+          <View>
+            {first ? <SectionHeader
+              title={urgent ? copy("Şimdi sizden bekleyenler", "Needs you now") : copy("Daha önce", "Earlier")}
+              count={urgent ? groups.now.length : groups.earlier.length} /> : null}
+            <AttentionRow item={item} time={relativeTime(item.updatedAt, copy)} onPress={() => open(item)} />
+          </View>
         );
       }}
     />

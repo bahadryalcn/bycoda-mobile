@@ -4,6 +4,7 @@ import { useRef, useState, type ComponentRef } from "react";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "./shared/search";
 import Plus from "lucide-react-native/icons/plus";
+import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 
 import {
   Body,
@@ -13,10 +14,11 @@ import {
   Notice,
   QueryState,
   SearchField,
+  SearchToolbar,
+  SelectField,
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { colors } from "@/ui/tokens";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import type { HostAutomation } from "@/domain/types";
@@ -29,13 +31,23 @@ import { AutomationEditor } from "./automations/automation-editor";
 import { AutomationCard } from "./automations/automation-card";
 import { savedAutomationId } from "./automations/automation-feedback";
 import type { AutomationEditorFlow } from "./automations/types";
+import { useMobileTheme } from "@/ui/theme";
 
 export function AutomationsScreen() {
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const [search, setSearch] = useState("");
   const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
   const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
+  type StateFilter = "all" | "enabled" | "paused";
+  const [filter, setFilter] = useState<StateFilter>("all");
+  const [filterDraft, setFilterDraft] = useState<StateFilter | null>(null);
+  const filterOptions: { value: StateFilter; label: string }[] = [
+    { value: "all", label: copy("Tümü", "All") },
+    { value: "enabled", label: copy("Etkin", "Enabled") },
+    { value: "paused", label: copy("Duraklatılmış", "Paused") },
+  ];
   const machine = useActiveMachine();
   const projectId = useMachines((state) => state.selectedProjectId);
   const query = useHostQuery<HostAutomation[]>(
@@ -61,7 +73,28 @@ export function AutomationsScreen() {
   const [historyId, setHistoryId] = useState<string | null>(null);
   const busy = save.isPending || run.isPending || remove.isPending;
   const scoped = query.data?.filter(item => !projectId || item.projectId === projectId);
-  const visible = scoped?.filter(item => matchesSearch(item.name + " " + item.prompt, search, locale));
+  const visible = scoped?.filter(item => (filter === "all" || (filter === "enabled") === item.enabled) && matchesSearch(item.name + " " + item.prompt, search, locale));
+  const canCreate = !!projectId && !!machine?.providers?.length && !editor && !busy;
+  const startNew = () => {
+    save.reset();
+    if (projectId)
+      setEditor({
+        kind: "new",
+        initial: {
+          ...initialAgent(machine?.providers),
+          id: identifier(),
+          name: "",
+          prompt: "",
+          projectId,
+          enabled: true,
+          scheduleKind: "daily",
+          time: "09:00",
+          minute: 0,
+          dayOfWeek: 1,
+          maxRunsPerDay: 0,
+        },
+      });
+  };
   return (
     <ScreenList<HostAutomation>
       title={copy("Otomasyonlar", "Automations")}
@@ -72,29 +105,8 @@ export function AutomationsScreen() {
       actions={
         <IconButton
           label={copy("Yeni otomasyon", "New automation")}
-          disabled={!projectId || !machine?.providers?.length || !!editor || busy}
-          onPress={() => {
-            save.reset();
-            return (
-              projectId &&
-              setEditor({
-                kind: "new",
-                initial: {
-                  ...initialAgent(machine?.providers),
-                  id: identifier(),
-                  name: "",
-                  prompt: "",
-                  projectId,
-                  enabled: true,
-                  scheduleKind: "daily",
-                  time: "09:00",
-                  minute: 0,
-                  dayOfWeek: 1,
-                  maxRunsPerDay: 0,
-                },
-              })
-            );
-          }}
+          disabled={!canCreate}
+          onPress={startNew}
         >
           <Plus size={22} strokeWidth={2.2} color={colors.accent} />
         </IconButton>
@@ -111,7 +123,24 @@ export function AutomationsScreen() {
           ) : !machine?.providers?.length ? (
             <AgentProviderPrerequisite />
           ) : null}
-          <SearchField ref={searchInput} label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
+          <FilterSheet
+            visible={filterDraft !== null}
+            onClose={() => setFilterDraft(null)}
+            onReset={() => setFilterDraft("all")}
+            onApply={() => { if (filterDraft !== null) setFilter(filterDraft); setFilterDraft(null); }}
+          >
+            <SelectField
+              label={copy("Duruma göre filtrele", "Filter by state")}
+              value={filterDraft ?? filter}
+              options={filterOptions}
+              onChange={setFilterDraft}
+            />
+          </FilterSheet>
+          <SearchToolbar
+            search={<SearchField ref={searchInput} label={copy("Ad veya talimatta ara", "Search automation names and instructions")} value={search} onChangeText={setSearch} />}
+            actions={<FilterButton count={filter !== "all" ? 1 : 0} onPress={() => setFilterDraft(filter)} />}
+          />
+          <AppliedFilters filters={[filter !== "all" && `${copy("Durum", "State")}: ${filterOptions.find((option) => option.value === filter)?.label}`]} />
 
           {!editor && !visible?.some(item => item.id === savedAutomationId(save.variables)) && (
             <MutationState
@@ -157,11 +186,20 @@ export function AutomationsScreen() {
             query={query}
             empty={visible?.length === 0}
             emptyTitle={
-              search.trim() && scoped?.length
+              (search.trim() || filter !== "all") && scoped?.length
                 ? copy("Eşleşen sonuç yok", "No matching results")
                 : copy("Henüz otomasyon yok", "No automations yet")
             }
-            emptyAction={search.trim() && scoped?.length ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
+            emptyDetail={scoped?.length ? undefined : copy("Otomasyon, ajanı belirlediğiniz zamanda otomatik çalıştırır.", "An automation runs an agent on a schedule you choose.")}
+            emptyAction={
+              scoped?.length && (search.trim() || filter !== "all")
+                ? search.trim()
+                  ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+                  : { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") }
+                : canCreate
+                  ? { label: copy("Yeni otomasyon", "New automation"), onPress: startNew }
+                  : undefined
+            }
           />
         </>
       }

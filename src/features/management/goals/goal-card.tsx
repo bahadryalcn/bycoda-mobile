@@ -3,9 +3,12 @@ import { PlanSteps } from "@/ui/plan-steps";
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
 import MessageSquare from "lucide-react-native/icons/message-square";
-import { uiStyles } from "@/ui/styles";
-import { ActionMenu, Body, Button, Disclosure, ErrorText, IconButton, MutationState, Row } from "@/ui/primitives";
-import { colors } from "@/ui/tokens";
+import Settings2 from "lucide-react-native/icons/settings-2";
+import Pencil from "lucide-react-native/icons/pencil";
+import Square from "lucide-react-native/icons/square";
+import Trash2 from "lucide-react-native/icons/trash-2";
+import { ActionMenu, Body, Button, Disclosure, ErrorNotice, IconButton, MutationState, Row } from "@/ui/primitives";
+import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
@@ -23,9 +26,11 @@ export function GoalCard({
   cancel,
   remove,
 }: GoalCardProps) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
+  const glyph = useMenuGlyph();
+  const relative = useRelativeTime();
   const canCancel = !["done", "cancelled"].includes(goal.status);
   const canDelete = ["done", "cancelled"].includes(goal.status);
   const active = goal.status === "planning" || goal.status === "running";
@@ -48,26 +53,26 @@ export function GoalCard({
   // Active work keeps Stop direct; inactive cancellation remains secondary.
   const menu = [
     canCancel && {
-      key: "settings",
+      key: "settings", icon: glyph(Settings2),
       label: copy("Hedef ayarları", "Goal settings"),
       disabled: busy || editorOpen,
       onPress: () => onSettings(goal),
     },
     ["awaiting-approval", "blocked"].includes(goal.status) && {
-      key: "revise",
+      key: "revise", icon: glyph(Pencil),
       label: copy("Planı değiştir", "Revise plan"),
       disabled: busy || editorOpen,
       onPress: () => onReplan(goal.id),
     },
     canCancel && !active && {
-      key: "cancel",
+      key: "cancel", icon: glyph(Square, true),
       label: copy("Hedefi durdur", "Cancel goal"),
       destructive: true,
       disabled: busy,
       onPress: stop,
     },
     canDelete && {
-      key: "delete",
+      key: "delete", icon: glyph(Trash2, true),
       label: copy("Kaydı sil", "Delete record"),
       destructive: true,
       disabled: busy,
@@ -87,15 +92,20 @@ export function GoalCard({
     <RecordCard
       title={goal.title}
       status={<Status value={goal.status} />}
-      metadata={goal.taskIds.length + " " + copy("görev", "tasks")}
+      metadata={joinMeta([
+        copy("{p0} görev", "{p0} tasks", { p0: goal.plan?.tasks.length ?? goal.taskIds.length }),
+        goal.projectIds.length > 1 && copy("{p0} proje", "{p0} projects", { p0: goal.projectIds.length }),
+        relative(goal.updatedAt) && copy("Güncellendi {p0}", "Updated {p0}", { p0: relative(goal.updatedAt) }),
+      ])}
+      preview={goal.prompt ? <Body muted numberOfLines={2}>{goal.prompt}</Body> : null}
       defaultExpanded={goal.status === "awaiting-approval"}
-      menu={<Row style={{ gap: 0, flexWrap: "nowrap" }}>
+      menu={<RecordTrailing>
         {goal.plannerSessionId ? <IconButton label={copy("Planlayıcı oturumu", "Planner session")} onPress={openPlanner}>
           <MessageSquare size={18} color={colors.accent} />
         </IconButton> : null}
         <ActionMenu label={copy("Hedef işlemleri", "Goal actions")}
           busy={(!active && cancelling) || (remove.isPending && remove.variables?.goalId === goal.id)} actions={menu} />
-      </Row>}
+      </RecordTrailing>}
       footer={active || goal.status === "awaiting-approval" ? (
         <Row>
           {active && (
@@ -144,8 +154,8 @@ export function GoalCard({
         }))} /></Disclosure> : null}
       </>}
     >
-      <ErrorText error={goal.error} />
-      <ErrorText error={goal.planError} />
+      <ErrorNotice error={goal.error} />
+      <ErrorNotice error={goal.planError} />
       {approve.variables?.goalId === goal.id ? <MutationState mutation={approve} /> : null}
       {cancel.variables?.goalId === goal.id ? <MutationState mutation={cancel} /> : null}
       {remove.variables?.goalId === goal.id ? <MutationState mutation={remove} /> : null}

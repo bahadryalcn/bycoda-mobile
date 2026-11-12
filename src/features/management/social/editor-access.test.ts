@@ -28,9 +28,10 @@ vi.mock("./policy",()=>({
 vi.mock("./fact-choices",()=>({FactChoices:()=>null}));
 vi.mock("./scheduled-time-field",()=>({ScheduledTimeField:(props:any)=>{fixture.time=props;return null;}}));
 vi.mock("../shared/format",()=>({identifier:()=>"request"}));
+vi.mock("@/ui/number-field", async () => ({ NumberField: (await import("@/ui/primitives")).Field }));
 vi.mock("@/ui/primitives",()=>{
  const wrap=({children}:PropsWithChildren)=>createElement("div",null,children);
- return{Stack:wrap,Body:wrap,Card:wrap,Heading:wrap,Row:wrap,
+ return{Stack:wrap,Body:wrap,Card:wrap,Heading:wrap,Row:wrap,Section:wrap,
   Notice:({message}:any)=>createElement("p",null,message),ErrorText:()=>null,QueryState:()=>null,MutationState:()=>null,
   Field:(props:any)=>{fixture.fields.set(props.label,props);return createElement("input",{"aria-label":props.label,value:props.value,readOnly:props.editable===false,onChange:(event:any)=>props.onChangeText(event.target.value)});},
   SelectField:(props:any)=>{fixture.selects.set(props.label,props);return null;},

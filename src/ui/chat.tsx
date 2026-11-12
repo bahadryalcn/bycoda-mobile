@@ -1,12 +1,12 @@
 import React from "react";
 import Animated from "react-native-reanimated";
-import { View, type ViewProps } from "react-native";
+import { View, type ViewProps, type HostInstance } from "react-native";
 import { Message } from "panelui-native/components/message";
 import { Surface } from "panelui-native/components/surface";
 import type { UIMessage } from "ai";
 import type { MessageContext } from "./media-policy";
 import { MessageText } from "./message-text";
-import { colors, radii, space } from "./tokens";
+import { radii, space, type MobileColors } from "./tokens";
 
 /** Product facade keeps transcript semantics while PanelUI owns presentation. */
 export const ChatMessage = React.memo(function ChatMessage({
@@ -48,10 +48,14 @@ export function ChatResponse({
   );
 }
 
-export const ChatConversation = React.forwardRef<View, ViewProps>(
+export const ChatConversation = React.forwardRef<HostInstance, ViewProps>(
   function ChatConversation(props, ref) {
     // The application already owns inversion, history anchoring and keyboard space.
-    return <Surface {...props} variant="transparent" padding="none" ref={ref} />;
+    // PanelUI MessageScroller.List was evaluated and not adopted: it is a plain FlatList that
+    // animates scrollToEnd on every content-size change, has no drag-aware follow machine,
+    // offset restore, keyed find-jump or end-aligned short transcripts, which LegendList plus
+    // transcript-scroll.ts provide here.
+    return <Surface {...props} variant="transparent" padding="none" ref={ref as never} />;
   },
 );
 
@@ -64,13 +68,13 @@ export const ChatConversation = React.forwardRef<View, ViewProps>(
 export const ChatComposerSurface = Animated.View;
 
 /** The user's own message: a rounded trailing bubble that never spans the whole column. */
-export function chatUserBubbleStyle() {
+export function chatUserBubbleStyle(colors: MobileColors) {
   return {
     alignSelf: "flex-end" as const,
     maxWidth: "85%" as const,
     backgroundColor: colors.userMessage,
-    borderRadius: radii.card,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
+    borderRadius: radii.bubble,
+    paddingHorizontal: space.md + space.xxs,
+    paddingVertical: space.sm + space.xxs,
   };
 }

@@ -3,6 +3,7 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProviderCenter } from "./provider-center";
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }), HintSection: ({ children }: PropsWithChildren) => createElement("div", null, children), InfoHint: () => null, InfoPanel: () => null, HintLabel: () => null, UnitHint: () => null, isUnitHint: () => false }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 const state = vi.hoisted(() => ({ id: "machine", endpoint: "https://original.example", uncertain: false, revision: "a".repeat(64), requests: [] as { method: string; params: unknown }[], methods: [] as string[] }));
@@ -12,13 +13,17 @@ vi.mock("@/state/queries", () => ({
   useHostMutation: (method: string) => ({ isPending: false, mutateAsync: async (params: unknown) => { state.requests.push({ method, params }); if (state.uncertain) throw { uncertain: true }; } }),
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { accent: "#000" } }) }));
+vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("@/ui/agent-avatar", () => ({ ProviderAccountMark: ({ provider }: { provider: string }) => createElement("i", null, provider) }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label);
   return { StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children),
     Disclosure: Wrapper,
-    Row: Wrapper, Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    Row: Wrapper, Section: ({ title, children }: { title: string; children: import("react").ReactNode }) => createElement("section", null, title, children), SectionHeader: ({ title, count }: { title: string; count?: number }) => createElement("h3", null, count === undefined ? title : title + " (" + count + ")"),
+    StateView: ({ title, description }: { title: string; description?: string }) => createElement("p", null, title, description), IconButton: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { "aria-label": label, onClick: onPress, disabled }), Badge: ({ label }: { label: string }) => createElement("span", null, label),
     SearchField: ({ label, value, onChangeText }: { label: string; value: string; onChangeText: (value: string) => void }) => createElement("input", { "aria-label": label, value, onChange: (event: import("react").ChangeEvent<HTMLInputElement>) => onChangeText(event.target.value) }),
     FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, submitLabel === "Review changes" ? submitLabel : "Confirm save")), Body: Wrapper, Sheet: Wrapper, QueryState: () => null, ErrorText: () => null, MutationState: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message), Button, NavigationRow: Button,

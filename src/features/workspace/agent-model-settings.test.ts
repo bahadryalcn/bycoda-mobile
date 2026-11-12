@@ -24,5 +24,7 @@ it("orders and names model settings exactly like the desktop picker", () => {
       for (const setting of mobile[group]) expect(settingLabel(setting)).toBe(desktopSettingLabel(setting));
     }
   }
-  expect(SETTING_GROUP_TITLE).toEqual(DESKTOP_GROUP_TITLE);
+  // Mobile intentionally names the delegation group "Advisor and subagents" (see
+  // agent-model-fields.test.ts); the desktop picker also groups image settings as "Agents and images".
+  expect(SETTING_GROUP_TITLE).toEqual({ ...DESKTOP_GROUP_TITLE, delegation: "Advisor and subagents" });
 });

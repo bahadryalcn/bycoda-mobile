@@ -7,10 +7,10 @@ import {
   Badge,
   Body,
   Button,
-  Empty,
   ErrorText,
   FormActions,
-  Notice,
+  Empty,
+  StateView,
   IconButton,
   Row,
   ScreenList,
@@ -30,8 +30,7 @@ import { useLocale } from "@/i18n";
 import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
 import { ScreenChromeProvider } from "@/ui/layout";
 import { normalizeSearch } from "../management/shared/search";
-import { colors, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { space } from "@/ui/tokens";
 import { AttachmentFile } from "./transcript-attachments";
 import { useEarlierSession } from "./session-queries";
 import {
@@ -52,7 +51,7 @@ export function SessionFiles(props: { scope: SessionScope; session: HostSession 
 }
 
 function SessionFilesScope({ scope, session, connection }: { scope: SessionScope; session: HostSession; connection: ConnectionScope }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const client = useHostClient();
@@ -117,8 +116,8 @@ function SessionFilesScope({ scope, session, connection }: { scope: SessionScope
         onClose={close}
         footer={<FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />}
       >
-        {open && !readable ? <ScrollView contentContainerStyle={{ padding: space.screen, gap: space.sm }}>
-          <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />
+        {open && !readable ? <ScrollView contentContainerStyle={{ padding: space.screen, gap: space.sm, flexGrow: 1 }}>
+          <StateView illustration="locked" title={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />
           {available && denied.current ? <><ErrorText error={earlier.error} /><Button label={copy("Önceki mesajları yükle", "Load earlier messages")} busy={earlier.isPending} onPress={loadEarlier} /></> : null}
         </ScrollView> : null}
         <PrivateContentBoundary visible={readable} isAllowed={canRead}><PrivateContentAccessProvider value={scopedAccess}>
@@ -145,7 +144,7 @@ function SessionFilesScope({ scope, session, connection }: { scope: SessionScope
             header={readable ? <Body muted style={uiStyles.caption}>{opening.machineName}</Body> : undefined}
             ListEmptyComponent={
               <Empty
-                compact
+                compact={false}
                 title={
                   files.length
                     ? copy("Aramana uyan dosya yok", "No files match your search")
@@ -213,6 +212,7 @@ function SessionFilesScope({ scope, session, connection }: { scope: SessionScope
 
 /** The existing transport owner captures the original collection's private check. */
 function ScopedFileList({ scope, session, ...props }: Omit<ScreenListProps<SessionFile>, "renderItem"> & { scope: SessionScope; session: HostSession }) {
+  const { uiStyles } = useMobileTheme();
   const client = useHostClient(), copy = useCopy();
   const context = client ? { client, machineId: scope.machineId, projectId: session.projectId, sessionId: scope.sessionId, cwd: session.session.worktreeCwd || session.session.cwd } : undefined;
   return <ScreenList<SessionFile> {...props} renderItem={({ item }) => <View style={{ gap: space.xs }}>

@@ -1,6 +1,7 @@
 import { Stack, router, useLocalSearchParams } from "expo-router";
-import { Empty, Button, Screen } from "@/ui/primitives";
+import { Empty, Screen } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { LegalReader } from "./legal-reader";
 import { isLegalDocument, legalDocumentTitle, LegalDocument } from "./legal-document";
 
 export function LegalScreen() {
@@ -9,13 +10,28 @@ export function LegalScreen() {
   const document = Array.isArray(params.document) ? params.document[0] : params.document;
   if (!isLegalDocument(document)) {
     return (
-      <Screen>
+      <Screen scroll={false}>
         <Stack.Screen options={{ title: copy("Belge bulunamadı", "Document not found") }} />
-          <Empty title={copy("Bu belge mevcut değil.", "This document is unavailable.")} />
-          <Button label={copy("Geri dön", "Go back")} onPress={() => {
-            if (router.canGoBack()) router.back();
-            else router.replace("/");
-          }} />
+        <Empty
+          compact={false}
+          illustration="error"
+          title={copy("Bu belge mevcut değil.", "This document is unavailable.")}
+          action={{
+            label: copy("Geri dön", "Go back"),
+            onPress: () => {
+              if (router.canGoBack()) router.back();
+              else router.replace("/");
+            },
+          }}
+        />
+      </Screen>
+    );
+  }
+  if (document !== "help") {
+    return (
+      <Screen scroll={false}>
+        <Stack.Screen options={{ title: legalDocumentTitle(document, copy) }} />
+        <LegalReader document={document} />
       </Screen>
     );
   }

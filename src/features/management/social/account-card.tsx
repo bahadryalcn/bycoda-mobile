@@ -11,7 +11,6 @@ import {
   QueryState,
   Disclosure,
 } from "@/ui/primitives";
-import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useHostMutation, useHostQuery } from "@/state/queries";
@@ -20,8 +19,10 @@ import type { SocialOAuthBegin } from "@/remote/types";
 import { socialRequest as request } from "./request";
 import type { AccountCardProps, OAuthStatus } from "./types";
 import { socialLabel } from "./labels";
+import { useMobileTheme } from "@/ui/theme";
 
 export function AccountCard({ account, state, projectId }: AccountCardProps) {
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const action = useHostMutation("social.request", ["social"]);
   const begin = useHostMutation<SocialOAuthBegin>("social.oauth.begin", ["social"]);

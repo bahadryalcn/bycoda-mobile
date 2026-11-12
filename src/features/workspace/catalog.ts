@@ -33,9 +33,16 @@ export function sessionModel(catalog: HostModelCatalog | undefined, provider: Re
 
 export function sessionSettings(model: ReturnType<typeof sessionModel>, values: Record<string, string>): Record<string, string> {
   if (!model) return {};
-  return Object.fromEntries((model.settings ?? []).map((setting) => [setting.id,
+  return carryReserved(values, Object.fromEntries((model.settings ?? []).map((setting) => [setting.id,
     setting.options.some((option) => option.value === values[setting.id]) ? values[setting.id] : setting.value,
-  ]));
+  ])));
+}
+
+/** bycoda's own delegation choices ride in modelSettings under reserved keys the model never declares. */
+const RESERVED_KEYS = ["crossAdvisor", "crossSubagents", "imageModels", "delegationParent"] as const;
+function carryReserved(from: Record<string, string>, into: Record<string, string>): Record<string, string> {
+  for (const key of RESERVED_KEYS) if (from[key] !== undefined) into[key] = from[key];
+  return into;
 }
 
 /** New sessions use product defaults; explicit model IDs and setting choices win. */
@@ -57,23 +64,28 @@ export function creationSettings(model: ReturnType<typeof sessionModel>, values:
   if (explicit.subagentModel !== undefined || explicit.subagentPolicy !== undefined) {
     result.crossSubagents = explicit.subagentModel === "off" || explicit.subagentPolicy === "off" ? "[]" : "";
   }
-  return result;
+  // An explicit cross-provider choice wins over the value derived from the provider's own setting.
+  return carryReserved(values, result);
 }
 
-/** Older saved connections may lack a descriptor; infer only providers returned by the host. */
+/**
+ * Providers the computer offers: its descriptor list plus every provider the live catalog reports.
+ * The saved descriptor can be stale (taken at pairing, or before a CLI was installed), so the
+ * catalog never loses a provider the Host can serve now.
+ */
 export function catalogProviders(
   advertised: readonly RemoteProvider[] | undefined,
   catalog?: HostModelCatalog,
 ): RemoteProvider[] {
-  const providers = advertised?.length
-    ? advertised
-    : REMOTE_PROVIDERS.filter(
-        (provider) =>
-          Object.prototype.hasOwnProperty.call(catalog?.models ?? {}, provider) ||
-          Object.prototype.hasOwnProperty.call(catalog?.errors ?? {}, provider) ||
-          !!catalog?.pending?.includes(provider),
-      );
-  return [...new Set(providers)].filter((provider) => REMOTE_PROVIDERS.includes(provider));
+  const listed = REMOTE_PROVIDERS.filter(
+    (provider) =>
+      Object.prototype.hasOwnProperty.call(catalog?.models ?? {}, provider) ||
+      Object.prototype.hasOwnProperty.call(catalog?.errors ?? {}, provider) ||
+      !!catalog?.pending?.includes(provider),
+  );
+  return [...new Set([...(advertised ?? []), ...listed])].filter((provider) =>
+    REMOTE_PROVIDERS.includes(provider),
+  );
 }
 
 export function catalogModel(

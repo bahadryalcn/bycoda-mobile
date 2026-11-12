@@ -3,7 +3,7 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine } from "@/state/reviewed-machine";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { Body, Button, Disclosure, FormActions, MutationState, Notice, QueryState, StatusRow, Sheet, Stack, ToggleField } from "@/ui/primitives";
+import { Body, Button, Disclosure, FormActions, MutationState, Notice, QueryState, StateView, StatusRow, Sheet, Stack, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
 import type { DeviceHostStatus } from "./types";
@@ -47,7 +47,7 @@ export function DeviceRuntime({ projectId, deviceId, onClose }: { projectId: str
   const checks = supported ? preflight.data?.checks : undefined;
   return <Sheet visible title={copy("Cihaz servisi", "Device service")} size="form" dismissible={!busy} onClose={onClose}>
     <Body muted>{machine?.name}</Body>
-    {!supported ? <Notice message={copy("Seçili bilgisayar değişti veya bu özelliği desteklemiyor.", "The selected computer changed or does not support this feature.")} /> : <><QueryState query={preflight} /><QueryState query={status} loading="none" /></>}
+    {!supported ? <StateView illustration="permission" title={copy("Güncelleme gerekiyor", "Update needed")} description={copy("Seçili bilgisayar değişti veya bu özelliği desteklemiyor.", "The selected computer changed or does not support this feature.")} /> : <><QueryState query={preflight} /><QueryState query={status} loading="none" /></>}
     {checks ? <Stack style={{ gap: space.xs }}>
       <StatusRow label="SDK"><Body muted>{checks.sdk ? copy("Hazır", "Ready") : copy("Kullanılamıyor", "Unavailable")}</Body></StatusRow>
       <StatusRow label={copy("Cihazlar", "Devices")}><Body muted>{checks.device ? copy("Hazır", "Ready") : copy("Kullanılamıyor", "Unavailable")}</Body></StatusRow>

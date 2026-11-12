@@ -21,10 +21,10 @@ import {
   SelectField,
   Sheet,
 } from "@/ui/primitives";
-import { colors, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { space } from "@/ui/tokens";
 import { ProjectIcon } from "@/ui/project-icon";
 import { GroupedListRow, rowInset } from "./shared";
+import { queryOwnsRegion } from "./query-region";
 import type { ProjectDirectories } from "./projects-screen-types";
 
 type Location = { value: string; label: string; detail?: string };
@@ -45,7 +45,7 @@ export function ProjectFolderBrowser({
   onOpen: (path: string) => void;
   mutation: { isPending: boolean; isError: boolean; isSuccess: boolean; error: unknown };
 }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const [path, setPath] = useState<string>();
   const [manual, setManual] = useState("");
@@ -83,6 +83,28 @@ export function ProjectFolderBrowser({
     setSearch("");
     setPath(next);
   };
+  const regionOwned = queryOwnsRegion(folders, !!folders.data && !entries.length);
+  const regionState = (
+    <QueryState
+      query={folders}
+      empty={!!folders.data && !entries.length}
+      emptyIllustration={search ? "search-empty" : "inbox-empty"}
+      emptyAction={search ? {
+        label: copy("Aramayı temizle", "Clear search"),
+        onPress: () => setSearch(""),
+      } : undefined}
+      onManageConnections={() => {
+        if (mutation.isPending) return;
+        onClose();
+        router.push("/machines");
+      }}
+      emptyTitle={
+        search
+          ? copy("Aramana uyan klasör yok.", "No folders match your search.")
+          : copy("Alt klasör yok", "No subfolders")
+      }
+    />
+  );
   return (
     <Sheet
       visible
@@ -143,6 +165,8 @@ export function ProjectFolderBrowser({
               </IconButton>
               <Body
                 mono
+                numberOfLines={2}
+                ellipsizeMode="middle"
                 style={[uiStyles.grow, uiStyles.caption]}
               >
                 {current ?? path ?? copy("Bir klasör seç", "Choose a folder")}
@@ -159,27 +183,11 @@ export function ProjectFolderBrowser({
                 onChangeText={setSearch}
               />
             ) : null}
-            <QueryState
-              query={folders}
-              empty={!!folders.data && !entries.length}
-              emptyAction={search ? {
-                label: copy("Aramayı temizle", "Clear search"),
-                onPress: () => setSearch(""),
-              } : undefined}
-              onManageConnections={() => {
-                if (mutation.isPending) return;
-                onClose();
-                router.push("/machines");
-              }}
-              emptyTitle={
-                search
-                  ? copy("Aramana uyan klasör yok.", "No folders match your search.")
-                  : copy("Alt klasör yok", "No subfolders")
-              }
-            />
+            {regionOwned ? null : regionState}
           </>
         }
         contentContainerStyle={{ gap: 0 }}
+        ListEmptyComponent={regionOwned ? regionState : undefined}
         renderItem={({ item: entry, index }) => (
           <GroupedListRow
             first={index === 0}

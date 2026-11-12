@@ -5,12 +5,12 @@ import { Body, Button, CodePanel, CodeText, ErrorText, Row, Sheet } from "@/ui/p
 import { ScopedFilePreview } from "@/ui/message-text";
 import { mediaQueryKey, type MessageContext } from "@/ui/media-policy";
 import { useCopy } from "@/ui/copy";
-import { colors, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import { useSingleFlight } from "@/state/actions";
 import { useClipboardFeedback } from "@/ui/use-clipboard-feedback";
 import { SOURCE_PAGE_SIZE, useSourcePages } from "@/ui/use-source-pages";
 import { ReaderActions } from "@/ui/reader-actions";
-import { chatTextStyles } from "@/ui/chat-styles";
+import { useChatTextStyles } from "@/ui/chat-styles";
 import { useChatAppearance } from "@/state/chat-appearance";
 import type { Block } from "./wire";
 import File from "lucide-react-native/icons/file";
@@ -27,7 +27,7 @@ export function TranscriptToolPreview(props: PreviewProps) {
 }
 
 function PreviewOwner(props: RecordedPreview) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy(), [open, setOpen] = useState(false);
   const { preview } = props;
   const name = preview.path || preview.fileName || preview.title || copy("Değişiklik", "Change");
@@ -39,8 +39,8 @@ function PreviewOwner(props: RecordedPreview) {
 }
 
 function PreviewReader({ preview, status, context, name, onClose }: RecordedPreview & { name: string; onClose(): void }) {
-  useMobileTheme();
-  const copy = useCopy(), size = useChatAppearance(state => state.textSize);
+  const { colors } = useMobileTheme();
+  const copy = useCopy(), size = useChatAppearance(state => state.textSize), text = useChatTextStyles(size);
   const [file, setFile] = useState<{ path: string; context: MessageContext } | null>(null);
   const source = useMemo(() => toolPreviewSource(preview), [preview.lines, preview.output]);
   const pagination = useSourcePages(source.text);
@@ -64,7 +64,7 @@ function PreviewReader({ preview, status, context, name, onClose }: RecordedPrev
   </>}>
     <ScrollView key={pagination.page} contentContainerStyle={{ padding: space.sm, gap: space.sm }}>
     {preview.contentOnly ? <Body muted>{copy("Önceki sürüm kaydedilmemiş; yeni içerik gösteriliyor.", "The previous version was not recorded; showing new content.")}</Body> : null}
-      {source.text ? <CodePanel><CodeText style={chatTextStyles(size).code}>{runs.map((run, index) => <Text key={index} style={{ color: run.kind === "add" ? colors.success : run.kind === "del" ? colors.danger : colors.text }}>{run.text}</Text>)}</CodeText></CodePanel> : <Body muted>{copy("Henüz içerik yok", "No content yet")}</Body>}
+      {source.text ? <CodePanel><CodeText style={text.code}>{runs.map((run, index) => <Text key={index} style={{ color: run.kind === "add" ? colors.success : run.kind === "del" ? colors.danger : colors.text }}>{run.text}</Text>)}</CodeText></CodePanel> : <Body muted>{copy("Henüz içerik yok", "No content yet")}</Body>}
     </ScrollView>
     {file ? <ScopedFilePreview path={file.path} context={file.context} onClose={() => setFile(null)} /> : null}
   </Sheet>;

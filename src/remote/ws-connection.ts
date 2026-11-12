@@ -11,6 +11,7 @@ import {
   WS_LIMITS,
   getHostRpcMethod,
   nativeDesktopMethod,
+  hostRpcCost,
   hostRpcSupported,
   parseHostRpcParams,
   type BulkDescriptor,
@@ -51,6 +52,14 @@ const failureMessages: Record<HostWsFailure, string> = {
   validation: "The computer rejected this request. Check its details and try again.",
   unsupported: "This Host does not support this operation. Update the Host and reconnect.",
 };
+/** Below the Host's maxPendingRpc (64), leaving room for control and ack frames. */
+const IN_FLIGHT_LIMIT = 48;
+/**
+ * Below the Host's 8 concurrent control requests per socket (stream open/ack/close). Thirty-two
+ * project streams opening at once otherwise get "busy", and a refused ack drops the socket.
+ */
+const CONTROL_IN_FLIGHT_LIMIT = 6;
+const QUEUE_LIMIT = 512;
 /** A rejected RPC is not evidence of malformed wire data or a broken socket. */
 function rpcFailure(code: number, category?: string): HostWsFailure {
   if (category && Object.hasOwn(failureMessages, category)) return category as HostWsFailure;
@@ -95,6 +104,8 @@ export class HostWsError extends Error {
 export type HostWsRequestOptions = { signal?: AbortSignal; timeoutMs?: number };
 type Pending = {
   method: string;
+  /** Counts against the Host's per-socket control limit (stream open/ack/close). */
+  control: boolean;
   commandId?: string;
   subscriptionId?: string;
   sent: boolean;
@@ -104,6 +115,7 @@ type Pending = {
   timer: ReturnType<typeof setTimeout>;
   detach(): void;
 };
+type StreamCursor = SubscriptionEvent["params"]["cursor"];
 export type AppliedHostEvent = (
   event: SubscriptionEvent,
   assertCurrent: () => void,
@@ -130,7 +142,15 @@ function wireParams(value: unknown, depth = 0): unknown {
 function nativeFailure(error: unknown): HostWsError {
   if (error instanceof HostWsError) return error;
   const message = error instanceof Error ? error.message : "";
-  if (/credential|secure.store|access.changed|authentication/i.test(message))
+  // A local handle the native side dropped (app backgrounded, access epoch moved) is
+  // not a Host authorization failure: re-acquire it from SecureStore and reconnect.
+  if (
+    /credential_handle_expired|credentials_invalidated|access.changed|Host socket: unavailable/i.test(
+      message,
+    )
+  )
+    return new HostWsError("unavailable");
+  if (/credential|secure.store|authentication/i.test(message))
     return new HostWsError("authentication");
   if (/\btls\b|certificate|\btrust\b/i.test(message)) return new HostWsError("tls");
   if (/schema|ZodError/i.test(message) || (error instanceof Error && error.name === "ZodError"))
@@ -142,6 +162,8 @@ function nativeFailure(error: unknown): HostWsError {
 export class MobileHostWsConnection {
   readonly connectionId: string;
   private pending = new Map<string, Pending>();
+  /** Requests waiting for an in-flight slot; the Host rejects more than 64 pending RPCs. */
+  private waiting: { control: boolean; run: () => void; fail: (error: HostWsError) => void }[] = [];
   private nextId = 0;
   private listener: { remove(): void } | undefined;
   private closed = false;
@@ -150,10 +172,14 @@ export class MobileHostWsConnection {
   private hostCapabilities: readonly string[] = [];
   private bulkJobs = 0;
   private bulkBytes = 0;
+  private bulkWaiters: (() => void)[] = [];
   private eventTails = new Map<string, Promise<void>>();
   private streamIdentities = new Map<string, string>();
   private eventGuards = new Map<string, { valid: boolean; jobs: number }>();
   private pendingInvalidations = new Set<string>();
+  /** Malformed frames dropped on this connection. */
+  droppedFrames = 0;
+  private acks = new Map<string, { inflight: boolean; latest?: StreamCursor }>();
   constructor(
     private readonly native: HostSocketNative,
     readonly binding: CredentialBinding,
@@ -190,17 +216,23 @@ export class MobileHostWsConnection {
         this.fail(new HostWsError("identity"));
         return;
       }
+      // Native credit releases bridge buffers only (the server cursor ACK happens after
+      // the reducer/cache commit). Release it on receipt: a frame whose processing waits
+      // on a later frame would otherwise starve the credit and close the socket "overload".
+      if (event.type === "message" && Number.isSafeInteger(event.sequence))
+        void this.native
+          .acknowledge(this.connectionId, this.generation, event.sequence!)
+          .catch(() => undefined);
       void this.receive(event)
-        .catch((error) =>
-          this.fail(error instanceof HostWsError ? error : new HostWsError("schema")),
-        )
-        .finally(() => {
-          // Native credit releases bridge buffers only. Server cursor ACK happens
-          // separately, after the application's successful reducer/cache commit.
-          if (event.type === "message" && Number.isSafeInteger(event.sequence))
-            void this.native
-              .acknowledge(this.connectionId, this.generation, event.sequence!)
-              .catch(() => undefined);
+        .catch((error) => {
+          // One undecodable frame is dropped, not treated as an auth/credential failure.
+          // Stream gaps resync through the cursor check; stalled requests hit their deadline.
+          if (error instanceof SyntaxError || (error instanceof Error && error.name === "ZodError")) {
+            this.droppedFrames++;
+            console.warn(`Dropped malformed Host frame (${this.droppedFrames} so far).`);
+            return;
+          }
+          this.fail(error instanceof HostWsError ? error : new HostWsError("schema"));
         });
     });
     try {
@@ -234,7 +266,59 @@ export class MobileHostWsConnection {
     options: HostWsRequestOptions = {},
   ): Promise<T> {
     if (!this.supports(method)) return Promise.reject(new HostWsError("schema"));
-    return this.perform(method, params, options) as Promise<T>;
+    const control = hostRpcCost(method, params) === "control";
+    if (!this.waiting.some((entry) => entry.control === control) && this.canSend(control))
+      return this.perform(method, params, options) as Promise<T>;
+    if (this.waiting.length >= QUEUE_LIMIT) return Promise.reject(new HostWsError("overload"));
+    // A screen with many projects fans out more reads than the Host accepts at once;
+    // queue them (nothing is sent yet, so this never replays or reorders a write).
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => {
+        const index = this.waiting.indexOf(entry);
+        if (index < 0) return;
+        this.waiting.splice(index, 1);
+        reject(new HostWsError("cancelled"));
+      };
+      const entry = {
+        control,
+        run: () => {
+          options.signal?.removeEventListener("abort", onAbort);
+          try {
+            (this.perform(method, params, options) as Promise<T>).then(resolve, reject);
+          } catch (error) {
+            reject(error);
+          }
+        },
+        fail: (error: HostWsError) => {
+          options.signal?.removeEventListener("abort", onAbort);
+          reject(error);
+        },
+      };
+      this.waiting.push(entry);
+      options.signal?.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+  private canSend(control: boolean): boolean {
+    if (this.pending.size >= IN_FLIGHT_LIMIT) return false;
+    if (!control) return true;
+    let controls = 0;
+    for (const pending of this.pending.values()) if (pending.control) controls++;
+    return controls < CONTROL_IN_FLIGHT_LIMIT;
+  }
+  /** FIFO per class: a waiting control request never blocks reads, and controls keep their order. */
+  private drainWaiting(): void {
+    let controlBlocked = false;
+    for (let index = 0; !this.closed && index < this.waiting.length; ) {
+      const entry = this.waiting[index]!;
+      if ((entry.control && controlBlocked) || !this.canSend(entry.control)) {
+        if (!entry.control || this.pending.size >= IN_FLIGHT_LIMIT) return;
+        controlBlocked = true;
+        index++;
+        continue;
+      }
+      this.waiting.splice(index, 1);
+      entry.run();
+    }
   }
   supports(method: string): boolean {
     return (
@@ -280,6 +364,7 @@ export class MobileHostWsConnection {
       const abort = () => cancel("cancelled");
       const pending: Pending = {
         method,
+        control: hostRpcCost(method, parsed) === "control",
         commandId: typeof parsed.commandId === "string" ? parsed.commandId : undefined,
         subscriptionId:
           typeof parsed.subscriptionId === "string" ? parsed.subscriptionId : undefined,
@@ -314,6 +399,7 @@ export class MobileHostWsConnection {
       this.pending.delete(id);
       clearTimeout(pending.timer);
       pending.detach();
+      if (this.waiting.length) queueMicrotask(() => this.drainWaiting());
     }
     return pending;
   }
@@ -402,7 +488,15 @@ export class MobileHostWsConnection {
             ...notification,
             params: {
               ...notification.params,
-              ...(data === undefined ? {} : { data: JsonValueSchema.parse(data) }),
+              // Inline data was validated with the frame; only hydrated bulk bytes are new input.
+              ...(data === undefined
+                ? {}
+                : {
+                    data:
+                      data === notification.params.data
+                        ? notification.params.data
+                        : JsonValueSchema.parse(data),
+                  }),
             },
           },
           assertDeliveryCurrent,
@@ -412,11 +506,9 @@ export class MobileHostWsConnection {
         });
         if (!guard.valid) return;
         assertDeliveryCurrent();
+        // Ack off the pipeline: the next event applies without waiting for the Host's reply.
         if (applied && ["snapshot", "delta"].includes(notification.params.kind))
-          await this.request("subscriptions.ack", {
-            subscriptionId: id,
-            cursor: notification.params.cursor,
-          });
+          this.queueAck(id, notification.params.streamId, notification.params.cursor);
       });
       this.eventTails.set(id, handled);
       try {
@@ -475,6 +567,35 @@ export class MobileHostWsConnection {
         );
     }
   }
+  /** At most one ack in flight per subscription; newer cursors replace queued ones (cursors only advance). */
+  private queueAck(subscriptionId: string, streamId: string, cursor: StreamCursor): void {
+    const state = this.acks.get(subscriptionId) ?? { inflight: false };
+    state.latest = cursor;
+    this.acks.set(subscriptionId, state);
+    if (state.inflight) return;
+    const pump = () => {
+      const next = state.latest;
+      if (!next || this.closed) {
+        if (!state.inflight) this.acks.delete(subscriptionId);
+        return;
+      }
+      state.latest = undefined;
+      state.inflight = true;
+      this.request("subscriptions.ack", { subscriptionId, cursor: next }).then(
+        () => {
+          state.inflight = false;
+          pump();
+        },
+        (error) => {
+          state.inflight = false;
+          this.acks.delete(subscriptionId);
+          if (this.closed || this.streamIdentities.get(subscriptionId) !== streamId) return;
+          this.fail(error instanceof HostWsError ? error : new HostWsError("network"));
+        },
+      );
+    };
+    pump();
+  }
   private invalidateStream(subscriptionId: string, streamId: string): void {
     const guard = this.eventGuards.get(JSON.stringify([subscriptionId, streamId]));
     if (guard) guard.valid = false;
@@ -486,12 +607,15 @@ export class MobileHostWsConnection {
     return this.download(descriptor, needed);
   }
   private async download(descriptor: BulkDescriptor, needed: () => boolean): Promise<unknown> {
-    if (
-      descriptor.totalBytes > MAX_BULK_BYTES ||
-      this.bulkJobs >= 2 ||
-      this.bulkBytes + descriptor.totalBytes > 2 * MAX_BULK_BYTES
-    )
-      throw new HostWsError("overload");
+    if (descriptor.totalBytes > MAX_BULK_BYTES) throw new HostWsError("overload");
+    // Wait for a slot instead of failing: summary polls keep two downloads busy most of the
+    // time, and rejecting a third left a large transcript permanently "busy".
+    while (this.bulkJobs >= 2 || this.bulkBytes + descriptor.totalBytes > 2 * MAX_BULK_BYTES) {
+      await new Promise<void>((resolve) => this.bulkWaiters.push(resolve));
+      this.assertCurrent();
+      if (!needed()) throw new HostWsError("cancelled");
+      if (Date.now() >= descriptor.expiresAt) throw new HostWsError("deadline");
+    }
     this.bulkJobs++;
     this.bulkBytes += descriptor.totalBytes;
     try {
@@ -526,6 +650,7 @@ export class MobileHostWsConnection {
     } finally {
       this.bulkJobs--;
       this.bulkBytes -= descriptor.totalBytes;
+      for (const wake of this.bulkWaiters.splice(0)) wake();
     }
   }
   private fail(error: HostWsError): void {
@@ -536,14 +661,17 @@ export class MobileHostWsConnection {
   close(reason: HostWsFailure = "network"): void {
     if (this.closed) return;
     this.closed = true;
+    for (const wake of this.bulkWaiters.splice(0)) wake();
     this.ready = false;
     this.eventTails.clear();
     for (const guard of this.eventGuards.values()) guard.valid = false;
     this.eventGuards.clear();
     this.streamIdentities.clear();
     this.pendingInvalidations.clear();
+    this.acks.clear();
     this.listener?.remove();
     this.listener = undefined;
+    for (const entry of this.waiting.splice(0)) entry.fail(new HostWsError(reason));
     for (const id of this.pending.keys()) {
       const pending = this.take(id)!;
       pending.reject(this.pendingError(pending, reason));

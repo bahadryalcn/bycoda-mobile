@@ -13,6 +13,7 @@ import { credentials, useActiveMachine, useMachines } from "./machines";
 import { assertAppAccess, useSecurity } from "./security";
 import {
   assertProviderPermission,
+  isScopePermitted,
   readPermittedCredential,
   useProviderPermission,
 } from "../features/privacy/consent-access";
@@ -28,6 +29,7 @@ import { attachmentReleases } from "../features/workspace/attachment-ownership";
 import { usePrivateContentAccess } from "../ui/private-access";
 import { getHostWsRuntimeProvider, observeHostWsRuntimeProvider } from "../remote/ws-runtime-port";
 import { selectMobileHostTransport } from "../remote/lan-ws";
+import { isTransientConnectionError, retryTransientRead, transientRetryDelay } from "./query-retry";
 
 export { hostKey } from "./host-request";
 /** Stack routes stay mounted. Only the visible foreground route should refresh host data. */
@@ -38,6 +40,15 @@ export function useHostReadActive() {
     (state) => state.status === "unlocked" && state.appState === "active" && state.windowFocused,
   );
   return focused && available && privateAccess.allowed && privateAccess.check();
+}
+
+/** The saved provider consent for the active computer has not been read yet (app start). */
+export function useConsentPending() {
+  const machine = useActiveMachine();
+  const scope = machine ? consentScope(machine.environmentId, machine.providers ?? []) : "";
+  return useProviderPermission(
+    (state) => !!scope && !Object.keys(state.scopes).length,
+  );
 }
 
 export function useHostClient() {
@@ -51,7 +62,7 @@ export function useHostClient() {
   const unlocked = useSecurity((s) => s.status === "unlocked");
   const ready = useMachines((s) => s.hydrated && !s.storageError && !s.connectionPending);
   const scope = machine ? consentScope(machine.environmentId, machine.providers ?? []) : "";
-  const consented = useProviderPermission((state) => state.scopes[scope] === true);
+  const consented = useProviderPermission((state) => isScopePermitted(state.scopes, scope));
   const client = useMemo(() => {
     if (
       !machine ||
@@ -150,6 +161,8 @@ export function useHostQuery<T>(
     enabled?: boolean;
     interval?: number | ((data: T | undefined) => number | false);
     queryFn?: (client: HostTransport, signal: AbortSignal) => Promise<T>;
+    /** Keep showing the previous key's data (same computer only) while the next key loads. */
+    keepPrevious?: boolean;
   } = {},
 ) {
   const machine = useActiveMachine();
@@ -166,12 +179,23 @@ export function useHostQuery<T>(
     },
     enabled: !!client && active && options.enabled !== false,
     staleTime: 4000,
-    retry: false,
+    // Another computer's data is never carried over as a placeholder.
+    placeholderData: options.keepPrevious
+      ? (previous, previousQuery) =>
+          previousQuery?.queryKey[1] === (machine?.id ?? null) ? previous : undefined
+      : undefined,
+    retry: retryTransientRead,
+    retryDelay: transientRetryDelay,
     // Hosts can be reachable on a LAN without internet connectivity.
     networkMode: "always",
     refetchInterval:
       typeof interval === "function"
-        ? (query) => (query.state.status === "error" ? false : interval(query.state.data))
+        ? (query) =>
+          query.state.status === "error"
+            ? isTransientConnectionError(query.state.error)
+              ? 10_000
+              : false
+            : interval(query.state.data)
         : (interval ?? false),
     refetchIntervalInBackground: false,
   });

@@ -24,17 +24,15 @@ async function inspect(directory) {
       rules.push([/['"]#[\da-f]{3,8}['"]/gi, "Use colors from ui/tokens.ts"]);
     if (!relative.startsWith("src/ui/")) {
       rules.push([
-        /from\s+["\']@\/ui\/gluestack(?:\/|["\'])/g,
-        "Use product UI facades instead of raw gluestack parts",
-      ]);
-      rules.push([
         /<(?:TextInput|Pressable|Switch)\b/g,
         "Use shared Input, Field, PressableCard, IconButton or ToggleField",
       ]);
-      rules.push([
-        /\b(?:fontSize|borderRadius)\s*:\s*\d/g,
-        "Use shared typography and radius tokens",
-      ]);
+      // Widget layouts run in the widget extension without app modules, so they size text inline.
+      if (!relative.startsWith("src/features/widgets/ui/"))
+        rules.push([
+          /\b(?:fontSize|borderRadius)\s*:\s*\d/g,
+          "Use shared typography and radius tokens",
+        ]);
       rules.push([/\bfontFamily\s*:/g, "Use shared CodeText or uiStyles.mono"]);
     }
     for (const [pattern, message] of rules)

@@ -3,6 +3,7 @@ import {
   directorySections,
   distinctDirectoryProjects,
   directoryRows,
+  nestDirectoryProjects,
   projectPathLabel,
   sortDirectoryProjects,
   type DirectoryProject,
@@ -62,5 +63,18 @@ describe("complete project directory", () => {
     expect(projectPathLabel("G:\\Projects\\Firisbe\\Captcha")).toBe("…/Firisbe/Captcha");
     expect(projectPathLabel("/Users/owner/code/project", true)).toBe("/Users/owner/code/project");
     expect(projectPathLabel("/project")).toBe("/project");
+  });
+});
+
+describe("nested project folders", () => {
+  it("places a project folder under its closest parent project", () => {
+    const rows = nestDirectoryProjects([
+      { id: "c", cwd: "G:\\Repo\\pkg\\core" },
+      { id: "a", cwd: "G:/Repo" },
+      { id: "x", cwd: "G:/Other" },
+      { id: "b", cwd: "G:/Repo/pkg" },
+      { id: "same", cwd: "g:/repo/" },
+    ]);
+    expect(rows.map((row) => `${row.project.id}:${row.depth}`)).toEqual(["a:0", "b:1", "c:2", "x:0", "same:0"]);
   });
 });

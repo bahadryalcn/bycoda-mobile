@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import { encryptedLanFetch } from "./lan-fetch";
-import { createLanIdentity, openLanRequest } from "../../../host/mobile-lan-crypto";
+import { createLanIdentity, openLanRequest } from "../../../host/mobile/mobile-lan-crypto";
 import { HostTransport } from "./host-transport";
 import { redeemMobilePairingCode } from "../features/connections/pairing-redeem";
 

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { create } from "zustand";
+import { create, useStore } from "zustand";
+import { DEFAULT_PALETTE, normalizePalette, type PaletteId } from "../ui/palettes";
 
 export const THEME_MODES = ["system", "light", "dark"] as const;
 export type ThemeMode = (typeof THEME_MODES)[number];
@@ -12,10 +13,12 @@ export function normalizeThemeMode(value: unknown): ThemeMode {
 
 export type AppearanceState = {
   themeMode: ThemeMode;
+  palette: PaletteId;
   hydrated: boolean;
   storageError: Error | null;
   hydrate(): Promise<void>;
   setThemeMode(value: ThemeMode): Promise<void>;
+  setPalette(value: PaletteId): Promise<void>;
 };
 
 /** Presentation only. Connection credentials and conversation data have separate owners. */
@@ -23,8 +26,9 @@ export function createAppearanceStore(storage: Pick<typeof AsyncStorage, "getIte
   let hydration: Promise<void> | undefined;
   let persistence = Promise.resolve();
   let selectionVersion = 0;
-  return create<AppearanceState>((set, get) => ({
+  const store = create<AppearanceState>((set, get) => ({
     themeMode: "system",
+    palette: DEFAULT_PALETTE,
     hydrated: false,
     storageError: null,
     hydrate() {
@@ -37,9 +41,9 @@ export function createAppearanceStore(storage: Pick<typeof AsyncStorage, "getIte
           if (version !== selectionVersion) return;
           let value: unknown;
           try { value = raw ? JSON.parse(raw) : null; } catch { value = null; }
-          const mode = value && typeof value === "object" && !Array.isArray(value)
-            ? (value as { themeMode?: unknown }).themeMode : undefined;
-          set({ themeMode: normalizeThemeMode(mode), storageError: null });
+          const stored = value && typeof value === "object" && !Array.isArray(value)
+            ? (value as { themeMode?: unknown; palette?: unknown }) : {};
+          set({ themeMode: normalizeThemeMode(stored.themeMode), palette: normalizePalette(stored.palette), storageError: null });
         })
         .catch(() => {
           if (version === selectionVersion)
@@ -48,29 +52,33 @@ export function createAppearanceStore(storage: Pick<typeof AsyncStorage, "getIte
         .finally(() => { set({ hydrated: true }); });
       return hydration;
     },
-    async setThemeMode(value) {
-      if (!get().hydrated) void get().hydrate();
-      const version = ++selectionVersion;
-      const themeMode = normalizeThemeMode(value);
-      set({ themeMode, storageError: null });
-      const write = persistence.catch(() => undefined).then(() =>
-        storage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ version: 1, themeMode })),
-      );
-      persistence = write;
-      try {
-        await write;
-        if (version === selectionVersion) set({ storageError: null });
-      } catch {
-        if (version === selectionVersion)
-          set({ storageError: new Error("Appearance could not be saved.") });
-      }
-    },
+    setThemeMode: (value) => select({ themeMode: normalizeThemeMode(value) }),
+    setPalette: (value) => select({ palette: normalizePalette(value) }),
   }));
+  const { getState: get, setState: set } = store;
+  async function select(change: Partial<Pick<AppearanceState, "themeMode" | "palette">>) {
+    if (!get().hydrated) void get().hydrate();
+    const version = ++selectionVersion;
+    set({ ...change, storageError: null });
+    const { themeMode, palette } = get();
+    const write = persistence.catch(() => undefined).then(() =>
+      storage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ version: 1, themeMode, palette })),
+    );
+    persistence = write;
+    try {
+      await write;
+      if (version === selectionVersion) set({ storageError: null });
+    } catch {
+      if (version === selectionVersion)
+        set({ storageError: new Error("Appearance could not be saved.") });
+    }
+  }
+  return store;
 }
 
 export const appearanceStore = createAppearanceStore(AsyncStorage);
 export function useAppearance<Selected>(selector: (state: AppearanceState) => Selected): Selected {
-  const value = appearanceStore(selector);
+  const value = useStore(appearanceStore, selector);
   useEffect(() => { void appearanceStore.getState().hydrate(); }, []);
   return value;
 }

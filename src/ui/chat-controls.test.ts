@@ -9,7 +9,7 @@ const state = vi.hoisted(() => ({
   motion: vi.fn(),
   action: vi.fn(),
 }));
-vi.mock("./theme", () => ({ useMobileTheme: () => {} }));
+vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("./use-reduced-motion", () => ({ useReducedMotionPreference: () => state.reduced }));
 vi.mock("./motion", () => ({
   usePressMotion: (depth: number) => {
@@ -112,8 +112,8 @@ it("keeps the same accessible toolbar target and callback when its visible label
   expect(trigger.getAttribute("aria-label")).toBe("Chat view: Messages");
   expect(trigger.textContent).toBe("");
   expect(trigger.querySelector("[data-icon]")).not.toBeNull();
-  expect(trigger.dataset.width).toBe("48");
-  expect(trigger.dataset.height).toBe("48");
+  expect(trigger.dataset.width).toBe("28");
+  expect(trigger.dataset.height).toBe("28");
   await act(async () => trigger.click());
   expect(state.action).toHaveBeenCalledTimes(1);
 });
@@ -126,12 +126,13 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 it.each([ChatCircleAction, ChatToolbarAction])(
-  "subtle feedback preserves the 48dp action and stops spatial feedback on live reduced-motion changes",
+  "subtle feedback keeps a compact visual with a 48dp hit slop and and stops spatial feedback on live reduced-motion changes",
   async (Component) => {
     await render(createElement(Component, { label: "Action", onPress: state.action }));
     expect(state.motion).toHaveBeenCalledWith(0.97);
-    expect(container.querySelector("button")!.dataset.height).toBe("48");
-    expect(container.querySelector("button")!.dataset.width).toBe("48");
+    const visual = Component === ChatCircleAction ? "32" : "28";
+    expect(container.querySelector("button")!.dataset.height).toBe(visual);
+    expect(container.querySelector("button")!.dataset.width).toBe(visual);
     expect(container.querySelector("button")!.dataset.scale).toBeUndefined();
     expect(
       container.querySelector("[data-animated-scale]")?.getAttribute("data-animated-scale"),

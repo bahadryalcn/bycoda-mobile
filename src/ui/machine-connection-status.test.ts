@@ -2,18 +2,20 @@ import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ paired: true, online: true, permitted: true, successAt: 99_000, errorAt: 0 }));
-vi.mock("./theme", () => ({ useMobileTheme: () => undefined }));
+const state = vi.hoisted(() => ({ paired: true, online: true, permitted: true, consentPending: false, successAt: 99_000, errorAt: 0, error: undefined as unknown }));
+vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: { success: { text: "s" }, info: { text: "i" }, warning: { text: "w" }, danger: { text: "d" } }, uiStyles: {} }) }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./motion", () => ({ haptic: {} }));
-vi.mock("./primitives", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
+vi.mock("./primitives", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children), NavigationGroup: () => null, NavigationRow: () => null, Sheet: () => null }));
 vi.mock("./busy-indicator", () => ({ BusyIndicator: () => null }));
 vi.mock("expo-router", () => ({ router: {} }));
 vi.mock("panelui-native/components/menu", () => ({ Menu: {} }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children), Text: "span", Pressable: "button" }));
 vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }));
+vi.mock("./icon-tile", () => ({ IconTile: () => null }));
+vi.mock("lucide-react-native/icons/hard-drive", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/laptop", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/wifi-off", () => ({ default: () => null }));
@@ -30,12 +32,14 @@ vi.mock("../state/machines", () => ({
 vi.mock("../state/security", () => ({ useSecurity: (select: (value: unknown) => unknown) => select({ status: "unlocked" }) }));
 vi.mock("../state/queries", () => ({
   useHostClient: () => state.permitted ? {} : undefined,
-  useHostQuery: () => ({ errorUpdatedAt: state.errorAt, isSuccess: false }),
+  useConsentPending: () => state.consentPending,
+  useHostQuery: () => ({ errorUpdatedAt: state.errorAt, error: state.error, isSuccess: false }),
 }));
 import { MachineConnectionStatus } from "./machine-bar";
+import { RemoteHostError } from "../remote/host-error";
 
 beforeEach(() => {
-  Object.assign(state, { paired: true, online: true, permitted: true, successAt: 99_000, errorAt: 0 });
+  Object.assign(state, { paired: true, online: true, permitted: true, consentPending: false, successAt: 99_000, errorAt: 0, error: undefined });
   vi.spyOn(Date, "now").mockReturnValue(100_000);
 });
 afterEach(() => vi.restoreAllMocks());
@@ -53,6 +57,14 @@ it("shows an offline or permission failure despite cached successful traffic", (
   state.online = true;
   state.permitted = false;
   expect(render()).toContain("Permission required");
+});
+it("names a refused device key as access and does not claim missing permission while consent loads", () => {
+  state.errorAt = 99_500;
+  state.error = new RemoteHostError("computer", "auth", "denied");
+  expect(render()).toContain("Access needed");
+  Object.assign(state, { errorAt: 0, error: undefined, permitted: false, consentPending: true, successAt: 0 });
+  expect(render()).toContain("Checking connection");
+  expect(render()).not.toContain("Permission required");
 });
 it("keeps unknown and unpaired states distinct from a proven connection", () => {
   state.successAt = 0;

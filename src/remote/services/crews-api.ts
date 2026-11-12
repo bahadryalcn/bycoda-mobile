@@ -1,9 +1,11 @@
 import type { HostRequest, RemoteRequestOptions } from "../types";
-import type { CrewDefinition, CrewDirectory, CrewRun, CrewRunDetail, SavedCrewAgent } from "../contracts/crews";
+import type { ActiveCrewList, CrewDefinition, CrewDirectory, CrewRun, CrewRunDetail, SavedCrewAgent } from "../contracts/crews";
 
 /** Project scope is explicit even for host-wide saved definitions/profiles. */
 export function createCrewsApi(request: HostRequest) {
   return { crews: {
+    /** Host-wide owner read of members currently working; needs `crews.active.v1`. */
+    activeList: (limit = 200, options?: RemoteRequestOptions) => request<ActiveCrewList>("crews.active.list", { limit }, options),
     list: (projectId: string, options?: RemoteRequestOptions) => request<CrewDirectory>("crews.list", { projectId }, options),
     get: (projectId: string, runId: string, options?: RemoteRequestOptions) => request<CrewRunDetail>("crews.get", { projectId, runId }, options),
     inspect: (projectId: string, definitionId: string, memberId: string, options?: RemoteRequestOptions) => request<unknown>("crews.inspect", { projectId, definitionId, memberId }, options),

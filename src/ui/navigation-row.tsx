@@ -1,13 +1,12 @@
 import { useMobileTheme } from "@/ui/theme";
 import { createContext, use, type ReactNode } from "react";
-import { View, type TextProps } from "react-native";
+import { StyleSheet, View, useWindowDimensions, type TextProps } from "react-native";
 import { Pressable } from "react-native";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Check from "lucide-react-native/icons/check";
 import { Body } from "./typography";
 import { BusyIndicator } from "./busy-indicator";
-import { colors, opacity, semanticColors, space, type SemanticTone } from "./tokens";
-import { uiStyles } from "./styles";
+import { gapIcon, metrics, opacity, space, type SemanticTone } from "./tokens";
 import type { ContainerProps } from "./component-props";
 
 const GroupedNavigation = createContext(false);
@@ -25,7 +24,7 @@ export function NavigationGroup({ children, style }: ContainerProps) {
 }
 
 export function Separator({ style }: Pick<ContainerProps, "style">) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   return <View accessible={false} style={[uiStyles.separator, style]} />;
 }
 
@@ -48,9 +47,12 @@ export function NavigationRow({
   detailSelectable = true,
   detailEllipsizeMode,
   emphasized,
+  separator,
   accessibilityLabel,
   intent = selected === undefined ? "navigate" : "select",
 }: {
+  /** Inset hairline under the row; defaults to true inside a NavigationGroup. */
+  separator?: boolean;
   /** Bold label, e.g. an unread inbox item. */
   emphasized?: boolean;
   label: string;
@@ -78,10 +80,14 @@ export function NavigationRow({
   detailSelectable?: boolean;
   detailEllipsizeMode?: TextProps["ellipsizeMode"];
 }) {
-  useMobileTheme();
+  const { colors, semanticColors, uiStyles, pressedFill } = useMobileTheme();
   const plain = variant !== "card";
   const semantic = tone ? semanticColors[tone] : undefined;
-  return (
+  const inGroup = useInNavigationGroup();
+  const line = separator ?? inGroup;
+  // Enlarged system text lets supporting lines grow instead of clipping them at the compact row limits.
+  const grows = useWindowDimensions().fontScale > 1;
+  const row = (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? [label, detail, metadata].filter(Boolean).join(". ")}
@@ -93,19 +99,20 @@ export function NavigationRow({
       onPress={onPress}
       style={({ pressed }) => [
         uiStyles.press,
-        plain && { borderWidth: 0, borderRadius: 0, backgroundColor: "transparent" },
+        plain && { borderWidth: 0, backgroundColor: "transparent" },
+        !plain && { marginHorizontal: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.panel },
         semantic && !plain && { borderColor: semantic.border, backgroundColor: semantic.surface },
         {
-          minHeight: detail ? 60 : 48,
-          paddingHorizontal: plain ? 0 : space.md,
-          paddingVertical: space.sm,
+          minHeight: detail || metadata ? metrics.rowHeightSession : metrics.rowHeightProject,
+          paddingHorizontal: plain ? space.sm : space.md,
+          paddingVertical: space.row,
           flexDirection: "row",
           alignItems: "center",
-          gap: space.row,
+          gap: gapIcon,
           opacity: disabled && !busy ? opacity.disabled : 1,
         },
         selected && { backgroundColor: colors.selected },
-        pressed && { backgroundColor: semantic?.surface ?? colors.raised },
+        pressed && { backgroundColor: semantic?.surface ?? pressedFill },
       ]}
     >
       {icon ? (
@@ -113,12 +120,12 @@ export function NavigationRow({
           {icon}
         </View>
       ) : null}
-      <View style={[uiStyles.grow, { gap: 2 }]}>
+      <View style={[uiStyles.grow, { gap: space.xxs }]}>
         <Body
           numberOfLines={labelLines}
           style={[
             uiStyles.label,
-            emphasized && { fontWeight: "600" },
+            emphasized && { fontWeight: "700" },
             semantic && { color: semantic.text },
           ]}
         >
@@ -127,24 +134,25 @@ export function NavigationRow({
         {detail ? (
           <Body
             muted
-            numberOfLines={detailLines}
+            numberOfLines={grows ? undefined : detailLines}
             selectable={detailSelectable}
             ellipsizeMode={detailEllipsizeMode}
-            style={[uiStyles.caption, { lineHeight: 18 }]}
+            style={uiStyles.caption}
           >
             {detail}
           </Body>
         ) : null}
-        {metadata ? <Body muted numberOfLines={metadataLines} style={[uiStyles.caption, { lineHeight: 18 }]}>
+        {metadata ? <Body muted numberOfLines={grows ? undefined : metadataLines} style={uiStyles.caption}>
           {metadata}
         </Body> : null}
         {supporting}
       </View>
-      {trailing ? <View style={{ flexShrink: 0 }}>{trailing}</View> : null}
+      {trailing ? <View style={{ flexShrink: 1, maxWidth: "50%" }}>{trailing}</View> : null}
       {busy ? <BusyIndicator size="sm" color={colors.accent} />
-        : intent === "navigate" ? <ChevronRight size={17} strokeWidth={2.4} color={colors.tertiary} style={{ flexShrink: 0 }} />
-        : intent === "select" && selected && !trailing ? <Check size={18} color={colors.accent} style={{ flexShrink: 0 }} />
+        : intent === "navigate" ? <ChevronRight size={14} strokeWidth={2.4} color={colors.tertiary} style={{ flexShrink: 0 }} />
+        : intent === "select" && selected && !trailing ? <Check size={16} color={colors.accent} style={{ flexShrink: 0 }} />
         : null}
     </Pressable>
   );
+  return line ? <View>{row}<View accessible={false} style={uiStyles.separator} /></View> : row;
 }

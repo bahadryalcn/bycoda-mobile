@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import {
   Body, Button, CodePanel, CodeText, FormActions, ErrorText, MutationState,
-  Disclosure, Notice, QueryState, Row, Sheet, ToggleField, NavigationGroup,
+  Disclosure, Notice, QueryState, StateView, Row, Sheet, ToggleField, NavigationGroup,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -95,7 +95,7 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
   return (
     <Sheet visible title={server.name} size="full" dismissible={!busy} onClose={onClose}>
       <Body muted>{[opening.machineName, opening.projectName ?? opening.projectId].filter(Boolean).join(" · ")}</Body>
-      {!validScope ? <Notice tone="warning" message={copy("Bağlantı veya proje değişti. Devam etmek için bu ekranı yeniden açın.", "The connection or project changed. Reopen this view to continue.")} /> : <QueryState query={{ ...details, refetch: reconcile }} />}
+      {!validScope ? <StateView illustration="error" tone="danger" title={copy("Bir şeyler ters gitti", "Something went wrong")} description={copy("Bağlantı veya proje değişti. Devam etmek için bu ekranı yeniden açın.", "The connection or project changed. Reopen this view to continue.")} /> : <QueryState query={{ ...details, refetch: reconcile }} />}
       {validScope && details.isSuccess && !details.error && !current ? <Notice tone="danger" message={copy("Sunucu ayrıntıları bu hedefle eşleşmiyor. Yenile ve tekrar kontrol et.", "The server details do not match this target. Refresh and check again.")} retrying={reconciling || details.isFetching} onRetry={() => { void reconcile(); }} /> : null}
       {current ? (
         <>
@@ -140,7 +140,7 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
           {restart.data?.conflict ? <Notice tone="warning" message={copy("{p0} portu zaten kullanılıyor.", "Port {p0} is already in use.", { p0: restart.data.conflict.port })} /> : null}
           {showLogs ? <>
             <QueryState query={logs} />
-            {logs.data?.available ? <CodePanel horizontal={false}><CodeText>{logs.data.output.slice(-32_000)}</CodeText></CodePanel> : getQueryPresentation(logs) === "ready" ? <Notice message={copy("Bu sunucunun günlükleri kullanılamıyor.", "Logs are not available for this server.")} /> : null}
+            {logs.data?.available ? <CodePanel horizontal={false}><CodeText>{logs.data.output.slice(-32_000)}</CodeText></CodePanel> : getQueryPresentation(logs) === "ready" ? <StateView compact title={copy("Bu sunucunun günlükleri kullanılamıyor.", "Logs are not available for this server.")} /> : null}
           </> : null}
         </>
       ) : null}

@@ -22,7 +22,8 @@ Keep one primary action per active task and disclose secondary options.
 
 Desktop and mobile share compact chrome, progressive disclosure, preserved
 drafts and explicit operation state. Adapt density to touch: mobile controls
-retain 48dp targets even when their visible glyphs are small. Do not copy desktop
+keep 48dp hit areas even when the visible control is compact (32 icon buttons, 28 chips, 40
+buttons and inputs, grown with `hitSlop` or padding). Do not copy desktop
 pixel sizes, CSS, Arc runtime or overlay infrastructure.
 
 Avoid nested decorative cards, repeated introductions, permanent help paragraphs
@@ -88,7 +89,7 @@ Paths in this table are relative to `mobile/`.
 PanelUI Native supplies underlying components. Product screens consume bycoda
 facades; extend an existing facade for a reusable missing capability. Direct
 upstream imports belong in shared implementations, preferably from individual
-component subpaths. Retained gluestack source is compatibility material. Do not
+component subpaths. Do not
 eagerly import the full upstream barrel or component gallery into startup.
 
 ## Color and appearance
@@ -99,13 +100,14 @@ Do not invent feature-local hex colors, tints or gradients.
 
 | Role | Use |
 | --- | --- |
-| `background` | Application canvas |
-| `panel`, `raised` | Grouped content and raised surfaces |
+| `background` | Application canvas (step 1) |
+| `panel` | Code blocks, pressed rows in dark (step 2) |
+| `raised` | Composer, chips, sheets, pressed rows in light (step 3) |
 | `fill`, `elevated` | Control/search fills and floating or selected control surfaces |
 | `text` | Primary content |
 | `muted`, `subtle` | Supporting readable text |
 | `tertiary` | Decorative glyphs such as chevrons; never body text |
-| `border`, `separator` | Boundaries and row separation |
+| `border`, `separator` | Hairline (`StyleSheet.hairlineWidth`) field outlines and row dividers |
 | `accent` | Interactive foreground and action glyphs |
 | `accentSolid`, `primaryText` | Filled primary control and label |
 | `selected` | Selected content surface |
@@ -113,12 +115,13 @@ Do not invent feature-local hex colors, tints or gradients.
 | `semanticColors[tone]` | Matching status text, surface and border |
 | `userMessage`, `scrim` | Conversation bubble and modal backdrop |
 
-Dark uses pure black canvas, panels, controls, floating surfaces and message backgrounds;
-light uses pure white for those same roles. Primary text is pure white/black respectively.
-Use thin semantic borders for editable areas and the composer. Tabs communicate selection
+Surfaces use three layered steps: `background` < `panel` < `raised` (dark `#0B0B0C`/`#131316`/`#1A1A1E`,
+light `#FCFCFD`/`#FFFFFF`/`#F4F4F6`); `fill` is the input/quiet control fill and `elevated` the
+menu/floating fill. Use `pressedFill()` for pressed rows. Text is `#F5F5F7` (dark) and `#17171A`
+(light). Borders are hairline, never 1.5px outlines; focus may raise a field to 1px accent. Tabs communicate selection
 with text contrast and weight, without colored strips on any edge. Focus, selection and
 status feedback retain their semantic colors; neutral
-gray fills must not return as large resting surfaces. Keep
+large resting fills stay within the three steps. Keep
 system/light/dark preference working from the lock screen onward. Theme changes
 must update mounted content without resetting forms, focus or drafts.
 
@@ -151,29 +154,31 @@ system scaling.
 
 | Family | Current values |
 | --- | --- |
-| Spacing | `xxs` 3; `xs` 4; `sm` 8; `row`/`md` 12; `lg`/`screen` 16; `xl` 24; `xxl` 32 |
-| Type | `micro` 11; `caption`/`badge` 12; `small` 13; `control` 14; `body` 16; `input`/`title` 17; `heading` 20; `hero` 28; `display` 34 |
-| Radius | `badge` 6; `control` 12; `card` 12; `preview` 16; `sheet` 24; `pill` 999 |
-| Targets | Controls, inputs, selections and icon targets 48; multiline minimum 96 |
+| Spacing | `xxs` 2; `xs` 4; `sm` 6; `row` 10; `md` 12; `lg`/`screen` 16; `xl` 20; `xxl` 28; `gapIcon` 8 |
+| Type (size/line) | `micro` 11/14; `caption`/`badge` 12/16; `small` 13/17; `control` 14/19; `body` 15/21 (chat `lineHeight.message` 22); `input` 16/21; `title` 16/21; `heading` 18/24; `hero` 24/30; `display` 28/34. Use the paired `lineHeight` map |
+| Radius | `badge` 6; `control` 10; `card` 12; `preview` 14; `bubble` 18; `composer` 24; `sheet` 24; `pill` 999 |
+| Visible sizes | `controlHeight`/`buttonHeight`/`inputHeight`/`composerFieldMin` 40; `visualControl` 32 (icon buttons, send); `chipHeight` 28; `toolRowHeight` 28; `sectionHeaderHeight` 28; `rowHeightSession` 56; `rowHeightProject` 52; `headerHeight` 48; `tabBarHeight` 52 |
+| Hit areas | `touchTarget`/`iconTarget` 48. Smaller visible controls add `hitSlop={hitSlopFor(visual)}`; the actual target never drops below 48 |
+| Other | Multiline input minimum 96 |
 | Width | Content 760; entry surfaces 520 |
 | Motion | Press 120ms; reveal 220ms; sheet 280ms |
 
 Use `Body`, `Heading`, `CodeText` and shared `uiStyles`. Keep the system text face
 and shared monospace role. Avoid fixed text heights and truncation hiding
 essential values. Wrap long localized labels or move secondary metadata to a
-second row. Compact density reduces padding, not target height.
+second row. Compact density shrinks the visible control and padding; the hit area stays 48.
 
-Shared buttons and search use the control radius. Presentation belongs in the shared owner.
+Shared buttons use the control radius; search is a 40 high pill. Presentation belongs in the shared owner.
 NavigationGroup is an unboxed collection with aligned rows; RecordCard separates record
 identity, visible status and optional retained details through spacing. Reserve Card
 for a meaningful task group, and avoid nesting cards for ordinary metadata.
-Operational page titles use the heading scale. `ScreenHeading` owns the compact
-identity/action row, and the tab navigator's `headerIdentity` combines the title
+Screen titles are 24/30 left-aligned (`uiStyles.pageTitle`), without large-title collapse.
+`ScreenHeading` owns the compact 48 identity/action row, and the tab navigator's `headerIdentity` combines the title
 and computer selector in one 48dp-or-larger target. Counts belong to its secondary
 context. Native-title screens suppress only the duplicate content title, preserving
 context and actions. Reserve explicit `LargeTitle`/hero treatment for intentional
 entry or overview content; body and form controls keep their readable scale.
-The bottom tab bar sits in normal layout without a floating tray or shadow.
+The bottom tab bar is 52 high with a hairline top border, in normal layout, with no tray or shadow.
 Primary destinations remain visible without horizontal scrolling. Equal columns
 share the available width; larger system text uses fewer columns and additional
 rows. Labels and activity counts can grow, and selection belongs to the actual
@@ -281,6 +286,29 @@ Use shared motion helpers and system reduced motion. Keep transitions brief;
 avoid permanent decorative animation. Private content must disappear immediately
 on lock; security visibility takes priority over exit animation.
 
+### States
+
+One language for every state; use the shared owners in `src/ui/`, never ad hoc text.
+
+| State | Presentation (owner) |
+|---|---|
+| Empty, first run, not connected, unreachable, locked, no permission | `StateView`: centered in the region (parent `flex: 1`, or a scroller with `flexGrow: 1`), max width 320, `Illustration` 120 (96 compact), title 18/600, description 14/20 muted, primary Button, optional quiet secondary. `Empty` is a thin wrapper; `compact` (default) is an inline icon row for sub-sections. |
+| Initial load | `QueryState` `loading`: `"list"`/`"content"` skeleton of the content shape (rows with tile, title and meta; or heading and lines), `"centered"` spinner plus label only when the shape is unknown. Never both, and no visible "Loading…" text above a skeleton: `loadingLabel` is announced only. Placeholders appear after 250 ms (`useDelayedVisible`), so fast or cached loads never flash. A quiet reconnect without data keeps the same skeleton; the computer pill shows the link. A field-level control (project scope) never renders a `StateView`: it would stretch its toolbar row and slide the row's actions. Spinners stay for in-place actions (button, row, connecting). |
+| Refresh | Pull-to-refresh or progress line; no blocking UI. |
+| Failed load, no data | `QueryState` renders `StateView` with art from the error kind (network/timeout unreachable, offline, auth/identity locked, else error) and Retry or the repair action. |
+| Failed or paused refresh, data shown | Nothing: keep the data; the computer pill carries the connection (`QueryState` renders null). |
+| Waiting for a connection, no data | `QueryState` renders a centered `StateView` "Waiting for a connection" with Manage connections; reconnecting without data is a centered loading. |
+| Feedback tied to a user action (form, sheet, dialog) or a contextual explanation to read before acting | `Notice`/`ErrorNotice` with tone, never for connection, loading, availability or "not available yet" (use `StateView`), and never stacked with a `StateView` in one region: tinted surface, hairline border, 16px icon, quiet recovery action. |
+| Field validation | `Field`/`ErrorText` use `FieldError`: 13/17 danger text with a 14px icon; the input border turns danger. |
+| One spinner per operation | Busy `Button`/`IconButton` claim the spinner through `useSoleSpinner` (`src/ui/spinner-claim.ts`): the newest busy control draws it, any other stays busy (disabled, announced) without a second glyph, so a toolbar menu and a Retry button refetching the same data never show two identical spinners. Different kinds (skeleton, progress line, one spinner) may coexist. Never hand-draw a busy glyph beside a `busy` control. |
+| Submitting | Busy `Button` keeps its label; siblings disable; `MutationState` adds no second indicator inside `FormActions`. |
+| Success | `MutationState success` raises a toast (`showToast`, `useSuccessToast`) when `ToastHost` is mounted, otherwise a success `Notice`. |
+| Dirty | `FormActions dirty` and `Sheet dirty` show the `UnsavedBadge` pill above the actions; leaving still goes through the Sheet guard. |
+| Offline, reconnecting, unreachable, access | The computer pill status only; no app-chrome banner and never per-row errors. A region with nothing to show uses a centered `StateView`. |
+
+Titles are human sentences; the specific error text goes in the description.
+Illustrations are decorative and hidden from screen readers; the title carries the meaning.
+
 ## Conversation presentation
 
 Use the shared message renderer and chat facades for transcripts and appearance
@@ -322,8 +350,11 @@ another horizontal gutter or multiply vertical insets. Use `variant="surface"`
 only when a genuinely independent task region needs a raised surface; inputs,
 code and media viewports retain their own boundaries. This avoids treating every
 metadata block as another large card. Buttons, icon actions, selection rows and
-list rows retain stable 48dp targets; pressed feedback changes opacity rather
-than scaling the target. Primary option labels may grow instead of being clipped.
+list rows retain 48dp+ hit areas (rows are at least 52/56 high); pressed rows fill with
+`pressedFill()` instead of scaling. Ordinary rows are flat: no card, inset hairline separators
+(`NavigationRow` draws one inside `NavigationGroup`), 15/21 medium title and 13/17 muted meta.
+Group rows under `SectionHeader` (12/16 semibold muted label, count, hairline). Show row status
+as `StatusText` (colored 13/17 text plus a 6px dot), not a filled `Badge`. Primary option labels may grow instead of being clipped.
 
 Collapsed task records lead with title, status and a directly named session icon.
 Stop, pending operations and actionable failures stay visible. Completion and

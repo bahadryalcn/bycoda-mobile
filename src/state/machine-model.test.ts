@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { restoreMachines } from "./machine-model";
+import { MAX_MACHINE_ROUTES, restoreMachines } from "./machine-model";
 describe("saved remote computers", () => {
   it("restores pinned LAN metadata and rejects unpinned or public HTTP", () => {
     const lan = {
@@ -57,5 +57,31 @@ describe("saved remote computers", () => {
         { ...machine, name: "PC\nsecret" },
       ]),
     ).toEqual([]);
+  });
+  it("restores every paired route with the active one first and drops invalid ones", () => {
+    const lan = { endpoint: "http://192.168.1.20:3777", lanKey: "ab".repeat(32) };
+    const tailscale = { endpoint: "https://home.tail1.ts.net" };
+    const [restored] = restoreMachines([
+      {
+        id: "home",
+        name: "Home",
+        environmentId: "home",
+        ...tailscale,
+        routes: [lan, tailscale, { endpoint: "http://8.8.8.8" }, { endpoint: 4 }, lan],
+      },
+    ]);
+    expect(restored?.endpoint).toBe(tailscale.endpoint);
+    expect(restored?.routes).toEqual([tailscale, lan]);
+  });
+  it("caps saved routes and omits the list for a single route", () => {
+    const routes = Array.from({ length: 8 }, (_, index) => ({
+      endpoint: `https://host-${index}.example`,
+    }));
+    const [many, single] = restoreMachines([
+      { id: "many", name: "Many", environmentId: "e1", endpoint: "https://host-0.example", routes },
+      { id: "one", name: "One", environmentId: "e2", endpoint: "https://one.example" },
+    ]);
+    expect(many?.routes).toHaveLength(MAX_MACHINE_ROUTES);
+    expect(single).not.toHaveProperty("routes");
   });
 });

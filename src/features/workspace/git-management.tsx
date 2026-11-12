@@ -1,28 +1,35 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { BackHandler, View } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { View } from "react-native";
+import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useIsFocused } from "expo-router/react-navigation";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useConnectionScope } from "@/state/connection-scope";
 import { usePrivateContentAccess } from "@/ui/private-access";
 import { GitManagementReview, type GitManagementReviewContent } from "./git-management-review";
 import { useCopy } from "@/ui/copy";
+import { useMobileTheme } from "@/ui/theme";
 import { confirmAction } from "@/ui/confirm";
-import { ActionMenu, Body, Button, ErrorText, MutationState, NavigationRow, Notice, QueryState, ScreenList, SearchField, SegmentedControl, Sheet } from "@/ui/primitives";
+import ArrowLeft from "lucide-react-native/icons/arrow-left";
+import Pencil from "lucide-react-native/icons/pencil";
+import Trash2 from "lucide-react-native/icons/trash-2";
+import { ActionMenu, Badge, Body, Button, ErrorText, IconButton, MutationState, NavigationRow, Notice, QueryState, ScreenList, SearchField, SegmentedControl, Sheet } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import type { GitScope } from "./git-types";
 import { useGitBranches, useGitIndex } from "./git-queries";
 import { GitManagementForm, useGitManagementLabels } from "./git-management-form";
 import { managementSnapshotRequest, managementDraft, pullRequestRepository, readGitRemotes, readGitTags, safeRemoteUrl, type GitManagementAction, type GitManagementDraft, type GitManagementRow, type GitManagementSnapshot } from "./git-management-model";
 import { uncertainStashWrite } from "./git-stash-model";
+import { FeatureUnavailable } from "./unavailable-state";
 
 type Tab = "branches" | "tags" | "remotes" | "operations" | "pr";
 type PullRequest = { number: number; title: string; url: string; state: string } | null;
 type Editor = { opening: GitManagementDraft; value: GitManagementDraft; branch: string | null; head: string | null; snapshot: GitManagementSnapshot; repository?: string };
 
-export function GitManagement({ scope, onClose, onBusyChange, registerExit }: {
-  scope: GitScope; onClose: () => void; onBusyChange: (busy: boolean) => void; registerExit: (exit: (() => void) | null) => void;
+export function GitManagement({ scope, initialTab = "branches", onClose, onBusyChange, registerExit }: {
+  scope: GitScope; initialTab?: Tab; onClose: () => void; onBusyChange: (busy: boolean) => void; registerExit: (exit: (() => void) | null) => void;
 }) {
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const labels = useGitManagementLabels();
   const machine = useActiveMachine();
@@ -35,7 +42,7 @@ export function GitManagement({ scope, onClose, onBusyChange, registerExit }: {
   const [machineId] = useState(machine?.id);
   const [machineName] = useState(machine?.name ?? "");
   const [openingScope] = useState(() => ({ ...scope }));
-  const [tab, setTab] = useState<Tab>("branches");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [search, setSearch] = useState("");
   const [editor, setEditor] = useState<Editor | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -98,10 +105,8 @@ export function GitManagement({ scope, onClose, onBusyChange, registerExit }: {
     onClose();
   }, [editor, onClose, copy]);
   useEffect(() => { registerExit(close); return () => registerExit(null); }, [close, registerExit]);
-  useFocusEffect(useCallback(() => {
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => { close(); return true; });
-    return () => subscription.remove();
-  }, [close]));
+  const focused = useIsFocused();
+  useBackHandler(focused, close);
   let invalid: string | undefined;
   if (editor) { try { managementSnapshotRequest(openingScope, editor.value, editor.snapshot); } catch (reason) { invalid = String((reason as Error).message); } }
   const submit = () => {
@@ -154,9 +159,9 @@ export function GitManagement({ scope, onClose, onBusyChange, registerExit }: {
   return <>
     <ScreenList<GitManagementRow> data={rows} keyExtractor={(row) => `${row.kind}:${row.remote ?? ""}:${row.name}`} query={query}
       header={<View style={{ gap: space.sm }}>
-        <Button tone="quiet" label={copy("Geri", "Back")} disabled={busy} onPress={close} />
+        <IconButton label={copy("Geri", "Back")} disabled={busy} onPress={close}><ArrowLeft size={20} color={colors.muted} /></IconButton>
         <Body mono>{openingScope.root}</Body><Body>{machineName} · {index.data?.branch ?? "HEAD"}</Body>
-        {!supported && <Notice message={copy("Gelişmiş Git işlemleri için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer for advanced Git actions.")} />}
+        {!supported && <FeatureUnavailable message={copy("Gelişmiş Git işlemleri için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer for advanced Git actions.")} />}
         <SegmentedControl label={copy("Git yönetimi", "Git management")} value={tab} onChange={setTab} options={[
           { value: "branches", label: copy("Dallar", "Branches") }, { value: "tags", label: copy("Etiketler", "Tags") }, { value: "remotes", label: copy("Uzak depolar", "Remotes") },
           { value: "operations", label: copy("Geçmiş işlemleri", "History actions") }, { value: "pr", label: "PR" },
@@ -192,12 +197,13 @@ export function GitManagement({ scope, onClose, onBusyChange, registerExit }: {
         </>}
       </View>}
       renderItem={({ item }) => <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-        <View style={{ flex: 1, minWidth: 0 }}><NavigationRow variant="plain" label={`${item.remote ? `${item.remote}/` : ""}${item.name}${item.current ? " · HEAD" : ""}`} detail={item.url ? safeRemoteUrl(item.url) : undefined}
+        <View style={{ flex: 1, minWidth: 0 }}><NavigationRow variant="plain" label={`${item.remote ? `${item.remote}/` : ""}${item.name}`} detail={item.url ? safeRemoteUrl(item.url) : undefined}
+        trailing={item.current ? <Badge label={copy("Geçerli", "Current")} tone="success" /> : undefined}
         onPress={() => open(item.kind === "remote" ? "removeRemote" : item.kind === "tag" ? "deleteTag" : item.remote ? "deleteRemoteBranch" : "renameBranch", item)}
         /></View>
         <ActionMenu label={copy("Kayıt işlemleri", "Entry actions")} actions={
           (item.kind === "remote" ? ["removeRemote"] : item.kind === "tag" ? ["deleteTag"] : item.remote ? ["deleteRemoteBranch"] : ["renameBranch", "deleteBranch"])
-            .map((action) => ({ key: action, label: labels[action as GitManagementAction], destructive: action !== "renameBranch", disabled: unavailable || (item.current && action === "deleteBranch"), onPress: () => open(action as GitManagementAction, item) }))} />
+            .map((action) => ({ key: action, label: labels[action as GitManagementAction], icon: action === "renameBranch" ? <Pencil size={18} color={colors.muted} /> : <Trash2 size={18} color={colors.danger} />, destructive: action !== "renameBranch", disabled: unavailable || (item.current && action === "deleteBranch"), onPress: () => open(action as GitManagementAction, item) }))} />
       </View>} />
     {editor && <Sheet visible size="form" title={labels[editor.value.action]} dirty={JSON.stringify(editor.opening) !== JSON.stringify(editor.value)} dismissible={!busy} onClose={() => { if (mounted.current && !occupied.current && editorNow.current === editor) { cancelReview(); setEditor(null); } }}
       discardTitle={copy("Git taslağını bırak?", "Leave Git draft?")}

@@ -12,6 +12,7 @@ vi.mock("@/state/queries", () => ({
 }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: state.draft, isError: false }) }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: vi.fn() } }));
+vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => false }));
 vi.mock("expo-router", () => ({ useFocusEffect: () => undefined }));
 vi.mock("react-native", () => ({
   BackHandler: {}, useWindowDimensions: () => ({ width: 320 }),
@@ -19,7 +20,7 @@ vi.mock("react-native", () => ({
   ScrollView: ({ children }: PropsWithChildren) => createElement("div", null, children),
   FlatList: ({ data, renderItem }: { data: { number: number; text: string }[]; renderItem: (value: { item: { number: number; text: string } }) => unknown }) => createElement("div", null, data.map((item) => createElement("div", { key: item.number }, renderItem({ item }) as import("react").ReactNode))),
 }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => null }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: { mono: { fontSize: 13, lineHeight: 20 } } }) }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, space: { screen: 16 } }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { mono: { fontSize: 13, lineHeight: 20 } } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, params?: Record<string, string | number>) => en.replace(/\{(\w+)\}/g, (match, key: string) => String(params?.[key] ?? match)) }));
@@ -29,8 +30,8 @@ vi.mock("@/ui/document-preview", () => ({
 }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Wrapper, CodeText: ({ children, selectable }: PropsWithChildren<{ selectable?: boolean }>) => createElement("span", { "data-code": true, "data-selectable": selectable !== false }, children), Row: Wrapper, Screen: Wrapper, ErrorText: () => null, QueryState: () => null,
-    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+  return { Badge: ({ label }: { label: string }) => createElement("span", null, label), HeaderBackButton: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label), Body: Wrapper, CodeText: ({ children, selectable }: PropsWithChildren<{ selectable?: boolean }>) => createElement("span", { "data-code": true, "data-selectable": selectable !== false }, children), Row: Wrapper, Screen: Wrapper, ErrorText: () => null, QueryState: () => null,
+    Notice: ({ message }: { message: string }) => createElement("p", null, message), StateView: ({ title }: { title: string }) => createElement("p", null, title),
     Button: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
     SegmentedControl: ({ options, onChange }: { options: { value: string; label: string }[]; onChange: (value: string) => void }) => createElement("div", null, options.map((option) => createElement("button", { key: option.value, onClick: () => onChange(option.value) }, option.label))),
   };

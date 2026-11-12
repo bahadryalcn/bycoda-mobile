@@ -65,9 +65,28 @@ parser.validateLink = (url) =>
   /^data:/i.test(url.trim())
     ? inlineRaster(url) !== null
     : !/^(?:javascript|vbscript|content):/i.test(url.trim());
-const cache = new Map<string, MessageNode[]>();
+type CacheEntry = { digest: string; nodes: MessageNode[]; size: number };
+const cache = new Map<string, CacheEntry>();
 let cachedCharacters = 0;
+const CACHE_ENTRIES = 400;
+const CACHE_CHARACTERS = 3_000_000;
 export const MESSAGE_RENDER_LIMIT = 256_000;
+
+/** Cheap content fingerprint (length + FNV-1a); far cheaper than a Markdown parse. */
+export function messageDigest(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${text.length}:${(hash >>> 0).toString(36)}`;
+}
+
+/** Cache slot. A block id owns one slot, so streaming one message replaces only itself. */
+export function messageCacheKey(hideInternalMetadata: boolean, id?: string, source = ""): string {
+  const mode = hideInternalMetadata ? "assistant" : "literal";
+  return id === undefined ? `${mode}:text:${source}` : `${mode}:id:${id}`;
+}
 
 function tree(tokens: Token[], source: string): MessageNode[] {
   const root: MessageNode[] = [];
@@ -98,22 +117,37 @@ function tree(tokens: Token[], source: string): MessageNode[] {
   return root;
 }
 
-/** Bounded native AST. Ordinary Markdown never becomes executable HTML. */
-export function parseMessage(text: string, hideInternalMetadata = false): MessageNode[] {
+/**
+ * Bounded native AST. Ordinary Markdown never becomes executable HTML.
+ * `cacheId` (the block id) keys the cache by identity plus a content digest instead of the
+ * whole text, so a streaming message occupies one slot and never evicts the others.
+ */
+export function parseMessage(text: string, hideInternalMetadata = false, cacheId?: string): MessageNode[] {
   const source = text.slice(0, MESSAGE_RENDER_LIMIT);
-  const key = `${hideInternalMetadata ? "assistant:" : "literal:"}${source}`;
+  const key = messageCacheKey(hideInternalMetadata, cacheId, source);
+  const digest = cacheId === undefined ? "" : messageDigest(source);
   const found = cache.get(key);
-  if (found) return found;
-  const result = tree(parser.parse(source, { hideInternalMetadata }) as Token[], source);
-  while (cache.size >= 24 || cachedCharacters + key.length > 1_000_000) {
+  if (found && found.digest === digest) {
+    // Refresh recency so actively viewed messages outlive stale ones.
+    cache.delete(key);
+    cache.set(key, found);
+    return found.nodes;
+  }
+  const nodes = tree(parser.parse(source, { hideInternalMetadata }) as Token[], source);
+  if (found) {
+    cache.delete(key);
+    cachedCharacters -= found.size;
+  }
+  const size = source.length;
+  while (cache.size >= CACHE_ENTRIES || cachedCharacters + size > CACHE_CHARACTERS) {
     const oldest = cache.keys().next().value;
     if (oldest === undefined) break;
-    cachedCharacters -= oldest.length;
+    cachedCharacters -= cache.get(oldest)!.size;
     cache.delete(oldest);
   }
-  cache.set(key, result);
-  cachedCharacters += key.length;
-  return result;
+  cache.set(key, { digest, nodes, size });
+  cachedCharacters += size;
+  return nodes;
 }
 /** Presentation-only source for the long reader; callers keep original text for copy. */
 export function messageDisplaySource(text: string): string {

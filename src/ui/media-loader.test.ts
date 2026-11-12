@@ -9,7 +9,7 @@ vi.mock("expo-file-system", () => {
     constructor() { state.files.push(this); }
     create() { this.exists = true; }
     delete() { this.exists = false; this.deleted = true; }
-    open() { return { writeBytes: (data: Uint8Array) => { this.chunks.push(data); this.size += data.length; }, close: () => {} }; }
+    open() { return { writeBytesSync: (data: Uint8Array) => { this.chunks.push(data); this.size += data.length; }, close: () => {} }; }
   }
   class Directory { exists = false; create() {} list() { return []; } }
   return { File, Directory, Paths: { cache: "cache" } };

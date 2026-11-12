@@ -1,11 +1,11 @@
 import { useMobileTheme } from "@/ui/theme";
 import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
-import { Linking, ScrollView, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import Square from "lucide-react-native/icons/square";
 import SquareCheck from "lucide-react-native/icons/square-check";
 import { decorativeSvgProps } from "./accessibility";
 import { Body, ErrorText } from "./primitives";
-import { colors, space } from "./tokens";
+import { metrics, opacity, space } from "./tokens";
 import { useCopy } from "./copy";
 import { markdownTarget } from "./message-inline";
 import {
@@ -17,11 +17,15 @@ import {
 import { MessageReader } from "./message-reader";
 import { MessageCode } from "./message-code";
 import { MessageImage } from "./message-image";
-import { chatTextStyles } from "./chat-styles";
+import { useChatTextStyles } from "./chat-styles";
 import { useChatAppearance } from "@/state/chat-appearance";
 import type { ChatTextSize } from "@/state/chat-appearance-model";
 import type { MessageContext, OpenDocument } from "./media-policy";
 import { scopedMessageReferences } from "./message-citations";
+import { linkOnlyItem } from "./message-link-item";
+
+/** Width reserved for a list marker ("•", "12.", task box) so item text aligns. */
+const LIST_MARKER_WIDTH = space.xxl;
 
 function FileLink({
   path,
@@ -34,7 +38,7 @@ function FileLink({
   children: ReactNode;
   onOpenFile?: OpenDocument;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   return (
     <Text
       accessibilityRole={context && onOpenFile ? "link" : undefined}
@@ -58,8 +62,11 @@ export const MessageContent = memo(function MessageContent({
   context,
   onOpenFile,
   compactMedia = false,
+  cacheId,
 }: {
   text: string;
+  /** Stable block id: keys the parse cache so streaming one message keeps the others cached. */
+  cacheId?: string;
   error?: boolean;
   role?: "user" | "assistant" | "activity";
   textSize?: ChatTextSize;
@@ -67,15 +74,15 @@ export const MessageContent = memo(function MessageContent({
   context?: MessageContext;
   onOpenFile?: OpenDocument;
 }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const preference = useChatAppearance((state) => state.textSize);
-  const typography = chatTextStyles(textSize ?? preference);
+  const typography = useChatTextStyles(textSize ?? preference);
   const bodyStyle = role === "user" ? typography.user : typography.assistant;
   const copy = useCopy();
   const [linkError, setLinkError] = useState<unknown>(null);
   const nodes = useMemo(
-    () => scopedMessageReferences(parseMessage(text, role === "assistant"), context),
-    [text, role, context?.cwd, context?.basePath],
+    () => scopedMessageReferences(parseMessage(text, role === "assistant", cacheId), context),
+    [text, role, cacheId, context?.cwd, context?.basePath],
   );
   const inline = (nodes: MessageNode[]): ReactNode =>
     nodes.map((node, index) => {
@@ -248,6 +255,30 @@ export const MessageContent = memo(function MessageContent({
                       : entry,
                   )
                 : item.children;
+              const linkItem = task ? null : linkOnlyItem(item);
+              if (linkItem)
+                return (
+                  <Pressable
+                    key={itemIndex}
+                    accessibilityRole="link"
+                    accessibilityLabel={`${linkItem.title}, ${linkItem.host}`}
+                    onPress={() => {
+                      setLinkError(null);
+                      void Linking.openURL(linkItem.href).catch(setLinkError);
+                    }}
+                    style={({ pressed }) => ({
+                      minHeight: metrics.touchTarget,
+                      justifyContent: "center",
+                      paddingVertical: space.xs,
+                      opacity: pressed ? opacity.pressed : 1,
+                    })}
+                  >
+                    <Body style={[bodyStyle, { color: colors.accent }]}>{linkItem.title}</Body>
+                    <Body muted style={uiStyles.caption}>
+                      {linkItem.host}
+                    </Body>
+                  </Pressable>
+                );
               return (
                 <View
                   key={itemIndex}
@@ -263,7 +294,7 @@ export const MessageContent = memo(function MessageContent({
                           : copy("Tamamlandı", "Completed")
                       }
                       style={{
-                        minWidth: 25,
+                        minWidth: LIST_MARKER_WIDTH,
                         minHeight: bodyStyle.lineHeight,
                         flexShrink: 0,
                         justifyContent: "center",
@@ -287,7 +318,7 @@ export const MessageContent = memo(function MessageContent({
                       )}
                     </View>
                   ) : (
-                    <Body style={[bodyStyle, { minWidth: 25, flexShrink: 0, color: colors.muted }]}>
+                    <Body style={[bodyStyle, { minWidth: LIST_MARKER_WIDTH, flexShrink: 0, color: colors.muted }]}>
                       {node.type === "ordered_list"
                         ? `${Number(node.attrs.start ?? 1) + itemIndex}.`
                         : "•"}

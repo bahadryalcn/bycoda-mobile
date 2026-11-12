@@ -6,11 +6,14 @@ import { useFormDraft } from "@/state/form-draft";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
-import { Body, Field, FormActions, MutationState, Notice, Stack, ToggleField } from "@/ui/primitives";
+import { NumberField } from "@/ui/number-field";
+import { Body, FormActions, MutationState, Notice, NavigationGroup, Section, Stack, ToggleField } from "@/ui/primitives";
+import { useMobileTheme } from "@/ui/theme";
 import { goalSettings, validGoalSettings } from "./settings-model";
 
 export function GoalSettingsEditor({ initial, onClose }: { initial: HostGoal; onClose: () => void }) {
   const copy = useCopy();
+  const { uiStyles } = useMobileTheme();
   // Keep both the draft and conflict token from the opening record across polling.
   const [opening] = useState(initial);
   const form = useFormDraft(() => goalSettings(opening));
@@ -30,16 +33,24 @@ export function GoalSettingsEditor({ initial, onClose }: { initial: HostGoal; on
     { onSuccess: onClose });
   };
   return <Stack>
-    <Body>{opening.title}</Body>
+    <Body style={uiStyles.title}>{opening.title}</Body>
     {!supported && <Notice tone="warning" message={copy("Hedef ayarları için bilgisayardaki bycoda uygulamasını güncelleyin.", "Update bycoda on this computer to edit goal settings.")} />}
-    <ToggleField label={copy("Tamamlanana kadar devam et", "Continue until done")} value={form.values.continueUntilDone}
-      disabled={save.isPending || !supported} onChange={(continueUntilDone) => form.patch({ continueUntilDone })} />
-    <ToggleField label={copy("Otomatik birleştir", "Auto merge")} value={form.values.autoMerge}
-      disabled={save.isPending || !supported || opening.isolate === false} onChange={(autoMerge) => form.patch({ autoMerge })} />
-    <Field label={copy("Eşzamanlı görev sınırı (0 = bilgisayar sınırı)", "Concurrent task limit (0 = computer limit)")}
-      value={concurrency} onChangeText={setConcurrency} keyboardType="number-pad" editable={supported && !save.isPending} />
-    <Field label={copy("Çalışma süresi sınırı (dakika, 0 = sınırsız)", "Run time limit (minutes, 0 = unlimited)")}
-      value={minutes} onChangeText={setMinutes} keyboardType="number-pad" editable={supported && !save.isPending && opening.status !== "planning"} />
+    <Section title={copy("Çalışma", "Execution")}>
+      <NavigationGroup>
+        <ToggleField label={copy("Tamamlanana kadar devam et", "Continue until done")} value={form.values.continueUntilDone}
+          disabled={save.isPending || !supported} onChange={(continueUntilDone) => form.patch({ continueUntilDone })} />
+        <ToggleField label={copy("Otomatik birleştir", "Auto merge")} value={form.values.autoMerge}
+          disabled={save.isPending || !supported || opening.isolate === false} onChange={(autoMerge) => form.patch({ autoMerge })} />
+      </NavigationGroup>
+    </Section>
+    <Section title={copy("Sınırlar", "Limits")}>
+      <NumberField label={copy("Eşzamanlı görev sınırı", "Concurrent task limit")} unit={copy("görev", "tasks")}
+        hint={copy("0 = bilgisayar sınırı", "0 = computer limit")}
+        value={concurrency} onChangeText={setConcurrency} editable={supported && !save.isPending} />
+      <NumberField label={copy("Çalışma süresi sınırı", "Run time limit")} unit={copy("dk", "min")}
+        hint={copy("0 = sınırsız", "0 = unlimited")}
+        value={minutes} onChangeText={setMinutes} editable={supported && !save.isPending && opening.status !== "planning"} />
+    </Section>
     {!valid && <Notice tone="warning" message={copy("Görev sınırı 0–8, süre sınırı 0–10080 olmalıdır. Planlama sırasında süre değiştirilemez.", "Task limit must be 0–8 and time limit 0–10080. The time limit cannot change during planning.")} />}
     <FormActions feedback={<MutationState mutation={save} />} submitLabel={copy("Kaydet", "Save")}
       busy={save.isPending} disabled={!supported || !dirty || !valid || save.isPending} onSubmit={() => {

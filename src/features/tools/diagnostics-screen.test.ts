@@ -3,17 +3,22 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ fetching: false, refresh: undefined as any, refetch: vi.fn(async () => ({})) }));
+vi.mock("./usage-charts", () => ({ UsageKpis: () => null, ProviderShare: () => null }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 vi.mock("@/state/queries", () => ({ useHostQuery: () => ({ isFetching: fixture.fetching, refetch: fixture.refetch }) }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ name: "Computer" }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("../management/shared/format", () => ({ stamp: () => "Timestamp" }));
 vi.mock("@/ui/metric-row", () => ({ MetricRow: () => null }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { accent: "" }, uiStyles: {} }) }));
+vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("panelui-native/components/meter", () => ({ Meter: () => null }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Group, Section: Group, Stack: Group, NavigationGroup: Group, Disclosure: Group, QueryState: () => null, ToggleField: () => null,
     Screen: ({ actions, refreshState, children }: any) => { fixture.refresh = refreshState; return createElement("main", null, actions, children); },
-    Button: ({ label, onPress, busy, disabled }: any) => createElement("button", { onClick: onPress, disabled, "data-busy": String(!!busy) }, label),
+    IconButton: ({ label, onPress, busy, disabled }: any) => createElement("button", { onClick: onPress, disabled, "data-busy": String(!!busy), "aria-label": label }),
+    Row: Group,
   };
 });
 import { DiagnosticsScreen } from "./diagnostics-screen";

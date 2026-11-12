@@ -13,7 +13,7 @@ WHEN_UNLOCKED_THIS_DEVICE_ONLY policy. No native secret getter is registered for
 JavaScript. Existing guarded JS credential access remains a separately owned
 legacy HTTP compatibility exception until that cohort retires.
 
-The native-only SecureStore accessor patch is pinned to 57.0.4 and registered in
+The native-only SecureStore accessor patch is pinned to 58.0.2 and registered in
 `pnpm-workspace.yaml`. A future authorized dependency installation must apply it
 before a native build. No installed package is edited by the verifier:
 
@@ -42,7 +42,7 @@ after dispatch remains uncertain under its same commandId; reconnect never
 resends it or falls back to HTTP. Calls made while connecting remain unsent.
 
 Limits: four sockets, 64 opaque handles, 64 pending JS RPCs, 1 MiB application
-messages, 8 MiB outbound bytes, and 32 native bridge deliveries/2 MiB per socket.
+messages, 8 MiB outbound bytes, and 512 native bridge deliveries/16 MiB per socket (a busy Host sends a burst of stream frames on connect; a lower credit closed healthy sockets with `overload`).
 Native bridge credit is distinct from a server stream acknowledgement. The
 application acknowledges a server cursor only after its cache/reducer commits.
 Bulk HTTP is same-origin and credential-bound, 64 KiB chunks, at most two jobs,

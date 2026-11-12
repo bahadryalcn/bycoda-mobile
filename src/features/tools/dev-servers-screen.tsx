@@ -10,7 +10,6 @@ import type { HostProject } from "@/domain/types";
 import { Badge, Body, ErrorText, Field, FormActions, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, ScreenList, SearchField, Sheet } from "@/ui/primitives";
 import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
-import { colors } from "@/ui/tokens";
 import { useMobileTheme } from "@/ui/theme";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
@@ -26,7 +25,7 @@ export function DevServersScreen({ project }: { project: HostProject }) {
 }
 
 function DevServersScreenBody({ project }: { project: HostProject }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const machine = useActiveMachine();
@@ -105,9 +104,13 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
                   ? copy("Eşleşen sonuç yok", "No matching results")
                   : copy("Bu projede sunucu yok.", "No servers in this project.")
               }
+              emptyDetail={search.trim() && projectRows.length ? undefined : copy(
+                "Bu projenin geliştirme sunucuları burada görünür. Bilgisayarda çalışan bir komutu buradan başlatabilirsin.",
+                "This project's dev servers appear here. Start a command to run it on the computer from your phone.",
+              )}
               emptyAction={search.trim() && projectRows.length ? {
                 label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
-              } : undefined}
+              } : { label: copy("Sunucu başlat", "Start server"), onPress: () => { start.reset(); setResultError(undefined); setCreating(true); } }}
             />
             {!scan.error && scan.data?.status === "error" ? <Notice tone="danger" message={scan.data.error ?? copy("Hata", "Error")} retrying={scan.isFetching} onRetry={() => { if (!scan.isFetching) void scan.refetch(); }} /> : null}
 
@@ -153,6 +156,7 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
         <FormActions
           submitLabel={copy("Sunucu başlat", "Start server")}
           busy={start.isPending}
+          dirty={form.dirty}
           disabled={!form.values.command.trim()}
           onSubmit={submit}
           feedback={

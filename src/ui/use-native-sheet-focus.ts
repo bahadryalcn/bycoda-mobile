@@ -1,13 +1,13 @@
 import { useEffect, useRef, type RefObject } from "react";
-import { AccessibilityInfo, findNodeHandle, type TextInput, type View } from "react-native";
+import { AccessibilityInfo, findNodeHandle, type TextInput, type View, type HostInstance, type TextInputInstance } from "react-native";
 import { useSecurity } from "@/state/security";
 import { usePrivateContentAccess } from "./private-content";
 
 /** Native screen-reader focus for the existing Sheet heading and trigger. */
 export function useNativeSheetFocus(
   visible: boolean,
-  heading: RefObject<View | null>,
-  returnFocusRef?: RefObject<View | TextInput | null>,
+  heading: RefObject<HostInstance | null>,
+  returnFocusRef?: RefObject<HostInstance | TextInputInstance | null>,
 ) {
   const access = usePrivateContentAccess();
   const epoch = useRef(0);

@@ -9,7 +9,7 @@ describe("shared component catalog", () => {
       .map((entry) => entry.name)
       .sort();
     expect(componentCatalog.map((item) => item.id).sort()).toEqual(installed);
-    expect(new Set(installed).size).toBe(140);
+    expect(new Set(installed).size).toBe(143);
     const exports = readFileSync(new URL("./library.ts", import.meta.url), "utf8");
     expect(exports).toContain('export * as PanelUI from "./panelui"');
     expect(readFileSync(new URL("./panelui.ts", import.meta.url), "utf8")).toContain('export * from "panelui-native"');

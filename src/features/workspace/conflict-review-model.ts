@@ -1,4 +1,4 @@
-import type { HostConflictStages } from "../../../../host/git-conflicts";
+import type { HostConflictStages } from "../../../../host/git/git-conflicts";
 export type ConflictChoice = "ours" | "theirs" | "both";
 export type ConflictPart = { kind: "text"; text: string } | { kind: "conflict"; id: string; ours: string; theirs: string; base: string | null };
 const kinds = new Set(["both-modified", "both-added", "deleted-by-us", "deleted-by-them", "added-by-us", "added-by-them", "both-deleted"]);

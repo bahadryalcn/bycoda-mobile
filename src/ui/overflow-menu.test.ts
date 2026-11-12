@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const f=vi.hoisted(()=>({open:false,change:undefined as undefined|((open:boolean)=>void),rows:new Map<string,()=>void>(),allowed:true}));
-vi.mock("./theme",()=>({useMobileTheme:()=>undefined}));
+vi.mock("./theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));
 vi.mock("react-native",()=>({View:({children,...props}:any)=>createElement("div",{ref:props.ref},children),useWindowDimensions:()=>({height:640,width:320})}));
 vi.mock("react-native-safe-area-context",()=>({useSafeAreaInsets:()=>({top:0,bottom:0,left:0,right:0})}));
 vi.mock("lucide-react-native/icons/ellipsis",()=>({default:()=>null}));
@@ -13,10 +13,14 @@ vi.mock("./copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
 vi.mock("./motion",()=>({haptic:{select:()=>{}}}));
 vi.mock("./private-access",()=>({usePrivateContentAccess:()=>({allowed:f.allowed,check:()=>f.allowed})}));
 vi.mock("panelui-native/components/menu",()=>({Menu:Object.assign(({open,onOpenChange,children}:any)=>{f.open=open;f.change=onOpenChange;return children;},{Trigger:({children}:any)=>children,Content:({children}:any)=>f.open?children:null,Item:({children,onSelect}:any)=>{f.rows.set(children,onSelect);return createElement("span",null,children);}})}));
-import {ActionMenu,type MenuAction} from "./overflow-menu";
+vi.mock("./dialogs",()=>({Sheet:()=>null}));
+vi.mock("./navigation-row",()=>({NavigationGroup:()=>null,NavigationRow:()=>null}));
+vi.mock("./typography",()=>({Body:()=>null}));
+vi.mock("./icon-tile",()=>({IconTile:()=>null}));
+import {ActionMenu,groupMenuActions,type MenuAction} from "./overflow-menu";
 let root:ReturnType<typeof createRoot>,node:HTMLDivElement;
-beforeEach(()=>{(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;f.open=false;f.allowed=true;f.rows.clear();node=document.createElement("div");document.body.append(node);root=createRoot(node);});
-afterEach(()=>{act(()=>root.unmount());node.remove();});
+beforeEach(()=>{vi.stubEnv("EXPO_OS","web");(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;f.open=false;f.allowed=true;f.rows.clear();node=document.createElement("div");document.body.append(node);root=createRoot(node);});
+afterEach(()=>{vi.unstubAllEnvs();act(()=>root.unmount());node.remove();});
 const render=(actions:MenuAction[])=>act(()=>root.render(createElement(ActionMenu,{label:"Project options",actions})));
 const open=()=>act(()=>f.change!(true));
 it("resets an empty menu and rejects late events from its retired trigger after choices return",()=>{
@@ -36,4 +40,10 @@ it("retires a hidden private menu and returns with a closed trigger",()=>{
 });
 it("does not dispatch a retained selection from an unmounted menu owner",()=>{
  const run=vi.fn();render([{key:"inspect",label:"Inspect",onPress:run}]);open();const select=f.rows.get("Inspect")!;act(()=>root.render(null));act(()=>select());expect(run).not.toHaveBeenCalled();
+});
+it("puts destructive actions in their own last group",()=>{
+ const a={key:"a",destructive:false},d={key:"d",destructive:true},b={key:"b",destructive:false};
+ expect(groupMenuActions([a,d,b])).toEqual([[a,b],[d]]);
+ expect(groupMenuActions([d])).toEqual([[d]]);
+ expect(groupMenuActions([])).toEqual([]);
 });

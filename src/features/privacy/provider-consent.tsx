@@ -17,7 +17,7 @@ import {
   Body,
   Button,
   Stack,
-  ErrorText,
+  ErrorNotice,
   Disclosure,
   Heading,
   Loading,
@@ -27,7 +27,7 @@ import {
 } from "../../ui/primitives";
 import { IconTile } from "../../ui/icon-tile";
 import { enterItem } from "../../ui/motion";
-import { colors, space } from "../../ui/tokens";
+import { space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
 import { LegalDocument, legalDocumentTitle, type LegalDocumentId } from "../legal/legal-document";
 import { consentScope, createConsentStore } from "./consent-store";
@@ -47,7 +47,7 @@ export async function revokeProviderConsent() {
 
 /** Keep navigation mounted; request-time guards protect the workspace beneath this overlay. */
 export function ProviderConsentGate({ children }: PropsWithChildren) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const pathname = usePathname();
   const machine = useActiveMachine();
@@ -129,17 +129,25 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
           <Screen title={loaded ? copy("Verilerin nereye gider?", "Where does your data go?") : undefined}>
             {!loaded ? (
               <Loading
+                centered
                 label={copy("Gizlilik tercihi yükleniyor…", "Loading privacy preference…")}
               />
             ) : (
               <>
+                <ErrorNotice
+                  error={permission.error || action.error}
+                  message={copy(
+                    "Gizlilik tercihi okunamadı veya kaydedilemedi. Yeniden dene.",
+                    "Your privacy preference could not be read or saved. Try again.",
+                  )}
+                />
                 <Animated.View entering={enterItem(0)}>
                   <Stack>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
                       <IconTile color={colors.accent}>
                         <Laptop size={18} strokeWidth={2} color={colors.accent} />
                       </IconTile>
-                      <View style={{ flex: 1, gap: 2 }}>
+                      <View style={{ flex: 1, gap: space.xxs }}>
                         <Body>{machine?.name ?? copy("Bilgisayar", "Computer")}</Body>
                         <Body muted numberOfLines={1}>{machine?.endpoint}</Body>
                       </View>
@@ -181,13 +189,6 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                     </Disclosure>
                   </Stack>
                 </Animated.View>
-                <ErrorText
-                  error={permission.error || action.error}
-                  message={copy(
-                    "Gizlilik tercihi okunamadı veya kaydedilemedi. Yeniden dene.",
-                    "Your privacy preference could not be read or saved. Try again.",
-                  )}
-                />
                 {permission.error ? (
                   <Button
                     label={copy("Yeniden yükle", "Reload")}
@@ -214,7 +215,7 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                       void allow();
                     }}
                   />
-                  <Row style={{ justifyContent: "center" }}>
+                  <Row style={{ justifyContent: "center", flexWrap: "wrap" }}>
                     <Button
                       tone="secondary"
                       label={copy("Gizlilik politikası", "Privacy policy")}

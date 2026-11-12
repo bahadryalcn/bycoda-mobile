@@ -45,9 +45,19 @@ type Runtime = {
   fence: number;
   timer?: ReturnType<typeof setTimeout>;
   stable?: ReturnType<typeof setTimeout>;
+  /** Why the runtime is blocked; only authentication/TLS blocks are re-checked. */
+  blockedBy?: string;
   events: Set<AppliedHostEvent>;
   states: Set<(state: MobileHostRuntimeState) => void>;
 };
+
+const BLOCKED_RECHECK_MS = 20_000;
+/**
+ * In-memory references to the one shared socket. Every component's host client (43 hook call
+ * sites, plus each host query) takes a lease, so a session screen passed the old cap of 64 and
+ * its reads failed locally as "This computer is busy" without reaching the Host.
+ */
+const MAX_LEASES = 1024;
 
 /** One app-scoped retry owner. Native code performs exactly one attempt. */
 export class MobileHostRuntimeRegistry {
@@ -95,9 +105,11 @@ export class MobileHostRuntimeRegistry {
       };
       this.runtimes.set(key, runtime);
     }
-    if (runtime.refs >= 64) throw new HostWsError("overload");
+    if (runtime.refs >= MAX_LEASES) throw new HostWsError("overload");
     runtime.refs++;
-    if (runtime.refs === 1 && runtime.state !== "blocked") void this.connect(runtime);
+    if (runtime.refs === 1)
+      if (runtime.state !== "blocked") void this.connect(runtime);
+      else this.recheckBlocked(runtime);
     const owned = runtime;
     const ownedEvents = new Set<AppliedHostEvent>();
     const ownedStates = new Set<(state: MobileHostRuntimeState) => void>();
@@ -118,7 +130,7 @@ export class MobileHostRuntimeRegistry {
         return owned.connection.request<T>(method, params, options);
       },
       subscribe: (handler) => {
-        if (released || owned.events.size >= 64) throw new HostWsError("overload");
+        if (released || owned.events.size >= MAX_LEASES) throw new HostWsError("overload");
         owned.events.add(handler);
         ownedEvents.add(handler);
         return () => {
@@ -128,7 +140,7 @@ export class MobileHostRuntimeRegistry {
       },
       state: () => owned.state,
       onState: (handler) => {
-        if (released || owned.states.size >= 64) throw new HostWsError("overload");
+        if (released || owned.states.size >= MAX_LEASES) throw new HostWsError("overload");
         owned.states.add(handler);
         ownedStates.add(handler);
         return () => {
@@ -184,11 +196,11 @@ export class MobileHostRuntimeRegistry {
     const fence = runtime.fence;
     this.setState(runtime, "connecting");
     try {
-      try {
-        await this.invalidation;
-      } catch {
-        throw new HostWsError("authentication");
-      }
+      // A failed native access/invalidation call has still settled. Treating it as an
+      // authorization failure blocked every later attempt until the app was restarted
+      // ("Access needed" while the Host accepted the same credential); native access
+      // checks in acquireCredential/open still refuse a stale or inactive handle.
+      await this.invalidation.catch(() => undefined);
       if (runtime.fence !== fence || !this.active || !runtime.refs) return;
       this.assertAccess();
       const binding = {
@@ -199,8 +211,13 @@ export class MobileHostRuntimeRegistry {
       if (!credential) {
         try {
           credential = await this.native!.acquireCredential(binding);
-        } catch {
-          throw new HostWsError("authentication");
+        } catch (error) {
+          // "unavailable"/"access_changed": native access is not resumed yet or moved (foreground race) — retry.
+          throw new HostWsError(
+            error instanceof Error && /\b(unavailable|access_changed)\b/i.test(error.message)
+              ? "unavailable"
+              : "authentication",
+          );
         }
       }
       if (runtime.fence !== fence || !this.active || !runtime.refs) return;
@@ -240,6 +257,7 @@ export class MobileHostRuntimeRegistry {
         connection.close();
         return;
       }
+      runtime.blockedBy = undefined;
       this.setState(runtime, "ready");
       runtime.stable = setTimeout(() => {
         if (runtime.fence === fence && runtime.state === "ready") runtime.attempt = 0;
@@ -258,9 +276,13 @@ export class MobileHostRuntimeRegistry {
     }
     if (["authentication", "identity", "schema", "tls"].includes(error.category)) {
       runtime.credential = undefined;
+      runtime.blockedBy = error.category;
       this.setState(runtime, "blocked");
+      this.recheckBlocked(runtime);
       return;
     }
+    // The native side may have dropped this handle; the next attempt re-acquires it.
+    runtime.credential = undefined;
     this.setState(runtime, "backoff");
     const cap = Math.min(30_000, 250 * 2 ** Math.min(runtime.attempt++, 16));
     runtime.timer = setTimeout(
@@ -270,6 +292,19 @@ export class MobileHostRuntimeRegistry {
       },
       Math.floor(Math.max(0, Math.min(1, this.random())) * cap),
     );
+  }
+  /**
+   * A Host restart can briefly reject a valid credential (and a TLS listener can be replaced),
+   * so a blocked computer is re-checked slowly while a view still uses it instead of staying
+   * blocked until the app is backgrounded. A revoked credential keeps failing the same way.
+   */
+  private recheckBlocked(runtime: Runtime): void {
+    if (runtime.timer || !runtime.refs || !["authentication", "tls"].includes(runtime.blockedBy ?? ""))
+      return;
+    runtime.timer = setTimeout(() => {
+      runtime.timer = undefined;
+      void this.connect(runtime);
+    }, BLOCKED_RECHECK_MS);
   }
   /** App lock/background closes sockets and invalidates native handles immediately. */
   setAccess(active: boolean, epoch: number): void {
@@ -357,6 +392,8 @@ export async function installMobileHostRuntime(
     },
   };
 }
+/** How long a backgrounded app keeps its Host connection before closing it. */
+export const BACKGROUND_GRACE_MS = 5 * 60_000;
 async function createMobileHostRuntime(options: {
   onState?: (machineId: string, state: MobileHostRuntimeState) => void;
 }): Promise<Installation> {
@@ -477,7 +514,10 @@ async function createMobileHostRuntime(options: {
         );
       let binding: CredentialBinding;
       const credentialGeneration = credentialGenerations.get(machine.id) ?? 1;
-      if (descriptor.mobileTls !== undefined) {
+      // The paired-CA bootstrap describes the local-network WSS listener. Use it
+      // only on the local-network route; an HTTPS route (e.g. Tailscale away
+      // from home) keeps its own public-CA socket on the same address.
+      if (descriptor.mobileTls !== undefined && machine.lanKey) {
         let trusted;
         try {
           trusted = requireMobileTlsBootstrap(descriptor.mobileTls, machine.environmentId);
@@ -541,13 +581,45 @@ async function createMobileHostRuntime(options: {
       }
     },
   });
+  const apply = (next: boolean) => {
+    if (next === active) return;
+    active = next;
+    epoch = ++appAccessEpoch;
+    registry.setAccess(next, epoch);
+  };
+  // Leaving the app keeps the JavaScript side marked active for a grace, so a stay the OS
+  // never reports to native needs no teardown; the lock still closes everything immediately
+  // through isAppAccessAllowed. Every return from the background issues a new access epoch.
+  let backgroundTimer: ReturnType<typeof setTimeout> | undefined;
+  let backgroundSince: number | undefined;
+  const clearGrace = () => {
+    if (backgroundTimer !== undefined) clearTimeout(backgroundTimer);
+    backgroundTimer = undefined;
+    backgroundSince = undefined;
+  };
   const access = () => {
-    const next = isAppAccessAllowed() && AppState.currentState === "active";
-    if (next !== active) {
-      active = next;
-      epoch = ++appAccessEpoch;
-      registry.setAccess(next, epoch);
+    if (!isAppAccessAllowed()) {
+      clearGrace();
+      apply(false);
+      return;
     }
+    if (AppState.currentState === "active") {
+      // The native module closes its gate on every background event, before JavaScript runs
+      // again, and only a newer epoch reopens it. Returning without one — a stay shorter than the
+      // grace — left every later attempt failing with "unavailable" until the app restarted.
+      const left = backgroundSince !== undefined;
+      clearGrace();
+      if (left) apply(false);
+      apply(true);
+      return;
+    }
+    if (!active || backgroundTimer !== undefined) return;
+    backgroundSince = Date.now();
+    backgroundTimer = setTimeout(() => {
+      backgroundTimer = undefined;
+      apply(false);
+    }, BACKGROUND_GRACE_MS);
+    backgroundTimer.unref?.();
   };
   const security = useSecurity.subscribe(access);
   const lifecycle = AppState.addEventListener("change", access);
@@ -587,6 +659,7 @@ async function createMobileHostRuntime(options: {
     registry,
     dispose: () => {
       removeProvider();
+      clearGrace();
       security();
       lifecycle.remove();
       machineState();

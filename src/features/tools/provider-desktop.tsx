@@ -1,9 +1,20 @@
+import { ProviderAccountKind } from "@/ui/provider-account-kind";
 import { useLayoutEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { reviewedMachine, isReviewedMachine } from "@/state/reviewed-machine";
 import { useHostQuery } from "@/state/queries";
-import { Body, Button, Disclosure, Empty, Notice, QueryState, Row, ScreenList, Sheet } from "@/ui/primitives";
+import {
+  Body,
+  Button,
+  Disclosure,
+  Empty,
+  Notice,
+  QueryState,
+  Row,
+  ScreenList,
+  Sheet,
+} from "@/ui/primitives";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useCopy } from "@/ui/copy";
@@ -41,20 +52,33 @@ export function ProviderDesktop({
     target: reviewedMachine(machine),
     environmentId: machine?.environmentId,
   }));
-  const mounted = useRef(true), invalidated = useRef(false);
-  const latest = useRef({ scope, projectId }); latest.current = { scope, projectId };
-  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const mounted = useRef(true),
+    invalidated = useRef(false);
+  const latest = useRef({ scope, projectId });
+  latest.current = { scope, projectId };
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const current = () => {
-    if (!opening.target || opening.target.id !== opening.machineId ||
+    if (
+      !opening.target ||
+      opening.target.id !== opening.machineId ||
       !isReviewedMachine(opening.target, useMachines.getState()) ||
       latest.current.scope.machineId !== opening.machineId ||
       latest.current.scope.sessionId !== opening.sessionId ||
-      latest.current.projectId !== opening.projectId) invalidated.current = true;
+      latest.current.projectId !== opening.projectId
+    )
+      invalidated.current = true;
     return mounted.current && !invalidated.current;
   };
   const validScope = current();
   const supported =
-    validScope && !!opening.environmentId && machine?.capabilities?.includes("providers.desktop.v1");
+    validScope &&
+    !!opening.environmentId &&
+    machine?.capabilities?.includes("providers.desktop.v1");
   const params = { projectId: opening.projectId, sessionId: opening.sessionId };
   const query = useHostQuery<DesktopManagementReport>(
     ["provider-desktop", opening.projectId, opening.sessionId],
@@ -62,6 +86,7 @@ export function ProviderDesktop({
     params,
     {
       enabled: !!supported,
+      interval: 5000,
       queryFn: async (client, signal) => {
         if (!current()) throw Error("Provider management source changed");
         const result = readDesktopManagement(
@@ -74,7 +99,9 @@ export function ProviderDesktop({
     },
   );
   const report = supported ? query.data : undefined;
-  const refresh = usePullRefresh(supported ? () => current() ? query.refetch() : undefined : undefined);
+  const refresh = usePullRefresh(
+    supported ? () => (current() ? query.refetch() : undefined) : undefined,
+  );
   const ready = getQueryPresentation(query) === "ready";
   const entries: Entry[] = report
     ? [
@@ -102,35 +129,61 @@ export function ProviderDesktop({
           <View style={{ gap: space.sm }}>
             <Row>
               <Body style={{ flex: 1 }}>{machine?.name}</Body>
-              <Button busy={refresh.refreshing} tone="quiet" label={copy("Yenile", "Refresh")}
-                disabled={!supported || query.isFetching} onPress={() => { void refresh.onRefresh(); }} />
+              <Button
+                busy={refresh.refreshing}
+                tone="quiet"
+                label={copy("Yenile", "Refresh")}
+                disabled={!supported || query.isFetching}
+                onPress={() => {
+                  void refresh.onRefresh();
+                }}
+              />
             </Row>
             {!supported ? (
               <Notice
-                message={!validScope ? copy("Bağlantı veya proje değişti. Devam etmek için bu ekranı yeniden açın.", "The connection or project changed. Reopen this view to continue.") : copy(
-                  "Hesap ve MCP bilgilerini görmek için bu oturumun bilgisayarındaki bycoda’yı güncelleyin.",
-                  "Update bycoda on this session's computer to view account and MCP information.",
-                )}
+                message={
+                  !validScope
+                    ? copy(
+                        "Bağlantı veya proje değişti. Devam etmek için bu ekranı yeniden açın.",
+                        "The connection or project changed. Reopen this view to continue.",
+                      )
+                    : copy(
+                        "Hesap ve MCP bilgilerini görmek için bu oturumun bilgisayarındaki bycoda’yı güncelleyin.",
+                        "Update bycoda on this session's computer to view account and MCP information.",
+                      )
+                }
               />
             ) : (
               <QueryState query={query} />
             )}
             <Disclosure label={copy("Ayrıntılar", "Details")}>
               <Body mono>{opening.sessionId}</Body>
-              <Body muted>{copy(
-                "Bilgisayarda önceden gözlemlenen hesap ve MCP bilgileri. Yenileme giriş yapmaz, kota sorgulamaz veya servis başlatmaz.",
-                "Previously observed account and MCP information from the computer. Refresh does not sign in, fetch quotas or start services.",
-              )}</Body>
-              <Body muted>{copy(
-                "Kotalar sağlayıcı önbelleğidir; oturum kullanımı, fatura veya fiyat değildir.",
-                "Quotas come from the provider cache; they are not session usage, invoices or prices.",
-              )}</Body>
-              {report ? <Body muted>{copy("Önbellek anlık görüntüsü", "Cached snapshot")} · {new Date(report.sampledAt).toLocaleString()}</Body> : null}
+              <Body muted>
+                {copy(
+                  "Bilgisayarda önceden gözlemlenen hesap ve MCP bilgileri. Yenileme giriş yapmaz, kota sorgulamaz veya servis başlatmaz.",
+                  "Previously observed account and MCP information from the computer. Refresh does not sign in, fetch quotas or start services.",
+                )}
+              </Body>
+              <Body muted>
+                {copy(
+                  "Kotalar sağlayıcı önbelleğidir; oturum kullanımı, fatura veya fiyat değildir.",
+                  "Quotas come from the provider cache; they are not session usage, invoices or prices.",
+                )}
+              </Body>
+              {report ? (
+                <Body muted>
+                  {copy("Önbellek anlık görüntüsü", "Cached snapshot")} ·{" "}
+                  {new Date(report.sampledAt).toLocaleString()}
+                </Body>
+              ) : null}
             </Disclosure>
             {report ? (
               <>
                 {ready && !report.accounts.length ? (
-                  <Empty compact title={copy("Yapılandırılmış hesap yok.", "No configured accounts.")} />
+                  <Empty
+                    compact
+                    title={copy("Yapılandırılmış hesap yok.", "No configured accounts.")}
+                  />
                 ) : null}
                 {ready && report.coverage.mcpSource === "unavailable" ? (
                   <Notice
@@ -159,19 +212,33 @@ export function ProviderDesktop({
         }
         renderItem={({ item }) =>
           "account" in item ? (
-            <RecordCard title={item.account.label}
+            <RecordCard
+              title={item.account.label}
               metadata={`${item.account.provider}${item.account.isDefault ? ` · ${copy("Varsayılan", "Default")}` : ""}`}
-              details={<CachedQuota quota={item.account.quota} />}
-              footer={(machine?.capabilities?.includes("providers.desktop.metadata.v1") || (item.account.provider === "claude" && machine?.capabilities?.includes("providers.desktop.quotaRefresh.v1"))) ? (
-                <Button
-                  tone="quiet"
-                  label={copy("Hesap işlemleri", "Account actions")}
-                  disabled={!supported || !ready || !!report?.coverage.truncated}
-                  onPress={() => {
-                    if (ready && report && current()) setSelected({ report, account: item.account });
-                  }}
-                />
-              ) : undefined}
+              details={
+                <>
+                  <ProviderAccountKind
+                    kind={item.account.kind}
+                    derivedKind={item.account.derivedKind}
+                  />
+                  <CachedQuota quota={item.account.quota} />
+                </>
+              }
+              footer={
+                machine?.capabilities?.includes("providers.desktop.metadata.v1") ||
+                (item.account.provider === "claude" &&
+                  machine?.capabilities?.includes("providers.desktop.quotaRefresh.v1")) ? (
+                  <Button
+                    tone="quiet"
+                    label={copy("Hesap işlemleri", "Account actions")}
+                    disabled={!supported || !ready || !!report?.coverage.truncated}
+                    onPress={() => {
+                      if (ready && report && current())
+                        setSelected({ report, account: item.account });
+                    }}
+                  />
+                ) : undefined
+              }
             />
           ) : (
             <View style={{ gap: space.xs }}>
@@ -192,7 +259,7 @@ export function ProviderDesktop({
           report={selected.report}
           account={selected.account}
           onClose={() => {
-            setSelected((latest) => latest === selected ? undefined : latest);
+            setSelected((latest) => (latest === selected ? undefined : latest));
             if (current()) void query.refetch();
           }}
         />

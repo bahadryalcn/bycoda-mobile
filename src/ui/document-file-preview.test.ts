@@ -2,7 +2,7 @@
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-vi.mock("@/ui/theme",()=>({useMobileTheme:()=>{}}));
+vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));
 vi.mock("react-native",()=>({View:({children}:PropsWithChildren)=>createElement("div",null,children)}));
 vi.mock("@tanstack/react-query",()=>({useQuery:({enabled}:{enabled:boolean})=>({data:enabled?"source":undefined,isFetching:false,isSuccess:enabled,isError:false,error:null,refetch:vi.fn()})}));
 vi.mock("./document-content",()=>({ProjectMediaContent:()=>null,DocumentContent:({onOpenFile,context}:{context:unknown;onOpenFile:(path:string,context:unknown)=>void})=>createElement("button",{onClick:()=>onOpenFile("child.txt",context)},"Open child")}));

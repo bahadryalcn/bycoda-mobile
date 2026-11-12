@@ -11,7 +11,8 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { BackHandler, StyleSheet, View } from "react-native";
+import { StyleSheet, View, type HostInstance } from "react-native";
+import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import { KeyboardController } from "react-native-keyboard-controller";
 import Animated, {
   useAnimatedStyle,
@@ -22,7 +23,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useSecurity } from "../state/security";
-import { uiStyles } from "./styles";
 import type { OverlayEntry, OverlayRegistry, ScreenOverlayProps } from "./overlay-types";
 import { canRemoveOverlay, closeOverlay, showOverlay, type OverlayState } from "./overlay-state";
 import { motionTiming } from "./motion";
@@ -91,9 +91,9 @@ function OverlayLayer({
 
 /** Private overlays share the activity window and the application's lock boundary. */
 export function OverlayProvider({ children }: PropsWithChildren) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const [entries, setEntries] = useState<Map<string, OverlayState<OverlayEntry>>>(() => new Map());
-  const background = useRef<View>(null);
+  const background = useRef<HostInstance>(null);
   const elements = useRef(new Map<string, HTMLElement>());
   const webFocus = useRef<ReturnType<typeof createOverlayWebFocus> | null>(null);
   const captureElement = useCallback((id: string, value: unknown) => {
@@ -148,19 +148,14 @@ export function OverlayProvider({ children }: PropsWithChildren) {
       }),
     });
   });
-  useEffect(() => {
-    if (!active || process.env.EXPO_OS === "web") return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (useSecurity.getState().status !== "unlocked") return true;
-      if (active.visible && KeyboardController.isVisible()) {
-        void KeyboardController.dismiss();
-        return true;
-      }
-      if (active.visible) active.value.onClose();
-      return true;
-    });
-    return () => subscription.remove();
-  }, [active]);
+  useBackHandler(!!active, () => {
+    if (useSecurity.getState().status !== "unlocked") return;
+    if (active?.visible && KeyboardController.isVisible()) {
+      void KeyboardController.dismiss();
+      return;
+    }
+    if (active?.visible) active.value.onClose();
+  });
   return (
     <Context.Provider value={registry}><OverlayWebMenuContext.Provider value={menuFocus}>
       <View style={uiStyles.screen}>

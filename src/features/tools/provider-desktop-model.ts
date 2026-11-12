@@ -20,6 +20,8 @@ export type DesktopManagementReport = {
     id: string;
     label: string;
     color: string | null;
+    kind?: "personal" | "work";
+    derivedKind?: "personal" | "work";
     isDefault: boolean;
     quota: DesktopQuota;
   }[];
@@ -87,7 +89,18 @@ export function readDesktopManagement(
     !value.accounts.every(
       (a) =>
         record(a) &&
-        exact(a, ["provider", "id", "label", "color", "isDefault", "quota"]) &&
+        exact(a, [
+          "provider",
+          "id",
+          "label",
+          "color",
+          "isDefault",
+          "quota",
+          ...(a.kind !== undefined ? ["kind"] : []),
+          ...(a.derivedKind !== undefined ? ["derivedKind"] : []),
+        ]) &&
+        (a.kind === undefined || a.kind === "personal" || a.kind === "work") &&
+        (a.derivedKind === undefined || a.derivedKind === "personal" || a.derivedKind === "work") &&
         ["claude", "codex"].includes(String(a.provider)) &&
         text(a.id, 128) &&
         text(a.label, 160) &&

@@ -53,6 +53,7 @@ export function ProfileEditor({
       catalog={catalog}
       catalogRead={catalogRead}
       groupsSupported={machine?.capabilities?.includes("crews.agent-groups.v1") === true}
+      lookSupported={machine?.capabilities?.includes("crews.identity.v1") === true}
       busy={save.isPending}
       disabled={!supported}
       feedback={<MutationState mutation={save} />}
@@ -63,6 +64,7 @@ export function ProfileEditor({
         <>
           <SelectField
             label={copy("Kapsam", "Scope")}
+            hint={copy("Ekipler bu profilin kendi kopyasını tutar. Profili değiştirmek var olan ekipleri değiştirmez.", "Crews retain their own copy of this profile. Editing it does not change existing crews.")}
             value={scope}
             onChange={setScope}
             disabled={!supported || save.isPending || !!opening.updatedAt}
@@ -74,12 +76,6 @@ export function ProfileEditor({
               },
             ]}
           />
-          <Body muted>
-            {copy(
-              "Ekipler bu profilin kendi kopyasını tutar. Profili değiştirmek var olan ekipleri değiştirmez.",
-              "Crews retain their own copy of this profile. Editing it does not change existing crews.",
-            )}
-          </Body>
         </>
       }
     />

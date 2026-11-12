@@ -7,6 +7,7 @@ import { ProviderInboxRow } from "./provider-list";
 
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/issue-summary", () => ({ IssueSummary: () => null }));
+vi.mock("../management/shared/record-bits", () => ({ useRelativeTime: () => () => "" }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("span", null, children);
   return { Body: Wrap, Row: Wrap, Badge: ({ label }: { label: string }) => createElement("span", null, label),

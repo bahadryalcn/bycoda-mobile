@@ -10,15 +10,15 @@ import { PrivateContentAccessProvider,usePrivateContentAccess } from "@/ui/priva
 import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { colors } from "@/ui/tokens";
 import { QueueEditReview } from "./queue-edit-review";
 import type { SessionScope } from "./session-types";
 import type { useQueueEditor } from "./session-queue-editor";
 import { composerDeliveryError } from "./composer-delivery-copy";
+import { RecordAccessUnavailable } from "./unavailable-state";
 
 /** Presentation keeps no draft copy; the original persistent editor remains its owner. */
 export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typeof useQueueEditor>;blocked:boolean;scope:SessionScope}){
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy=useCopy(),{height}=useWindowDimensions(),connection=useConnectionScope(),access=usePrivateContentAccess();
   const machine=useMachines(state=>state.machines.find(entry=>entry.id===scope.machineId));
   const [opening]=useState(()=>({connection,scope:{...scope},name:machine?.name??machine?.id??""}));
@@ -55,7 +55,7 @@ export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typ
   const feedback=<ErrorText error={editor.error||editor.editError} message={composerDeliveryError(editor.error||editor.editError,copy)}/>;
   return <>
     {edit||editor.error?<ChatToolbarAction label={copy("Sıradaki mesajın taslağı", "Queued message draft")} onPress={()=>{if(origin())live.current.editor.open();}} disabled={!available}><Pencil size={14} color={colors.muted}/></ChatToolbarAction>:null}
-    <Sheet visible={editor.visible} title={copy("Sıradaki mesajı düzenle", "Edit queued message")} dismissible={!editor.working} onClose={close} size="form" scroll={false}>
+    <Sheet visible={editor.visible} title={copy("Sıradaki mesajı düzenle", "Edit queued message")} dismissible={!editor.working} dirty={!!edit && edit.text !== edit.original.text} onClose={close} size="form" scroll={false}>
       <ScreenList data={available&&edit?edit.original.attachments:[]} keyExtractor={file=>file.id} header={<Stack>
         {available?<>
           <CollectionToolbar field={<Body selectable>{opening.name}</Body>} actions={edit?<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
@@ -72,7 +72,7 @@ export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typ
               {edit.original.modelTarget?<><Body mono selectable>{edit.original.modelTarget.harness}</Body>{Object.entries(edit.original.modelTarget.modelSettings).map(([key,value])=><Body key={key} mono selectable>{key}: {String(value)}</Body>)}</>:null}
             </Disclosure>
           </>:editor.ready&&!editor.error?<Empty compact title={copy("Sıradaki mesaja ait taslak yok.", "No queued message draft.")}/>:null}
-        </>:<Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")}/>}
+        </>:<RecordAccessUnavailable />}
       </Stack>} renderItem={({item:file})=><Body muted selectable>{file.name} · {Math.ceil(file.size/1024)} KB</Body>}/>
       {available&&editor.error&&!editor.ready?<FormActions submitLabel={copy("Taslağı yeniden yükle", "Retry loading draft")} onSubmit={()=>{void retry();}} busy={retrying} disabled={editor.working} feedback={feedback} onCancel={!retrying?close:undefined} cancelLabel={copy("Kapat", "Close")}/>:
         available&&edit&&editor.ready?<FormActions submitLabel={needsResume?copy("Düzenlemeye devam et", "Continue editing"):copy("Değişiklikleri kaydet", "Save changes")} onSubmit={needsResume?resume:save} busy={editor.working} disabled={blocked||!!approval} feedback={feedback} onCancel={close} cancelLabel={copy("Kapat", "Close")}/>:

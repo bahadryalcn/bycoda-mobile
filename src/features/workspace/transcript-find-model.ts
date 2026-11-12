@@ -51,7 +51,7 @@ export async function findTranscriptAsync(
   const pause = options.yield ?? (() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
   let deadline = Date.now() + 4;
   let scanned = 0;
-  for (let index = entries.length - 1; index >= 0; index--) {
+  for (let index = 0; index < entries.length; index++) {
     const entry = entries[index]!;
     const blocks = entry.kind === "message" ? [entry.block] : entry.blocks;
     for (const block of blocks) {
@@ -81,7 +81,7 @@ export async function findTranscriptAsync(
   return options.signal.aborted ? [] : results;
 }
 
-/** One result per matching block, in chronology despite the list's inverted order. */
+/** One result per matching block, in chronological list order. */
 export function findTranscript(
   entries: readonly TranscriptEntry[],
   query: string,
@@ -89,7 +89,7 @@ export function findTranscript(
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
   const results: TranscriptFindResult[] = [];
-  for (let index = entries.length - 1; index >= 0; index--) {
+  for (let index = 0; index < entries.length; index++) {
     const entry = entries[index]!;
     const blocks = entry.kind === "message" ? [entry.block] : entry.blocks;
     for (const block of blocks) {

@@ -3,10 +3,8 @@ import { useState } from "react";
 import { View } from "react-native";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import { Body, Button, IconButton, QueryState, Row } from "@/ui/primitives";
-import { colors, space, fontSize } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { space, fontSize, lineHeight } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
-import { workspaceStyles } from "./shared";
 import { useDiffPreview } from "./use-diff-preview";
 import { useGitDiff } from "./git-queries";
 import type { GitDiffPanelProps } from "./git-types";
@@ -25,14 +23,14 @@ export function GitDiffPanel({
   onReviewExit,
   children,
 }: GitDiffPanelProps) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const diff = useGitDiff(scope, selection);
   const [selecting, setSelecting] = useState(false);
   const textDiff = diff.data && !diff.data.binary && !diff.data.tooLarge ? diff.data : undefined;
   const preview = useDiffPreview(textDiff?.original, textDiff?.current);
   return (
-      <View style={workspaceStyles.stack}>
+      <View style={uiStyles.stack}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
           <IconButton
             label={copy("Değişikliklere dön", "Back to changes")}
@@ -46,7 +44,7 @@ export function GitDiffPanel({
             selectable={false}
             numberOfLines={2}
             ellipsizeMode="middle"
-            style={[uiStyles.grow, { fontSize: fontSize.caption, lineHeight: 17 }]}
+            style={[uiStyles.grow, { fontSize: fontSize.caption, lineHeight: lineHeight.small }]}
           >
             {selection.path}
           </Body>

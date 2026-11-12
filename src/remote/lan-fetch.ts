@@ -1,4 +1,4 @@
-import { boundedResponseText } from "./response-body";
+import { boundedResponse, boundedResponseText } from "./response-body";
 import { gcm } from "@noble/ciphers/aes.js";
 import { x25519 } from "@noble/curves/ed25519.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
@@ -109,10 +109,7 @@ export function encryptedLanFetch(
         utf8ToBytes(value.body).length > MOBILE_LAN_MAX_BYTES
       )
         throw new Error("Invalid local network response.");
-      return new Response(value.body, {
-        status: value.status,
-        headers: { "Content-Type": "application/json" },
-      });
+      return boundedResponse(value.body, value.status);
     } finally {
       shared.fill(0);
       payload.fill(0);

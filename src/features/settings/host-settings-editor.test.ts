@@ -29,10 +29,10 @@ vi.mock("@/ui/primitives", () => {
   return { Stack: Wrap, Body: Wrap, Disclosure: Wrap, Button,
     QueryState: ({ query }: { query: { error?: Error } }) => query.error ? createElement("p", null, query.error.message) : null,
     ErrorText: ({ error }: { error?: string | Error }) => error ? createElement("p", null, String(error)) : null,
-    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    StateView: ({ title, description, action }: { title: string; description?: string; action?: { label: string; onPress: () => void } }) => createElement("div", null, createElement("p", null, title), description ? createElement("p", null, description) : null, action ? createElement("button", { onClick: action.onPress }, action.label) : null), Notice: ({ message }: { message: string }) => createElement("p", null, message),
     FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: import("@/ui/component-props").FormActionsProps) => createElement("section", null, feedback, createElement(Button, { label: submitLabel, disabled, busy, onPress: onSubmit })),
     MutationState: ({ mutation, success }: { mutation: { error?: Error; isSuccess?: boolean }; success: string }) => createElement("p", null, mutation.error?.message ?? (mutation.isSuccess ? success : null)),
-    Field: ({ label, value, editable, onChangeText }: { label: string; value: string; editable?: boolean; onChangeText: (value: string) => void }) => createElement("input", { "aria-label": label, value, disabled: editable === false, onChange: (e: import("react").ChangeEvent<HTMLInputElement>) => onChangeText(e.target.value) }),
+    NumberField: ({ label, value, editable, onChangeText }: { label: string; value: string; editable?: boolean; onChangeText: (value: string) => void }) => createElement("input", { "aria-label": label, value, disabled: editable === false, onChange: (e: import("react").ChangeEvent<HTMLInputElement>) => onChangeText(e.target.value) }),
   };
 });
 import { HostSettingsEditor } from "./host-settings-editor";

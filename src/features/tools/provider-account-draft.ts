@@ -1,10 +1,12 @@
 export type AccountMetadataChange =
   | { kind: "rename"; label: string }
   | { kind: "color"; color: string | null }
+  | { kind: "accountKind"; accountKind: "personal" | "work" | null }
   | { kind: "default"; confirm: "DEFAULT_FOR_FUTURE_SESSIONS" }
   | { kind: "quotaRefresh"; confirm: "REFRESH_PROVIDER_QUOTA" };
 export type AccountMetadataDraft = {
-  kind: "rename" | "color" | "default" | "quotaRefresh";
+  kind: "rename" | "color" | "accountKind" | "default" | "quotaRefresh";
+  accountKind?: "personal" | "work" | null;
   label: string;
   color: string | null;
   pending?: {
@@ -44,6 +46,12 @@ export function validateAccountChange(value: unknown): AccountMetadataChange {
   )
     return { kind: "color", color: v.color as string | null };
   if (
+    v.kind === "accountKind" &&
+    Object.keys(v).length === 2 &&
+    (v.accountKind === null || v.accountKind === "personal" || v.accountKind === "work")
+  )
+    return { kind: "accountKind", accountKind: v.accountKind };
+  if (
     v.kind === "default" &&
     Object.keys(v).length === 2 &&
     v.confirm === "DEFAULT_FOR_FUTURE_SESSIONS"
@@ -56,8 +64,10 @@ export function decodeAccountDraft(raw: string): AccountMetadataDraft {
   const v = JSON.parse(raw) as AccountMetadataDraft;
   if (
     !v ||
-    Object.keys(v).some((k) => !["kind", "label", "color", "pending", "finished"].includes(k)) ||
-    !["rename", "color", "default", "quotaRefresh"].includes(v.kind) ||
+    Object.keys(v).some(
+      (k) => !["kind", "label", "color", "accountKind", "pending", "finished"].includes(k),
+    ) ||
+    !["rename", "color", "accountKind", "default", "quotaRefresh"].includes(v.kind) ||
     typeof v.label !== "string" ||
     v.label.length > 48 ||
     /[\0\r\n]/.test(v.label) ||
@@ -65,6 +75,8 @@ export function decodeAccountDraft(raw: string): AccountMetadataDraft {
   )
     throw Error("Invalid saved account metadata");
   validateAccountChange({ kind: "color", color: v.color });
+  if (v.accountKind !== undefined)
+    validateAccountChange({ kind: "accountKind", accountKind: v.accountKind });
   if (v.pending) {
     const p = v.pending;
     if (

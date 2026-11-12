@@ -10,7 +10,7 @@ import { useCopy } from "../../ui/copy";
 import {
   Body,
   Disclosure,
-  ErrorText,
+  ErrorNotice,
   NavigationGroup,
   NavigationRow,
   SelectField,
@@ -19,8 +19,9 @@ import {
 } from "../../ui/primitives";
 import { IconTile } from "../../ui/icon-tile";
 import { enterItem } from "../../ui/motion";
-import { colors, space } from "../../ui/tokens";
+import { space } from "../../ui/tokens";
 import { useSecurityError } from "./app-lock";
+import { useMobileTheme } from "../../ui/theme";
 
 function tile(Glyph: typeof Lock, color: string) {
   return (
@@ -31,6 +32,7 @@ function tile(Glyph: typeof Lock, color: string) {
 }
 
 export function SecuritySettings() {
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const security = useSecurity();
   const describeError = useSecurityError();
@@ -56,10 +58,12 @@ export function SecuritySettings() {
     );
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
+      <ErrorNotice error={security.error} message={describeError(security.error) ?? undefined} />
       <NavigationGroup>
         <ToggleField
           label={copy("Uygulama kilidi", "App lock")}
-          detail={copy(
+          icon={tile(Lock, colors.accent)}
+          help={copy(
             "Bilgisayarlarını telefonunun ekran kilidi veya biyometrisiyle koru.",
             "Protect your computers with your phone’s screen lock or biometrics.",
           )}
@@ -110,7 +114,6 @@ export function SecuritySettings() {
           />
         </NavigationGroup>
       ) : null}
-      <ErrorText error={security.error} message={describeError(security.error) ?? undefined} />
       <NavigationGroup>
         <NavigationRow
           label={copy("Şimdi kilitle", "Lock now")}

@@ -4,6 +4,7 @@ import { matchesSearch } from "./shared/search";
 import { useProjectList } from "../workspace/use-project-directory";
 import { useReducer, useRef, useState, type ComponentRef } from "react";
 import Plus from "lucide-react-native/icons/plus";
+import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 
 import {
   Button,
@@ -13,10 +14,11 @@ import {
   Heading,
   QueryState,
   SearchField,
+  SearchToolbar,
+  SelectField,
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { colors } from "@/ui/tokens";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import type { HostGoal } from "@/domain/types";
@@ -27,16 +29,40 @@ import { GoalEditor } from "./goals/goal-editor";
 import { ReplanEditor } from "./goals/replan-editor";
 import { GoalCard } from "./goals/goal-card";
 import { GoalSettingsEditor } from "./goals/settings-editor";
+import { useMobileTheme } from "@/ui/theme";
+
+/** Poll often only while an agent is working on a goal; otherwise refresh slowly. */
+export function goalsPollInterval(goals: readonly Pick<HostGoal, "status">[] | undefined): number {
+  return goals?.some((goal) => goal.status === "running" || goal.status === "planning")
+    ? 5000
+    : 15_000;
+}
+
+type GoalFilter = "all" | "open" | "awaiting" | "finished";
+const goalFilterMatches = (status: HostGoal["status"], filter: GoalFilter) =>
+  filter === "all" ||
+  (filter === "open" && ["planning", "running", "blocked"].includes(status)) ||
+  (filter === "awaiting" && status === "awaiting-approval") ||
+  (filter === "finished" && ["done", "cancelled"].includes(status));
 
 export function GoalsScreen() {
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const [search, setSearch] = useState("");
   const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
   const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
+  const [filter, setFilter] = useState<GoalFilter>("all");
+  const [filterDraft, setFilterDraft] = useState<GoalFilter | null>(null);
+  const filterOptions: { value: GoalFilter; label: string }[] = [
+    { value: "all", label: copy("Tümü", "All") },
+    { value: "open", label: copy("Devam eden", "In progress") },
+    { value: "awaiting", label: copy("Onay bekleyen", "Awaiting approval") },
+    { value: "finished", label: copy("Bitmiş", "Finished") },
+  ];
   const machine = useActiveMachine();
   const projectId = useMachines((state) => state.selectedProjectId);
-  const query = useHostQuery<HostGoal[]>(["goals"], "goals.list", {}, { interval: 5000 });
+  const query = useHostQuery<HostGoal[]>(["goals"], "goals.list", {}, { interval: goalsPollInterval });
   const projects = useProjectList();
   const create = useHostMutation<HostGoal>("goals.create", ["goals"]);
   const approve = useHostMutation<HostGoal>("goals.approve", ["goals"]);
@@ -52,9 +78,11 @@ export function GoalsScreen() {
     remove.isPending ||
     replan.isPending;
   const scoped = query.data?.filter((goal) => !projectId || goal.projectIds.includes(projectId));
-  const visible = scoped?.filter((goal) => matchesSearch(goal.title + " " + goal.prompt, search, locale));
+  const visible = scoped?.filter((goal) => goalFilterMatches(goal.status, filter) && matchesSearch(goal.title + " " + goal.prompt, search, locale));
   const replanGoal =
     flow.kind === "replan" ? query.data?.find((goal) => goal.id === flow.goalId) : undefined;
+  const canCreate = !!projectId && !!machine?.providers?.length && flow.kind === "closed" && !busy;
+  const startNew = () => { create.reset(); if (projectId) dispatch({ type: "new", projectId }); };
   return (
     <ScreenList<HostGoal> title={copy("Hedefler", "Goals")} query={query}
       data={visible ?? []}
@@ -63,14 +91,31 @@ export function GoalsScreen() {
       actions={
         <IconButton
           label={copy("Yeni hedef", "New goal")}
-          disabled={!projectId || !machine?.providers?.length || flow.kind !== "closed" || busy}
-          onPress={() => { create.reset(); if (projectId) dispatch({ type: "new", projectId }); }}
+          disabled={!canCreate}
+          onPress={startNew}
         >
           <Plus size={22} strokeWidth={2.2} color={colors.accent} />
         </IconButton>
       }
       header={<>
-      <SearchField ref={searchInput} label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
+      <FilterSheet
+        visible={filterDraft !== null}
+        onClose={() => setFilterDraft(null)}
+        onReset={() => setFilterDraft("all")}
+        onApply={() => { if (filterDraft !== null) setFilter(filterDraft); setFilterDraft(null); }}
+      >
+        <SelectField
+          label={copy("Duruma göre filtrele", "Filter by status")}
+          value={filterDraft ?? filter}
+          options={filterOptions}
+          onChange={setFilterDraft}
+        />
+      </FilterSheet>
+      <SearchToolbar
+        search={<SearchField ref={searchInput} label={copy("Başlık veya hedefte ara", "Search goal titles and outcomes")} value={search} onChangeText={setSearch} />}
+        actions={<FilterButton count={filter !== "all" ? 1 : 0} onPress={() => setFilterDraft(filter)} />}
+      />
+      <AppliedFilters filters={[filter !== "all" && `${copy("Durum", "Status")}: ${filterOptions.find((option) => option.value === filter)?.label}`]} />
       {flow.kind === "closed" && <MutationState
         mutation={create}
         success={copy("Hedef planlaması istendi.", "Goal planning requested.")}
@@ -131,8 +176,17 @@ export function GoalsScreen() {
       <QueryState
         query={query}
         empty={visible?.length === 0}
-        emptyTitle={search.trim() && scoped?.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz hedef yok", "No goals yet")}
-        emptyAction={search.trim() && scoped?.length ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
+        emptyTitle={(search.trim() || filter !== "all") && scoped?.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz hedef yok", "No goals yet")}
+        emptyDetail={scoped?.length ? undefined : copy("Hedef, bilgisayardaki ajanın projelerinizde görevlere böleceği bir sonuçtur.", "A goal is an outcome the agent on your computer breaks into tasks across your projects.")}
+        emptyAction={
+          scoped?.length && (search.trim() || filter !== "all")
+            ? search.trim()
+              ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+              : { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") }
+            : canCreate
+              ? { label: copy("Yeni hedef", "New goal"), onPress: startNew }
+              : undefined
+        }
       />
       </>}
       renderItem={({ item: goal }) => (

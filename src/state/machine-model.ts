@@ -1,4 +1,4 @@
-import type { MobileMachine } from "../remote/types";
+import type { MobileMachine, MobileRoute } from "../remote/types";
 import { normalizeHostEndpoint } from "../remote/transport";
 import { REMOTE_PROVIDERS } from "../../../src/features/connections/model/protocol";
 
@@ -8,6 +8,58 @@ export function validateMachine(value: unknown): MobileMachine {
   if (!machine) throw new Error("Invalid saved computer connection.");
   return machine;
 }
+export const MAX_MACHINE_ROUTES = 4;
+export const sameRoute = (a: MobileRoute, b: MobileRoute) =>
+  a.endpoint === b.endpoint && a.lanKey === b.lanKey;
+
+/**
+ * Validates saved routes, keeps the active one first and drops duplicates or
+ * malformed entries. An invalid stored route never invalidates the computer.
+ */
+export function mergeRoutes(active: MobileRoute, ...others: (MobileRoute[] | undefined)[]) {
+  const routes: MobileRoute[] = [active];
+  for (const list of others)
+    for (const item of list ?? []) {
+      if (routes.length >= MAX_MACHINE_ROUTES) break;
+      if (!item || typeof item !== "object" || typeof item.endpoint !== "string") continue;
+      if (item.lanKey !== undefined && typeof item.lanKey !== "string") continue;
+      let route: MobileRoute;
+      try {
+        route = {
+          endpoint: normalizeHostEndpoint(item.endpoint, item.lanKey),
+          ...(item.lanKey !== undefined ? { lanKey: item.lanKey } : {}),
+        };
+      } catch {
+        continue;
+      }
+      if (!routes.some((known) => sameRoute(known, route))) routes.push(route);
+    }
+  return routes;
+}
+
+/**
+ * The routes of a saved computer after its Host reported the ones it serves
+ * now, so a phone paired over one route learns the others without pairing
+ * again. The active route stays first. A reported local listener replaces a
+ * saved one with the same key at another address (its DHCP address changed);
+ * other saved routes stay. Undefined when the Host reports nothing (older Host).
+ */
+export function learnRoutes(machine: MobileMachine, reported: unknown): MobileRoute[] | undefined {
+  if (!Array.isArray(reported)) return undefined;
+  const active: MobileRoute = {
+    endpoint: machine.endpoint,
+    ...(machine.lanKey !== undefined ? { lanKey: machine.lanKey } : {}),
+  };
+  const fresh = mergeRoutes(active, reported as MobileRoute[]).slice(1);
+  const moved = (route: MobileRoute) =>
+    fresh.some((known) => known.lanKey && known.lanKey === route.lanKey && !sameRoute(known, route));
+  return mergeRoutes(
+    active,
+    fresh,
+    (machine.routes ?? []).filter((route) => !moved(route)),
+  );
+}
+
 export function restoreMachines(value: unknown): MobileMachine[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
@@ -30,6 +82,14 @@ export function restoreMachines(value: unknown): MobileMachine[] {
       return [];
     try {
       const endpoint = normalizeHostEndpoint(source.endpoint, source.lanKey as string | undefined);
+      const active: MobileRoute = {
+        endpoint,
+        ...(source.lanKey !== undefined ? { lanKey: source.lanKey as string } : {}),
+      };
+      const routes = mergeRoutes(
+        active,
+        Array.isArray(source.routes) ? (source.routes as MobileRoute[]) : undefined,
+      );
       seen.add(source.id);
       return [
         {
@@ -37,6 +97,7 @@ export function restoreMachines(value: unknown): MobileMachine[] {
           name: source.name,
           endpoint,
           ...(source.lanKey !== undefined ? { lanKey: source.lanKey as string } : {}),
+          ...(routes.length > 1 ? { routes } : {}),
           environmentId: source.environmentId,
           providers: Array.isArray(source.providers)
             ? source.providers.filter((v): v is (typeof REMOTE_PROVIDERS)[number] =>

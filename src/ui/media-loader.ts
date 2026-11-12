@@ -39,7 +39,7 @@ export async function loadSessionMedia(context: MessageContext, id: string, name
       if (!Number.isSafeInteger(chunk.size) || chunk.size < 0 || chunk.size > MAX_MEDIA_BYTES || (size !== undefined && size !== chunk.size) || chunk.data.length > 710_000) throw new Error("Invalid attachment response.");
       const bytes = base64ToBytes(chunk.data);
       if (chunk.offset !== offset + bytes.length || chunk.offset > chunk.size || (!bytes.length && offset < chunk.size)) throw new Error("Incomplete attachment response.");
-      handle.writeBytes(bytes);
+      handle.writeBytesSync(bytes);
       offset = chunk.offset;
       size = chunk.size;
     } while (offset < size!);
@@ -70,7 +70,7 @@ export async function loadProjectMedia(context: MessageContext, rawPath: string,
       if (!chunk || typeof chunk.data !== "string" || chunk.data.length > Math.ceil(length / 3) * 4 || chunk.offset !== offset || !Number.isSafeInteger(chunk.length) || chunk.length < 1 || chunk.length > length) throw new Error("Invalid file chunk.");
       const bytes = base64ToBytes(chunk.data);
       if (bytes.length !== chunk.length) throw new Error("Incomplete file chunk.");
-      handle.writeBytes(bytes);
+      handle.writeBytesSync(bytes);
       offset += bytes.length;
     }
     const final = await context.client.request<{ size: number; version: string }>("workspace.run", { command: "read_file_info", args: { path } }, { signal });

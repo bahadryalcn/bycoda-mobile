@@ -2,6 +2,7 @@ import { ActionReviewSheet } from "@/ui/action-review-sheet";
 import { Body, Disclosure, Notice, ScreenList, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
+import { formatAttachmentSize } from "./attachment-presentation";
 import type { HistoryCandidate } from "./history-import-model";
 
 export function HistoryImportReview({ targetLabel, projectId, sessionId, candidates, onClose, onConfirm }: {
@@ -17,7 +18,7 @@ export function HistoryImportReview({ targetLabel, projectId, sessionId, candida
       <Disclosure label={copy("Ayrıntılar", "Details")}><Body mono selectable>{projectId}</Body><Body mono selectable>{sessionId}</Body></Disclosure>
     </Stack>} renderItem={({ item }) => <Stack>
       <Body selectable>{item.prompt || item.provider}</Body>
-      <Body muted>{item.provider} · {item.kind} · {item.sizeBytes} B{!item.resumable ? ` · ${copy("Salt okunur", "Read-only")}` : ""}</Body>
+      <Body muted>{item.provider} · {item.kind} · {formatAttachmentSize(item.sizeBytes, locale)}{!item.resumable ? ` · ${copy("Salt okunur", "Read-only")}` : ""}</Body>
       <Body muted>{new Date(item.startedAt).toLocaleString(locale)} → {new Date(item.lastAt).toLocaleString(locale)}</Body>
     </Stack>} />
   </ActionReviewSheet>;

@@ -8,47 +8,48 @@ import ChevronDown from "lucide-react-native/icons/chevron-down";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import WifiOff from "lucide-react-native/icons/wifi-off";
 import CircleAlert from "lucide-react-native/icons/circle-alert";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { notifyManager, useQueryClient } from "@tanstack/react-query";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useActiveMachine, useMachines } from "../state/machines";
-import { useHostClient, useHostQuery } from "../state/queries";
+import { useConsentPending, useHostClient, useHostQuery } from "../state/queries";
 import { useSecurity } from "../state/security";
 import type { HostDescriptor } from "../remote/types";
-import { colors, metrics, opacity, radii, semanticColors, space } from "./tokens";
-import { uiStyles } from "./styles";
-import { Body } from "./primitives";
+import { hitSlopFor, metrics, radii, space } from "./tokens";
+import { Body, NavigationGroup, NavigationRow, Sheet } from "./primitives";
+import { IconTile } from "./icon-tile";
+import HardDrive from "lucide-react-native/icons/hard-drive";
 import { useCopy } from "./copy";
 import { connectionPhase } from "./connection-presentation";
 import { Menu } from "panelui-native/components/menu";
 import { BusyIndicator as Spinner } from "./busy-indicator";
 import { decorativeSvgProps } from "./accessibility";
+import { remoteErrorKind } from "./error-message";
+import { machineSuccessStore } from "./machine-success-store";
+import { refetchRecoveredReads } from "../state/query-retry";
 
 /** Connection state for the active computer; mounting it also keeps the descriptor fresh. */
 function useMachineStatus() {
+  const { colors, semanticColors } = useMobileTheme();
   const machine = useActiveMachine();
   const copy = useCopy();
   const network = useNetInfo();
   const cache = useQueryClient();
   const client = useHostClient();
+  // Until the saved consent is read, a missing client means "still checking", not "permission required".
+  const consentPending = useConsentPending();
   const storageError = useMachines((state) => state.storageError);
   const unlocked = useSecurity((state) => state.status === "unlocked");
-  const subscribe = useCallback(
-    (callback: () => void) => cache.getQueryCache().subscribe(notifyManager.batchCalls(callback)),
-    [cache],
+  const successStore = useMemo(() => machineSuccessStore(cache.getQueryCache(), machine?.id ?? null), [cache, machine?.id]);
+  const subscribeSuccess = useCallback(
+    (callback: () => void) => successStore.subscribe(notifyManager.batchCalls(callback)),
+    [successStore],
   );
-  const lastSuccess = useCallback(
-    () =>
-      Math.max(
-        0,
-        ...cache
-          .getQueryCache()
-          .findAll({ queryKey: ["machine", machine?.id ?? null] })
-          .map((query) => query.state.dataUpdatedAt),
-      ),
-    [cache, machine?.id],
+  const successAt = useSyncExternalStore(
+    subscribeSuccess,
+    successStore.getSnapshot,
+    successStore.getSnapshot,
   );
-  const successAt = useSyncExternalStore(subscribe, lastSuccess, lastSuccess);
   const health = useHostQuery<HostDescriptor>(
     ["connection"],
     "environment.describe",
@@ -64,8 +65,9 @@ function useMachineStatus() {
     paired: !!machine,
     networkConnected: network.isConnected,
     unlocked,
-    permitted: !!client,
+    permitted: !!client || consentPending,
     storageError,
+    accessDenied: ["auth", "identity"].includes(remoteErrorKind(health.error) ?? ""),
     successAt,
     errorAt: health.errorUpdatedAt,
     now: Date.now(),
@@ -75,6 +77,7 @@ function useMachineStatus() {
     offline: copy("Ağ bağlantısı yok", "No network connection"),
     locked: copy("Kilitli", "Locked"),
     permission: copy("İzin gerekiyor", "Permission required"),
+    access: copy("Erişim gerekli", "Access needed"),
     storage: copy("Yerel depolama hatası", "Local storage error"),
     checking: copy("Bağlantı kontrol ediliyor…", "Checking connection…"),
     connected: copy("Bağlı", "Connected"),
@@ -88,7 +91,7 @@ function useMachineStatus() {
         ? semanticColors.info.text
         : phase === "offline" || phase === "disconnected"
           ? semanticColors.danger.text
-          : phase === "permission" || phase === "locked" || phase === "storage"
+          : phase === "permission" || phase === "access" || phase === "locked" || phase === "storage"
             ? semanticColors.warning.text
             : colors.muted;
   return { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError };
@@ -96,13 +99,17 @@ function useMachineStatus() {
 
 /** Headless owner of the periodic connection check while the tab shell is mounted. */
 export function MachineHealthMonitor() {
-  useMachineStatus();
+  const { machine, successAt } = useMachineStatus();
+  const cache = useQueryClient();
+  useEffect(() => {
+    if (machine && successAt) refetchRecoveredReads(cache, machine.id, successAt);
+  }, [cache, machine?.id, successAt]);
   return null;
 }
 
 /** Quiet while healthy; use the existing active-computer health owner for exceptional states. */
 export function MachineConnectionStatus() {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const { phase, status, statusColor } = useMachineStatus();
   if (phase === "connected") return null;
   const StatusIcon = phase === "offline" || phase === "disconnected" ? WifiOff : CircleAlert;
@@ -113,10 +120,10 @@ export function MachineConnectionStatus() {
   </View>;
 }
 
-/** A page identity and computer selector share one stable touch target. */
+/** Page title with a compact computer pill: one 48dp-tall row, no stacked subtitle. */
 
 export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?: string } = {}) {
-  useMobileTheme();
+  const { colors, uiStyles, pressedFill } = useMobileTheme();
   const { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError } = useMachineStatus();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
@@ -127,10 +134,8 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
   }
   if (!unlocked && menuOpen) setMenuOpen(false);
   const name = machine?.name ?? copy("Bilgisayar bağla", "Connect a computer");
-  return (
-    <View style={{ minWidth: 0, flexShrink: 1, alignSelf: heading ? "stretch" : "flex-start" }}>
-      <Menu open={menuOpen && unlocked} onOpenChange={(next) => setMenuOpen(unlocked && next)}>
-        <Menu.Trigger>
+  const degraded = phase !== "unpaired" && phase !== "connected" && phase !== "checking" && unlocked;
+  const pill = (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={[heading, name, machine ? status : undefined, subtitle, copy("Bilgisayar seç", "Choose computer")]
@@ -138,45 +143,51 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
               .join(". ")}
             accessibilityState={{ expanded: menuOpen && unlocked }}
             aria-expanded={menuOpen && unlocked}
-            onPress={() => haptic.select()}
+            hitSlop={hitSlopFor(metrics.chipHeight)}
+            onPress={() => {
+              haptic.select();
+              if (process.env.EXPO_OS !== "web") setMenuOpen(unlocked);
+            }}
             style={({ pressed }) => [
               {
                 flexDirection: "row",
                 alignItems: "center",
-                gap: space.sm,
-                minHeight: metrics.touchTarget,
-                paddingStart: heading ? 0 : space.md,
-                paddingEnd: heading ? 0 : space.sm,
-                paddingVertical: space.xs,
-                borderRadius: heading ? 0 : radii.pill,
-                backgroundColor: heading ? "transparent" : colors.fill,
-                maxWidth: "100%",
-                minWidth: 0,
+                gap: space.xs + 2,
+                height: metrics.chipHeight,
+                paddingStart: space.row,
+                paddingEnd: space.sm,
+                borderRadius: radii.pill,
+                backgroundColor: colors.fill,
                 flexShrink: 1,
+                minWidth: 64,
               },
-              pressed && { opacity: opacity.pressed },
+              pressed && { backgroundColor: pressedFill },
             ]}
           >
-            <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
-              {heading ? <Text accessibilityRole="header" style={uiStyles.heading}>{heading}</Text> : null}
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, minWidth: 0 }}>
-                {machine ? (
-                  health.isFetching && !successAt ? (
-                    <Spinner size="sm" color={statusColor} />
-                  ) : (
-                    <View accessible={false} style={{ width: 8, height: 8, borderRadius: radii.pill, backgroundColor: statusColor }} />
-                  )
-                ) : (
-                  <Laptop size={15} strokeWidth={2} color={colors.muted} />
-                )}
-                <Text style={[uiStyles.caption, { color: heading ? colors.muted : colors.text, flex: 1, minWidth: 0 }]}>
-                  {[name, subtitle, phase !== "unpaired" && phase !== "connected" && phase !== "checking" && unlocked ? status : undefined].filter(Boolean).join(" · ")}
-                </Text>
-                <ChevronDown size={14} strokeWidth={2.6} color={colors.muted} style={{ flexShrink: 0 }} />
-              </View>
-            </View>
+            {machine ? (
+              health.isFetching && !successAt ? (
+                <Spinner size="sm" color={statusColor} />
+              ) : (
+                <View accessible={false} style={{ width: 6, height: 6, borderRadius: radii.pill, backgroundColor: statusColor }} />
+              )
+            ) : (
+              <Laptop size={14} strokeWidth={2} color={colors.muted} />
+            )}
+            <Text numberOfLines={1} style={[uiStyles.caption, { color: colors.text, flexShrink: 1, minWidth: 0 }]}>
+              {degraded ? `${name} · ${status}` : name}
+            </Text>
+            <ChevronDown size={12} strokeWidth={2.6} color={colors.muted} style={{ flexShrink: 0 }} />
           </Pressable>
-        </Menu.Trigger>
+  );
+  return (
+    // The title keeps its full width; when title and pill no longer fit (large text), the pill wraps below it.
+    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.sm, rowGap: space.xs, minWidth: 0, flexShrink: 1, alignSelf: heading ? "stretch" : "flex-start" }}>
+      {heading ? <Text accessibilityRole="header" style={[uiStyles.pageTitle, { flexShrink: 0, maxWidth: "100%" }]}>{heading}</Text> : null}
+      {process.env.EXPO_OS === "web" ? (
+        <Menu open={menuOpen && unlocked} onOpenChange={(next) => setMenuOpen(unlocked && next)}>
+          <Menu.Trigger>
+            {pill}
+          </Menu.Trigger>
         <Menu.Content
           placement="bottom"
           align="start"
@@ -243,6 +254,45 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
           ) : null}
         </Menu.Content>
       </Menu>
+      ) : (
+        <>
+          {pill}
+          <Sheet visible={menuOpen && unlocked} title={copy("Bilgisayar", "Computer")} size="compact" onClose={closeMenu}>
+            <NavigationGroup>
+              {storageError ? (
+                <NavigationRow
+                  intent="navigate"
+                  tone="warning"
+                  icon={<IconTile><HardDrive size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
+                  label={copy("Depolamayı kurtar", "Recover saved connections")}
+                  detail={storageError}
+                  detailLines={0}
+                  onPress={() => { closeMenu(); router.push("/machines"); }}
+                />
+              ) : null}
+              <NavigationRow
+                intent="navigate"
+                icon={<IconTile><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
+                label={machine?.name ?? copy("Bilgisayar bağla", "Connect a computer")}
+                detail={machine ? status : undefined}
+                detailSelectable={false}
+                accessibilityLabel={[machine?.name, status, copy("Bilgisayar seç", "Choose computer")].filter(Boolean).join(". ")}
+                separator={!!(machine && health.error)}
+                onPress={() => { closeMenu(); router.push("/machines"); }}
+              />
+              {machine && health.error ? (
+                <NavigationRow
+                  intent="command"
+                  separator={false}
+                  icon={<IconTile><RefreshCw size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
+                  label={copy("Bağlantıyı yeniden dene", "Retry connection")}
+                  onPress={() => { closeMenu(); void health.refetch(); }}
+                />
+              ) : null}
+            </NavigationGroup>
+          </Sheet>
+        </>
+      )}
     </View>
   );
 }

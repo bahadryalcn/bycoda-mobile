@@ -25,7 +25,7 @@ vi.mock("./use-project-directory", () => ({ useProjectList: () => ({
   isSuccess: state.directoryReady, isPending: !state.directoryReady,
   isFetching: state.verifying, error: undefined, refetch: state.refetch,
 }) }));
-import { useProjectActivity } from "./use-project-activity";
+import { activityPollDelay, useProjectActivity } from "./use-project-activity";
 
 const key = ["machine", "machine", "project-summaries", ["project"]];
 const session = { id: "session", projectId: "project", title: "Private session", harness: "codex", revision: 1, status: "idle", updatedAt: 1 };
@@ -95,4 +95,8 @@ it.each(["auth", "identity"] as const)("conceals cached session rows after %s fa
   const count = state.request.mock.calls.length;
   await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
   expect(state.request).toHaveBeenCalledTimes(count);
+});
+
+it("backs off summary polling 5s to 60s and resets after success", () => {
+  expect([0, 1, 2, 3, 4, 5, 9].map(activityPollDelay)).toEqual([5_000, 5_000, 10_000, 20_000, 40_000, 60_000, 60_000]);
 });

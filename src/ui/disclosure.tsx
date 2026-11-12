@@ -1,10 +1,10 @@
 import { useMobileTheme } from "./theme";
 import { useState, type PropsWithChildren, type ReactNode } from "react";
+import { useDisclosure } from "panelui-native/hooks/use-disclosure";
 import { View } from "react-native";
 import { Pressable } from "react-native";
 import { Body } from "./typography";
-import { colors, metrics, opacity, semanticColors, space, type SemanticTone } from "./tokens";
-import { uiStyles } from "./styles";
+import { metrics, opacity, space, type SemanticTone } from "./tokens";
 import Animated from "react-native-reanimated";
 import { resize } from "./motion";
 import { DisclosureBody, DisclosureChevron } from "./disclosure-motion";
@@ -17,8 +17,8 @@ export function Disclosure({
   defaultExpanded = false,
   tone,
 }: PropsWithChildren<{ label: string; detail?: string; feedback?: ReactNode; defaultExpanded?: boolean; tone?: SemanticTone }>) {
-  useMobileTheme();
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const { colors, semanticColors, uiStyles } = useMobileTheme();
+  const { isOpen: expanded, toggle } = useDisclosure({ defaultOpen: defaultExpanded });
   const [visited, setVisited] = useState(defaultExpanded);
   return (
     <Animated.View layout={resize} style={{ gap: expanded ? space.sm : 0 }}>
@@ -30,7 +30,7 @@ export function Disclosure({
         hitSlop={{ top: 5, bottom: 5, left: 0, right: 0 }}
         onPress={() => {
           setVisited(true);
-          setExpanded((current) => !current);
+          toggle();
         }}
         style={({ pressed }) => ({
           minHeight: metrics.controlHeight,

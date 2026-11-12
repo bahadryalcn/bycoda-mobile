@@ -19,13 +19,13 @@ import { Row, Stack } from "./layout";
 import { NavigationGroup, NavigationRow } from "./navigation-row";
 import { Badge, Empty, Notice } from "./feedback";
 import { Sheet } from "./dialogs";
-import { colors } from "./tokens";
-import { uiStyles } from "./styles";
 import { decorativeSvgProps } from "./accessibility";
+import { useMobileTheme } from "./theme";
 
 const pageSize = 20;
 
 export function GalleryCatalog({ onExample }: { onExample: (example: GalleryExample) => void }) {
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const [search, setSearch] = useState("");
   const [group, setGroup] = useState<GalleryGroup>();

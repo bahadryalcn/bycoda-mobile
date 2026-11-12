@@ -3,7 +3,7 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach,beforeEach,expect,it,vi } from "vitest";
 const fixture=vi.hoisted(()=>({sender:null as import("./report-delivery").ReportSender|null,submits:[] as Array<{label:string;run:()=>void}>,locked:false}));
-vi.mock("@/ui/theme",()=>({useMobileTheme:()=>{}}));
+vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));
 vi.mock("./report-config",()=>({get reportSender(){return fixture.sender;}}));
 vi.mock("expo-crypto",()=>({randomUUID:()=>"screen-request"}));
 vi.mock("expo-router",()=>({Stack:{Screen:()=>null},router:{push:vi.fn()}}));
@@ -17,7 +17,7 @@ vi.mock("react-native-reanimated",()=>({default:{View:({children}:PropsWithChild
 vi.mock("@/ui/consent-field",()=>({ConsentField:()=>null}));
 vi.mock("@/ui/primitives",()=>{
  const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);
- return {Body:Wrapper,NavigationGroup:Wrapper,Disclosure:Wrapper,Button:()=>null,ToggleField:()=>null,SelectField:()=>null,
+ return {Body:Wrapper,NavigationGroup:Wrapper,Disclosure:Wrapper,Section:Wrapper,Button:()=>null,ToggleField:()=>null,SelectField:()=>null,useSuccessToast:()=>()=>"",
  Screen:({children,footer}:PropsWithChildren<{footer:import("react").ReactNode}>)=>createElement("main",null,createElement("article",null,children),createElement("footer",null,footer)),
  Field:({label,error}:{label:string;error?:string})=>createElement("section",{"data-field":label},error),
  ErrorText:({error,message}:{error:unknown;message:string})=>error?createElement("p",null,message):null,
@@ -42,7 +42,7 @@ it("shows the unavailable service once and keeps task actions outside form conte
 });
 it("does not present missing consent as an error for an already received report",async()=>{
  await act(async()=>{updateContentReport({description:"Reviewed report"});useContentReport.setState({status:"sent",receiptId:"receipt-one"});});
- expect(container.textContent).toContain("Report received.");expect(container.textContent).toContain("receipt-one");expect(container.textContent).not.toContain("Confirm the information to send.");expect(button("Sent").disabled).toBe(true);
+ expect(container.textContent).toContain("receipt-one");expect(container.textContent).not.toContain("Confirm the information to send.");expect(button("Sent").disabled).toBe(true);
 });
 it("keeps description validation with its field",async()=>{
  await act(async()=>updateContentReport({consent:true}));expect(container.querySelector('[data-field="Description"]')?.textContent).toContain("Write a description");

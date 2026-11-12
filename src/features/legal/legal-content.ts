@@ -6,8 +6,8 @@ export type LegalSection = {
   paragraphs: readonly LegalText[];
 };
 
-export const legalUpdatedDate: LegalText = ["11 Ekim 2026", "11 October 2026"];
-export const supportEmail = "info@bahadrhllyalcn.com";
+export const legalUpdatedDate: LegalText = ["9 Kasım 2026", "9 November 2026"];
+export const supportEmail = "info@bycoda.codes";
 export const privacyPolicyUrl =
   "https://github.com/bahadryalcn/bycoda/blob/main/docs/guides/privacy-policy.md";
 export const repositoryUrl = "https://github.com/bahadryalcn/bycoda";
@@ -32,8 +32,8 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
       title: ["Kapsam ve iletişim", "Scope & contact"],
       paragraphs: [
         [
-          "Bu politika bycoda mobil uygulamasını ve bağlandığın bycoda Host ile veri alışverişini açıklar. Uygulama, bahadryalcn tarafından bağımsız olarak sürdürülen açık kaynak projesidir. Gizlilik soruları ve talepler için info@bahadrhllyalcn.com adresine yazabilirsin.",
-          "This policy explains the bycoda mobile app and its exchanges with your connected bycoda Host. The app is an open-source project independently maintained by bahadryalcn. For privacy questions and requests, contact info@bahadrhllyalcn.com.",
+          "Bu politika bycoda mobil uygulamasını ve bağlandığın bycoda Host ile veri alışverişini açıklar. Uygulama, bahadryalcn tarafından bağımsız olarak sürdürülen açık kaynak projesidir. Gizlilik soruları ve talepler için info@bycoda.codes adresine yazabilirsin.",
+          "This policy explains the bycoda mobile app and its exchanges with your connected bycoda Host. The app is an open-source project independently maintained by bahadryalcn. For privacy questions and requests, contact info@bycoda.codes.",
         ],
       ],
     },
@@ -47,6 +47,30 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
         [
           "Bu, hiçbir veri saklanmadığı veya ağ kullanılmadığı anlamına gelmez. Veriler telefonunda, bağlandığın bilgisayarda ve seçtiğin servislerde işlenir.",
           "This does not mean no data is stored or that the network is never used. Data is processed on your phone, connected computer and chosen services.",
+        ],
+        [
+          "İsteğe bağlı ve ücretsiz bir bycoda hesabı oluşturabilirsin; hesap olmadan da uygulamanın tamamı çalışır. Giriş Google, GitHub veya e-posta kodu ile yapılır, parola yoktur. Giriş, veri işleyicimiz Clerk tarafından yürütülür. Hesap açarsan bycoda kullanıcı kimliğini, e-postanı, görünen adını, profil resmi adresini, bağlı giriş yöntemlerini, dilini ve saat dilimini, bildirim tercihlerini ve hesap oluşturma tarihini saklar. Oturum belirteçleri işletim sisteminin korumalı SecureStore alanında tutulur.",
+          "You can create an optional, free bycoda account; the whole app works without one. Sign-in uses Google, GitHub or an email code; there is no password. Sign-in is handled by our identity processor, Clerk. If you create an account, bycoda stores a user identifier, your email address, display name, profile picture address, linked sign-in methods, language and time zone, notification preferences and the account creation date. Sign-in tokens are kept in the operating system’s protected SecureStore.",
+        ],
+        [
+          "Google ve GitHub bycoda ile yalnızca adını, e-postanı, profil resmini ve hesap kimliğini paylaşır, parolanı asla paylaşmaz; bağlantıyı hesap portalındaki Güvenlik sayfasından kesebilirsin. Sunucularımız AB’dedir; ABD merkezli sağlayıcılara (Clerk, Cloudflare, Expo, Resend, Google, GitHub) aktarımlar sağlayıcıların standart sözleşme şartlarına dayanır. Dışa aktarma dosyaları 7 gün sonra silinir. Veri sorumlusunun tam adı ve posta adresi resmi başvurular için talep üzerine bildirilir. Hesaplar 16 yaşın altındakiler için değildir; 18 yaşın altındakiler için ebeveyn izni gerekir.",
+          "Google and GitHub share only your name, email, profile picture and account identifier with bycoda, never your password; you can disconnect them on the Security page of the account portal. Our servers are in the EU; transfers to US-based providers (Clerk, Cloudflare, Expo, Resend, Google, GitHub) rely on the providers’ standard contractual terms. Export files are deleted after 7 days. The controller’s full name and postal address are provided on request for formal applications. Accounts are not for people under 16; under 18 needs a parent’s permission.",
+        ],
+        [
+          "Giriş yaptığın her cihaz için cihaz adı, işletim sistemi ve sürümü, uygulama sürümü, yayın kanalı, bildirim açtıysan push belirteci, ilk kayıt ve son görülme zamanı saklanır. Aktif süre için uygulama, hangi dakikaların etkin kullanıldığını cihazında kaydeder; giriş yaptıysan bu, cihaz ve gün başına tek bir kayıt (1.440 dakikalık aç/kapa değerleri, tarih ve saat dilimi) olarak yüklenir. Ekranında ne olduğu, hangi proje veya oturumun açık olduğu ve ne yazdığın asla kaydedilmez. Cihazlarını uygulamadan ve hesap portalından görüp bir cihazın oturumunu uzaktan kapatabilirsin.",
+          "For each device where you sign in, bycoda stores a device name, operating system and version, app version, release channel, a push token if you enable push notifications, and when it was first registered and last seen. For active time, the app records on your device which minutes were actively used; when you are signed in, this is uploaded as one record per device per day (1,440 on/off values, the date and time zone). What is on your screen, which project or session was open and what you type are never recorded. You can see your devices in the app and the account portal and sign a device out remotely.",
+        ],
+        [
+          "Push bildirimlerini açarsan push belirteci Expo’nun push servisine iletilir ve bildirimler Apple veya Google üzerinden gelir. Bildirimler oturum içeriği değil, genel bir metin ve bağlantı içerir; ayrıntılar ancak sen açarsan gösterilir. Bildirim ayarları ekranından olay ve kanal seçebilir, sessiz saatler belirleyebilirsin. Zorunlu güvenlik bildirimleri kapatılamaz. E-postalar bir işlem e-postası sağlayıcısı (Resend) üzerinden gider; özet e-postaları yalnızca sen seçersen gönderilir.",
+          "If you enable push notifications, the push token is sent to Expo’s push service, which delivers them through Apple or Google. Notifications contain generic text and a link, not session content; details appear only if you opt in. In Notification settings you can choose events and channels and set quiet hours. Mandatory security notifications cannot be turned off. Emails go through a transactional email provider (Resend); digest emails are sent only if you opt in.",
+        ],
+        [
+          "İsteğe bağlı anonim istatistikler varsayılan olarak kapalıdır ve masaüstü uygulamasında bir kez sorulur; yalnızca paylaşmayı seçersen gönderilir. Mobil uygulama anonim istatistik göndermez.",
+          "Optional anonymous statistics are off by default and are asked once in the desktop app; they are sent only if you choose to share. The mobile app does not send anonymous statistics.",
+        ],
+        [
+          "Tanılama günlükleri yalnızca senin seçimine bağlı olarak yüklenir: uygulama çöktükten sonra sorulur (Bana sor) veya otomatik gönderirsin (çökmelerde ve haftada bir). Gizlilik ve veriler ayarlarından kapatabilir ya da istediğin zaman elle gönderebilirsin. Günlükler yüklenmeden önce cihazında gizli bilgiler (belirteçler, e-posta adresleri, kullanıcı adları) çıkarılır, konuşma içeriği içermez ve 90 gün saklanır. Hesap açmadıysan günlükler hesap veya cihaz kimliği olmadan gönderilir.",
+          "Diagnostic logs are uploaded only according to your choice: you are asked after a crash (Ask me) or you let the app send them automatically (after crashes and weekly). You can turn this off in Privacy & data or send logs manually at any time. Logs are redacted on your device before upload (tokens, email addresses, user names), do not include conversation content and are kept for 90 days. Without an account, logs are sent without an account or device identifier.",
         ],
       ],
     },
@@ -134,8 +158,12 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
           "Removing a computer connection or clearing local phone data does not delete host records, project files, provider history, backups or published social content. Separately revoke the phone’s access in host/desktop device settings. Uninstalling does not guarantee removal of every operating-system backup or protected-storage record.",
         ],
         [
-          "bycoda kaydı veya merkezi kullanıcı hesabı bulunmadığından silinecek bir bycoda hesabı yoktur. Bağladığın üçüncü taraf hesabını silmek için o servisin kendi kontrollerini kullan. Geliştirici cihazına uzaktan erişemez ve senin adına yerel ya da sağlayıcı verilerini silemez.",
-          "There is no bycoda registration or central user account to delete. Use each connected service’s own controls to delete a third-party account. The maintainer cannot remotely access your device or erase local or provider data on your behalf.",
+          "Hesap verileri (profil, cihazlar, bildirim ayarları) hesap var olduğu sürece saklanır; giriş ve cihaz kaydının ülkesi (IP adresi değil) 180 gün tutulur. Hesap verilerinin makine tarafından okunabilir bir dışa aktarımını hesap merkezinden veya hesap portalından isteyebilirsin. Hesabı silmek için Hesap → Hesabı yönet veya sil bölümünü ya da account.bycoda.codes/delete adresini kullan: istekten sonra 14 günlük bir bekleme süresi vardır ve bu sürede iptal edebilirsin; süre bitince hesabın, cihazların ve aktif süre kayıtların kalıcı olarak silinir, push belirteçleri kaldırılır. Silinen veriler yedeklerde en fazla 30 gün kalabilir. Bağladığın üçüncü taraf hesapları için o servisin kendi kontrollerini kullan.",
+          "Account data (profile, devices, notification settings) is kept while the account exists; the country of sign-ins and device registrations (not the IP address) is kept for 180 days. You can request a machine-readable export of your account data from the account center or the account portal. To delete your account use Account → Manage or delete account, or account.bycoda.codes/delete: after the request there is a 14-day grace period in which you can cancel; afterwards your account, devices and active-time records are permanently deleted and push tokens are removed. Deleted data can remain in backups for up to 30 days. Use each connected third-party service’s own controls to delete those accounts.",
+        ],
+        [
+          "Geliştirici cihazına uzaktan erişemez ve yerel ya da sağlayıcı verilerini senin adına silemez. KVKK (6698) kapsamında veri sorumlusu bycoda’yı geliştiren bağımsız geliştiricidir; bilgi alma, düzeltme, silme, itiraz ve Kişisel Verileri Koruma Kuruluna şikâyet haklarını kullanmak için info@bycoda.codes adresine yazabilirsin; en geç 30 gün içinde yanıt verilir.",
+          "The maintainer cannot remotely access your device or erase local or provider data on your behalf. Under the Turkish KVKK (Law No. 6698) the data controller is the independent developer who maintains bycoda; to exercise your rights to information, correction, deletion and objection, or to complain to the Personal Data Protection Board, write to info@bycoda.codes; we answer within 30 days at the latest.",
         ],
       ],
     },
@@ -158,8 +186,8 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
       title: ["Uygulama ve lisans", "App & license"],
       paragraphs: [
         [
-          "bycoda mobil, seçtiğin bilgisayardaki bycoda Host için bir yardımcı uygulamadır. bycoda hesabı veya uygulama içi sağlayıcı aboneliği oluşturmaz. Açık kaynak yazılım depodaki MIT lisansı altında sunulur. Bu kullanım açıklamaları lisansın verdiği hakları kısıtlamaz ve üçüncü taraf lisans bildirimlerini değiştirmez.",
-          "bycoda mobile is a companion for bycoda Host on your chosen computer. It does not create a bycoda account or an in-app provider subscription. The open-source software is provided under the repository’s MIT license. These use notices do not restrict rights granted by that license or replace third-party license notices.",
+          "bycoda mobil, seçtiğin bilgisayardaki bycoda Host için bir yardımcı uygulamadır. bycoda hesabı gerektirmez; isteğe bağlı ücretsiz bir hesap sunar ve uygulama içi sağlayıcı aboneliği oluşturmaz. Açık kaynak yazılım depodaki MIT lisansı altında sunulur. Bu kullanım açıklamaları lisansın verdiği hakları kısıtlamaz ve üçüncü taraf lisans bildirimlerini değiştirmez.",
+          "bycoda mobile is a companion for bycoda Host on your chosen computer. It does not require a bycoda account (an optional free one is available) and does not create an in-app provider subscription. The open-source software is provided under the repository’s MIT license. These use notices do not restrict rights granted by that license or replace third-party license notices.",
         ],
       ],
     },
@@ -198,8 +226,8 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
       title: ["Gizlilik ve iletişim", "Privacy & contact"],
       paragraphs: [
         [
-          "Veri saklama ve servislerle paylaşım gizlilik politikasında açıklanır. Güvenlik açıklarını ve hassas destek taleplerini info@bahadrhllyalcn.com adresine özel olarak ilet. Değişiklikler tarihli olarak depoda yayımlanır ve sonraki uygulama sürümlerine eklenir.",
-          "The privacy policy explains data storage and service sharing. Report vulnerabilities and sensitive support requests privately to info@bahadrhllyalcn.com. Changes are dated in the repository and included in subsequent app versions.",
+          "Veri saklama ve servislerle paylaşım gizlilik politikasında açıklanır. Güvenlik açıklarını ve hassas destek taleplerini info@bycoda.codes adresine özel olarak ilet. Değişiklikler tarihli olarak depoda yayımlanır ve sonraki uygulama sürümlerine eklenir.",
+          "The privacy policy explains data storage and service sharing. Report vulnerabilities and sensitive support requests privately to info@bycoda.codes. Changes are dated in the repository and included in subsequent app versions.",
         ],
       ],
     },
@@ -238,14 +266,18 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
           "Güvenli giriş alanından uygulama kilidini yönetebilirsin. Kamera iznini telefon ayarlarından değiştirebilirsin. Sağlayıcı hesaplarını ve yayımlanmış içeriği silmek için ilgili servisin kendi ayarlarını kullan.",
           "Manage app lock under Secure access. Change camera permission in phone settings. Use each service’s own settings to delete provider accounts and published content.",
         ],
+        [
+          "bycoda hesabın varsa Hesap ekranından bildirim ayarlarını değiştirebilir, hesabını silme isteği gönderebilir (14 günlük bekleme süresinde iptal edebilirsin) veya account.bycoda.codes/delete portalını açabilirsin. Veri dışa aktarımı hesap portalında da bulunur.",
+          "If you have a bycoda account, the Account screen lets you change notification settings, request account deletion (you can cancel during the 14-day grace period) or open account.bycoda.codes/delete. Data export is also available in the account portal.",
+        ],
       ],
     },
     {
       title: ["Destek ve geri bildirim", "Support & feedback"],
       paragraphs: [
         [
-          "Destek, gizlilik talepleri, güvenlik sorunları veya AI çıktısıyla ilgili geri bildirim için info@bahadrhllyalcn.com adresine yazabilirsin. E-posta düğmesi yalnızca e-posta uygulamanı açar; otomatik mesaj veya günlük göndermez. Göndermeden önce paylaşacağın bilgiyi kendin incele.",
-          "For support, privacy requests, security issues or feedback about AI output, contact info@bahadrhllyalcn.com. The email button only opens your email app; it does not automatically send messages or logs. Review the information you choose to share before sending.",
+          "Destek, gizlilik talepleri, güvenlik sorunları veya AI çıktısıyla ilgili geri bildirim için info@bycoda.codes adresine yazabilirsin. E-posta düğmesi yalnızca e-posta uygulamanı açar; otomatik mesaj veya günlük göndermez. Göndermeden önce paylaşacağın bilgiyi kendin incele.",
+          "For support, privacy requests, security issues or feedback about AI output, contact info@bycoda.codes. The email button only opens your email app; it does not automatically send messages or logs. Review the information you choose to share before sending.",
         ],
         [
           "Sorunu yeniden oluşturma adımları, telefon işletim sistemi ve uygulama sürümü gibi gerekli ayrıntıları paylaş. Erişim anahtarları, eşleştirme kodları, özel proje dosyaları veya kişisel konuşmalar gönderme. GitHub konuları herkese açıktır; hassas talepler için e-posta kullan.",
@@ -261,20 +293,8 @@ export const mitLicense = `MIT License
 
 Copyright (c) 2026 Nick
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.`;
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.`;

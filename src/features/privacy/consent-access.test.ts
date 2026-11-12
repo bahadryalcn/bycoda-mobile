@@ -44,3 +44,16 @@ describe("request-time data sharing permission", () => {
     await expect(reading).rejects.toThrow("Allow");
   });
 });
+
+describe("consent coverage across provider-list changes", () => {
+  it("treats a consented superset on the same computer as permission", async () => {
+    const { isScopePermitted } = await import("./consent-access");
+    const { consentScope } = await import("./consent-store");
+    const scopes = { [consentScope("env", ["codex", "claude", "grok"])]: true };
+    expect(isScopePermitted(scopes, consentScope("env", ["codex", "claude"]))).toBe(true);
+    expect(isScopePermitted(scopes, consentScope("env", ["cursor"]))).toBe(false);
+    expect(isScopePermitted(scopes, consentScope("other", ["codex"]))).toBe(false);
+    expect(isScopePermitted({ [consentScope("env", ["codex"])]: false }, consentScope("env", ["codex"]))).toBe(false);
+    expect(isScopePermitted(scopes, "")).toBe(false);
+  });
+});

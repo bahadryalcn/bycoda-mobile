@@ -203,7 +203,7 @@ class BycodaHostSocketModule : Module() {
           val bytes = text.toByteArray(Charsets.UTF_8).size
           synchronized(lock) {
             if (!current(connection)) return
-            if (bytes > 1048576 || connection.deliveries.size >= 32 || connection.deliveryBytes + bytes > 2097152) { finish(connection, "overload", true); return }
+            if (bytes > 1048576 || connection.deliveries.size >= 512 || connection.deliveryBytes + bytes > 16777216) { finish(connection, "overload", true); return }
             val sequence = ++connection.sequence
             connection.deliveries[sequence] = bytes; connection.deliveryBytes += bytes
             event(connection, "message", mapOf("sequence" to sequence.toDouble(), "text" to text))

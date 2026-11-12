@@ -430,3 +430,103 @@ it("checks the absence of computers inside the cleanup queue before touching dra
   await pairing; expect(await cleanup).toMatchObject({ message: "Disconnect computers before deleting saved drafts." }); expect(operation).not.toHaveBeenCalled();
   expect(useMachines.getState().connectionPending).toBe(false);
 });
+describe("multiple routes to one computer", () => {
+  const lan = { endpoint: "http://192.168.2.108:63888", lanKey: "ab".repeat(32) };
+  const tailscale = { endpoint: "https://bab.tail12e784.ts.net" };
+  const computer = { id: "bab", name: "bab", environmentId: "env-bab" };
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    storage.getItem.mockResolvedValue(null);
+    storage.setItem.mockResolvedValue(undefined);
+    access.assertAppAccess.mockImplementation(() => undefined);
+    secrets.getItemAsync.mockResolvedValue(null);
+    secrets.setItemAsync.mockResolvedValue(undefined);
+    useMachines.setState({
+      machines: [],
+      projects: {},
+      activeId: null,
+      hydrated: false,
+      storageError: null,
+    });
+    await useMachines.getState().hydrate();
+  });
+  it("adds a route when the same computer is paired by another method", async () => {
+    await useMachines.getState().saveMachine({ ...computer, ...tailscale }, token);
+    await useMachines.getState().saveMachine({ ...computer, ...lan }, replacement);
+    const saved = useMachines.getState().machines.find((m) => m.id === "bab");
+    expect(saved).toMatchObject(lan);
+    expect(saved?.routes).toEqual([lan, tailscale]);
+    const stored = JSON.parse(storage.setItem.mock.calls.at(-1)![1]);
+    expect(stored.machines[0].routes).toEqual([lan, tailscale]);
+  });
+  it("switches only to a saved route and persists the choice", async () => {
+    await useMachines.getState().saveMachine({ ...computer, ...tailscale }, token);
+    await useMachines.getState().saveMachine({ ...computer, ...lan }, token);
+    expect(await useMachines.getState().switchRoute("bab", tailscale)).toBe(true);
+    const saved = useMachines.getState().machines[0]!;
+    expect(saved.endpoint).toBe(tailscale.endpoint);
+    expect(saved.lanKey).toBeUndefined();
+    expect(saved.routes).toEqual([tailscale, lan]);
+    const unknown = { endpoint: "https://other.example" };
+    expect(await useMachines.getState().switchRoute("bab", unknown)).toBe(false);
+    expect(await useMachines.getState().switchRoute("bab", tailscale)).toBe(false);
+  });
+  it("learns the routes the Host reports, replacing a moved local listener", async () => {
+    await useMachines.getState().saveMachine({ ...computer, ...tailscale }, token);
+    useMachines.setState({ activeId: "bab" });
+    const describe = (mobileRoutes?: unknown) =>
+      ({
+        protocolVersion: 1,
+        environmentId: "env-bab",
+        name: "bab",
+        providers: [],
+        capabilities: [],
+        ...(mobileRoutes === undefined ? {} : { mobileRoutes }),
+      }) as never;
+    useMachines.getState().refreshDescriptor("bab", describe([lan, tailscale]));
+    expect(useMachines.getState().machines[0]?.routes).toEqual([tailscale, lan]);
+    // The listener got a new DHCP address: the old one is not kept beside it.
+    const moved = { ...lan, endpoint: "http://192.168.2.150:63888" };
+    useMachines.getState().refreshDescriptor("bab", describe([moved]));
+    expect(useMachines.getState().machines[0]?.routes).toEqual([tailscale, moved]);
+    // An older Host reports nothing, and what was learned stays.
+    useMachines.getState().refreshDescriptor("bab", describe());
+    expect(useMachines.getState().machines[0]?.routes).toEqual([tailscale, moved]);
+    await vi.waitFor(() =>
+      expect(JSON.parse(storage.setItem.mock.calls.at(-1)![1]).machines[0].routes).toEqual([
+        tailscale,
+        moved,
+      ]),
+    );
+  });
+  it("keeps only providers this build knows, so a raw descriptor cannot reset consent", async () => {
+    await useMachines.getState().saveMachine({ ...computer, ...tailscale }, token);
+    useMachines.getState().refreshDescriptor("bab", {
+      protocolVersion: 1,
+      environmentId: "env-bab",
+      name: "bab",
+      providers: ["codex", "claude", "not-a-provider"],
+      capabilities: [],
+    } as never);
+    expect(useMachines.getState().machines[0]?.providers).toEqual(["codex", "claude"]);
+  });
+  it("ignores routes reported by another computer", async () => {
+    await useMachines.getState().saveMachine({ ...computer, ...tailscale }, token);
+    useMachines.getState().refreshDescriptor("bab", {
+      protocolVersion: 1,
+      environmentId: "env-other",
+      name: "other",
+      providers: [],
+      capabilities: [],
+      mobileRoutes: [lan],
+    } as never);
+    expect(useMachines.getState().machines[0]?.routes).toBeUndefined();
+  });
+  it("keeps the previous route if the switch cannot be saved", async () => {
+    await useMachines.getState().saveMachine({ ...computer, ...tailscale }, token);
+    await useMachines.getState().saveMachine({ ...computer, ...lan }, token);
+    storage.setItem.mockRejectedValueOnce(new Error("full"));
+    expect(await useMachines.getState().switchRoute("bab", tailscale)).toBe(false);
+    expect(useMachines.getState().machines[0]).toMatchObject(lan);
+  });
+});

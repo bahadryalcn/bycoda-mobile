@@ -396,7 +396,8 @@ describe("mobile single-attempt native WS", () => {
     abort.abort();
     await expect(command).rejects.toMatchObject({ uncertain: true, category: "cancelled" });
     expect(f.sent.at(-1)?.method).toBe("requests.cancel");
-    const waiting = Array.from({ length: 64 }, () =>
+    // 48 in flight + 512 queued (the Host itself accepts 64 pending RPCs).
+    const waiting = Array.from({ length: 48 + 512 }, () =>
       f.connection.request("projects.list").catch((error) => error),
     );
     await expect(f.connection.request("projects.list")).rejects.toMatchObject({
@@ -430,6 +431,57 @@ describe("mobile single-attempt native WS", () => {
       expect(f.sent.filter((r) => r.method === "subscriptions.ack")).toHaveLength(1),
     );
   });
+  it("applies a burst without waiting for acks and coalesces them to the newest cursor", async () => {
+    const applied: number[] = [];
+    const f = await connected(async (event) => {
+      applied.push(event.params.cursor.sequence);
+      return true;
+    });
+    const realSend = vi.mocked(f.native.send).getMockImplementation()!;
+    const acks: number[] = [];
+    // Host never answers acks: a serialized pipeline would stall after the first event.
+    vi.mocked(f.native.send).mockImplementation(async (id, generation, text) => {
+      const request = JSON.parse(text) as { method: string; params: { cursor: { sequence: number } } };
+      if (request.method === "subscriptions.ack") acks.push(request.params.cursor.sequence);
+      else await realSend(id, generation, text);
+    });
+    for (let sequence = 1; sequence <= 5; sequence++)
+      f.emit({
+        jsonrpc: "2.0",
+        method: "subscription.event",
+        params: {
+          subscriptionId: "subscription-a",
+          streamId: "stream-a",
+          cursor: { epoch: "epoch-a", sequence },
+          kind: "snapshot",
+          data: { sequence },
+        },
+      });
+    await vi.waitFor(() => expect(applied).toEqual([1, 2, 3, 4, 5]));
+    expect(acks).toEqual([1]);
+  });
+  it("drops one malformed frame instead of failing the connection", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const failures: HostWsError[] = [];
+    const f = fakeNative();
+    const credential = await f.native.acquireCredential(binding);
+    const connection = new MobileHostWsConnection(
+      f.native, binding, credential, 1, "app-a", undefined, (error) => failures.push(error),
+    );
+    connections.push(connection);
+    await connection.start();
+    f.event("message", { text: "{not json", sequence: 90 });
+    f.event("message", {
+      text: JSON.stringify({ jsonrpc: "2.0", method: "subscription.event", params: { bogus: 1 } }),
+      sequence: 91,
+    });
+    await vi.waitFor(() => expect(connection.droppedFrames).toBe(2));
+    expect(failures).toEqual([]);
+    expect(f.native.close).not.toHaveBeenCalled();
+    f.respond(() => []);
+    await expect(connection.request("projects.list")).resolves.toEqual([]);
+    warn.mockRestore();
+  });
   it("hydrates protected bulk bytes, checks their full hash, then validates the domain result", async () => {
     const f = await connected();
     const bytes = Buffer.from(
@@ -452,5 +504,88 @@ describe("mobile single-attempt native WS", () => {
     expect(f.native.readBulk).toHaveBeenCalledTimes(Math.ceil(bytes.length / 16));
     f.respond(() => ({ $bulk: { ...descriptor, sha256: "0".repeat(64) } }));
     await expect(f.connection.request("projects.list")).rejects.toBeInstanceOf(HostWsError);
+  });
+});
+
+describe("native delivery credit", () => {
+  it("releases bridge credit on receipt even while the frame's processing is still waiting", async () => {
+    const apply = vi.fn(() => new Promise<void>(() => undefined));
+    const f = await connected(apply as never);
+    const before = vi.mocked(f.native.acknowledge).mock.calls.length;
+    f.emit({
+      jsonrpc: "2.0",
+      method: "subscription.event",
+      params: {
+        subscriptionId: "subscription-a",
+        streamId: "stream-a",
+        cursor: { epoch: "epoch-a", sequence: 1 },
+        kind: "snapshot",
+        data: {},
+      },
+    });
+    await vi.waitFor(() => expect(vi.mocked(f.native.acknowledge).mock.calls.length).toBe(before + 1));
+  });
+});
+
+describe("request queue under the Host's pending-RPC limit", () => {
+  it("queues requests beyond the in-flight cap instead of failing them as overload", async () => {
+    const f = await connected();
+    f.respond(() => undefined); // the Host holds every request open
+    const sentBefore = f.sent.length;
+    const results = Array.from({ length: 80 }, () =>
+      f.connection.request("projects.list", {}).then(
+        () => "ok",
+        (error: HostWsError) => error.category,
+      ),
+    );
+    await vi.waitFor(() => expect(f.sent.length - sentBefore).toBe(48));
+    // Answer the in-flight ones; the queued ones are sent and answered in turn.
+    f.respond(() => ({ projects: [] }));
+    for (const request of f.sent.slice(sentBefore))
+      f.emit({ jsonrpc: "2.0", id: request.id, result: { projects: [] } });
+    await vi.waitFor(() => expect(f.sent.length - sentBefore).toBe(80));
+    const settled = await Promise.all(results);
+    expect(settled.filter((value) => value === "overload")).toHaveLength(0);
+  });
+  it("keeps stream controls under the Host's per-socket control limit without blocking reads", async () => {
+    const f = await connected();
+    f.respond(() => undefined); // the Host holds every request open
+    const sentBefore = f.sent.length;
+    for (let index = 0; index < 32; index++)
+      void f.connection
+        .request("subscriptions.open", {
+          subscriptionId: `subscription-${index}`,
+          target: { kind: "session", sessionId: `session-${index}` },
+        })
+        .catch(() => undefined);
+    void f.connection.request("projects.list", {}).catch(() => undefined);
+    await vi.waitFor(() => expect(f.sent.length - sentBefore).toBe(7));
+    const sent = f.sent.slice(sentBefore);
+    expect(sent.filter((request) => request.method === "subscriptions.open")).toHaveLength(6);
+    // A read waiting behind queued controls is still sent.
+    expect(sent.some((request) => request.method === "projects.list")).toBe(true);
+    // Answering one open lets the next queued open go, in order.
+    const first = sent.find((request) => request.method === "subscriptions.open")!;
+    f.emit({
+      jsonrpc: "2.0",
+      id: first.id,
+      result: { subscriptionId: "subscription-0", streamId: "stream-0" },
+    });
+    await vi.waitFor(() => expect(f.sent.length - sentBefore).toBe(8));
+    expect(f.sent.at(-1)!.params).toMatchObject({ subscriptionId: "subscription-6" });
+    f.connection.close();
+  });
+  it("drops a queued request when its caller aborts and rejects the queue on close", async () => {
+    const f = await connected();
+    f.respond(() => undefined);
+    for (let index = 0; index < 48; index++)
+      void f.connection.request("projects.list", {}).catch(() => undefined);
+    const controller = new AbortController();
+    const aborted = f.connection.request("projects.list", {}, { signal: controller.signal });
+    const closed = f.connection.request("projects.list", {});
+    controller.abort();
+    await expect(aborted).rejects.toMatchObject({ category: "cancelled" });
+    f.connection.close();
+    await expect(closed).rejects.toMatchObject({ category: "network" });
   });
 });

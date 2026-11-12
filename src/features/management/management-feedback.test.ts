@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
     { variables?: Record<string, unknown>; error?: Error }
   >,
 }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("expo-router", () => ({ router: { push: state.navigate } }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 // Screen feedback consumes a workspace snapshot; transport/crypto have their own tests.
@@ -39,10 +40,18 @@ vi.mock("./social/use-workspace-query", () => ({
 vi.mock("react-native", () => ({ View: "div" }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/play", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pause", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
 vi.mock("@/ui/copy", () => ({
   useCopy: () => (_tr: string, en: string) => en,
 }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
+vi.mock("./crews/member-avatars", () => ({ MemberAvatars: () => null }));
+vi.mock("./crews/member-lines", () => ({ MemberLines: () => null }));
+vi.mock("./crews/active-crews", () => ({ ActiveCrews: () => null }));
+vi.mock("lucide-react-native/icons/copy", () => ({ default: () => null }));
 vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null,
   FilterButton: () => null,
   FilterSheet: () => null,
@@ -99,6 +108,7 @@ vi.mock("./automations/automation-card", () => ({
 }));
 vi.mock("./automations/schedule-model", () => ({
   scheduleLabel: () => "Daily",
+  scheduleSentence: () => "Every day",
 }));
 vi.mock("./stewards/steward-editor", () => ({
   StewardEditor: ({ initial }: { initial: { id: string } }) =>
@@ -163,6 +173,7 @@ vi.mock("@/ui/primitives", () => {
     IconButton: Button,
     ActionMenu: () => null,
     ErrorText: () => null,
+    ErrorNotice: () => null,
     MutationState: ({ mutation }: { mutation: { error?: Error } }) =>
       mutation.error
         ? createElement("span", null, mutation.error.message)
@@ -456,7 +467,7 @@ it.each(["stewards.save", "stewards.runNow", "stewards.delete"])(
 it("routes crew deletion feedback by record kind as well as id and keeps recovery across tabs", async () => {
   state.data = {
     definitions: [{ id: "same-id", name: "Crew one", agents: [] }],
-    agents: [{ id: "same-id", name: "Member one", role: "specialist" }],
+    agents: [{ id: "same-id", name: "Member one", role: "specialist", candidates: [] }],
     runs: [],
   };
   state.mutations["crews.delete"] = {

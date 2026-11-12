@@ -1,12 +1,11 @@
 import { useMobileTheme } from "./theme";
-import { useImperativeHandle, useRef, useState, type ReactNode } from "react";
-import { View, useWindowDimensions, type TextInput } from "react-native";
+import type { ComponentProps, ReactNode } from "react";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { SearchBar } from "panelui-native/components/search-bar";
+import { useDebouncedValue } from "panelui-native/hooks/use-debounced-value";
 import Search from "lucide-react-native/icons/search";
-import X from "lucide-react-native/icons/x";
-import { Input } from "./fields";
-import { IconButton } from "./buttons";
 import { useCopy } from "./copy";
-import { colors, metrics, radii, space } from "./tokens";
+import { space } from "./tokens";
 import type { InputProps } from "./component-props";
 import { decorativeSvgProps } from "./accessibility";
 
@@ -25,84 +24,74 @@ export function CollectionToolbar({ field, actions }: { field: ReactNode; action
   </View>;
 }
 
+/** Debounce a search query for expensive filtering; the input itself stays immediate. */
+export function useDebouncedSearch(query: string, delay = 300): string {
+  return useDebouncedValue(query, delay);
+}
+
+type SearchFieldProps = InputProps & {
+  clearable?: boolean;
+  clearLabel?: string;
+  /** Pause in ms before `onDebouncedChange` runs; unset keeps behavior immediate. */
+  debounce?: number;
+  onDebouncedChange?: (value: string) => void;
+};
+
 /** A single search surface with a visible focus boundary and a spoken label. */
 export function SearchField({
   label,
   placeholder = label,
-  onFocus,
-  onBlur,
-  ref,
   style,
   clearable = true,
   clearLabel,
+  ref,
+  editable,
+  readOnly,
+  value,
+  onChangeText,
+  tone: _tone,
+  mono: _mono,
+  hint,
+  error,
   ...props
-}: InputProps & {
-  clearable?: boolean;
-  clearLabel?: string;
-}) {
-  useMobileTheme();
+}: SearchFieldProps) {
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
-  const input = useRef<TextInput>(null);
-  useImperativeHandle(ref, () => input.current!, []);
-  const [focused, setFocused] = useState(false);
-  const canClear =
-    clearable &&
-    !!props.value &&
-    !!props.onChangeText &&
-    props.editable !== false &&
-    !props.readOnly;
+  // Layout belongs to the outer wrapper so toolbars can size the field; the
+  // TextInput keeps only presentation.
+  const { flex, flexGrow, flexShrink, flexBasis, alignSelf, width, minWidth, maxWidth, ...fieldStyle } =
+    StyleSheet.flatten(style) ?? {};
+  const inactive = editable === false || !!readOnly;
+  const { accessibilityHint, ...rest } = props;
   return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: space.xs,
-        paddingStart: space.md,
-        backgroundColor: colors.fill,
-        borderWidth: 1.5,
-        borderColor: focused ? colors.accent : colors.border,
-        borderRadius: radii.control,
-        minHeight: metrics.touchTarget,
-      }}
-    >
-      <Search
-        {...decorativeSvgProps}
-        size={17}
-        strokeWidth={2.2}
-        color={colors.muted}
-      />
-      <Input
-        {...props}
-        ref={input}
-        label={label}
+    <View style={{ minWidth: minWidth ?? 0, maxWidth: maxWidth ?? "100%", flex, flexGrow, flexShrink, flexBasis, alignSelf: alignSelf ?? "stretch", width }}>
+      <SearchBar
+        {...(rest as ComponentProps<typeof SearchBar>)}
+        ref={ref as ComponentProps<typeof SearchBar>["ref"]}
+        accessibilityLabel={label}
+        accessibilityHint={error ?? hint ?? accessibilityHint}
         placeholder={placeholder}
-        autoCapitalize="none"
-        autoCorrect={false}
-        returnKeyType="search"
-        onFocus={(event) => {
-          setFocused(true);
-          onFocus?.(event);
-        }}
-        onBlur={(event) => {
-          setFocused(false);
-          onBlur?.(event);
-        }}
-        style={[
-          { flex: 1, minWidth: 0, minHeight: metrics.inputHeight, borderWidth: 0, backgroundColor: "transparent" },
-          style,
-        ]}
+        value={value}
+        onChangeText={onChangeText}
+        editable={editable}
+        readOnly={readOnly}
+        disabled={editable === false}
+        isClearable={clearable && !!onChangeText && !inactive}
+        clearLabel={clearLabel ?? copy("Aramayı temizle", "Clear search")}
+        shape="pill"
+        size="sm"
+        icon={<Search {...decorativeSvgProps} size={16} strokeWidth={2.2} color={colors.muted} />}
+        placeholderTextColor={colors.muted}
+        selectionColor={colors.accent}
+        cursorColor={colors.accent}
+        className="h-auto text-foreground bg-fill border-border"
+        style={StyleSheet.flatten([
+          uiStyles.input,
+          { borderRadius: 999, textAlignVertical: "center" },
+          inactive && { color: colors.muted },
+          fieldStyle,
+        ])}
       />
-      {canClear ? (
-        <IconButton
-          label={clearLabel ?? copy("Aramayı temizle", "Clear search")}
-          onPress={() => {
-            props.onChangeText?.("");
-            input.current?.focus();
-          }}
-        >
-          <X {...decorativeSvgProps} size={18} color={colors.muted} />
-        </IconButton>
-      ) : null}
     </View>
   );
 }

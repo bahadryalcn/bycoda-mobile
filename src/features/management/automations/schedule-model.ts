@@ -31,3 +31,19 @@ export function scheduleLabel(
     default: return item.scheduleKind;
   }
 }
+
+/** The schedule as a human sentence ("Every weekday at 09:00"); stewards share it. */
+export function scheduleSentence(
+  item: Pick<HostAutomationInput, "scheduleKind" | "time" | "minute" | "dayOfWeek">,
+  copy: (tr: string, en: string, values?: Record<string, string | number>) => string,
+) {
+  const days = [copy("Pazar", "Sunday"), copy("Pazartesi", "Monday"), copy("Salı", "Tuesday"), copy("Çarşamba", "Wednesday"), copy("Perşembe", "Thursday"), copy("Cuma", "Friday"), copy("Cumartesi", "Saturday")];
+  const time = { p0: item.time };
+  switch (item.scheduleKind) {
+    case "hourly": return copy("Her saat {p0}. dakikada", "Every hour at minute {p0}", { p0: item.minute });
+    case "daily": return copy("Her gün {p0}", "Every day at {p0}", time);
+    case "weekdays": return copy("Hafta içi her gün {p0}", "Every weekday at {p0}", time);
+    case "weekly": return copy("Her {p0} {p1}", "Every {p0} at {p1}", { p0: days[item.dayOfWeek] ?? copy("hafta", "week"), p1: item.time });
+    default: return item.scheduleKind;
+  }
+}

@@ -10,10 +10,15 @@
     "backgroundColor": "#000000",
     "ios": {
       "supportsTablet": true,
+      "associatedDomains": [
+        "applinks:link.bycoda.codes"
+      ],
       "bundleIdentifier": "com.bycoda.mobile",
       "buildNumber": "1",
       "infoPlist": {
-        "NSAppTransportSecurity": { "NSAllowsLocalNetworking": true },
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
         "NSLocalNetworkUsageDescription": "Connect to your Bycoda computer on your private network."
       },
       "privacyManifests": {
@@ -22,17 +27,39 @@
         "NSPrivacyAccessedAPITypes": [
           {
             "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
-            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]
+            "NSPrivacyAccessedAPITypeReasons": [
+              "C617.1"
+            ]
           },
           {
             "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
-            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+            "NSPrivacyAccessedAPITypeReasons": [
+              "CA92.1"
+            ]
           }
         ]
       }
     },
     "android": {
       "package": "com.bycoda.mobile",
+      "googleServicesFile": "./google-services.json",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "link.bycoda.codes",
+              "pathPrefix": "/session/v1/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
       "versionCode": 1,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
@@ -67,11 +94,26 @@
       [
         "expo-localization",
         {
-          "supportedLocales": ["tr", "en", "de", "fr", "es", "pt", "zh-CN", "ja"]
+          "supportedLocales": [
+            "tr",
+            "en",
+            "de",
+            "fr",
+            "es",
+            "pt",
+            "zh-CN",
+            "ja"
+          ]
         }
       ],
       "expo-secure-store",
-      ["expo-notifications", { "defaultChannel": "bycoda" }],
+      "@clerk/expo",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "bycoda"
+        }
+      ],
       [
         "expo-image-picker",
         {
@@ -103,10 +145,104 @@
           "resizeMode": "contain",
           "backgroundColor": "#000000"
         }
+      ],
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "com.bycoda.mobile.widgets",
+          "groupIdentifier": "group.com.bycoda.mobile",
+          "enablePushNotifications": false,
+          "frequentUpdates": true,
+          "enableAndroid": true,
+          "widgets": [
+            {
+              "name": "ActiveSessions",
+              "displayName": "Active sessions",
+              "description": "Running and waiting agent sessions.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium",
+                  "systemLarge",
+                  "accessoryRectangular"
+                ]
+              },
+              "android": {
+                "minWidth": 250,
+                "minHeight": 110,
+                "targetCellWidth": 4,
+                "targetCellHeight": 2,
+                "resizeMode": "both",
+                "initialLayout": "./src/features/widgets/ui/ActiveSessions.android.tsx"
+              }
+            },
+            {
+              "name": "NeedsAttention",
+              "displayName": "Needs attention",
+              "description": "Sessions waiting for you or failed.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "accessoryCircular",
+                  "accessoryRectangular"
+                ]
+              },
+              "android": {
+                "minWidth": 110,
+                "minHeight": 110,
+                "targetCellWidth": 2,
+                "targetCellHeight": 2,
+                "resizeMode": "both",
+                "initialLayout": "./src/features/widgets/ui/NeedsAttention.android.tsx"
+              }
+            },
+            {
+              "name": "SessionActivity",
+              "displayName": "Session activity",
+              "description": "Live status of running sessions.",
+              "android": null,
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      [
+        "expo-quick-actions",
+        {
+          "androidIcons": {
+            "shortcut_icon": {
+              "foregroundImage": "./assets/brand/mobile-adaptive-foreground.png",
+              "backgroundColor": "#000000"
+            }
+          }
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "-dontwarn kotlin.MustUseReturnValues\n-keep class * extends androidx.work.InputMerger { <init>(); }"
+          }
+        }
+      ],
+      "expo-video",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos",
+          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save images to your photos",
+          "granularPermissions": ["photo"]
+        }
       ]
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "reactCompiler": true
     },
     "extra": {
       "reporting": {
@@ -117,7 +253,11 @@
         "iosAppStoreUrl": null,
         "androidPlayStoreUrl": null,
         "publicAppUrl": "https://github.com/bahadryalcn/bycoda"
+      },
+      "eas": {
+        "projectId": "2b86d28c-1c30-4ca7-966d-bba4a8da19df"
       }
-    }
+    },
+    "owner": "bahadryalcn"
   }
 }

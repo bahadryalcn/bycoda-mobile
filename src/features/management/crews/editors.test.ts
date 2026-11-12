@@ -21,15 +21,19 @@ const state = vi.hoisted(() => ({
   fields: new Map<string, (value: string) => void>(), submit: undefined as undefined | (() => void),
   mutate: vi.fn(),
 }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }), HintSection: ({ children }: PropsWithChildren) => createElement("div", null, children), InfoHint: () => null, InfoPanel: () => null, HintLabel: () => null, UnitHint: () => null, isUnitHint: () => false }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => state.machine, useMachines: { getState: () => ({ activeId: state.activeId }) } }));
 vi.mock("@/state/queries", () => ({ useHostMutation: () => ({ mutate: state.mutate, isPending: false, isError: false }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: (_title: string, _text: string, _label: string, run: () => void) => run() }));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestClose: vi.fn() }) }));
 vi.mock("../shared/format", () => ({ identifier: () => "stable-request" }));
+vi.mock("./member-avatar", () => ({ MemberAvatar: () => null }));
+vi.mock("./member-look-fields", () => ({ MemberLookFields: () => null }));
+vi.mock("@/ui/number-field", async () => ({ NumberField: (await import("@/ui/primitives")).Field }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: wrapper, Disclosure: wrapper, NavigationGroup: wrapper, Stack: wrapper, Heading: wrapper,
+  return { Section: wrapper, NumberField: () => null, Body: wrapper, Disclosure: wrapper, NavigationGroup: wrapper, Stack: wrapper, Heading: wrapper,
     Notice: () => null, ErrorText: () => null, MutationState: () => null,
     SelectField: ({ label, onChange }: { label: string; onChange: (text: string) => void }) => { state.fields.set(label, onChange); return null; }, MultiSelectField: () => null,
     Button: () => null, ToggleField: () => null, NavigationRow: () => null, Sheet: () => null,

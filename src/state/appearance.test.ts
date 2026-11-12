@@ -12,11 +12,11 @@ function storage() {
 describe("appearance preference", () => {
   it.each(["system", "light", "dark"] as const)("restores %s with one read", async (themeMode) => {
     const adapter = storage();
-    adapter.getItem.mockResolvedValueOnce(JSON.stringify({ version: 1, themeMode }));
+    adapter.getItem.mockResolvedValueOnce(JSON.stringify({ version: 1, themeMode, palette: "tide" }));
     const store = createAppearanceStore(adapter);
     await Promise.all([store.getState().hydrate(), store.getState().hydrate()]);
     expect(adapter.getItem).toHaveBeenCalledTimes(1);
-    expect(store.getState()).toMatchObject({ themeMode, hydrated: true, storageError: null });
+    expect(store.getState()).toMatchObject({ themeMode, palette: "tide", hydrated: true, storageError: null });
   });
 
   it.each(["broken", "null", "[]", '{"themeMode":"unknown"}'])("uses the system for invalid storage: %s", async (raw) => {
@@ -38,7 +38,7 @@ describe("appearance preference", () => {
     finish('{"themeMode":"dark"}');
     await Promise.all([loading, saving]);
     expect(store.getState().themeMode).toBe("light");
-    expect(adapter.setItem).toHaveBeenLastCalledWith(APPEARANCE_STORAGE_KEY, '{"version":1,"themeMode":"light"}');
+    expect(adapter.setItem).toHaveBeenLastCalledWith(APPEARANCE_STORAGE_KEY, '{"version":1,"themeMode":"light","palette":"classic"}');
   });
 
   it("keeps rapid writes ordered and reports storage failure without losing selection", async () => {
@@ -50,7 +50,38 @@ describe("appearance preference", () => {
     expect(store.getState()).toMatchObject({ themeMode: "dark", storageError: expect.any(Error) });
     await Promise.all([store.getState().setThemeMode("light"), store.getState().setThemeMode("system")]);
     expect(store.getState()).toMatchObject({ themeMode: "system", storageError: null });
-    expect(adapter.setItem).toHaveBeenLastCalledWith(APPEARANCE_STORAGE_KEY, '{"version":1,"themeMode":"system"}');
+    expect(adapter.setItem).toHaveBeenLastCalledWith(APPEARANCE_STORAGE_KEY, '{"version":1,"themeMode":"system","palette":"classic"}');
+  });
+
+  it("loads a stored value without a palette as classic and normalises unknown palettes", async () => {
+    for (const raw of ['{"version":1,"themeMode":"dark"}', '{"version":1,"themeMode":"dark","palette":"neon"}']) {
+      const adapter = storage();
+      adapter.getItem.mockResolvedValueOnce(raw);
+      const store = createAppearanceStore(adapter);
+      await store.getState().hydrate();
+      expect(store.getState()).toMatchObject({ themeMode: "dark", palette: "classic" });
+    }
+  });
+
+  it("persists a palette choice together with the theme mode and ignores unknown ids", async () => {
+    const adapter = storage();
+    const store = createAppearanceStore(adapter);
+    await store.getState().hydrate();
+    await store.getState().setThemeMode("dark");
+    await store.getState().setPalette("kiln");
+    expect(store.getState().palette).toBe("kiln");
+    expect(adapter.setItem).toHaveBeenLastCalledWith(APPEARANCE_STORAGE_KEY, '{"version":1,"themeMode":"dark","palette":"kiln"}');
+    await store.getState().setPalette("nope" as never);
+    expect(store.getState().palette).toBe("classic");
+  });
+
+  it("keeps the palette selection when saving it fails", async () => {
+    const adapter = storage();
+    const store = createAppearanceStore(adapter);
+    await store.getState().hydrate();
+    adapter.setItem.mockRejectedValueOnce(new Error("Unavailable"));
+    await store.getState().setPalette("ink");
+    expect(store.getState()).toMatchObject({ palette: "ink", storageError: expect.any(Error) });
   });
 
   it("keeps the application usable when preferences cannot be read", async () => {

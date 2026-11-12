@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { themePalettes, semanticPalettes } from "./tokens";
+import { PALETTE_IDS, resolveMobilePalette } from "./tokens";
 
 function luminance(hex: string) {
   const rgb = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
@@ -13,9 +13,9 @@ function contrast(a: string, b: string) {
   return (values[0]! + 0.05) / (values[1]! + 0.05);
 }
 
-describe.each(["light", "dark"] as const)("mobile %s reading contrast", (mode) => {
-  const colors = themePalettes[mode];
-  const semanticColors = semanticPalettes[mode];
+const cases = PALETTE_IDS.flatMap((palette) => (["light", "dark"] as const).map((mode) => [palette, mode] as const));
+describe.each(cases)("mobile %s %s reading contrast", (palette, mode) => {
+  const { colors, semantic: semanticColors } = resolveMobilePalette(palette, mode);
   it("keeps small body, metadata and action text readable on every workbench surface", () => {
     for (const background of [
       colors.background,

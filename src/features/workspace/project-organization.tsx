@@ -33,6 +33,7 @@ import {
   emptyOrganizationForm as empty,
   type OrganizationEditor as Editor,
 } from "./project-organization-editor";
+import { FeatureUnavailable } from "./unavailable-state";
 
 export function ProjectOrganization({
   scope,
@@ -244,12 +245,10 @@ export function ProjectOrganization({
                 )}
               />
               {!supported ? (
-                <Notice
-                  message={copy(
-                    "Organizasyonu yönetmek için güncel bycoda masaüstü uygulamasını bu projede açık tutun.",
-                    "Keep the updated bycoda desktop app open in this project to manage organization.",
-                  )}
-                />
+                <FeatureUnavailable message={copy(
+                  "Organizasyonu yönetmek için güncel bycoda masaüstü uygulamasını bu projede açık tutun.",
+                  "Keep the updated bycoda desktop app open in this project to manage organization.",
+                )} />
               ) : (
                 <QueryState query={query} />
               )}
@@ -326,7 +325,7 @@ export function ProjectOrganization({
                       label={copy("Proje grubu", "Project group")}
                       detail={
                         visible.groups.find((row) => row.id === visible.groupId)?.name ??
-                        copy("Gruplanmamış", "Ungrouped")
+                        copy("Diğerleri", "Others")
                       }
                       disabled={disabled}
                       onPress={() => open({ kind: "projectGroup" })}

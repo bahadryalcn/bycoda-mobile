@@ -16,6 +16,7 @@ import type { HostWorktrees } from "@/remote/types";
 import type { SessionScope } from "./session-types";
 import { WorktreeRemovalReview } from "./worktree-removal-review";
 import { readWorktreeRemoval, readWorktreeRemovalStatus, type WorktreeRemovalSnapshot, type WorktreeRemovalStatus } from "./worktree-removal-model";
+import { FeatureUnavailable } from "./unavailable-state";
 
 /** Durable receipt identity stays independent from draft and presentation authority. */
 export function WorktreeRemoval({ scope, projectId, onClose }: { scope: SessionScope; projectId: string; onClose: () => void }) {
@@ -133,7 +134,7 @@ export function WorktreeRemoval({ scope, projectId, onClose }: { scope: SessionS
         <FormActions submitLabel={copy("Kaldırmayı incele", "Review removal")} disabled={disabled || !eligible || !trees.isSuccess || !!trees.isError || !!review} busy={busy && pendingAction==="secondary-3"} onSubmit={inspect} feedback={feedback} onCancel={close} cancelLabel={copy("Kapat", "Close")} />
       </>}
     </> : <>
-      {privateError ? <ErrorText error={privateError} /> : <Notice message={unavailableMessage} />}
+      {privateError ? <ErrorText error={privateError} /> : <FeatureUnavailable message={unavailableMessage} />}
       <FormActions submitLabel={attempt && statusAccessFailure ? copy("Sonucu oku", "Read result") : error ? copy("Hatayı temizle", "Clear error") : copy("Yenile", "Refresh")} disabled={!available || !sameEnvironment || busy || (!error && !statusAccessFailure && (!!attempt || trees.isEnabled===false))} busy={busy} onSubmit={attempt && statusAccessFailure ? readStatus : error ? clearError : refresh} onCancel={close} cancelLabel={copy("Kapat", "Close")} />
     </>}
   </Sheet><PrivateContentAccessProvider value={{allowed:readable,check:canRead}}>

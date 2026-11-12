@@ -5,6 +5,7 @@ import { assertAppAccess, useSecurity } from "./security";
 import {
   assertProviderPermission,
   readPermittedCredential,
+  isScopePermitted,
   useProviderPermission,
 } from "../features/privacy/consent-access";
 import { consentScope } from "../features/privacy/consent-store";
@@ -16,7 +17,7 @@ export function useHostClient(machineId?: string): HostClient | null {
   const machine = useMachines((state) => state.machines.find((value) => value.id === id));
   const allowed = useSecurity((state) => state.status === "unlocked");
   const scope = machine ? consentScope(machine.environmentId, machine.providers ?? []) : "";
-  const consented = useProviderPermission((state) => state.scopes[scope] === true);
+  const consented = useProviderPermission((state) => isScopePermitted(state.scopes, scope));
   const client = useMemo(() => {
     if (!machine || !allowed || !consented) return null;
     const assertAccess = () => {

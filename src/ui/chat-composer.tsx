@@ -1,63 +1,106 @@
-import type { ComponentProps, ReactNode } from "react";
-import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
+import type { ReactNode } from "react";
+import { View, useWindowDimensions, type LayoutChangeEvent, type TextInputProps } from "react-native";
 import { AIInput } from "panelui-native/components/ai-input";
-import { colors, fontSize, interfaceFont, metrics, space } from "./tokens";
+import { fontSize, interfaceFont, lineHeight, metrics, radii, space } from "./tokens";
 import { useMobileTheme } from "./theme";
 import { ComposerActionArea } from "./composer-actions";
+import { COMPOSER_FIELD_PADDING, COMPOSER_MAX_LINES } from "./chat-composer-model";
 
-/** The feature owns drafts and dispatch; this facade owns composer presentation. */
+/** Compact toolbar row: 32dp controls plus hit slop keep the capsule at two short rows. */
+const TOOLBAR_HEIGHT = metrics.visualControl + space.xs * 2;
+
+/**
+ * The feature owns drafts and dispatch; this facade owns composer presentation: one capsule with a
+ * full-width field that starts at one line (40dp) and grows to five before scrolling, then a
+ * toolbar row of attach, chips, queue actions and send/stop.
+ */
 export function ChatComposer({
   value,
   onValueChange,
   disabled,
   field,
+  top,
   leading,
   mode,
+  model,
   submit,
   onToolbarLayout,
 }: {
   value: string;
   onValueChange: (value: string) => void;
   disabled?: boolean;
-  field: ComponentProps<typeof AIInput.Field>;
+  field: Omit<TextInputProps, "value" | "onChangeText" | "editable" | "multiline">;
+  /** Notes and attachments live inside the capsule, above the field. */
+  top?: ReactNode;
   leading: ReactNode;
   mode?: ReactNode;
+  model?: ReactNode;
   submit: ReactNode;
   onToolbarLayout?: (event: LayoutChangeEvent) => void;
 }) {
-  useMobileTheme();
-  const requested = StyleSheet.flatten(field.style)?.minHeight;
-  const minimum = typeof requested === "number" && Number.isFinite(requested) ? Math.max(metrics.touchTarget, requested) : metrics.touchTarget;
+  const { colors } = useMobileTheme();
+  const { fontScale } = useWindowDimensions();
+  const scale = Number.isFinite(fontScale) ? Math.max(1, fontScale) : 1;
+  const { style, ...rest } = field;
   return (
     <AIInput
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
       avoidKeyboard={false}
-      maxRows={5}
+      maxRows={COMPOSER_MAX_LINES}
       size="sm"
       className="w-full shadow-none"
       style={{
-        backgroundColor: colors.fill,
+        backgroundColor: colors.raised,
+        borderRadius: radii.composer,
         borderWidth: 1,
         borderColor: colors.border,
+        overflow: "hidden",
+        opacity: 1,
       }}
     >
+      {top}
       <AIInput.Field
-        {...field}
+        placeholderTextColor={colors.tertiary}
+        selectionColor={colors.accent}
+        cursorColor={colors.accent}
+        {...rest}
         style={[
-          field.style,
-          { minWidth: 0, minHeight: minimum, fontSize: fontSize.body, fontFamily: interfaceFont, color: colors.text, paddingHorizontal: space.md },
-          process.env.EXPO_OS === "web" && ({ resize: "none" } as object),
+          {
+            minWidth: 0,
+            minHeight: metrics.composerFieldMin,
+            maxHeight: Math.ceil(lineHeight.input * scale * COMPOSER_MAX_LINES + COMPOSER_FIELD_PADDING * 2),
+            paddingTop: COMPOSER_FIELD_PADDING,
+            paddingBottom: COMPOSER_FIELD_PADDING,
+            paddingHorizontal: space.lg,
+            fontSize: fontSize.input,
+            lineHeight: lineHeight.input,
+            fontFamily: interfaceFont,
+            color: colors.text,
+            includeFontPadding: false,
+            textAlignVertical: "top",
+          },
+          style,
         ]}
       />
-      <AIInput.Row onLayout={onToolbarLayout} style={{ flexWrap: "wrap", gap: 0, padding: 0 }}>
+      <AIInput.Toolbar
+        onLayout={onToolbarLayout}
+        style={{
+          minHeight: TOOLBAR_HEIGHT,
+          gap: space.xs,
+          paddingHorizontal: space.sm,
+          paddingBottom: space.xs,
+        }}
+      >
         {leading}
-        {mode}
-        <View style={{ flex: 1 }} />
-        <ComposerActionArea />
-        {submit}
-      </AIInput.Row>
+        {mode ? <View style={{ flexShrink: 0, flexDirection: "row", alignItems: "center", gap: space.xs }}>{mode}</View> : null}
+        <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center" }}>{model}</View>
+        <View style={{ flexShrink: 0, flexDirection: "row", alignItems: "center", gap: space.xs }}>
+          <ComposerActionArea />
+          {submit}
+        </View>
+      </AIInput.Toolbar>
     </AIInput>
   );
 }

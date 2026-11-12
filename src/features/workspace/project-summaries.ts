@@ -6,6 +6,8 @@ import type {
 export type ProjectSummaries = {
   instanceId?: string;
   limited?: boolean;
+  /** Projects whose read failed this time; their last known rows are kept. */
+  failed?: string[];
   projects: Record<string, { etag: string; sessions: HostSessionSummary[] }>;
 };
 type SummaryClient = {
@@ -83,25 +85,44 @@ export async function readProjectSummaries(
         throw error;
     }
   }
-  const entries: Array<readonly [string, ProjectSummaries["projects"][string]]> = [];
-  for (let offset = 0; offset < ids.length; offset += 6)
-    entries.push(
-      ...(await Promise.all(
-        ids.slice(offset, offset + 6).map(
-          async (projectId) =>
-            [
-              projectId,
-              {
-                etag: "",
-                sessions: await client.request<HostSessionSummary[]>(
-                  "sessions.list",
-                  { projectId },
-                  options,
-                ),
-              },
-            ] as const,
-        ),
-      )),
+  // One project the Host cannot read must not hide the other projects' sessions.
+  const projects: ProjectSummaries["projects"] = {};
+  const failed: string[] = [];
+  let firstError: unknown;
+  for (let offset = 0; offset < ids.length; offset += 6) {
+    const batch = ids.slice(offset, offset + 6);
+    const results = await Promise.allSettled(
+      batch.map((projectId) =>
+        client.request<HostSessionSummary[]>("sessions.list", { projectId }, options),
+      ),
     );
-  return { limited: projectIds.length > ids.length, projects: Object.fromEntries(entries) };
+    results.forEach((result, index) => {
+      const projectId = batch[index]!;
+      if (result.status === "fulfilled") {
+        projects[projectId] = { etag: "", sessions: result.value };
+        return;
+      }
+      firstError ??= result.reason;
+      failed.push(projectId);
+      const previous = known?.projects[projectId];
+      if (previous) projects[projectId] = previous;
+    });
+  }
+  if (failed.length === ids.length && ids.length) throw firstError;
+  return {
+    limited: projectIds.length > ids.length,
+    projects,
+    ...(failed.length ? { failed } : {}),
+  };
+}
+
+/** Newest non-archived session update per project, for the quiet "last active" meta. */
+export function latestProjectActivity(
+  rows: readonly { project: { id: string }; session: { updatedAt: number; archived?: boolean } }[],
+): Record<string, number> {
+  const latest: Record<string, number> = {};
+  for (const { project, session } of rows)
+    if (!session.archived && session.updatedAt > (latest[project.id] ?? 0))
+      latest[project.id] = session.updatedAt;
+  return latest;
 }

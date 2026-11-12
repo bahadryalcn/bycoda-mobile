@@ -19,9 +19,13 @@ vi.mock("@/state/queries", () => ({
   useHostMutation: (method: string) => ({ isPending: false, mutate: (...args: unknown[]) => state.writes(method, ...args) }),
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({}) }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
+vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
+vi.mock("panelui-native/components/progress", () => ({ Progress: () => null }));
+vi.mock("../shared/record-bits", () => ({ RecordTrailing: ({ children }: PropsWithChildren) => createElement("div", null, children), useMenuGlyph: () => () => null, useRelativeTime: () => () => "soon", joinMeta: (parts: unknown[]) => parts.filter(Boolean).join(" · ") }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: (_title: string, _detail: string, _label: string, action: () => void) => action() }));
 vi.mock("./runtime-panel", () => ({ CrewRuntimePanel: ({children}: PropsWithChildren) => createElement("div",null,children) }));
+vi.mock("./member-lines", () => ({ MemberLines: () => null }));
 vi.mock("../shared/status", () => ({ Status: ({value}: {value:string}) => createElement("span",null,value), statusLabel: (value:string) => value }));
 vi.mock("@/ui/record-card", () => ({ RecordCard: ({ children, footer, details, menu }: PropsWithChildren<Record<string, any>>) => createElement("div", null, children, footer, details, menu) }));
 vi.mock("@/ui/primitives", () => {
@@ -35,6 +39,7 @@ vi.mock("@/ui/primitives", () => {
       state.actions.set(label,{disabled,onPress});
       return createElement("button",{disabled,"aria-label":accessibilityLabel},label,detail,supporting);
     },
+    ErrorNotice: ({error}: {error?:string}) => error ? createElement("p",{role:"alert"},error) : null,
     ErrorText: ({error}: {error?:string}) => error ? createElement("p",{role:"alert"},error) : null,
     MutationState: () => null,
     ActionMenu: ({ actions }: { actions: Array<false | { label: string; disabled?: boolean; onPress: () => void }> }) => {

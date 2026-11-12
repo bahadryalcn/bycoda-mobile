@@ -12,7 +12,8 @@ import type { GitScope } from "./git-types";
 import { stableGitReview } from "./git-selective-query";
 import { conflictParts, readConflictStages, resolveConflictParts, type ConflictChoice, type ConflictPart } from "./conflict-review-model";
 import { GitDiffViewer } from "./git-diff-viewer";
-import type { HostConflictStages } from "../../../../host/git-conflicts";
+import type { HostConflictStages } from "../../../../host/git/git-conflicts";
+import { FeatureUnavailable } from "./unavailable-state";
 type Review = { snapshot: string; stages: HostConflictStages; working: string | null; parts: ConflictPart[] | null; workingError: unknown; operation: string | null };
 
 export function ConflictChoiceField({ part, value, disabled, onChange }: { part: Extract<ConflictPart, { kind: "conflict" }>; value: ConflictChoice | ""; disabled: boolean; onChange: (value: ConflictChoice) => void }) {
@@ -105,7 +106,7 @@ export function ConflictReview({ scope, path, onClose, onBusyChange, onChanged, 
       <Body mono>{`${machineName}\n${opening.root}\n${path}`}</Body>
       <Notice message={copy("Ortak temel, bizim ve gelen sürümleri salt okunur incele. Her blok için bir tarafı veya ikisini seç.", "Review base, our and incoming versions read-only. Choose either side or both for each block.")} />
       {review?.operation === "rebase" ? <Notice message={copy("Rebase sırasında bizim sürüm hedef daldır; gelen sürüm yeniden uygulanan commit’tir.", "During a rebase, our version is the target branch; incoming is the commit being replayed.")} /> : null}
-      {!supported ? <Notice message={copy("Güvenli çakışma incelemesi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer for safe conflict review.")} /> : <QueryState query={query} />}
+      {!supported ? <FeatureUnavailable message={copy("Güvenli çakışma incelemesi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer for safe conflict review.")} /> : <QueryState query={query} />}
       <ErrorText error={error} />{stale ? <Notice tone="warning" message={copy("İncelenen içerik değişti. Yenileyip tekrar inceleyin.", "Reviewed contents changed. Refresh and review again.")} /> : null}{review?.workingError ? <ErrorText error={review.workingError} /> : null}
       {review && !safe ? <Notice tone="warning" message={copy("İkili veya eksik içerikten çözüm uygulanamaz. Dosyanın tamamını bilgisayarda incele.", "A resolution cannot be applied from binary or incomplete content. Review the complete file on your computer.")} /> : null}
       {sent ? <Notice tone="warning" message={copy("İşlem gönderildi. Tekrar göndermeden Git durumunu yenileyip incele.", "The action was sent. Refresh and review Git state before sending again.")} /> : null}
@@ -113,6 +114,6 @@ export function ConflictReview({ scope, path, onClose, onBusyChange, onChanged, 
       <SelectField label={copy("Sürüm", "Version")} value={version} onChange={next => { if (current()) setVersion(next); }} options={[{ value: "base", label: copy("Ortak temel", "Common base") }, { value: "ours", label: copy("Bizim sürüm", "Our version") }, { value: "theirs", label: copy("Gelen sürüm", "Incoming version") }, { value: "working", label: copy("Çalışma dosyası", "Working file") }, { value: "result", label: copy("Çözüm önizlemesi", "Resolution preview") }]} />
       {text === null || text === undefined ? <Body muted>{copy("Bu sürüm mevcut değil veya henüz hazır değil.", "This version is absent or not ready yet.")}</Body> : <GitDiffViewer key={`${review?.snapshot}:${version}`} lines={text.split(/\r?\n/).map((line, index) => ({ kind: "same", text: line, oldLine: index + 1, newLine: index + 1 }))} />}
     </View>} renderItem={({ item }) => <ConflictChoiceField part={item} value={choices[item.id] ?? ""} disabled={disabled} onChange={(value) => { if (!submitted.current && !disabled && current() && latest.current.review === review) setChoices(before => ({ ...before, [item.id]: value })); }} />} />
-    : <>{scopeAccess.available && query.error ? <QueryState query={{ ...query, data: undefined, refetch: () => { if (scopeAccess.check()) return query.refetch(); } }} /> : <Notice message={scopeAccess.scopeCurrent && !supported ? copy("Güvenli çakışma incelemesi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer for safe conflict review.") : copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />}</>}
+    : <>{scopeAccess.available && query.error ? <QueryState query={{ ...query, data: undefined, refetch: () => { if (scopeAccess.check()) return query.refetch(); } }} /> : <FeatureUnavailable message={scopeAccess.scopeCurrent && !supported ? copy("Güvenli çakışma incelemesi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer for safe conflict review.") : copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />}</>}
   </Sheet><PrivateContentAccessProvider value={readAccess}>{approval.element}</PrivateContentAccessProvider></>;
 }

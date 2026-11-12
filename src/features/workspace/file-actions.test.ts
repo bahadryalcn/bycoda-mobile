@@ -13,7 +13,7 @@ vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) =>
     createElement("div", null, children),
 }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({
   useCopy: () => (_tr: string, en: string) => en,
 }));

@@ -1,16 +1,15 @@
 import { useMobileTheme } from "@/ui/theme";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import Animated from "react-native-reanimated";
 import QrCode from "lucide-react-native/icons/qr-code";
 import ClipboardPaste from "lucide-react-native/icons/clipboard-paste";
 import PencilLine from "lucide-react-native/icons/pencil-line";
 import Wifi from "lucide-react-native/icons/wifi";
 import Network from "lucide-react-native/icons/network";
-import { Body, Button, NavigationGroup, NavigationRow, Row } from "@/ui/primitives";
+import { Body, Button, Heading, NavigationGroup, NavigationRow, Row, StateView } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
-import { uiStyles } from "@/ui/styles";
-import { colors, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { ManualConnectionForm } from "./manual-connection-form";
 import { PairingPreview } from "./pairing-preview";
@@ -29,20 +28,17 @@ function tile(Glyph: typeof QrCode, color: string) {
 }
 
 export function PairingEntry({ controller, disabled }: PairingEntryProps) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const { entry, busy } = controller;
   if (entry.kind === "choices")
     return (
       <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
-        <View style={centered}>
-          <Text selectable accessibilityRole="header" style={[uiStyles.heading, title]}>
-            {copy("Bilgisayarına bağlan", "Connect your computer")}
-          </Text>
-          <Body muted style={title}>
-            {copy("Bilgisayarına nasıl ulaşacağını seç.", "Choose how to reach your computer.")}
-          </Body>
-        </View>
+        <StateView
+          illustration="connect-computer"
+          title={copy("Bilgisayarına bağlan", "Connect your computer")}
+          description={copy("Bilgisayarına nasıl ulaşacağını seç.", "Choose how to reach your computer.")}
+        />
         <NavigationGroup>
           <NavigationRow
             label={copy("Yerel ağ", "Local network")}
@@ -75,9 +71,9 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <View style={centered}>
-        <Text selectable accessibilityRole="header" style={[uiStyles.heading, title]}>
+        <Heading style={title}>
           {controller.connectionMode === "lan" ? copy("Yerel ağ", "Local network") : "Tailscale"}
-        </Text>
+        </Heading>
         <Body muted style={title}>
           {copy(
             "Bilgisayarındaki Bycoda’da telefon bağlantısını aç ve QR kodunu tara.",

@@ -5,7 +5,7 @@ import { View } from "react-native";
 import type { HostProject } from "@/domain/types";
 import { useProjectList } from "../workspace/use-project-directory";
 import { useActiveMachine } from "@/state/machines";
-import { Button, Empty, Notice, QueryState, Screen } from "@/ui/primitives";
+import { Empty, QueryState, Screen } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { DevServersScreen } from "./dev-servers-screen";
 import { RuntimeLogsScreen } from "./runtime-logs-screen";
@@ -35,23 +35,28 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
   const capability = tool === "servers" ? "dev.servers" : tool === "devices" ? "device.host" : tool === "browser" ? "browser.shared" : tool === "terminals" ? "terminals.v1" : tool === "logs" ? "runtime.logs" : tool === "diagnostics" ? "resources.diagnostics" : tool === "usage" ? "usage.sessions.read" : null;
   const supported = !!capability && machine?.capabilities?.includes(capability);
   if (!capability) return (
-    <Screen title={copy("Araçlar", "Tools")}>
-      <Empty title={copy("Araç bulunamadı", "Tool not found")} />
-      <Button tone="quiet" label={copy("Projelere dön", "Back to projects")} onPress={() => router.replace("/")} />
+    <Screen title={copy("Araçlar", "Tools")} scroll={false}>
+      <View style={{ flex: 1 }}>
+        <Empty compact={false} illustration="search-empty" title={copy("Araç bulunamadı", "Tool not found")}
+          action={{ label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} />
+      </View>
     </Screen>
   );
   return (
     <View style={{ flex: 1 }}>
-      {!visibleProject || !supported ? <Screen title={copy("Araçlar", "Tools")}>
+      {!visibleProject || !supported ? <Screen title={copy("Araçlar", "Tools")} scroll={false}><View style={{ flex: 1 }}>
         <ProjectDirectoryFeedback query={projects} readiness={projects.readiness}
           privacyUnavailable={projects.privacyUnavailable}
           loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
-        {projects.directoryReady && machine?.capabilities && !supported ? <Notice message={copy("Bu araç için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on your computer to use this tool.")} /> : null}
-        {projects.directoryReady && !visibleProject ? <Empty title={projectId
+        {projects.directoryReady && machine?.capabilities && !supported ? <Empty compact={false} illustration="permission"
+          title={copy("Güncelleme gerekiyor", "Update needed")}
+          detail={copy("Bu araç için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on your computer to use this tool.")}
+          action={{ label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} /> : null}
+        {projects.directoryReady && !visibleProject && !(machine?.capabilities && !supported) ? <Empty compact={false} illustration="no-projects" title={projectId
           ? copy("Bu bilgisayarda proje bulunamadı.", "Project not found on this computer.")
-          : copy("Proje seçin", "Choose a project")} /> : null}
-        <Button tone="quiet" label={copy("Projelere dön", "Back to projects")} onPress={() => router.replace("/")} />
-      </Screen> : null}
+          : copy("Proje seçin", "Choose a project")}
+          action={{ label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} /> : null}
+      </View></Screen> : null}
       <PrivateContentBoundary visible={!!visibleProject && !!supported} isAllowed={() => !!project && projects.isProjectVisible(project.id)}>
         {machine && project && supported ? <ProjectToolContent key={`${machine.id}:${project.id}:${tool}`} tool={tool} project={project} /> : null}
       </PrivateContentBoundary>

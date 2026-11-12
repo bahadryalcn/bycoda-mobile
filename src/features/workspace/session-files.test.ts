@@ -17,7 +17,7 @@ vi.mock("react-native", () => {
 });
 vi.mock("lucide-react-native/icons/paperclip", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/sliders-horizontal", () => ({ default: () => null }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => {} }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, space: {} }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, args?: Record<string, unknown>) => en.replace(/\{(\w+)\}/g, (_match, key) => String(args?.[key] ?? key)) }));
@@ -42,7 +42,7 @@ vi.mock("@/ui/chat-controls", () => ({ ChatAction: ({ label, onPress }: any) => 
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => h("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: any) => { state.actions.set(label, onPress); return h("button", { disabled: disabled || busy, onClick: onPress }, label); };
-  return { Body: Wrapper, Row: Wrapper, Notice: ({ message }: any) => h("p", null, message), Badge: ({ label }: any) => h("span", null, label), Button, IconButton: Button, ErrorText: () => null,
+  return { Body: Wrapper, Row: Wrapper, Notice: ({ message }: any) => h("p", null, message), StateView: ({ title }: any) => h("p", null, title), Badge: ({ label }: any) => h("span", null, label), Button, IconButton: Button, ErrorText: () => null,
     Sheet: ({ visible, title, children, footer }: any) => visible ? h("section", { "aria-label": title }, children, footer) : null,
     FormActions: ({ submitLabel, onSubmit, cancelLabel, onCancel, cancelDisabled }: any) => h("div", null, h(Button, { label: submitLabel, onPress: onSubmit }), onCancel ? h(Button, { label: cancelLabel, onPress: onCancel, disabled: cancelDisabled }) : null),
     SearchField: ({ label, value, onChangeText }: any) => { state.search = onChangeText; return h("input", { "aria-label": label, value, onChange: (event: any) => onChangeText(event.target.value) }); },

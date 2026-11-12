@@ -1,6 +1,5 @@
 import { useCopy } from "@/ui/copy";
-import { SelectField } from "@/ui/primitives";
-import { ProjectDirectoryFeedback } from "../../workspace/project-directory-feedback";
+import { ErrorNotice, Loading, SelectField } from "@/ui/primitives";
 import { useProjectList } from "../../workspace/use-project-directory";
 import { useMachines } from "@/state/machines";
 import type { ScopeProps } from "./types";
@@ -41,9 +40,11 @@ export function Scope({ allowAll = false }: ScopeProps) {
           selectProject(id || null);
         }}
       />
-      <ProjectDirectoryFeedback query={projects} readiness={projects.readiness}
-        privacyUnavailable={projects.privacyUnavailable} loading="inline"
-        loadingLabel={copy("Projeler yükleniyor…", "Loading projects…")} />
+      {/* Field-level feedback stays one compact line: a full StateView here would stretch the
+          toolbar row (sliding its actions) and compete with the screen's own state. */}
+      {projects.error ? <ErrorNotice error={projects.error} onRetry={() => { if (!projects.isFetching) void projects.refetch?.(); }}
+        retrying={projects.isFetching} /> : projects.data === undefined && projects.isLoading ? <Loading
+        label={copy("Projeler yükleniyor…", "Loading projects…")} /> : null}
     </>
   );
 }

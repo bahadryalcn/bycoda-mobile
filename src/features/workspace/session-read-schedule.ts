@@ -9,9 +9,16 @@ export class SessionReadSchedule {
       this.retryWaitAt = now + 60_000;
   }
   rejectWait(now = Date.now()) { this.retryWaitAt = now + 60_000; }
-  delay(running: boolean, error: boolean, now = Date.now()) {
-    return error || now < this.retryWaitAt ? (running ? 2_500 : 7_500) : 25;
+  /** `failures` is the consecutive failed reads; error cadence doubles per failure up to 30s. */
+  delay(running: boolean, error: boolean, now = Date.now(), failures = 1) {
+    if (error) return backoffMs(running ? 2_500 : 7_500, failures - 1, 30_000);
+    return now < this.retryWaitAt ? (running ? 2_500 : 7_500) : 25;
   }
+}
+
+/** base * 2^attempt, capped. */
+export function backoffMs(base: number, attempt: number, cap: number) {
+  return Math.min(cap, base * 2 ** Math.max(0, Math.min(attempt, 16)));
 }
 
 export function unsupportedSessionWait(error: unknown) {

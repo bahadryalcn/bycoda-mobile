@@ -21,7 +21,7 @@ vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }))
 vi.mock("lucide-react-native/icons/keyboard", () => ({ default: () => null }));
 vi.mock("@/ui/tokens", () => ({ colors: {} }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => {} }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/remote-frame", () => ({ RemoteFrame: ({ onPress }: { onPress?: (point: { x: number; y: number }) => void }) => createElement("button", { onClick: () => onPress?.({ x: 10, y: 20 }) }, "Browser frame") }));
 vi.mock("@/ui/action-field", () => ({ ActionField: ({ value, onChangeText }: { value: string; onChangeText: (value: string) => void }) => {
   state.draftCallbacks.set("URL draft", onChangeText);

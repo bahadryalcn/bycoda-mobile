@@ -8,7 +8,7 @@ import {
   SelectField,
   Field,
   FormActions,
-  Heading,
+  Section,
   NavigationGroup,
   Row,
   ToggleField,
@@ -50,8 +50,7 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
   };
   return (
     <Stack>
-      <Stack>
-      <Heading>{copy("İstenen sonuç", "Desired result")}</Heading>
+      <Section title={copy("İstenen sonuç", "Desired result")}>
       <Field
         editable={!busy}
         label={copy("Başlık", "Title")}
@@ -65,15 +64,8 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
         onChangeText={(prompt) => update({ prompt })}
         multiline
       />
-      </Stack>
-      <Stack>
-      <Heading>{copy("Proje kapsamı", "Project scope")}</Heading>
-      <Body muted>
-        {copy(
-          "Aynı bilgisayardan en fazla 8 proje seçin.",
-          "Choose up to 8 projects on this computer.",
-        )}
-      </Body>
+      </Section>
+      <Section title={copy("Proje kapsamı", "Project scope")}>
       <MultiSelectField
         label={copy("Projeler", "Projects")}
         values={draft.projectIds}
@@ -83,6 +75,7 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
           detail: project.cwd,
         }))}
         max={8}
+        hint={copy("Aynı bilgisayardan en fazla 8 proje seçin.", "Choose up to 8 projects on this computer.")}
         disabled={busy}
         onChange={(ids) =>
           update({
@@ -91,9 +84,8 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
           })
         }
       />
-      </Stack>
-      <Stack>
-      <Heading>{copy("Planlayıcı", "Planner")}</Heading>
+      </Section>
+      <Section title={copy("Planlayıcı", "Planner")}>
       <SelectField
         label={copy("Planlayıcının başlangıç projesi", "Planner lead project")}
         value={draft.leadProjectId}
@@ -110,7 +102,7 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
         projectId={draft.leadProjectId}
         onChange={(agent) => update(agent)}
       />
-      </Stack>
+      </Section>
       <Disclosure label={copy("Çalışma seçenekleri", "Execution options")}>
       <NavigationGroup>
         <ToggleField

@@ -81,13 +81,11 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
               autoCapitalize="none"
               autoCorrect={false}
               onChangeText={(baseBranch) => set({ workspace: { ...draft.workspace, baseBranch } })}
-            />
-            <Body muted>
-              {copy(
+              hint={copy(
                 "Boş bırakırsanız projenin mevcut klasörü ve dalı kullanılır. Bilgisayar seçilen çalışma alanını doğrular.",
                 "Leave blank to use the project's current checkout and branch. The computer validates the selected workspace.",
               )}
-            </Body>
+            />
           </>
         )}
         <NavigationGroup>

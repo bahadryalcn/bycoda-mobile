@@ -14,14 +14,14 @@ let latest: ReturnType<typeof useComposerDelivery>;
 let root: ReturnType<typeof createRoot> | undefined;
 const props = { client, queueSupported: true };
 
-function Probe(input: { session?: HostSession; queueSupported: boolean }) {
-  const delivery = useComposerDelivery({ client, session: input.session, queueSupported: input.queueSupported });
+function Probe(input: { session?: HostSession; queueSupported: boolean; busyPreferred?: "steer" | "queue" }) {
+  const delivery = useComposerDelivery({ client, session: input.session, queueSupported: input.queueSupported, busyPreferred: input.busyPreferred });
   useLayoutEffect(() => {
     latest = delivery;
   });
   return null;
 }
-async function render(input: { session?: HostSession; queueSupported?: boolean }) {
+async function render(input: { session?: HostSession; queueSupported?: boolean; busyPreferred?: "steer" | "queue" }) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   root ??= createRoot(document.createElement("div"));
   await act(async () => root!.render(createElement(Probe, { ...props, ...input })));
@@ -32,18 +32,24 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("starts on Send and picks Queue when the first snapshot is already running", async () => {
+it("starts on Send and uses the preferred busy mode while a run is active", async () => {
   await render({ session: undefined });
   expect(latest.mode).toBe("send");
   await render({ session: session("running") });
+  expect(latest.mode).toBe("steer");
+  await render({ session: session("running"), busyPreferred: "queue" });
   expect(latest.mode).toBe("queue");
+  await render({ session: session("running"), busyPreferred: "steer", queueSupported: false });
+  expect(latest.mode).toBe("steer");
   expect(latest.showModeChip).toBe(true);
 });
 
-it("initializes only once: a later snapshot does not override the mode", async () => {
+it("follows the busy preference when a run starts, and returns to Send when it ends", async () => {
   await render({ session: session("idle") });
   expect(latest.mode).toBe("send");
-  await render({ session: session("running") });
+  await render({ session: session("running"), busyPreferred: "queue" });
+  expect(latest.mode).toBe("queue");
+  await render({ session: session("idle"), busyPreferred: "queue" });
   expect(latest.mode).toBe("send");
 });
 

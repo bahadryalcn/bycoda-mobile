@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const fixture=vi.hoisted(()=>({code:vi.fn(),cancel:vi.fn(),submit:null as null|(()=>void)}));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
 vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));
 vi.mock("@/ui/tokens",()=>({space:{}}));vi.mock("@/ui/styles",()=>({uiStyles:{}}));
@@ -11,6 +12,7 @@ vi.mock("react-native",()=>({Text:({children}:PropsWithChildren)=>createElement(
 vi.mock("react-native-reanimated",()=>({default:{View:({children}:PropsWithChildren)=>createElement("div",null,children)}}));
 vi.mock("@/ui/primitives",()=>({
  Body:({children}:PropsWithChildren)=>createElement("p",null,children),
+ Heading:({children}:PropsWithChildren)=>createElement("h2",null,children),
  IdentifierField:({value,onChangeText,editable}:{value:string;onChangeText:(value:string)=>void;editable:boolean})=>createElement("textarea",{value,disabled:!editable,onChange:event=>onChangeText((event.currentTarget as HTMLTextAreaElement).value)}),
  MutationState:({mutation}:{mutation:{error?:Error}})=>mutation.error?createElement("p",null,mutation.error.message):null,
  FormActions:({onSubmit,onCancel,disabled,submitLabel,cancelLabel,feedback}:{onSubmit:()=>void;onCancel:()=>void;disabled:boolean;submitLabel:string;cancelLabel:string;feedback:import("react").ReactNode})=>{fixture.submit=onSubmit;return createElement("div",null,feedback,createElement("button",{onClick:onSubmit,disabled},submitLabel),createElement("button",{onClick:onCancel},cancelLabel));},

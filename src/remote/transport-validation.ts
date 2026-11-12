@@ -1,6 +1,7 @@
 import {
   HOST_PROTOCOL_VERSION,
-  REMOTE_PROVIDERS,
+  knownRemoteProviders,
+  protocolMismatchMessage,
 } from "../../../src/features/connections/model/protocol";
 import type { HostDescriptor } from "./types";
 import { isLanAddress, isLanKey } from "../../../src/integrations/mobile-lan";
@@ -68,18 +69,21 @@ export function safeHostMessage(value: string, credential: string): string {
 export function requireMobileHostDescriptor(value: unknown): HostDescriptor {
   if (!value || typeof value !== "object") throw new Error("Invalid host description.");
   const host = value as HostDescriptor;
+  const mismatch = protocolMismatchMessage(host.protocolVersion, HOST_PROTOCOL_VERSION);
+  if (mismatch) throw new Error(mismatch);
+  // Providers this build does not know are dropped, never fatal: a Host that
+  // gained a provider stays reachable from an older phone build.
+  const providers = knownRemoteProviders(host.providers);
   if (
-    host.protocolVersion !== HOST_PROTOCOL_VERSION ||
     typeof host.environmentId !== "string" ||
     !host.environmentId ||
     typeof host.name !== "string" ||
-    !Array.isArray(host.providers) ||
-    !host.providers.every((provider) => REMOTE_PROVIDERS.includes(provider)) ||
+    !providers ||
     !Array.isArray(host.capabilities) ||
     !host.capabilities.every((capability) => typeof capability === "string")
   )
     throw new Error("This computer is running an incompatible bycoda Host.");
   if (host.platform !== undefined && !["win32", "darwin", "linux"].includes(host.platform))
     throw new Error("Invalid host platform.");
-  return host;
+  return providers.length === host.providers.length ? host : { ...host, providers };
 }

@@ -206,7 +206,7 @@ public final class BycodaHostSocketModule: Module {
         case .success(.data): self.ended(connection.id, connection.generation, "binary_not_supported", true)
         case .success(.string(let text)):
           let count = text.utf8.count
-          guard count <= 1_048_576, connection.deliveries.count < 32, connection.deliveryBytes + count <= 2_097_152 else { self.ended(connection.id, connection.generation, "overload", true); return }
+          guard count <= 1_048_576, connection.deliveries.count < 512, connection.deliveryBytes + count <= 16_777_216 else { self.ended(connection.id, connection.generation, "overload", true); return }
           connection.sequence += 1; connection.deliveries[connection.sequence] = count; connection.deliveryBytes += count
           self.event(connection, "message", ["sequence": connection.sequence, "text": text]); self.receive(connection)
         @unknown default: self.ended(connection.id, connection.generation, "schema", true)

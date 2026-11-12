@@ -7,11 +7,13 @@ const fixture = vi.hoisted(() => ({
   projectId: "project", endpoint: "https://synthetic.invalid", params: {} as any,
   logsRead: vi.fn(), sourcesRead: vi.fn(), refresh: undefined as any,
 }));
+vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
+vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, router: { push: vi.fn() } }));
 vi.mock("react-native", () => ({ Platform: { OS: "web" } }));
 vi.mock("../management/shared/format", () => ({ stamp: () => "Timestamp" }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/tokens", () => ({ colors: {} }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));

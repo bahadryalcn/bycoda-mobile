@@ -3,6 +3,7 @@ export type ConnectionPhase =
   | "offline"
   | "locked"
   | "permission"
+  | "access"
   | "storage"
   | "checking"
   | "connected"
@@ -14,6 +15,8 @@ export function connectionPhase(input: {
   unlocked: boolean;
   permitted: boolean;
   storageError?: string | null;
+  /** The computer refused this device key (revoked or replaced); reconnecting will not fix it. */
+  accessDenied?: boolean;
   successAt: number;
   errorAt: number;
   now: number;
@@ -23,6 +26,7 @@ export function connectionPhase(input: {
   if (!input.unlocked) return "locked";
   if (input.storageError) return "storage";
   if (!input.permitted) return "permission";
+  if (input.accessDenied && input.errorAt && input.errorAt >= input.successAt) return "access";
   if (input.errorAt && input.errorAt >= input.successAt) return "disconnected";
   if (input.successAt > 0 && input.now - input.successAt < 45_000) return "connected";
   return "checking";

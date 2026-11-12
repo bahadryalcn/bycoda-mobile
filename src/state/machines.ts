@@ -2,8 +2,15 @@ import { isLanguagePreference } from "../../../src/shared/i18n/languages";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
-import type { HostDescriptor, MobileMachine } from "../remote/types";
-import { restoreMachines, validateMachine, type MobileLanguage } from "./machine-model";
+import type { HostDescriptor, MobileMachine, MobileRoute } from "../remote/types";
+import {
+  mergeRoutes,
+  restoreMachines,
+  learnRoutes,
+  sameRoute,
+  validateMachine,
+  type MobileLanguage,
+} from "./machine-model";
 import { assertAppAccess } from "./security";
 
 const key = "bycoda.mobile.remote-machines.v1";
@@ -100,6 +107,8 @@ type MachineState = {
   connectionPending: boolean;
   hydrate(): Promise<void>;
   saveMachine(machine: MobileMachine, token: string): Promise<void>;
+  /** Makes another saved route of the same computer the active one. */
+  switchRoute(id: string, route: MobileRoute): Promise<boolean>;
   removeMachine(id: string, expected?: Pick<MobileMachine, "endpoint" | "environmentId" | "lanKey">): Promise<void>;
   selectMachine(id: string): void;
   refreshDescriptor(id: string, descriptor: HostDescriptor): void;
@@ -217,16 +226,30 @@ export const useMachines = create<MachineState>((set, get) => ({
     return hydration;
   },
   async saveMachine(input, token) {
-    const machine = validateMachine(input);
+    const validated = validateMachine(input);
     if (!validToken(token)) throw new Error("Enter a valid 43-character device credential.");
-    return serializeMutation(machine.id, async () => {
+    return serializeMutation(validated.id, async () => {
       requireStorage();
       const prior = get();
-      const existing = prior.machines.find((value) => value.id === machine.id);
-      if (existing && existing.environmentId !== machine.environmentId)
+      const existing = prior.machines.find((value) => value.id === validated.id);
+      if (existing && existing.environmentId !== validated.environmentId)
         throw new Error(
           "This connection belongs to another computer. Add the new computer separately.",
         );
+      // Pairing the same computer by another method adds a route instead of
+      // replacing the old one: one device credential is valid on every route.
+      const machine = existing
+        ? validateMachine({
+            ...validated,
+            routes: mergeRoutes(
+              { endpoint: validated.endpoint, ...(validated.lanKey ? { lanKey: validated.lanKey } : {}) },
+              validated.routes,
+              existing.routes ?? [
+                { endpoint: existing.endpoint, ...(existing.lanKey ? { lanKey: existing.lanKey } : {}) },
+              ],
+            ),
+          })
+        : validated;
       let oldToken: string | null;
       try {
         oldToken = await readSecret(machine.id);
@@ -310,6 +333,28 @@ export const useMachines = create<MachineState>((set, get) => ({
       }
     });
   },
+  switchRoute(id, route) {
+    return serializeMutation(id, async () => {
+      if (!get().hydrated || get().storageError) return false;
+      const prior = get();
+      const current = prior.machines.find((machine) => machine.id === id);
+      const target = current?.routes?.find((known) => sameRoute(known, route));
+      if (!current || !target || sameRoute(current, target)) return false;
+      const next = validateMachine({
+        ...current,
+        endpoint: target.endpoint,
+        lanKey: target.lanKey,
+      });
+      set((s) => ({ machines: s.machines.map((m) => (m.id === id ? next : m)) }));
+      try {
+        await persist();
+      } catch {
+        set({ machines: prior.machines });
+        return false;
+      }
+      return true;
+    });
+  },
   selectMachine(id) {
     if (
       !get().hydrated ||
@@ -324,24 +369,27 @@ export const useMachines = create<MachineState>((set, get) => ({
   refreshDescriptor(id, descriptor) {
     if (!get().hydrated || get().storageError || pendingMutations) return;
     const current = get().machines.find((m) => m.id === id);
+    if (!current || current.environmentId !== descriptor.environmentId) return;
+    const learned = learnRoutes(current, descriptor.mobileRoutes);
+
+    const routes = learned === undefined ? current.routes : learned.length > 1 ? learned : undefined;
     if (
-      !current ||
-      current.environmentId !== descriptor.environmentId ||
-      JSON.stringify([current.providers, current.capabilities, current.platform]) ===
-        JSON.stringify([descriptor.providers, descriptor.capabilities, descriptor.platform])
+      JSON.stringify([current.providers, current.capabilities, current.platform, current.routes]) ===
+      JSON.stringify([descriptor.providers, descriptor.capabilities, descriptor.platform, routes])
     )
       return;
     set((s) => ({
-      machines: s.machines.map((m) =>
-        m.id === id
-          ? validateMachine({
-              ...m,
-              providers: descriptor.providers,
-              capabilities: descriptor.capabilities,
-              platform: descriptor.platform,
-            })
-          : m,
-      ),
+      machines: s.machines.map((m) => {
+        if (m.id !== id) return m;
+        const { routes: _previous, ...rest } = m;
+        return validateMachine({
+          ...rest,
+          providers: descriptor.providers,
+          capabilities: descriptor.capabilities,
+          platform: descriptor.platform,
+          ...(routes ? { routes } : {}),
+        });
+      }),
     }));
     void persist().catch(() => set({ storageError: "Computer capabilities could not be saved." }));
   },

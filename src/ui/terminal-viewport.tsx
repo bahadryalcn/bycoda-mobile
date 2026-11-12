@@ -6,7 +6,7 @@ export const TerminalViewport = forwardRef<
   TerminalViewportHandle,
   { nonce: string; onPacket: (packet: TerminalPacket) => void; onLost: () => void }
 >(function TerminalViewport({ nonce, onPacket, onLost }, ref) {
-  const web = useRef<WebView>(null);
+  const web = useRef<WebView<object>>(null);
   const source = useMemo(
     () => ({ html: terminalDocument(nonce), baseUrl: "about:blank" }),
     [nonce],

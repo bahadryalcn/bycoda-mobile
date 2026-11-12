@@ -1,9 +1,8 @@
 import { ConnectionFeedback } from "./connection-feedback";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import Animated from "react-native-reanimated";
-import { Body, FormActions, Disclosure, Field, IdentifierField, Stack } from "@/ui/primitives";
+import { Body, FormActions, Disclosure, Field, Heading, IdentifierField, Stack } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
-import { uiStyles } from "@/ui/styles";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import type { ManualConnectionFormProps } from "./connection-types";
@@ -16,15 +15,11 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <View style={{ gap: space.sm }}>
-        <Text
-          selectable
-          accessibilityRole="header"
-          style={uiStyles.heading}
-        >
+        <Heading>
           {editing
             ? copy("Bağlantıyı yenile", "Update connection")
             : copy("Manuel bağlan", "Connect manually")}
-        </Text>
+        </Heading>
         <Body muted>
           {controller.connectionMode === "lan"
             ? copy(
@@ -82,7 +77,7 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
         </Disclosure>
       ) : null}
       <FormActions
-        feedback={<ConnectionFeedback operation={controller.operation} />}
+        feedback={<ConnectionFeedback operation={controller.operation} onRetry={disabled ? undefined : () => { void controller.connect(); }} />}
         submitLabel={copy("Bağlan", "Connect")}
         onSubmit={() => {
           void controller.connect();

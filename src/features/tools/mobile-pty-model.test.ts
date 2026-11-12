@@ -53,3 +53,9 @@ it("preserves byte cursors across split UTF8 and refuses foreign epochs, gap tai
     ).gap,
   ).toBe(true);
 });
+
+it("encodes the special keys as the bytes a terminal expects", async () => {
+  const { PTY_KEYS } = await import("./mobile-pty-model");
+  const text = (value: string) => Buffer.from(value, "base64").toString("latin1");
+  expect(Object.values(PTY_KEYS).map(text)).toEqual(["\x1b", "\t", "\x03", "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"]);
+});

@@ -1,47 +1,68 @@
-import { View } from "react-native";
-import Pin from "lucide-react-native/icons/pin";
+import { memo } from "react";
+import { View, useWindowDimensions } from "react-native";
 import GitBranch from "lucide-react-native/icons/git-branch";
-import Ellipsis from "lucide-react-native/icons/ellipsis";
-import { Badge, Body, IconButton, PressableCard, Row } from "@/ui/primitives";
+import { Body, PressableCard, StatusText } from "@/ui/primitives";
+import { ProjectIcon } from "@/ui/project-icon";
 import { ProviderIcon } from "@/ui/provider-identity";
 import { decorativeSvgProps } from "@/ui/accessibility";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { colors, metrics, radii, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { metrics, space } from "@/ui/tokens";
+import type { HostProject } from "@/domain/types";
 import type { HostSessionSummary } from "./wire";
-import { sessionStatus } from "./shared";
+import { relativeTime, sessionStatus } from "./shared";
 import { SessionRowActions } from "./session-row-actions";
+import { sessionDisplayTitle } from "./session-title";
 
-/** One compact conversation identity; navigation and secondary actions remain separate targets. */
-export function SessionListRow({
+/** One compact conversation identity; secondary actions live in swipe and long-press. */
+export const SessionListRow = memo(function SessionListRow({
   machineId,
   projectId,
   projectName,
   projectCwd,
+  projectAppearance,
+  showProject,
   session,
   ancestors,
   compressed,
   canRead,
+  settled,
   onPress,
 }: {
   machineId: string;
   projectId: string;
   projectName?: string;
   projectCwd?: string;
+  projectAppearance?: HostProject["appearance"];
+  /** All-session views name the project in the meta line; a project's own list does not. */
+  showProject?: boolean;
   session: HostSessionSummary;
   ancestors?: readonly string[];
   compressed?: boolean;
-  canRead: () => boolean;
-  onPress: () => void;
+  canRead: (projectId: string) => boolean;
+  /** The Host marks this session settled (shown in the collapsed Settled group). */
+  settled?: boolean;
+  /** Receives the session id so the parent can pass one stable callback to every row. */
+  onPress: (sessionId: string, projectId: string) => void;
 }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
-  const title = session.title || copy("Yeni oturum", "New session");
-  const status = sessionStatus({ ...session, pinned: false }, copy);
-  const context = [projectName, compressed ? ancestors?.at(-1) : undefined]
-    .filter(Boolean)
-    .join(" · ");
+  const { fontScale } = useWindowDimensions();
+  const title = sessionDisplayTitle(session.title, copy("Yeni oturum", "New session"));
+  const status = sessionStatus({ ...session, pinned: false }, copy, colors);
+  const attention = session.needsInput || session.status === "interrupted";
+  const live = !attention && session.status === "running";
+  const stamp =
+    attention || live ? (
+      <StatusText label={status.label} tone={attention ? "warning" : "live"} />
+    ) : (
+      <Body selectable={false} muted style={uiStyles.caption}>
+        {relativeTime(session.updatedAt, copy)}
+      </Body>
+    );
+  const optionsLabel = copy("Oturum seçenekleri", "Session options");
+  const folder = compressed ? ancestors?.at(-1) : undefined;
+  const meta = [showProject ? undefined : folder, session.branch].filter(Boolean).join(" · ");
   const label = [
     title,
     projectName,
@@ -61,96 +82,59 @@ export function SessionListRow({
       projectName={projectName}
       projectCwd={projectCwd}
       session={session}
-      canRead={canRead}
+      settled={settled}
+      canRead={() => canRead(projectId)}
     >
       {(openActions) => (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.xxs }}>
+        <View>
           <PressableCard
             label={label}
-            onPress={onPress}
+            optionsLabel={optionsLabel}
+            onPress={() => onPress(session.id, projectId)}
+            onLongPress={openActions}
             style={{
-              flex: 1,
-              minWidth: 0,
-              minHeight: metrics.touchTarget,
-              padding: space.sm,
-              gap: space.xs,
-              borderWidth: 0,
-              borderRadius: radii.control,
-              backgroundColor: colors.panel,
+              minHeight: metrics.rowHeightSession,
+              justifyContent: "center",
+              paddingVertical: space.row,
             }}
           >
-            <Row style={{ justifyContent: "space-between", gap: space.xs }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  flex: 1,
-                  minWidth: 0,
-                  gap: space.xs,
-                }}
-              >
-                {session.pinned ? (
-                  <Pin {...decorativeSvgProps} size={12} color={colors.muted} />
-                ) : null}
-                {context ? (
-                  <Body
-                    selectable={false}
-                    muted
-                    numberOfLines={1}
-                    style={[uiStyles.caption, { flex: 1 }]}
-                  >
-                    {context}
-                  </Body>
-                ) : null}
-              </View>
-              <Badge
-                label={status.label}
-                tone={
-                  session.needsInput || session.status === "interrupted"
-                    ? "warning"
-                    : session.status === "running"
-                      ? "live"
-                      : "default"
-                }
-              />
-            </Row>
-            <Body selectable={false} numberOfLines={1} style={uiStyles.title}>
-              {title}
-            </Body>
-            <Row style={{ flexWrap: "nowrap", justifyContent: "space-between", gap: space.sm }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  flex: 1,
-                  minWidth: 0,
-                  gap: space.xs,
-                }}
-              >
-                {session.branch ? (
-                  <GitBranch {...decorativeSvgProps} size={12} color={colors.muted} />
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.row }}>
+              <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
+                {showProject ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2 }}>
+                    <ProjectIcon appearance={projectAppearance} size={14} box={16} />
+                    <Body selectable={false} muted numberOfLines={fontScale > 1 ? undefined : 1} style={[uiStyles.caption, { flex: 1, minWidth: 0 }]}>
+                      {projectName}
+                    </Body>
+                  </View>
                 ) : null}
                 <Body
                   selectable={false}
-                  muted
-                  numberOfLines={1}
-                  style={[uiStyles.caption, { flex: 1 }]}
+                  numberOfLines={fontScale > 1 ? undefined : 2}
+                  style={[uiStyles.label, { fontWeight: "700" }]}
                 >
-                  {session.branch}
+                  {title}
                 </Body>
+                {session.branch || folder ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2 }}>
+                    {session.branch ? (
+                      <GitBranch {...decorativeSvgProps} size={12} color={colors.muted} />
+                    ) : null}
+                    <Body selectable={false} muted numberOfLines={fontScale > 1 ? undefined : 1} style={[uiStyles.caption, { flex: 1, minWidth: 0 }]}>
+                      {meta}
+                    </Body>
+                  </View>
+                ) : null}
               </View>
-              <ProviderIcon provider={session.harness} size={16} />
-            </Row>
+              <View style={{ flexShrink: 0, alignItems: "flex-end", gap: space.xs }}>
+                {stamp}
+                <ProviderIcon provider={session.harness} size={18} />
+              </View>
+            </View>
           </PressableCard>
-          <IconButton
-            label={copy("Oturum seçenekleri", "Session options")}
-            density="compact"
-            onPress={openActions}
-          >
-            <Ellipsis size={18} color={colors.muted} />
-          </IconButton>
+          <View accessible={false} style={uiStyles.separator} />
         </View>
       )}
     </SessionRowActions>
   );
-}
+});

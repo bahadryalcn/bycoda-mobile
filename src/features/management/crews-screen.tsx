@@ -12,30 +12,28 @@ import type { HostModelCatalog } from "@/domain/types";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { confirmAction } from "@/ui/confirm";
-import { colors } from "@/ui/tokens";
 import {
-  ActionMenu,
-  Body,
-  Button,
   IconButton,
   MutationState,
-  Notice,
+  StateView,
   QueryState,
   SearchField,
   SegmentedControl,
   Sheet,
 } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
-import { RecordCard } from "@/ui/record-card";
 import { Scope } from "./shared/scope";
 import { identifier } from "./shared/format";
 import { CrewEditor } from "./crews/crew-editor";
 import { ProfileEditor } from "./crews/profile-editor";
 import { StartCrewEditor } from "./crews/start-editor";
+import { ActiveCrews } from "./crews/active-crews";
 import { CrewRunCard } from "./crews/run-card";
+import { CrewDefinitionCard } from "./crews/definition-card";
+import { CrewProfileCard } from "./crews/profile-card";
 import { newDefinition, newMember, validateCrewDirectory } from "./crews/model";
 import { crewCatalogState, crewRoleOptions } from "./crews/presentation";
+import { useMobileTheme } from "@/ui/theme";
 
 type Tab = "definitions" | "runs" | "agents";
 type Row =
@@ -49,6 +47,7 @@ type Editor = { projectId: string; directory: CrewDirectory } & (
 );
 
 export function CrewsScreen() {
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const roleLabels = crewRoleOptions(copy);
@@ -119,6 +118,11 @@ export function CrewsScreen() {
     if (!projectId || !directory || editor || busy) return;
     setEditor({ ...entry, projectId, directory } as Editor);
   };
+  const createLabel =
+    tab === "agents"
+      ? copy("Yeni kütüphane üyesi", "New library member")
+      : copy("Yeni ekip", "New crew");
+  const canCreate = !!projectId && !!directory && !busy && !editor;
   const create = () => {
     if (!projectId || !directory) return;
     if (tab === "agents")
@@ -148,12 +152,8 @@ export function CrewsScreen() {
       actions={
         supported && tab !== "runs" ? (
           <IconButton
-            label={
-              tab === "agents"
-                ? copy("Yeni kütüphane üyesi", "New library member")
-                : copy("Yeni ekip", "New crew")
-            }
-            disabled={!projectId || !directory || busy || !!editor}
+            label={createLabel}
+            disabled={!canCreate}
             onPress={create}
           >
             <Plus size={22} color={colors.accent} />
@@ -162,18 +162,21 @@ export function CrewsScreen() {
       }
       header={
         <>
+          {supported ? <ActiveCrews /> : null}
           {!supported ? (
-            <Notice
-              tone="info"
-              message={copy(
+            <StateView
+              illustration="permission"
+              title={copy("Güncelleme gerekiyor", "Update needed")}
+              description={copy(
                 "Ekipleri kullanmak için bilgisayardaki bycoda uygulamasını güncelleyin.",
                 "Update bycoda on this computer to use crews.",
               )}
             />
           ) : !projectId ? (
-            <Notice
-              tone="info"
-              message={copy(
+            <StateView
+              illustration="no-projects"
+              title={copy("Proje seçin", "Choose a project")}
+              description={copy(
                 "Ekipleri görüntülemek için bir proje seçin.",
                 "Select a project to view crews.",
               )}
@@ -195,7 +198,7 @@ export function CrewsScreen() {
               />
               <SearchField
                 ref={searchInput}
-                label={copy("Ara", "Search")}
+                label={tab === "definitions" ? copy("Ekip adında ara", "Search crew names") : tab === "runs" ? copy("Çalışma başlığında ara", "Search work titles") : copy("Üye adında ara", "Search member names")}
                 value={search}
                 onChangeText={setSearch}
               />
@@ -219,19 +222,22 @@ export function CrewsScreen() {
                 emptyTitle={
                   search.trim() && rows.length
                     ? copy("Eşleşen sonuç yok", "No matching results")
-                    : copy("Bu görünümde kayıt yok", "No entries in this view")
+                    : tab === "definitions" ? copy("Henüz ekip yok", "No crews yet")
+                      : tab === "runs" ? copy("Henüz ekip çalışması yok", "No crew work yet")
+                        : copy("Kütüphanede üye yok", "No library members yet")
                 }
-                emptyAction={search.trim() && rows.length ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
+                emptyDetail={search.trim() && rows.length ? undefined
+                  : tab === "definitions" ? copy("Ekip; koordinatör, uzman ve inceleyenlerden oluşur ve işi birlikte yürütür.", "A crew pairs a coordinator, specialists and a reviewer to carry out work together.")
+                    : tab === "runs" ? copy("Bir ekipten iş başlattığınızda çalışma burada görünür.", "Work appears here once you start it from a crew.")
+                      : copy("Kayıtlı üyeleri birden çok ekipte yeniden kullanın.", "Save members once and reuse them across crews.")}
+                emptyAction={
+                  search.trim() && rows.length
+                    ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+                    : !search.trim() && tab !== "runs" && canCreate
+                      ? { label: createLabel, onPress: create }
+                      : undefined
+                }
               />
-              {tab === "runs" && !executionSupported && (
-                <Notice
-                  tone="info"
-                  message={copy(
-                    "Bu hostta yeni ekip çalışması başlatılamaz. Bilgisayardaki bycoda uygulamasını güncelleyin.",
-                    "This host cannot start new crew work. Update bycoda on the computer.",
-                  )}
-                />
-              )}
             </>
           )}
           {editor && (
@@ -282,145 +288,31 @@ export function CrewsScreen() {
         item.kind === "run" ? (
           <CrewRunCard run={item.value} />
         ) : item.kind === "definition" ? (
-          <RecordCard
-            title={item.value.name}
-            metadata={`${item.value.agents.length} ${copy("üye", "members")} · ${item.value.projectId ? copy("Bu proje", "This project") : copy("Bilgisayar geneli", "Host-wide")}`}
-            footer={
-              <Button
-                tone="quiet"
-                label={copy("İş başlat", "Start work")}
-                disabled={!executionSupported || busy || !!editor}
-                onPress={() => open({ kind: "start", value: item.value })}
-              />
-            }
-            details={
-              <Body>
-                {item.value.agents
-                  .map((agent) => `${agent.name} · ${roleLabel(agent.role)}`)
-                  .join("\n")}
-              </Body>
-            }
-            menu={
-              <ActionMenu
-                label={copy("Ekip işlemleri", "Crew actions")}
-                busy={
-                  remove.isPending &&
-                  remove.variables?.definitionId === item.value.id
-                }
-                actions={[
-                  {
-                    key: "edit",
-                    label: copy("Düzenle", "Edit"),
-                    disabled: busy || !!editor,
-                    onPress: () =>
-                      open({ kind: "definition", value: item.value }),
-                  },
-                  {
-                    key: "copy",
-                    label: copy("Kopyasını oluştur", "Create a copy"),
-                    disabled: busy || !!editor,
-                    onPress: () =>
-                      open({
-                        kind: "definition",
-                        value: {
-                          ...structuredClone(item.value),
-                          id: identifier(),
-                          updatedAt: 0,
-                        },
-                      }),
-                  },
-                  {
-                    key: "delete",
-                    label: copy("Sil", "Delete"),
-                    destructive: true,
-                    disabled: !deleteSupported || busy || !!editor,
-                    onPress: () =>
-                      confirmAction(
-                        copy("Ekibi sil", "Delete crew"),
-                        copy(
-                          "Kayıtlı ekip tanımı silinir. Host devam eden çalışma veya görevler kullanıyorsa işlemi engeller.",
-                          "The saved crew definition will be deleted. The host blocks deletion while active work or tasks still use it.",
-                        ),
-                        copy("Sil", "Delete"),
-                        () => {
-                          if (
-                            useMachines.getState().activeId !== machine?.id ||
-                            useMachines.getState().selectedProjectId !==
-                              projectId
-                          )
-                            return;
-                          remove.mutate({
-                            projectId,
-                            definitionId: item.value.id,
-                            expectedUpdatedAt: item.value.updatedAt,
-                          });
-                        },
-                      ),
-                  },
-                ]}
-              />
-            }
-          >
-            {remove.variables?.definitionId === item.value.id ? (
-              <MutationState mutation={remove} />
-            ) : null}
-          </RecordCard>
+          <CrewDefinitionCard
+            value={item.value}
+            roleLabel={roleLabel}
+            busy={busy}
+            editorOpen={!!editor}
+            executionSupported={executionSupported}
+            deleteSupported={deleteSupported}
+            machineId={machine?.id}
+            projectId={projectId}
+            remove={remove}
+            library={directory?.agents}
+            onStart={(value) => open({ kind: "start", value })}
+            onEdit={(value) => open({ kind: "definition", value })}
+          />
         ) : (
-          <RecordCard
-            title={item.value.name}
-            metadata={`${roleLabel(item.value.role)} · ${item.value.projectId ? copy("Bu proje", "This project") : copy("Bilgisayar geneli", "Host-wide")}`}
-            details={<Body>{item.value.instructions}</Body>}
-            menu={
-              <ActionMenu
-                label={copy(
-                  "Kütüphane üyesi işlemleri",
-                  "Library member actions",
-                )}
-                busy={
-                  removeAgent.isPending &&
-                  removeAgent.variables?.agentId === item.value.id
-                }
-                actions={[
-                  {
-                    key: "edit",
-                    label: copy("Düzenle", "Edit"),
-                    disabled: busy || !!editor,
-                    onPress: () => open({ kind: "profile", value: item.value }),
-                  },
-                  {
-                    key: "delete",
-                    label: copy("Sil", "Delete"),
-                    destructive: true,
-                    disabled: busy || !!editor,
-                    onPress: () =>
-                      confirmAction(
-                        copy("Üyeyi kütüphaneden sil", "Delete library member"),
-                        copy(
-                          "Kütüphane profili silinir. Ekiplerdeki kopyaları korunur.",
-                          "The library profile will be deleted. Copies in crews are kept.",
-                        ),
-                        copy("Sil", "Delete"),
-                        () => {
-                          if (
-                            useMachines.getState().activeId === machine?.id &&
-                            useMachines.getState().selectedProjectId ===
-                              projectId
-                          )
-                            removeAgent.mutate({
-                              projectId,
-                              agentId: item.value.id,
-                            });
-                        },
-                      ),
-                  },
-                ]}
-              />
-            }
-          >
-            {removeAgent.variables?.agentId === item.value.id ? (
-              <MutationState mutation={removeAgent} />
-            ) : null}
-          </RecordCard>
+          <CrewProfileCard
+            value={item.value}
+            roleLabel={roleLabel}
+            busy={busy}
+            editorOpen={!!editor}
+            machineId={machine?.id}
+            projectId={projectId}
+            remove={removeAgent}
+            onEdit={(value) => open({ kind: "profile", value })}
+          />
         )
       }
     />

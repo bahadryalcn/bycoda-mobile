@@ -15,6 +15,7 @@ import { SubagentStopReview } from "./subagent-stop-review";
 import type { TranscriptBlockProps } from "./session-types";
 import { activeSubagent, subagentSteps, subagentStopCommand, subagentTarget } from "./subagent-model";
 import { stamp } from "../management/shared/format";
+import { FeatureUnavailable } from "./unavailable-state";
 
 export function SubagentDetails({ block, scope, runId, disabled, onCommand, context, parentProvider, onClose }:
   Pick<TranscriptBlockProps, "block" | "scope" | "runId" | "disabled" | "onCommand" | "context" | "parentProvider"> & {onClose?:()=>void}) {
@@ -87,7 +88,7 @@ export function SubagentDetails({ block, scope, runId, disabled, onCommand, cont
           <Body muted>{copy("Ana oturum", "Parent session")}</Body><Body mono selectable>{target.sessionId}</Body><Body mono selectable>{target.runId}</Body><Body mono selectable>{target.blockId}</Body><Body mono selectable>{target.callId}</Body>
         </Disclosure>
         {!onClose && (!canStop || attempted) ? feedback : null}
-      </> : <Notice tone="warning" message={!matches ? copy("Seçili alt ajan değişti. Ayrıntıları yeniden açın.", "The selected subagent changed. Reopen its details.") : copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />}
+      </> : <FeatureUnavailable message={!matches ? copy("Seçili alt ajan değişti. Ayrıntıları yeniden açın.", "The selected subagent changed. Reopen its details.") : copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />}
     </Stack>} renderItem={({item:step})=><Stack style={{gap:space.xs}}>
       <Row><Body muted>{step.kind}</Body>{step.status?<Badge label={step.status}/>:null}</Row>
       <MessageText text={step.text} context={context} compactMedia/>

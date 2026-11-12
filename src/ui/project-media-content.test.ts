@@ -35,7 +35,7 @@ vi.mock("./media-loader", () => ({ loadProjectMedia: async () => {
 } }));
 vi.mock("./document-content", () => ({ DocumentContent: (props: any) => { s.props = props; return h("div", { "data-media": true }, props.uri); } }));
 vi.mock("./document-navigation", () => ({ DocumentNavigation: ({ children }: any) => children((...args: any[]) => s.opens.push(args)) }));
-vi.mock("./primitives", () => ({ Loading: () => null, Notice: ({ message }: any) => h("p", null, message),
+vi.mock("./primitives", () => ({ Loading: () => null, Empty: ({ title }: any) => h("p", null, title),
   ErrorText: ({ error }: any) => error ? h("p", null, error.message) : null,
   Button: ({ label, onPress, busy }: any) => { s.retry = onPress; return h("button", { onClick: onPress, disabled: busy }, label); },
 }));

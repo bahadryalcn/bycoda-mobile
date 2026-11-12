@@ -348,7 +348,10 @@ describe("mobile compatibility with the generated Host registry", () => {
     },
   );
   it("negotiates the generated versions/methods and requires both capability and actual hello route", async () => {
-    const methods = Object.keys(generated.methods);
+    // The hello result admits at most 256 methods (ConnectionHelloResultSchema); the registry now
+    // has more, so advertise every mobile method plus a few desktop-only ones, like a real Host.
+    const advertised = [...mobileMethods.map(([name]) => name), ...desktopOnlyMethods.slice(0, 8)];
+    const methods = advertised;
     const capabilities = capabilitiesOf(Object.entries(generated.methods));
     const f = fakeNative({ methods, capabilities });
     const connection = new MobileHostWsConnection(

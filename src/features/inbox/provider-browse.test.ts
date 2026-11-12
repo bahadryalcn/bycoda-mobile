@@ -15,10 +15,13 @@ const fixture = vi.hoisted(() => ({
   list: [] as RemoteInboxItem[],
   error: null as Error | null, route: vi.fn(),
 }));
+vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
+vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
 vi.mock("./inbox-browse-memory-provider",()=>({useInboxBrowseMemory:()=>fixture.memory}));
 vi.mock("expo-router", () => ({ router: { push: fixture.route } }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("../management/shared/record-bits", () => ({ useRelativeTime: () => () => "" }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ capabilities: [] }), useMachines:{getState:()=>({activeId:fixture.active,selectedProjectId:fixture.project})} }));
 vi.mock("../management/common", () => ({ Scope: () => null }));
 vi.mock("./jira-board-screen", () => ({ ProviderJiraBoards: () => null }));
@@ -64,7 +67,7 @@ vi.mock("@/ui/primitives", async () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress }: any) => {fixture.presses.set(label,onPress);return createElement("button", { onClick: onPress }, label);};
   return { Badge: ({ label }: any) => createElement("span", null, label), Body: Wrap, Row: Wrap, Disclosure: Wrap,
-    NavigationGroup: Wrap, Button, NavigationRow: Button, Notice: ({ message }: any) => createElement("p", null, message),
+    NavigationGroup: Wrap, Button, StateView: ({ title, description }: any) => createElement("p", null, title, description), NavigationRow: Button, Notice: ({ message }: any) => createElement("p", null, message),
     Empty: ({ title }: any) => createElement("p", null, title),
     ActionMenu: ({ actions }: any) => createElement("div", null, ...actions.filter(Boolean).map((action: any) => createElement(Button, { key: action.key, ...action }))),
     ToggleField: ({ label, value, onChange }: any) => createElement("button", { onClick: () => onChange(!value) }, label),
@@ -123,12 +126,11 @@ it("retains independent partial failures and routes each retry to its source wit
   expect(services.textContent).toContain("Open Bycoda on your computer");
   expect(services.textContent).not.toContain("Account unavailable");
 });
-it("keeps cached-unavailable refresh failures ahead of the successful desktop-setup explanation", async () => {
+it("shows no warning banner for cached-unavailable refresh failures and no stale desktop-setup explanation", async () => {
   await render(); await click("Connected services");
   fixture.available = false; fixture.success = false; fixture.error = new Error("Availability refresh failed"); await render();
   const services = container.querySelector('aside[data-title="Connected services"]')!;
-  expect(services.textContent).toContain("Could not refresh");
-  expect(container.textContent?.match(/Could not refresh/g)).toHaveLength(1);
+  expect(container.textContent).not.toContain("Could not refresh");
   expect(services.textContent).not.toContain("Open Bycoda on your computer");
   expect(container.querySelector("main")!.textContent).not.toContain("Open Bycoda on your computer");
   fixture.success = true; fixture.error = null; await render();

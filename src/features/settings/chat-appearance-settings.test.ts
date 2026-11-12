@@ -7,7 +7,7 @@ const state = vi.hoisted(() => ({
   shared: vi.fn(),
   bubble: vi.fn(),
 }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => {} }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/state/actions", () => ({ useAsyncAction: () => ({isPending:false,run:(work:()=>Promise<void>)=>work()}) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
@@ -42,6 +42,7 @@ vi.mock("@/ui/primitives", () => {
     Stack: Wrap,
     Section: Wrap,
     Notice: () => null,
+    Skeleton: ({label}: {label?:string}) => createElement("p", {role:"progressbar","aria-label":label ?? "Loading…"}, label ?? "Loading…"),
     Loading: ({label}: {label:string}) => createElement("p", {role:"progressbar","aria-label":label},label),
     SegmentedControl: () => null,
   };

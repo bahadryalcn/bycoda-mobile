@@ -1,18 +1,18 @@
+import { TranscriptSkeleton } from "./transcript-skeleton";
 import { ProjectDirectoryFeedback } from "./project-directory-feedback";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { router, Stack } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+import { setViewingSession } from "../push/push-viewing";
 import { View } from "react-native";
-import Search from "lucide-react-native/icons/search";
-import { ChatAction } from "@/ui/chat-controls";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useActiveMachine } from "@/state/machines";
-import { Empty, Notice, QueryState, Screen } from "@/ui/primitives";
+import { Empty, QueryState, Screen } from "@/ui/primitives";
 import { PrivateContentBoundary } from "@/ui/private-content";
 import { hostKey } from "@/state/queries";
-import { colors, metrics, space } from "@/ui/tokens";
-import { WorkspaceFrame } from "@/ui/workspace-frame";
+import { metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { remoteErrorKind } from "@/ui/error-message";
 import { SessionComposer } from "./session-composer";
 import { ComposerTransferProvider } from "./composer-transfer";
 import { SessionKeyboardFrame } from "./session-keyboard-frame";
@@ -20,7 +20,10 @@ import { useSessionSnapshot } from "./session-queries";
 import { SessionSettings } from "./session-settings";
 import { SessionToolbar } from "./session-toolbar";
 import { SessionTranscript } from "./session-transcript";
-import { TranscriptViewFilter } from "./transcript-view-filter";
+import { SessionAgents } from "./session-agents";
+import { SessionHeader } from "./session-header";
+import { SessionParentBar } from "./session-parent-bar";
+import { sessionHeaderStatus } from "./session-header-model";
 import type { TranscriptView } from "./transcript-model";
 import { UncertainCommand, useCommands } from "./shared";
 import type { SessionScope, SessionScreenProps, SessionWorkspaceProps } from "./session-types";
@@ -33,10 +36,19 @@ import { TranscriptScrollPosition } from "./transcript-scroll";
 export function SessionScreen({ id, projectId }: SessionScreenProps) {
   const machine = useActiveMachine();
   const copy = useCopy();
+  const environmentId = machine?.environmentId;
+  // Pushes about the conversation on screen are listed without a banner.
+  useFocusEffect(useCallback(() => {
+    if (!environmentId) return;
+    setViewingSession({ environmentId, sessionId: id });
+    return () => setViewingSession(null);
+  }, [environmentId, id]));
   if (!machine) {
     return (
       <Screen>
         <Empty
+          compact={false}
+          illustration="connect-computer"
           title={copy("Bilgisayara bağlan", "Connect to a computer")}
           action={{
             label: copy("Bilgisayar bağla", "Connect a computer"),
@@ -133,6 +145,11 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineNam
     [sendCommand, refetchSnapshot, cache, machineId, id, privacy.projectId, canRead, session],
   );
 
+  const projectName = projects.data?.find((project) => project.id === projectId)?.name;
+  const headerStatus = sessionHeaderStatus(session, !!snapshot.error, copy, snapshot.fetchStatus === "paused");
+  // Only credential/identity failures need the in-flow state; transient drops show in the header.
+  const repairKind = remoteErrorKind(snapshot.error);
+  const needsRepair = repairKind === "auth" || repairKind === "identity";
   const refresh = () => {
     void snapshot.refetch();
   };
@@ -144,56 +161,77 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineNam
   return (
     <ComposerTransferProvider scope={scope}>
       <Screen scroll={false}>
-        <Stack.Screen
-          options={{
-            title: visible
-              ? session?.session.title || copy("Oturum", "Session")
-              : copy("Oturum", "Session"),
-            headerRight: visible
-              ? () => <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <ChatAction label={copy("Mesajlarda bul", "Find in messages")}
-                    onPress={() => setFindOpen(true)}>
-                    <Search size={18} color={findOpen ? colors.accent : colors.muted} />
-                  </ChatAction>
-                  <TranscriptViewFilter value={transcriptView} onChange={setTranscriptView} />
+        <SessionHeader
+          title={visible ? session?.session.title || copy("Oturum", "Session") : copy("Oturum", "Session")}
+          context={visible ? (projectName ?? machineName) : undefined}
+          provider={visible ? session?.session.harness : undefined}
+          status={headerStatus.label}
+          tone={headerStatus.tone}
+          actions={
+            visible && session ? (
+              <PrivateContentBoundary visible={visible} isAllowed={canRead}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: space.xs }}>
+                  <SessionToolbar
+                    scope={scope}
+                    projectId={projectId}
+                    contextLabel={[machineName, projectName ?? projectId].filter(Boolean).join(" · ")}
+                    query={{ ...snapshot, data: session }}
+                    command={command}
+                    blocked={blocked}
+                    onSettings={() => setSettings(true)}
+                    onRefresh={refresh}
+                    onCommand={dispatch}
+                    onFind={() => setFindOpen(true)}
+                    view={transcriptView}
+                    onViewChange={setTranscriptView}
+                  />
                 </View>
-              : undefined,
-          }}
+              </PrivateContentBoundary>
+            ) : null
+          }
         />
+        {visible ? <SessionParentBar session={session} machineId={machineId} /> : null}
         {!visible ? (
-          !projects.directoryReady ? (
-            <ProjectDirectoryFeedback query={projects} readiness={projects.readiness}
-              privacyUnavailable={projects.privacyUnavailable} loading="content"
-              loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
-          ) : privacy.canRead ? (
-            <QueryState
-              query={snapshot}
-              loading="content"
-              loadingLabel={copy("Oturum yükleniyor…", "Loading session…")}
-            />
-          ) : privacy.reason === "hidden" ? (
-            <Empty
-              title={copy(
-                "Proje bu bilgisayarda bulunamadı.",
-                "Project not found on this computer.",
-              )}
-              action={{
-                label: copy("Oturumlar", "Sessions"),
-                onPress: () => router.push("/sessions"),
-              }}
-            />
-          ) : (
-            <Notice
-              message={copy(
-                "Projesini doğrulamak için bu oturumu oturum listesinden açın.",
-                "Open this session from the session list to verify its project.",
-              )}
-              action={{
-                label: copy("Oturumlar", "Sessions"),
-                onPress: () => router.push("/sessions"),
-              }}
-            />
-          )
+          <View style={{ flex: 1 }}>
+            {!projects.directoryReady ? (
+              <ProjectDirectoryFeedback query={projects.error ? { ...projects, data: undefined } : projects} readiness={projects.readiness}
+                privacyUnavailable={projects.privacyUnavailable} loading="content"
+                loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
+            ) : privacy.canRead ? (
+              snapshot.data === undefined && !snapshot.error ? (
+                <TranscriptSkeleton label={copy("Oturum yükleniyor…", "Loading session…")} />
+              ) : (
+                <QueryState query={snapshot} loading="none" />
+              )
+            ) : privacy.reason === "hidden" ? (
+              <Empty
+                compact={false}
+                illustration="no-projects"
+                title={copy(
+                  "Proje bu bilgisayarda bulunamadı.",
+                  "Project not found on this computer.",
+                )}
+                action={{
+                  label: copy("Oturumlar", "Sessions"),
+                  onPress: () => router.push("/sessions"),
+                }}
+              />
+            ) : (
+              <Empty
+                compact={false}
+                illustration="locked"
+                title={copy("Proje doğrulanmalı", "Verify the project first")}
+                detail={copy(
+                  "Projesini doğrulamak için bu oturumu oturum listesinden açın.",
+                  "Open this session from the session list to verify its project.",
+                )}
+                action={{
+                  label: copy("Oturumlar", "Sessions"),
+                  onPress: () => router.push("/sessions"),
+                }}
+              />
+            )}
+          </View>
         ) : null}
         <PrivateContentBoundary visible={visible} isAllowed={canRead}>
           <SessionKeyboardFrame
@@ -204,6 +242,7 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineNam
                 blocked={blocked}
                 busy={command.isPending}
                 onCommand={dispatch}
+                onOpenSettings={() => setSettings(true)}
               />
             }
             style={{
@@ -213,23 +252,14 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineNam
               alignSelf: "center",
               paddingLeft: Math.max(insets.left, space.screen),
               paddingRight: Math.max(insets.right, space.screen),
-              paddingTop: space.xs,
             }}
           >
-            <WorkspaceFrame headerInset="none" toolbar={session ? (
-              <SessionToolbar
-                scope={scope}
-                projectId={projectId}
-                contextLabel={[machineName, projects.data?.find((project) => project.id === projectId)?.name ?? projectId].filter(Boolean).join(" · ")}
-                query={{ ...snapshot, data: session }}
-                command={command}
-                blocked={blocked}
-                onSettings={() => setSettings(true)}
-                onRefresh={refresh}
-                onCommand={dispatch}
-              />
-            ) : null} feedback={visible ? <QueryState query={snapshot} /> : null}>
+            {visible && needsRepair ? <View style={{ flex: 1 }}><QueryState query={snapshot} /></View> : (
+            <View style={{ flex: 1 }}>
+            <SessionAgents session={session} scope={scope} disabled={blocked} onCommand={dispatch}>
+            {(agentsChip) => <View style={{ flex: 1 }}>
             <SessionTranscript
+              header={agentsChip}
               findOpen={findOpen}
               onFindOpenChange={setFindOpen}
               navigation={navigation.current}
@@ -240,8 +270,8 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineNam
               command={command}
               onCommand={dispatch}
               onReceiptHandled={receiptHandled}
-            />
-            </WorkspaceFrame>
+            /></View>}
+            </SessionAgents></View>)}
           </SessionKeyboardFrame>
           {settings && session && projectId ? (
             <SessionSettings

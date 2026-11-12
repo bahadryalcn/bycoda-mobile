@@ -1,11 +1,11 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import Animated from "react-native-reanimated";
-import { Body, Stack, Loading, Notice, Section, SegmentedControl } from "@/ui/primitives";
+import { Body, Stack, Skeleton, Notice, Section, SegmentedControl } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
-import { colors, space } from "@/ui/tokens";
-import { chatTextStyles } from "@/ui/chat-styles";
+import { space } from "@/ui/tokens";
+import { useChatTextStyles } from "@/ui/chat-styles";
 
 import { useChatAppearance } from "@/state/chat-appearance";
 import { ChatMessage, ChatResponse, chatUserBubbleStyle } from "@/ui/chat";
@@ -15,7 +15,7 @@ import { chatAppearanceFeedback } from "./chat-appearance-feedback";
 import { useAsyncAction } from "@/state/actions";
 
 export function ChatAppearanceSettings() {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const size = useChatAppearance((state) => state.textSize);
   const hydrated = useChatAppearance((state) => state.hydrated);
@@ -26,7 +26,7 @@ export function ChatAppearanceSettings() {
   const [retryError, setRetryError] = useState<Error | null>(null);
   const retrying = retryError !== null;
   const feedback = chatAppearanceFeedback(storageError ?? retryError, copy);
-  const text = chatTextStyles(size);
+  const text = useChatTextStyles(size);
   const messages = [
     {
       id: "appearance-preview-user",
@@ -79,7 +79,7 @@ export function ChatAppearanceSettings() {
           }}
         />
       </Section>
-      {!hydrated ? <Loading label={copy("Yükleniyor…", "Loading…")} /> : null}
+      {!hydrated ? <Skeleton /> : null}
       {feedback ? (
         <Notice
           tone="warning"
@@ -94,11 +94,11 @@ export function ChatAppearanceSettings() {
         />
       ) : null}
       <Section title={copy("Önizleme", "Preview")}>
-        <Stack style={{ gap: space.lg }}>
+        <Stack style={{ gap: space.lg, paddingBottom: space.lg }}>
           <ChatMessage
             role="user"
             message={messages[0]}
-            style={{ ...chatUserBubbleStyle(), gap: space.xs }}
+            style={{ ...chatUserBubbleStyle(colors), gap: space.xs }}
           >
             <Body style={[text.author, { color: colors.muted }]}>{copy("Sen", "You")}</Body>
             <ChatResponse message={messages[0]} />

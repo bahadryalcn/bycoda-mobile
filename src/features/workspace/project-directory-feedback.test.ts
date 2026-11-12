@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
-vi.mock("@/ui/primitives", () => ({ Notice: "Notice", QueryState: "QueryState" }));
+vi.mock("@/ui/primitives", () => ({ StateView: "StateView", QueryState: "QueryState" }));
+vi.mock("react-native", () => ({ View: "View" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 import { router } from "expo-router";
-import { ProjectDirectoryFeedback } from "./project-directory-feedback";
+import { ProjectDirectoryFeedback, ProjectDirectorySlot } from "./project-directory-feedback";
+// The slot always renders a stable container; its child is the state (or nothing).
+const slot = (props: Parameters<typeof ProjectDirectorySlot>[0]) => ProjectDirectorySlot(props).props.children;
 
 describe("directory feedback ownership", () => {
   it("honors embedded connection recovery for waiting and forwards it for exact query failures", () => {
@@ -15,8 +18,8 @@ describe("directory feedback ownership", () => {
   });
   it("shows one reconnect explanation instead of paused/loading feedback as well", () => {
     const view = ProjectDirectoryFeedback({ query: { fetchStatus: "paused", isPending: true }, readiness: "waiting" });
-    expect(view.type).toBe("Notice");
-    expect(view.props.message).toContain("Waiting for a connection");
+    expect(view.type).toBe("StateView");
+    expect(view.props.title).toContain("Waiting for a connection");
     view.props.action.onPress();
     expect(router.push).toHaveBeenCalledWith("/machines");
   });
@@ -31,11 +34,11 @@ describe("directory feedback ownership", () => {
   it("keeps synchronization recovery local and prevents duplicate refetches", () => {
     const refetch = vi.fn();
     const view = ProjectDirectoryFeedback({ query: { refetch }, privacyUnavailable: true });
-    expect(view.type).toBe("Notice");
-    view.props.onRetry();
+    expect(view.type).toBe("StateView");
+    view.props.action.onPress();
     expect(refetch).toHaveBeenCalledOnce();
     const busy = ProjectDirectoryFeedback({ query: { refetch, isFetching: true }, privacyUnavailable: true });
-    busy.props.onRetry();
+    busy.props.action.onPress();
     expect(refetch).toHaveBeenCalledOnce();
   });
 
@@ -43,5 +46,15 @@ describe("directory feedback ownership", () => {
     const view = ProjectDirectoryFeedback({ query: { status: "success", data: [] }, empty: true, emptyTitle: "No projects", loading: "content" });
     expect(view.type).toBe("QueryState");
     expect(view.props).toMatchObject({ empty: true, emptyTitle: "No projects", loading: "content" });
+  });
+
+  it("renders nothing above data, a centered state for the empty region, and never hides an error behind empty data", () => {
+    expect(slot({ query: { status: "success", data: [{}] } })).toBeNull();
+    expect(slot({ query: { fetchStatus: "paused", data: [{}] } })).toBeNull();
+    expect(ProjectDirectoryFeedback(slot({ query: {}, readiness: "waiting" })!.props).type).toBe("StateView");
+    expect(ProjectDirectoryFeedback(slot({ query: {}, privacyUnavailable: true })!.props).type).toBe("StateView");
+    const failed = ProjectDirectoryFeedback(slot({ query: { data: [], error: new Error("Read failed") } })!.props);
+    expect(failed.type).toBe("QueryState");
+    expect(failed.props.query.data).toBeUndefined();
   });
 });

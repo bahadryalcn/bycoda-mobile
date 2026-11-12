@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   write: vi.fn(async (_params: unknown) => undefined), refetch: vi.fn(),
 }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children), BackHandler: { addEventListener: () => ({ remove() {} }) } }));
+vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => false }));
 vi.mock("expo-router", () => ({ useFocusEffect: () => undefined }));
 vi.mock("@/state/connection-scope", () => { const scope = { isCurrent: () => state.epoch }; return { useConnectionScope: () => scope }; });
 vi.mock("@/ui/private-access", () => ({ usePrivateContentAccess: () => ({ allowed: state.allowed, check: () => state.allowed }), PrivateContentAccessProvider: ({ children }: PropsWithChildren) => children }));
@@ -23,7 +24,7 @@ vi.mock("@/ui/search-field", () => ({ CollectionToolbar: ({ field, actions }: { 
 vi.mock("@/ui/action-review-sheet", () => ({ ActionReviewSheet: ({ children, onConfirm, onClose }: PropsWithChildren<{ onConfirm: () => void; onClose: () => void }>) => {
   state.confirmation = onConfirm; state.dismiss = onClose; return createElement("aside", null, children);
 } }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/tokens", () => ({ space: { sm: 8 } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: (_title: string, _text: string, _label: string, callback: () => void) => { state.confirmation = callback; } }));
@@ -32,16 +33,22 @@ vi.mock("@/state/queries", () => ({
   useHostQuery: () => ({ isSuccess: !state.queryError, isError: !!state.queryError, isEnabled: state.enabled, fetchStatus: state.paused ? "paused" : "idle", error: state.queryError, data: state.rows, refetch: state.refetch }),
   useHostMutation: () => ({ mutateAsync: state.write, error: state.error, isPending: state.pending }),
 }));
+vi.mock("lucide-react-native/icons/arrow-left", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/arrow-down-to-line", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/info", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => { state.commands.set(label, onPress); return createElement("button", { disabled, onClick: onPress }, label); };
-  return { Stack: wrapper, Body: wrapper, Row: wrapper, Button: button, NavigationRow: button,
+  return { Stack: wrapper, Body: wrapper, Row: wrapper, Button: button, IconButton: button, NavigationRow: button,
     QueryState: () => null, MutationState: () => null,
     ActionMenu: ({ actions }: { actions: Array<{ key: string; label: string; disabled?: boolean; onPress: () => void } | false> }) => createElement("nav", null, ...actions.filter(Boolean).map(a => { const item = a as Exclude<typeof a, false>; state.commands.set(item.label, item.onPress); return createElement("button", { key: item.key, disabled: item.disabled, onClick: item.onPress }, item.label); })),
     Field: (props: NonNullable<typeof state.field>) => { state.field = props; return createElement("input", { value: props.value, onChange: e => props.onChangeText(e.currentTarget.value) }); },
     SelectField: (props: NonNullable<typeof state.mode>) => { state.mode = props; return null; },
     FormActions: ({ submitLabel, onSubmit, onCancel, cancelLabel, disabled }: { submitLabel: string; onSubmit: () => void; onCancel: () => void; cancelLabel: string; disabled: boolean }) => createElement("footer", null, button({ label: submitLabel, onPress: onSubmit, disabled }), button({ label: cancelLabel, onPress: onCancel })),
-    Notice: ({ message }: { message: string }) => createElement("div", null, message),
+    Notice: ({ message }: { message: string }) => createElement("div", null, message), StateView: ({ title }: { title: string }) => createElement("div", null, title),
     Sheet: ({ visible, children }: PropsWithChildren<{ visible: boolean }>) => visible ? wrapper({ children }) : null,
     ScreenList: ({ header, actions, context, data, renderItem }: { header: React.ReactNode; actions: React.ReactNode; context: React.ReactNode; data: unknown[]; renderItem: (args: { item: unknown }) => React.ReactNode }) =>
       createElement("main", null, context, actions, header, ...data.map((item) => renderItem({ item }))),

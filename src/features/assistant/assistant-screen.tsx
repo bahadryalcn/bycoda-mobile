@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { View } from "react-native";
 import { router, Stack } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCopy } from "@/ui/copy";
@@ -20,6 +21,14 @@ import { useConnectionScope } from "@/state/connection-scope";
 import { useProjectList } from "../workspace/use-project-directory";
 import { remoteErrorKind } from "@/ui/error-message";
 import { AssistantMobileClient, type OwnerPresence } from "./assistant-client";
+import { SessionKeyboardFrame } from "../workspace/session-keyboard-frame";
+import { usePendingApprovalCount } from "../approvals/use-approvals";
+import { AssistantComposer } from "./assistant-composer";
+import { AssistantJobsSection } from "./assistant-jobs-section";
+import { AssistantMessageRow } from "./assistant-message-row";
+import { AssistantQuestionsSection } from "./assistant-questions-section";
+import { jobNeedsAttention, jobVisible } from "./assistant-jobs";
+import { ownerQuestionActionable } from "./assistant-question";
 import {
   assistantHistoryPage,
   assistantMessageVisible,
@@ -32,7 +41,7 @@ import type {
   AssistantThread,
 } from "../../../../src/shared/model/host-contracts/assistant";
 
-export function AssistantScreen() {
+export function AssistantScreen({ focusJobId }: { focusJobId?: string } = {}) {
   const machine = useActiveMachine(),
     connection = useConnectionScope(),
     transport = useHostClient();
@@ -50,25 +59,35 @@ export function AssistantScreen() {
   const copy = useCopy();
   if (!machine)
     return (
-      <Screen title={copy("Asistan", "Assistant")}>
-        <Empty
-          title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
-          action={{
-            label: copy("Bilgisayar bağla", "Connect a computer"),
-            onPress: () => router.push("/machines"),
-          }}
-        />
+      <Screen title={copy("Asistan", "Assistant")} scroll={false}>
+        <View style={{ flex: 1 }}>
+          <Empty
+            compact={false}
+            illustration="connect-computer"
+            title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
+            detail={copy("Asistan, bağlı bilgisayarındaki oturumunla çalışır.", "The assistant works with your session on a connected computer.")}
+            action={{
+              label: copy("Bilgisayar bağla", "Connect a computer"),
+              onPress: () => router.push("/machines"),
+            }}
+          />
+        </View>
       </Screen>
     );
   if (!client)
     return (
-      <Screen title={copy("Asistan", "Assistant")}>
-        <Notice
-          message={copy(
-            "Asistan için bilgisayar erişimini doğrulayın.",
-            "Verify access to this computer to use the assistant.",
-          )}
-        />
+      <Screen title={copy("Asistan", "Assistant")} scroll={false}>
+        <View style={{ flex: 1 }}>
+          <Empty
+            compact={false}
+            illustration="permission"
+            title={copy("Erişim gerekiyor", "Access needed")}
+            detail={copy(
+              "Asistan için bilgisayar erişimini doğrulayın.",
+              "Verify access to this computer to use the assistant.",
+            )}
+          />
+        </View>
       </Screen>
     );
   return (
@@ -76,8 +95,10 @@ export function AssistantScreen() {
       key={connection.token}
       client={client}
       machineId={machine.id}
+      environmentId={connection.review!.environmentId}
       machineName={machine.name}
       sourceKey={connection.token}
+      focusJobId={focusJobId}
       current={() => connection.isCurrent()}
     />
   );
@@ -86,14 +107,18 @@ export function AssistantScreen() {
 function AssistantWorkspace({
   client,
   machineId,
+  environmentId,
   machineName,
   sourceKey,
+  focusJobId,
   current,
 }: {
   client: AssistantMobileClient;
   machineId: string;
+  environmentId: string;
   machineName: string;
   sourceKey: string;
+  focusJobId?: string;
   current(): boolean;
 }) {
   const copy = useCopy(),
@@ -125,6 +150,14 @@ function AssistantWorkspace({
   const state = current() && !denied(snapshot.error) ? snapshot.data?.snapshot : undefined;
   const threads = (state?.threads ?? []).filter((row) => assistantThreadVisible(row, access));
   const visibleThread = state && thread && assistantThreadVisible(thread, access) ? thread : null;
+  // A job a tapped push pointed at is listed first.
+  const jobs = (state?.jobs ?? [])
+    .filter((job) => jobNeedsAttention(job) && jobVisible(job, access))
+    .sort((a, b) => Number(b.id === focusJobId) - Number(a.id === focusJobId));
+  const pendingApprovals = usePendingApprovalCount();
+  const questions = (state?.ownerQuestions ?? []).filter((question) =>
+    ownerQuestionActionable(question, access.visible, access.ready),
+  );
   const [pages, setPages] = useState<
       Record<string, { version: number; messages: AssistantMessage[] }>
     >({}),
@@ -159,6 +192,11 @@ function AssistantWorkspace({
     : history.data?.thread && history.data.thread.id === visibleThread?.id
       ? history.data.thread
       : visibleThread;
+  const refreshAll = async () => {
+    await snapshot.refetch();
+    if (visibleThread) await history.refetch();
+  };
+  const writable = current() && active && !!state;
   const perform = async (kind: NonNullable<typeof busyKind>, action: () => Promise<void>) => {
     if (pending.current || !current() || !active) return;
     pending.current = true;
@@ -266,6 +304,13 @@ function AssistantWorkspace({
     <>
       <Body muted>{machineName}</Body>
       <QueryState query={snapshot} />
+      {pendingApprovals ? (
+        <Button
+          label={copy("Onaylar ({p0} bekliyor)", "Approvals ({p0} waiting)", { p0: pendingApprovals })}
+          tone="primary"
+          onPress={() => router.push("/approvals")}
+        />
+      ) : null}
       {state ? (
         <Section title={copy("Durumum", "My presence")}>
           <Row>
@@ -304,6 +349,27 @@ function AssistantWorkspace({
             </>
           ) : null}
         </Section>
+      ) : null}
+      {state ? (
+        <AssistantJobsSection
+          client={client}
+          jobs={jobs}
+          holds={state.jobHolds}
+          current={current}
+          enabled={writable}
+          onChanged={refreshAll}
+        />
+      ) : null}
+      {state ? (
+        <AssistantQuestionsSection
+          client={client}
+          questions={questions}
+          machineId={machineId}
+          environmentId={environmentId}
+          current={current}
+          enabled={writable}
+          onChanged={refreshAll}
+        />
       ) : null}
       {issue && !presenceUnknown ? (
         <Notice
@@ -382,6 +448,7 @@ function AssistantWorkspace({
           {!history.isPending && !messages.length ? (
             <Empty
               compact
+              illustration="chat-empty"
               title={copy("Gösterilebilen mesaj yok", "No messages are available to display")}
             />
           ) : null}
@@ -401,22 +468,31 @@ function AssistantWorkspace({
   return (
     <>
     <Stack.Screen options={{ title }} />
+    <SessionKeyboardFrame
+      composer={
+        visibleThread && writable ? (
+          <AssistantComposer
+            key={visibleThread.id}
+            client={client}
+            machineId={machineId}
+            environmentId={environmentId}
+            threadId={visibleThread.id}
+            current={current}
+            enabled={writable}
+            onSettled={refreshAll}
+          />
+        ) : null
+      }
+    >
     <ScreenList
       title={title}
       header={header}
       data={messages}
       keyExtractor={(message) => message.id}
       renderItem={({ item }) => (
-        <Section
-          title={`${item.role === "user" ? copy("Siz", "You") : copy("Asistan", "Assistant")} · ${item.via === "voice" ? copy("Ses", "Voice") : copy("Metin", "Text")}`}
-        >
-          <Body>{item.text}</Body>
-        </Section>
+        <AssistantMessageRow message={item} voiceLabel={copy("Sesle", "By voice")} />
       )}
-      refresh={async () => {
-        await snapshot.refetch();
-        if (visibleThread) await history.refetch();
-      }}
+      refresh={refreshAll}
       ListFooterComponent={
         <Body muted>
           {copy(
@@ -426,6 +502,7 @@ function AssistantWorkspace({
         </Body>
       }
     />
+    </SessionKeyboardFrame>
     </>
   );
 }

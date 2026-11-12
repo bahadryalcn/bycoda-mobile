@@ -19,7 +19,7 @@ vi.mock("@/ui/action-review-sheet",()=>({ActionReviewSheet:({children,onClose,on
 vi.mock("@/ui/primitives",()=>{
  const wrapper=({children}:any)=>createElement("div",null,children);
  const button=({label,onPress,disabled}:any)=>{state.commands.set(label,onPress);return createElement("button",{onClick:onPress,disabled},label);};
- return {Stack:wrapper,Body:wrapper,Disclosure:wrapper,Sheet:wrapper,Notice:({message}:any)=>createElement("p",null,message),ErrorText:({error}:any)=>error?createElement("p",null,error.message):null,
+ return {Stack:wrapper,Body:wrapper,Disclosure:wrapper,Sheet:wrapper,Notice:({message}:any)=>createElement("p",null,message), StateView: ({ title }:any) => createElement("p",null,title),ErrorText:({error}:any)=>error?createElement("p",null,error.message):null,
  QueryState:({query}:any)=>query.error?createElement("p",null,query.error.message):null,NavigationRow:button,
  FormActions:({submitLabel,onSubmit,disabled,feedback}:any)=>createElement("footer",null,feedback,button({label:submitLabel,onPress:onSubmit,disabled})),
  ActionMenu:({actions}:any)=>createElement("nav",null,...actions.filter(Boolean).map((a:any)=>button(a))),

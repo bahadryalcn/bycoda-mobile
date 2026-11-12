@@ -8,14 +8,14 @@ vi.mock("react-native",()=>({View:({children}:PropsWithChildren)=>createElement(
 vi.mock("react-native-reanimated",()=>({default:{View:({children}:PropsWithChildren)=>createElement("div",null,children)}}));
 vi.mock("expo-router",()=>({router:{push:vi.fn()}}));
 vi.mock("expo-constants",()=>({default:{expoConfig:{version:"1.0",android:{package:"com.bycoda.mobile"},extra:{engagement:{androidPlayStoreUrl:"https://play.google.com/store/apps/details?id=com.bycoda.mobile"}}}}}));
-vi.mock("@/ui/theme",()=>({useMobileTheme:()=>{}}));vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
-vi.mock("@/ui/styles",()=>({uiStyles:{}}));vi.mock("@/ui/tokens",()=>({colors:{},space:{}}));vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));vi.mock("@/ui/icon-tile",()=>({IconTile:()=>null}));
-vi.mock("lucide-react-native/icons/star",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/share-2",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/globe",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/message-square",()=>({default:()=>null}));
+vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
+vi.mock("@/ui/styles",()=>({uiStyles:{}}));vi.mock("@/ui/tokens",()=>({colors:{},space:{},lineHeight:{}}));vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));vi.mock("@/ui/icon-tile",()=>({IconTile:()=>null}));
+vi.mock("lucide-react-native/icons/star",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/share-2",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/globe",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/message-square",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/flag",()=>({default:()=>null}));
 vi.mock("@/ui/primitives",()=>{
  const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);
- return {Body:Wrapper,Stack:Wrapper,NavigationGroup:Wrapper,Disclosure:({label,children}:PropsWithChildren<{label:string}>)=>{const[open,setOpen]=useState(false);return createElement("div",null,createElement("button",{"aria-expanded":open,onClick:()=>setOpen(!open)},label),open?children:null);},Section:({title,children}:PropsWithChildren<{title:string}>)=>createElement("section",null,createElement("h2",null,title),children),
+ return {Body:Wrapper,Heading:Wrapper,Stack:Wrapper,NavigationGroup:Wrapper,Disclosure:({label,children}:PropsWithChildren<{label:string}>)=>{const[open,setOpen]=useState(false);return createElement("div",null,createElement("button",{"aria-expanded":open,onClick:()=>setOpen(!open)},label),open?children:null);},Section:({title,children}:PropsWithChildren<{title:string}>)=>createElement("section",null,createElement("h2",null,title),children),
  NavigationRow:({label,detail,onPress,disabled}:{label:string;detail?:string;onPress:()=>void;disabled?:boolean})=>{fixture.handlers.set(label,onPress);return createElement("button",{onClick:onPress,disabled},label,detail?createElement("span",null,detail):null);},
- ErrorText:({error}:{error?:string})=>error?createElement("p",{role:"alert"},error):null,
+ Notice:({message}:{message:string})=>createElement("p",{role:"alert"},message),
  MutationState:({mutation}:{mutation:{error?:Error}})=>mutation.error?createElement("p",{role:"alert"},mutation.error.message):null,
  };
 });

@@ -19,7 +19,7 @@ vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
   return { Stack:wrapper, Body: wrapper, Button: button, ActionMenu:({actions}:any)=>createElement("nav",null,...actions.map((a:any)=>button({label:a.label,disabled:a.disabled,onPress:a.onPress}))), Row: wrapper, ErrorText: () => null, QueryState: () => null,
-    Notice: ({ message }: { message: string }) => createElement("div", null, message),
+    Notice: ({ message }: { message: string }) => createElement("div", null, message), StateView: ({ title }: { title: string }) => createElement("div", null, title),
     Sheet: ({ children, footer }: PropsWithChildren<{ footer: React.ReactNode }>) => createElement("div", null, children, footer),
     SelectField: ({ label, value, disabled, onChange, options }: { label: string; value: string; disabled?: boolean; onChange: (value: string) => void; options: { value: string; label: string }[] }) => { state.callbacks.set(label,onChange); return createElement("select", { "aria-label": label, value, disabled, onChange: (event: React.ChangeEvent<HTMLSelectElement>) => onChange(event.target.value) }, options.map((option) => createElement("option", { key: option.value, value: option.value }, option.label))); },
     ScreenList: ({ header, data, renderItem }: { header: React.ReactNode; data: unknown[]; renderItem: (args: { item: unknown }) => React.ReactNode }) => createElement("div", null, header, ...data.map((item, key) => createElement("div", { key }, renderItem({ item })))),

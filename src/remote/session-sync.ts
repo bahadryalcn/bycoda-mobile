@@ -25,30 +25,45 @@ const MAX_TRANSFER_UNITS = 32 * 1024 * 1024;
 function requireSessionRead(value: unknown, sessionId: string, projectId: string): HostSession {
   const parsed = SessionViewSchema.parse(value);
   const session = parsed.session;
-  if (
-    parsed.projectId !== projectId ||
-    session.id !== sessionId ||
-    !Array.isArray(session.blocks) ||
-    typeof session.title !== "string" ||
-    typeof session.cwd !== "string" ||
-    typeof session.model !== "string" ||
-    !SessionProviderSchema.safeParse(session.harness).success ||
-    !SessionRuntimeModeSchema.safeParse(session.runtimeMode).success ||
-    !session.modelSettings ||
-    typeof session.modelSettings !== "object" ||
-    Array.isArray(session.modelSettings) ||
-    Object.values(session.modelSettings).some((value) => typeof value !== "string") ||
-    session.blocks.some(
-      (block) =>
-        !block ||
-        typeof block !== "object" ||
-        Array.isArray(block) ||
-        typeof block.id !== "string" ||
-        typeof block.role !== "string" ||
-        typeof block.text !== "string",
-    )
-  )
+  const settings = session.modelSettings;
+  // Field names only: the reason is logged for diagnosis and never carries content.
+  const failed =
+    parsed.projectId !== projectId
+      ? "projectId"
+      : session.id !== sessionId
+        ? "session.id"
+        : !Array.isArray(session.blocks)
+          ? "blocks"
+          : typeof session.title !== "string"
+            ? "title"
+            : typeof session.cwd !== "string"
+              ? "cwd"
+              : typeof session.model !== "string"
+                ? "model"
+                : !SessionProviderSchema.safeParse(session.harness).success
+                  ? "harness"
+                  : !SessionRuntimeModeSchema.safeParse(session.runtimeMode).success
+                    ? "runtimeMode"
+                    : !settings ||
+                        typeof settings !== "object" ||
+                        Array.isArray(settings) ||
+                        Object.values(settings).some((value) => typeof value !== "string")
+                      ? "modelSettings"
+                      : session.blocks.some(
+                            (block) =>
+                              !block ||
+                              typeof block !== "object" ||
+                              Array.isArray(block) ||
+                              typeof block.id !== "string" ||
+                              typeof block.role !== "string" ||
+                              typeof block.text !== "string",
+                          )
+                        ? "block fields"
+                        : undefined;
+  if (failed) {
+    console.warn(`Transcript read rejected: ${failed}`);
     throw new Error("Transcript stream identity or read fields changed.");
+  }
   // Inner feature extensions remain the explicitly opaque read boundary. This
   // checks required UI fields, not a claim that every Block DTO has migrated.
   return parsed as unknown as HostSession;

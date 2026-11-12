@@ -6,17 +6,20 @@ const fixture = vi.hoisted(() => ({
   history: {} as Record<string, any>, branches: {} as any,
   reads: [] as any[], events: [] as string[], choose: vi.fn(), create: vi.fn(), name: vi.fn(), busy: false,
 }));
+vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
+vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children),
   BackHandler: { addEventListener: () => ({ remove: () => undefined }) } }));
 vi.mock("expo-router", () => ({ useFocusEffect: () => undefined, router: { push: () => fixture.events.push("route") } }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => false }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/tokens", () => ({ space: {}, colors: {} }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: () => null }));
 vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
-vi.mock("./shared", () => ({ rowInset: 16, GroupedListRow: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
+vi.mock("./shared", () => ({ rowInset: 16, relativeTime: () => "now", GroupedListRow: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("./git-queries", () => ({ useGitBranches: () => fixture.branches }));
 vi.mock("./git-history-queries", () => ({ useGitHistoryRead: (_scope: unknown, read: any) => { fixture.reads.push(read); return fixture.history[read.kind]; } }));
 vi.mock("./use-diff-preview", () => ({ useDiffPreview: () => null }));
@@ -27,12 +30,14 @@ vi.mock("@/ui/feedback", () => ({
   ErrorNotice: ({ error, action }: any) => createElement("div", null, error.message, action ? createElement("button", { onClick: action.onPress }, action.label) : null),
   Loading: () => createElement("div", null, "Loading"), Skeleton: () => createElement("div", null, "Loading"),
 }));
+vi.mock("lucide-react-native/icons/arrow-left", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
 vi.mock("@/ui/primitives", async () => {
   const { QueryState } = await import("@/ui/query-state");
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: any) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);
   const Input = ({ label, value, onChangeText }: any) => createElement("input", { "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) });
-  return { QueryState, Body: Group, Disclosure: Group, Button, NavigationRow: Button, SearchField: Input, IdentifierField: Input,
+  return { QueryState, Body: Group, CodeText: Group, Badge: Group, IconButton: Button, Disclosure: Group, Button, NavigationRow: Button, SearchField: Input, IdentifierField: Input,
     Sheet: ({ children, footer }: any) => createElement("section", null, children, footer),
     ScreenList: ({ header, footer, data, renderItem }: any) => createElement("main", null, createElement("header", null, header),
       createElement("section", null, data.map((item: unknown, index: number) => createElement("div", { key: index }, renderItem({ item, index })))), footer),
@@ -67,17 +72,17 @@ it("clears a no-match commit filter without changing the loaded request or openi
 });
 it("gives cached list and commit-file errors precedence over empty success messages", async () => {
   fixture.history.history = { ...ok({ commits: [] }), error: new Error("Read failed") }; await history();
-  expect(container.textContent).toContain("Could not refresh"); expect(container.textContent).not.toContain("No commits found");
+  expect(container.textContent).toContain("Something went wrong"); expect(container.textContent).not.toContain("No commits found");
   fixture.history.history = ok({ commits: [commit] }); await history(); await click("Reviewed change");
   fixture.history.files = { ...ok([]), error: new Error("Read failed") }; await history();
-  expect(container.textContent).toContain("Could not refresh"); expect(container.textContent).not.toContain("No file changes in this commit");
+  expect(container.textContent).toContain("Something went wrong"); expect(container.textContent).not.toContain("No file changes in this commit");
   fixture.history.files = ok([]); await history(); expect(container.textContent).toContain("No file changes in this commit");
 });
 it("uses the same error-before-empty rule for blame while preserving the immutable revision", async () => {
-  await history(); await click("Reviewed change"); await click("src/app.ts"); await click("Blame");
+  await history(); await click("Reviewed change"); await click("app.ts"); await click("Blame");
   expect(container.textContent).toContain("No blame lines");
   fixture.history.blame = { ...ok([]), error: new Error("Read failed") }; await history();
-  expect(container.textContent).not.toContain("No blame lines"); expect(container.textContent).toContain("Could not refresh");
+  expect(container.textContent).not.toContain("No blame lines"); expect(container.textContent).toContain("Something went wrong");
   expect(fixture.reads.filter((r) => ["diff", "blame"].includes(r.kind)).every((r) => r.sha === commit.sha && r.path === "src/app.ts")).toBe(true);
 });
 it("restores branch results without touching the new-branch draft or dispatching Git operations", async () => {

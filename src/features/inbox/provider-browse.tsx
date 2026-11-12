@@ -5,7 +5,7 @@ import { ProviderJiraBoards } from "./jira-board-screen";
 import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import { SearchField, SearchToolbar } from "@/ui/search-field";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
-import { ActionMenu, Button, Notice, QueryState, Sheet, ToggleField, NavigationGroup } from "@/ui/primitives";
+import { ActionMenu, Button, Notice, QueryState, Sheet, StateView, ToggleField, NavigationGroup } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { Scope } from "../management/common";
@@ -103,10 +103,10 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
   const unavailableWithoutCause = scopeCurrent && !readAllowed && !availability.error && availability.data?.available === true && getQueryPresentation(availability) === "ready";
   const accessFeedback = <>
     {!scopeCurrent || unavailableWithoutCause ? <>
-      <Notice message={accessMessage} />
+      <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")} description={accessMessage} />
       {unavailableWithoutCause ? <Button tone="quiet" label={copy("Yenile","Refresh")} onPress={()=>{void refresh();}} /> : null}
     </> : <QueryState query={{...availability, refetch: refresh}}
-      empty={availability.data?.available === false} emptyTitle={copy("Bilgisayardaki Bycoda açık olmalı", "Open Bycoda on your computer")}
+      empty={availability.data?.available === false} emptyIllustration="connect-computer" emptyTitle={copy("Bilgisayardaki Bycoda açık olmalı", "Open Bycoda on your computer")}
       emptyDetail={copy("GitHub, GitLab, Azure DevOps, Linear ve Jira erişimi bilgisayardaki oturumundan alınır. Bycoda’yı aç veya güncelle; bağlantı otomatik kontrol edilir.",
         "Provider access uses your desktop session. Open or update Bycoda on this computer; availability is checked automatically.")}
       onManageConnections={connectionsOpen ? manageConnections : undefined} />}
@@ -143,7 +143,7 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
             </>} />
           <AppliedFilters result={items.data ? `${items.data.items.length} ${copy("kayıt","items")}` : undefined}
             filters={[assigned&&copy("Yalnız bana atananlar","Assigned to me only"),all&&copy("Kapalı kayıtları da göster","Include closed items")]} />
-          <QueryState query={{...items,refetch:retryItems}} empty={empty} emptyTitle={copy("Bu filtrede kayıt yok","No items match these filters")}
+          <QueryState query={{...items,refetch:retryItems}} empty={empty} searching={!!(search.trim()||assigned||all)} emptyIllustration="inbox-empty" emptyTitle={copy("Bu filtrede kayıt yok","No items match these filters")}
             emptyAction={search.trim()||assigned||all?{label:copy("Filtreleri temizle","Clear filters"),onPress:()=>dispatch({type:"clear-filters"})}:undefined} />
           {items.data ? <ProviderInboxFeedback result={items.data} retrying={items.isFetching} onRetry={retryItems} /> : null}
         </> : null}

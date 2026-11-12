@@ -4,15 +4,16 @@ import { AppState, View } from "react-native";
 import { focusManager, onlineManager } from "@tanstack/react-query";
 import NetInfo from "@react-native-community/netinfo";
 import { useMachines } from "./state/machines";
-import { uiStyles } from "./ui/styles";
 import { Loading } from "./ui/primitives";
 import { useSecurity } from "./state/security";
 import { useAttachmentReleaseRetry } from "./state/queries";
 import type { LifecycleProps } from "./app-types";
 import { invalidateProjectPrivacy } from "./features/workspace/project-privacy-cache";
+import { WidgetCoordinator } from "./features/widgets";
+import { PushCoordinator } from "./features/push";
 
 export function AppLifecycle({ children, cache }: LifecycleProps) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   useAttachmentReleaseRetry();
   const hydrate = useMachines((s) => s.hydrate);
   const hydrated = useMachines((s) => s.hydrated);
@@ -78,5 +79,11 @@ export function AppLifecycle({ children, cache }: LifecycleProps) {
         <Loading label="bycoda" centered />
       </View>
     );
-  return children;
+  return (
+    <>
+      <WidgetCoordinator />
+      <PushCoordinator />
+      {children}
+    </>
+  );
 }

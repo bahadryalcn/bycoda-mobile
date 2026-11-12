@@ -1,10 +1,16 @@
 import type { HostDescriptor, RemoteProvider } from "./host";
 
+/** One way to reach a computer: a pinned local-network listener or an HTTPS address. */
+export type MobileRoute = { endpoint: string; lanKey?: string };
+
 export type MobileMachine = {
   id: string;
   name: string;
+  /** The route currently in use. Always one of `routes` when those are saved. */
   endpoint: string;
   lanKey?: string;
+  /** Every paired route for this computer, e.g. local network and Tailscale. */
+  routes?: MobileRoute[];
   environmentId: string;
   platform?: HostDescriptor["platform"];
   providers?: RemoteProvider[];

@@ -1,14 +1,15 @@
 import { scrollKeyboardDismissMode } from "./scroll-keyboard";
 import { useMobileTheme } from "./theme";
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ChevronsUpDown from "lucide-react-native/icons/chevrons-up-down";
-import { FlatList, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text, View, type HostInstance } from "react-native";
 import { Pressable } from "react-native";
 import Check from "lucide-react-native/icons/check";
 import { DisclosureChevron } from "./disclosure-motion";
 import Square from "lucide-react-native/icons/square";
 import CheckSquare from "lucide-react-native/icons/square-check-big";
 import { Sheet } from "./dialogs";
+import { SheetGuardContext } from "./sheet-guard-context";
 import { Body } from "./typography";
 import { Button } from "./buttons";
 import { SearchField } from "./search-field";
@@ -18,9 +19,13 @@ import { usePrivateContentAccess, type PrivateContentAccess } from "./private-ac
 import { normalizeSearch } from "./search-matching";
 import { useFilteredListScrollMemory } from "./use-list-scroll-memory";
 import { useCopy } from "./copy";
-import { colors, metrics, opacity, radii, semanticColors, space } from "./tokens";
-import { uiStyles } from "./styles";
+import { HintLabel, UnitHint, isUnitHint } from "./info-hint";
+import { useInNavigationGroup } from "./navigation-row";
+import { metrics, opacity, radii, space, gapIcon } from "./tokens";
 import { filterSelection, selectionLabels, toggleSelection, type SelectionOption } from "./selection-model";
+
+/** Inline option lists stay inside the sheet scroller; a longer list asks for a search. */
+const INLINE_LIMIT = 60;
 
 type SelectionFieldOption<T extends string> = SelectionOption<T> & { icon?: ReactNode };
 
@@ -79,10 +84,10 @@ function SelectionField<T extends string>({
   variant = "field",
   icon,
 }: MultiSelectProps<T> & { multiple?: boolean }) {
-  useMobileTheme();
+  const { colors, semanticColors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale(), access = usePrivateContentAccess();
-  const trigger = useRef<View>(null);
+  const trigger = useRef<HostInstance>(null);
   const mounted = useRef(false);
   useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [opening, setOpening] = useState<{ access: PrivateContentAccess } | null>(null);
@@ -129,9 +134,77 @@ function SelectionField<T extends string>({
   };
   const position = useFilteredListScrollMemory<SelectionFieldOption<T>>(searchKey, open && available, filtered.length, { suspended: !open || !available });
   const row = variant === "row";
+  const grouped = useInNavigationGroup();
+  // Inside a Sheet the options expand under the trigger: one overlay, one scroll owner.
+  const inSheet = useContext(SheetGuardContext) !== null;
+  const inline = inSheet && open && available;
+  const gutter = inSheet ? 0 : space.screen;
+  const controls = searchEnabled || multiple ? (
+    <View style={[uiStyles.header, { paddingHorizontal: gutter, flexShrink: 0 }]}>
+      {searchEnabled ? <SearchField
+        label={copy("Seçenek ara", "Search options")}
+        value={search} onChangeText={changeSearch} /> : null}
+      {multiple ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.row, minHeight: 34 }}>
+          <Body muted style={[uiStyles.grow, uiStyles.caption]}>
+            {max !== undefined
+              ? copy("{p0}/{p1} seçildi", "{p0}/{p1} selected", { p0: values.length, p1: max })
+              : copy("{p0} seçildi", "{p0} selected", { p0: values.length })}
+          </Body>
+          {values.length ? (
+            <Button density="compact" disabled={!available}
+              label={copy("Seçimi temizle", "Clear selection")} onPress={clearSelection} />
+          ) : null}
+          {inSheet ? <Button density="compact" tone="quiet" label={copy("Tamam", "Done")} onPress={close} /> : null}
+        </View>
+      ) : null}
+    </View>
+  ) : null;
+  const empty = <Empty compact
+    title={options.length ? copy("Eşleşen seçenek yok.", "No matching options.") : copy("Kullanılabilir seçenek yok.", "No options available.")}
+    action={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined} />;
+  const renderOption = (item: SelectionFieldOption<T>) => {
+    const selected = values.includes(item.value);
+    const off = !available || !!item.disabled ||
+      (!!multiple && !selected && max !== undefined && values.length >= max);
+    return (
+      <Pressable
+        accessibilityRole={multiple ? "checkbox" : "radio"}
+        accessibilityLabel={[item.label, item.detail].filter(Boolean).join(". ")}
+        accessibilityState={{ checked: selected, disabled: off }}
+        aria-checked={selected}
+        aria-disabled={off}
+        disabled={off}
+        onPress={() => choose(item.value)}
+        style={({ pressed }) => ({
+          minHeight: metrics.touchTarget,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: space.md,
+          paddingHorizontal: space.md,
+          paddingVertical: space.sm,
+          borderRadius: radii.control,
+          backgroundColor: pressed ? colors.raised : "transparent",
+          opacity: off ? opacity.disabled : 1,
+        })}
+      >
+        <SelectionIcon>{item.icon}</SelectionIcon>
+        <View style={[uiStyles.grow, { gap: 2 }]}>
+          <Body style={selected ? { color: colors.accent, fontWeight: "600" } : undefined}>{item.label}</Body>
+          {item.detail ? <Body muted style={uiStyles.caption}>{item.detail}</Body> : null}
+        </View>
+        {multiple ? (
+          selected ? <CheckSquare color={colors.accent} size={20} /> : <Square color={colors.muted} size={20} />
+        ) : selected ? (
+          <Check color={colors.accent} strokeWidth={2.6} size={20} />
+        ) : null}
+      </Pressable>
+    );
+  };
+  const shown = filtered.slice(0, INLINE_LIMIT);
   return (
-    <View style={row ? undefined : uiStyles.field}>
-      {!hideLabel && !row ? <Text style={uiStyles.fieldLabel}>{label}</Text> : null}
+    <View style={row ? undefined : [uiStyles.field, (error || isUnitHint(hint)) && { paddingBottom: space.xs }]}>
+      {!hideLabel && !row ? <HintLabel label={label} help={hint} /> : null}
       {row ? (
         <Pressable
           ref={trigger}
@@ -144,10 +217,10 @@ function SelectionField<T extends string>({
           disabled={!available}
           onPress={openPanel}
           style={({ pressed }) => ({
-            minHeight: metrics.touchTarget,
+            minHeight: metrics.rowHeightProject,
             flexDirection: "row",
             alignItems: "center",
-            gap: space.row,
+            gap: gapIcon,
             paddingHorizontal: 0,
             paddingVertical: space.sm,
             backgroundColor: pressed ? colors.raised : "transparent",
@@ -166,7 +239,10 @@ function SelectionField<T extends string>({
           </View>
           <ChevronsUpDown size={15} strokeWidth={2.2} color={colors.tertiary} />
         </Pressable>
-      ) : (
+      ) : null}
+      {/* Settings rows share NavigationRow's inset separator inside a group. */}
+      {row && grouped ? <View accessible={false} style={uiStyles.separator} /> : null}
+      {!row ? (
       <Pressable
         ref={trigger}
         accessibilityRole="combobox"
@@ -176,13 +252,13 @@ function SelectionField<T extends string>({
         aria-expanded={open && available}
         aria-disabled={!available}
         disabled={!available}
-        hitSlop={compact ? { top: 4, bottom: 4, left: 0, right: 0 } : undefined}
+        hitSlop={compact ? { top: 8, bottom: 8, left: 0, right: 0 } : undefined}
         onPress={openPanel}
         style={({ pressed }) => [
           uiStyles.input,
           compact && {
-            minHeight: metrics.iconTarget,
-            paddingVertical: 6,
+            minHeight: metrics.visualControl,
+            paddingVertical: space.xxs,
             borderColor: colors.separator,
           },
           error && { borderColor: semanticColors.danger.border },
@@ -207,17 +283,30 @@ function SelectionField<T extends string>({
           openAngle={270}
         />
       </Pressable>
-      )}
+      ) : null}
       {error ? (
         <Text selectable accessibilityRole="alert" style={uiStyles.error}>
           {error}
         </Text>
-      ) : hint ? (
-        <Text selectable style={uiStyles.caption}>
-          {hint}
-        </Text>
+      ) : <UnitHint hint={hint} />}
+      {inline ? (
+        <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
+          borderRadius: radii.control, backgroundColor: colors.panel, paddingBottom: space.xs, marginTop: space.xs }}>
+          {controls}
+          {shown.length ? shown.map((item, index) => (
+            <View key={item.value}>
+              {index ? <View accessible={false} style={[uiStyles.separator, { marginHorizontal: space.sm }]} /> : null}
+              {renderOption(item)}
+            </View>
+          )) : empty}
+          {filtered.length > shown.length ? (
+            <Body muted style={[uiStyles.caption, { paddingHorizontal: space.md, paddingTop: space.sm }]}>
+              {copy("Daha fazlası için arayın.", "Search to narrow the list.")}
+            </Body>
+          ) : null}
+        </View>
       ) : null}
-      <Sheet
+      {!inSheet ? <Sheet
         visible={open && available}
         onClose={close}
         title={label}
@@ -231,41 +320,7 @@ function SelectionField<T extends string>({
         }
       >
         <View style={{ flexShrink: 1, flexGrow: searchEnabled ? 1 : 0, minHeight: 0 }}>
-          {searchEnabled || multiple ? (
-            <View style={[uiStyles.header, { paddingHorizontal: space.screen, flexShrink: 0 }]}>
-              {searchEnabled ? <SearchField
-                label={copy("Seçenek ara", "Search options")}
-                value={search} onChangeText={changeSearch} /> : null}
-              {multiple ? (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                    gap: space.row,
-                    minHeight: 34,
-                  }}
-                >
-                  <Body muted style={[uiStyles.grow, uiStyles.caption]}>
-                    {max !== undefined
-                      ? copy("{p0}/{p1} seçildi", "{p0}/{p1} selected", {
-                          p0: values.length,
-                          p1: max,
-                        })
-                      : copy("{p0} seçildi", "{p0} selected", { p0: values.length })}
-                  </Body>
-                  {values.length ? (
-                    <Button
-                      density="compact"
-                      disabled={!available}
-                      label={copy("Seçimi temizle", "Clear selection")}
-                      onPress={clearSelection}
-                    />
-                  ) : null}
-                </View>
-              ) : null}
-            </View>
-          ) : null}
+          {controls}
           <FlatList
             {...position.listProps}
             data={filtered}
@@ -281,64 +336,11 @@ function SelectionField<T extends string>({
             ItemSeparatorComponent={() => (
               <View style={[uiStyles.separator, { marginHorizontal: space.sm }]} />
             )}
-            ListEmptyComponent={<Empty compact
-              title={options.length ? copy("Eşleşen seçenek yok.", "No matching options.") : copy("Kullanılabilir seçenek yok.", "No options available.")}
-              action={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined} />}
-            renderItem={({ item }) => {
-              const selected = values.includes(item.value);
-              const off =
-                !available ||
-                !!item.disabled ||
-                (!!multiple && !selected && max !== undefined && values.length >= max);
-              return (
-                <Pressable
-                  accessibilityRole={multiple ? "checkbox" : "radio"}
-                  accessibilityLabel={[item.label, item.detail].filter(Boolean).join(". ")}
-                  accessibilityState={{ checked: selected, disabled: off }}
-                  aria-checked={selected}
-                  aria-disabled={off}
-                  disabled={off}
-                  onPress={() => choose(item.value)}
-                  style={({ pressed }) => ({
-                    minHeight: metrics.selectionHeight,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: space.md,
-                    paddingHorizontal: space.md,
-                    paddingVertical: space.sm,
-                    borderRadius: radii.control,
-                    backgroundColor: pressed ? colors.raised : "transparent",
-                    opacity: off ? opacity.disabled : 1,
-                  })}
-                >
-                  <SelectionIcon>{item.icon}</SelectionIcon>
-                  <View style={[uiStyles.grow, { gap: 2 }]}>
-                    <Body
-                      style={selected ? { color: colors.accent, fontWeight: "600" } : undefined}
-                    >
-                      {item.label}
-                    </Body>
-                    {item.detail ? (
-                      <Body muted style={uiStyles.caption}>
-                        {item.detail}
-                      </Body>
-                    ) : null}
-                  </View>
-                  {multiple ? (
-                    selected ? (
-                      <CheckSquare color={colors.accent} size={20} />
-                    ) : (
-                      <Square color={colors.muted} size={20} />
-                    )
-                  ) : selected ? (
-                    <Check color={colors.accent} strokeWidth={2.6} size={20} />
-                  ) : null}
-                </Pressable>
-              );
-            }}
+            ListEmptyComponent={empty}
+            renderItem={({ item }) => renderOption(item)}
           />
         </View>
-      </Sheet>
+      </Sheet> : null}
     </View>
   );
 }

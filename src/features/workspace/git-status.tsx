@@ -1,24 +1,29 @@
 import { useMobileTheme } from "@/ui/theme";
-import { View } from "react-native";
+import { useState } from "react";
+import { Text, View } from "react-native";
+import ArrowDownToLine from "lucide-react-native/icons/arrow-down-to-line";
+import Check from "lucide-react-native/icons/check";
+import Download from "lucide-react-native/icons/download";
+import FileText from "lucide-react-native/icons/file-text";
+import GitCompare from "lucide-react-native/icons/git-compare";
 import Animated from "react-native-reanimated";
 import GitBranch from "lucide-react-native/icons/git-branch";
-import RefreshCw from "lucide-react-native/icons/refresh-cw";
+import ChevronDown from "lucide-react-native/icons/chevron-down";
 import {
+  ActionMenu,
   Badge,
   Body,
   Button,
   Card,
   Heading,
-  IconButton,
   MutationState,
-  NavigationRow,
+  PressableCard,
   Row,
 } from "@/ui/primitives";
+import { pullRequestStateLabel, pullRequestTone } from "./git-link-pr-model";
 import { enterItem } from "@/ui/motion";
-import { colors, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { radii, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
-import { workspaceStyles } from "./shared";
 import type {
   GitActionFeedbackProps,
   GitConflictsPanelProps,
@@ -26,63 +31,45 @@ import type {
   GitOperationPanelProps,
 } from "./git-types";
 
-/** Branch identity leads; sync state and the next action share one wrapping toolbar. */
+/** One compact branch row; tapping it opens the git actions sheet. */
 export function GitHeader({
   index,
-  refreshing,
-  onRefresh,
-  onToggleBranches,
   onOpenActions,
-  navigationActions,
   busy,
+  linkedPr,
 }: GitHeaderProps & { onOpenActions: () => void }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
-  const remote = index.branch && index.remote?.endsWith(`/${index.branch}`)
-    ? index.remote.slice(0, -index.branch.length - 1)
-    : index.remote;
+  const name = index.branch || copy("Git", "Git");
   return (
     <Animated.View entering={enterItem(0)}>
-      <View style={{ gap: space.xs }}>
-        <Row>
-          <View style={{ flexBasis: 240, flexGrow: 1, flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
-            <NavigationRow
-              label={index.branch || copy("Git", "Git")}
-              detail={remote || copy("Çalışma klasörü", "Working folder")}
-              detailLines={0}
-              icon={<GitBranch size={18} strokeWidth={2} color={colors.accent} />}
-              accessibilityLabel={`${copy("Dallar", "Branches")}: ${[index.branch || copy("Git", "Git"), index.remote].filter(Boolean).join(" · ")}`}
-              onPress={onToggleBranches}
-              disabled={busy}
-            />
-          </View>
-          <Row style={{ gap: space.xs, flexGrow: 1, flexShrink: 1, maxWidth: "100%" }}>
-            <Button
-              label={copy("Commit ve eşitleme", "Commit and sync")}
-              tone="primary"
-              density="compact"
-              disabled={busy}
-              onPress={onOpenActions}
-              style={{ alignSelf: "flex-start", marginEnd: "auto" }}
-            />
-            <Row style={{ flexWrap: "nowrap", marginStart: "auto" }}>
-              <IconButton label={copy("Yenile", "Refresh")} onPress={onRefresh} busy={refreshing} disabled={busy}>
-                <RefreshCw size={18} color={colors.muted} />
-              </IconButton>
-              {navigationActions}
-            </Row>
-          </Row>
-        </Row>
-        <GitSyncSummary index={index} />
-      </View>
+      <PressableCard
+        label={`${copy("Git işlemleri", "Git actions")}: ${[name, index.remote].filter(Boolean).join(" · ")}`}
+        disabled={busy}
+        onPress={onOpenActions}
+        style={{
+          minHeight: 48, flexDirection: "row", alignItems: "center", gap: space.row, paddingVertical: 0, paddingHorizontal: space.row,
+          marginHorizontal: 0, borderRadius: radii.control, backgroundColor: colors.raised,
+        }}
+      >
+        <GitBranch size={18} strokeWidth={2} color={colors.accent} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={1} ellipsizeMode="middle" style={[uiStyles.label, { fontWeight: "700" }]}>{name}</Text>
+          <GitSyncSummary index={index} />
+        </View>
+        {linkedPr ? <Badge label={`#${linkedPr.number} · ${pullRequestStateLabel(linkedPr.state, copy)}`} tone={pullRequestTone(linkedPr.state)} /> : null}
+        {index.ahead ? <Text style={[uiStyles.caption, { color: colors.accent }]}>{`↑${index.ahead}`}</Text> : null}
+        {index.behind ? <Text style={[uiStyles.caption, { color: colors.warning }]}>{`↓${index.behind}`}</Text> : null}
+        <ChevronDown size={16} color={colors.muted} />
+      </PressableCard>
     </Animated.View>
   );
 }
 
 function GitSyncSummary({ index }: { index: GitHeaderProps["index"] }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
-  if (!index.files.length && !index.ahead && !index.behind) return null;
+  if (!index.files.length) return null;
   return (
     <Row style={{ gap: space.xs }}>
       <Body muted style={uiStyles.caption}>
@@ -90,8 +77,6 @@ function GitSyncSummary({ index }: { index: GitHeaderProps["index"] }) {
         {index.additions ? <Body style={[uiStyles.caption, { color: colors.success }]}>{` · +${index.additions}`}</Body> : null}
         {index.deletions ? <Body style={[uiStyles.caption, { color: colors.danger }]}>{` · −${index.deletions}`}</Body> : null}
       </Body>
-      {index.ahead ? <Badge label={`↑ ${index.ahead}`} tone="info" /> : null}
-      {index.behind ? <Badge label={`↓ ${index.behind}`} tone="warning" /> : null}
     </Row>
   );
 }
@@ -162,6 +147,9 @@ export function GitOperationPanel({
   );
 }
 
+const CONFLICT_PREVIEW = 3;
+
+/** Bounded: shows a few conflicting files and expands on demand, so the list header never grows unbounded. */
 export function GitConflictsPanel({
   files,
   canResolve,
@@ -172,49 +160,97 @@ export function GitConflictsPanel({
   onReview,
   children,
 }: GitConflictsPanelProps) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? files : files.slice(0, CONFLICT_PREVIEW);
   return (
     <Card>
-      <Heading>{copy("Çakışmalar", "Conflicts")}</Heading>
+      <Row>
+        <Heading>{copy("Çakışmalar", "Conflicts")}</Heading>
+        <Badge label={String(files.length)} tone="danger" />
+      </Row>
       <Body muted>
         {copy(
           "Commit öncesinde bu dosyalardaki çakışmaları çöz. Bir tarafı seçmek diğer tarafın değişikliklerini bırakır.",
           "Resolve these conflicts before committing. Choosing one side discards the other side’s changes.",
         )}
       </Body>
-      {files.map((file) => (
-        <View key={file.relative} style={workspaceStyles.stack}>
-          <Body mono>{file.relative}</Body>
-          <Row>
-            {onReview ? <Button label={copy("Sürümleri incele", "Review versions")} disabled={busy} onPress={() => onReview(file.relative)} /> : null}
-            <Button
-              label={copy("Dosyayı incele", "Review file")}
-              disabled={busy}
-              onPress={() => onOpenFile(file.relative)}
-            />
-            <Button
-              label={copy("Düzenlenmiş dosyayı stage’e al", "Stage edited file")}
+      {shown.map((file) => {
+        const normalized = file.relative.replaceAll("\\", "/");
+        const cut = normalized.lastIndexOf("/");
+        return (
+          <View key={file.relative} style={{ flexDirection: "row", alignItems: "center", gap: space.row, minHeight: 48 }}>
+            <View style={[uiStyles.grow, { gap: space.xxs }]}>
+              <Body numberOfLines={2} ellipsizeMode="middle" style={{ fontWeight: "600" }}>
+                {normalized.slice(cut + 1)}
+              </Body>
+              {cut > 0 ? (
+                <Body muted numberOfLines={1} ellipsizeMode="middle" style={uiStyles.caption}>
+                  {normalized.slice(0, cut)}
+                </Body>
+              ) : null}
+            </View>
+            <Badge label={copy("Çakışma", "Conflict")} tone="danger" />
+            <ActionMenu
+              label={file.relative}
               busy={busy}
-              onPress={() => onStageFile(file.relative)}
+              actions={[
+                onReview && {
+                  key: "review",
+                  label: copy("Sürümleri incele", "Review versions"),
+                  icon: <GitCompare size={18} color={colors.muted} />,
+                  disabled: busy,
+                  onPress: () => onReview(file.relative),
+                },
+                {
+                  key: "file",
+                  label: copy("Dosyayı incele", "Review file"),
+                  icon: <FileText size={18} color={colors.muted} />,
+                  disabled: busy,
+                  onPress: () => onOpenFile(file.relative),
+                },
+                {
+                  key: "stage",
+                  label: copy("Düzenlenmiş dosyayı stage’e al", "Stage edited file"),
+                  icon: <ArrowDownToLine size={18} color={colors.muted} />,
+                  disabled: busy,
+                  onPress: () => onStageFile(file.relative),
+                },
+                canResolve && {
+                  key: "ours",
+                  label: copy("Bizim sürüm", "Our version"),
+                  icon: <Check size={18} color={colors.muted} />,
+                  disabled: busy,
+                  destructive: true,
+                  onPress: () => onChoose({ kind: "resolve", path: file.relative, side: "ours" }),
+                },
+                canResolve && {
+                  key: "theirs",
+                  label: copy("Gelen sürüm", "Incoming version"),
+                  icon: <Download size={18} color={colors.muted} />,
+                  disabled: busy,
+                  destructive: true,
+                  onPress: () => onChoose({ kind: "resolve", path: file.relative, side: "theirs" }),
+                },
+              ]}
             />
-          </Row>
-          {canResolve ? (
-            <Row>
-              <Button
-                label={copy("Bizim sürüm", "Our version")}
-                disabled={busy}
-                onPress={() => onChoose({ kind: "resolve", path: file.relative, side: "ours" })}
-              />
-              <Button
-                label={copy("Gelen sürüm", "Incoming version")}
-                disabled={busy}
-                onPress={() => onChoose({ kind: "resolve", path: file.relative, side: "theirs" })}
-              />
-            </Row>
-          ) : null}
-        </View>
-      ))}
+          </View>
+        );
+      })}
+      {files.length > CONFLICT_PREVIEW ? (
+        <Button
+          tone="quiet"
+          density="compact"
+          label={
+            expanded
+              ? copy("Daha az göster", "Show fewer")
+              : copy("{p0} çakışmanın tümünü göster", "Show all {p0} conflicts", { p0: files.length })
+          }
+          onPress={() => setExpanded((value) => !value)}
+          style={{ alignSelf: "flex-start" }}
+        />
+      ) : null}
       {children}
     </Card>
   );

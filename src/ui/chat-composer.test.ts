@@ -1,12 +1,32 @@
 import { expect, it, vi } from "vitest";
-function flatten(value:any):any{return Array.isArray(value)?Object.assign({},...value.filter(Boolean).map(flatten)):value??{};}
-vi.mock("react-native",()=>({View:"View",StyleSheet:{flatten:(value:any)=>flatten(value)}}));
-vi.mock("./theme",()=>({useMobileTheme:()=>undefined}));
-vi.mock("panelui-native/components/ai-input",()=>({AIInput:Object.assign(()=>null,{Field:"Field",Row:"Row"})}));
+function flatten(value: any): any { return Array.isArray(value) ? Object.assign({}, ...value.filter(Boolean).map(flatten)) : value ?? {}; }
+vi.mock("react-native", () => ({ View: "View", useWindowDimensions: () => ({ fontScale: 1 }) }));
+vi.mock("panelui-native/components/ai-input", () => ({ AIInput: Object.assign(() => null, { Field: () => null, Toolbar: () => null, Spacer: () => null }) }));
+vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
+vi.mock("./composer-actions", () => ({ ComposerActionArea: () => null }));
 import { ChatComposer } from "./chat-composer";
-it("preserves the feature's larger input floor and exact field callbacks",()=>{
- const selection=vi.fn(),change=vi.fn(),layout=vi.fn();const view=ChatComposer({value:"Draft",onValueChange:change,leading:null,submit:null,onToolbarLayout:layout,field:{style:{minHeight:82,maxHeight:90},onSelectionChange:selection}});const [field,row]=view.props.children;expect(flatten(field.props.style).minHeight).toBe(82);expect(flatten(field.props.style).maxHeight).toBe(90);expect(field.props.onSelectionChange).toBe(selection);expect(row.props.onLayout).toBe(layout);expect(view.props.onValueChange).toBe(change);expect(view.props.avoidKeyboard).toBe(false);
+const render = (props: Partial<Parameters<typeof ChatComposer>[0]> = {}) =>
+  ChatComposer({ value: "Draft", onValueChange: () => {}, leading: null, submit: null, field: {}, ...props });
+it("starts as a 40dp multiline field that grows to five lines, with exact field callbacks", () => {
+  const selection = vi.fn(), change = vi.fn(), layout = vi.fn();
+  const view = render({ onValueChange: change, onToolbarLayout: layout, field: { onSelectionChange: selection } });
+  const [, field, row] = view.props.children;
+  expect(view.props.value).toBe("Draft");
+  expect(view.props.onValueChange).toBe(change);
+  expect(view.props.avoidKeyboard).toBe(false);
+  expect(field.props.onSelectionChange).toBe(selection);
+  expect(row.props.onLayout).toBe(layout);
+  const style = flatten(field.props.style);
+  expect(style.minHeight).toBe(40);
+  expect(style.maxHeight).toBeGreaterThan(40 * 2);
 });
-it("retains a full touch-sized field for missing or undersized caller geometry",()=>{
- for(const minHeight of [undefined,20,NaN]){const view=ChatComposer({value:"",onValueChange:()=>{},leading:null,submit:null,field:{style:{minHeight}}});expect(flatten(view.props.children[0].props.style).minHeight).toBe(48);}
+it("locks the field when disabled and lets the feature cap the height", () => {
+  const view = render({ disabled: true, field: { style: { maxHeight: 90 } } });
+  const field = view.props.children[1];
+  expect(view.props.disabled).toBe(true);
+  expect(flatten(field.props.style).maxHeight).toBe(90);
+});
+it("renders attachments and notes inside the capsule above the field", () => {
+  const view = render({ top: "TOP" });
+  expect(view.props.children[0]).toBe("TOP");
 });

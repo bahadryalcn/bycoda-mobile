@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HostStore } from "../../../../host/store";
 import { HostAssistant } from "../../../../host/assistant/service";
-import { assistantDomain } from "../../../../host/assistant-domain";
+import { assistantDomain } from "../../../../host/domains/assistant/service";
 import { AssistantMobileClient, type AssistantMobilePort } from "./assistant-client";
 import { assistantHistoryPage } from "./assistant-history";
 const cleanups: Array<() => Promise<void>> = [];

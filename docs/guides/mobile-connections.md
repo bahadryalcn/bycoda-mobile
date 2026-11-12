@@ -47,10 +47,19 @@ Tailscale account on both devices. The existing setup flow enables a private HTT
 Serve endpoint without overwriting unrelated Serve services or enabling Funnel.
 Manual HTTPS address and device-key entry remains available.
 
-Pairing with another method for an already saved computer updates that computer's
-connection after verifying its environment identity. It does not automatically
-switch networks or bypass the app lock, provider consent, host credential
-revocation, or social sending approval rules.
+## Use both on the same computer
+
+Pairing once is enough when the computer's Host is up to date: it tells a paired
+phone which local-network and Tailscale addresses it serves, and the phone adds
+them as routes. A local listener whose address changed replaces its old address.
+With an older Host, pair the same computer once with **Local network** and once
+with **Tailscale**. After verifying the computer's identity, the second pairing adds
+a route instead of replacing the first. The phone then picks the route itself: the local network when
+it answers, otherwise Tailscale. It checks again whenever you return to the app,
+when the connection keeps failing, and every minute while the app is open, so
+leaving or coming home switches without re-pairing. Requests that were in flight
+on the old route are not replayed. Route switching does not bypass the app lock,
+provider consent, host credential revocation, or social sending approval rules.
 
 ## Incompatible data or repeated disconnections
 

@@ -14,4 +14,4 @@ export type ProjectSessionControls = {
   refresh: () => void;
 };
 export type ProjectSessionsProps = WorkspaceTarget & { initialCreating?: boolean; sessionLayout?: SessionLayout; directoryQuery?: QueryLike; projectName?: string; projectCwd?: string; canReadProject: () => boolean; renderFrame: (content: ReactNode, controls: ProjectSessionControls) => ReactNode };
-export type SessionCreationDraft = { provider?: RemoteProvider; model: string };
+export type SessionCreationDraft = { provider?: RemoteProvider; accountId?: string; model: string };

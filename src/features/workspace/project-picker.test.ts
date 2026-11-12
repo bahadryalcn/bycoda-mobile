@@ -8,6 +8,7 @@ const fixture = vi.hoisted(() => ({
   actions: new Map<string, () => void>(), search: undefined as undefined | ((value: string) => void),
   machine: { id: "machine", name: "Computer", endpoint: "https://synthetic.invalid", environmentId: "host", lanKey: "synthetic" },
 }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("expo-router", () => ({ router: { push: () => fixture.events.push("route") } }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -29,11 +30,12 @@ vi.mock("@/ui/primitives", () => {
   const Button = ({ label, onPress }: any) => { fixture.actions.set(label, onPress); return createElement("button", { onClick: onPress }, label); };
   return { Body: ({ children }: PropsWithChildren) => createElement("span", null, children), Sheet: ({ children, footer, onClose }: any) => { fixture.actions.set("Close", onClose); return createElement("section", null, children, footer); },
     FormActions: ({ submitLabel, onSubmit }: any) => createElement(Button, { label: submitLabel, onPress: onSubmit }),
-    ScreenList: ({ header, data, renderItem }: any) => createElement("main", null, createElement("header", null, header),
-      createElement("section", null, ...data.map((item: unknown, index: number) => createElement("div", { key: index }, renderItem({ item, index }))))),
+    ScreenList: ({ header, data, renderItem, ListEmptyComponent }: any) => createElement("main", null, createElement("header", null, header),
+      createElement("section", null, !data.length ? ListEmptyComponent : null, ...data.map((item: unknown, index: number) => createElement("div", { key: index }, renderItem({ item, index }))))),
     NavigationRow: Button,
     SearchField: ({ label, value, onChangeText }: any) => { fixture.search = onChangeText; return createElement("input", { "aria-label": label, value, onChange: (event: any) => onChangeText(event.target.value) }); },
     Notice: ({ message, action, onRetry, retryLabel }: any) => createElement("div", null, message, action ? createElement(Button, { label: action.label, onPress: action.onPress }) : null, onRetry ? createElement(Button, { label: retryLabel, onPress: onRetry }) : null),
+    StateView: ({ title, description, action }: any) => createElement("div", null, title, description, action ? createElement(Button, { label: action.label, onPress: action.onPress }) : null),
     QueryState: ({ query, empty, emptyTitle, emptyAction, onManageConnections }: any) => query.error
       ? createElement("div", null, query.error.message, createElement(Button, { label: "Manage connections", onPress: onManageConnections }))
       : empty ? createElement("div", null, emptyTitle, emptyAction ? createElement(Button, { label: emptyAction.label, onPress: emptyAction.onPress }) : null) : null,
@@ -66,7 +68,7 @@ it("uses one waiting explanation and closes the picker before connection navigat
   await click("Manage connections"); expect(fixture.events).toEqual(["close", "route"]);
 });
 it("keeps privacy synchronization local and gives exact errors precedence", async () => {
-  fixture.ready = false; fixture.readiness = "waiting"; fixture.privacy = true; await render();
+  fixture.rows = []; fixture.ready = false; fixture.readiness = "waiting"; fixture.privacy = true; await render();
   expect(container.textContent).toContain("Protected groups stay hidden"); expect(container.textContent).not.toContain("Waiting for a connection");
   await click("Refresh"); expect(fixture.refetch).toHaveBeenCalledOnce();
   fixture.error = new Error("Pairing needs repair"); await render(); expect(container.textContent).not.toContain("Protected groups stay hidden");
@@ -115,7 +117,7 @@ it("does not let an old clear wipe a newer query", async () => {
   await act(async () => fixture.search!("Beta")); await act(async () => clear()); expect(container.querySelector("input")!.value).toBe("Beta");
 });
 it("retires repair actions when the error disappears or the picker closes", async () => {
-  fixture.error = new Error("repair"); await render(); const repair = fixture.actions.get("Manage connections")!;
+  fixture.rows = []; fixture.error = new Error("repair"); await render(); const repair = fixture.actions.get("Manage connections")!;
   fixture.error = null; await render(); await act(async () => repair()); expect(fixture.events).toEqual([]);
   fixture.error = new Error("repair"); await render(); const next = fixture.actions.get("Manage connections")!;
   await act(async () => fixture.actions.get("Close")!()); await act(async () => next()); expect(fixture.events).toEqual(["close"]);

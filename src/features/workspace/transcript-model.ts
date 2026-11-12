@@ -1,7 +1,7 @@
 import type { Block } from "./wire";
 
 export type TranscriptEntry =
-  | { id: string; kind: "message"; block: Block; author?: string }
+  | { id: string; kind: "message"; block: Block; author?: string; /** Identical failures folded into this card. */ repeat?: number }
   | { id: string; kind: "activity"; blocks: Block[]; author?: string };
 export type TranscriptView = "messages" | "details";
 
@@ -63,6 +63,27 @@ export function canCollapseToolFailure(block: Block) {
     !block.handoff
   );
 }
+/** A plain system failure card (no tool, approval or structured content). */
+export const isSystemFailure = (block: Block) =>
+  block.role === "system" && block.notice === "error" && !block.tool && !block.approval && !block.attachments?.length;
+
+/**
+ * Folds an identical system failure into the latest one when only user messages lie between,
+ * e.g. repeated sends to an archived session; returns the count the surviving card represents.
+ */
+function foldFailure(entries: TranscriptEntry[], block: Block): number {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index];
+    if (entry.kind !== "message") return 1;
+    if (entry.block.role === "user") continue;
+    if (!isSystemFailure(entry.block) || entry.block.text !== block.text) return 1;
+    const count = (entry.repeat ?? 1) + 1;
+    entries.splice(index, 1);
+    return count;
+  }
+  return 1;
+}
+
 /** Preserve chronology and keep actionable/error content outside collapsed activity. */
 export function transcriptEntries(
   blocks: readonly Block[],
@@ -88,6 +109,9 @@ export function transcriptEntries(
     if (isQuietActivity(block)) {
       if (previous?.kind === "activity") previous.blocks.push(block);
       else entries.push({ id: `activity:${block.id}`, kind: "activity", blocks: [block], author });
+    } else if (isSystemFailure(block) && block.text) {
+      const repeat = foldFailure(entries, block);
+      entries.push({ id: block.id, kind: "message", block, author, ...(repeat > 1 ? { repeat } : {}) });
     } else entries.push({ id: block.id, kind: "message", block, author });
   }
   return entries;

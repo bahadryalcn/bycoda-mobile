@@ -46,7 +46,7 @@ vi.mock("@/ui/primitives", () => {
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress?: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
   return { Body: Wrapper, Badge: ({ label }: { label: string }) => createElement("span", null, label),
     Sheet: ({ children, title }: { children: ReactNode; title: string }) => createElement("div", { role: "dialog", "aria-label": title }, children),
-    Row: Wrapper, Stack: Wrapper, Notice: ({ message }: { message: string }) => createElement("span", null, message), QueryState: () => null, Button,
+    Row: Wrapper, Stack: Wrapper, StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: { message: string }) => createElement("span", null, message), QueryState: () => null, Button,
     ActionMenu: ({ actions }: { actions: Array<{ key: string; label: string; disabled?: boolean; onPress: () => void }> }) => createElement("div", null, actions.map((action) => {
       state.actions.set(action.key, action.onPress); return createElement(Button, { ...action, key: action.key });
     })),

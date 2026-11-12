@@ -28,6 +28,10 @@ describe("connection presentation", () => {
     expect(connectionPhase({ ...state, unlocked: false })).toBe("locked");
     expect(connectionPhase({ ...state, paired: false })).toBe("unpaired");
   });
+  it("names a refused device key as access, not as a lost connection", () => {
+    expect(connectionPhase({ ...state, errorAt: 99_500, accessDenied: true })).toBe("access");
+    expect(connectionPhase({ ...state, networkConnected: false, accessDenied: true })).toBe("offline");
+  });
   it("allows a newer successful request to recover an older health error", () => {
     expect(connectionPhase({ ...state, errorAt: 98_000 })).toBe("connected");
   });

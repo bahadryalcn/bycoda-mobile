@@ -6,13 +6,14 @@ import { space } from "@/ui/tokens";
 import { matchesSearch, normalizeSearch } from "../management/shared/search";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
-import { Body, Button, FormActions, NavigationRow, Notice, QueryState, ScreenList, SearchField, Sheet, Stack } from "@/ui/primitives";
+import { Body, Button, FormActions, NavigationRow, QueryState, ScreenList, SearchField, Sheet, Stack } from "@/ui/primitives";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
 import { useCopy } from "@/ui/copy";
 import type { HtmlArtifact, HtmlArtifactSummary } from "@/remote/types";
 import { readArtifact, readArtifactList } from "./artifact-model";
 import { ArtifactReader } from "./artifact-reader";
+import { FeatureUnavailable, RecordAccessUnavailable } from "./unavailable-state";
 
 type Scope = { projectId: string; sessionId: string; messageId?: string };
 export function SessionArtifacts(props: Scope) {
@@ -79,13 +80,13 @@ function ArtifactScope({ projectId, sessionId, messageId, connection }: Scope & 
   const readerQuery = listReadable ? detailPresentation : listPresentation;
   const readerUnavailable = (!readable || !!detail.data && !detailPresentation.data) && !readerQuery.error && readerQuery.fetchStatus !== "paused";
   const presentationAccess = useMemo(() => ({ allowed: available, check: originCurrent }), [available, access, lease]);
-  const unavailable = <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />;
+  const unavailable = <RecordAccessUnavailable />;
   const trigger = messageId && (!supported || !items.length) ? null : <Button density="compact" tone="quiet" disabled={!available} label={supported ? copy("Görseller ({p0})", "Artifacts ({p0})", { p0: listReadable && list.data ? items.length : "…" }) : copy("Kaydedilen görseller", "Saved artifacts")} onPress={show} />;
   return <>{trigger}<PrivateContentAccessProvider value={presentationAccess}>{open && selected ? <ArtifactReader
     artifact={detailPresentation.data} summary={selected} machineName={opening.machineName} query={readerQuery} unavailable={readerUnavailable} onBack={back} />
   : <Sheet visible={open} title={copy("Kaydedilen görseller", "Saved artifacts")} size="full" scroll={!available || !supported} onClose={close}
     footer={<FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />}>
-    {!available ? unavailable : !supported ? <Notice message={copy("Bu bilgisayar kaydedilmiş HTML görsellerini paylaşmayı desteklemiyor. Çalışma alanına kaydedilen HTML dosyalarını Dosyalar’dan açabilirsin.", "This computer does not support sharing saved HTML artifacts. Open HTML files saved in the workspace from Files.")} /> : <View style={{ flex: 1, minHeight: 0 }}><Stack style={{ paddingHorizontal: space.screen }}><Body selectable>{opening.machineName}</Body><SearchField label={copy("Yüklenen kayıtlarda ara", "Search loaded records")} value={listReadable ? search : ""} editable={listReadable} maxLength={200} onChangeText={changeSearch} /></Stack><ScreenList {...position.listProps} data={rows} query={listPresentation} keyExtractor={item => item.id}
+    {!available ? unavailable : !supported ? <FeatureUnavailable message={copy("Bu bilgisayar kaydedilmiş HTML görsellerini paylaşmayı desteklemiyor. Çalışma alanına kaydedilen HTML dosyalarını Dosyalar’dan açabilirsin.", "This computer does not support sharing saved HTML artifacts. Open HTML files saved in the workspace from Files.")} /> : <View style={{ flex: 1, minHeight: 0 }}><Stack style={{ paddingHorizontal: space.screen }}><Body selectable>{opening.machineName}</Body><SearchField label={copy("Yüklenen kayıtlarda ara", "Search loaded records")} value={listReadable ? search : ""} editable={listReadable} maxLength={200} onChangeText={changeSearch} /></Stack><ScreenList {...position.listProps} data={rows} query={listPresentation} keyExtractor={item => item.id}
       header={<Stack><QueryState query={listPresentation} empty={listReadable && list.isSuccess && !rows.length} emptyTitle={searchKey ? copy("Eşleşen sonuç yok", "No matching results") : copy("Bu oturumda kaydedilmiş görsel yok.", "No saved artifacts in this session.")} emptyAction={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined} />{!listReadable && !list.error && list.fetchStatus !== "paused" ? unavailable : null}</Stack>}
       renderItem={({ item }) => <NavigationRow label={item.title} labelLines={2} detail={new Date(item.createdAt).toLocaleDateString()} onPress={() => choose(item)} />} /></View>}
   </Sheet>}</PrivateContentAccessProvider></>;

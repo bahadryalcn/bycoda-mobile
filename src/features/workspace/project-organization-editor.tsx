@@ -1,7 +1,7 @@
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import ArrowDown from "lucide-react-native/icons/arrow-down";
 import { useMobileTheme } from "@/ui/theme";
-import { colors, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import type { useFormDraft } from "@/state/form-draft";
 import { useCopy } from "@/ui/copy";
 import {
@@ -24,7 +24,7 @@ import {
 } from "./project-organization-model";
 
 export function OrganizationOrderRow({ label, index, total, disabled, onMove }: { label: string; index: number; total: number; disabled: boolean; onMove: (step: number) => void }) {
- useMobileTheme();
+ const { colors } = useMobileTheme();
  const copy = useCopy();
  return <Row style={{ flexWrap: "nowrap", gap: space.xs }}>
    <Body style={{ flex: 1, minWidth: 0 }}>{label}</Body>
@@ -141,7 +141,7 @@ export function OrganizationEditorSheet({
                 value={form.values.list}
                 disabled={disabled}
                 options={[
-                  { value: "loose", label: copy("Gruplanmamış", "Ungrouped") },
+                  { value: "loose", label: copy("Diğerleri", "Others") },
                   { value: "pinned", label: copy("Sabitlenmiş", "Pinned") },
                 ]}
                 onChange={(list) => {
@@ -202,7 +202,7 @@ export function OrganizationEditorSheet({
             disabled={disabled}
             searchable
             options={[
-              { value: "", label: copy("Gruplanmamış", "Ungrouped") },
+              { value: "", label: copy("Diğerleri", "Others") },
               ...(visible?.groups.map((row) => ({ value: row.id, label: row.name })) ?? []),
             ]}
             onChange={(value) => form.setField("groupId", value)}
@@ -269,7 +269,7 @@ export function OrganizationEditorSheet({
               value={form.values.folderId}
               disabled={disabled}
               options={[
-                { value: "", label: copy("Gruplanmamış", "Ungrouped") },
+                { value: "", label: copy("Diğerleri", "Others") },
                 ...(visible?.folders.map((row) => ({ value: row.id, label: row.name })) ?? []),
               ]}
               onChange={(value) => form.setField("folderId", value)}

@@ -1,6 +1,14 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createElement, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ComponentType } from "react";
 import { View } from "react-native";
 import type { QueuedMessage } from "../../../../src/features/sessions/model/session";
+import RefreshCw from "lucide-react-native/icons/refresh-cw";
+import Pause from "lucide-react-native/icons/pause";
+import Play from "lucide-react-native/icons/play";
+import Pencil from "lucide-react-native/icons/pencil";
+import ArrowUp from "lucide-react-native/icons/arrow-up";
+import ArrowDown from "lucide-react-native/icons/arrow-down";
+import Trash2 from "lucide-react-native/icons/trash-2";
 import { useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { ActionMenu, Badge, Body, Empty, ErrorText, FormActions, NavigationRow, Notice, Row, Sheet, Stack } from "@/ui/primitives";
@@ -9,14 +17,17 @@ import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import { useListScrollMemory } from "@/ui/use-list-scroll-memory";
 import { useCopy } from "@/ui/copy";
-import { uiStyles } from "@/ui/styles";
 import type { SessionScope } from "./session-types";
+import { useMobileTheme } from "@/ui/theme";
+import { RecordAccessUnavailable } from "./unavailable-state";
 
 export type QueueSheetState={rows:readonly QueuedMessage[];label:string;error:unknown;errorMessage?:string;warning?:string;disabled:boolean;sending:boolean;controlling:boolean;reloadBusy:boolean;queueError:boolean;active:boolean;canEdit:boolean;hasDraft:boolean;disableSend:boolean;disableControl:boolean;};
 export type QueueSheetActions={close():void;reload():void;resume():void;send():void;control():void;edit(row:QueuedMessage):void;move(id:string,delta:-1|1):void;remove(id:string):void;};
 
 /** Presentation and local reading only; queue/editor owners retain every write. */
 export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionScope;visible:boolean;state:QueueSheetState;actions:QueueSheetActions}){
+  const { uiStyles, colors } = useMobileTheme();
+  const glyph=(Icon:ComponentType<{size:number;color:string}>,danger?:boolean)=>createElement(Icon,{size:18,color:danger?colors.danger:colors.muted});
   const copy=useCopy(),connection=useConnectionScope(),access=usePrivateContentAccess();
   const machine=useMachines(store=>store.machines.find(entry=>entry.id===scope.machineId));
   const [opening]=useState(()=>({scope:{...scope},connection,name:machine?.name??machine?.id??""}));
@@ -50,18 +61,18 @@ export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionSc
   return <><Sheet visible={visible} title={copy("Mesaj sırası", "Message queue")} size="form" scroll={false} onClose={close}>
     <ScreenList {...scroll.listProps} data={readable?state.rows:[]} keyExtractor={row=>row.id} header={<Stack>
       {readable?<CollectionToolbar field={<Stack><Body selectable>{opening.name}</Body><Body muted style={uiStyles.caption}>{state.label}</Body></Stack>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
-        {key:"reload",label:copy("Sırayı yeniden yükle", "Reload queue"),disabled:state.reloadBusy,onPress:reload},
-        !!state.rows.length&&{key:"control",label:state.active?copy("Sırayı duraklat", "Pause queue"):copy("Sırayı başlat", "Start queue"),disabled:state.disableControl||state.controlling,onPress:()=>{if(current()&&live.current.state.active===state.active&&!live.current.state.disableControl&&!live.current.state.controlling)live.current.actions.control();}},
-        state.hasDraft&&{key:"resume",label:copy("Düzenlemeye devam et", "Continue editing"),disabled:state.disabled,onPress:()=>{if(current()&&!live.current.state.disabled&&live.current.state.hasDraft)live.current.actions.resume();}},
-      ]}/>}/>:privateFailure?<ErrorText error={state.error}/>:<Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")}/>}
-      {readable&&!state.rows.length?<Empty compact title={copy("Sıra boş", "Queue is empty")}/>:null}
+        {key:"reload",icon:glyph(RefreshCw),label:copy("Sırayı yeniden yükle", "Reload queue"),disabled:state.reloadBusy,onPress:reload},
+        !!state.rows.length&&{key:"control",icon:glyph(state.active?Pause:Play),label:state.active?copy("Sırayı duraklat", "Pause queue"):copy("Sırayı başlat", "Start queue"),disabled:state.disableControl||state.controlling,onPress:()=>{if(current()&&live.current.state.active===state.active&&!live.current.state.disableControl&&!live.current.state.controlling)live.current.actions.control();}},
+        state.hasDraft&&{key:"resume",icon:glyph(Pencil),label:copy("Düzenlemeye devam et", "Continue editing"),disabled:state.disabled,onPress:()=>{if(current()&&!live.current.state.disabled&&live.current.state.hasDraft)live.current.actions.resume();}},
+      ]}/>}/>:privateFailure?<ErrorText error={state.error}/>:<RecordAccessUnavailable />}
+      {readable&&!state.rows.length?<Empty compact title={copy("Sıra boş", "Queue is empty")} detail={copy("Tur sürerken yazdığın mesajlar burada sırayla bekler ve sırayla gönderilir.", "Messages you queue while a turn runs wait here and are sent in order.")}/>:null}
     </Stack>} renderItem={({item:row,index})=><Row style={{alignItems:"flex-start"}}>
       <View style={{flex:1,minWidth:0}}><NavigationRow label={row.text||copy("Ekli mesaj", "Message with attachments")} labelLines={2} detail={`${index+1} · ${row.modelTarget?.model??""}`} metadata={row.attachments.map(file=>file.name).join(" · ")} supporting={row.deliveryUnknown?<Badge label={copy("Kontrol gerekiyor", "Needs review")}/>:undefined} onPress={()=>inspect(row)}/></View>
       <ActionMenu label={copy("Mesaj işlemleri", "Message actions")} actions={[
-        {key:"edit",label:copy("Sırayı duraklat ve düzenle", "Pause queue and edit"),disabled:state.disabled||!state.canEdit||state.queueError,onPress:()=>edit(row)},
-        {key:"up",label:copy("Yukarı taşı", "Move up"),disabled:state.disabled||state.hasDraft||index===0,onPress:()=>{if(writable(row)&&!live.current.state.hasDraft&&live.current.state.rows.indexOf(row)>0)live.current.actions.move(row.id,-1);}},
-        {key:"down",label:copy("Aşağı taşı", "Move down"),disabled:state.disabled||state.hasDraft||index===state.rows.length-1,onPress:()=>{if(writable(row)&&!live.current.state.hasDraft&&live.current.state.rows.indexOf(row)<live.current.state.rows.length-1)live.current.actions.move(row.id,1);}},
-        {key:"remove",label:copy("Sıradan kaldır", "Remove from queue"),destructive:true,disabled:state.disabled||state.hasDraft,onPress:()=>{if(writable(row)&&!live.current.state.hasDraft)live.current.actions.remove(row.id);}},
+        {key:"edit",icon:glyph(Pencil),label:copy("Sırayı duraklat ve düzenle", "Pause queue and edit"),disabled:state.disabled||!state.canEdit||state.queueError,onPress:()=>edit(row)},
+        {key:"up",icon:glyph(ArrowUp),label:copy("Yukarı taşı", "Move up"),disabled:state.disabled||state.hasDraft||index===0,onPress:()=>{if(writable(row)&&!live.current.state.hasDraft&&live.current.state.rows.indexOf(row)>0)live.current.actions.move(row.id,-1);}},
+        {key:"down",icon:glyph(ArrowDown),label:copy("Aşağı taşı", "Move down"),disabled:state.disabled||state.hasDraft||index===state.rows.length-1,onPress:()=>{if(writable(row)&&!live.current.state.hasDraft&&live.current.state.rows.indexOf(row)<live.current.state.rows.length-1)live.current.actions.move(row.id,1);}},
+        {key:"remove",icon:glyph(Trash2,true),label:copy("Sıradan kaldır", "Remove from queue"),destructive:true,disabled:state.disabled||state.hasDraft,onPress:()=>{if(writable(row)&&!live.current.state.hasDraft)live.current.actions.remove(row.id);}},
       ]}/>
     </Row>}/>
     <FormActions submitLabel={!readable?copy("Sırayı yeniden yükle", "Reload queue"):primary==="reload"?copy("Sırayı yeniden yükle", "Reload queue"):primary==="resume"?copy("Düzenlemeye devam et", "Continue editing"):primary==="send"?copy("Sonrakini gönder", "Send next"):copy("Kapat", "Close")}

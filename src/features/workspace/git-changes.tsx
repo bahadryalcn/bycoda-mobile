@@ -6,21 +6,20 @@ import ArrowDownToLine from "lucide-react-native/icons/arrow-down-to-line";
 import ArrowUpFromLine from "lucide-react-native/icons/arrow-up-from-line";
 import GitCommitHorizontal from "lucide-react-native/icons/git-commit-horizontal";
 import { Body, Button, Disclosure, Field, Row } from "@/ui/primitives";
-import { colors, space, fontSize } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { space, fontSize, lineHeight } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { GitFileRow } from "./git-file-row";
 import type { GitChangesPanelProps, GitCommitPanelProps } from "./git-types";
 
 export function GitChangesPanel({ files, busy, onSelect, onAction }: GitChangesPanelProps) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   if (!files.some((file) => file.staged || file.unstaged)) {
     return (
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.md }}>
         <CheckCircle size={18} color={colors.success} />
         <View style={uiStyles.grow}>
-          <Body style={{ fontSize: fontSize.control, lineHeight: 20, fontWeight: "600" }}>
+          <Body style={{ fontSize: fontSize.control, lineHeight: lineHeight.control, fontWeight: "600" }}>
             {copy("Çalışma klasörü temiz", "Working folder is clean")}
           </Body>
           <Body muted style={uiStyles.caption}>
@@ -46,13 +45,13 @@ export function GitChangesPanel({ files, busy, onSelect, onAction }: GitChangesP
                 flexDirection: "row",
                 alignItems: "center",
                 gap: space.sm,
-                paddingVertical: 3,
+                paddingVertical: space.xs,
               }}
             >
               <Body
                 style={[
                   uiStyles.grow,
-                  { fontSize: fontSize.small, lineHeight: 18, fontWeight: "600" },
+                  { fontSize: fontSize.small, lineHeight: lineHeight.small, fontWeight: "600" },
                 ]}
               >{`${title} · ${groupedFiles.length}`}</Body>
               <Button
@@ -95,7 +94,7 @@ export function GitCommitPanel({
   children,
   busy,
 }: GitCommitPanelProps) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const stagedCount = index.files.filter((file) => file.staged).length;
   const commitDisabled =

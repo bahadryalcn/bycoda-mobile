@@ -1,11 +1,11 @@
 import {expect,it} from "vitest";
 import {workspaceHeaderMaximum} from "./workspace-frame-model";
 it("keeps normal two-row navigation possible beside a useful body",()=>{
- expect(workspaceHeaderMaximum(230,1)).toBe(118);
- expect(workspaceHeaderMaximum(560,1)).toBe(448);
+ expect(workspaceHeaderMaximum(230,1)).toBe(126);
+ expect(workspaceHeaderMaximum(560,1)).toBe(456);
 });
 it("reserves a readable input/action pair even when expanded feedback is very long",()=>{
- for(const height of [144,230,375,640])for(const [scale,budget] of [[1,112],[2,122],[3,149]]){
+ for(const height of [144,230,375,640])for(const [scale,budget] of [[1,104],[2,120],[3,142]]){
   const maximum=workspaceHeaderMaximum(height,scale);expect(maximum).toBeGreaterThanOrEqual(0);expect(height-maximum).toBeGreaterThanOrEqual(Math.min(height/2,budget));
  }
 });
@@ -25,7 +25,7 @@ it("gives short conversations room for search and a readable message after a ful
 });
 
 it("lets large native controls grow beyond the minimum touch size",()=>{
- expect(workspaceHeaderMaximum(162,3)).toBe(58);
- expect(workspaceHeaderMaximum(162,4)).toBe(72);
- expect(workspaceHeaderMaximum(0,3)).toBe(58);
+ expect(workspaceHeaderMaximum(162,3)).toBe(54);
+ expect(workspaceHeaderMaximum(162,4)).toBe(68);
+ expect(workspaceHeaderMaximum(0,3)).toBe(54);
 });

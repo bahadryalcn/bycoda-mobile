@@ -1,10 +1,14 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { BackHandler, View } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { View } from "react-native";
+import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useIsFocused } from "expo-router/react-navigation";
 import type { GitBlameLine, GitChangedFile, GitFileDiff, GitHistory, GitHistoryCommit } from "../../../../src/platform/tauri/fs";
-import { Body, Button, NavigationRow, QueryState, ScreenList, SearchField, SegmentedControl } from "@/ui/primitives";
+import ArrowLeft from "lucide-react-native/icons/arrow-left";
+import { Badge, Body, Button, CodeText, IconButton, NavigationRow, QueryState, ScreenList, SearchField, SegmentedControl } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
+import { gitFilePresentation } from "./git-file-presentation";
+import { relativeTime } from "./shared";
 import { space } from "@/ui/tokens";
 import type { GitScope } from "./git-types";
 import { useDiffPreview } from "./use-diff-preview";
@@ -18,7 +22,7 @@ type HistoryView =
 
 /** Separate virtualized page: history never nests another growing list in the changes list. */
 export function GitHistoryPanel({ scope, onClose }: { scope: GitScope; onClose: () => void }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const [view, setView] = useState<HistoryView>({ kind: "history" });
   const back = useCallback(() => {
@@ -26,12 +30,10 @@ export function GitHistoryPanel({ scope, onClose }: { scope: GitScope; onClose: 
     else if (view.kind === "file") setView({ kind: "commit", commit: view.commit });
     else setView({ kind: "history" });
   }, [view, onClose]);
-  useFocusEffect(useCallback(() => {
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => { back(); return true; });
-    return () => subscription.remove();
-  }, [back]));
+  const focused = useIsFocused();
+  useBackHandler(focused, back);
   const header = <View style={{ gap: space.sm }}>
-    <Button tone="quiet" label={copy("Geri", "Back")} onPress={back} />
+    <IconButton label={copy("Geri", "Back")} onPress={back}><ArrowLeft size={20} color={colors.muted} /></IconButton>
     <Body mono>{scope.root}</Body>
     {view.kind !== "history" ? <>
       <Body>{view.commit.subject}</Body>
@@ -65,7 +67,7 @@ function CommitList({ scope, header, onSelect, path }: ListProps & { path?: stri
     header={<View style={{ gap: space.sm }}>{header}
       <Body>{path ? copy("Dosya geçmişi · mevcut dal", "File history · current branch") : copy("Commit geçmişi", "Commit history")}</Body>
       <SearchField label={copy("Yüklenen commitlerde ara", "Search loaded commits")} value={search} maxLength={200} onChangeText={setSearch} />
-      <QueryState query={query} empty={!filtered.length}
+      <QueryState query={commits.length ? query : { ...query, data: undefined }} empty={!filtered.length}
         emptyTitle={search.trim() ? copy("Aramana uyan commit yok.", "No commits match your search.") : copy("Commit bulunamadı", "No commits found")}
         emptyAction={search.trim() ? { label: copy("Aramayı temizle", "Clear search"), onPress: () => setSearch("") } : undefined} />
     </View>}
@@ -77,16 +79,31 @@ function CommitList({ scope, header, onSelect, path }: ListProps & { path?: stri
 
 /** Presentation-only row also supports isolated rendering with safe fixture data. */
 export function GitHistoryCommitRow({ commit, onSelect }: { commit: GitHistoryCommit; onSelect: () => void }) {
-  return <NavigationRow label={commit.subject || commit.shortSha} detail={`${commit.shortSha} · ${commit.author} · ${new Date(commit.timestamp * 1000).toLocaleDateString()}`} onPress={onSelect} />;
+  const copy = useCopy();
+  return <NavigationRow label={commit.subject || commit.shortSha} labelLines={2} emphasized
+    detail={`${commit.author} · ${relativeTime(commit.timestamp * 1000, copy)}`}
+    trailing={<CodeText selectable={false}>{commit.shortSha}</CodeText>} onPress={onSelect} />;
 }
 
 function CommitFiles({ scope, commit, header, onSelect }: { scope: GitScope; commit: GitHistoryCommit; header: ReactNode; onSelect: (path: string) => void }) {
   const copy = useCopy();
   const query = useGitHistoryRead<GitChangedFile[]>(scope, { kind: "files", sha: commit.sha });
   return <ScreenList data={query.data ?? []} keyExtractor={(file) => file.relative} query={query}
-    header={<View style={{ gap: space.sm }}>{header}<QueryState query={query} empty={!query.data?.length}
+    header={<View style={{ gap: space.sm }}>{header}<QueryState query={query.data?.length ? query : { ...query, data: undefined }} empty={!query.data?.length}
       emptyTitle={copy("Bu committe dosya farkı yok", "No file changes in this commit")} /></View>}
-    renderItem={({ item }) => <NavigationRow label={item.relative} detail={`${item.status} · +${item.additions} −${item.deletions}`} onPress={() => onSelect(item.relative)} />} />;
+    renderItem={({ item }) => <CommitFileRow file={item} onSelect={() => onSelect(item.relative)} />} />;
+}
+
+function CommitFileRow({ file, onSelect }: { file: GitChangedFile; onSelect: () => void }) {
+  const copy = useCopy();
+  const status = gitFilePresentation(file.status);
+  const label = status.kind === "added" ? copy("Eklendi", "Added") : status.kind === "deleted" ? copy("Silindi", "Deleted")
+    : status.kind === "renamed" ? copy("Yeniden adlandırıldı", "Renamed") : copy("Değiştirildi", "Modified");
+  const path = file.relative.replaceAll("\\", "/");
+  const cut = path.lastIndexOf("/");
+  return <NavigationRow label={path.slice(cut + 1)} labelLines={2}
+    detail={`${cut > 0 ? `${path.slice(0, cut)} · ` : ""}+${file.additions} −${file.deletions}`} detailEllipsizeMode="middle"
+    trailing={<Badge label={label} tone={status.tone} />} onPress={onSelect} />;
 }
 
 function HistoricalFile({ scope, commit, path, mode, header, onSelect }: ListProps & { commit: GitHistoryCommit; path: string; mode: "diff" | "blame" | "fileHistory" }) {
@@ -118,7 +135,7 @@ function HistoricalBlame({ scope, commit, path, header }: FileProps) {
   const lines = useMemo(() => content.data?.current.split(/\r?\n/) ?? [], [content.data]);
   return <ScreenList data={supported ? query.data ?? [] : []} keyExtractor={(line) => String(line.line)} query={supported ? query : content}
     header={<View style={{ gap: space.sm }}>{header}<QueryState query={content} />
-      {supported ? <QueryState query={query} empty={!query.data?.length} emptyTitle={copy("Satır geçmişi yok", "No blame lines")} /> : null}
+      {supported ? <QueryState query={query.data?.length ? query : { ...query, data: undefined }} empty={!query.data?.length} emptyTitle={copy("Satır geçmişi yok", "No blame lines")} /> : null}
       {content.data && !supported ? <Body muted>{content.data.status === "deleted"
         ? copy("Dosya bu committe silinmiş. Satır geçmişi önceki committen açılabilir.", "This file was deleted in this commit. Open its parent commit to inspect blame.")
         : copy("İkili veya diff için çok büyük dosya. Tam içeriği bilgisayarda aç.", "Binary file or diff exceeds the mobile budget. Open the full content on your computer.")}</Body> : null}
@@ -127,9 +144,10 @@ function HistoricalBlame({ scope, commit, path, header }: FileProps) {
 }
 
 export function GitBlameRow({ line, content }: { line: GitBlameLine; content?: string }) {
+  const copy = useCopy();
   return <View style={{ gap: space.xs, paddingVertical: space.sm }}>
-    <Body mono>{line.line} · {line.shortSha}</Body><Body>{line.summary}</Body>
-    <Body muted>{line.author} · {new Date(line.timestamp * 1000).toLocaleDateString()}</Body>
+    <Body mono muted>{line.line} · {line.shortSha}</Body><Body>{line.summary}</Body>
+    <Body muted>{line.author} · {relativeTime(line.timestamp * 1000, copy)}</Body>
     <Body mono>{content}</Body>
   </View>;
 }

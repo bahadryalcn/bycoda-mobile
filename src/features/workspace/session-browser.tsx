@@ -3,7 +3,7 @@ import { ScrollView } from "react-native";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import type { HostProject } from "@/domain/types";
-import { FormActions, Notice, Sheet } from "@/ui/primitives";
+import { FormActions, Sheet, StateView } from "@/ui/primitives";
 import { ScreenChromeProvider } from "@/ui/layout";
 import { PrivateContentBoundary, usePrivateContentAccess } from "@/ui/private-content";
 import { useCopy } from "@/ui/copy";
@@ -43,12 +43,12 @@ export function SessionBrowser({ scope, projectId, onClose }: { scope: SessionSc
   const retry = async () => { if (lease.active && originalCurrent() && live.current.supported && !retired.current && live.current.projects.isEnabled !== false && !live.current.projects.isFetching) await live.current.projects.refetch(); };
   const close = () => { if (mounted.current) onClose(); };
   const feedbackQuery = { ...projects, data: usable ? projects.data : undefined, refetch: retry };
-  const unavailable = <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />;
+  const unavailable = <StateView illustration="locked" title={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />;
   return <Sheet visible title={copy("Tarayıcı", "Browser")} size="full" scroll={false} onClose={close}
     footer={!usable ? <FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} /> : undefined}>
-    {!usable ? <ScrollView contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.screen, paddingVertical: space.sm }}>
-      {!available ? unavailable : !supported ? <Notice message={copy("Bu bilgisayar ortak tarayıcıyı desteklemiyor.", "This computer does not support the shared browser.")} />
-        : retired.current ? <Notice message={copy("Proje klasörü değişti. Tarayıcıyı güncel projeden yeniden aç.", "The project folder changed. Reopen the browser from the current project.")} />
+    {!usable ? <ScrollView contentContainerStyle={{ flexGrow: 1, gap: space.sm, paddingHorizontal: space.screen, paddingVertical: space.sm }}>
+      {!available ? unavailable : !supported ? <StateView illustration="error" title={copy("Bu bilgisayar ortak tarayıcıyı desteklemiyor.", "This computer does not support the shared browser.")} />
+        : retired.current ? <StateView illustration="error" title={copy("Proje klasörü değişti. Tarayıcıyı güncel projeden yeniden aç.", "The project folder changed. Reopen the browser from the current project.")} />
         : denied.current && !projects.error && !projects.isFetching ? unavailable
         : proofReady && candidate && !projects.isProjectVisible(opening.projectId, project?.cwd ?? candidate.cwd) ? unavailable
         : <ProjectDirectoryFeedback query={feedbackQuery} readiness={projects.fetchStatus === "paused" || projects.isEnabled === false || !projects.readable ? "waiting" : projects.readiness} privacyUnavailable={projects.privacyUnavailable}

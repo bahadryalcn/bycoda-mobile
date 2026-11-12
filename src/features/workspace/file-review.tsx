@@ -1,13 +1,16 @@
-import { useCallback, useMemo, useState } from "react";
-import { BackHandler, FlatList, ScrollView, View, useWindowDimensions } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useMemo, useState } from "react";
+import { FlatList, ScrollView, View, useWindowDimensions } from "react-native";
+import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useIsFocused } from "expo-router/react-navigation";
 import { useQuery } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useActiveMachine } from "@/state/machines";
 import { useHostClient, useHostQuery, useHostReadActive } from "@/state/queries";
 import {
+  Badge,
   Body,
   Button,
+  HeaderBackButton,
   CodeText,
   ErrorText,
   Notice,
@@ -15,12 +18,12 @@ import {
   Row,
   Screen,
   SegmentedControl,
+  StateView,
 } from "@/ui/primitives";
 import { DocumentPreview, ProjectMedia } from "@/ui/document-preview";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { colors, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { space } from "@/ui/tokens";
 import type { FileEditorProps } from "./file-editor-types";
 import { isMediaFile } from "./file-preview-model";
 import {
@@ -42,7 +45,7 @@ export function FileReview(props: FileEditorProps) {
 }
 
 function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: FileEditorProps) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const client = useHostClient();
@@ -91,29 +94,24 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
         ? file.data
         : undefined;
   const binary = media || text?.includes("\0") === true;
-  useFocusEffect(
-    useCallback(() => {
-      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-        onBack();
-        return true;
-      });
-      return () => subscription.remove();
-    }, [onBack]),
-  );
+  const focused = useIsFocused();
+  useBackHandler(focused, onBack);
   return (
     <Screen scroll={false}>
       <View style={{ paddingHorizontal: space.screen, paddingVertical: space.sm, gap: space.xs }}>
-        <Row>
-          <Button tone="quiet" label={copy("Dosyalara dön", "Back to files")} onPress={onBack} />
-          <Body muted>
-            {source === "draft"
-              ? copy("Korunan taslak · salt okunur", "Preserved draft · read only")
-              : copy("Bilgisayardaki dosya · salt okunur", "Computer file · read only")}
+        <Row style={{ flexWrap: "nowrap" }}>
+          <HeaderBackButton label={copy("Dosyalara dön", "Back to files")} onPress={onBack} />
+          <Body mono numberOfLines={1} ellipsizeMode="middle" style={[uiStyles.grow, { fontWeight: "600" }]}>
+            {path}
           </Body>
+          <Badge
+            label={
+              source === "draft"
+                ? copy("Korunan taslak · salt okunur", "Preserved draft · read only")
+                : copy("Bilgisayardaki dosya · salt okunur", "Computer file · read only")
+            }
+          />
         </Row>
-        <Body mono selectable>
-          {path}
-        </Body>
         <Body mono muted selectable>
           {cwd || root || projectId}
         </Body>
@@ -155,9 +153,9 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
           {source === "computer" && context ? (
             <ProjectMedia path={path} context={context} />
           ) : (
-            <Notice
-              tone="warning"
-              message={copy(
+            <StateView
+              illustration="unreachable"
+              title={copy(
                 "Dosyayı görüntülemek için bilgisayara bağlan.",
                 "Connect to the computer to preview this file.",
               )}
@@ -196,6 +194,7 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
 
 /** Line numbers, selectable source, one virtualized vertical owner and a separate wide-content axis. */
 export function FileSource({ text, initialLine }: { text: string; initialLine?: number }) {
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const { width } = useWindowDimensions();
   const [atResult, setAtResult] = useState(true);

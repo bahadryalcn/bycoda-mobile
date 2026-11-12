@@ -10,6 +10,14 @@ const origin={machineId:"machine",projectId:"project"};
 const state=vi.hoisted(()=>({active:"machine",project:"project",hasMachine:true,enabled:true,paused:false,error:null as Error|null,
  external:false,actions:[] as Array<{key:string;onPress:()=>void}>,rows:[] as MobileInboxItem[],select:vi.fn(),push:vi.fn(),refetch:vi.fn(),reads:[] as boolean[],presses:new Map<string,()=>void>(),
  memory:null as ReturnType<typeof createInboxBrowseMemory>|null,bindings:null as any,scroll:vi.fn()}));
+vi.mock("@/ui/icon-tile", () => ({ IconTile: () => null }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
+vi.mock("lucide-react-native/icons/circle-check", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/circle-help", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/eye", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-pull-request", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/shield-check", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: () => null }));
 vi.mock("expo-router",()=>({router:{push:state.push}}));
 vi.mock("expo-localization",()=>({getLocales:()=>[{languageTag:"en-US"}]}));
 vi.mock("react-native",()=>({View:({children}:PropsWithChildren)=>createElement("div",null,children)}));
@@ -25,17 +33,19 @@ vi.mock("./shared/scope",()=>({Scope:()=>null}));
 vi.mock("./shared/status",()=>({Status:({value}:{value:string})=>createElement("span",null,value),statusLabel:(value:string)=>value}));
 vi.mock("../inbox/provider-inbox-screen",()=>({ProviderInboxScreen:()=>createElement("p",null,"Provider mode")}));
 vi.mock("../inbox/inbox-browse-memory-provider",()=>({InboxBrowseMemoryProvider:({children}:PropsWithChildren)=>children,useInboxBrowseMemory:()=>state.memory}));
+// The row is presentation; these tests cover the screen's scope, routing and retirement rules.
+vi.mock("../inbox/attention-row",()=>({AttentionRow:({item,onPress}:{item:{title:string};onPress:()=>void})=>{state.presses.set(item.title,onPress);return createElement("button",{onClick:onPress},item.title);}}));
 vi.mock("@/ui/primitives",()=>{
  const Wrap=({children}:PropsWithChildren)=>createElement("div",null,children);
- return{Body:Wrap,Row:Wrap,
+ return{Body:Wrap,Row:Wrap,SectionHeader:({title}:{title:string})=>createElement("h3",null,title),Badge:({label}:{label:string})=>createElement("span",null,label),
  ActionMenu:({actions}:any)=>{state.actions=actions.filter(Boolean);return createElement("div",null,...state.actions.map(a=>createElement("button",{key:a.key,onClick:a.onPress},a.key)));},
- Sheet:({visible,children,onClose}:any)=>visible?createElement("aside",null,children,createElement("button",{onClick:onClose},"Close help")):null,Screen:Wrap,ScreenHeader:Wrap,Notice:({message}:{message:string})=>createElement("p",null,message),
+ Sheet:({visible,children,onClose}:any)=>visible?createElement("aside",null,children,createElement("button",{onClick:onClose},"Close help")):null,Screen:Wrap,ScreenHeader:Wrap,StateView:({title,description}:{title:string;description?:string})=>createElement("p",null,title,description),
  QueryState:({query}:{query:{error?:Error}})=>query.error?createElement("p",null,query.error.message):null,
  SegmentedControl:({options,onChange}:{options:Array<{label:string;value:string}>;onChange:(value:string)=>void})=>createElement("nav",null,...options.map(o=>createElement("button",{key:o.value,onClick:()=>onChange(o.value)},o.label))),
  NavigationRow:({label,onPress,supporting}:{label:string;onPress:()=>void;supporting:unknown})=>{state.presses.set(label,onPress);return createElement("button",{onClick:onPress},label,supporting as never);},
  };
 });
-vi.mock("@/ui/screen-list",()=>({ScreenList:(props:any)=>{state.bindings=props;if(props.ref)props.ref.current={scrollToOffset:state.scroll};return createElement("main",{"data-count":props.data.length},props.context,props.header,...props.data.map((item:MobileInboxItem)=>createElement("div",{key:item.id},props.renderItem({item}))));}}));
+vi.mock("@/ui/screen-list",()=>({ScreenList:(props:any)=>{state.bindings=props;if(props.ref)props.ref.current={scrollToOffset:state.scroll};return createElement("main",{"data-count":props.data.length},props.context,props.header,...props.data.map((item:MobileInboxItem,index:number)=>createElement("div",{key:item.id},props.renderItem({item,index}))));}}));
 const row={id:"record-1",title:"Original attention target",kind:"session",sessionId:"session-7",projectId:"target-project",detail:"Original detail",status:"review",updatedAt:Date.UTC(2026,10,3)} as MobileInboxItem;
 let root:ReturnType<typeof createRoot>|undefined,host:HTMLDivElement;
 async function render(){await act(async()=>root!.render(createElement(InboxScreen)));}

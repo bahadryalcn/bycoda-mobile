@@ -1,7 +1,8 @@
 import type { FileEditorProps, FileEditorMode, FileEditorConfirmation } from "./file-editor-types";
 import { useCallback, useEffect, useState } from "react";
-import { BackHandler, useWindowDimensions } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { useWindowDimensions } from "react-native";
+import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { router, useIsFocused } from "expo-router";
 import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine } from "@/state/machines";
@@ -11,7 +12,7 @@ import {
   Body,
   Button,
   ConfirmationCard,
-  IconButton,
+  HeaderBackButton,
   Input,
   MutationState,
   Notice,
@@ -20,12 +21,12 @@ import {
   Screen,
   SegmentedControl,
   Sheet,
+  StateView,
 } from "@/ui/primitives";
-import ChevronLeft from "lucide-react-native/icons/chevron-left";
+import { UnsavedBadge } from "@/ui/unsaved-badge";
 import { useMobileTheme } from "@/ui/theme";
 import { haptic } from "@/ui/motion";
-import { colors, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { space } from "@/ui/tokens";
 import { View } from "react-native";
 import { DocumentPreview, ProjectMedia } from "@/ui/document-preview";
 import { isFileConflict, isMediaFile } from "./file-preview-model";
@@ -41,7 +42,7 @@ const encodeFileDraft = (value: FileDraft | null) =>
   value && value.content !== value.expected ? JSON.stringify(value) : null;
 
 export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }: FileEditorProps) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const manageConnections = () => router.push("/machines");
   const { height } = useWindowDimensions();
@@ -105,19 +106,13 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
     else if (localBack) onBack();
     else navigation.dispatch(data.action);
   });
-  useFocusEffect(
-    useCallback(() => {
-      if (confirmation) return;
-      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-        if (!save.isPending && !transition.isPending) {
-          if (dirty) setConfirmation({ kind: "leave" });
-          else onBack();
-        }
-        return true;
-      });
-      return () => subscription.remove();
-    }, [confirmation, dirty, onBack, save.isPending, transition.isPending]),
-  );
+  const focused = useIsFocused();
+  useBackHandler(focused && !confirmation, () => {
+    if (!save.isPending && !transition.isPending) {
+      if (dirty) setConfirmation({ kind: "leave" });
+      else onBack();
+    }
+  });
   const leaveEditor = useCallback(() => {
     if (confirmation?.kind === "leave" && confirmation.action)
       navigation.dispatch(confirmation.action);
@@ -126,13 +121,11 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
   return (
     <Screen>
       <Row style={{ flexWrap: "nowrap" }}>
-        <IconButton
+        <HeaderBackButton
           label={copy("Dosyalara dön", "Back to files")}
           disabled={transition.isPending || save.isPending}
           onPress={() => (dirty ? setConfirmation({ kind: "leave" }) : onBack())}
-        >
-          <ChevronLeft size={22} strokeWidth={2.2} color={colors.accent} />
-        </IconButton>
+        />
         <Body
           mono
           numberOfLines={1}
@@ -142,10 +135,7 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
           {path}
         </Body>
         {!binary && edit && draft.ready ? (
-          <Badge
-            label={dirty ? copy("Kaydedilmedi", "Unsaved") : copy("Kaydedildi", "Saved")}
-            tone={dirty ? "warning" : undefined}
-          />
+          dirty ? <UnsavedBadge /> : <Badge label={copy("Kaydedildi", "Saved")} />
         ) : null}
       </Row>
       {confirmation?.kind === "leave" ? (
@@ -197,9 +187,9 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
         context ? (
           <ProjectMedia path={path} context={context} />
         ) : (
-          <Notice
-            tone="warning"
-            message={copy(
+          <StateView
+            illustration="unreachable"
+            title={copy(
               "Dosyayı görüntülemek için bilgisayara bağlan.",
               "Connect to the computer to preview this file.",
             )}

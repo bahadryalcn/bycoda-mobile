@@ -1,27 +1,30 @@
+import type { LucideIcon } from "lucide-react-native";
 import { RecordCard } from "@/ui/record-card";
 import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useRef } from "react";
 import { router } from "expo-router";
 import MessageSquare from "lucide-react-native/icons/message-square";
+import Play from "lucide-react-native/icons/play";
+import Check from "lucide-react-native/icons/check";
+import Ban from "lucide-react-native/icons/ban";
+import ListPlus from "lucide-react-native/icons/list-plus";
+import Pencil from "lucide-react-native/icons/pencil";
+import ArrowUp from "lucide-react-native/icons/arrow-up";
+import ArrowDown from "lucide-react-native/icons/arrow-down";
+import GitMerge from "lucide-react-native/icons/git-merge";
+import Undo2 from "lucide-react-native/icons/undo-2";
+import RefreshCw from "lucide-react-native/icons/refresh-cw";
+import Trash2 from "lucide-react-native/icons/trash-2";
 import Square from "lucide-react-native/icons/square";
-import Cpu from "lucide-react-native/icons/cpu";
-import Bot from "lucide-react-native/icons/bot";
-import { uiStyles } from "@/ui/styles";
-import { ActionMenu, Body, Button, Disclosure, ErrorText, IconButton, MutationState, Row } from "@/ui/primitives";
-import { colors, space } from "@/ui/tokens";
+import { ActionMenu, Body, Button, Disclosure, ErrorNotice, IconButton, MutationState, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
-import { statusLabel } from "../shared/status";
-import { ProviderIcon } from "@/ui/provider-identity";
-import { REMOTE_PROVIDERS } from "@/domain/providers";
-import type { RemoteProvider } from "@/domain/types";
+import { Status, statusLabel } from "../shared/status";
 import { Hint } from "@/ui/hint";
-import { decorativeSvgProps } from "@/ui/accessibility";
 import { taskActions } from "../task-actions";
 import { ReviewNotes } from "./review-notes";
 import type { TaskCardProps } from "./types";
-import { TaskStatusIcon } from "./task-status-icon";
 import { TaskDeclineFeedback } from "./task-feedback";
 
 export function TaskCard({
@@ -39,7 +42,7 @@ export function TaskCard({
   tasks,
   lifecycleReady,
 }: TaskCardProps) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const moves = taskActions(task);
@@ -90,17 +93,18 @@ export function TaskCard({
       : task.status === "review"
         ? copy("Tekrar çalıştır", "Retry")
         : copy("Sıraya al", "Queue");
+  const glyph = (Icon: LucideIcon, color = colors.muted) => <Icon size={18} color={color} />;
   const menu = [
     canStart && !!task.sessionId && !starting && {
-      key: "start", label: copy("Şimdi başlat", "Start now"),
+      key: "start", icon: glyph(Play), label: copy("Şimdi başlat", "Start now"),
       disabled: busy || !lifecycleReady || moves.queueBlocked || waiting.length > 0,
       onPress: () => start.mutate({ taskId: task.id }),
     },
     moves.complete && {
-      key: "complete", label: copy("Tamamla", "Complete"), disabled: busy, onPress: complete,
+      key: "complete", icon: glyph(Check), label: copy("Tamamla", "Complete"), disabled: busy, onPress: complete,
     },
     task.source === "steward" && task.status === "todo" && {
-      key: "decline",
+      key: "decline", icon: glyph(Ban, colors.danger),
       label: copy("Öneriyi reddet", "Decline suggestion"),
       destructive: true,
       disabled: busy || editorOpen || !machine?.capabilities?.includes("stewards") || decline.error?.message.includes("Unsupported host method"),
@@ -109,25 +113,25 @@ export function TaskCard({
         copy("Reddet", "Decline"), () => decline.mutate({ taskId: task.id })),
     },
     moves.queue && {
-        key: "queue",
+        key: "queue", icon: glyph(ListPlus),
         label: queueLabel,
         disabled: busy || moves.queueBlocked,
         onPress: () => move.mutate({ taskId: task.id, to: "queued" }),
       },
     moves.edit && {
-      key: "edit",
+      key: "edit", icon: glyph(Pencil),
       label: copy("Düzenle", "Edit"),
       disabled: busy || editorOpen,
       onPress: () => onEdit(task),
     },
     queued && {
-      key: "up",
+      key: "up", icon: glyph(ArrowUp),
       label: copy("Sırada yukarı taşı", "Move up in queue"),
       disabled: busy || !lifecycleReady || position <= 0,
       onPress: () => changeOrder(-1),
     },
     queued && {
-      key: "down",
+      key: "down", icon: glyph(ArrowDown),
       label: copy("Sırada aşağı taşı", "Move down in queue"),
       disabled: busy || !lifecycleReady || position < 0 || position >= ordered.length - 1,
       onPress: () => changeOrder(1),
@@ -136,26 +140,26 @@ export function TaskCard({
       task.status === "review" &&
       !!task.branch &&
       !task.merged && {
-        key: "delivery",
+        key: "delivery", icon: glyph(GitMerge),
         label: copy("Teslim hedefini değiştir", "Change delivery target"),
         disabled: busy || editorOpen,
         onPress: () => onDelivery(task),
       },
     moves.toDo && {
-      key: "todo",
+      key: "todo", icon: glyph(Undo2),
       label: copy("Yapılacaklara geri al", "Return to to-do"),
       disabled: busy,
       onPress: () => move.mutate({ taskId: task.id, to: "todo" }),
     },
     supported &&
       moves.recheck && {
-        key: "recheck",
+        key: "recheck", icon: glyph(RefreshCw),
         label: copy("İncelemeyi yenile", "Recheck review"),
         disabled: busy,
         onPress: () => recheck.mutate({ taskId: task.id }),
       },
     !["running", "verifying"].includes(task.status) && {
-      key: "delete",
+      key: "delete", icon: glyph(Trash2, colors.danger),
       label: copy("Sil", "Delete"),
       destructive: true,
       disabled: busy,
@@ -194,14 +198,9 @@ export function TaskCard({
     <RecordCard
       title={task.title}
       hint={[statusLabel(task.status, copy), task.harness, task.model].filter(Boolean).join(" · ")}
-      status={<Row style={{ gap: space.sm }}>
-        <TaskStatusIcon value={task.status} />
-        {task.harness ? REMOTE_PROVIDERS.includes(task.harness as RemoteProvider)
-          ? <ProviderIcon provider={task.harness as RemoteProvider} size={16} />
-          : <Bot size={16} color={colors.muted} {...decorativeSvgProps} /> : null}
-        {task.model ? <Cpu size={16} color={colors.muted} {...decorativeSvgProps} /> : null}
-      </Row>}
-      menu={<Row style={{ gap: 0, flexWrap: "nowrap" }}>
+      status={<Status value={task.status} />}
+      metadata={[task.harness, task.model].filter(Boolean).join(" · ") || undefined}
+      menu={<Row style={{ gap: 0, flexWrap: "nowrap", alignItems: "flex-start" }}>
         {task.sessionId ? <IconButton label={copy("Oturumu aç", "Open session")} onPress={openSession}>
           <MessageSquare size={18} color={colors.accent} />
         </IconButton> : null}
@@ -242,7 +241,6 @@ export function TaskCard({
       details={
         <>
           <Body>{task.prompt}</Body>
-          {task.harness || task.model ? <Body muted selectable style={uiStyles.caption}>{[task.harness, task.model].filter(Boolean).join(" · ")}</Body> : null}
           {supported && lifecycleReady && (task.status === "todo" || task.status === "queued") && (
             <Body muted style={uiStyles.caption}>
               {copy("Bilgisayardaki sıra", "Queue position on computer")}: {position + 1}
@@ -267,8 +265,8 @@ export function TaskCard({
         </>
       }
     >
-      <ErrorText error={task.error} />
-      <ErrorText error={task.mergeError} />
+      <ErrorNotice error={task.error} />
+      <ErrorNotice error={task.mergeError} />
       {move.variables?.taskId === task.id ? <MutationState mutation={move} /> : null}
       {remove.variables?.taskId === task.id ? <MutationState mutation={remove} /> : null}
       {recheck.variables?.taskId === task.id ? <MutationState mutation={recheck} /> : null}

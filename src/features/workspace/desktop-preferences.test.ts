@@ -106,7 +106,7 @@ vi.mock("@/ui/primitives", () => {
       const [open, setOpen] = useState(false);
       return createElement("div", null, createElement("button", { onClick: () => setOpen(!open), "aria-expanded": open }, label), open ? children : null);
     },
-    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    Notice: ({ message }: { message: string }) => createElement("p", null, message), StateView: ({ title }: { title: string }) => createElement("p", null, title),
     QueryState: () => null,
     ErrorText: ({ error }: { error: Error | null }) => error ? createElement("p", { role: "alert" }, error.message) : null,
     ScreenList: ({

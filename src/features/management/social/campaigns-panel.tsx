@@ -3,7 +3,6 @@ import { ContentExcerpt } from "./content-excerpt";
 import { RecordCard } from "@/ui/record-card";
 import { CollectionRows } from "./collection-rows";
 import { ActionMenu, Body, Button, NavigationGroup, Row, SelectField, Stack } from "@/ui/primitives";
-import { uiStyles } from "@/ui/styles";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { stamp } from "../shared/format";
@@ -11,6 +10,7 @@ import { stamp } from "../shared/format";
 import type { CampaignsPanelProps } from "./types";
 import { accountIdentity, campaignReview, captureCampaignReview, variantReviewLines } from "./review-presentation";
 import { CollectionSearch, useCollectionSearch } from "./collection-search";
+import { useMobileTheme } from "@/ui/theme";
 
 export function CampaignsPanel({
   state,
@@ -20,6 +20,7 @@ export function CampaignsPanel({
   run,
   page,
 }: CampaignsPanelProps) {
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const collection = useCollectionSearch(page ? state.campaigns : state.campaigns.filter((campaign) => !projectId || campaign.projectIds.includes(projectId)),
     (campaign) => [campaign.name, ...campaign.variants.map((variant) => variant.text)].join(" "), page);

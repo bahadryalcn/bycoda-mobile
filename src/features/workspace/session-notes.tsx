@@ -17,6 +17,7 @@ import { readSessionNote, readSessionNotes } from "./session-notes-model";
 import type { SessionScope } from "./session-types";
 import { useComposerTransfer } from "./composer-transfer";
 import { readNoteContext } from "../../../../src/features/notes/noteContext";
+import { FeatureUnavailable, RecordAccessUnavailable } from "./unavailable-state";
 
 /** Read-only notes; only the mounted composer owns insertion and draft persistence. */
 export function SessionNotes({ scope, projectId, onClose }: { scope: SessionScope; projectId: string; onClose: () => void }) {
@@ -101,13 +102,13 @@ export function SessionNotes({ scope, projectId, onClose }: { scope: SessionScop
   };
   const listPresentation = { ...list, data: listReadable ? list.data : undefined, refetch: async () => { if (current() && list.isEnabled !== false) await list.refetch(); } };
   const detailPresentation = { ...detail, data: readable ? detail.data : undefined, refetch: async () => { if (lease.active && current() && live.current.selected === selected && detail.isEnabled !== false) await detail.refetch(); } };
-  const unavailable = <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />;
+  const unavailable = <RecordAccessUnavailable />;
   return <Sheet visible title={copy("Oturum notları", "Session notes")} size="full" scroll={!!selected || !available || !supported} onClose={close}
     footer={<FormActions tone={selected && canTransfer ? "primary" : "quiet"} submitLabel={selected && canTransfer ? copy("Bağlam olarak ekle", "Add as context") : selected ? copy("Geri", "Back") : copy("Kapat", "Close")}
       onSubmit={selected && canTransfer ? attach : close} disabled={!!selected && canTransfer && (detail.isFetching || !!detail.error)}
       cancelLabel={selected && canTransfer ? copy("Geri", "Back") : undefined} onCancel={selected && canTransfer ? back : undefined}
       feedback={transferError && note ? <Notice tone="warning" message={copy("Not eklenemedi. Not en fazla 64.000 karakter olmalı ve etkin oturumdaki mesaj alanı hazır olmalı.", "The note could not be added. It must fit within 64,000 characters and the active session’s composer must be ready.")} /> : undefined} />}>
-    {!available ? unavailable : !supported ? <Notice message={copy("Oturum notlarını görmek için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to view session notes.")} /> : selected ? <Stack>
+    {!available ? unavailable : !supported ? <FeatureUnavailable message={copy("Oturum notlarını görmek için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to view session notes.")} /> : selected ? <Stack>
       <Body selectable>{opening.machineName}</Body>
       <QueryState query={detailPresentation} empty={readable && detail.data === null} emptyTitle={copy("Not bulunamadı.", "Note not found.")} />
       {note ? <PrivateContentAccessProvider value={{ allowed: readable, check: () => lease.active && current() }}><Body selectable>{note.title}</Body><MessageText text={note.body} /></PrivateContentAccessProvider> : !readable && !detail.error && detail.fetchStatus !== "paused" ? unavailable : null}

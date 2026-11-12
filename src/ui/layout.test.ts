@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ refresh: {} as any, viewport: {} as any, frames: [] as Array<(event:any)=>void>, footerStyle:{} as any, footerContent:{} as any, keyboardVisible:false, insets: { top: 0, right: 0, bottom: 0, left: 0 } }));
-vi.mock("./theme", () => ({ useMobileTheme: vi.fn() }));
+vi.mock("./theme", () => ({ useMobileTheme: vi.fn(() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })) }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
 vi.mock("./tokens", async () => {
  const actual=await vi.importActual<typeof import("./tokens")>("./tokens");
@@ -28,9 +28,10 @@ vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => fixt
 vi.mock("react-native-reanimated", () => ({ default: { View: "div" } }));
 vi.mock("panelui-native/components/card", () => ({ Card: "div" }));
 vi.mock("./design-system", () => ({ surfaceClasses: "" }));
+vi.mock("./header-back-button", () => ({ HeaderBackButton: () => null }));
 vi.mock("./motion", () => ({ reveal: undefined }));
 vi.mock("./use-pull-refresh", () => ({ usePullRefresh: vi.fn() }));
-import { Screen, ScreenChromeProvider, ScreenHeading, useScreenHeading } from "./layout";
+import { Screen, ScreenChromeProvider, ScreenHeading, sectionTitleText, useScreenHeading } from "./layout";
 
 describe("page identity and action ownership", () => {
   it("keeps page actions outside the single page scroller", () => {
@@ -130,9 +131,9 @@ it("retains a measured scene through transient zero layouts and keeps the body m
   expect(host.querySelector('[data-keyboard-frame="true"]')).not.toBeNull();
   expect(host.querySelector('[data-keyboard-scroll="false"]')).not.toBeNull();
   const measure=fixture.frames[0];
-  act(()=>measure({nativeEvent:{layout:{height:200}}}));expect(fixture.footerStyle.maxHeight).toBe(112);
+  act(()=>measure({nativeEvent:{layout:{height:200}}}));expect(fixture.footerStyle.maxHeight).toBe(120);
   for(const height of [0,-1,NaN,Infinity])act(()=>measure({nativeEvent:{layout:{height}}}));
-  expect(fixture.footerStyle.maxHeight).toBe(112);
+  expect(fixture.footerStyle.maxHeight).toBe(120);
   act(()=>root.render(createElement(Screen,null,body)));
   expect(host.querySelector('[data-keyboard-frame="false"]')).not.toBeNull();
   expect(host.querySelector('[data-keyboard-scroll="true"]')).not.toBeNull();
@@ -152,4 +153,10 @@ it("removes only the footer navigation inset while the IME owns the bottom edge"
   fixture.keyboardVisible=false;renderToStaticMarkup(page);
   expect(fixture.footerContent.paddingBottom).toBe(idle);
  }finally {fixture.insets.bottom=0;fixture.keyboardVisible=false;}
+});
+
+it("keeps short section titles on one line and lets long ones wrap", () => {
+  expect(sectionTitleText("Access & privacy")).toBe(`Access${String.fromCharCode(0xa0)}&${String.fromCharCode(0xa0)}privacy`);
+  const long = "A very long section title that must still be able to wrap";
+  expect(sectionTitleText(long)).toBe(long);
 });

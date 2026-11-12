@@ -6,7 +6,7 @@ import { ErrorText } from "@/ui/primitives";
 import { ComposerActionSlot, useComposerActionArea } from "@/ui/composer-actions";
 import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useHostClient } from "@/state/queries";
-import { colors, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { moveQueuedMessage, queuedCommand, queuedDeliveryUnknown } from "./composer-delivery";
 import { readSession } from "./session-wire";
@@ -29,7 +29,7 @@ export function SessionQueue({
   running: boolean;
   onCommand: SessionCommand;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const compact = useComposerActionArea();
   const copy = useCopy();
   const client = useHostClient();

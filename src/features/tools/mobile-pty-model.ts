@@ -126,3 +126,14 @@ export function readMobilePtyOutput(
     throw new Error("PTY byte cursor changed");
   return value as MobilePtyRead;
 }
+
+/** Terminal key bytes (base64) for the special-keys row; the PTY write API takes base64 input. */
+export const PTY_KEYS = {
+  escape: "Gw==",
+  tab: "CQ==",
+  interrupt: "Aw==",
+  up: "G1tB",
+  down: "G1tC",
+  right: "G1tD",
+  left: "G1tE",
+} as const;

@@ -2,10 +2,9 @@ import { ScheduleFields } from "../shared/schedule-fields";
 import { SchedulePreview } from "./schedule-preview";
 import { useState } from "react";
 import {
-  Body,
-  ErrorText,
   Stack,
   Field,
+  Section,
   FormActions,
   MutationState,
   NavigationGroup,
@@ -15,6 +14,7 @@ import { haptic } from "@/ui/motion";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { integerInRange, validScheduleTime } from "./schedule-model";
 import { useCopy } from "@/ui/copy";
+import { NumberField } from "@/ui/number-field";
 import { useFormDraft } from "@/state/form-draft";
 import type { HostAutomationInput } from "@/domain/types";
 import { AgentFields } from "../shared/agent-fields";
@@ -50,55 +50,60 @@ export function AutomationEditor({ initial, save, busy, onClose }: AutomationEdi
   };
   return (
     <Stack>
-      <Field
-        editable={!busy}
-        label={copy("Ad", "Name")}
-        value={draft.name}
-        onChangeText={(name) => update({ name })}
-      />
-      <Field
-        editable={!busy}
-        label={copy("Ne yapmalı?", "What should it do?")}
-        value={draft.prompt}
-        onChangeText={(prompt) => update({ prompt })}
-        multiline
-      />
-      <AgentFields
-        onValidityChange={setAgentValid}
-        disabled={busy}
-        value={draft}
-        projectId={draft.projectId}
-        onChange={(agent) => update(agent)}
-      />
-      <ScheduleFields
-        value={draft}
-        minute={minute}
-        onMinuteChange={setMinute}
-        onChange={update}
-        disabled={busy}
-      />
-      <Field
-        editable={!busy}
-        label={copy("Günlük çalıştırma sınırı (0 = sınırsız)", "Daily run limit (0 = unlimited)")}
-        value={limit}
-        keyboardType="number-pad"
-        onChangeText={setLimit}
-      />
-      <SchedulePreview disabled={busy} valid={draft.scheduleKind === "hourly" ? minuteValid : timeValid}
-        schedule={{ scheduleKind: draft.scheduleKind, time: draft.time, minute: Number(minute), dayOfWeek: draft.dayOfWeek }} />
-      {!limitValid && (
-        <ErrorText
-          error={copy("0 ile 1000 arasında bir sınır girin.", "Enter a limit from 0 to 1000.")}
+      <Section title={copy("Görev", "Task")}>
+        <Field
+          editable={!busy}
+          label={copy("Ad", "Name")}
+          value={draft.name}
+          onChangeText={(name) => update({ name })}
         />
-      )}
-      <NavigationGroup>
-        <ToggleField
+        <Field
+          editable={!busy}
+          label={copy("Ne yapmalı?", "What should it do?")}
+          value={draft.prompt}
+          onChangeText={(prompt) => update({ prompt })}
+          multiline
+        />
+      </Section>
+      <Section title={copy("Ajan", "Agent")}>
+        <AgentFields
+          onValidityChange={setAgentValid}
           disabled={busy}
-          label={copy("Etkin", "Enabled")}
-          value={draft.enabled}
-          onChange={(enabled) => update({ enabled })}
+          value={draft}
+          projectId={draft.projectId}
+          onChange={(agent) => update(agent)}
         />
-      </NavigationGroup>
+      </Section>
+      <Section title={copy("Zamanlama", "Schedule")}>
+        <ScheduleFields
+          value={draft}
+          minute={minute}
+          onMinuteChange={setMinute}
+          onChange={update}
+          disabled={busy}
+        />
+        <NumberField
+          editable={!busy}
+          label={copy("Günlük çalıştırma sınırı", "Daily run limit")}
+          unit={copy("çalıştırma", "runs")}
+          hint={copy("0 = sınırsız", "0 = unlimited")}
+          error={limitValid ? undefined : copy("0 ile 1000 arasında bir sınır girin.", "Enter a limit from 0 to 1000.")}
+          value={limit}
+          onChangeText={setLimit}
+        />
+        <SchedulePreview disabled={busy} valid={draft.scheduleKind === "hourly" ? minuteValid : timeValid}
+          schedule={{ scheduleKind: draft.scheduleKind, time: draft.time, minute: Number(minute), dayOfWeek: draft.dayOfWeek }} />
+      </Section>
+      <Section title={copy("Durum", "Status")}>
+        <NavigationGroup>
+          <ToggleField
+            disabled={busy}
+            label={copy("Etkin", "Enabled")}
+            value={draft.enabled}
+            onChange={(enabled) => update({ enabled })}
+          />
+        </NavigationGroup>
+      </Section>
       <FormActions
         feedback={
           <>

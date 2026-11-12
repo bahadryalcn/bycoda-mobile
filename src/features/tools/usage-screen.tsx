@@ -5,21 +5,28 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { useHostQuery } from "@/state/queries";
 import type { HostProject } from "@/domain/types";
-import { Body, Button, Disclosure, Notice, QueryState, ScreenList, SelectField } from "@/ui/primitives";
+import RefreshCw from "lucide-react-native/icons/refresh-cw";
+import { Body, Button, Disclosure, IconButton, Notice, QueryState, ScreenList, SectionHeader, SegmentedControl, SelectField, StateView } from "@/ui/primitives";
 import { MetricRow } from "@/ui/metric-row";
 import { useCopy } from "@/ui/copy";
+import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
-import { RecordCard } from "@/ui/record-card";
 import {
   readUsageReport,
   usageDuration,
   usageNumber,
   type SessionUsageReport,
 } from "./usage-model";
+import { compactTokens, providerUsage, shortSessionId, totalTokens } from "./usage-breakdown";
+import { UsageCost } from "./usage-cost";
+import { UsageLimits } from "./usage-limits";
+import { ProviderShare, UsageKpis } from "./usage-charts";
+import { UsageUnavailable, type UsageTab } from "./usage-summary";
 
 export function UsageScreen({ project }: { project: HostProject }) {
   const copy = useCopy();
   const machine = useActiveMachine();
+  const [tab, setTab] = useState<UsageTab>("tokens");
   const [days, setDays] = useState("1");
   const [untilMs, setUntilMs] = useState(Date.now);
   const [page, setPage] = useState<{ projectId: string; reviewed: ReviewedMachine | undefined; cursor?: string }>(() => ({ projectId: project.id, reviewed: reviewedMachine(machine) }));
@@ -82,14 +89,16 @@ export function UsageScreen({ project }: { project: HostProject }) {
       if (request === flight.current) { pending.current = false; setAction(null); }
     });
   });
+  const { colors } = useMobileTheme();
   const refreshControl = (
-    <Button
-      tone="quiet"
+    <IconButton
       label={copy("Yenile", "Refresh")}
       busy={action === "refresh"}
       disabled={!supported || query.isFetching}
       onPress={() => { void refresh(); }}
-    />
+    >
+      <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
+    </IconButton>
   );
   return (
     <ScreenList
@@ -97,11 +106,25 @@ export function UsageScreen({ project }: { project: HostProject }) {
       subtitle={`${machine?.name ?? ""} · ${project.name}`}
       actions={refreshControl}
       refreshState={supported ? { refreshing: action === "refresh", onRefresh: refresh } : undefined}
-      data={report?.rows ?? []}
+      data={tab === "tokens" ? report?.rows ?? [] : []}
       keyExtractor={(row) => row.sessionId}
       header={
         <View style={{ gap: space.sm }}>
           <Stack.Screen options={{ title: copy("Oturum kullanımı", "Session usage") }} />
+          <SegmentedControl
+            hideLabel
+            label={copy("Kullanım görünümü", "Usage view")}
+            value={tab}
+            options={[
+              { value: "cost", label: copy("Maliyet", "Cost") },
+              { value: "tokens", label: copy("Token", "Tokens") },
+              { value: "limits", label: copy("Limitler", "Limits") },
+            ]}
+            onChange={setTab}
+          />
+          {tab === "cost" ? (machine?.capabilities?.includes("usage.cost.read") ? <UsageCost /> : <UsageUnavailable tab="cost" />) : null}
+          {tab === "limits" ? (machine?.capabilities?.includes("usage.limits.read") ? <UsageLimits /> : <UsageUnavailable tab="limits" />) : null}
+          {tab === "tokens" ? <>
           <SelectField
             label={copy("Zaman aralığı", "Time range")}
             value={days}
@@ -116,9 +139,6 @@ export function UsageScreen({ project }: { project: HostProject }) {
               setCursor(undefined);
             }}
           />
-          <Body muted>
-            {usageWindowDate(sinceMs)} — {usageWindowDate(untilMs)} · UTC
-          </Body>
           <Disclosure label={copy("Nasıl hesaplanır?", "How is usage calculated?")}>
             <Body muted>{copy("Bu bilgisayarda gözlemlenen proje oturumları.", "Project sessions observed on this computer.")}</Body>
             <Body muted>{copy(
@@ -134,8 +154,10 @@ export function UsageScreen({ project }: { project: HostProject }) {
             <Body muted>{new Date(sinceMs).toISOString()} — {new Date(untilMs).toISOString()} · UTC</Body>
           </Disclosure>
           {!supported ? (
-            <Notice
-              message={copy(
+            <StateView
+              illustration="permission"
+              title={copy("Güncelleme gerekiyor", "Update needed")}
+              description={copy(
                 "Oturum kullanımını görmek için bilgisayardaki bycoda’yı güncelle.",
                 "Update bycoda on this computer to view session usage.",
               )}
@@ -155,6 +177,11 @@ export function UsageScreen({ project }: { project: HostProject }) {
           )}
           {report ? (
             <>
+              {hasTotals ? <UsageKpis items={[
+                { title: copy("Toplam token", "Total tokens"), value: compactTokens(totalTokens(report.totals)) },
+                { title: copy("Tur", "Turns"), value: usageNumber(report.totals.turns) },
+                { title: copy("Oturum", "Sessions"), value: usageNumber(report.rows.length) },
+              ]} /> : null}
               {report.coverage.truncated || report.coverage.undatedTurns > 0 ? (
                 <Notice
                   tone="warning"
@@ -164,13 +191,22 @@ export function UsageScreen({ project }: { project: HostProject }) {
                   )}
                 />
               ) : null}
-              {hasTotals ? <RecordCard title={copy("Bu sayfanın gözlemlenen toplamları", "Observed totals on this page")}
-                metadata={`${usageWindowDate(report.sampledAt)} · UTC`}
-                preview={<MetricRow label={`${copy("Gözlemlenen turlar", "Observed turns")}: ${usageNumber(report.totals.turns)}`} value={usageDuration(report.totals.durationMs)} />}
-                details={<UsageValues value={report.totals} />} /> : null}
+              {hasTotals && providerUsage(report.rows).length ? (
+                <View style={{ gap: space.sm }}>
+                  <SectionHeader title={copy("Sağlayıcıya göre", "By provider")} />
+                  <ProviderShare rows={providerUsage(report.rows)} />
+                </View>
+              ) : null}
+              {hasTotals ? (
+                <Disclosure label={copy("Token ayrıntısı", "Token details")}>
+                  <UsageValues value={report.totals} />
+                </Disclosure>
+              ) : null}
             </>
           ) : null}
-          {(!!cursor && (!query.isSuccess || !!report?.rows.length)) || action === "first" ? (
+          </> : null}
+          {tab === "tokens" && report?.rows.length ? <SectionHeader title={copy("Oturumlar", "Sessions")} count={report.rows.length} /> : null}
+          {tab === "tokens" && ((!!cursor && (!query.isSuccess || !!report?.rows.length)) || action === "first") ? (
             <Button
               tone="quiet"
               label={copy("İlk sayfa", "First page")}
@@ -181,16 +217,9 @@ export function UsageScreen({ project }: { project: HostProject }) {
           ) : null}
         </View>
       }
-      renderItem={({ item }) => (
-        <RecordCard
-          title={item.provider}
-          metadata={item.sessionId}
-          preview={<MetricRow label={`${copy("Gözlemlenen turlar", "Observed turns")}: ${usageNumber(item.turns)}`} value={usageDuration(item.durationMs)} />}
-          details={<UsageValues value={item} />}
-        />
-      )}
+      renderItem={({ item }) => <SessionRow row={item} />}
       footer={
-        report?.nextCursor || action === "next" ? (
+        tab === "tokens" && (report?.nextCursor || action === "next") ? (
           <Button
             tone="quiet"
             label={copy("Sonraki sayfa", "Next page")}
@@ -231,6 +260,25 @@ export function UsageValues({ value }: { value: SessionUsageReport["totals"] }) 
       {fields.map(([label, reading]) => (
         <MetricRow key={label} label={label} value={reading} />
       ))}
+    </View>
+  );
+}
+
+/** One observed session: provider as the title, the shortened id beside it, and the reading on the right. */
+function SessionRow({ row }: { row: SessionUsageReport["rows"][number] }) {
+  const copy = useCopy();
+  const { colors } = useMobileTheme();
+  const tokens = totalTokens(row);
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm, borderBottomWidth: 1, borderColor: colors.separator }}>
+      <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
+        <Body style={{ fontWeight: "600" }}>{row.provider}</Body>
+        <Body muted mono>{`${copy("Oturum", "Session")} ${shortSessionId(row.sessionId)}`}</Body>
+      </View>
+      <View style={{ alignItems: "flex-end", minWidth: 0, gap: space.xs }}>
+        <Body mono>{tokens === null ? "—" : `${compactTokens(tokens)} ${copy("token", "tokens")}`}</Body>
+        <Body muted>{`${usageNumber(row.turns)} ${copy("tur", "turns")} · ${usageDuration(row.durationMs)}`}</Body>
+      </View>
     </View>
   );
 }

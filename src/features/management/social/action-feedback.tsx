@@ -19,6 +19,12 @@ const owners: Record<string, Collection | undefined> = {
   "jobs.retry": "jobs",
 };
 
+/** These row buttons show their own busy state, so the row feedback must not add a second spinner. */
+const rowButtonBusy = new Set([
+  "drafts.approve", "replies.send", "messages.send", "comments.send",
+  "campaigns.pause", "jobs.cancel", "jobs.retry",
+]);
+
 /** Unknown operations stay with the screen owner; never guess from an id alone. */
 export function socialActionTarget(
   variables: Record<string, unknown> | undefined,
@@ -41,11 +47,11 @@ export function socialActionTarget(
   return { collection, id: input.id };
 }
 
-export function SocialActionFeedback({ action }: Context) {
+export function SocialActionFeedback({ action, quietPending }: Context & { quietPending?: boolean }) {
   const copy = useCopy();
   return (
     <MutationState
-      pending={copy("İşlem sürüyor…", "Working…")}
+      pending={quietPending ? undefined : copy("İşlem sürüyor…", "Working…")}
       mutation={
         action.variables?.action === "campaigns.approveReviewed"
           ? { ...action, error: campaignApprovalError(action.error, copy) }
@@ -74,6 +80,6 @@ export function SocialRecordFeedback({
 }: Context & { collection: Collection; id: string }) {
   const target = socialActionTarget(action.variables);
   return target?.collection === collection && target.id === id ? (
-    <SocialActionFeedback action={action} />
+    <SocialActionFeedback action={action} quietPending={rowButtonBusy.has(String(action.variables?.action))} />
   ) : null;
 }

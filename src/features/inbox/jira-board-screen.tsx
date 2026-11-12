@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useCopy } from "@/ui/copy";
-import { ActionMenu, Body, Button, Notice, QueryState, Row, ScreenList, SelectField, Sheet, Stack } from "@/ui/primitives";
+import { ActionMenu, Body, Button, Notice, QueryState, Row, ScreenList, SelectField, Sheet, Stack, StateView } from "@/ui/primitives";
 import { AppliedFilters, FilterButton } from "@/ui/filter-sheet";
 import { CollectionToolbar } from "@/ui/search-field";
 import { useInboxRead } from "./provider-queries";
@@ -84,9 +84,9 @@ export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
       onChanged={() => { if (available()) void board.refetch(); }} onClose={() => setSelected(null)} /> : null}
     <ScreenList<JiraMobileIssue> data={rows} keyExtractor={(item) => item.identifier} refresh={readable ? refresh : undefined}
       header={<Stack>
-        {!supported ? <Notice message={copy("Jira panoları için bir proje seç ve bilgisayardaki bycoda’yı güncelle.", "Select a project and update bycoda on this computer to open Jira boards.")} /> :
-          !canRead ? <Notice message={copy("Jira panolarına erişilemiyor. Bilgisayar ve proje bağlantısını kontrol edin.", "Jira board access is unavailable. Check the computer and project connection.")} /> : null}
-        {readable ? <QueryState query={boards} empty={boards.isSuccess && !boards.data?.length}
+        {!supported ? <StateView illustration="permission" title={copy("Güncelleme gerekiyor", "Update needed")} description={copy("Jira panoları için bir proje seç ve bilgisayardaki bycoda’yı güncelle.", "Select a project and update bycoda on this computer to open Jira boards.")} /> :
+          !canRead ? <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")} description={copy("Jira panolarına erişilemiyor. Bilgisayar ve proje bağlantısını kontrol edin.", "Jira board access is unavailable. Check the computer and project connection.")} /> : null}
+        {readable ? <QueryState query={boards} empty={boards.isSuccess && !boards.data?.length} emptyIllustration="no-projects"
           emptyTitle={copy("Bilgisayarda etkin Jira panosu yok.", "No Jira boards are enabled on the computer.")} /> : null}
         <CollectionToolbar field={<SelectField compact hideLabel={!!boardId} label={copy("Jira panosu", "Jira board")}
           value={contentAvailable ? boardId : ""} disabled={!contentAvailable}
@@ -127,6 +127,7 @@ export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
         }} /> : null}
       </Row>{cursorStopped ? <Notice message={copy("Sayfa sınırına veya tekrarlanan imlece ulaşıldı. Pano kapsamını değiştir veya önceki sayfaları incele.", "The page limit or a repeated cursor was reached. Change the board scope or review earlier pages.")} /> : null}</Stack> : undefined}
       renderItem={({ item }) => <IssueRecordRow label={`${item.identifier} · ${item.title}`} state={item.state}
+        caption={item.assignees?.[0]?.login}
         disabled={!contentAvailable || !canWrite || board.isFetching} onPress={() => { if (canBrowse() && snapshot) setSelected({ issue: item, snapshot }); }} />} />
     {filterDraft && contentAvailable ? <JiraBoardFilterSheet value={filterDraft.value} sprints={sprints} columns={snapshot?.configuration.columns ?? []}
       disabled={!readable || filterDraft.boardId !== boardId} feedback={<QueryState query={board} loading="inline" />}

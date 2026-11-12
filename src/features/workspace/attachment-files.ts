@@ -53,7 +53,7 @@ export function stageBrowserCapture(value: unknown, comment: string, scope: Brow
   const file: StagedAttachment = { id, name: "browser-element.jpg", kind: "image", mimeType: "image/jpeg", size: bytes.length,
     uri: new File(directory, id).uri, browserAnnotation };
   validateAttachment(file);
-  try { directory.create({ idempotent: true, intermediates: true }); const local = new File(file.uri); local.create(); local.write(bytes); return file; }
+  try { directory.create({ idempotent: true, intermediates: true }); const local = new File(file.uri); local.create(); local.writeSync(bytes); return file; }
   catch (error) { removeStagedFile(file); throw error; }
   });
 }
@@ -74,4 +74,18 @@ export function clearAttachmentDraftFiles(retainedScopes: readonly string[]) {
     catch { return true; }
   })) throw new Error("Invalid attachment draft directory entry.");
   for (const entry of entries) if (!keep.has(entry.uri.replace(/\/+$/, ""))) entry.delete();
+}
+/** Copies a local file (for example a cached image) into the draft staging folder as an attachment. */
+export async function stageLocalFile(file: { uri: string; name: string; mimeType?: string }, scope: string): Promise<StagedAttachment> {
+  const owner = createDraftStorageOwner(AsyncStorage, `bycoda.mobile.draft.v1:${scope}`);
+  return owner.run(async () => {
+    if (!file.uri.startsWith("file:")) throw new Error("Only a downloaded file can be attached.");
+    const directory = new Directory(Paths.document, "chat-drafts", encodeURIComponent(scope));
+    directory.create({ idempotent: true, intermediates: true });
+    const source = new File(file.uri), id = randomUUID(), mimeType = file.mimeType ?? "application/octet-stream";
+    const staged: StagedAttachment = { id, name: file.name || source.name || "attachment", mimeType, size: source.size, uri: new File(directory, id).uri,
+      kind: mimeType.startsWith("image/") ? "image" : mimeType.startsWith("audio/") ? "audio" : "file" };
+    validateAttachment(staged);
+    try { await source.copy(new File(staged.uri)); return staged; } catch (error) { removeStagedFile(staged); throw error; }
+  });
 }

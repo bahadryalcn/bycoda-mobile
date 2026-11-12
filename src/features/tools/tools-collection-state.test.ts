@@ -9,6 +9,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DevServersScreen } from "./dev-servers-screen";
 import { DevicesScreen } from "./devices-screen";
+vi.mock("lucide-react-native/icons/wrench", () => ({ default: () => null }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("expo-crypto", () => { let id = 0; return { randomUUID: () => String(++id) }; });
 const state = vi.hoisted(() => ({
@@ -27,7 +28,7 @@ vi.mock("./dev-server-detail", () => ({ DevServerDetail: () => null }));
 vi.mock("./device-runtime", () => ({ DeviceRuntime: () => null }));
 vi.mock("./device-viewer", () => ({ DeviceViewer: () => null }));
 vi.mock("@/ui/issue-summary", () => ({ IssueSummary: () => null }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/motion", () => ({ haptic: { success: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({
   useCopy: () => (_tr: string, en: string, params?: Record<string, unknown>) =>

@@ -41,6 +41,27 @@ const queue = (): SharedQueue => ({
   messages: [queuedComposerMessage("q", session(), "Next", [attachment])],
 });
 
+describe("mobile draft mode", () => {
+  it("saves a draft through the Host draft command without an agent turn", () => {
+    expect(composerCommand({ ...session(), authorityGeneration: 3 }, "send", "/draft later", [attachment])).toEqual({
+      type: "draft",
+      authorityGeneration: 3,
+      sessionId: "s",
+      text: "later",
+      attachments: [attachment],
+    });
+    expect(composerCommand(session(), "send", "/draft ", [attachment])).toMatchObject({ type: "draft", text: "" });
+  });
+  it("refuses an empty, running or duplicate draft and note context", () => {
+    expect(() => composerCommand(session(), "send", "/draft ", [])).toThrow(/before saving a draft/);
+    expect(() => composerCommand(session("running"), "send", "/draft x", [])).toThrow(/running/);
+    const saved = session();
+    saved.session.blocks = [{ id: "d", role: "user", text: "x", draft: true }];
+    expect(() => composerCommand(saved, "send", "/draft y", [])).toThrow(/already has a draft/);
+    expect(() => validateNoteDelivery({} as never, "send", "/draft y", true)).toThrow();
+  });
+});
+
 describe("mobile composer delivery", () => {
   it.each([undefined, 2])(
     "sends queued generation %s without blessing it from the displayed generation",

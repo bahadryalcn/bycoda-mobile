@@ -28,18 +28,22 @@ must be checked against installed source before implementation.
 | --- | --- | --- |
 | Clear peer navigation | `tabs` | Existing `SegmentedControl`, navigator and floating-tab owners; preserve route semantics, avoid duplicate tabs |
 | Secondary actions | `menu`, `context-menu` | `src/ui/overflow-menu.tsx`; retain accessible trigger and visible frequent actions |
-| One/many values and search | `select`, `search-bar`, `tag-input` | `src/ui/select-field.tsx`, `src/ui/search-field.tsx`; preserve single/multiple/free-entry contracts |
-| Fields and numeric values | `input`, `input-group`, `number-input` | `src/ui/fields.tsx`; retain labels, refs, keyboard, validation and pending state |
+| One/many values and search | `select`, `search-bar`, `tag-input` | `src/ui/select-field.tsx`; `src/ui/search-field.tsx` is built on `search-bar`. Preserve single/multiple/free-entry contracts |
+| Fields and numeric values | `input`, `input-group`, `otp-input`, `number-input` | `src/ui/fields.tsx`; `src/ui/number-field.tsx` on `input-group` commits every keystroke (`number-input` commits on blur); `src/ui/code-field.tsx` on `otp-input` for verification codes only. Retain labels, refs, keyboard, validation and pending state |
 | Advanced details/history | `accordion`, `timeline` | Existing `Disclosure` or focused shared composite; do not collapse required errors/state |
 | Long editors and confirmation | `bottom-sheet`, `dialog` | `src/ui/dialogs.tsx`; preserve private overlay, dirty guard, Back, focus and keyboard owners |
-| Loading, empty and feedback | `skeleton`, `empty-state`, `alert` | `src/ui/query-state.tsx`, `src/ui/feedback.tsx`; use semantic states and useful recovery |
-| Message composer and transcript | `ai-input`, `message`, `message-scroller` | `src/ui/chat.tsx` plus workspace owners; preserve virtualized list, streaming, drafts, queue and measured composer |
+| Loading, empty and feedback | `skeleton`, `empty-state`, `alert` | `src/ui/query-state.tsx`, `src/ui/feedback.tsx`; `StateView` renders on `empty-state` for empty/waiting/unavailable regions, and `Skeleton` hands off through `useSkeletonHandoff`; `Notice` only for action feedback; no connection or stale banners |
+| Message composer and transcript | `ai-input`, `message` | `src/ui/chat.tsx` plus workspace owners; preserve virtualized list, streaming, drafts, queue and measured composer. `message-scroller` was evaluated and not adopted (LegendList stays) |
 | Attachments and code | `attachment`, `code-block` | Chat/file preview facades; keep transfer ownership, cancel/error and readable wide-content handling |
-| Execution plan | `plan`, `planner`, `timeline` | Existing structured transcript/plan presentation; real progress and expandable details |
+| Execution plan | `plan` | Existing structured transcript/plan presentation; real progress and expandable details. `planner` and `timeline` were evaluated and not adopted |
 | Dense structured data | `table` | Use `src/ui/metric-row.tsx` for fixed read-only label/reading summaries; use focused table presentation for richer collections. Preserve all fields/actions and readable narrow-screen details |
 | Pairing | `qr-code` | Existing connection flow; no QR credential/expiry/security contract changes |
 | Contextual help | `tooltip`, `accordion` | Shared disclosure/help; touch and screen-reader access, never hover-only explanation |
-| Appearance | `theme-selector` | Existing appearance setting and controller; preserve system mode and mounted drafts |
+| Appearance | `theme-selector` | `ThemeSelector` in `src/features/settings/settings-screen.tsx`, controlled by the persisted `themeMode` with `applyTheme={false}`; `MobileThemeController` stays the only mode owner |
+| Agent questions | `questionnaire` | `features/workspace/question-card.tsx`; reply payload unchanged |
+| Long documents | `section-progress` | `src/ui/section-progress.tsx` (`SectionNavigator`) for terms and privacy; a sibling of the scroller |
+| Schedules and quiet hours | `week-hours-grid` | `src/ui/week-hours.tsx`, read-only beside the editable fields |
+| Hold-to-confirm | `progress-button` | `ProgressButton` in `src/ui/buttons.tsx` for one deliberate, hard-to-undo action; not for routine submits |
 
 ## Integration boundaries
 
@@ -183,13 +187,10 @@ unrequested package upgrades and do not edit `node_modules` as the deliverable.
 
 ## Retained compatibility
 
-Current Expo routes use feature owners and focused product facades. The retained
-`src/screens/management/{shared,work-screens}.tsx`,
-`src/screens/workspace/{shared,session-screen,sessions-screen}.tsx` and
-`src/ui/components.tsx` have no runtime-module import path from the current app
-route roots. The copied `src/ui/gluestack/` subtree is also outside that graph.
-This is static application reachability, not a claim about external consumers.
-Keep these compatibility contracts; do not delete or wire them back into routes
+Current Expo routes use feature owners and focused product facades. The former `src/screens/` and `src/ui/gluestack/` compatibility trees were removed.
+The retained `src/ui/components.tsx` has no runtime-module import path from the
+current app route roots. This is static application reachability, not a claim
+about external consumers. Keep that compatibility contract; do not wire it back into routes
 without reviewing their behavior and authority against current feature owners.
 
 Compatibility presentation remains a thin adapter: let shared ErrorNotice own

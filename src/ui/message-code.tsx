@@ -6,8 +6,8 @@ import { HtmlDocument } from "./html-document";
 import type { MessageContext } from "./media-policy";
 import type { ChatTextSize } from "@/state/chat-appearance-model";
 import { useCopy } from "./copy";
-import { colors, radii, space } from "./tokens";
-import { chatTextStyles } from "./chat-styles";
+import { radii, space } from "./tokens";
+import { useChatTextStyles } from "./chat-styles";
 import { useChatAppearance } from "@/state/chat-appearance";
 import { CodeSource } from "./code-source";
 import { codePreview, codePreviewKind } from "./message-code-model";
@@ -33,7 +33,7 @@ type MessageCodeProps = {
   allowPreview?: boolean;
 };
 
-/** Transcript shows a bounded preview; full code opens outside the inverted list. */
+/** Transcript shows a bounded preview; full code opens outside the list. */
 export function MessageCode({ compact = false, ...props }: MessageCodeProps) {
   useMobileTheme();
   const copy = useCopy();
@@ -76,11 +76,11 @@ function CodePreview({ code, context, kind, visible, onClose }: {
 function CodeDocument({ code, language = "", complete = true, context, textSize,
   compact = false, onOpen, copyLabel, allowPreview = true,
 }: MessageCodeProps & { onOpen?: () => void }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const preference = useChatAppearance((state) => state.textSize);
   const size = textSize ?? preference;
-  const styles = chatTextStyles(size);
+  const styles = useChatTextStyles(size);
   const [preview, setPreview] = useState(false);
   // The prepared payload is always the complete source, never the bounded preview.
   const clipboard = useClipboardFeedback(code);

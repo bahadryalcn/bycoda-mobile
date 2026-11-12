@@ -5,10 +5,10 @@ import runtime from "../../assets/mermaid-runtime";
 import { Body, Button, Sheet } from "./primitives";
 import { HtmlPreview } from "./html-preview";
 import { useCopy } from "./copy";
-import { colors, space } from "./tokens";
+import { space } from "./tokens";
 
 export function MessageDiagram({ source, fill = false }: { source: string; fill?: boolean }) {
-  const { mode } = useMobileTheme();
+  const { mode, colors } = useMobileTheme();
   const copy = useCopy(); const [open, setOpen] = useState(false);
   const allowed = source.length <= 32_000 && source.split("\n").length <= 400;
   const failureText = copy("Önizleme açılamadı.", "Preview could not be opened.");

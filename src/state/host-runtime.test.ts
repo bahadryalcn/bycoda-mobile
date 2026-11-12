@@ -89,6 +89,86 @@ describe("single app mobile Host supervisor", () => {
     expect(f.native.acquireCredential).toHaveBeenLastCalledWith({ ...binding, accessEpoch: 3 });
     lease.release();
   });
+  it("re-acquires an expired native credential handle instead of blocking (app returned from background)", async () => {
+    const f = fakeNative();
+    vi.mocked(f.native.open).mockRejectedValueOnce(
+      new Error("Host socket: credential_handle_expired"),
+    );
+    const registry = new MobileHostRuntimeRegistry(f.native, "app-a", () => 0);
+    registries.push(registry);
+    const lease = registry.retain(binding, ["transport.ws.v2"])!;
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    expect(vi.mocked(f.native.acquireCredential).mock.calls.length).toBeGreaterThanOrEqual(2);
+    lease.release();
+  });
+  it("retries when native access is briefly unavailable while returning to the foreground", async () => {
+    const f = fakeNative();
+    vi.mocked(f.native.acquireCredential).mockRejectedValueOnce(new Error("Host socket: unavailable"));
+    const registry = new MobileHostRuntimeRegistry(f.native, "app-a", () => 0);
+    registries.push(registry);
+    const lease = registry.retain(binding, ["transport.ws.v2"])!;
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    lease.release();
+  });
+  it("reconnects after a failed native access call instead of reporting access denied", async () => {
+    const f = fakeNative();
+    vi.mocked(f.native.setAccess).mockRejectedValueOnce(new Error("Host socket: busy"));
+    const registry = new MobileHostRuntimeRegistry(f.native, "app-a", () => undefined, () => 0);
+    registries.push(registry);
+    const lease = registry.retain(binding, ["transport.ws.v2"])!;
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    registry.setAccess(false, 2);
+    registry.setAccess(true, 3);
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    lease.release();
+  });
+  it("shares one socket among more than 64 screen clients instead of failing them as busy", async () => {
+    const f = fakeNative();
+    const registry = new MobileHostRuntimeRegistry(f.native, "app-a", () => undefined, () => 0);
+    registries.push(registry);
+    const leases = Array.from({ length: 100 }, () => registry.retain(binding, ["transport.ws.v2"])!);
+    await vi.waitFor(() => expect(leases[99]!.state()).toBe("ready"));
+    for (const lease of leases) lease.onState(() => undefined);
+    expect(f.native.open).toHaveBeenCalledTimes(1);
+    for (const lease of leases) lease.release();
+  });
+  it("retries when the app moved while the native credential was read", async () => {
+    const f = fakeNative();
+    vi.mocked(f.native.acquireCredential).mockRejectedValueOnce(
+      new Error("Host socket: access_changed"),
+    );
+    const registry = new MobileHostRuntimeRegistry(f.native, "app-a", () => 0);
+    registries.push(registry);
+    const lease = registry.retain(binding, ["transport.ws.v2"])!;
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    lease.release();
+  });
+  it("re-checks an authentication block while in use, so a Host restart does not leave it stuck", async () => {
+    vi.useFakeTimers();
+    const f = fakeNative();
+    const registry = new MobileHostRuntimeRegistry(f.native, "app-a", () => undefined, () => 0);
+    registries.push(registry);
+    const lease = registry.retain(binding, ["transport.ws.v2"])!;
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    f.event("error", { code: "authentication" });
+    await vi.waitFor(() => expect(lease.state()).toBe("blocked"));
+    expect(f.native.open).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(20_000);
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    expect(f.native.open).toHaveBeenCalledTimes(2);
+    lease.release();
+  });
+  it("re-acquires the handle after the native side invalidates credentials on a live socket", async () => {
+    const f = fakeNative();
+    const registry = new MobileHostRuntimeRegistry(f.native, "app-a", () => 0);
+    registries.push(registry);
+    const lease = registry.retain(binding, ["transport.ws.v2"])!;
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    f.event("error", { code: "credentials_invalidated" });
+    await vi.waitFor(() => expect(f.native.acquireCredential).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    lease.release();
+  });
   it("preserves the explicit legacy adapter and refuses requests queued during reconnect", async () => {
     const f = fakeNative();
     const registry = new MobileHostRuntimeRegistry(f.native, "app-a", () => undefined);

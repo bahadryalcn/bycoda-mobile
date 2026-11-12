@@ -7,12 +7,11 @@ import type { HostSteward, HostStewardInput } from "@/remote/types";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { colors } from "@/ui/tokens";
 import {
   Body,
   IconButton,
   MutationState,
-  Notice,
+  StateView,
   QueryState,
   SearchField,
   Sheet,
@@ -25,8 +24,10 @@ import { identifier } from "./shared/format";
 import { StewardCard } from "./stewards/steward-card";
 import { savedStewardId } from "./stewards/steward-feedback";
 import { StewardEditor } from "./stewards/steward-editor";
+import { useMobileTheme } from "@/ui/theme";
 
 export function StewardsScreen() {
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const machine = useActiveMachine();
@@ -51,6 +52,7 @@ export function StewardsScreen() {
   const existingSteward = projectId
     ? query.data?.find((item) => item.projectId === projectId)
     : undefined;
+  const canCreate = !!projectId && !!machine?.providers?.length && !busy && !editor && !existingSteward;
   const create = () => {
     if (
       !projectId ||
@@ -115,9 +117,10 @@ export function StewardsScreen() {
       header={
         <>
           {!supported ? (
-            <Notice
-              tone="info"
-              message={copy(
+            <StateView
+              illustration="permission"
+              title={copy("Güncelleme gerekiyor", "Update needed")}
+              description={copy(
                 "Bu bilgisayar proje sorumlularını desteklemiyor.",
                 "This computer does not support project stewards.",
               )}
@@ -138,7 +141,7 @@ export function StewardsScreen() {
                 ref={searchInput}
                 value={search}
                 onChangeText={setSearch}
-                label={copy("Ara", "Search")}
+                label={copy("Odak veya modelde ara", "Search steward focus and model")}
               />
               {!rows.some(
                 (item) => item.id === savedStewardId(save.variables),
@@ -168,7 +171,21 @@ export function StewardsScreen() {
                         "No project stewards yet",
                       )
                 }
-                emptyAction={search.trim() && scoped.length ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
+                emptyDetail={
+                  scoped.length
+                    ? undefined
+                    : copy(
+                        "Proje sorumlusu projeyi düzenli inceler ve yeni görevler önerir.",
+                        "A project steward reviews the project on a schedule and proposes new tasks.",
+                      )
+                }
+                emptyAction={
+                  search.trim() && scoped.length
+                    ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+                    : !search.trim() && canCreate
+                      ? { label: copy("Yeni proje sorumlusu", "New project steward"), onPress: create }
+                      : undefined
+                }
               />
             </>
           )}

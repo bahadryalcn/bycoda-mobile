@@ -5,10 +5,13 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DevicePermissionSettings } from "./device-permission-settings";
 
 const mocks = vi.hoisted(() => ({ read: vi.fn(), allow: vi.fn(), settings: vi.fn(), test: vi.fn(), listeners: [] as ((state: string) => void)[] }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }), HintSection: ({ children }: PropsWithChildren) => createElement("div", null, children), InfoHint: () => null, InfoPanel: () => null, HintLabel: () => null, UnitHint: () => null, isUnitHint: () => false }));
 vi.mock("react-native", () => ({
+  View: ({ children }: PropsWithChildren) => createElement("div", null, children),
   Linking: { openSettings: mocks.settings },
   AppState: { addEventListener: (_event: string, listener: (state: string) => void) => { mocks.listeners.push(listener); return { remove: () => { mocks.listeners.splice(mocks.listeners.indexOf(listener), 1); } }; } },
 }));
+vi.mock("../push/PushSettings", () => ({ PushSettings: () => null, usePushTestFromComputer: () => ({ action: { error: null }, disabled: false, busy: false, run: () => undefined }) }));
 vi.mock("./device-permissions", () => ({ readDevicePermission: mocks.read, allowDevicePermission: mocks.allow, testDeviceNotification: mocks.test }));
 vi.mock("@/state/actions", async () => {
   const { useCallback, useRef, useState } = await import("react");
@@ -20,13 +23,20 @@ vi.mock("@/state/actions", async () => {
   } };
 });
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { muted: "#777" } }) }));
+vi.mock("lucide-react-native/icons/bell", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/camera", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/image", () => ({ default: () => null }));
+vi.mock("@/ui/icon-tile", () => ({ IconTile: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
-    Body: Wrapper, Stack: Wrapper, NavigationGroup: Wrapper, Disclosure: Wrapper, MutationState: ({ mutation }: { mutation: { error: unknown } }) => mutation.error instanceof Error ? createElement("p", null, mutation.error.message) : null, ErrorText: () => null,
-    NavigationRow: ({ label, detail, disabled, onPress }: { label: string; detail: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, `${label}: ${detail}`),
-    Button: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
-    FormActions: ({ submitLabel, disabled, feedback }: { submitLabel: string; disabled?: boolean; feedback?: ReactNode }) => createElement("div", { "data-form-actions": true }, feedback, createElement("button", { disabled }, submitLabel)),
+    SectionHeader: ({ title }: { title: string }) => createElement("h2", null, title), Body: Wrapper, Stack: Wrapper, Row: Wrapper, NavigationGroup: Wrapper,
+    Section: ({ title, children }: PropsWithChildren<{ title: string }>) => createElement("section", null, createElement("h2", null, title), children),
+    MutationState: ({ mutation }: { mutation: { error: unknown } }) => mutation.error instanceof Error ? createElement("p", null, mutation.error.message) : null,
+    Badge: ({ label }: { label: string }) => createElement("span", { "data-badge": true }, label),
+    NavigationRow: ({ label, disabled, onPress, trailing }: { label: string; disabled?: boolean; onPress: () => void; trailing?: ReactNode }) => createElement("div", { "data-row": label }, createElement("button", { disabled, onClick: onPress }, label), trailing),
+    Button: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { disabled, onClick: onPress }, label),
     Notice: ({ message, onRetry }: { message: string; onRetry?: () => void }) => createElement("div", null, createElement("p", null, message), onRetry ? createElement("button", { onClick: onRetry }, "Retry") : null),
   };
 });
@@ -36,6 +46,8 @@ const undetermined = { granted: false, canAskAgain: true, status: "undetermined"
 let root: ReturnType<typeof createRoot> | undefined; let container: HTMLDivElement;
 const buttons = () => [...container.querySelectorAll("button")].map((button) => button.textContent);
 const find = (text: string) => [...container.querySelectorAll("button")].find((button) => button.textContent === text)!;
+// The state badge shown on a permission row; null when the state is unknown.
+const badgeOf = (label: string) => container.querySelector(`[data-row="${label}"] [data-badge]`)?.textContent ?? null;
 async function render() { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); root = createRoot(container); await act(async () => root!.render(createElement(DevicePermissionSettings))); }
 beforeEach(() => { vi.stubEnv("EXPO_OS", "android"); });
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; vi.clearAllMocks(); mocks.listeners.length = 0; vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
@@ -43,22 +55,21 @@ afterEach(async () => { await act(async () => root?.unmount()); root = undefined
 it("a failing notification read leaves the camera usable, exposes Retry, and never requests a permission on mount", async () => {
   mocks.read.mockImplementation(async (kind: string) => { if (kind === "notifications") throw new Error("unavailable"); return undetermined; });
   await render();
-  expect(buttons()).toContain("Camera: Permission required"); expect(buttons()).toContain("Notifications: Could not check");
-  expect(find("Camera: Permission required").disabled).toBe(false); expect(find("Notifications: Could not check").disabled).toBe(true);
+  expect(badgeOf("Camera")).toBe("Not asked"); expect(badgeOf("Notifications")).toBeNull();
+  expect(find("Camera").disabled).toBe(false); expect(find("Notifications").disabled).toBe(true);
   expect(mocks.allow).not.toHaveBeenCalled(); expect(mocks.settings).not.toHaveBeenCalled();
   mocks.read.mockResolvedValue(granted);
   await act(async () => find("Retry").click());
-  expect(buttons()).toContain("Notifications: Allowed"); expect(buttons()).not.toContain("Retry"); expect(mocks.allow).not.toHaveBeenCalled();
+  expect(badgeOf("Notifications")).toBe("Granted"); expect(buttons()).not.toContain("Retry"); expect(mocks.allow).not.toHaveBeenCalled();
 });
-it("shows Checking only while a read is pending and refreshes again when the app returns to the foreground", async () => {
+it("shows no badge while a read is pending and refreshes again when the app returns to the foreground", async () => {
   let release!: (value: typeof granted) => void;
   mocks.read.mockImplementation((kind: string) => kind === "camera" ? new Promise((resolve) => { release = resolve as typeof release; }) : Promise.resolve(granted));
-  await render(); expect(buttons()).toContain("Camera: Checking…"); expect(buttons()).toContain("Notifications: Allowed");
-  await act(async () => release(granted)); expect(buttons()).toContain("Camera: Allowed");
-  mocks.read.mockResolvedValue(undetermined); await act(async () => mocks.listeners.forEach((listener) => listener("active")));
-  expect(buttons()).toContain("Camera: Permission required"); expect(mocks.allow).not.toHaveBeenCalled();
+  await render(); expect(badgeOf("Camera")).toBeNull(); expect(badgeOf("Notifications")).toBe("Granted");
+  await act(async () => release(granted)); expect(badgeOf("Camera")).toBe("Granted");
+  mocks.read.mockResolvedValue({ granted: false, canAskAgain: false, status: "denied" }); await act(async () => mocks.listeners.forEach((listener) => listener("active")));
+  expect(badgeOf("Camera")).toBe("Denied"); expect(mocks.allow).not.toHaveBeenCalled();
 });
-
 
 it("retains every independent permission read failure without requesting permission", async () => {
  mocks.read.mockImplementation(async (kind: string) => { throw new Error(`${kind} status unavailable`); });
@@ -68,7 +79,7 @@ it("retains every independent permission read failure without requesting permiss
  expect(mocks.allow).not.toHaveBeenCalled();
  mocks.read.mockResolvedValue(granted);
  await act(async () => find("Retry").click());
- expect(buttons()).toContain("Camera: Allowed"); expect(buttons()).toContain("Notifications: Allowed"); expect(mocks.allow).not.toHaveBeenCalled();
+ expect(badgeOf("Camera")).toBe("Granted"); expect(badgeOf("Notifications")).toBe("Granted"); expect(mocks.allow).not.toHaveBeenCalled();
 });
 
 it("keeps a camera operation failure beside Camera when a foreground refresh arrives during that operation", async () => {
@@ -76,12 +87,11 @@ it("keeps a camera operation failure beside Camera when a foreground refresh arr
  let reject!: (error: Error) => void;
  mocks.allow.mockImplementation(() => new Promise((_resolve, fail) => { reject = fail; }));
  await render();
- await act(async () => find("Camera: Permission required").click());
+ await act(async () => find("Camera").click());
  await act(async () => mocks.listeners.forEach(listener => listener("active")));
  await act(async () => reject(new Error("Camera request failed")));
  const error = [...container.querySelectorAll("p")].find(node => node.textContent === "Camera request failed")!;
  expect(error).toBeDefined();
- expect(error.compareDocumentPosition(find("Notifications: Permission required")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
- expect(container.querySelector("[data-form-actions]")?.textContent).not.toContain("Camera request failed");
+ expect(error.compareDocumentPosition(find("Notifications")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
  expect(mocks.read).toHaveBeenCalledTimes(2); expect(mocks.allow).toHaveBeenCalledExactlyOnceWith("camera");
 });

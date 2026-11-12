@@ -14,10 +14,13 @@ import {
   FormActions,
   Heading,
   MultiSelectField,
+  NumberField,
+  Section,
   SelectField,
   Stack,
 } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
+import { MemberLookFields } from "./member-look-fields";
 import { candidateFromCatalog, crewNameError, crewValidationMessage, memberValidation, memberValidationFeedback } from "./model";
 
 export function useRoleOptions() {
@@ -30,6 +33,7 @@ export function MemberEditor({
   catalog,
   catalogRead,
   groupsSupported,
+  lookSupported,
   busy,
   disabled,
   feedback,
@@ -42,6 +46,8 @@ export function MemberEditor({
   catalog?: HostModelCatalog;
   catalogRead?: CrewCatalogRead;
   groupsSupported: boolean;
+  /** Host has `crews.identity.v1`: show the handle and look fields. */
+  lookSupported?: boolean;
   busy: boolean;
   disabled?: boolean;
   feedback?: ReactNode;
@@ -108,6 +114,7 @@ export function MemberEditor({
   return (
     <Stack>
       {extraFields}
+      <Section title={copy("Üye", "Member")}>
       <Field
         label={copy("Üye adı", "Member name")}
         value={draft.name}
@@ -132,12 +139,20 @@ export function MemberEditor({
       />
       {groupsSupported && (
         <Field
-          label={copy("Uzmanlık grupları (virgülle ayırın)", "Specialty groups (comma separated)")}
+          label={copy("Uzmanlık grupları", "Specialty groups")}
+          hint={copy("Virgülle ayırın", "Separate with commas")}
           value={groups}
           editable={!locked}
           onChangeText={setGroups}
         />
       )}
+      </Section>
+      {lookSupported ? (
+        <Section title={copy("Kimlik ve görünüm", "Identity and look")}>
+          <MemberLookFields member={draft} disabled={locked} onPatch={form.patch} />
+        </Section>
+      ) : null}
+      <Section title={copy("Model", "Model")}>
       <SelectField
         label={copy("Model seçimi", "Model selection")}
         value={draft.selection}
@@ -220,6 +235,7 @@ export function MemberEditor({
           ) : null}
         </>
       ) : null}
+      </Section>
       <Disclosure label={copy("Model ayarları ve tahminler", "Model settings and estimates")}>
         {(draft.selection === "fixed" ? draft.candidates.slice(0, 1) : draft.candidates).map(
           (item) => (
@@ -301,12 +317,12 @@ function EstimateFields({
   return (
     <>
       {fields.map(([key, label, max]) => (
-        <Field
+        <NumberField
           key={key}
           label={label}
           value={values[key]}
           editable={!busy}
-          keyboardType="decimal-pad"
+          decimal
           onChangeText={(text) => {
             setValues((current) => ({ ...current, [key]: text }));
             if (text === "") onChange({ [key]: undefined });

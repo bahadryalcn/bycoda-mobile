@@ -1,26 +1,36 @@
 import type { PropsWithChildren } from "react";
-import ListFilter from "lucide-react-native/icons/list-filter";
-import { Button } from "./buttons";
-import { Badge } from "./feedback";
+import { View } from "react-native";
+import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
+import { Button, IconButton } from "./buttons";
+import { radii, space } from "./tokens";
 import { Row } from "./layout";
 import { Sheet } from "./dialogs";
 import { useCopy } from "./copy";
-import { colors } from "./tokens";
 import { Body } from "./typography";
-import { uiStyles } from "./styles";
 import { useMobileTheme } from "./theme";
 
 export function FilterButton({ count, onPress }: { count: number; onPress: () => void }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
+  const label = copy("Filtreler", "Filters");
+  // Icon only: the same sliders trigger on every list. A dot marks applied filters; the count is spoken.
   return (
-    <Button label={copy("Filtreler", "Filters")} accessibilityLabel={count ? `${copy("Filtreler", "Filters")} · ${count}` : undefined}
-      tone={count ? "secondary" : "quiet"} onPress={onPress}>
-      <ListFilter size={18} color={colors.accent} />
-      {count ? <Badge label={String(count)} /> : null}
-    </Button>
+    <View>
+      <IconButton label={count ? `${label} · ${count}` : label} onPress={onPress}>
+        <SlidersHorizontal size={18} color={count ? colors.accent : colors.muted} />
+      </IconButton>
+      {count ? (
+        <View accessible={false} pointerEvents="none" style={{
+          position: "absolute", top: space.sm, end: space.sm, width: space.sm + space.xxs, height: space.sm + space.xxs,
+          borderRadius: radii.pill, backgroundColor: colors.accent,
+        }} />
+      ) : null}
+    </View>
   );
 }
+
+/** Equal-width pair that wraps to two full-width rows at large text. */
+const FOOTER_BUTTON = { flexGrow: 1, flexBasis: 140, alignSelf: "stretch" } as const;
 
 /** Filter edits stay local until Apply; the action area never scrolls away. */
 export function FilterSheet({ visible, onClose, onApply, onReset, applyDisabled = false, children }: PropsWithChildren<{
@@ -33,9 +43,9 @@ export function FilterSheet({ visible, onClose, onApply, onReset, applyDisabled 
   const copy = useCopy();
   return (
     <Sheet visible={visible} title={copy("Filtreler", "Filters")} size="compact" onClose={onClose}
-      footer={<Row style={{ justifyContent: "space-between" }}>
-        <Button label={copy("Sıfırla", "Reset")} tone="quiet" onPress={onReset} />
-        <Button label={copy("Uygula", "Apply")} tone="primary" disabled={applyDisabled} onPress={onApply} />
+      footer={<Row>
+        <Button label={copy("Sıfırla", "Reset")} tone="secondary" onPress={onReset} style={FOOTER_BUTTON} />
+        <Button label={copy("Uygula", "Apply")} tone="primary" disabled={applyDisabled} onPress={onApply} style={FOOTER_BUTTON} />
       </Row>}>
       {children}
     </Sheet>
@@ -47,7 +57,7 @@ export function AppliedFilters({ filters, result }: {
   filters: readonly (string | false | null | undefined)[];
   result?: string;
 }) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const labels = filters.filter((label): label is string => typeof label === "string" && !!label);
   const text = [result, ...labels].filter(Boolean).join(" · ");

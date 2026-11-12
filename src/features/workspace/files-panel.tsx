@@ -1,15 +1,19 @@
 import { useMobileTheme } from "@/ui/theme";
 import type { ProjectFilesProps, FileContentSearch, CreateFileDraft } from "./files-panel-types";
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
-import { useFocusEffect } from "expo-router";
-import { BackHandler, ScrollView, View } from "react-native";
+import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode } from "react";
+import { useIsFocused } from "expo-router/react-navigation";
+import { ScrollView, Text, View } from "react-native";
+import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import Folder from "lucide-react-native/icons/folder";
 import File from "lucide-react-native/icons/file";
 import FileText from "lucide-react-native/icons/file-text";
 import Plus from "lucide-react-native/icons/plus";
 import MoreHorizontal from "lucide-react-native/icons/ellipsis";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
+import Home from "lucide-react-native/icons/house";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
+import { ScrollFade } from "panelui-native/components/scroll-fade";
 import { useFormDraft } from "@/state/form-draft";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import {
@@ -17,19 +21,20 @@ import {
   Body,
   Button,
   SegmentedControl,
-  Empty,
   IdentifierField,
   IconButton,
   MutationState,
   NavigationRow,
+  PressableCard,
   QueryState,
   Row,
   ScreenList,
   SearchField,
   Sheet,
+  StateView,
 } from "@/ui/primitives";
-import { colors, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { queryOwnsRegion } from "./query-region";
+import { space } from "@/ui/tokens";
 import { SearchToolbar } from "@/ui/search-field";
 import { useCopy } from "@/ui/copy";
 import { haptic } from "@/ui/motion";
@@ -45,6 +50,17 @@ type FileRow =
   | { key: string; entry: FileEntry }
   | { key: string; match: FileContentSearch["matches"][number] };
 
+function Crumb({ label, home, current, onPress }: { label: string; home?: boolean; current: boolean; onPress: () => void }) {
+  const { colors, uiStyles } = useMobileTheme();
+  return (
+    <PressableCard label={label} onPress={onPress} hitSlop={{ top: 8, bottom: 8 }}
+      style={{ flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: 0, paddingHorizontal: space.sm, marginHorizontal: 0, minHeight: 32 }}>
+      {home ? <Home size={14} color={current ? colors.text : colors.muted} /> : null}
+      <Text numberOfLines={1} style={[uiStyles.label, { color: current ? colors.text : colors.muted, fontWeight: current ? "700" : "500" }]}>{label}</Text>
+    </PressableCard>
+  );
+}
+
 export function ProjectFiles({
   projectId,
   cwd,
@@ -53,7 +69,7 @@ export function ProjectFiles({
   onClearInitialPath,
   onDraftGuard,
 }: ProjectFilesProps) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const [state, dispatch] = useReducer(filesReducer, {
     path: "",
@@ -76,8 +92,11 @@ export function ProjectFiles({
     ["files", projectId, cwd, path, query],
     query ? "files.search" : "files.list",
     { projectId, cwd, ...(query ? { query } : { path }) },
-    { enabled: !searchContent },
+    { enabled: !searchContent, keepPrevious: true },
   );
+  // While the next folder loads, the previous rows stay in place (dimmed, inert) instead of
+  // the list collapsing into a skeleton and jumping back.
+  const switching = list.isPlaceholderData;
   const content = useHostQuery<FileContentSearch>(
     ["file-content", projectId, cwd, query],
     "files.searchContent",
@@ -104,19 +123,13 @@ export function ProjectFiles({
         match,
       }))
     : entries.map((entry) => ({ key: entry.path, entry }));
-  useFocusEffect(
-    useCallback(() => {
-      if (state.view.kind !== "browse" || (!path && !search)) return;
-      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-        if (search) dispatch({ type: "search", value: "" });
-        else navigate(fileParentPath(path));
-        return true;
-      });
-      return () => subscription.remove();
-    }, [state.view.kind, path, search, navigate]),
-  );
-  if (selected)
-    return (
+  const focused = useIsFocused();
+  useBackHandler(focused && state.view.kind === "browse" && (!!path || !!search), () => {
+    if (search) dispatch({ type: "search", value: "" });
+    else navigate(fileParentPath(path));
+  });
+  // The browser stays mounted under an open file so Back returns to the same scroll position.
+  const review = selected ? (
       <FileReview
         key={selected}
         projectId={projectId}
@@ -130,7 +143,7 @@ export function ProjectFiles({
         }}
         onDraftGuard={onDraftGuard}
       />
-    );
+    ) : null;
   const crumbs = path.split("/").filter(Boolean);
   const activeQuery = searchContent ? content : list;
   const activeOptions =
@@ -139,13 +152,44 @@ export function ProjectFiles({
     !options.showIgnored ||
     options.order !== defaultFileListOptions.order;
   const visibilityFiltered = !options.showHidden || !options.showIgnored;
+  const awaitingContentSearch = searchContent && !query;
+  const emptyFiltered = !searchContent && visibilityFiltered;
+  const regionOwned = awaitingContentSearch || queryOwnsRegion(activeQuery, !rows.length);
+  const clearSearch = () => { setQuery(""); dispatch({ type: "search", value: "" }); };
+  const regionState = awaitingContentSearch ? (
+    <StateView
+      illustration="search-empty"
+      title={copy("Dosya içeriğinde ara", "Search file contents")}
+      description={copy("Eşleşmeleri görmek için bir arama yaz.", "Enter a search to see matching lines.")}
+    />
+  ) : (
+    <QueryState
+      query={activeQuery}
+      empty={
+        !rows.length
+          ? emptyFiltered
+            ? copy("Filtrelere uyan dosya yok.", "No files match the filters.")
+            : query
+              ? copy("Aramana uyan dosya yok.", "No files match your search.")
+              : copy("Bu klasörde dosya yok.", "No files in this folder.")
+          : undefined
+      }
+      emptyIllustration={query || emptyFiltered ? "search-empty" : "inbox-empty"}
+      emptyAction={query ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+        : emptyFiltered ? { label: copy("Sıfırla", "Reset"), onPress: () => setOptions(defaultFileListOptions) }
+        : undefined}
+    />
+  );
   return (
     <>
+      {review}
+      <View style={{ flex: 1, display: selected ? "none" : "flex" }}>
       <ScreenList<FileRow>
         grouped
         data={rows}
         keyExtractor={(row) => row.key}
         contentContainerStyle={{ gap: 0 }}
+        ListEmptyComponent={regionOwned ? regionState : undefined}
         query={searchContent && !query ? undefined : activeQuery}
         header={
           <View style={{ gap: space.sm, paddingBottom: space.sm }}>
@@ -158,30 +202,26 @@ export function ProjectFiles({
                   <ArrowUp size={19} color={colors.muted} />
                 </IconButton>
               ) : null}
+              <ScrollFade edges="both" size={24} color={colors.background} style={uiStyles.grow}>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 style={uiStyles.grow}
                 contentContainerStyle={{ alignItems: "center", gap: space.xs }}
               >
-                <Button
-                  tone="quiet"
-                  density="compact"
-                  label={copy("Kök", "Root")}
-                  onPress={() => navigate("")}
-                />
+                <Crumb label={copy("Kök", "Root")} home current={!crumbs.length} onPress={() => navigate("")} />
                 {crumbs.map((part, index) => (
-                  <Row key={index + ":" + part} style={{ gap: space.xs }}>
-                    <Body muted>/</Body>
-                    <Button
-                      tone="quiet"
-                      density="compact"
+                  <Row key={index + ":" + part} style={{ gap: 0, flexWrap: "nowrap" }}>
+                    <ChevronRight size={13} color={colors.tertiary} />
+                    <Crumb
                       label={part}
+                      current={index === crumbs.length - 1}
                       onPress={() => navigate(crumbs.slice(0, index + 1).join("/"))}
                     />
                   </Row>
                 ))}
               </ScrollView>
+              </ScrollFade>
               <IconButton
                 label={copy("Yeni dosya / klasör", "New file / folder")}
                 tone="default"
@@ -313,28 +353,6 @@ export function ProjectFiles({
                 success={copy("Dosya işlemi tamamlandı.", "File action completed.")}
               />
             ) : null}
-            {searchContent && !query ? (
-              <Empty
-                title={copy("Dosya içeriğinde ara", "Search file contents")}
-                detail={copy(
-                  "Eşleşmeleri görmek için bir arama yaz.",
-                  "Enter a search to see matching lines.",
-                )}
-              />
-            ) : (
-              <QueryState
-                query={activeQuery}
-                empty={
-                  !rows.length
-                    ? !searchContent && visibilityFiltered
-                      ? copy("Filtrelere uyan dosya yok.", "No files match the filters.")
-                      : query
-                        ? copy("Aramana uyan dosya yok.", "No files match your search.")
-                        : copy("Bu klasörde dosya yok.", "No files in this folder.")
-                    : undefined
-                }
-              />
-            )}
           </View>
         }
         footer={
@@ -347,7 +365,7 @@ export function ProjectFiles({
             </Body>
           ) : null
         }
-        renderItem={({ item, index }) => {
+        renderItem={({ item, index }) => dimWhile(switching, (() => {
           const first = index === 0;
           const last = index === rows.length - 1;
           if ("match" in item) {
@@ -381,6 +399,7 @@ export function ProjectFiles({
                   <NavigationRow
                     variant="plain"
                     label={entry.name}
+                    intent={root ? "select" : "navigate"}
                     icon={
                       entry.isDir ? (
                         <IconTile>
@@ -414,14 +433,15 @@ export function ProjectFiles({
                       dispatch({ type: "view", view: { kind: "actions", entry } });
                     }}
                   >
-                    <MoreHorizontal size={21} color={colors.muted} />
+                    <MoreHorizontal size={18} color={colors.muted} />
                   </IconButton>
                 ) : null}
               </Row>
             </GroupedListRow>
           );
-        }}
+        })())}
       />
+      </View>
       {creating ? (
         <CreateFileSheet
           path={path}
@@ -511,4 +531,9 @@ function CreateFileSheet({
       />
     </Sheet>
   );
+}
+
+/** Rows of the previous folder stay in place, dimmed and inert, until the next one loads. */
+function dimWhile(dimmed: boolean, row: ReactNode) {
+  return dimmed ? <View style={{ opacity: 0.5 }} pointerEvents="none">{row}</View> : row;
 }

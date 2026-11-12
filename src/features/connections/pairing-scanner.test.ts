@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ permission: { granted: true, canAskAgain: true, status: "granted" } as { granted: boolean; canAskAgain: boolean; status: string } | null,
   refresh: vi.fn(), request: vi.fn(), focused: true, unlocked: true, camera: null as null | { onBarcodeScanned?: (result: {data: string}) => void; onMountError: () => void },
   listeners: new Map<string, Set<(state: string) => void>>(), close: vi.fn(), paste: vi.fn(), code: vi.fn(), settings: vi.fn() }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => {} }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, radii: {}, space: {}, metrics: { entryWidth: 440 } }));
@@ -25,7 +25,7 @@ vi.mock("expo-camera", () => ({ useCameraPermissions: () => [fixture.permission,
 vi.mock("@/ui/primitives", () => {
   const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);
   const Button=({label,onPress,disabled}:{label:string;onPress:()=>void;disabled?:boolean})=>createElement("button",{onClick:onPress,disabled},label);
-  return { Body:Wrapper, Notice:({message}:{message:string})=>createElement("p",null,message), Screen:({children,footer}:PropsWithChildren<{footer?:import("react").ReactNode}>)=>createElement("main",null,children,footer), IconButton:Button, Button,
+  return { Body:Wrapper, Notice:({message}:{message:string})=>createElement("p",null,message), Screen:({children,footer}:PropsWithChildren<{footer?:import("react").ReactNode}>)=>createElement("main",null,children,footer), IconButton:Button, HeaderBackButton:({onPress}:{onPress:()=>void})=>createElement("button",{onClick:onPress},"Geri"), Button,
     Loading:({label}:{label:string})=>createElement("p",null,label),
     MutationState:({mutation}:{mutation:{error?:Error}})=>mutation.error?createElement("p",null,mutation.error.message):null,
     ErrorNotice:({error,onRetry,retryLabel}:{error?:Error|string;onRetry?:()=>void;retryLabel?:string})=>error?createElement("div",null,createElement("p",null,error instanceof Error?error.message:error),onRetry?createElement(Button,{label:retryLabel??"Retry",onPress:onRetry}):null):null,
@@ -62,7 +62,7 @@ it("replaces initial camera loading with actionable permission-read recovery",as
 });
 it.each(["back","paste","blur"])("ignores an already-delivered barcode handler after %s",async reason=>{
  await render();await settle();const old=fixture.camera!.onBarcodeScanned!;
- if(reason==="paste")await click("Paste pairing code");else await event(reason);
+ if(reason==="paste")await click("Paste instead");else await event(reason);
  await act(async()=>old({data:"late"}));await settle();expect(fixture.code).not.toHaveBeenCalled();
 });
 

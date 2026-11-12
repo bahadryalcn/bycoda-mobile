@@ -2,12 +2,15 @@ import { useRef, useState } from "react";
 import { useHostMutation, useHostQuery, useHostReadActive } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
-import { Body, Button, Disclosure, FormActions, Field, MutationState, NavigationGroup, NavigationRow, Notice, QueryState, Sheet } from "@/ui/primitives";
+import { Badge, Body, Disclosure, IconButton, Row, FormActions, Field, MutationState, NavigationGroup, NavigationRow, Notice, QueryState, Sheet, StateView } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { useMobileTheme } from "@/ui/theme";
+import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { monitorUrl, readMonitors, uncertainMonitorWrite, type RuntimeMonitor } from "./runtime-monitor-model";
 
 export function RuntimeMonitors({ projectId, projectName, onClose }: { projectId: string; projectName?: string; onClose: () => void }) {
   const copy = useCopy();
+  const { colors } = useMobileTheme();
   const machine = useActiveMachine();
   const [opening] = useState(() => ({ projectId, projectName, machineName: machine?.name, reviewed: reviewedMachine(machine) }));
   const latestProject = useRef(projectId);
@@ -60,11 +63,16 @@ export function RuntimeMonitors({ projectId, projectName, onClose }: { projectId
   const consequence = copy("Başlatma, seçili bilgisayarda bağımsız bir tarayıcı açar. İzleyici ekran kapansa da durdurulana kadar çalışır.", "Starting opens an independent browser on the selected computer. A monitor keeps running after this screen closes until stopped.");
   return <Sheet visible title={copy("Günlük izleyicileri", "Log monitors")} size={(query.data?.length ?? 0) > 2 ? "form" : "compact"} dirty={!!url.trim()} dismissible={!busy} onClose={onClose}>
     <Body muted>{[opening.machineName, opening.projectName ?? opening.projectId].filter(Boolean).join(" · ")}</Body>
-    {!validScope ? <Notice tone="warning" message={copy("Bağlantı veya proje değişti. Devam etmek için bu ekranı yeniden açın.", "The connection or project changed. Reopen this view to continue.")} /> : <QueryState query={query} empty={query.data?.length === 0} emptyTitle={copy("Etkin izleyici yok.", "No active monitors.")} />}
-    <Button tone="quiet" label={copy("Yenile", "Refresh")} busy={reconciling} disabled={busy || query.isFetching || !active || !validScope} onPress={() => { void refresh(); }} />
+    {!validScope ? <StateView illustration="error" tone="danger" title={copy("Bir şeyler ters gitti", "Something went wrong")} description={copy("Bağlantı veya proje değişti. Devam etmek için bu ekranı yeniden açın.", "The connection or project changed. Reopen this view to continue.")} /> : <QueryState query={query} empty={query.data?.length === 0} emptyTitle={copy("Etkin izleyici yok.", "No active monitors.")} emptyDetail={copy("Bir port veya HTTP(S) adresi girerek bilgisayardaki sunucunun günlüklerini izle.", "Enter a port or HTTP(S) URL to follow the computer's server logs.")} />}
+    <Row>
+      <Body muted style={{ flex: 1, minWidth: 0 }}>{copy("Etkin izleyiciler", "Active monitors")}</Body>
+      <IconButton label={copy("Yenile", "Refresh")} busy={reconciling} disabled={busy || query.isFetching || !active || !validScope} onPress={() => { void refresh(); }}>
+        <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
+      </IconButton>
+    </Row>
     {uncertain ? <Notice tone="warning" message={copy("İşlemin sonucu bilinmiyor. Yeniden işlem yapmadan önce izleyici listesini yenile.", "The operation outcome is unknown. Refresh the monitor list before another action.")} /> : null}
     <NavigationGroup>{(validScope ? query.data ?? [] : []).map((monitor) => <NavigationRow key={monitor.id} label={monitor.url}
-      detail={monitor.sourceId ? copy("Çalışıyor", "Running") : copy("Başlatılıyor", "Starting")}
+      supporting={<Row><Badge label={monitor.sourceId ? copy("Çalışıyor", "Running") : copy("Başlatılıyor", "Starting")} tone={monitor.sourceId ? "active" : "default"} /></Row>}
       disabled={disabled} onPress={() => { setError(undefined); setIntent({ monitor }); }} />)}</NavigationGroup>
     <Field label={copy("Port veya HTTP(S) adresi", "Port or HTTP(S) URL")} value={url} error={error} editable={!busy && validScope} autoCapitalize="none" autoCorrect={false} maxLength={2048} onChangeText={(value) => { setUrl(value); setError(undefined); setIntent(undefined); }} />
     {!intent ? <Disclosure label={copy("Ayrıntılar", "Details")}><Body muted>{consequence}</Body></Disclosure> : null}

@@ -1,6 +1,7 @@
 import { haptic } from "@/ui/motion";
 import { ErrorText } from "@/ui/primitives";
 import { Stack } from "@/ui/primitives";
+import { NumberField } from "@/ui/number-field";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import {
   Body,
@@ -12,6 +13,7 @@ import {
   MutationState,
   QueryState,
   Row,
+  Section,
   Notice,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -81,6 +83,7 @@ export function RuleEditor({ available = true, unavailableFeedback, ...input }: 
       <Heading>{account.name}</Heading>
       <Body muted>{copy("Proje", "Project")}: {projectLabel ?? projectId}</Body>
       {access.blocked ? !available && unavailableFeedback ? unavailableFeedback : <Notice tone="warning" message={access.message} /> : null}
+      <Section title={copy("Kural", "Rule")}>
       <Field
         label={copy("Ad", "Name")}
         value={name}
@@ -126,6 +129,7 @@ export function RuleEditor({ available = true, unavailableFeedback, ...input }: 
         disabled={busy || access.blocked}
         onChange={(value) => form.setField("factId", value)}
       />
+      </Section>
       {!profile?.facts.length && (
         <Body>
           {copy(
@@ -134,14 +138,15 @@ export function RuleEditor({ available = true, unavailableFeedback, ...input }: 
           )}
         </Body>
       )}
-      <Field
+      <Section title={copy("Sınır", "Limit")}>
+      <NumberField
         label={copy("Günlük yanıt sınırı (1–100)", "Daily reply limit (1–100)")}
         value={dailyLimit}
         onChangeText={(value) => form.setField("dailyLimit", value)}
         editable={!busy && !access.blocked}
-        keyboardType="number-pad"
       />
       {!validLimit && <ErrorText error={copy("1 ile 100 arasında bir sınır girin.", "Enter a limit from 1 to 100.")} />}
+      </Section>
       <QueryState query={policy} loading="inline" />
       <PolicyInfo policy={policy.data?.effective} />
       <FormActions

@@ -17,7 +17,7 @@ export default function ProjectRoute() {
         key={`${active}:${id}:${cwd ?? ""}:${view ?? ""}:${create ?? ""}`}
         id={id}
         initialCwd={cwd}
-        initialSegment={view === "files" || view === "git" ? view : "sessions"}
+        initialSegment={view === "files" || view === "git" || view === "preferences" ? view : "sessions"}
         initialCreateSession={create === "session"}
       />
     </WorkspaceRouteScope>

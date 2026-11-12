@@ -17,8 +17,19 @@ vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/cpu", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/bot", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/play", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/ban", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/list-plus", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/arrow-up", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/arrow-down", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-merge", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/undo-2", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
 vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/record-card", () => ({ RecordCard: ({ menu }: { menu: React.ReactNode }) => menu }));
 vi.mock("./tasks/task-status-icon", () => ({ TaskStatusIcon: () => null }));
@@ -32,9 +43,10 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestClose: vi.fn() }) }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: (_title: string, _message: string, _action: string, run: () => void) => run() }));
 vi.mock("./shared/format", () => ({ stamp: (value: number) => `date:${value}` }));
+vi.mock("@/ui/number-field", async () => ({ NumberField: (await import("@/ui/primitives")).Field }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Disclosure: wrapper, IconButton: wrapper, Stack: wrapper, Row: wrapper, Body: wrapper, ErrorText: () => null, ToggleField: () => null, MutationState: () => null,
+  return { Section: wrapper, NavigationGroup: wrapper, NumberField: () => null, Disclosure: wrapper, IconButton: wrapper, Stack: wrapper, Row: wrapper, Body: wrapper, ErrorText: () => null, ErrorNotice: () => null, ToggleField: () => null, MutationState: () => null,
     ActionMenu: ({ actions }: { actions: typeof state.actions }) => { state.actions = actions; return null; },
     Notice: ({ message }: { message: string }) => createElement("div", null, message),
     Button: ({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),
@@ -57,7 +69,7 @@ it("preserves goal draft and conflict token when a newer goal arrives, closes on
   const initial = { id: "goal", title: "Goal", status: "running", updatedAt: 12, maxRunMinutes: 30 } as HostGoal;
   const render = (goal: HostGoal) => root.render(createElement(GoalSettingsEditor, { initial: goal, onClose: close }));
   await act(async () => render(initial));
-  await act(async () => state.fields.get("Concurrent task limit (0 = computer limit)")!("2"));
+  await act(async () => state.fields.get("Concurrent task limit")!("2"));
   await act(async () => render({ ...initial, updatedAt: 99, maxRunMinutes: 60 }));
   act(() => state.submit!());
   expect(state.mutation.mutate).toHaveBeenCalledWith({ goalId: "goal", expectedUpdatedAt: 12,

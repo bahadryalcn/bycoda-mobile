@@ -1,10 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import { terminalDocument, readTerminalPacket, type TerminalPacket } from "./terminal-document";
 import type { TerminalViewportHandle } from "./terminal-viewport";
+import { useCopy } from "./copy";
 export const TerminalViewport = forwardRef<
   TerminalViewportHandle,
   { nonce: string; onPacket: (packet: TerminalPacket) => void; onLost: () => void }
 >(function TerminalViewport({ nonce, onPacket }, ref) {
+  const copy = useCopy();
   const frame = useRef<HTMLIFrameElement>(null);
   const source = useMemo(() => terminalDocument(nonce), [nonce]);
   const callback = useRef(onPacket);
@@ -29,7 +31,7 @@ export const TerminalViewport = forwardRef<
   return (
     <iframe
       ref={frame}
-      title="Interactive terminal"
+      title={copy("Etkileşimli terminal", "Interactive terminal")}
       srcDoc={source}
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"

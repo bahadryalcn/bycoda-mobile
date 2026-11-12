@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ScrollView } from "react-native";
 import { useAsyncAction } from "@/state/actions";
 import { sameFormValue, useFormDraft } from "@/state/form-draft";
-import { ErrorNotice, Field, FormActions, Loading, Notice } from "@/ui/primitives";
+import { ErrorNotice, Field, FormActions, Loading, Notice, Section } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { space } from "@/ui/tokens";
@@ -50,16 +50,22 @@ export function TemplateEditor({ initial, onClose, onInsert }: {
     {existing ? <TemplateInsertAction disabled={form.dirty || blocked} onInsert={onInsert}
       secondaryAction={<TemplateActionsMenu templateId={initial.id} name={initial.name} disabled={blocked}
         onDelete={() => { void save(true); }} />} /> : null}
-    <Field label={copy("Şablon adı", "Template name")} value={form.values.name}
-      error={form.dirty && !form.values.name.trim() ? required : undefined}
-      onChangeText={(name) => form.patch({ name })} editable={!busy} />
-    <Field label={copy("Şablon tetikleyicisi", "Template trigger")} value={form.values.trigger ?? ""}
-      error={triggerInvalid ? copy("Tetikleyici benzersiz olmalı; 1–24 harf, rakam veya tire kullan.", "Use a unique trigger with 1–24 letters, numbers or dashes.") : undefined}
-      onChangeText={(trigger) => form.patch({ trigger })} editable={!busy} autoCapitalize="none" />
-    <Field label={copy("Şablon metni", "Template text")} value={form.values.body}
-      error={form.dirty && !form.values.body.trim() ? required : undefined}
-      onChangeText={(body) => form.patch({ body })} multiline maxLength={MAX_TEMPLATE_BODY}
-      style={{ minHeight: 180 }} editable={!busy} />
+    <Section title={copy("Şablon", "Template")}>
+      <Field label={copy("Şablon adı", "Template name")} value={form.values.name}
+        error={form.dirty && !form.values.name.trim() ? required : undefined}
+        onChangeText={(name) => form.patch({ name })} editable={!busy} />
+      <Field label={copy("Şablon tetikleyicisi", "Template trigger")} value={form.values.trigger ?? ""}
+        hint={copy("Mesaja ;tetikleyici yazıp boşluk bırakınca şablon eklenir.", "Type ;trigger and a space in a message to insert the template.")}
+        error={triggerInvalid ? copy("Tetikleyici benzersiz olmalı; 1–24 harf, rakam veya tire kullan.", "Use a unique trigger with 1–24 letters, numbers or dashes.") : undefined}
+        onChangeText={(trigger) => form.patch({ trigger })} editable={!busy} autoCapitalize="none" />
+    </Section>
+    <Section title={copy("Metin", "Text")}>
+      <Field label={copy("Şablon metni", "Template text")} value={form.values.body}
+        hint={copy("İmlecin duracağı yere {{cursor}} yazın.", "Write {{cursor}} where the cursor should land.")}
+        error={form.dirty && !form.values.body.trim() ? required : undefined}
+        onChangeText={(body) => form.patch({ body })} multiline maxLength={MAX_TEMPLATE_BODY}
+        style={{ minHeight: 180 }} editable={!busy} />
+    </Section>
     <FormActions submitLabel={copy("Şablonu kaydet", "Save template")} disabled={blocked || !valid || !form.dirty} busy={state.saving}
       onSubmit={() => { void save(); }} onCancel={requestClose} cancelDisabled={busy}
       feedback={<>
@@ -68,7 +74,7 @@ export function TemplateEditor({ initial, onClose, onInsert }: {
             await state.hydrate();
             if (!useTemplates.getState().error) setError(null);
           }); } : undefined} />
-        {reload.isPending ? <Loading /> : null}
+        {reload.isPending && !(state.error ?? error) ? <Loading /> : null}
         {conflict ? <Notice tone="warning" message={copy("Şablonlar değişti. Taslağını koru ve kaydetmeden önce güncel listeyi yeniden aç.", "Templates changed. Keep your draft and reopen the current list before saving.")} /> : null}
       </>} />
   </ScrollView>;

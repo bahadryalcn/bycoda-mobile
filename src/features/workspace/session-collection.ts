@@ -1,14 +1,52 @@
 import type { HostProjectDirectory } from "@/domain/types";
 import type { ActiveSession } from "./activity-model";
 import { isRunningSession } from "./activity-model";
-import { filterSessionDirectory, sessionDirectoryRows, type SessionDirectoryRow } from "./session-directory";
+import { filterSessionDirectory } from "./session-directory";
 
 type DirectoryProject = HostProjectDirectory["projects"][number];
-export type ProjectSessionCollectionRow =
-  | { kind: "project"; key: string; project: DirectoryProject; count: number; running: number; expanded: boolean }
-  | (SessionDirectoryRow & { project: DirectoryProject });
+export type SessionShelfId = "pinned" | "needs" | "running" | "recent" | "settled" | "archived";
+export type SessionShelfRow =
+  | { kind: "header"; key: string; shelf: SessionShelfId; count: number; expanded: boolean }
+  | { kind: "session"; key: string; project: ActiveSession["project"]; session: ActiveSession["session"] };
 
-export const sessionCollectionScope = (machineId: string, projectId: string) => JSON.stringify([machineId, projectId]);
+export const shelfOf = (
+  session: ActiveSession["session"],
+  archived: boolean,
+  settled: ReadonlySet<string>,
+): SessionShelfId =>
+  archived || session.archived ? "archived"
+    : settled.has(session.id) && !isRunningSession(session) && !session.needsInput ? "settled"
+    : session.pinned ? "pinned"
+    : session.needsInput ? "needs"
+    : isRunningSession(session) ? "running"
+    : "recent";
+const shelfOrder: readonly SessionShelfId[] = ["pinned", "needs", "running", "recent", "settled", "archived"];
+
+/** Status shelves keep the directory's ordering; an empty shelf has no header. */
+export function sessionShelfRows(
+  directory: readonly ActiveSession[],
+  collapsed: Readonly<Partial<Record<SessionShelfId, boolean>>> = {},
+  searching = false,
+  archived = false,
+  settledIds: ReadonlySet<string> = new Set(),
+): SessionShelfRow[] {
+  const shelves = new Map<SessionShelfId, ActiveSession[]>();
+  for (const entry of directory) {
+    const id = shelfOf(entry.session, archived, settledIds);
+    shelves.set(id, [...(shelves.get(id) ?? []), entry]);
+  }
+  return shelfOrder.flatMap((shelf): SessionShelfRow[] => {
+    const members = shelves.get(shelf);
+    if (!members?.length) return [];
+    // Settled sessions stay folded until the owner opens the group.
+    const expanded = searching || !(collapsed[shelf] ?? shelf === "settled");
+    return [
+      { kind: "header", key: `shelf:${shelf}`, shelf, count: members.length, expanded },
+      ...(expanded ? members.map(({ project, session }): SessionShelfRow =>
+        ({ kind: "session", key: `${project.id}:${session.id}`, project, session })) : []),
+    ];
+  });
+}
 
 /** Match project/folder names while retaining the activity directory's ordering and host IDs. */
 export function filterProjectSessionDirectory(
@@ -33,33 +71,3 @@ export function filterProjectSessionDirectory(
   });
 }
 
-/** Keep each project's tree contiguous; only complete project sections may change order. */
-export function projectSessionCollectionRows(
-  projects: readonly DirectoryProject[],
-  directory: readonly ActiveSession[],
-  machineId: string,
-  collapsedFolders: Readonly<Record<string, Readonly<Record<string, boolean>>>> = {},
-  collapsedProjects: Readonly<Record<string, boolean>> = {},
-  searching = false,
-): ProjectSessionCollectionRow[] {
-  const sessionsByProject = new Map<string, ActiveSession["session"][]>();
-  for (const { project, session } of directory) {
-    const members = sessionsByProject.get(project.id) ?? [];
-    members.push(session);
-    sessionsByProject.set(project.id, members);
-  }
-  const sections = projects.flatMap((project) => {
-    const sessions = sessionsByProject.get(project.id);
-    if (!sessions?.length) return [];
-    return [{ project, sessions, running: sessions.filter(isRunningSession).length }];
-  }).sort((a, b) => Number(b.running > 0) - Number(a.running > 0));
-  return sections.flatMap(({ project, sessions, running }): ProjectSessionCollectionRow[] => {
-    const scope = sessionCollectionScope(machineId, project.id);
-    const expanded = searching || !collapsedProjects[scope];
-    return [
-      { kind: "project", key: `project:${project.id}`, project, count: sessions.length, running, expanded },
-      ...(expanded ? sessionDirectoryRows(sessions, project.sessionLayout, collapsedFolders[scope], searching)
-        .map((row) => ({ ...row, project, key: `${project.id}:${row.key}` })) : []),
-    ];
-  });
-}

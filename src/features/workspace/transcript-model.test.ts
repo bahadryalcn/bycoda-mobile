@@ -248,3 +248,13 @@ describe("readable transcript", () => {
     ).toBe("failed");
   });
 });
+
+describe("repeated system failures", () => {
+  const fail = (id: string) => ({ id, role: "system", notice: "error", text: "archived" }) as import("./wire").Block;
+  const user = (id: string) => ({ id, role: "user", text: id }) as import("./wire").Block;
+  it("folds identical failures separated only by user messages into one counted card", () => {
+    const entries = transcriptEntries([user("u1"), fail("f1"), user("u2"), fail("f2")]);
+    expect(entries.map((entry) => entry.id)).toEqual(["u1", "u2", "f2"]);
+    expect(entries.at(-1)).toMatchObject({ repeat: 2 });
+  });
+});

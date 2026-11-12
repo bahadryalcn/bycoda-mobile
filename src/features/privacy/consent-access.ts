@@ -1,17 +1,25 @@
 import { create } from "zustand";
-import { consentScope } from "./consent-store";
+import { consentCovers, consentScope } from "./consent-store";
 
 type Computer = { environmentId: string; providers?: readonly string[] };
 export const useProviderPermission = create<{
   scopes: Record<string, boolean>;
 }>(() => ({ scopes: {} }));
 
+/** True when this scope, or a consented superset on the same computer, is allowed. */
+export function isScopePermitted(scopes: Record<string, boolean>, scope: string): boolean {
+  if (!scope) return false;
+  if (scopes[scope] === true) return true;
+  return Object.entries(scopes).some(([granted, allowed]) => allowed && consentCovers(granted, scope));
+}
+
 export function hasProviderPermission(computer: Computer | null | undefined) {
   return (
     !!computer &&
-    useProviderPermission.getState().scopes[
-      consentScope(computer.environmentId, computer.providers ?? [])
-    ] === true
+    isScopePermitted(
+      useProviderPermission.getState().scopes,
+      consentScope(computer.environmentId, computer.providers ?? []),
+    )
   );
 }
 

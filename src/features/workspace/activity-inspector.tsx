@@ -2,12 +2,12 @@ import { FlatList } from "react-native";
 import { Sheet } from "@/ui/primitives";
 import { ChatSummary, ChatToolbarAction } from "@/ui/chat-controls";
 import Terminal from "lucide-react-native/icons/terminal";
-import { colors } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { activityState, activityTitle } from "./transcript-model";
 import { TranscriptBlock } from "./transcript-block";
 import type { Block } from "./wire";
 import type { TranscriptBlockProps } from "./session-types";
+import { useMobileTheme } from "@/ui/theme";
 
 export type ActivityInspection = { ids: string[]; selectedId?: string; author?: string };
 
@@ -18,6 +18,7 @@ export function ActivityInspector({ blocks, inspection, onChange, live, ...props
   inspection: ActivityInspection;
   onChange: (value: ActivityInspection | null) => void;
 }) {
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const selected = blocks.find((block) => block.id === inspection.selectedId);
   const index = selected ? blocks.indexOf(selected) : -1;

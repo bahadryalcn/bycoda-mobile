@@ -10,7 +10,7 @@ acceptance, and the [component adoption map](../../docs/reference/component-adop
 to select additional library structures. Catalog availability alone is not
 evidence that a screen is usable or a migration is complete.
 
-The native application uses **PanelUI Native 0.112.0**, Expo SDK 57, Uniwind 1.12,
+The native application uses **PanelUI Native 1.4.0**, Expo SDK 58, Uniwind 1.12,
 Tailwind 4, and Reanimated 4. PanelUI is an installed MIT dependency, rather than
 a visual reference. Its upstream license is retained in `vendor/panelui-native.LICENSE`.
 See the [upstream installation guide](https://panelui.dev/docs/installation).
@@ -28,6 +28,12 @@ adapters for new screens; do not create a second button or field system.
 `maxWidth: "100%"`). ScreenHeading's action group and SearchToolbar's action
 group also accept horizontal shrinkage. Bound the nested group itself; limiting
 only its parent does not stop intrinsic-width controls escaping left or right.
+
+Back navigation uses `HeaderBackButton` (header-back-button.tsx) everywhere: the
+root stack sets it as `headerLeft` for every native header (replacing the platform
+back arrow), and in-screen headings take `onBack` on `Screen`/`ScreenList`, shown only
+when no native header owns navigation. Entry flows that cancel their own state pass
+`HeaderBackButton` with their callback instead of a hand-made IconButton chevron.
 
 `Hint` adapts PanelUI Tooltip for long-press icon explanations and respects private
 content access. Its trigger must forward onLongPress. Task RecordCard identity
@@ -176,7 +182,7 @@ trailing column; an actual review reason stays fully readable inside its row.
 families place running/opening state and time in supporting content, rather than
 letting a wide status badge reduce the title to a few characters per line.
 Project/group/folder disclosures keep counts and status with their identity
-column. ActivityBadge bounds its contents and allows the label to wrap. Existing
+column. Status badges bound their contents and allow the label to wrap. Existing
 row action, expanded/disabled state, search ancestry, group collapse, source path,
 privacy and draft owners stay intact. The pinned folder icon uses the existing
 platform-specific decorativeSvgProps; its Pinned meaning stays in the row label.
@@ -304,7 +310,7 @@ The keyboard frame ignores transient zero/invalid scene layouts so concealment
 cannot switch the composer back to an unrelated window-height budget.
 
 `ComposerActionsProvider` is local to one composer. ComposerActionSlot registers
-presentation nodes; ComposerActionArea draws them in AIInput.Row. The store never
+presentation nodes; ComposerActionArea draws them in AIInput.Toolbar. The store never
 owns a draft, executes a callback or changes a queue lease. SessionQueue keeps its
 controller, editor and Sheet state in their original feature owner. Updating a
 summary reuses its control and focus; removing its owner removes its slot. Without
@@ -350,40 +356,98 @@ groups use a layers fallback. Identity color denotes saved identity only. Runnin
 session's labelled status, never the project icon. The Projects navigation tab
 uses the same folder shape with the standard selected-navigation treatment.
 
+`SearchField` (search-field.tsx) is built on PanelUI SearchBar. It keeps the
+InputProps contract and adds opt-in `debounce` and `onDebouncedChange`;
+`useDebouncedSearch(query, delay)` wraps PanelUI useDebouncedValue for screens
+that filter locally. Layout props go on an outer wrapper, and the field grows
+with text scale.
+
+`NumberField` (number-field.tsx) is a numeric text field on PanelUI InputGroup. It
+strips non-digits, allows one optional decimal point and shows an inline unit. It
+commits on every keystroke because PanelUI NumberInput commits only on blur, which
+would hand Save a stale value. `CodeField` (code-field.tsx) is a fixed-length
+numeric verification code on PanelUI OtpInput and keeps paste and one-time-code
+autofill. Never use it for the pairing payload, which is a long encoded value.
+
+`StateView` regions render on PanelUI EmptyState; the compact inline row stays
+bycoda's. `Skeleton` takes `loading` and uses PanelUI useSkeletonHandoff: a visible
+placeholder dissolves into a zero-height, pointer-inert overlay while content takes
+its place. `QueryState` keeps the Skeleton mounted beside the state view for `list`
+and `content` loading.
+
+`ProgressButton` (buttons.tsx) is PanelUI progress-button. Use it for one deliberate,
+hard-to-undo action: press and hold confirms it instead of a confirm dialog. Do not
+use it for routine submits or operation progress. Screen readers get an immediate
+activate action.
+
+Screens and overlays handle hardware back with PanelUI `useBackHandler(enabled, onBack)`.
+It always consumes the event, so gate it with focus through `useIsFocused` from
+expo-router/react-navigation. Vitest cannot apply a test's react-native mock to the
+upstream hook, so `vitest.config.ts` aliases it to `src/ui/back-handler-test-double.ts`.
+Disclosure open state uses PanelUI useDisclosure.
+
+The Files browser breadcrumb strip uses PanelUI ScrollFade as an overflow hint.
+`SectionNavigator` (section-progress.tsx) wraps PanelUI SectionProgress and
+useScrollSections as a reading-progress pill for long single-page documents such as
+terms and privacy. It must be a sibling of the scroller, and the scroller reserves
+`sectionNavigatorClearance(fontScale)` bottom padding.
+
+PanelUI components evaluated and not adopted:
+
+- message-scroller: the transcript keeps LegendList for its streaming follow machine, drag/momentum tracking, alignItemsAtEnd, scroll-memory restore, scrollToKey and KEEP_POSITION prepend.
+- select, combobox: their portal/BottomSheet presentation would replace security-aware Sheet routing; select is single-value.
+- tag-input: no free-entry mode.
+- chip: the pill cannot wrap full AppliedFilters labels.
+- number-input: commits on blur.
+- steps: no linear multi-step flow.
+- code-block: fixed text-xs conflicts with chat text-size presets.
+- response: bypasses bycoda message-content media and privacy handling.
+- sources: citations are inline file links.
+- thinking-orb: a continuous frame loop for a persistent pill.
+- soundwave, image-generation: no voice input or image generation.
+- panelside: no wide-screen layout.
+- planner: goals have dependency steps, not dated milestones.
+- timeline: git history rows are tappable navigation in a virtualized list.
+- section-rail: a floating side overlay covers content on phones.
+- slider: text size is three named choices.
+- support: a help-desk landing, not the report form.
+- tour: anchors belong to other owners.
+- sortable: task order applies only within status groups of a virtualized mixed list; the Move up/down menu stays.
+- tree: the file browser is drill-in navigation.
+- context-menu: rows already have a visible ActionMenu.
+- week-strip: date-based, while the schedule uses a weekday enum.
+- useCopyToClipboard: no single-flight or access gating.
+- useKeyboard: keyboard-controller owns keyboard events.
+
 The full upstream public API is exposed as `ui/panelui` and as the `PanelUI`
-namespace in `ui/library`. `catalog.ts` indexes all **140 installed component
+namespace in `ui/library`. `catalog.ts` indexes all **143 installed component
 modules**, their roles, core bycoda use cases and optional capabilities.
 `catalog.test.ts` checks the inventory against the installed package. Shared UI
 implementations should import individual `panelui-native/components/...` modules
 when possible. Full catalog availability does not mean every component is shown
 in every product screen.
 
-`vendor/patches/panelui-native@0.112.0.patch` exposes the existing public portal
-primitive without importing the full 140-component barrel in the provider. It
-also declares controlled `aria-selected` on both tab trigger variants,
-`aria-checked`/`aria-disabled` on Switch, Checkbox and RadioGroup items, and
-`aria-valuemin`/`aria-valuemax`/`aria-valuenow`/`aria-valuetext` on both Slider
-thumbs and Progress. Progress also declares `aria-busy` and clears its numeric
-range and value text while indeterminate. React Native Web 0.21 does not reflect
-the native composite state/value props on initial render. Native state/value props remain present, with radio
-selection represented by its correct `checked` state. The narrow pinned patch
-updates both source and compiled entry
-and keeps one upstream portal context. Remove each patch part when upstream
-exposes the portal subpath or declares the corresponding web state. The
-upstream MIT license is retained alongside the patch.
+In PanelUI 1.4.0 the portal export and the Tabs `animationDisabled` context are
+upstream, so `vendor/patches/panelui-native@1.4.0.patch` no longer adds them. The
+patch now only adds the TabsList scroll animation gate (see below) and the aria-*
+state attributes that React Native Web 0.21 does not reflect on initial render:
+`aria-selected` on both tab trigger variants, `aria-checked`/`aria-disabled` on
+Checkbox, Switch and RadioGroup items, Progress `aria-busy` with its numeric
+range and value text, and the Slider thumb `aria-value*` attributes. Native state/value props remain present, with radio
+selection represented by its correct `checked` state. Remove each patch part when
+upstream declares the corresponding web state. The upstream MIT license is
+retained alongside the patch.
 
 The pinned patch also makes scrollable Tabs.List reveal its selected tab without
 animation when the existing `disable-all` animation mode is active. Both its
 source and compiled module use the same motion gate. SegmentedControl uses this
 intrinsic-width list so translated and system-scaled labels can scroll intact.
 
-The previous gluestack source remains under `ui/gluestack` as compatibility
-source. Its retained license belongs to that source, and its namespaces in
-`library.ts` are compatibility exports. Production screens and their shared
-provider do not import this runtime. The offline tour lazy-loads ComponentGallery
+The former gluestack compatibility source (`ui/gluestack`) and its exports were
+removed; production screens never imported it. The offline tour lazy-loads ComponentGallery
 only after the user selects Controls. Its interactive forms, attachments, chat,
 plan, table and timeline examples use focused PanelUI imports and the same product
-adapters. The searchable 140-module catalog provides category/priority filters,
+adapters. The searchable 143-module catalog provides category/priority filters,
 explicit preview coverage, individual import paths and upstream documentation.
 Optional native or service requirements remain visible; the tour does not connect
 to a host, configure a service or send messages. Do not import the full upstream
@@ -585,6 +649,11 @@ through ScopedFilePreview and the original transport/resource owners. Rendering
 proposed/rejected diff colors never grants write/apply authority. Native paging,
 selection, nested dismissal and clipboard acceptance require device proof.
 
+Agent questions (`QuestionCard`) render on PanelUI Questionnaire with the frame and
+swipe off and answers controlled. Notes and free text stay bycoda Field and
+Disclosure inside each item. The reply payload is unchanged, and dismiss stays a
+bycoda Button that sends `skipped`.
+
 ## Record and collection controls
 
 Focused facades also cover expandable records (`record-card.tsx`, backed by
@@ -603,6 +672,11 @@ with a font-scale-aware basis; the disclosure indicator may wrap to the trailing
 edge instead of splitting a word beside it. Keep commands outside the trigger,
 touch targets at 48dp, and the existing visited/expanded body owner intact.
 
+`HoursOverview` (week-hours.tsx, with week-hours-model.ts) is a read-only PanelUI
+WeekHoursGrid showing when schedules fire and when quiet hours apply. Its bars are
+shorter than 48dp, so every value stays editable through the form fields beside it.
+Hours are host wall-clock.
+
 ## Light, dark and system appearance
 
 `tokens.ts` owns the light/dark native palettes, semantic states, typography,
@@ -613,11 +687,18 @@ it. Do not edit the generated CSS.
 
 `MobileThemeController` applies the persisted system/light/dark preference before
 the private workspace is available, including on the initial lock screen.
-`useMobileTheme()` subscribes renderers using native inline colors. Use
+`useMobileTheme()` returns per-mode `{ mode, colors, semanticColors, uiStyles, pressedFill }`
+objects whose identity changes with the mode. Components must destructure what they
+read from it inside the component; the module-level `colors`, `semanticColors` and
+`uiStyles` accessors are for style factories and later-running handlers only, because
+React Compiler would otherwise keep stale memoized JSX. Read any other themed sheet
+with `useThemedStyles(sheet)`. `theme-hook-usage.test.ts` enforces this. Use
 `createThemedStyles(() => ({ ... }))` for reusable native style sets: it caches
 styles per mode and resolves the current palette when read. Do not capture color
 values in module-level objects or `StyleSheet.create`. A theme change updates
 existing screens without remounting them or clearing drafts and form state.
+Settings appearance uses PanelUI ThemeSelector controlled by bycoda's persisted
+themeMode with `applyTheme={false}`; `MobileThemeController` stays the only mode owner.
 
 The dark theme uses neutral graphite; the light theme uses a white canvas and neutral control fills.
 Both share the same blue action role and semantic status roles. Controls retain
@@ -635,10 +716,10 @@ Keep output in the page scroller instead of nesting a fixed-height output reader
 not polling. Custom `refresh` callbacks must return the complete refresh promise.
 An action owns its pending indicator; do not repeat it in adjacent mutation copy
 or animate unrelated actions that happen to share a mutation object.
-`Notice`/`ErrorNotice` use compact inline feedback: semantic icon, readable text,
-and a trailing recovery action on the same wrapping row. No large tinted card
-or separate retry row. Short notices without actions have no control-height
-minimum; recovery buttons still own 48dp targets. Text and extra required content
+`Notice`/`ErrorNotice` are a semantic-tinted banner (hairline semantic border,
+radius control, 16px tone icon, 14/20 message) with a compact quiet recovery
+action on the same wrapping row. A region with no data uses `StateView`
+instead (see design-system.md "States"). Recovery buttons still own 48dp targets. Text and extra required content
 remain visible and can grow. Use `action` for connection repair and other
 non-retry recovery; preserve `onRetry` for query retries.
 Contrast tests cover text, metadata, actions and feedback in both palettes.

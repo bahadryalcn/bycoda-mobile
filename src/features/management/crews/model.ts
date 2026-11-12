@@ -49,6 +49,10 @@ export function crewValidationMessage(error: string | undefined, copy: CrewCopy,
     case "Invalid crew provider":
     case "Invalid model settings":
       return copy("Üyenin modelini ve model ayarlarını yeniden seçin.", "Select the member's model and model settings again.");
+    case "Invalid member handle":
+      return copy("Geçerli bir takma ad girin (küçük harf, rakam, tire; en fazla 24 karakter).", "Enter a valid handle (lowercase letters, digits, hyphens; up to 24 characters).");
+    case "Duplicate member handles":
+      return copy("Bir takma ad ekipte yalnızca bir üyede olabilir.", "A handle can belong to only one member of the crew.");
     case "Invalid member groups":
       return copy("En fazla 12 uzmanlık grubu girin; her grup adı 40 karakteri aşmasın.", "Enter up to 12 specialty groups, with at most 40 characters per name.");
     case "Invalid allocation policy":

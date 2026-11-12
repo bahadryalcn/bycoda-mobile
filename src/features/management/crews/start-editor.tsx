@@ -27,7 +27,7 @@ export function StartCrewEditor({ definition, projectId, onClose }: { definition
     start.mutate({ projectId, definitionId: definition.id, prompt, requestId }, { onSuccess: onClose, onSettled: () => { sending.current = false; } });
   };
   return <Stack>
-    <Body>{definition.name}</Body>
+    <Body muted>{copy("Ekip", "Crew")}: {definition.name}</Body>
     <Field label={copy("Ekibin teslim edeceği sonuç", "Desired crew delivery")} value={prompt} onChangeText={setPrompt} multiline editable={!start.isPending && !submitted && supported} />
     {!supported && <Notice tone="info" message={copy("Ekip çalıştırmak için bilgisayardaki bycoda uygulamasını güncelleyin.", "Update bycoda on this computer to start crew work.")} />}
     {submitted && !start.isPending && start.isError && <Notice tone="warning" message={copy("İstek yinelenmedi. Çalışmalar listesini yenileyip bu işin oluşup oluşmadığını kontrol edin.", "The request was not repeated. Refresh the work list to check whether this run was created.")} />}

@@ -4,7 +4,7 @@ import { compareNative } from "./native-fingerprint.mjs";
 
 const report = () => ({
   status: "measured",
-  expoVersion: "57.0.31",
+  expoVersion: "58.0.23",
   tool: { version: "0.20.14" },
   settings: { sourceSkips: 0 },
   nativeHash: "abc",

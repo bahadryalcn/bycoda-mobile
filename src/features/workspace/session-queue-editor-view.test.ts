@@ -6,7 +6,7 @@ import { SessionQueueEditor } from "./session-queue-editor-view";
 const f=vi.hoisted(()=>({allowed:true,epoch:true,activeId:"m",commands:new Map<string,()=>void>(),change:undefined as undefined|((text:string)=>void),confirm:undefined as undefined|(()=>void),cancel:undefined as undefined|(()=>void)}));
 vi.mock("react-native",()=>({useWindowDimensions:()=>({height:640})}));
 vi.mock("lucide-react-native/icons/pencil",()=>({default:()=>null}));
-vi.mock("@/ui/theme",()=>({useMobileTheme:()=>undefined}));
+vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {muted:"#555"}, semanticColors: {}, uiStyles: {} })}));
 vi.mock("@/ui/tokens",()=>({colors:{muted:"#555"}}));
 vi.mock("@/state/machines",()=>({useMachines:Object.assign((select:any)=>select({machines:[{id:"m",name:"Original computer"}]}),{getState:()=>({activeId:f.activeId})})}));
 vi.mock("@/state/connection-scope",()=>{const value={isCurrent:()=>f.epoch};return{useConnectionScope:()=>value};});
@@ -18,7 +18,7 @@ vi.mock("@/ui/action-review-sheet",()=>({ActionReviewSheet:({children,onClose,on
 vi.mock("@/ui/primitives",()=>{
  const content=({children}:any)=>createElement("div",null,children);
  const button=({label,onPress,disabled}:any)=>{f.commands.set(label,onPress);return createElement("button",{disabled,onClick:onPress},label);};
- return{Body:content,Stack:content,Disclosure:content,Empty:({title}:any)=>createElement("p",null,title),Loading:()=>createElement("p",null,"Loading"),Notice:({message}:any)=>createElement("p",null,message),ErrorText:({error,message}:any)=>error?createElement("p",null,message||error.message):null,Sheet:({visible,children}:any)=>visible?createElement("article",null,children):null,
+ return{Body:content,Stack:content,Disclosure:content,Empty:({title}:any)=>createElement("p",null,title),Loading:()=>createElement("p",null,"Loading"),Notice:({message}:any)=>createElement("p",null,message), StateView: ({ title }:any) => createElement("p",null,title),ErrorText:({error,message}:any)=>error?createElement("p",null,message||error.message):null,Sheet:({visible,children}:any)=>visible?createElement("article",null,children):null,
  Input:({value,onChangeText,editable}:any)=>{f.change=onChangeText;return createElement("textarea",{value,readOnly:!editable,onInput:(event:any)=>onChangeText(event.currentTarget.value)});},ActionMenu:({actions}:any)=>createElement("nav",null,...actions.map((action:any)=>createElement("section",{key:action.key},button(action)))),
  FormActions:({submitLabel,onSubmit,disabled,onCancel,cancelLabel,feedback}:any)=>createElement("footer",null,feedback,button({label:submitLabel,onPress:onSubmit,disabled}),onCancel?button({label:cancelLabel,onPress:onCancel}):null)};
 });

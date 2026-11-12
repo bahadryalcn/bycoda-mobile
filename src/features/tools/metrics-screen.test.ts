@@ -7,13 +7,18 @@ const fixture = vi.hoisted(() => ({
   samples: [] as unknown[], params: {} as Record<string, unknown>, interval: undefined as number | undefined,
   enabled: undefined as boolean | undefined, refetch: vi.fn(), nativeOptions: [] as Record<string, unknown>[],
 }));
+vi.mock("./usage-charts", () => ({ UsageKpis: () => null, ProviderShare: () => null }));
+vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
 vi.mock("expo-router", () => ({ Stack: { Screen: ({ options }: { options: Record<string, unknown> }) => { fixture.nativeOptions.push(options); return null; } } }));
 vi.mock("@/state/machines", () => {
   const machine = () => ({ id: "computer", endpoint: "https://synthetic.invalid", name: "Computer", environmentId: "env", capabilities: fixture.supported ? ["usage.sessions.read"] : [] });
   return { useActiveMachine: machine, useMachines: { getState: () => ({ activeId: "computer", machines: [machine()] }) } };
 });
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/tokens", () => ({ space: {} }));
+vi.mock("@/ui/tokens", () => ({ space: {}, fontSize: {}, radii: {} }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
+vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("panelui-native/components/meter", () => ({ Meter: () => null }));
 vi.mock("../management/shared/format", () => ({ stamp: () => "Sample time" }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/ui/metric-row", () => ({ MetricRow: ({ label, value }: any) => createElement("p", null, `${label}: ${value}`) }));
@@ -30,12 +35,14 @@ vi.mock("@/ui/primitives", async () => {
   const { getQueryPresentation } = await import("@/ui/query-presentation");
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: any) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);
-  return { Body: Wrap, Disclosure: Wrap, NavigationGroup: Wrap, Section: Wrap, Stack: Wrap, Button,
+  const IconButton = ({ label, onPress, disabled, busy }: any) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);
+  return { Body: Wrap, Disclosure: Wrap, NavigationGroup: Wrap, Section: Wrap, Stack: Wrap, Button, IconButton, Row: Wrap,
     ToggleField: ({ label, value, onChange }: any) => createElement("button", { onClick: () => onChange(!value) }, label),
     Screen: ({ children, actions }: any) => createElement("main", null, actions, children),
     ScreenList: ({ header, footer, actions, data, renderItem }: any) => createElement("main", null, actions, header, ...data.map((item: unknown, i: number) => createElement("div", { key: i }, renderItem({ item }))), footer),
+    SegmentedControl: () => null, Card: ({ children }: any) => children, SectionHeader: () => null,
     SelectField: ({ value, onChange, disabled }: any) => createElement("button", { disabled, onClick: () => onChange(value === "1" ? "7" : "1") }, "Change range"),
-    Notice: ({ message }: any) => createElement("p", null, message),
+    StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: any) => createElement("p", null, message),
     QueryState: ({ query, empty, emptyTitle }: any) => { const state = getQueryPresentation(query, empty); return state === "empty" ? createElement("p", null, emptyTitle) : state === "stale-error" ? createElement("p", null, "Showing cached data") : state === "loading" ? createElement("p", null, "Loading") : null; },
   };
 });

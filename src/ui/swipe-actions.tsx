@@ -7,11 +7,11 @@ import {
   type PropsWithChildren,
   type ReactNode,
 } from "react";
-import { Platform, View } from "react-native";
+import { Platform, View, type HostInstance } from "react-native";
 import { Swipe, type SwipeHandle } from "panelui-native/components/swipe";
 import { usePrivateContentAccess } from "./private-access";
 import { useMobileTheme } from "./theme";
-import { colors, metrics, opacity, semanticColors } from "./tokens";
+import { metrics, opacity } from "./tokens";
 
 export type SwipeRowAction = {
   key: string;
@@ -31,10 +31,10 @@ export function SwipeActions({
   actions: readonly SwipeRowAction[];
   disabled?: boolean;
 }>) {
-  useMobileTheme();
+  const { colors, semanticColors } = useMobileTheme();
   const access = usePrivateContentAccess();
   const swipe = useRef<SwipeHandle>(null);
-  const surface = useRef<View>(null);
+  const surface = useRef<HostInstance>(null);
   const mounted = useRef(false);
   useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -101,7 +101,7 @@ export function SwipeActions({
               color={action.destructive ? "destructive" : "default"}
               labelClassName={action.destructive ? "text-danger" : "text-foreground"}
               style={{
-                backgroundColor: action.destructive ? semanticColors.danger.surface : colors.fill,
+                backgroundColor: colors.background,
                 minHeight: metrics.touchTarget,
                 minWidth: metrics.touchTarget,
                 opacity: !available || action.disabled ? opacity.disabled : 1,

@@ -117,3 +117,23 @@ describe("shared remote error copy", () => {
     );
   });
 });
+
+describe("schema and provider failures", () => {
+  const copy = (_tr: string, en: string) => en;
+  it("never shows a raw zod dump", () => {
+    const raw = JSON.stringify([
+      { code: "unrecognized_keys", keys: ["managedBy"], path: [], message: "Unrecognized key" },
+    ]);
+    const text = errorMessage(new Error(raw), copy);
+    expect(text).not.toContain("unrecognized_keys");
+    expect(text).toContain("Update Bycoda");
+  });
+  it("softens archived provider sessions", async () => {
+    const { friendlyProviderFailure } = await import("./error-message");
+    const out = friendlyProviderFailure(
+      "session 01a is archived. Run codex unarchive 01a to unarchive it first.",
+      copy,
+    );
+    expect(out).not.toContain("codex unarchive");
+  });
+});

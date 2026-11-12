@@ -30,6 +30,8 @@ export type GitHeaderProps = {
   refreshing: boolean;
   onRefresh: () => void;
   onToggleBranches: () => void;
+  /** Pull request linked to this checkout's session. */
+  linkedPr?: { number: number; state: string };
 };
 
 export type GitActionFeedbackProps = {

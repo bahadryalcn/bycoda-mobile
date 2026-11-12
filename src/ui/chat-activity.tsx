@@ -12,8 +12,7 @@ import { Plan } from "panelui-native/components/plan";
 import { useHostReadActive } from "@/state/queries";
 import { useReducedMotionPreference } from "./use-reduced-motion";
 import { Body } from "./typography";
-import { colors, metrics, radii, space } from "./tokens";
-import { uiStyles } from "./styles";
+import { fontSize, gapIcon, hitSlopFor, lineHeight, metrics, radii, space } from "./tokens";
 import { useMobileTheme } from "./theme";
 import { useCopy } from "./copy";
 import { activityFileLabel } from "./activity-file-label";
@@ -37,7 +36,7 @@ export function ChatActivity({
   /** In virtualized timelines, inspect in the feature-owned sheet instead of expanding. */
   onInspect?: () => void;
 }) {
-  useMobileTheme();
+  const { colors, pressedFill } = useMobileTheme();
   const copy = useCopy();
   const reduceMotion = useReducedMotionPreference();
   const active = useHostReadActive();
@@ -75,37 +74,54 @@ export function ChatActivity({
               ? copy("İşlem kaydı", "Action record")
               : copy("Bekliyor", "Pending");
   const fileLabel = reasoning ? { title, directory: undefined } : activityFileLabel(title);
-  const visibleTitle = open ? title : fileLabel.title;
-  const detailLabel = [...new Set([fileLabel.directory, statusLabel, detail].filter(Boolean))].join(" · ");
+  const visibleTitle = fileLabel.title;
   const accessibleLabel = [...new Set([title, statusLabel, detail].filter(Boolean))].join(". ");
+  // Collapsed rows are one muted line; only states that need attention add a colored word.
+  const trailing =
+    status === "error" || status === "stopped"
+      ? statusLabel
+      : detail && detail !== visibleTitle && status !== "running"
+        ? detail
+        : undefined;
   const titleStyle = {
-    ...uiStyles.caption,
-    fontWeight: "600" as const,
-    color: status === "error" ? colors.danger : colors.text,
+    fontSize: fontSize.control,
+    lineHeight: lineHeight.control,
+    color: status === "error" ? colors.danger : colors.muted,
   };
   const Chevron = onInspect ? ChevronRight : ChevronDown;
   const header = (
     <>
-      <Icon size={18} color={statusColor} />
-      <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
+      <View style={{ width: 20, alignItems: "center", justifyContent: "center" }}>
+        <Icon size={14} color={statusColor} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
         {status === "running" && !reduceMotion && visibleTitle.length < 60 ? (
           <Shimmer enabled={active} textStyle={titleStyle}>
             {visibleTitle}
           </Shimmer>
         ) : (
-          <Body numberOfLines={open ? undefined : 2} style={titleStyle}>
+          <Body numberOfLines={1} style={titleStyle}>
             {visibleTitle}
           </Body>
         )}
-        {detailLabel ? (
-          <Body muted numberOfLines={open ? undefined : 2} style={uiStyles.caption}>
-            {detailLabel}
-          </Body>
-        ) : null}
       </View>
+      {trailing ? (
+        <Body
+          numberOfLines={1}
+          style={{
+            flexShrink: 1,
+            maxWidth: "40%",
+            fontSize: fontSize.caption,
+            lineHeight: lineHeight.caption,
+            color: status === "error" ? colors.danger : status === "stopped" ? colors.warning : colors.tertiary,
+          }}
+        >
+          {trailing}
+        </Body>
+      ) : null}
       <Chevron
-        size={16}
-        color={colors.muted}
+        size={14}
+        color={colors.tertiary}
         style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }}
       />
     </>
@@ -117,15 +133,14 @@ export function ChatActivity({
         accessibilityRole="button"
         accessibilityLabel={accessibleLabel}
         onPress={onInspect}
+        hitSlop={hitSlopFor(metrics.toolRowHeight)}
         style={({ pressed }) => ({
-          minHeight: metrics.touchTarget,
+          height: metrics.toolRowHeight,
           flexDirection: "row",
           alignItems: "center",
-          gap: space.sm,
-          paddingHorizontal: space.sm,
-          paddingVertical: space.xs,
-          borderRadius: radii.control,
-          backgroundColor: pressed ? colors.raised : "transparent",
+          gap: gapIcon / 2,
+          borderRadius: radii.badge,
+          backgroundColor: pressed ? pressedFill : "transparent",
         })}
       >
         {header}
@@ -140,7 +155,7 @@ export function ChatActivity({
         defaultOpen={false}
       >
         <Reasoning.Trigger
-          className="min-h-12"
+          className="min-h-7 py-0"
           accessibilityLabel={accessibleLabel}
           aria-expanded={open}
         >
@@ -155,7 +170,7 @@ export function ChatActivity({
       open={open}
       onOpenChange={onOpenChange}
     >
-      <Task.Trigger className="min-h-12" accessibilityLabel={accessibleLabel} aria-expanded={open}>
+      <Task.Trigger className="min-h-7 py-0" accessibilityLabel={accessibleLabel} aria-expanded={open}>
         {header}
       </Task.Trigger>
       {!onInspect ? (
@@ -166,7 +181,7 @@ export function ChatActivity({
 }
 
 export function ChatStreaming({ label }: { label: string }) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const reducedMotion = useReducedMotionPreference();
   const active = useHostReadActive();
   return (
@@ -193,13 +208,13 @@ export function ChatPlan({
   action?: ReactNode;
   onOpenChange?: (open: boolean) => void;
 }) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   return (
     <Plan defaultOpen onOpenChange={onOpenChange} className="min-w-0 rounded-none border-0 bg-transparent shadow-none">
       <Plan.Header style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
         <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
           <Plan.Title>
-            <Body style={uiStyles.title}>{title}</Body>
+            <Body style={[uiStyles.label, { fontWeight: "600" }]}>{title}</Body>
           </Plan.Title>
           {status ? (
             <Body muted style={uiStyles.caption}>
@@ -208,7 +223,7 @@ export function ChatPlan({
           ) : null}
         </View>
         <Plan.Action>
-          <Plan.Trigger className="min-h-12 min-w-12" accessibilityLabel={title} />
+          <Plan.Trigger className="min-h-10 min-w-10" accessibilityLabel={title} />
         </Plan.Action>
       </Plan.Header>
       <Plan.Content>{children}</Plan.Content>

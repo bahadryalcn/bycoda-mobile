@@ -18,6 +18,7 @@ vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
     Body: wrapper, Row: wrapper, Disclosure: wrapper, Loading: () => null,
+    ActionMenu: ({ actions }: { actions: { key: string; label: string; disabled?: boolean; onPress: () => void }[] }) => createElement("div", null, actions.map((action) => createElement("button", { key: action.key, disabled: action.disabled, onClick: action.onPress }, action.label))),
     Button: ({ label, accessibilityLabel, disabled, onPress }: { label: string; accessibilityLabel?: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, "aria-label": accessibilityLabel, onClick: onPress }, label),
     MultiSelectField: ({ values, onChange }: { values: string[]; onChange: (ids: string[]) => void }) => { state.select = onChange; return createElement("output", null, values.join(",")); },
     Sheet: ({ visible, onClose, footer, children }: PropsWithChildren<{ visible: boolean; onClose: () => void; footer: import("react").ReactNode }>) => { state.close = onClose; return visible ? createElement("section", null, children, footer) : null; },

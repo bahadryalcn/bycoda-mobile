@@ -17,7 +17,8 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
-    "../src/vite-env.d.ts"
+    "../src/vite-env.d.ts",
+    "../src/mammoth-browser.d.ts"
   ],
   "exclude": [
     "node_modules",

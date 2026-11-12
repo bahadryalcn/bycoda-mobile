@@ -4,14 +4,16 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { SelectField, MultiSelectField } from "./select-field";
 import { PrivateContentAccessProvider } from "./private-access";
+import { SheetGuardContext } from "./sheet-guard-context";
 const s = vi.hoisted(() => ({ actions: new Map<string, () => void>(), search: undefined as undefined | ((value: string) => void),
   locale: "en", options: [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }] as { value: string; label: string; disabled?: boolean }[],
   values: [] as string[], multiple: false, max: undefined as number | undefined, disabled: false, allowed: true, changes: [] as string[][] }));
-vi.mock("./theme", () => ({ useMobileTheme: () => {} }));
+vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: { info: {}, danger: {} }, uiStyles: {} }) }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string, args?: any) => en.replace(/\{(p\d+)\}/g, (_, key) => args?.[key]) }));
 vi.mock("@/i18n", () => ({ useLocale: () => s.locale }));
 vi.mock("./tokens", () => ({ colors: {}, metrics: {}, opacity: {}, radii: {}, semanticColors: { info: {}, danger: {} }, space: {} }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
+vi.mock("./info-hint", () => ({ HintLabel: ({ label, help }: any) => h("span", { "data-help": help }, label), UnitHint: () => null, isUnitHint: () => false }));
 vi.mock("./disclosure-motion", () => ({ DisclosureChevron: () => null }));
 vi.mock("lucide-react-native/icons/chevrons-up-down", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
@@ -19,6 +21,7 @@ vi.mock("lucide-react-native/icons/search", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/square-check-big", () => ({ default: () => null }));
 vi.mock("react-native", () => ({
+  StyleSheet: { hairlineWidth: 1 },
   Text: ({ children }: PropsWithChildren) => h("span", null, children), View: ({ children }: PropsWithChildren) => h("div", null, children),
   Pressable: ({ children, accessibilityLabel, accessibilityRole, onPress, disabled }: any) => {
     s.actions.set(accessibilityRole === "combobox" ? "Open" : accessibilityLabel, onPress);
@@ -33,6 +36,7 @@ const Search = ({ value, onChangeText }: any) => { s.search = onChangeText; retu
 vi.mock("./fields", () => ({ Input: (props: any) => h(Search, props) }));
 vi.mock("./search-field", () => ({ SearchField: (props: any) => h(Search, props) }));
 vi.mock("./feedback", () => ({ Empty: ({ title, action }: any) => h("div", null, title, action ? h("button", { onClick: action.onPress }, action.label) : null) }));
+vi.mock("./navigation-row", () => ({ useInNavigationGroup: () => false }));
 vi.mock("./dialogs", () => ({ Sheet: ({ visible, children, onClose, headerAction }: any) => {
   s.actions.set("Close", onClose); return visible ? h("section", null, headerAction, children) : null;
 } }));
@@ -102,4 +106,15 @@ it("retires old search and Done callbacks across reopening", async () => {
 it("checks private authority before React commits", async () => {
   await render(); await call("Open"); const old = s.actions.get("Alpha")!; s.allowed = false;
   await act(async () => old()); expect(s.changes).toEqual([]);
+});
+it("expands options inline inside a Sheet instead of stacking a second sheet", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); root = createRoot(container);
+  const guard = { register() {}, requestClose() {}, requestCloseThen() {} };
+  await act(async () => root!.render(h(SheetGuardContext.Provider, { value: guard },
+    h(SelectField, { label: "Choice", options: s.options, onChange: (v: string) => s.changes.push([v]) }))));
+  await call("Open");
+  expect(container.querySelector("section")).toBeNull();
+  await call("Alpha");
+  expect(s.changes).toEqual([["a"]]);
+  expect(container.textContent).not.toContain("Beta");
 });

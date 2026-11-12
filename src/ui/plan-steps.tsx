@@ -1,7 +1,6 @@
 import { Plan } from "panelui-native/components/plan";
 import { useMobileTheme } from "./theme";
 import { Body } from "./typography";
-import { uiStyles } from "./styles";
 
 export type PlanStep = {
   id: string;
@@ -13,7 +12,7 @@ export type PlanStep = {
 
 /** Readable connected steps, without a separate decorative card around every task. */
 export function PlanSteps({ steps }: { steps: readonly PlanStep[] }) {
-  useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   return (
     <Plan className="rounded-none border-0 bg-transparent shadow-none overflow-visible">
       <Plan.Steps>

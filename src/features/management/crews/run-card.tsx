@@ -1,5 +1,7 @@
 import { router } from "expo-router";
 import MessageSquare from "lucide-react-native/icons/message-square";
+import Trash2 from "lucide-react-native/icons/trash-2";
+import { Progress } from "panelui-native/components/progress";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { CrewRunView } from "@/remote/contracts/crews";
@@ -7,11 +9,13 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { hostKey, useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
-import { ActionMenu, Body, Button, ErrorText, IconButton, MutationState, NavigationGroup, NavigationRow, Row, Stack } from "@/ui/primitives";
-import { colors } from "@/ui/tokens";
+import { ActionMenu, Body, Button, ErrorNotice, IconButton, MutationState, NavigationGroup, NavigationRow, Row, Stack } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
 import { RecordCard } from "@/ui/record-card";
 import { Status, statusLabel } from "../shared/status";
+import { formatDuration } from "../shared/duration";
+import { joinMeta, RecordTrailing, useMenuGlyph } from "../shared/record-bits";
+import { MemberLines } from "./member-lines";
 import { CrewRuntimePanel } from "./runtime-panel";
 import { canDeleteCrewRun, canStopCrewRun, crewActivityKnown, crewHasRunningWork, crewTaskSessions } from "./runtime-model";
 
@@ -33,15 +37,16 @@ function CrewTaskRow({ task, model, supported, onOpenSession }: {
       disabled={!sessions.worker || !supported}
       onPress={() => { if (sessions.worker) onOpenSession(sessions.worker); }}
     />
-    <ErrorText error={task.error} />
+    <ErrorNotice error={task.error} />
     {sessions.review && <NavigationRow label={copy("İnceleyen", "Reviewer")} detail={task.title}
       disabled={!supported} onPress={() => onOpenSession(sessions.review!)} />}
   </Stack>;
 }
 
 export function CrewRunCard({ run }: { run: CrewRunView }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
+  const glyph = useMenuGlyph();
   const machine = useActiveMachine();
   const [machineId] = useState(machine?.id);
   const cache = useQueryClient();
@@ -58,10 +63,15 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
     if (supported && machineId && useMachines.getState().activeId === machineId)
       router.push({ pathname: "/session/[id]", params: { id: sessionId, machineId, projectId: run.projectId } });
   };
+  const done = run.tasks.filter((task) => task.status === "done").length;
+  const elapsed = formatDuration(run.status === "finished" ? run.updatedAt - run.createdAt : Date.now() - run.createdAt, copy);
   const stopWork = () => confirmAction(copy("Çalışmayı durdur", "Stop work"), copy("Koordinatör ve çalışan ekip görevleri durdurulur. Dosyalar ve çalışma kaydı korunur.", "The coordinator and active crew tasks will stop. Files and the work record are kept."),
     copy("Durdur", "Stop"), () => { if (supported && useMachines.getState().activeId === machineId) stop.mutate({ projectId: run.projectId, runId: run.id }, { onError: refreshAfterFailure }); });
   return <RecordCard title={run.title || run.definition.name} status={<Status value={run.status} />}
-    metadata={`${run.definition.name} · ${run.tasks.filter((task) => task.status === "done").length}/${run.tasks.length}`}
+    metadata={joinMeta([run.definition.name, run.tasks.length ? copy("{p0}/{p1} görev", "{p0}/{p1} tasks", { p0: done, p1: run.tasks.length }) : "", elapsed])}
+    preview={run.tasks.length ? <Progress value={done} maxValue={run.tasks.length} size="sm"
+      color={run.status === "finished" ? "success" : "primary"}
+      accessibilityLabel={copy("{p0}/{p1} görev tamamlandı", "{p0} of {p1} tasks done", { p0: done, p1: run.tasks.length })} /> : null}
     footer={canStopCrewRun(run) || run.status !== "finished" ? <Row>
       {canStopCrewRun(run) && <Button tone="danger" busy={stop.isPending}
         label={copy("Çalışmayı durdur", "Stop work")}
@@ -74,19 +84,20 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
           run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Beklet", "Pause"),
           () => { if (supported && useMachines.getState().activeId === machineId) (run.status === "paused" ? resume : pause).mutate({ projectId: run.projectId, runId: run.id }, { onError: refreshAfterFailure }); }, undefined, "default")} />}
     </Row> : null}
-    menu={<Row style={{ gap: 0, flexWrap: "nowrap" }}>
+    menu={<RecordTrailing>
       {run.coordinatorSessionId ? <IconButton disabled={!supported} label={copy("Koordinatör oturumu", "Coordinator session")} onPress={() => openSession(run.coordinatorSessionId!)}>
         <MessageSquare size={18} color={colors.accent} />
       </IconButton> : null}
       <ActionMenu label={copy("Ekip çalışması işlemleri", "Crew work actions")} actions={[
-      machine?.capabilities?.includes("crews.run-delete.v1") && { key: "delete", label: copy("Çalışmayı sil", "Delete work"), destructive: true,
+      machine?.capabilities?.includes("crews.run-delete.v1") && { key: "delete", icon: glyph(Trash2, true), label: copy("Çalışmayı sil", "Delete work"), destructive: true,
         disabled: busy || !supported || !canDeleteCrewRun(run),
         onPress: () => confirmAction(copy("Çalışmayı sil", "Delete work"), copy("Bu çalışma listeden kaldırılsın mı? Ekip, görevler ve oturumlar korunur.", "Remove this work from the list? The crew, tasks and conversations are kept."),
           copy("Sil", "Delete"), () => { if (supported && !busy && canDeleteCrewRun(run) && useMachines.getState().activeId === machineId) remove.mutate({ projectId: run.projectId, runId: run.id, expectedUpdatedAt: run.updatedAt }); }) },
       ]} />
-    </Row>}
+    </RecordTrailing>}
     details={<CrewRuntimePanel run={run}>
-      <Body muted>{copy("Ekip üyeleri", "Crew members")}: {run.definition.agents.map((agent) => agent.name).join(" · ")}</Body>
+      <Body muted>{copy("Ekip üyeleri", "Crew members")}</Body>
+      <MemberLines agents={run.definition.agents} />
       <NavigationGroup>{run.tasks.map((task) => <CrewTaskRow key={task.id} task={task}
         model={run.assignments.find((assignment) => assignment.taskId === task.id)?.candidate.model}
         supported={supported} onOpenSession={openSession} />)}</NavigationGroup>
@@ -95,7 +106,7 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
     {run.status === "paused" && crewActivityKnown(run) && <Body muted>{crewHasRunningWork(run)
       ? copy("Yeni görev atamaları duraklatıldı. Devam eden işler tamamlanabilir.", "New assignments are paused. Running work can still finish.")
       : copy("İş duraklatıldı. Çalışan bir işlem yok.", "Work is paused. Nothing is running.")}</Body>}
-    <ErrorText error={run.error} />
+    <ErrorNotice error={run.error} />
     <MutationState mutation={pause} /><MutationState mutation={resume} /><MutationState mutation={stop} /><MutationState mutation={remove} />
   </RecordCard>;
 }

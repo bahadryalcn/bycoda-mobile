@@ -2,13 +2,12 @@ import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useRef } from "react";
 import { FlatList, View, useWindowDimensions } from "react-native";
 import { Body, Button, ErrorText, Loading, PressableCard, Row } from "@/ui/primitives";
-import { colors, radii, space } from "@/ui/tokens";
+import { radii, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
-import { uiStyles } from "@/ui/styles";
 import type { ComposerSuggestion } from "./use-composer-catalog";
 
 export function ComposerSuggestions({ items, loading, error, trigger, selected, onPick, onRetry, onClose, maximumHeight, compact }: { maximumHeight: number; compact: boolean; items: ComposerSuggestion[]; loading: boolean; error: unknown; trigger: string; selected: number; onPick: (item: ComposerSuggestion) => void; onRetry: () => void; onClose: () => void }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const { fontScale } = useWindowDimensions();
   const list = useRef<FlatList<ComposerSuggestion>>(null);
@@ -27,7 +26,7 @@ export function ComposerSuggestions({ items, loading, error, trigger, selected, 
       accessibilityLabel={title}
       style={{ minHeight: 0, flexShrink: 1 }}
       ListHeaderComponent={<View style={{gap:space.xs}}>
-        {loading ? <Loading /> : null}<ErrorText error={error} />{error ? <Button label={copy("Yeniden dene", "Retry")} onPress={onRetry} /> : null}
+        {loading && !error ? <Loading /> : null}<ErrorText error={error} />{error ? <Button label={copy("Yeniden dene", "Retry")} busy={loading} onPress={onRetry} /> : null}
         {!loading && !error && !items.length ? <Body muted>{copy("Eşleşme yok", "No matches")}</Body> : null}
       </View>}
       keyboardShouldPersistTaps="always"

@@ -1,10 +1,10 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useEffect, type PropsWithChildren } from "react";
 import { View } from "react-native";
-import { Pressable } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import { Body } from "./typography";
-import { colors, fontSize, metrics, opacity, radii, space } from "./tokens";
+import { fontSize, hitSlopFor, lineHeight, metrics, opacity, radii, space } from "./tokens";
 import { IconButton } from "./buttons";
 import Animated from "react-native-reanimated";
 import { BusyIndicator as Spinner } from "./busy-indicator";
@@ -31,7 +31,7 @@ export function ChatToolbarAction({
   /** Bounded navigator accessories retain their spoken label and icon target. */
   hideLabel?: boolean;
 }>) {
-  useMobileTheme();
+  const { colors, pressedFill } = useMobileTheme();
   const reducedMotion = useReducedMotionPreference();
   const press = usePressMotion(0.97);
   const color = colors[tone];
@@ -50,19 +50,20 @@ export function ChatToolbarAction({
       aria-busy={busy || undefined}
       onPressIn={!off && !reducedMotion ? press.onPressIn : undefined}
       onPressOut={press.onPressOut}
+      hitSlop={hitSlopFor(metrics.chipHeight)}
       style={({ pressed }) => ({
-        minHeight: metrics.touchTarget,
-        minWidth: metrics.touchTarget,
+        minHeight: metrics.chipHeight,
+        minWidth: metrics.chipHeight,
         maxWidth: "100%",
         flexShrink: 1,
-        paddingHorizontal: space.xs,
+        paddingHorizontal: space.sm,
         gap: space.xs,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        borderRadius: radii.control,
+        borderRadius: radii.pill,
         opacity: disabled && !busy ? opacity.disabled : 1,
-        backgroundColor: pressed ? colors.raised : "transparent",
+        backgroundColor: pressed ? pressedFill : "transparent",
       })}
     >
       <Animated.View
@@ -81,6 +82,7 @@ export function ChatToolbarAction({
         {busy ? <Spinner size="sm" color={color} /> : children}
         {!hideLabel ? <Body
           selectable={false}
+          numberOfLines={1}
           style={{
             color,
             fontSize: fontSize.small,
@@ -118,7 +120,6 @@ export function ChatAction({
       disabled={disabled}
       busy={busy}
       tone={primary ? "primary" : "default"}
-      density="compact"
       onPress={onPress}
     >
       {children}
@@ -127,8 +128,8 @@ export function ChatAction({
 }
 
 /**
- * Circular composer action: a 30dp visual (filled accent only when active) inside a
- * 48dp touch area, with a spring press and busy spinner.
+ * Circular composer action: a 32dp visual (filled when it can act; danger for Stop) with the
+ * touch area grown to 48dp through hit slop, a spring press and a busy spinner.
  */
 export function ChatCircleAction({
   label,
@@ -136,38 +137,57 @@ export function ChatCircleAction({
   disabled,
   busy,
   active,
+  danger,
   surface = false,
+  onLongPress,
+  longPressLabel,
+  hint,
   children,
 }: PropsWithChildren<{
   label: string;
   onPress: () => void;
+  /** Alternate action. Pair it with `longPressLabel` so assistive tech can reach it without a gesture. */
+  onLongPress?: () => void;
+  longPressLabel?: string;
+  hint?: string;
   disabled?: boolean;
   busy?: boolean;
   /** Filled accent when the action can be performed; gray otherwise. */
   active?: boolean;
+  /** Filled danger (Stop). */
+  danger?: boolean;
   surface?: boolean;
 }>) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const press = usePressMotion(0.97);
   const reducedMotion = useReducedMotionPreference();
   const off = !!(disabled || busy);
   useEffect(() => {
     if (reducedMotion || off) press.onPressOut();
   }, [reducedMotion, off]);
+  const filled = danger ? colors.danger : active ? colors.accentSolid : undefined;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={hint}
+      accessibilityActions={onLongPress && longPressLabel ? [{ name: "longpress", label: longPressLabel }] : undefined}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === "longpress") onLongPress?.();
+      }}
       accessibilityState={{ disabled: off, busy: !!busy }}
       aria-disabled={off}
       aria-busy={busy || undefined}
       disabled={off}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={350}
       onPressIn={!off && !reducedMotion ? press.onPressIn : undefined}
       onPressOut={press.onPressOut}
+      hitSlop={hitSlopFor(metrics.visualControl)}
       style={{
-        width: metrics.touchTarget,
-        height: metrics.touchTarget,
+        width: metrics.visualControl,
+        height: metrics.visualControl,
         alignItems: "center",
         justifyContent: "center",
       }}
@@ -175,20 +195,20 @@ export function ChatCircleAction({
       <Animated.View
         style={[
           {
-            width: 30,
-            height: 30,
+            width: metrics.visualControl,
+            height: metrics.visualControl,
             borderRadius: radii.pill,
-            backgroundColor: active ? colors.accentSolid : surface ? colors.panel : "transparent",
-            borderWidth: surface ? 1 : 0,
-            borderColor: colors.separator,
+            backgroundColor: filled ?? (surface ? colors.panel : "transparent"),
+            borderWidth: surface && !filled ? StyleSheet.hairlineWidth : 0,
+            borderColor: colors.border,
             alignItems: "center",
             justifyContent: "center",
-            opacity: disabled && !busy ? 0.6 : 1,
+            opacity: disabled && !busy ? opacity.disabled : 1,
           },
           !off && !reducedMotion && press.animatedStyle,
         ]}
       >
-        {busy ? <Spinner size="sm" color={active ? colors.primaryText : colors.muted} /> : children}
+        {busy ? <Spinner size="sm" color={filled ? colors.primaryText : colors.muted} /> : children}
       </Animated.View>
     </Pressable>
   );
@@ -199,7 +219,7 @@ export function ChatSummary({
   label,
   detail,
   status,
-  color = colors.muted,
+  color,
   icon,
   onPress,
   disabled = false,
@@ -212,7 +232,7 @@ export function ChatSummary({
   onPress: () => void;
   disabled?: boolean;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -245,7 +265,7 @@ export function ChatSummary({
         ) : null}
       </View>
       {status ? (
-        <Body style={{ fontSize: fontSize.caption, lineHeight: 16, color, maxWidth: "35%" }}>
+        <Body style={{ fontSize: fontSize.caption, lineHeight: 16, color: color ?? colors.muted, maxWidth: "35%" }}>
           {status}
         </Body>
       ) : null}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import type { FlatList, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, ViewToken } from "react-native";
+import type { FlatList, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, ListViewToken } from "react-native";
 
 /** Wait for current measurements; initial virtualized extents are not a final clamp.
  * Explicit suspension preserves position across concealment, unlike ordinary query loading.
@@ -146,7 +146,7 @@ export function useListScrollMemory<T>(memory: ListMemory | null, offset: number
   }, [cancelRestore, ready, suspended]);
   // FlatList requires a stable viewability callback across data/filter changes.
   const memoryNow = useRef(memory); memoryNow.current = memory;
-  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<T>[] }) => {
+  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ListViewToken[] }) => {
     if (!mounted.current || suspendedNow.current) return;
     geometry.current.lastVisible = viewableItems.some(item => item.index === geometry.current.rowCount - 1 && item.isViewable);
     if (!pending.current && !endTarget.current) {

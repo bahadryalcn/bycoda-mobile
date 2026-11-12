@@ -1,40 +1,85 @@
-import { useCallback, useState, type PropsWithChildren } from "react";
-import { Text, View, useWindowDimensions, type ColorValue, type LayoutChangeEvent } from "react-native";
+import type { ReactNode } from "react";
+import { Text, View } from "react-native";
+import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body } from "@/ui/typography";
+import { HeaderBackButton } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
-import { colors, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
-import { sessionStatusInline } from "./session-header-model";
+import { fontSize, lineHeight, metrics, radii, space } from "@/ui/tokens";
+import type { MobileColors } from "@/ui/tokens";
+import { ProviderIcon } from "@/ui/provider-identity";
+import type { RemoteProvider } from "@/domain/types";
+import { sessionDisplayTitle } from "./session-title";
+import type { SessionHeaderTone } from "./session-header-model";
 
-/** Status and scope share one identity column beside the frequent controls. */
-export function SessionHeader({ status, context, statusColor, compact, children }: PropsWithChildren<{
-  status: string; context?: string; statusColor: ColorValue; compact: boolean;
-}>) {
-  useMobileTheme();
-  const { fontScale } = useWindowDimensions();
-  const [width, setWidth] = useState(0);
-  const [actions, setActions] = useState(0);
-  const measureWidth = useCallback((event: LayoutChangeEvent) => {
-    const next = event.nativeEvent.layout.width;
-    if (Number.isFinite(next) && next > 0) setWidth(previous => previous === next ? previous : next);
-  }, []);
-  const measureActions = useCallback((event: LayoutChangeEvent) => {
-    const next = event.nativeEvent.layout.width;
-    if (Number.isFinite(next) && next > 0) setActions(previous => previous === next ? previous : next);
-  }, []);
-  const inline = sessionStatusInline(width, actions, fontScale);
-  const identity = <View style={{ minWidth: 0, gap: space.xxs }}><Body accessibilityLabel={status} style={uiStyles.caption}>
-    <Text accessible={false} aria-hidden style={{ color: statusColor }}>●{" "}</Text>
-    <Body style={[uiStyles.caption, { color: colors.text, fontWeight: "600" }]}>{status}</Body>
-  </Body>
-    {context ? <Body muted style={uiStyles.caption}>{context}</Body> : null}
-  </View>;
-  return <View onLayout={measureWidth} style={{ minWidth: 0, gap: compact ? space.xxs : space.xs }}>
-    <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "nowrap", gap: space.sm }}>
-      {inline ? <View style={{ flex: 1, minWidth: 0 }}>{identity}</View> : null}
-      <View onLayout={measureActions} style={{ flexDirection: "row", alignItems: "flex-start", flexWrap: "nowrap",
-        flexShrink: 1, maxWidth: "100%", marginStart: "auto", gap: space.xs }}>{children}</View>
+/**
+ * Two icon buttons laid out at their 48dp touch size (plus gap), so a late snapshot
+ * never shifts the title and a long title never runs under the actions.
+ */
+export const SESSION_HEADER_ACTIONS_WIDTH = metrics.touchTarget * 2 + space.xs;
+
+const toneColor = (tone: SessionHeaderTone, colors: MobileColors) =>
+  tone === "danger" ? colors.danger : tone === "warning" ? colors.warning : tone === "live" ? colors.live : colors.muted;
+
+/** Compact 48dp header: back, title over "project · status", then fixed action slots. */
+export function SessionHeader({
+  title,
+  context,
+  status,
+  tone,
+  actions,
+  provider,
+}: {
+  title: string;
+  context?: string;
+  status: string;
+  tone: SessionHeaderTone;
+  actions?: ReactNode;
+  /** Shown as an icon before the title; a "codex ·" title prefix is dropped. */
+  provider?: RemoteProvider;
+}) {
+  const { colors, uiStyles } = useMobileTheme();
+  const insets = useSafeAreaInsets();
+  const color = toneColor(tone, colors);
+  return (
+    <View
+      style={{
+        paddingTop: insets.top,
+        // Same geometry as the stack header: 16dp gutter, 48dp back box, title starts at its edge.
+        paddingLeft: Math.max(insets.left, space.screen),
+        paddingRight: Math.max(insets.right, space.screen),
+        paddingBottom: space.xs,
+        backgroundColor: colors.background,
+      }}
+    >
+      <View style={{ minHeight: metrics.headerHeight, flexDirection: "row", alignItems: "center" }}>
+        <HeaderBackButton onPress={() => (router.canGoBack() ? router.back() : router.replace("/sessions"))} />
+        <View style={{ flex: 1, minWidth: 0, justifyContent: "center" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            {provider ? <ProviderIcon provider={provider} size={16} /> : null}
+            <Body numberOfLines={1} accessibilityRole="header" style={{ flex: 1, minWidth: 0, fontSize: fontSize.title, lineHeight: lineHeight.title, fontWeight: "600", color: colors.text }}>
+              {sessionDisplayTitle(title, title)}
+            </Body>
+          </View>
+          <View accessible accessibilityLabel={[context, status].filter(Boolean).join(", ")} style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+            {context ? (
+              <Body muted numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1, fontSize: fontSize.caption, lineHeight: lineHeight.caption }]}>
+                {context}
+              </Body>
+            ) : null}
+            <View accessible={false} style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 0, maxWidth: "60%" }}>
+              {context ? <Text aria-hidden style={{ color: colors.tertiary, fontSize: fontSize.caption }}>·</Text> : null}
+              <View style={{ width: 6, height: 6, borderRadius: radii.pill, backgroundColor: color }} />
+              <Body numberOfLines={1} style={{ flexShrink: 1, fontSize: fontSize.caption, lineHeight: lineHeight.caption, fontWeight: "600", color }}>
+                {status}
+              </Body>
+            </View>
+          </View>
+        </View>
+        <View style={{ width: SESSION_HEADER_ACTIONS_WIDTH, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: space.xs }}>
+          {actions}
+        </View>
+      </View>
     </View>
-    {!inline ? identity : null}
-  </View>;
+  );
 }

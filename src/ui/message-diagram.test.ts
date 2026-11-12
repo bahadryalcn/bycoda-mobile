@@ -3,7 +3,7 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ previews: [] as any[] }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark" }) }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("../../assets/mermaid-runtime", () => ({ default: "trusted-runtime" }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));

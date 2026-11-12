@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createThemedStyles } from "./themed-styles";
 import { applyMobileTheme, colors, getMobileThemeMode, semanticColors, subscribeMobileTheme, themePalettes } from "./tokens";
 
-afterEach(() => applyMobileTheme("dark"));
+afterEach(() => applyMobileTheme("dark", "classic"));
 
 describe("native theme changes", () => {
   it("updates native styles and inline semantic colors without retaining the startup palette", () => {
@@ -32,5 +32,17 @@ describe("native theme changes", () => {
     unsubscribe();
     applyMobileTheme("dark");
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("caches one sheet per palette and mode", () => {
+    applyMobileTheme("dark", "classic");
+    const factory = vi.fn(() => ({ panel: { backgroundColor: colors.panel } }));
+    const styles = createThemedStyles(factory);
+    const classic = styles.panel;
+    applyMobileTheme("dark", "tide");
+    expect(styles.panel.backgroundColor).not.toBe(classic.backgroundColor);
+    applyMobileTheme("dark", "classic");
+    expect(styles.panel).toBe(classic);
+    expect(factory).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,6 +1,7 @@
 import type { ManagementScreenProps } from "./shared/types";
 import { router } from "expo-router";
 import { useState, type ComponentType } from "react";
+import { View } from "react-native";
 import { useCopy } from "@/ui/copy";
 import { Empty, SearchField, Screen } from "@/ui/primitives";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -26,15 +27,20 @@ export function ManagementHome() {
   const projectId = projects.directoryReady && projects.data?.some((project) => project.id === selectedProjectId)
     ? selectedProjectId : null;
   return (
-    <Screen title={copy("Araçlar", "Tools")} context={machine ? <Scope allowAll /> : undefined}>
+    <Screen title={copy("Araçlar", "Tools")} context={machine ? <Scope allowAll /> : undefined} scroll={!!machine}>
       {!machine ? (
+        <View style={{ flex: 1 }}>
         <Empty
+          compact={false}
+          illustration="connect-computer"
+          detail={copy("Araçlar bağlı bilgisayarındaki projelerle çalışır.", "Tools work with the projects on your connected computer.")}
           title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
           action={{
             label: copy("Bilgisayar bağla", "Connect a computer"),
             onPress: () => router.push("/machines"),
           }}
         />
+        </View>
       ) : (
         <>
           <SearchField
@@ -55,14 +61,19 @@ export function ManagementScreen({ section }: ManagementScreenProps) {
   const title = labels ? copy(labels[0], labels[1]) : copy("Bölüm bulunamadı", "Section not found");
   if (!machine)
     return (
-      <Screen title={title}>
+      <Screen title={title} scroll={false}>
+        <View style={{ flex: 1 }}>
         <Empty
+          compact={false}
+          illustration="connect-computer"
+          detail={copy("Bu bölüm bağlı bilgisayarındaki verileri gösterir.", "This section shows data from your connected computer.")}
           title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
           action={{
             label: copy("Bilgisayar bağla", "Connect a computer"),
             onPress: () => router.push("/machines"),
           }}
         />
+        </View>
       </Screen>
     );
   const screens: Record<ManagementSection, ComponentType> = {
@@ -79,8 +90,11 @@ export function ManagementScreen({ section }: ManagementScreenProps) {
   return Component ? (
     <Component key={`${machine.id}:${section}`} />
   ) : (
-    <Screen title={title}>
-      <Empty title={copy("Bölüm bulunamadı", "Section not found")} />
+    <Screen title={title} scroll={false}>
+      <View style={{ flex: 1 }}>
+        <Empty compact={false} illustration="search-empty" title={copy("Bölüm bulunamadı", "Section not found")}
+          action={{ label: copy("Geri dön", "Go back"), onPress: () => router.back() }} />
+      </View>
     </Screen>
   );
 }

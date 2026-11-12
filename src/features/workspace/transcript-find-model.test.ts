@@ -15,7 +15,7 @@ const block = (
   extra: Partial<Block> = {},
 ): Block => ({ id, role, text, ...extra });
 const entries = (blocks: Block[], view: "messages" | "details" = "details") =>
-  transcriptEntries(blocks, undefined, { view, running: false }).reverse();
+  transcriptEntries(blocks, undefined, { view, running: false });
 describe("loaded transcript find", () => {
   it("yields large searches, preserves results, and cancels a superseded scan", async () => {
     const rows = entries(
@@ -42,14 +42,14 @@ describe("loaded transcript find", () => {
     });
     expect(cancelled).toEqual([]);
   });
-  it("returns chronological block results with their inverted-list index and literal matching", () => {
+  it("returns chronological block results with their list index and literal matching", () => {
     const rows = entries([
       block("first", "user", "Need [test]"),
       block("last", "assistant", "[TEST] [test]"),
     ]);
     expect(findTranscript(rows, " [test] ").map(({ blockId, index }) => [blockId, index])).toEqual([
-      ["first", 1],
-      ["last", 0],
+      ["first", 0],
+      ["last", 1],
     ]);
     expect(findTranscript(rows, "  ")).toEqual([]);
   });

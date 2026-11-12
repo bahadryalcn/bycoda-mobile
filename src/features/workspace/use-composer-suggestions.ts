@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { NativeSyntheticEvent, TextInputKeyPressEventData } from "react-native";
+import type { TextInputKeyPressEvent } from "react-native";
 import { emptyComposerDraft, type ComposerDraft } from "./composer-draft";
 import { composerTokenAt, moveSuggestionSelection, replaceComposerToken } from "./composer-tokens";
 import { useComposerCatalog, type ComposerSuggestion } from "./use-composer-catalog";
@@ -69,7 +69,7 @@ export function useComposerSuggestions({
     setSelection({ start: replacement.cursor, end: replacement.cursor });
     setDismissed(null);
   };
-  const onKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+  const onKeyPress = (event: TextInputKeyPressEvent) => {
     if (!token) return;
     const key = event.nativeEvent.key;
     if (key === "Escape") {

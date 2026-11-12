@@ -1,3 +1,5 @@
+import { View } from "react-native";
+import { router } from "expo-router";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { Empty, Screen } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -11,8 +13,16 @@ export function ProviderInboxScreen({ embedded = false }: { embedded?: boolean }
 
   if (!machine) {
     return (
-      <Screen title={embedded ? undefined : copy("Servis gelen kutusu", "Provider inbox")}>
-        <Empty title={copy("Bir bilgisayar seçin", "Choose a computer")} />
+      <Screen title={embedded ? undefined : copy("Servis gelen kutusu", "Provider inbox")} scroll={false}>
+        <View style={{ flex: 1 }}>
+          <Empty
+            compact={false}
+            illustration="connect-computer"
+            title={copy("Bir bilgisayar seçin", "Choose a computer")}
+            detail={copy("Servis gelen kutusunu görmek için bir bilgisayar bağla.", "Connect a computer to see its provider inbox.")}
+            action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.push("/machines") }}
+          />
+        </View>
       </Screen>
     );
   }

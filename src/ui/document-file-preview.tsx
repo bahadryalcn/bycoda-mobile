@@ -3,8 +3,8 @@ import { View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useLocale } from "@/i18n";
 import { useHostClient } from "@/state/queries";
-import { Body, CodePanel, CodeText, Disclosure, Empty, ErrorText, FormActions, Loading, NavigationRow, Notice, ScreenList, SearchField, Sheet } from "./primitives";
-import { colors, space } from "./tokens";
+import { Body, CodePanel, CodeText, Disclosure, Empty, ErrorText, FormActions, Loading, NavigationRow, ScreenList, SearchField, Sheet } from "./primitives";
+import { space } from "./tokens";
 import { useCopy } from "./copy";
 import { mediaQueryKey, projectMediaQueryKey, resolveMediaPath, type MessageContext, type OpenDocument } from "./media-policy";
 import type { HostFileEntry } from "@/remote/types";
@@ -18,6 +18,7 @@ import { ScreenChromeProvider } from "./layout";
 import { useFilteredListScrollMemory } from "./use-list-scroll-memory";
 import { matchesSearch, normalizeSearch } from "./search-matching";
 import { ReaderContext } from "./reader-context";
+import { useMobileTheme } from "./theme";
 
 type ScopedFilePreviewProps = { path: string; context: MessageContext; onClose(): void };
 
@@ -78,7 +79,7 @@ function ScopedFilePreviewBody({ path, context, onClose }: ScopedFilePreviewProp
       feedback={selectedQuery.error ? <ErrorText error={selectedQuery.error} /> : undefined}
       busy={selectedQuery.isFetching} cancelLabel={copy("Kapat", "Close")} onCancel={close} allowCancelWhileBusy />;
   const status = !scope.ready || selectedQuery.isFetching && !selectedQuery.error ? <Loading /> : null;
-  const unavailable = <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />;
+  const unavailable = <Empty compact={false} illustration="unreachable" title={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />;
   return <Sheet visible title={documentDisplayName(path)} size="full" scroll={!folder} onClose={close} footer={footer}>
     {!resolved ? <Body>{copy("Dosya bu projenin dışında.", "This file is outside this project.")}</Body>
       : !scope.available ? !scope.ready ? <Loading /> : unavailable
@@ -90,7 +91,7 @@ function ScopedFilePreviewBody({ path, context, onClose }: ScopedFilePreviewProp
         <PrivateContentAccessProvider value={content.access}><ScopedDirectoryList {...position.listProps} context={context} data={rows}
           header={<View style={{ gap: space.sm }}>{status}{content.access.allowed ? <ReaderContext context={context} path={resolved} /> : null}</View>} onOpenFile={openChild}
           ListEmptyComponent={content.access.allowed && query.isSuccess ? <Empty compact title={searchKey ? copy("Eşleşen sonuç yok", "No matching results") : copy("Klasör boş", "Folder is empty")}
-            action={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined} /> : null} />
+            action={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined} /> : undefined} />
         </PrivateContentAccessProvider>
       </View> : <>{status}{data !== undefined ? <PrivateContentAccessProvider value={content.access}><ScopedTextContent path={resolved} text={data} context={context} line={line} onOpenFile={openChild} /></PrivateContentAccessProvider> : null}</>}
     {currentChild && content.access.allowed ? <PrivateContentAccessProvider value={content.access}><ScopedFilePreview path={currentChild.path} context={currentChild.context}
@@ -106,6 +107,7 @@ function ScopedDirectoryList({ context, onOpenFile, ...props }: Omit<import("./s
 }
 
 function ScopedTextContent({ path, text, context, line, onOpenFile }: { path: string; text: string; context: MessageContext; line: number; onOpenFile: OpenDocument }) {
+  const { colors } = useMobileTheme();
   const copy = useCopy(), client = useHostClient();
   if (!client) return null;
   const props = { name: path, text, context: { ...context, client }, onOpenFile };

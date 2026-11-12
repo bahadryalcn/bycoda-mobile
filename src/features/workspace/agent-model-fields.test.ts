@@ -6,7 +6,12 @@ import { AgentModelFields } from "./agent-model-fields";
 import { sessionCatalog } from "./catalog";
 
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("./agent-option-icons", () => ({ SettingIcon: () => null }));
+vi.mock("./model-picker-field", () => ({ ModelPickerField: () => null }));
+vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
+vi.mock("@/ui/tokens", () => ({ space: {} }));
 vi.mock("@/ui/primitives", () => ({
+  SectionHeader: ({ title }: { title: string }) => createElement("h3", null, title),
   Body: ({ children }: PropsWithChildren) => createElement("span", null, children),
   Disclosure: ({ label, children }: PropsWithChildren<{ label: string }>) => createElement("details", null, createElement("summary", null, label), children),
   IdentifierField: ({ label, value, editable, onChangeText }: { label: string; value: string; editable: boolean; onChangeText(value: string): void }) => createElement("input", { "aria-label": label, value, disabled: !editable, onChange: (event) => onChangeText(event.currentTarget.value) }),
@@ -42,7 +47,8 @@ it("updates Claude capabilities when switching from Fable to Haiku", async () =>
   await act(async () => { model.value = "claude:haiku-4.5"; model.dispatchEvent(new Event("change", { bubbles: true })); });
   expect(container.querySelector('select[aria-label="Reasoning"]')).toBeNull();
   expect(container.querySelector('select[aria-label="Thinking"]')).not.toBeNull();
-  expect(container.textContent).toContain("claude-haiku-4-5");
+  // The native id is not repeated under the model name.
+  expect(container.textContent).not.toContain("claude-haiku-4-5");
 });
 it("locks model, reasoning and custom ID while a session configuration is busy", async () => {
   await render("codex", true);

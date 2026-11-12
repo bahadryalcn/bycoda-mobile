@@ -3,7 +3,7 @@ import { act, createElement as h, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Disclosure } from "./disclosure";
-vi.mock("./theme", () => ({ useMobileTheme: () => ({}) }));
+vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
 vi.mock("./motion", () => ({ resize: undefined }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children), Pressable: ({ children, onPress, "aria-expanded": expanded, accessibilityLabel }: PropsWithChildren<{ onPress: () => void; "aria-expanded": boolean; accessibilityLabel: string }>) => h("button", { onClick: onPress, "aria-expanded": expanded, "aria-label": accessibilityLabel }, children) }));

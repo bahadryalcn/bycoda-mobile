@@ -1,6 +1,6 @@
 import { useMobileTheme } from "./theme";
-import { useContext, useEffect, useId, useRef, type ContextType, type RefObject, type ReactNode } from "react";
-import { View, useWindowDimensions } from "react-native";
+import { cloneElement, isValidElement, useContext, useEffect, useId, useRef, type ContextType, type RefObject, type ReactElement, type ReactNode } from "react";
+import { View, useWindowDimensions, type HostInstance } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MoreHorizontal from "lucide-react-native/icons/ellipsis";
 import CheckGlyph from "lucide-react-native/icons/check";
@@ -12,14 +12,22 @@ import { asWebElement } from "./overlay-web-focus";
 import { OverlayWebMenuContext } from "./overlay-web-menu-context";
 import { usePrivateContentAccess } from "./private-access";
 import { useMenuLifecycle } from "./use-menu-lifecycle";
-import { colors, radii, space } from "./tokens";
+import { Sheet } from "./dialogs";
+import { NavigationGroup, NavigationRow } from "./navigation-row";
+import { Body } from "./typography";
+import { IconTile } from "./icon-tile";
+import { radii, space } from "./tokens";
 
 export type MenuAction = {
   key: string;
   label: string;
   onPress: () => void;
+  /** Lucide glyph; the phone sheet puts it in an icon tile so labels align. */
   icon?: ReactNode;
+  /** Secondary line; a disabled action states its reason here. */
   detail?: string;
+  /** Shows a chevron: the action opens another surface rather than running a command. */
+  opens?: boolean;
   destructive?: boolean;
   disabled?: boolean;
   /** Shows a check mark; use for filter/sort choices. */
@@ -27,17 +35,22 @@ export type MenuAction = {
 };
 
 /**
- * iOS-style popover menu for secondary actions, filters and sorting. The default trigger is a
- * circular "…" button; pass `trigger` for a custom IconButton (e.g. a filter glyph).
+ * Menu for secondary actions, filters and sorting. Phones open a bottom sheet titled `label`
+ * (with `subtitle`, usually the record name) listing icon-tile rows, destructive actions last;
+ * web keeps a popover. The default trigger is a circular "…" button; pass `trigger` for a custom
+ * IconButton (e.g. a filter glyph).
  */
 export function ActionMenu({
   label,
+  subtitle,
   actions,
   trigger,
   active,
   busy,
 }: {
   label: string;
+  /** Record the menu acts on; shown under the sheet title. */
+  subtitle?: string;
   actions: readonly (MenuAction | false | null | undefined)[];
   trigger?: ReactNode;
   /** Marks the trigger as having an active filter. */
@@ -45,12 +58,12 @@ export function ActionMenu({
   /** Pending work initiated by a menu item stays visible after the menu closes. */
   busy?: boolean;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const maxHeight = Math.max(0, height - insets.top - insets.bottom - space.screen * 2);
-  const anchor = useRef<View>(null);
+  const anchor = useRef<HostInstance>(null);
   const focusRegistry = useContext(OverlayWebMenuContext);
   const access = usePrivateContentAccess();
   const items = actions.filter(Boolean) as MenuAction[];
@@ -79,7 +92,7 @@ export function ActionMenu({
           </View>
         </IconButton>
       </Menu.Trigger>
-      <Menu.Content
+      {process.env.EXPO_OS === "web" ? <Menu.Content
         accessibilityLabel={menuLabel}
         placement="bottom"
         align="end"
@@ -115,25 +128,83 @@ export function ActionMenu({
           </Menu.Item>
         ))}
         </MenuFocusScope>
-      </Menu.Content>
+      </Menu.Content> : null}
+      {process.env.EXPO_OS === "web" ? null : (
+        <Sheet visible={open} title={menuLabel} size="compact" onClose={close}>
+          {subtitle ? <Body muted numberOfLines={2}>{subtitle}</Body> : null}
+          <ActionRows items={items} onSelect={select} />
+        </Sheet>
+      )}
     </Menu>
   );
 }
 
+/** Splits into regular and destructive groups; destructive actions always come last. */
+export function groupMenuActions<T extends { destructive?: boolean }>(items: readonly T[]): T[][] {
+  const regular = items.filter((item) => !item.destructive);
+  const danger = items.filter((item) => item.destructive);
+  return [regular, danger].filter((group) => group.length > 0);
+}
+
+function ActionRows({ items, onSelect }: { items: readonly MenuAction[]; onSelect(item: MenuAction): void }) {
+  const { colors, semanticColors } = useMobileTheme();
+  const copy = useCopy();
+  return (
+    <View style={{ gap: space.sm }}>
+      {groupMenuActions(items).map((group, groupIndex) => (
+        <NavigationGroup key={groupIndex}>
+          {group.map((item, index) => (
+            <NavigationRow
+              key={item.key}
+              intent={item.opens ? "navigate" : "command"}
+              label={item.label}
+              detail={item.detail}
+              detailLines={0}
+              detailSelectable={false}
+              tone={item.destructive ? "danger" : undefined}
+              disabled={item.disabled}
+              separator={index < group.length - 1}
+              accessibilityLabel={[
+                item.label,
+                item.detail,
+                typeof item.selected === "boolean"
+                  ? item.selected ? copy("Seçili", "Selected") : copy("Seçili değil", "Not selected")
+                  : undefined,
+              ].filter(Boolean).join(". ")}
+              icon={isValidElement(item.icon) ? (
+                <IconTile>
+                  {cloneElement(item.icon as ReactElement<{ size?: number; strokeWidth?: number; color?: string }>, {
+                    size: 18,
+                    strokeWidth: 2,
+                    color: item.destructive ? semanticColors.danger.text : colors.muted,
+                  })}
+                </IconTile>
+              ) : undefined}
+              trailing={item.selected ? <Check /> : undefined}
+              onPress={() => onSelect(item)}
+            />
+          ))}
+        </NavigationGroup>
+      ))}
+    </View>
+  );
+}
+
 function Check() {
+  const { colors } = useMobileTheme();
   return <CheckGlyph size={17} strokeWidth={2.6} color={colors.accent} />;
 }
 
 /** Portal context is re-provided upstream only for Menu itself; pass our owner explicitly. */
 function MenuFocusScope({ registry, anchor, access, onClose, label, children }: {
   registry: ContextType<typeof OverlayWebMenuContext>;
-  anchor: RefObject<View | null>;
+  anchor: RefObject<HostInstance | null>;
   access: ReturnType<typeof usePrivateContentAccess>;
   onClose(): void;
   label: string;
   children: ReactNode;
 }) {
-  const element = useRef<View>(null);
+  const element = useRef<HostInstance>(null);
   const id = useId();
   useEffect(() => {
     if (process.env.EXPO_OS !== "web" || !registry) return;

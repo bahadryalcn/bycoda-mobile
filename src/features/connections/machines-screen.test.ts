@@ -10,7 +10,7 @@ vi.mock("@/ui/screen-list", () => ({
   ScreenList: ({header, footer, data, renderItem}: {header: import("react").ReactNode; footer: import("react").ReactNode; data: unknown[]; renderItem: (item: {item:unknown}) => import("react").ReactNode}) => createElement("div", null, header, data.map(item => renderItem({item})), footer),
 }));
 
-vi.mock("@/ui/theme", () => ({ useMobileTheme: vi.fn() }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: vi.fn(() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, args?: Record<string, string>) => en.replace(/\{(\w+)\}/g, (match, key) => args?.[key] ?? match) }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, metrics: {}, space: {} }));
@@ -33,6 +33,7 @@ vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("@/state/security", () => ({ assertAppAccess: vi.fn() }));
 vi.mock("../workspace/draft-guard", () => ({ flushWorkspaceDrafts: vi.fn() }));
 vi.mock("./recovery", async importOriginal => ({ ...await importOriginal<typeof import("./recovery")>(), reloadSavedConnections: vi.fn(), selectSavedComputer: vi.fn() }));
+vi.mock("./account-computers-section", () => ({ AccountComputersSection: ({ others }: { others?: import("react").ReactNode }) => others ?? null }));
 vi.mock("./pairing-entry", () => ({ PairingEntry: () => null }));
 vi.mock("./pairing-scanner", () => ({ PairingScanner: () => null }));
 const fixture = vi.hoisted(() => ({ kind: "choices", adding: false, reset: vi.fn(), remove: vi.fn(),
@@ -50,12 +51,13 @@ vi.mock("./use-computer-connection", () => ({
     busy: fixture.busy, cancel: fixture.cancel,
   }),
 }));
-vi.mock("@/state/machines", () => ({ useMachines: Object.assign(() => fixture.state, {
+vi.mock("@/state/machines", () => ({ useMachines: Object.assign((select?: (state: unknown) => unknown) => (select ? select(fixture.state) : fixture.state), {
   getState: () => ({ ...fixture.state, removeMachine: fixture.remove }),
 }) }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
+    Badge: ({ label }: { label: string }) => createElement("span", null, label),
     Body: Wrapper,
     Disclosure: Wrapper,
     NavigationGroup: Wrapper,
@@ -66,6 +68,7 @@ vi.mock("@/ui/primitives", () => {
     QueryState: () => null,
     MutationState: () => createElement("p", null, "Connection error"),
     IconButton: ({label, disabled, onPress}: {label:string; disabled?:boolean; onPress:()=>void}) => createElement("button", {disabled, onClick:onPress}, label),
+    HeaderBackButton: ({disabled, onPress}: {disabled?:boolean; onPress:()=>void}) => createElement("button", {disabled, onClick:onPress}, "Back"),
     Button: () => null,
     Sheet: Wrapper, FormActions: ({ submitLabel, disabled, onSubmit, cancelLabel, onCancel }: { submitLabel: string; disabled: boolean; onSubmit: () => void; cancelLabel: string; onCancel: () => void }) => createElement("div", null, createElement("button", { disabled, onClick: onSubmit }, submitLabel), createElement("button", { onClick: onCancel }, cancelLabel)), Notice: ({ message }: { message: string }) => createElement("p", null, message),
     NavigationRow: ({ label, selected, onPress }: { label: string; selected?: boolean; onPress: () => void }) =>

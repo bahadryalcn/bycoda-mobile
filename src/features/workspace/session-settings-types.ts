@@ -10,5 +10,6 @@ export type SessionSettingsProps = {
 type EditableSession = HostSession["session"];
 export type SessionSettingsDraft = Pick<EditableSession, "title" | "model" | "modelSettings"> & {
   provider: EditableSession["harness"];
+  accountId?: string;
   mode: EditableSession["runtimeMode"];
 };

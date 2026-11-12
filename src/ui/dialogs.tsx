@@ -3,20 +3,14 @@ import { useMobileTheme } from "./theme";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body, Heading } from "./typography";
-import {
-  Pressable,
-  ScrollView,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type HostInstance } from "react-native";
 import { createContext, useContext, useId, useLayoutEffect, useSyncExternalStore, useCallback, useMemo, useRef, useState } from "react";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import X from "lucide-react-native/icons/x";
 import { Card, Row } from "./layout";
 import { Button, IconButton } from "./buttons";
-import { colors, metrics, radii } from "./tokens";
+import { metrics, radii } from "./tokens";
 import { space } from "./tokens";
-import { uiStyles } from "./styles";
 import { useCopy } from "./copy";
 import type { FormActionsProps, ConfirmationCardProps, SheetProps } from "./component-props";
 import { ScreenOverlay, useOverlayProgress } from "./overlays";
@@ -24,6 +18,7 @@ import { SheetGuardContext, useSheetDismissal, useSheetGuards } from "./sheet-gu
 import { useNativeSheetFocus } from "./use-native-sheet-focus";
 import { createSheetActionsStore } from "./sheet-actions-store";
 import { FormActionRow } from "./form-action-row";
+import { UnsavedBadge } from "./unsaved-badge";
 
 const SheetActionsContext = createContext<ReturnType<typeof createSheetActionsStore> | null>(null);
 
@@ -36,17 +31,20 @@ export function FormActions(props: FormActionsProps) {
   return store ? null : <FormActionRow {...props} />;
 }
 
-function SheetActionArea({ store, footer, bottom, maxHeight }: {
+function SheetActionArea({ store, footer, bottom, maxHeight, dirty }: {
   store: ReturnType<typeof createSheetActionsStore>;
   footer: import("react").ReactNode;
   bottom: number;
   maxHeight: number;
+  dirty: boolean;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const insets = useSafeAreaInsets();
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const entries = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const content = !!footer || entries.length > 0;
+  // A FormActions row that reports its own dirtiness shows the pill itself.
+  const showDirty = dirty && content && !entries.some(([, actions]) => actions.dirty);
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
@@ -54,8 +52,8 @@ function SheetActionArea({ store, footer, bottom, maxHeight }: {
       automaticallyAdjustKeyboardInsets={false}
       contentInsetAdjustmentBehavior="never"
       style={{ flexGrow: 0, flexShrink: 0, minHeight: content ? Math.min(maxHeight, metrics.touchTarget) : 0,
-        maxHeight, borderTopWidth: 0,
-        borderTopColor: colors.separator, backgroundColor: colors.panel }}
+        maxHeight, borderTopWidth: content ? StyleSheet.hairlineWidth : 0,
+        borderTopColor: colors.border, backgroundColor: colors.panel }}
       contentContainerStyle={{
       paddingStart: Math.max(space.screen, insets.left),
       paddingEnd: Math.max(space.screen, insets.right),
@@ -63,6 +61,7 @@ function SheetActionArea({ store, footer, bottom, maxHeight }: {
       paddingBottom: (keyboardVisible ? 0 : bottom) + (content ? space.md : 0),
       gap: space.sm,
     }}>
+      {showDirty ? <UnsavedBadge /> : null}
       {footer}
       {entries.map(([id, actions]) => <FormActionRow key={id} {...actions} scrollFeedback={false} feedbackPlacement="after" />)}
     </ScrollView>
@@ -133,7 +132,7 @@ export function Sheet({
   discardMessage,
   returnFocusRef,
 }: SheetProps) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const parentSheet = useContext(SheetGuardContext);
   const parentSheetRef = useRef(parentSheet);
   parentSheetRef.current = parentSheet;
@@ -142,7 +141,7 @@ export function Sheet({
   const { height, fontScale } = useWindowDimensions();
   const [frameHeight, setFrameHeight] = useState(height);
   const [headerHeight, setHeaderHeight] = useState(metrics.touchTarget);
-  const heading = useRef<View>(null);
+  const heading = useRef<HostInstance>(null);
   const guards = useSheetGuards();
   const [actionsStore] = useState(createSheetActionsStore);
   const canClose = dismissible && !guards.pending;
@@ -184,7 +183,7 @@ export function Sheet({
     paddingTop: space.sm,
     paddingStart: Math.max(space.screen, insets.left),
     paddingEnd: Math.max(space.screen, insets.right),
-    paddingBottom: space.lg,
+    paddingBottom: space.xl,
   };
   return (
     <ScreenOverlay visible={visible} label={title} onClose={requestClose}>
@@ -213,7 +212,7 @@ export function Sheet({
           full={full}
           style={{
             backgroundColor: colors.panel,
-            borderWidth: full ? 0 : 1,
+            borderWidth: full ? 0 : StyleSheet.hairlineWidth,
             borderColor: colors.border,
             paddingTop: full ? insets.top : space.sm,
             borderTopStartRadius: full ? 0 : radii.sheet,
@@ -319,7 +318,7 @@ export function Sheet({
                 {children}
               </View>
             )}
-            <SheetActionArea store={actionsStore} footer={footer} bottom={insets.bottom} maxHeight={actionsMaximum} />
+            <SheetActionArea store={actionsStore} footer={footer} bottom={insets.bottom} maxHeight={actionsMaximum} dirty={dirty || guards.dirty} />
           </SheetGuardContext.Provider>
           </SheetActionsContext.Provider>
         </SheetSurface>

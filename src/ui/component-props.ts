@@ -4,12 +4,13 @@ import type {
   TextInputProps,
   TextProps,
   ViewStyle,
-  View,
-  TextInput,
+  HostInstance,
+  TextInputInstance,
 } from "react-native";
 import type { SemanticTone } from "./tokens";
 import type { QueryLike } from "./query-presentation";
 import type { usePullRefresh } from "./use-pull-refresh";
+import type { IllustrationName } from "./illustrations";
 
 export type ContainerProps = PropsWithChildren<{ style?: StyleProp<ViewStyle> }>;
 
@@ -32,7 +33,7 @@ export type ButtonProps = PropsWithChildren<{
 }>;
 
 export type InputProps = TextInputProps & {
-  ref?: Ref<TextInput>;
+  ref?: Ref<TextInputInstance>;
   label: string;
   mono?: boolean;
   hint?: string;
@@ -47,6 +48,8 @@ export type ScreenProps = PropsWithChildren<{
   context?: ReactNode;
   /** Trailing actions in the shared page heading. */
   actions?: ReactNode;
+  /** In-screen back control, shown only when no native header owns navigation. */
+  onBack?: () => void;
   scroll?: boolean;
   query?: QueryLike;
   refresh?: () => unknown;
@@ -68,12 +71,17 @@ export type ChoiceChipProps = Omit<ButtonProps, "children" | "selected"> & { sel
 
 export type ToggleFieldProps = {
   label: string;
+  /** Leading icon tile, aligned with NavigationRow icons in settings groups. */
+  icon?: ReactNode;
   /** Deliberate list preview; the accessible label retains its full text. */
   labelLines?: number;
   value: boolean;
   onChange: (value: boolean) => void;
   disabled?: boolean;
+  /** Short value-like status shown under the label (a current value or state). */
   detail?: string;
+  /** An explanation: hidden behind an info icon until tapped. */
+  help?: string;
   tone?: "default" | SemanticTone;
 };
 
@@ -83,6 +91,13 @@ export type PressableCardProps = ContainerProps & {
   selected?: boolean;
   disabled?: boolean;
   expanded?: boolean;
+  /** Secondary actions; `optionsLabel` also exposes them as a screen-reader custom action. */
+  onLongPress?: () => void;
+  optionsLabel?: string;
+  /** What the card is to assistive tech: a tab, a radio choice, a picker trigger or an image; defaults to button. */
+  role?: "button" | "tab" | "radio" | "combobox" | "imagebutton";
+  /** Extends the touch target of a visually small card to the 48dp minimum. */
+  hitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
 };
 
 export type SelectRowProps = {
@@ -109,12 +124,39 @@ export type BadgeProps = {
   tone?: "default" | SemanticTone | "live" | "active";
 };
 
+/** Button-shaped recovery or next step shown by a state. */
+export type StateAction = { label: string; onPress: () => void; busy?: boolean };
+
+export type StateTone = "neutral" | SemanticTone;
+
+export type StateViewProps = {
+  /** Calm line art for full-area states. Without it a tone icon is used. */
+  illustration?: IllustrationName;
+  title: string;
+  description?: string;
+  /** Primary next step. */
+  action?: StateAction;
+  /** Quiet alternative below the primary action. */
+  secondaryAction?: StateAction;
+  /** Inline, left-aligned variant (icon row) for small sub-sections. With an illustration it stays centered but smaller. */
+  compact?: boolean;
+  tone?: StateTone;
+  testID?: string;
+};
+
 export type EmptyProps = {
   title: string;
   detail?: string;
+  /** Defaults to true (inline with icon). Pass false for a centered full-area state. */
   compact?: boolean;
-  action?: { label: string; onPress: () => void };
+  action?: StateAction;
+  secondaryAction?: StateAction;
+  illustration?: IllustrationName;
 };
+
+export type UnsavedBadgeProps = { label?: string };
+
+export type FieldErrorProps = { message: string };
 
 export type LoadingProps = { label?: string; centered?: boolean; showLabel?: boolean };
 
@@ -146,7 +188,14 @@ export type QueryStateProps = {
   emptyTitle?: string;
   emptyDetail?: string;
   emptyAction?: EmptyProps["action"];
-  loading?: "list" | "content" | "inline" | "none";
+  /** Illustration for the empty state; defaults to "search-empty" when `searching`. */
+  emptyIllustration?: IllustrationName;
+  /** A search or filter is active, so empty means "no matches". */
+  searching?: boolean;
+  /** The device itself has no network; selects the offline illustration for errors. */
+  offline?: boolean;
+  /** "list"/"content" draw a skeleton of that shape; "centered" a spinner in the region. */
+  loading?: "list" | "content" | "inline" | "centered" | "none";
   loadingLabel?: string;
 };
 
@@ -169,6 +218,8 @@ export type FormActionsProps = {
   busy?: boolean;
   disabled?: boolean;
   tone?: ButtonProps["tone"];
+  /** Shows the compact "Unsaved changes" pill above the actions. */
+  dirty?: boolean;
 };
 
 export type ConfirmationCardProps = PropsWithChildren<{
@@ -200,5 +251,5 @@ export type SheetProps = PropsWithChildren<{
   dirty?: boolean;
   discardTitle?: string;
   discardMessage?: string;
-  returnFocusRef?: RefObject<View | TextInput | null>;
+  returnFocusRef?: RefObject<HostInstance | TextInputInstance | null>;
 }>;

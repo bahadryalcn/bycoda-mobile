@@ -19,15 +19,20 @@ vi.mock("react-native", () => ({
   Text: ({ children }: PropsWithChildren) => createElement("span", null, children),
   StyleSheet: { flatten: (style: unknown) => style },
 }));
-vi.mock("react-native-reanimated", () => ({ default: { View: ({ children }: PropsWithChildren) => createElement("div", null, children) } }));
-vi.mock("./theme", () => ({ useMobileTheme: vi.fn() }));
+vi.mock("react-native-reanimated", () => ({
+  default: { View: ({ children }: PropsWithChildren) => createElement("div", null, children) },
+  useAnimatedStyle: () => ({}),
+}));
+vi.mock("panelui-native/hooks/use-skeleton-handoff", () => ({ useSkeletonHandoff: () => ({ mounted: true, opacity: { value: 1 } }) }));
+vi.mock("./theme", () => ({ useMobileTheme: vi.fn(() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })) }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./motion", () => ({ reveal: undefined }));
 vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("./layout", () => ({ Row: "div" }));
+vi.mock("./state-view", () => ({ StateView: "div" }));
 vi.mock("./buttons", () => ({ Button: "button" }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
-vi.mock("./tokens", () => ({ colors: {}, semanticColors: {}, space: {}, radii: {} }));
+vi.mock("./tokens", () => ({ colors: {}, semanticColors: {}, space: {}, radii: {}, metrics: {} }));
 vi.mock("lucide-react-native/icons/info", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/circle-check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: () => null }));
@@ -63,7 +68,7 @@ const navigation = {
     return () => { values.delete(listener); };
   },
 };
-const controls = () => createElement("div", null, createElement(Loading, { label: "Connecting" }), createElement(Skeleton));
+const controls = () => createElement("div", null, createElement(Loading, { label: "Connecting" }), createElement(Skeleton, { rows: 2 }));
 const render = (withNavigation: boolean) => root.render(withNavigation
   ? createElement(NavigationContext.Provider, { value: navigation as never }, controls())
   : controls());
@@ -72,6 +77,8 @@ const setFocus = (value: boolean) => {
   for (const listener of listeners.get(value ? "focus" : "blur") ?? []) listener();
 };
 beforeEach(() => {
+  // Placeholders appear after a short reveal delay; the tests step past it.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   useSecurity.setState({ appState: "active", windowFocused: true, status: "loading" });
   preference.setState({ reduced: false });
@@ -85,12 +92,14 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await act(async () => root.unmount());
+  vi.useRealTimers();
   expect([...listeners.values()].every((values) => values.size === 0)).toBe(true);
   container.remove();
 });
 
 it("supports boot without navigation and before unlock, preserving feedback semantics", async () => {
   await act(async () => render(false));
+  await act(async () => vi.advanceTimersByTime(300));
   expect(container.querySelectorAll("[data-loop]")).toHaveLength(7);
   expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-label")).toBe("Connecting");
   await act(async () => { useSecurity.setState({ status: "locked" }); });
@@ -99,6 +108,7 @@ it("supports boot without navigation and before unlock, preserving feedback sema
 
 it("unmounts hidden-route loops, retains static placeholders and restarts on focus", async () => {
   await act(async () => render(true));
+  await act(async () => vi.advanceTimersByTime(300));
   expect(loops.mounted).toBe(7);
   await act(async () => setFocus(false));
   expect(container.querySelectorAll("[data-loop]")).toHaveLength(0);
@@ -112,6 +122,7 @@ it("unmounts hidden-route loops, retains static placeholders and restarts on foc
 for (const state of [{ appState: "background" }, { appState: "inactive" }, { windowFocused: false }] as const) {
   it(`suspends boot-level loops for ${JSON.stringify(state)} and resumes`, async () => {
     await act(async () => render(false));
+    await act(async () => vi.advanceTimersByTime(300));
     await act(async () => useSecurity.setState(state));
     expect(container.querySelectorAll("[data-loop]")).toHaveLength(0);
     await act(async () => useSecurity.setState({ appState: "active", windowFocused: true }));
@@ -121,6 +132,7 @@ for (const state of [{ appState: "background" }, { appState: "inactive" }, { win
 
 it("reacts to live reduced-motion changes while keeping loading content", async () => {
   await act(async () => render(true));
+  await act(async () => vi.advanceTimersByTime(300));
   await act(async () => preference.setState({ reduced: true }));
   expect(container.querySelectorAll("[data-loop]")).toHaveLength(0);
   expect(container.textContent).toContain("Connecting");

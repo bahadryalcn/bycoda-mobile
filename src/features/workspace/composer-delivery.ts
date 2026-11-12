@@ -30,11 +30,35 @@ export function validateNoteDelivery(
     throw new Error(
       "Update bycoda on this computer to send note context. Your draft is preserved.",
     );
-  if (mode !== "send" || /^\s*\/(?:plan|compact|build|clear|new)(?:\s|$)/i.test(text))
+  if (mode !== "send" || /^\s*\/(?:plan|draft|compact|build|clear|new)(?:\s|$)/i.test(text))
     throw new Error(
       "Note context requires Send without plan, compact or session commands. Change the delivery mode or remove the note.",
     );
   readNoteContext(noteCard);
+}
+
+const DRAFT_COMMAND = /^\s*\/draft(?=\s|$)/i;
+
+/** Draft mode saves the message on the Host without starting the agent (Host `draft` command). */
+function draftCommand(
+  session: HostSession,
+  text: string,
+  attachments: RemoteAttachment[],
+): Record<string, unknown> {
+  const body = text.replace(/^\s*\/draft(?=\s|$)\s*/i, "");
+  if (!body.trim() && !attachments.length)
+    throw new Error("Describe the message or add a file before saving a draft.");
+  if (session.status === "running")
+    throw new Error("A draft cannot be saved while the agent is running.");
+  if (session.session.blocks.some((block) => block.draft))
+    throw new Error("This conversation already has a draft. Send or remove it first.");
+  return {
+    type: "draft",
+    ...captureSessionAuthority(session),
+    sessionId: session.session.id,
+    text: body,
+    attachments,
+  };
 }
 
 /** The selected delivery mode never silently changes into a different action. */
@@ -62,6 +86,7 @@ export function composerCommand(
       attachments,
     };
   }
+  if (DRAFT_COMMAND.test(text)) return draftCommand(session, text, attachments);
   if (session.status === "running")
     throw new Error("Wait for this turn, queue your message, or choose Steer.");
   if (/^\s*\/compact\s*$/.test(text)) {

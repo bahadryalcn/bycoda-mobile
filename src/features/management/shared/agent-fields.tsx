@@ -1,7 +1,9 @@
 import { useCopy } from "@/ui/copy";
 import { useRef, useState, type ComponentRef } from "react";
+import { space } from "@/ui/tokens";
 import { ErrorText } from "@/ui/primitives";
-import { Body, Button, Disclosure, Field, IdentifierField, QueryState, SelectField } from "@/ui/primitives";
+import { NumberField } from "@/ui/number-field";
+import { Body, Button, Disclosure, IdentifierField, QueryState, SelectField } from "@/ui/primitives";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import type { HostModelCatalog } from "@/domain/types";
@@ -55,6 +57,7 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
         />
       <Button
         tone="quiet"
+        style={{ marginStart: -space.md }}
         label={copy("Katalogdan seç", "Choose from catalogue")}
         disabled={disabled || !available.length}
         onPress={() => { setChoosingModel(true); }}
@@ -80,7 +83,7 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
           disabled={disabled}
           onChange={(runtimeMode) => onChange({ ...value, runtimeMode })}
         />
-        {showRunLimit ? <><Field
+        {showRunLimit ? <><NumberField
           label={copy(
             "Çalışma sınırı (dakika, 0 = sınırsız)",
             "Run limit (minutes, 0 = unlimited)",
@@ -93,7 +96,6 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
             if (valid) onChange({ ...value, maxRunMinutes: Number(text) });
           }}
           editable={!disabled}
-          keyboardType="number-pad"
         />
         </> : null}
       </Disclosure>

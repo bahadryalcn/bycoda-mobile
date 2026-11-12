@@ -4,13 +4,17 @@ import { ProjectPicker } from "../workspace/project-picker";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import FolderOpen from "lucide-react-native/icons/folder-open";
 import GitBranch from "lucide-react-native/icons/git-branch";
-import MessageSquare from "lucide-react-native/icons/message-square";
+import MessagesSquare from "lucide-react-native/icons/messages-square";
 import CheckSquare from "lucide-react-native/icons/square-check-big";
 import Target from "lucide-react-native/icons/target";
 import Users from "lucide-react-native/icons/users";
 import Clock from "lucide-react-native/icons/clock";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
-import MessageCircle from "lucide-react-native/icons/message-circle";
+import Bot from "lucide-react-native/icons/bot";
+import Megaphone from "lucide-react-native/icons/megaphone";
+import Activity from "lucide-react-native/icons/activity";
+import Plug from "lucide-react-native/icons/plug";
+import KeyRound from "lucide-react-native/icons/key-round";
 import Inbox from "lucide-react-native/icons/inbox";
 import Laptop from "lucide-react-native/icons/laptop";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
@@ -23,7 +27,6 @@ import ChartColumn from "lucide-react-native/icons/chart-column";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { Empty, NavigationGroup, NavigationRow, Section } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { colors } from "@/ui/tokens";
 import { useMobileTheme } from "@/ui/theme";
 import { managementSections, type ManagementSection } from "./sections";
 
@@ -39,8 +42,8 @@ type Tool = {
 
 /** One directory feeds the global tools screen and each project's tools sheet. */
 const tools: readonly Tool[] = [
-  { id: "assistant", label: ["Asistan", "Assistant"], icon: MessageCircle },
-  { id: "sessions", label: ["Oturumlar", "Sessions"], icon: MessageSquare, projectView: "sessions" },
+  { id: "assistant", label: ["Asistan", "Assistant"], icon: Bot },
+  { id: "sessions", label: ["Oturumlar", "Sessions"], icon: MessagesSquare, projectView: "sessions" },
   { id: "files", label: ["Dosyalar", "Files"], icon: FolderOpen, projectView: "files" },
   { id: "git", label: ["Değişiklikler", "Changes"], icon: GitBranch, projectView: "git" },
   { id: "tasks", label: managementSections.tasks, icon: CheckSquare, managementSection: "tasks" },
@@ -49,18 +52,18 @@ const tools: readonly Tool[] = [
   { id: "automations", label: managementSections.automations, icon: Clock, managementSection: "automations" },
   { id: "stewards", label: managementSections.stewards, icon: ShieldCheck, managementSection: "stewards" },
   { id: "notes", label: managementSections.notes, icon: NotebookPen, managementSection: "notes" },
-  { id: "social", label: managementSections.social, icon: MessageCircle, managementSection: "social" },
+  { id: "social", label: managementSections.social, icon: Megaphone, managementSection: "social" },
   { id: "inbox", label: ["Gelen kutusu", "Inbox"], icon: Inbox },
   { id: "terminals", label: ["Terminaller", "Terminals"], icon: Terminal, hostTool: "terminals" },
   { id: "servers", label: ["Geliştirme sunucuları", "Dev servers"], icon: Server, hostTool: "servers" },
   { id: "logs", label: ["Çalışma günlükleri", "Runtime logs"], icon: ScrollText, hostTool: "logs" },
-  { id: "diagnostics", label: ["Tanılama", "Diagnostics"], icon: Server, hostTool: "diagnostics" },
+  { id: "diagnostics", label: ["Tanılama", "Diagnostics"], icon: Activity, hostTool: "diagnostics" },
   { id: "usage", label: ["Oturum kullanımı", "Session usage"], icon: ChartColumn, hostTool: "usage" },
   { id: "browser", label: ["Tarayıcı", "Browser"], icon: Globe, hostTool: "browser" },
   { id: "devices", label: ["Cihazlar", "Devices"], icon: Smartphone, hostTool: "devices" },
   { id: "computers", label: ["Bilgisayarlar", "Computers"], icon: Laptop },
-  { id: "providers", label: ["Sağlayıcı merkezi", "Provider center"], icon: Server },
-  { id: "access", label: ["Bilgisayar erişimi", "Host access"], icon: ShieldCheck },
+  { id: "providers", label: ["Sağlayıcı merkezi", "Provider center"], icon: Plug },
+  { id: "access", label: ["Bilgisayar erişimi", "Host access"], icon: KeyRound },
 ];
 
 /** Task groups also supply search vocabulary; an empty group never leaves a heading. */
@@ -85,7 +88,7 @@ export function ToolDirectory({
   onProjectView?: (view: "sessions" | "files" | "git") => void;
   onClearSearch?: () => void;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const connection = useConnectionScope();

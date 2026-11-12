@@ -23,7 +23,7 @@ vi.mock("@/state/queries", () => ({ useHostQuery: (_key: unknown, method: string
 vi.mock("@/ui/primitives", () => {
   const wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: wrap, Stack: wrap, SearchField: ({label,value,onChangeText,editable}:any)=>{state.callbacks.set(label,onChangeText);return createElement("input",{value,disabled:!editable,onInput:(event:any)=>onChangeText(event.currentTarget.value)});}, FormActions: ({submitLabel,onSubmit,cancelLabel,onCancel,feedback}: any) => {state.callbacks.set(submitLabel,onSubmit);return createElement("div",null,createElement("button",{onClick:onSubmit},submitLabel),cancelLabel?createElement("button",{onClick:onCancel},cancelLabel):null,feedback);}, Sheet: ({ children, footer, scroll }: PropsWithChildren<{ footer?: React.ReactNode; scroll: boolean }>) => { state.scrolling=scroll;return createElement("div", null, children, footer); }, QueryState: ({empty,emptyTitle,emptyAction}:any)=>empty?createElement("div",null,emptyTitle,emptyAction?createElement("button",{onClick:emptyAction.onPress},emptyAction.label):null):null,
-    Notice: ({ message }: { message: string }) => createElement("div", null, message),
+    Notice: ({ message }: { message: string }) => createElement("div", null, message), StateView: ({ title }: { title: string }) => createElement("div", null, title),
     Button: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
     ScreenList: ({ data, header, renderItem }: { data: unknown[]; header: React.ReactNode; renderItem: (row: { item: unknown }) => React.ReactNode }) => createElement("div", null, header, ...data.map((item) => renderItem({ item }))),
   };

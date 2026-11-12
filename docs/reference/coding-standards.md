@@ -110,6 +110,11 @@ Feature code uses facades and tokens. Generate `src/global.css` with
 `pnpm theme:build`; never edit it by hand. Keep native theme styles reactive and
 the single gesture, keyboard, safe-area, query and overlay owners intact.
 
+Render code reads theme values only from `useMobileTheme()` (`colors`, `semanticColors`,
+`uiStyles`, `pressedFill`) or `useThemedStyles(sheet)` inside the component. The module-level
+accessors are for style factories and handlers that run later: React Compiler treats imported
+values as constants and would keep stale JSX after a theme switch.
+
 Use `useCopy()` and existing localization. Its call shape is
 `copy(turkish, english, values?)`. Use the existing `{p1}`, `{p2}` placeholder
 contract rather than translated fragment concatenation. Update relevant catalogs,

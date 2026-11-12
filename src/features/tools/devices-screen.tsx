@@ -4,6 +4,7 @@ import { matchesSearch } from "@/ui/search-matching";
 import { Stack } from "expo-router";
 import Smartphone from "lucide-react-native/icons/smartphone";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
+import Wrench from "lucide-react-native/icons/wrench";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
@@ -11,7 +12,6 @@ import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/stat
 import type { HostProject } from "@/domain/types";
 import { ActionMenu, Badge, Body, Disclosure, IconButton, NavigationRow, QueryState, Row, ScreenList, SearchField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { colors } from "@/ui/tokens";
 import { useMobileTheme } from "@/ui/theme";
 import { IssueSummary } from "@/ui/issue-summary";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
@@ -24,7 +24,7 @@ import type { DeviceHostStatus, DeviceSummary } from "./types";
 type DeviceScope = { machineId: string | undefined; projectId: string; reviewed: ReviewedMachine | undefined; connection: ConnectionScope };
 
 export function DevicesScreen({ project }: { project: HostProject }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const machine = useActiveMachine();
@@ -66,7 +66,7 @@ export function DevicesScreen({ project }: { project: HostProject }) {
           <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
         </IconButton>
         <ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
-          { key: "service", label: copy("Cihaz servisi", "Device service"), onPress: () => setRuntime(currentScope) },
+          { key: "service", label: copy("Cihaz servisi", "Device service"), icon: <Wrench size={20} color={colors.accent} />, onPress: () => setRuntime(currentScope) },
         ]} />
       </>}
       header={

@@ -7,10 +7,16 @@ const fixture = vi.hoisted(() => ({
   fetching: false, error: false, emptyPage: false, emptyAll: false, params: {} as any, reads: [] as any[], refresh: undefined as any, oldNext: undefined as any,
   refetch: vi.fn(async () => ({})),
 }));
+vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
+vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, router: { push: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/tokens", () => ({ space: {} }));
+vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
+vi.mock("./usage-charts", () => ({ UsageKpis: ({ items }: any) => createElement("div", null, items.map((item: any) => createElement("span", { key: item.title }, item.title, item.value))), ProviderShare: () => null }));
+vi.mock("@/ui/tokens", () => ({ space: {}, fontSize: {}, radii: {} }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/state/machines", () => {
   const machine = () => ({ id: fixture.machineId, name: "Computer", endpoint: fixture.endpoint, environmentId: fixture.environmentId, lanKey: fixture.lanKey, capabilities: fixture.supported ? ["usage.sessions.read"] : [] });
@@ -32,8 +38,11 @@ vi.mock("@/ui/record-card", () => ({ RecordCard: ({ title, preview }: any) => cr
 vi.mock("@/ui/primitives", async () => {
   const { QueryState } = await import("@/ui/query-state");
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { QueryState, Body: Group, Disclosure: Group, Notice: ({ message }: any) => createElement("div", null, message),
+  return { QueryState, Body: Group, Disclosure: Group, StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: any) => createElement("div", null, message),
+    IconButton: ({ label, onPress, disabled, busy }: any) => createElement("button", { disabled: disabled || busy, onClick: onPress, "data-busy": String(!!busy) }, label),
     Button: ({ label, onPress, disabled, busy }: any) => { if (label === "Next page") fixture.oldNext = onPress; return createElement("button", { disabled: disabled || busy, onClick: onPress, "data-busy": String(!!busy) }, label); },
+    SegmentedControl: ({ value, onChange, options }: any) => createElement("div", null, options.map((o: any) => createElement("button", { key: o.value, "aria-pressed": value === o.value, onClick: () => onChange(o.value) }, o.label))),
+    Card: Group, SectionHeader: ({ title }: any) => createElement("h3", null, title),
     SelectField: ({ label, value, onChange, disabled }: any) => createElement("select", { "aria-label": label, disabled, value, onChange: (e: any) => onChange(e.target.value) }, ["1", "7"].map(v => createElement("option", { key: v, value: v }, v))),
     ScreenList: ({ header, actions, data, renderItem, footer, refreshState }: any) => { fixture.refresh = refreshState; return createElement("main", null, actions, header, data.map((item: any) => createElement("section", { key: item.sessionId }, renderItem({ item }))), footer); },
   };
@@ -98,4 +107,12 @@ it("does not let an old refresh completion clear the current scope's refresh ind
   await act(() => fixture.refresh.onRefresh()); expect(fixture.refresh.refreshing).toBe(true);
   await act(async () => first()); expect(fixture.refresh.refreshing).toBe(true);
   await act(async () => second()); expect(fixture.refresh.refreshing).toBe(false);
+});
+it("shows token breakdown by default and a Host-update state for Cost and Limits without session rows", async () => {
+  await render();
+  expect(node.textContent).toContain("Total tokens"); expect(node.textContent).toContain("By provider");
+  await click("Cost"); expect(node.textContent).toContain("Cost is not available on mobile yet");
+  expect(node.textContent).not.toContain("Provider"); expect(node.textContent).not.toContain("Next page");
+  await click("Limits"); expect(node.textContent).toContain("Limits are not available on mobile yet");
+  await click("Tokens"); expect(node.textContent).toContain("Next page");
 });

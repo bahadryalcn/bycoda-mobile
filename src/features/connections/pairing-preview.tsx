@@ -1,12 +1,11 @@
 import { useMobileTheme } from "@/ui/theme";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import Animated from "react-native-reanimated";
 import Laptop from "lucide-react-native/icons/laptop";
-import { Body, FormActions, Row } from "@/ui/primitives";
+import { Body, FormActions, Heading, Row } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
-import { uiStyles } from "@/ui/styles";
-import { colors, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { ConnectionFeedback } from "./connection-feedback";
 import type { ConnectionOperation } from "./connection-types";
@@ -17,7 +16,7 @@ export function PairingPreview({ code, operation, disabled, busy, onConnect, onC
   code: MobilePairingCode; operation: ConnectionOperation; disabled: boolean; busy: boolean;
   onConnect: () => Promise<unknown>; onCancel: () => void;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   return (
       <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
@@ -26,9 +25,7 @@ export function PairingPreview({ code, operation, disabled, busy, onConnect, onC
           <IconTile color={colors.muted}>
             <Laptop size={20} strokeWidth={2} color={colors.muted} />
           </IconTile>
-          <Text selectable accessibilityRole="header" style={[uiStyles.heading, uiStyles.grow, { textAlign: "left" }]}>
-            {code.name}
-          </Text>
+          <Heading style={{ flex: 1, textAlign: "left" }}>{code.name}</Heading>
           </Row>
           <Body muted style={{ textAlign: "left" }}>
             {code.endpoint}
@@ -45,7 +42,7 @@ export function PairingPreview({ code, operation, disabled, busy, onConnect, onC
           </Body>
         ) : null}
         <FormActions
-          feedback={<ConnectionFeedback operation={operation} />}
+          feedback={<ConnectionFeedback operation={operation} onRetry={disabled ? undefined : () => { void onConnect(); }} />}
           submitLabel={copy("Bağlan", "Connect")}
           disabled={disabled || process.env.EXPO_OS === "web"}
           busy={busy}

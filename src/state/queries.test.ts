@@ -30,6 +30,7 @@ vi.mock("./security", () => ({
 }));
 vi.mock("../features/privacy/consent-access", () => ({
   useProviderPermission: (selector: (state: unknown) => unknown) => selector({ scopes: { scope: true } }),
+  isScopePermitted: (scopes: Record<string, boolean>, scope: string) => scopes[scope] === true,
   assertProviderPermission: vi.fn(),
   readPermittedCredential: vi.fn(),
 }));

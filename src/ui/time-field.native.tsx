@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useCopy } from "./copy";
 import { Button } from "./buttons";
-import { NavigationGroup, NavigationRow } from "./navigation-row";
+import { TimeFieldTrigger } from "./time-field-trigger";
 import { Sheet } from "./dialogs";
 import { Row } from "./layout";
 import { useMobileTheme } from "./theme";
@@ -28,8 +28,8 @@ export function TimeField({ label, value, onChange, disabled }: TimeFieldProps) 
       } else if (time !== undefined && selected) setDraft(selected);
     }} /> : null;
   return <>
-    <NavigationGroup><NavigationRow label={label} detail={value} disabled={disabled}
-      onPress={() => setDraft(wallTimePickerDate(value))} /></NavigationGroup>
+    <TimeFieldTrigger label={label} value={value} disabled={disabled}
+      onPress={() => setDraft(wallTimePickerDate(value))} />
     {Platform.OS === "android" ? picker : draft !== null && !disabled ?
       <Sheet visible title={label} size="compact" onClose={() => setDraft(null)}
         footer={<Row style={{ justifyContent: "space-between" }}>

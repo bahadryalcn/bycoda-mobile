@@ -2,7 +2,7 @@ import { SocialCollectionFeedback, SocialRecordFeedback } from "./action-feedbac
 import { socialLabel } from "./labels";
 import { RecordCard } from "@/ui/record-card";
 import { CollectionRows } from "./collection-rows";
-import { NavigationGroup, SelectField, Body, Button, Row } from "@/ui/primitives";
+import { Badge, NavigationGroup, SelectField, Body, Button, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 
@@ -42,7 +42,8 @@ export function RulesPanel({
 
       <CollectionRows page={page} beforeRows={(visible) => <SocialCollectionFeedback action={action} collection="rules" visible={visible} />} key={projectId ?? "all"} items={collection.visible} renderItem={(rule) => (
           <RecordCard key={rule.id} title={rule.name}
-            metadata={`${accountIdentity(state.accounts, rule.accountId)} · ${copy("Proje", "Project")}: ${rule.projectId} · ${socialLabel(rule.mode, copy)} · ${socialLabel(rule.trigger, copy)} · ${rule.dailyLimit} ${copy("/ gün", "/ day")}`}
+            status={<Badge label={rule.enabled ? copy("Etkin", "Active") : copy("Duraklatıldı", "Paused")} tone={rule.enabled ? "success" : "warning"} />}
+            metadata={`${accountIdentity(state.accounts, rule.accountId)} · ${socialLabel(rule.mode, copy)} · ${socialLabel(rule.trigger, copy)} · ${rule.dailyLimit} ${copy("/ gün", "/ day")}`}
       footer={
             <Row>
               <Button
@@ -76,7 +77,10 @@ export function RulesPanel({
               />
             </Row>
       }
-            details={<Body>{rule.topics.join(", ")}</Body>}
+            details={<>
+              <Body muted>{`${copy("Proje", "Project")}: ${rule.projectId}`}</Body>
+              {rule.topics.length ? <Body>{rule.topics.join(", ")}</Body> : null}
+            </>}
           >
             {rule.pausedReason && <Body>{rule.pausedReason}</Body>}
 

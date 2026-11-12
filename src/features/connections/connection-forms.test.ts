@@ -1,6 +1,7 @@
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("react-native", () => ({ Text: "Text", View: "View" }));
 vi.mock("react-native-reanimated", () => ({ default: { View: "AnimatedView" } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -9,7 +10,7 @@ vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/tokens", () => ({ space: {} }));
 vi.mock("@/ui/primitives", () => ({
   Body: "Body", FormActions: "FormActions", Disclosure: "Disclosure",
-  Field: "Field", IdentifierField: "IdentifierField", Stack: "Stack",
+  Field: "Field", IdentifierField: "IdentifierField", Stack: "Stack", Heading: "Heading",
 }));
 import { ManualConnectionForm } from "./manual-connection-form";
 import { ConnectionFeedback } from "./connection-feedback";

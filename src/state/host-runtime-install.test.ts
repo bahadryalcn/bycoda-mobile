@@ -7,6 +7,18 @@ import publicCa from "../../modules/bycoda-host-socket/fixtures/public-ca-pin-ve
 const fixture = vi.hoisted(() => ({
   native: null as HostSocketNative | null,
   unlocked: true,
+  appState: {
+    currentState: "active" as string,
+    listeners: new Set<(state: string) => void>(),
+    addEventListener(_event: string, listener: (state: string) => void) {
+      fixture.appState.listeners.add(listener);
+      return { remove: () => fixture.appState.listeners.delete(listener) };
+    },
+    set(state: string) {
+      fixture.appState.currentState = state;
+      for (const listener of fixture.appState.listeners) listener(state);
+    },
+  },
   securityListeners: new Set<() => void>(),
   machineListeners: new Set<(state: unknown) => void>(),
   state: {
@@ -24,9 +36,7 @@ const fixture = vi.hoisted(() => ({
   },
 }));
 vi.mock("../../modules/bycoda-host-socket", () => ({ nativeHostSocket: () => fixture.native }));
-vi.mock("react-native", () => ({
-  AppState: { currentState: "active", addEventListener: () => ({ remove: () => undefined }) },
-}));
+vi.mock("react-native", () => ({ AppState: fixture.appState }));
 vi.mock("./security", () => ({
   useSecurity: {
     subscribe: (listener: () => void) => {
@@ -49,7 +59,7 @@ vi.mock("./machines", () => ({
   },
 }));
 
-import { installMobileHostRuntime } from "./host-runtime";
+import { BACKGROUND_GRACE_MS, installMobileHostRuntime } from "./host-runtime";
 const releases: (() => void)[] = [];
 const descriptor = {
   protocolVersion: 1,
@@ -69,6 +79,7 @@ const descriptor = {
 };
 beforeEach(() => {
   fixture.unlocked = true;
+  fixture.appState.currentState = "active";
   fixture.native = fakeNative().native;
 });
 afterEach(() => {
@@ -86,6 +97,65 @@ describe("mobile app lifecycle and authenticated trust composition", () => {
     expect(getHostWsRuntimeProvider()).toBeDefined();
     second.dispose();
     expect(getHostWsRuntimeProvider()).toBeUndefined();
+  });
+  it("reopens the native gate with a newer epoch after any background stay, however short", async () => {
+    // The native module closes its gate on every background event and only a newer epoch
+    // reopens it. Returning inside the grace without one left every later attempt failing with
+    // "unavailable" ("Can't reach your computer" on a working network) until the app restarted.
+    vi.useFakeTimers();
+    try {
+      const installed = await installMobileHostRuntime();
+      releases.push(installed.dispose);
+      const provider = getHostWsRuntimeProvider()!;
+      const machine = {
+        id: binding.machineId,
+        name: "Host",
+        environmentId: binding.environmentId,
+        endpoint: "https://host.example",
+        capabilities: descriptor.capabilities,
+      };
+      const lease = await provider.acquire(machine, async () => descriptor, () => undefined);
+      releases.push(lease.release);
+      await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+      const granted = () =>
+        vi.mocked(fixture.native!.setAccess).mock.calls.filter(([active]) => active).map(([, epoch]) => epoch);
+      const before = Math.max(...granted());
+
+      fixture.appState.set("background");
+      await vi.advanceTimersByTimeAsync(2_000);
+      fixture.appState.set("active");
+      await vi.waitFor(() => expect(Math.max(...granted())).toBeGreaterThan(before));
+      await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+      expect(fixture.native!.open).toHaveBeenCalledTimes(2);
+
+      fixture.appState.set("background");
+      await vi.advanceTimersByTimeAsync(BACKGROUND_GRACE_MS);
+      expect(lease.state()).toBe("suspended");
+      fixture.appState.set("active");
+      await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+      expect(fixture.native!.open).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("closes immediately when the app locks, regardless of the background grace", async () => {
+    const installed = await installMobileHostRuntime();
+    releases.push(installed.dispose);
+    const provider = getHostWsRuntimeProvider()!;
+    const machine = {
+      id: binding.machineId,
+      name: "Host",
+      environmentId: binding.environmentId,
+      endpoint: "https://host.example",
+      capabilities: descriptor.capabilities,
+    };
+    const lease = await provider.acquire(machine, async () => descriptor, () => undefined);
+    releases.push(lease.release);
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    fixture.appState.set("background");
+    fixture.unlocked = false;
+    for (const listener of fixture.securityListeners) listener();
+    expect(lease.state()).toBe("suspended");
   });
   it("coalesces authenticated bootstrap and consumers onto one native connection", async () => {
     const installed = await installMobileHostRuntime();
@@ -107,9 +177,36 @@ describe("mobile app lifecycle and authenticated trust composition", () => {
     await vi.waitFor(() => expect(first.state()).toBe("ready"));
     expect(read).toHaveBeenCalledTimes(1);
     expect(fixture.native!.open).toHaveBeenCalledTimes(1);
+    // An HTTPS route keeps its own public-CA socket even when the Host also
+    // advertises its local-network WSS bootstrap.
+    expect(fixture.native!.acquireCredential).toHaveBeenCalledWith(
+      expect.objectContaining({ machineId: binding.machineId, endpoint: "wss://host.example/ws" }),
+    );
+    expect(vi.mocked(fixture.native!.acquireCredential).mock.calls[0]?.[0]).not.toHaveProperty(
+      "tls",
+    );
+  });
+  it("uses the paired local-network WSS listener only on the local-network route", async () => {
+    const installed = await installMobileHostRuntime();
+    releases.push(installed.dispose);
+    const provider = getHostWsRuntimeProvider()!;
+    const lease = await provider.acquire(
+      {
+        id: binding.machineId,
+        name: "Host",
+        environmentId: binding.environmentId,
+        endpoint: "http://192.168.1.2:8888",
+        lanKey: "a".repeat(64),
+        capabilities: descriptor.capabilities,
+      },
+      async () => descriptor,
+      () => undefined,
+    );
+    releases.push(lease.release);
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
     expect(fixture.native!.acquireCredential).toHaveBeenCalledWith(
       expect.objectContaining({
-        machineId: binding.machineId,
+        endpoint: descriptor.mobileTls.endpoint,
         tls: expect.objectContaining({ caSpkiPin: publicCa.caSpkiPin }),
       }),
     );

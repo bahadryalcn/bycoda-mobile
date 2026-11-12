@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { applyProjectChanges, readProjectSummaries } from "./project-summaries";
+import { applyProjectChanges, latestProjectActivity, readProjectSummaries } from "./project-summaries";
 import type {
   HostSessionSummary,
   MachineChanges,
@@ -99,6 +99,24 @@ describe("batched project summaries", () => {
     expect(Object.keys(result.projects)).toHaveLength(32);
   });
 
+  it("keeps other projects when one per-project read fails", async () => {
+    const failure = new Error("Host read failed.");
+    const request = vi.fn(async (_method: string, params: Record<string, unknown>) => {
+      if (params.projectId === "broken") throw failure;
+      return [row(`${params.projectId}-session`)];
+    }) as unknown as <T>(method: string, params: Record<string, unknown>) => Promise<T>;
+    const known = { projects: { broken: { etag: "", sessions: [row("old")] } } };
+    const result = await readProjectSummaries({ request }, ["a", "broken", "b"], known, false);
+    expect(result.projects.a?.sessions[0]?.id).toBe("a-session");
+    expect(result.projects.b?.sessions[0]?.id).toBe("b-session");
+    // The failed project keeps its last known rows and is reported as incomplete.
+    expect(result.projects.broken?.sessions[0]?.id).toBe("old");
+    expect(result.failed).toEqual(["broken"]);
+    await expect(
+      readProjectSummaries({ request }, ["broken"], undefined, false),
+    ).rejects.toBe(failure);
+  });
+
   it("marks a batch with more than thirty-two projects as limited", async () => {
     const request = vi.fn().mockResolvedValue(changes([]));
     const result = await readProjectSummaries(
@@ -108,5 +126,18 @@ describe("batched project summaries", () => {
     );
     expect(result.limited).toBe(true);
     expect(request.mock.calls[0][1].projects).toHaveLength(32);
+  });
+});
+
+describe("latestProjectActivity", () => {
+  it("keeps the newest non-archived update per project", () => {
+    expect(
+      latestProjectActivity([
+        { project: { id: "a" }, session: { updatedAt: 5 } },
+        { project: { id: "a" }, session: { updatedAt: 9 } },
+        { project: { id: "a" }, session: { updatedAt: 99, archived: true } },
+        { project: { id: "b" }, session: { updatedAt: 3 } },
+      ]),
+    ).toEqual({ a: 9, b: 3 });
   });
 });

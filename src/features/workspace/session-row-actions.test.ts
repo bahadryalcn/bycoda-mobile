@@ -24,6 +24,16 @@ vi.mock("lucide-react-native/icons/archive", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/archive-restore", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/trash", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pin", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pin-off", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/circle-check", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/undo-2", () => ({ default: () => null }));
+vi.mock("./session-action-list", () => ({
+  SessionActionList: ({ actions }: { actions: Action[] }) => {
+    for (const action of actions) f.actions.set(action.key, action.onPress);
+    return null;
+  },
+}));
 vi.mock("lucide-react-native/icons/info", () => ({ default: () => null }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: f.invalidate }),
@@ -63,7 +73,7 @@ vi.mock("@/ui/private-access", () => ({
   PrivateContentAccessProvider: ({ children }: PropsWithChildren) => children,
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: { muted: "muted" }, semanticColors: {}, uiStyles: { title: {}, caption: {} } }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { title: {}, caption: {} } }));
 vi.mock("@/ui/tokens", () => ({ colors: { muted: "muted" } }));
 vi.mock("@/ui/provider-identity", () => ({ ProviderIcon: () => null }));
@@ -107,7 +117,7 @@ vi.mock("@/ui/primitives", () => {
     },
     StatusRow: ({ children, label }: PropsWithChildren<{ label: string }>) =>
       createElement("section", null, label, children),
-    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    Notice: ({ message }: { message: string }) => createElement("p", null, message), StateView: ({ title }: { title: string }) => createElement("p", null, title),
     ErrorText: ({ error }: { error?: Error }) =>
       error ? createElement("p", null, error.message) : null,
     FormActions: ({
@@ -142,6 +152,10 @@ const initial = (): HostSessionSummary => ({
 let session = initial(),
   root: ReturnType<typeof createRoot>,
   node: HTMLDivElement;
+const press = async (key: string) => {
+  if (!f.actions.has(key)) await act(() => (node.querySelector("button") as HTMLElement).click());
+  await act(() => f.actions.get(key)!());
+};
 const render = async (overrides: Partial<SessionRowActionsProps> = {}) =>
   act(() =>
     root.render(
@@ -183,7 +197,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 it("opens full cached details without a Host read and keeps them visible during live revision changes", async () => {
-  await act(() => f.actions.get("details")!());
+  await press("details");
   expect(node.textContent).toContain("A long full session title");
   expect(node.textContent).toContain("Original project");
   expect(node.textContent).toContain("/project");
@@ -240,8 +254,8 @@ it("blocks archive duplicates and rejects authority drift during preflight", asy
         resolve = value;
       }),
   );
+  await press("archive");
   await act(() => {
-    f.actions.get("archive")!();
     f.actions.get("archive")!();
   });
   expect(f.read).toHaveBeenCalledOnce();
@@ -257,7 +271,7 @@ it("blocks archive duplicates and rejects authority drift during preflight", asy
 });
 it("retains unknown archive outcome and refuses a second dispatch", async () => {
   f.update.mockRejectedValue(new RemoteHostError("machine", "timeout", "Unknown", true));
-  await act(async () => f.actions.get("archive")!());
+  await press("archive");
   expect(node.textContent).toContain("The result is uncertain");
   await act(async () => f.actions.get("archive")!());
   expect(f.update).toHaveBeenCalledOnce();
@@ -281,7 +295,7 @@ it("keeps uncertain feedback visible after the summary revision advances during 
         reject = refuse;
       }),
   );
-  await act(() => f.actions.get("archive")!());
+  await press("archive");
   session = { ...session, revision: 4 };
   await render();
   await act(() => reject(new RemoteHostError("machine", "timeout", "Unknown", true)));
@@ -293,10 +307,33 @@ it("keeps uncertain feedback visible after the summary revision advances during 
 it("does not mutate read-only capability sets or wrong project rows", async () => {
   f.capabilities = ["transport.ws.read.v2"];
   await render();
-  await act(() => f.actions.get("archive")!());
-  expect(f.read).not.toHaveBeenCalled();
+  await act(() => f.actions.get("pin")!());
+  await act(() => f.actions.get("settle")!());
+  expect(f.update).not.toHaveBeenCalled();
+  expect(f.remove).not.toHaveBeenCalled();
   f.capabilities = ["sessions"];
   await render({ projectId: "wrong" });
-  await act(() => f.actions.get("archive")!());
+  await act(() => f.actions.get("pin")!());
+  expect(f.update).not.toHaveBeenCalled();
   expect(f.read).not.toHaveBeenCalled();
+});
+
+it("pins through sessions.update with the displayed authority and refreshes the directory", async () => {
+  await act(() => f.actions.get("pin")!());
+  expect(f.update).toHaveBeenCalledExactlyOnceWith({
+    projectId: "project",
+    sessionId: "session",
+    pinned: true,
+    authorityGeneration: 2,
+  });
+  expect(f.invalidate).toHaveBeenCalledWith({
+    queryKey: ["machine", "machine", "project-summaries"],
+  });
+});
+it("settles through the lifecycle mutation and refreshes the settled list", async () => {
+  await act(() => f.actions.get("settle")!());
+  expect(f.remove).toHaveBeenCalledExactlyOnceWith({ sessionId: "session" });
+  expect(f.invalidate).toHaveBeenCalledWith({
+    queryKey: ["machine", "machine", "sessions-lifecycle"],
+  });
 });

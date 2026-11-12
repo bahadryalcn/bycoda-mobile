@@ -1,7 +1,7 @@
 import { View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useHostClient } from "@/state/queries";
-import { Button, ErrorText, Loading, Notice } from "./primitives";
+import { Button, Empty, ErrorText, Loading } from "./primitives";
 import { DocumentContent } from "./document-content";
 import { DocumentNavigation } from "./document-navigation";
 import { projectMediaQueryKey, type MessageContext, type OpenDocument } from "./media-policy";
@@ -36,7 +36,7 @@ function ProjectMediaBody({ path, context, onOpenFile }: Props) {
   };
   return <View style={{ gap: space.sm }}>
     {!scope.ready || scope.available && query.isFetching && !query.error ? <Loading /> : null}
-    {!scope.available && scope.ready ? <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} /> : null}
+    {!scope.available && scope.ready ? <Empty compact={false} illustration="unreachable" title={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} /> : null}
     {scope.available ? <><ErrorText error={query.error} />{query.error ? <Button busy={query.isFetching} label={copy("Yeniden dene", "Retry")} onPress={retryError} /> : null}
       {data ? <PrivateContentAccessProvider value={content.access}>
         {onOpenFile ? <ScopedProjectContent path={path} data={data} context={context} onReload={reload} onOpenFile={guardOpen(onOpenFile)} />

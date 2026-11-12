@@ -1,17 +1,18 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useLayoutEffect, useRef, useState } from "react";
 import Constants from "expo-constants";
-import { findNodeHandle, Linking, Share, View } from "react-native";
+import { findNodeHandle, Linking, Share, View, type HostInstance } from "react-native";
 import Animated from "react-native-reanimated";
 import Star from "lucide-react-native/icons/star";
 import Share2 from "lucide-react-native/icons/share-2";
 import Globe from "lucide-react-native/icons/globe";
 import MessageSquare from "lucide-react-native/icons/message-square";
-import { router } from "expo-router";
-import { Body, ErrorText, Stack, Disclosure, NavigationGroup, NavigationRow } from "../../ui/primitives";
+import Flag from "lucide-react-native/icons/flag";
+import { router, type Href } from "expo-router";
+import { Body, Notice, Stack, Disclosure, NavigationGroup, NavigationRow } from "../../ui/primitives";
 import { IconTile } from "../../ui/icon-tile";
 import { enterItem } from "../../ui/motion";
-import { colors, space } from "../../ui/tokens";
+import { space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
 import { appIdentity, engagementLinks } from "./engagement-model";
 import { openPublicLink, sharePublicApp } from "./engagement-actions";
@@ -26,12 +27,12 @@ function tile(Glyph: typeof Star, color: string) {
 
 /** User initiated public actions. This does not publish through connected social accounts. */
 export function EngagementSettings() {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const platform = process.env.EXPO_OS ?? "unknown";
   const links = engagementLinks(Constants.expoConfig, platform);
   const identity = appIdentity(Constants, platform);
-  const shareAnchor = useRef<View>(null);
+  const shareAnchor = useRef<HostInstance>(null);
   const pending = useRef(false);
   const active = useRef(true);
   useLayoutEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
@@ -102,7 +103,7 @@ export function EngagementSettings() {
 
   const feedback = (action: NonNullable<typeof busy>) => feedbackFor === action ? <Stack style={{ gap: space.sm }}>
     {notice ? <Body accessibilityLiveRegion="polite" muted>{notice}</Body> : null}
-    <ErrorText error={error} />
+    {error ? <Notice tone="warning" message={error} /> : null}
   </Stack> : null;
 
   return (
@@ -148,6 +149,12 @@ export function EngagementSettings() {
             label={copy("Geri bildirim gönder", "Send feedback")}
             disabled={!!busy}
             icon={tile(MessageSquare, colors.muted)}
+            onPress={() => router.push("/feedback" as Href)}
+          />
+          <NavigationRow
+            label={copy("İçerik bildir", "Report content")}
+            disabled={!!busy}
+            icon={tile(Flag, colors.muted)}
             onPress={() => router.push("/report")}
           />
         </NavigationGroup>

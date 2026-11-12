@@ -5,16 +5,20 @@ import { renderToStaticMarkup } from "react-dom/server";
 const fixture = vi.hoisted(() => ({ active: true, reduced: false }));
 vi.mock("@/state/queries", () => ({ useHostReadActive: () => fixture.active }));
 vi.mock("./use-reduced-motion", () => ({ useReducedMotionPreference: () => fixture.reduced }));
-vi.mock("./theme", () => ({ useMobileTheme: vi.fn() }));
+vi.mock("./theme", () => ({ useMobileTheme: vi.fn(() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })) }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./styles", () => ({
   uiStyles: { label: { fontSize: 17, lineHeight: 22 }, caption: { fontSize: 13, lineHeight: 18 } },
 }));
 vi.mock("./tokens", () => ({
-  colors: { text: "ink", danger: "danger", muted: "muted" },
+  colors: { text: "ink", danger: "danger", muted: "muted", tertiary: "tertiary", warning: "warning" },
   space: {},
-  metrics: { touchTarget: 48 },
+  metrics: { touchTarget: 48, toolRowHeight: 28 },
   radii: {},
+  fontSize: { control: 14, caption: 12 },
+  lineHeight: { control: 19, caption: 16 },
+  gapIcon: 8,
+  hitSlopFor: () => ({}),
 }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
@@ -85,7 +89,8 @@ describe("chat continuous animation lifecycle", () => {
     }));
     expect(html).toContain(`aria-label="${title}. Completed"`);
     expect(html).toMatch(/>Read preferences\.tsx<\//);
-    expect(html).toContain("/Users/name/project/src/features/settings/ · Completed");
+    // A collapsed row is a single line: the directory stays in the accessible name only.
+    expect(html.replace(/aria-label="[^"]*"/, "")).not.toContain("/Users/name/project/src/features/settings/");
   });
   it("keeps title metrics stable across running, settled and reduced motion", () => {
     fixture.active = true;
@@ -98,7 +103,7 @@ describe("chat continuous animation lifecycle", () => {
     };
     expect(styles("running", false)).toBe(styles("complete", false));
     expect(styles("running", true)).toBe(styles("complete", false));
-    expect(styles("running", false)).toContain("13");
+    expect(styles("running", false)).toContain("14");
   });
 
   it("announces state and visible detail for an inspector without false inline expansion", () => {
@@ -113,7 +118,7 @@ describe("chat continuous animation lifecycle", () => {
     );
     expect(html).toContain('aria-label="Read source. Interrupted. src/chat.tsx"');
     expect(html).not.toContain("aria-expanded");
-    expect(html).toContain("Interrupted · src/chat.tsx");
+    expect(html).toContain(">Interrupted<");
     expect(html).not.toContain("Pending");
   });
 

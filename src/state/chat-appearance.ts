@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { create } from "zustand";
+import { create, useStore } from "zustand";
 import {
   decodeChatTextSize,
   DEFAULT_CHAT_TEXT_SIZE,
@@ -91,7 +91,7 @@ export const chatAppearanceStore = createChatAppearanceStore(AsyncStorage);
 export function useChatAppearance<Selected>(
   selector: (state: ChatAppearanceState) => Selected,
 ): Selected {
-  const value = chatAppearanceStore(selector);
+  const value = useStore(chatAppearanceStore, selector);
   useEffect(() => {
     void chatAppearanceStore.getState().hydrate();
   }, []);

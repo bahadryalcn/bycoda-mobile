@@ -16,6 +16,13 @@ function fixture(raw: string | null = null) {
 }
 
 describe("explicit provider consent", () => {
+  it("keeps consent when the Host reports a narrower provider list, asks again for a new provider", async () => {
+    const { store } = fixture();
+    await store.allow(consentScope("computer-a", ["codex", "claude", "grok"]));
+    expect(await store.allows(consentScope("computer-a", ["claude", "codex"]))).toBe(true);
+    expect(await store.allows(consentScope("computer-a", ["codex", "cursor"]))).toBe(false);
+    expect(await store.allows(consentScope("computer-b", ["codex"]))).toBe(false);
+  });
   it("does not grant consent on first use, an old disclosure or another computer/provider set", async () => {
     const scope = consentScope("computer-a", ["claude", "codex"]);
     const { store } = fixture();

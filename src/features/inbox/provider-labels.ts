@@ -35,3 +35,11 @@ export function providerStateLabel(state: string, copy: Copy) {
   };
   return labels[state.toUpperCase()] ?? state;
 }
+
+/** Tone for a provider workflow state; unknown states stay neutral. */
+export function providerStateTone(state: string): "default" | "success" | "warning" | "danger" | "active" {
+  const tones: Record<string, "success" | "warning" | "danger" | "active"> = {
+    OPEN: "success", APPROVED: "success", MERGED: "active", CHANGES_REQUESTED: "danger", REVIEW_REQUIRED: "warning",
+  };
+  return tones[state.toUpperCase()] ?? "default";
+}

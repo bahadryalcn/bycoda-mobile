@@ -5,20 +5,20 @@ import type { HostProject } from "@/domain/types";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
-import { Body, FormActions, NavigationRow, Notice, ScreenList, SearchField, Sheet } from "@/ui/primitives";
+import { Body, FormActions, NavigationRow, ScreenList, SearchField, Sheet, StateView } from "@/ui/primitives";
 import { usePrivateContentAccess } from "@/ui/private-access";
 import { ScreenChromeProvider } from "@/ui/layout";
 import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
 import { matchesSearch, normalizeSearch } from "@/ui/search-matching";
 import { useLocale } from "@/i18n";
-import { ProjectDirectoryFeedback } from "./project-directory-feedback";
+import { ProjectDirectorySlot } from "./project-directory-feedback";
 import { useCopy } from "@/ui/copy";
 import { useProjectList } from "./use-project-directory";
 import { useProjectDirectoryPreferences } from "@/state/project-directory-preferences";
 import { projectPathLabel, sortDirectoryProjects } from "./project-directory";
 import { space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
 import { ProjectIcon } from "@/ui/project-icon";
+import { useMobileTheme } from "@/ui/theme";
 
 type Props = { visible: boolean; onClose(): void; onSelect(project: HostProject): void };
 
@@ -28,6 +28,7 @@ export function ProjectPicker({ visible, ...props }: Props) {
 }
 
 function ProjectPickerOpening({ onClose, onSelect }: Omit<Props, "visible">) {
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy(), locale = useLocale(), machine = useActiveMachine();
   const connection = useConnectionScope(), parent = usePrivateContentAccess();
   const [opening] = useState(() => ({ connection, review: reviewedMachine(machine), name: machine?.name }));
@@ -75,20 +76,24 @@ function ProjectPickerOpening({ onClose, onSelect }: Omit<Props, "visible">) {
   };
   const query = { ...projects, refetch: retry };
   const position = useFilteredListScrollMemory<HostProject>(normalized, readable, rows.length, { suspended: !readable });
+  const feedbackProps = {
+    query, readiness: projects.readiness, privacyUnavailable: projects.privacyUnavailable,
+    empty: !rows.length && projects.directoryReady, loadingLabel: copy("Projeler yükleniyor…", "Loading projects…"),
+    emptyTitle: normalized ? copy("Aramana uyan proje yok.", "No projects match your search.") : copy("Bu bilgisayarda henüz proje yok.", "No projects on this computer yet."),
+    emptyIllustration: normalized ? ("search-empty" as const) : ("no-projects" as const),
+    emptyAction: normalized ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined,
+    onManageConnections: manageConnections,
+  };
   return <Sheet visible title={copy("Proje seçin", "Choose a project")} size="full" scroll={false} onClose={close}
     footer={<FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />}>
-    {!available ? <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} /> : <>
+    {!available ? <StateView illustration="locked" title={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} /> : <>
       <View style={{ paddingHorizontal: space.screen, paddingVertical: space.sm }}>
         <SearchField label={copy("Projelerinde ara", "Search projects")} value={readable ? search : ""} editable={readable} onChangeText={changeSearch} />
       </View>
       <ScreenChromeProvider nativeTitle bottomSafeArea={false}><ScreenList {...position.listProps} grouped data={rows} keyExtractor={project => project.id} query={query}
+        ListEmptyComponent={<ProjectDirectorySlot {...feedbackProps} />}
         header={<>
           {opening.name ? <Body muted style={uiStyles.caption}>{opening.name}</Body> : null}
-          <ProjectDirectoryFeedback query={query} readiness={projects.readiness} privacyUnavailable={projects.privacyUnavailable}
-            empty={!rows.length && projects.directoryReady} loadingLabel={copy("Projeler yükleniyor…", "Loading projects…")}
-            emptyTitle={normalized ? copy("Aramana uyan proje yok.", "No projects match your search.") : copy("Bu bilgisayarda henüz proje yok.", "No projects on this computer yet.")}
-            emptyAction={normalized ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
-            onManageConnections={manageConnections} />
         </>}
         renderItem={({ item }) => <NavigationRow variant="plain" label={item.name} detail={projectPathLabel(item.cwd, preferences.fullPaths)} detailEllipsizeMode="middle" detailLines={preferences.fullPaths ? 0 : 1}
           icon={<ProjectIcon appearance={item.appearance} />} onPress={() => select(item)} />}

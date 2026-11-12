@@ -1,4 +1,4 @@
-import { providerStateLabel } from "./provider-labels";
+import { providerStateLabel, providerStateTone } from "./provider-labels";
 import type { ProviderConnectionsProps, ProviderInboxFeedbackProps, ProviderInboxRowProps } from "./provider-component-types";
 import {
   Badge,
@@ -8,6 +8,7 @@ import {
 import { useCopy } from "@/ui/copy";
 import { IssueSummary } from "@/ui/issue-summary";
 import { providerName } from "./provider-model";
+import { useRelativeTime } from "../management/shared/record-bits";
 import { IssueRecordRow } from "./issue-record-row";
 
 export {
@@ -59,6 +60,9 @@ export function ProviderInboxFeedback({ result, onRetry, retrying }: ProviderInb
 
 export function ProviderInboxRow({ item, onOpen }: ProviderInboxRowProps) {
   const copy = useCopy();
+  const relative = useRelativeTime();
+  const stamp = Date.parse(item.updatedAt);
+  const updated = Number.isFinite(stamp) ? relative(stamp) : "";
   return <IssueRecordRow
           label={item.title}
           detail={[
@@ -69,6 +73,9 @@ export function ProviderInboxRow({ item, onOpen }: ProviderInboxRowProps) {
             .filter(Boolean)
             .join(" · ")}
           state={providerStateLabel(item.state, copy)}
+          stateTone={providerStateTone(item.state)}
+          extraBadges={item.draft ? [copy("Taslak", "Draft")] : undefined}
+          caption={[item.assignees?.[0]?.login, updated].filter(Boolean).join(" · ") || undefined}
           onPress={() => onOpen(item)}
         />;
 }

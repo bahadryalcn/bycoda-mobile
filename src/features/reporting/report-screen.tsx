@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { randomUUID } from "expo-crypto";
 import { reportSender } from "./report-config";
@@ -9,11 +9,10 @@ import { useCopy } from "@/ui/copy";
 import { ConsentField } from "@/ui/consent-field";
 import Animated from "react-native-reanimated";
 import Flag from "lucide-react-native/icons/flag";
-import { Body, Button, Disclosure, ErrorText, Field, NavigationGroup, Screen, SelectField, Sheet, FormActions, Notice, ToggleField } from "@/ui/primitives";
+import { Body, Button, Disclosure, ErrorText, Field, NavigationGroup, Screen, Section, SelectField, Sheet, FormActions, Notice, ToggleField, useSuccessToast } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
-import { uiStyles } from "@/ui/styles";
-import { colors, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import {
   maxReportDescription,
   maxReportExcerpt,
@@ -38,13 +37,20 @@ function tile(Glyph: typeof Flag, color: string) {
 }
 
 export function ContentReportScreen() {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const { draft, status, error, receiptId, requestId, revision } = useContentReport();
   const [discarding, setDiscarding] = useState<ReportReview | null>(null);
   const active = useRef(true);
   const reviewOwner = useRef<ReportReview | null>(null);
   const retired = useRef(false);
+  const toastSuccess = useSuccessToast();
+  // Announce the delivery once, when it happens while this screen is mounted.
+  const announced = useRef(status);
+  useEffect(() => {
+    if (announced.current !== status && status === "sent") toastSuccess(copy("Bildirim alındı.", "Report received."));
+    announced.current = status;
+  }, [status, toastSuccess, copy]);
   const reviewCurrent = !discarding || isContentReportReviewCurrent(discarding);
   useLayoutEffect(() => { if (discarding && !reviewCurrent) retired.current = true; }, [discarding, reviewCurrent]);
   useLayoutEffect(() => { active.current = true; return () => { active.current = false; reviewOwner.current = null; }; }, []);
@@ -82,10 +88,7 @@ export function ContentReportScreen() {
     <Screen footer={<FormActions
       submitLabel={status === "sent" ? copy("Gönderildi", "Sent") : copy("Gönder", "Send")}
       disabled={!reportSender || status === "sent" || !!validation} busy={busy}
-      feedback={visibleError === "send" ? <ErrorText error message={errorLabels.send} /> : status === "sent" ? <View style={{ gap: space.sm }}>
-        <Notice tone="success" message={copy("Bildirim alındı.", "Report received.")} />
-        {receiptId ? <Body selectable muted>{receiptId}</Body> : null}
-      </View> : null}
+      feedback={visibleError === "send" ? <Notice tone="danger" message={errorLabels.send} /> : status === "sent" && receiptId ? <Body selectable muted>{receiptId}</Body> : null}
       onSubmit={() => { if (!active.current || busy) return; void sendContentReport({ review: { draft, status, requestId, receiptId, revision }, sender: reportSender, newRequestId: randomUUID, assertAccess: assertAppAccess }).catch(() => {}); }}
       cancelLabel={copy("Taslağı sil", "Discard draft")} cancelDisabled={busy}
       onCancel={() => {
@@ -96,6 +99,7 @@ export function ContentReportScreen() {
     />}>
       <RouterStack.Screen options={{ title: copy("İçerik bildir", "Report content") }} />
       {!reportSender || error === "service" ? <Notice tone="info" message={errorLabels.service} /> : null}
+      <Section title={copy("Neden", "Reason")}>
       <Animated.View entering={enterItem(0)}>
         <NavigationGroup>
           <SelectField
@@ -124,6 +128,8 @@ export function ContentReportScreen() {
           </Body>
         </View>
       </Animated.View>
+      </Section>
+      <Section title={copy("Alıntı", "Excerpt")}>
       <NavigationGroup>
         <ToggleField
           label={copy("İçerikten alıntı ekle", "Include a content excerpt")}
@@ -149,6 +155,8 @@ export function ContentReportScreen() {
           </Body>
         </View>
       ) : null}
+      </Section>
+      <Section title={copy("Onay", "Consent")}>
       <ConsentField label={copy("Gönderim onayı", "Consent to send")}
         detail={copy(
           "Seçtiğim bilgilerin incelenmek üzere bycoda’ya gönderilmesini onaylıyorum.",
@@ -157,6 +165,7 @@ export function ContentReportScreen() {
         value={draft.consent} disabled={busy}
         onChange={(consent) => updateContentReport({ consent })} />
       <ErrorText error={visibleError === "consent"} message={errorLabels.consent} />
+      </Section>
       <Disclosure label={copy("Bildirim ve gizlilik", "Reporting & privacy")}>
         <Body>
           {copy(

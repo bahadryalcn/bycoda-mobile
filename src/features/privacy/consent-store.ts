@@ -12,6 +12,28 @@ export function consentScope(environmentId: string, providers: readonly string[]
   return JSON.stringify([environmentId, [...new Set(providers)].sort()]);
 }
 
+/**
+ * Consent given for a provider set also covers any subset of it on the same computer.
+ * Hosts report narrower lists on some transports (HTTP vs socket), and a narrower
+ * list shares data with fewer parties; only a provider never consented asks again.
+ */
+export function consentCovers(granted: string, wanted: string): boolean {
+  if (granted === wanted) return true;
+  try {
+    const [grantedEnv, grantedProviders] = JSON.parse(granted) as [unknown, unknown];
+    const [wantedEnv, wantedProviders] = JSON.parse(wanted) as [unknown, unknown];
+    return (
+      typeof grantedEnv === "string" &&
+      grantedEnv === wantedEnv &&
+      Array.isArray(grantedProviders) &&
+      Array.isArray(wantedProviders) &&
+      wantedProviders.every((provider) => grantedProviders.includes(provider))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function decode(raw: string | null): string[] {
   if (raw === null) return [];
   const value: unknown = JSON.parse(raw);
@@ -36,7 +58,9 @@ export function createConsentStore(storage: Storage) {
   }
   return {
     allows: (scope: string) =>
-      enqueue(async () => decode(await storage.getItem(consentKey)).includes(scope)),
+      enqueue(async () => decode(await storage.getItem(consentKey)).some((granted) =>
+          consentCovers(granted, scope),
+        )),
     allow: (scope: string) =>
       enqueue(async () => {
         const scopes = decode(await storage.getItem(consentKey));

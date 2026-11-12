@@ -166,10 +166,15 @@ it.each(["bulk", "commit"] as const)(
       // Invalidating delivery does not pretend the native descriptor read has finished.
       const firstProbe = lease.request("projects.list");
       await vi.waitFor(() => expect(heldIo.has("probe-1")).toBe(true));
-      await expect(lease.request("projects.list")).rejects.toMatchObject({ category: "overload" });
+      // A third download waits for a slot instead of failing as "busy".
+      const queuedProbe = lease.request("projects.list");
+      await new Promise((resolve) => setTimeout(resolve, 20));
       expect(f.native.readBulk).toHaveBeenCalledTimes(2);
       heldIo.get("probe-1")!({ dataBase64: probeBytes.toString("base64") });
       expect(await firstProbe).toEqual([]);
+      await vi.waitFor(() => expect(heldIo.has("probe-2")).toBe(true));
+      heldIo.get("probe-2")!({ dataBase64: probeBytes.toString("base64") });
+      expect(await queuedProbe).toEqual([]);
       heldIo.get("stale-project")!({ dataBase64: staleBytes.toString("base64") });
     } else releaseCommit();
     await vi.waitFor(() =>

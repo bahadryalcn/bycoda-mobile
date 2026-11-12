@@ -9,13 +9,9 @@ import {
   Card,
   Disclosure,
   Field,
-  MultiSelectField,
-  SelectField,
-  Row,
 } from "@/ui/primitives";
-import { colors } from "@/ui/tokens";
+import { Questionnaire } from "panelui-native/components/questionnaire";
 import { useCopy } from "@/ui/copy";
-import { workspaceStyles } from "./shared";
 import type { QuestionCardProps, QuestionDraft } from "./session-types";
 import {
   questionDismissLabel,
@@ -24,6 +20,14 @@ import {
   questionSubmissionHeld,
 } from "./question-status";
 import { questionCardStates } from "./question-card-state";
+import {
+  CUSTOM_OPTION,
+  buildReply,
+  fromQuestionnaireAnswer,
+  noteApplies,
+  questionComplete,
+  toQuestionnaireAnswers,
+} from "./question-card-model";
 
 const RETAINED = Symbol("retained");
 type LocalDelivery = {
@@ -39,7 +43,7 @@ export function QuestionCard({
   disabled,
   onAnswer,
 }: QuestionCardProps) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const [retained] = useState(() => questionCardStates.read(draftScope, question));
   const form = useFormDraft<QuestionDraft>(() => retained?.draft ?? { answers: {}, custom: {} });
@@ -85,46 +89,13 @@ export function QuestionCard({
       questionCardStates.write(draftScope, question, { draft: form.values, delivery: "unknown" });
     }
   };
-  const complete = question.questions.every((item) => {
-    const selected = answers[item.id] ?? [];
-    const text = item.preserveCustomWhitespace ? custom[item.id] : custom[item.id]?.trim();
-    if (selected.includes("__custom__") && !text) return false;
-    return (
-      (selected.length > 0 && (item.multiSelect || selected.length === 1)) ||
-      (item.allowCustom && !!text)
-    );
-  });
-
+  const complete = question.questions.every((item) => questionComplete(item, form.values));
   const answer = () => {
-    const normalized: Record<string, string> = {};
-    const normalizedNotes: Record<string, string> = {};
-    for (const item of question.questions) {
-      const text = item.preserveCustomWhitespace ? custom[item.id] : custom[item.id]?.trim();
-      if (text) normalized[item.id] = text;
-      const note = notes[item.id]?.trim();
-      if (
-        note &&
-        item.allowCustom &&
-        !item.preserveCustomWhitespace &&
-        item.options.some(
-          (option) =>
-            option.id !== "__custom__" &&
-            (option.literal === true || !/^other$/i.test(option.label.trim())) &&
-            answers[item.id]?.includes(option.id),
-        )
-      )
-        normalizedNotes[item.id] = note;
-    }
-    void submit({
-      kind: "answered",
-      answers,
-      custom: normalized,
-      ...(Object.keys(normalizedNotes).length ? { notes: normalizedNotes } : {}),
-    });
+    void submit(buildReply(question.questions, form.values));
   };
   const customField = (item: QuestionCardProps["question"]["questions"][number]) => (
     <Field
-      label={item.options.length ? copy("Kendi yanıtın", "Your own answer") : item.prompt}
+      label={item.options.length ? copy("Kendi yanıtın", "Your own answer") : copy("Yanıtın", "Your answer")}
       value={custom[item.id] ?? ""}
       editable={!held}
       onChangeText={(text) =>
@@ -138,10 +109,12 @@ export function QuestionCard({
     <Card
       style={{
         backgroundColor: colors.panel,
-        borderWidth: 0,
+        // Prominent without a heavy box: a one-pixel edge that turns warm while it needs an answer.
+        borderWidth: 1,
+        borderColor: questionNeedsAttention(current) ? colors.warning : colors.border,
       }}
     >
-      <View style={workspaceStyles.stack}>
+      <View style={uiStyles.stack}>
         <Badge
           label={questionStatusLabel(current, copy)}
           tone={questionNeedsAttention(current) ? "warning" : "default"}
@@ -155,92 +128,92 @@ export function QuestionCard({
             )}
           </Body>
         ) : null}
-        {question.questions.map((item) => (
-          <View key={item.id} style={workspaceStyles.stack}>
-            {item.options.length || !item.allowCustom ? (
-              item.multiSelect ? (
-                <MultiSelectField
-                  label={item.prompt}
-                  values={answers[item.id] ?? []}
-                  disabled={held}
-                  options={item.options.map((option) => ({
-                    value: option.id,
-                    label: option.label,
-                    detail: option.description,
-                  }))}
-                  onChange={(next) =>
-                    form.patch((current) => ({ answers: { ...current.answers, [item.id]: next } }))
+        <Questionnaire
+          frame={false}
+          swipeable={false}
+          answers={toQuestionnaireAnswers(question.questions, form.values)}
+          onAnswersChange={(next) =>
+            form.patch((current) => {
+              const nextAnswers = { ...current.answers };
+              for (const item of question.questions) {
+                const ids = fromQuestionnaireAnswer(next[item.id]);
+                if (ids.join("\u0000") !== (nextAnswers[item.id] ?? []).join("\u0000"))
+                  nextAnswers[item.id] = ids;
+              }
+              return { answers: nextAnswers };
+            })
+          }
+        >
+          {question.questions.length > 1 ? <Questionnaire.Progress variant="count" /> : null}
+          {question.questions.map((item) => (
+            <Questionnaire.Item
+              key={item.id}
+              name={item.id}
+              required
+              multiple={!!item.multiSelect}
+              invalid={(answers[item.id] ?? []).includes(CUSTOM_OPTION) && !custom[item.id]?.trim()}
+            >
+              <Questionnaire.Question>{item.prompt}</Questionnaire.Question>
+              {item.options.length ? (
+                <Questionnaire.Choices>
+                  {item.options.map((option) => (
+                    <Questionnaire.Choice
+                      key={option.id}
+                      value={option.id}
+                      label={option.label}
+                      description={option.description}
+                      disabled={held}
+                    />
+                  ))}
+                </Questionnaire.Choices>
+              ) : null}
+              {item.allowCustom ? (
+                !item.options.length || answers[item.id]?.includes(CUSTOM_OPTION) ? (
+                  customField(item)
+                ) : (
+                  <Disclosure
+                    label={copy("Kendi yanıtın", "Your own answer")}
+                    defaultExpanded={!!custom[item.id]}
+                  >
+                    {customField(item)}
+                  </Disclosure>
+                )
+              ) : null}
+              {noteApplies(item, form.values) ? (
+                <Field
+                  label={copy("Ek not (isteğe bağlı)", "Additional note (optional)")}
+                  value={notes[item.id] ?? ""}
+                  editable={!held}
+                  onChangeText={(text) =>
+                    form.patch((current) => ({ notes: { ...current.notes, [item.id]: text } }))
                   }
+                  multiline
                 />
-              ) : (
-                <SelectField
-                  label={item.prompt}
-                  value={answers[item.id]?.[0]}
-                  disabled={held}
-                  options={item.options.map((option) => ({
-                    value: option.id,
-                    label: option.label,
-                    detail: option.description,
-                  }))}
-                  onChange={(next) =>
-                    form.patch((current) => ({
-                      answers: { ...current.answers, [item.id]: [next] },
-                    }))
-                  }
-                />
-              )
-            ) : null}
-            {item.allowCustom ? (
-              !item.options.length || answers[item.id]?.includes("__custom__") ? (
-                customField(item)
-              ) : (
-                <Disclosure
-                  label={copy("Kendi yanıtın", "Your own answer")}
-                  defaultExpanded={!!custom[item.id]}
-                >
-                  {customField(item)}
-                </Disclosure>
-              )
-            ) : null}
-            {item.allowCustom &&
-            !item.preserveCustomWhitespace &&
-            item.options.some(
-              (option) =>
-                option.id !== "__custom__" &&
-                (option.literal === true || !/^other$/i.test(option.label.trim())) &&
-                answers[item.id]?.includes(option.id),
-            ) ? (
-              <Field
-                label={copy("Ek not (isteğe bağlı)", "Additional note (optional)")}
-                value={notes[item.id] ?? ""}
-                editable={!held}
-                onChangeText={(text) =>
-                  form.patch((current) => ({ notes: { ...current.notes, [item.id]: text } }))
-                }
-                multiline
-              />
-            ) : null}
-          </View>
-        ))}
-        <Row style={{ justifyContent: "flex-end" }}>
-          <Button
-            label={questionDismissLabel(question, copy)}
-            disabled={held}
-            tone="quiet"
-            density="compact"
-            onPress={() => {
-              void submit({ kind: "skipped" });
-            }}
-          />
-          <Button
-            label={copy("Yanıtı gönder", "Send answer")}
-            tone="primary"
-            disabled={held || !complete}
-            busy={current.delivery === "sending"}
-            density="compact"
-            onPress={answer}
-          />
-        </Row>
+              ) : null}
+            </Questionnaire.Item>
+          ))}
+          <Questionnaire.Footer>
+            <Questionnaire.Back disabled={held}>{copy("Geri", "Back")}</Questionnaire.Back>
+            <Questionnaire.Spacer />
+            <Button
+              label={questionDismissLabel(question, copy)}
+              disabled={held}
+              tone="quiet"
+              density="compact"
+              onPress={() => {
+                void submit({ kind: "skipped" });
+              }}
+            />
+            <Questionnaire.Next disabled={held}>{copy("Devam", "Continue")}</Questionnaire.Next>
+            <Questionnaire.Submit
+              disabled={held || !complete}
+              loading={current.delivery === "sending"}
+              onPress={answer}
+            >
+              {copy("Yanıtı gönder", "Send answer")}
+            </Questionnaire.Submit>
+          </Questionnaire.Footer>
+        </Questionnaire>
       </View>
     </Card>
   );

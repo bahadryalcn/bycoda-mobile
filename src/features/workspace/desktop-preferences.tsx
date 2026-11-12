@@ -30,6 +30,7 @@ import {
 } from "./desktop-preferences-model";
 import { DesktopPreferenceEditorSheet, type PreferenceEditor as Editor } from "./desktop-preferences-editor";
 import { DesktopPreferenceContext } from "./desktop-preference-context";
+import { FeatureUnavailable } from "./unavailable-state";
 type Props = {
   scope: SessionScope;
   projectId: string;
@@ -221,13 +222,10 @@ export function DesktopPreferences({
         )}
       </Body>
       {!supported ? (
-        <Notice
-          tone="warning"
-          message={copy(
-            "Açık konuşması olan bağlı ve desteklenen bir bilgisayar seçin.",
-            "Choose a paired, supported computer with this conversation open.",
-          )}
-        />
+        <FeatureUnavailable message={copy(
+          "Açık konuşması olan bağlı ve desteklenen bir bilgisayar seçin.",
+          "Choose a paired, supported computer with this conversation open.",
+        )} />
       ) : (
         <QueryState query={query} empty={false} />
       )}

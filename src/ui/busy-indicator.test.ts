@@ -20,6 +20,7 @@ vi.mock("react-native", () => ({
     createElement("button", { "aria-label": accessibilityLabel, "aria-busy": accessibilityState?.busy,
       "data-native-busy": String(accessibilityState?.busy), "data-native-selected": String(accessibilityState?.selected),
       "data-native-expanded": String(accessibilityState?.expanded), disabled, onClick: onPress }, children),
+  useWindowDimensions: () => ({ width: 390, height: 844, scale: 3, fontScale: 1 }),
   View: ({ children, style }: NativeProps) => {
     const width = style && typeof style === "object" && "borderTopColor" in style &&
       "width" in style && typeof style.width === "number" ? style.width : undefined;
@@ -31,12 +32,12 @@ vi.mock("react-native-reanimated", () => ({ default: {
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
   createAnimatedComponent: (component: unknown) => component,
 } }));
-vi.mock("./theme", () => ({ useMobileTheme: vi.fn() }));
+vi.mock("./theme", () => ({ useMobileTheme: vi.fn(() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })) }));
 vi.mock("./motion", () => ({ haptic: { tap: vi.fn(), select: vi.fn() }, usePressMotion: () => ({ animatedStyle: {}, onPressIn: vi.fn(), onPressOut: vi.fn() }) }));
 vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
 vi.mock("./design-system", () => ({ controlClasses: () => "product-control" }));
-vi.mock("./tokens", () => ({ colors: {}, metrics: {}, fontSize: {}, opacity: {}, radii: {}, space: {} }));
+vi.mock("./tokens", () => ({ colors: {}, metrics: {}, fontSize: {}, opacity: {}, radii: {}, space: {}, hitSlopFor: () => undefined }));
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
 const loops = vi.hoisted(() => ({ started: 0, stopped: 0 }));
@@ -44,6 +45,8 @@ vi.mock("panelui-native/components/spinner", () => ({ Spinner: ({ size = "md" }:
   useEffect(() => { loops.started++; return () => { loops.stopped++; }; }, []);
   return createElement("span", { "data-loop": "spinner", "data-ring-width": size === "lg" ? 32 : size === "sm" ? 16 : 24 });
 } }));
+vi.mock("panelui-native/components/progress-button", () => ({ ProgressButton: () => null }));
+vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 // Mirror the installed upstream's busy override and unconditional loading Spinner.
 vi.mock("panelui-native/components/button", async () => {
   const { Pressable } = await import("react-native");
@@ -142,14 +145,14 @@ afterEach(async () => {
 
 it("stops hidden busy loops without clearing native busy/disabled or remounting the editor", async () => {
   await act(async () => render());
-  expect(container.querySelectorAll("[data-loop]")).toHaveLength(5);
+  expect(container.querySelectorAll("[data-loop]")).toHaveLength(4);
   assertPending();
   await act(async () => setFocus(false));
   expect(container.querySelectorAll("[data-loop]")).toHaveLength(0);
-  expect(loops.stopped).toBe(5);
+  expect(loops.stopped).toBe(4);
   assertPending();
   await act(async () => setFocus(true));
-  expect(container.querySelectorAll("[data-loop]")).toHaveLength(5);
+  expect(container.querySelectorAll("[data-loop]")).toHaveLength(4);
   assertPending();
 });
 
@@ -159,7 +162,7 @@ for (const state of [{ appState: "background" }, { appState: "inactive" }, { win
     await act(async () => useSecurity.setState(state));
     expect(container.querySelectorAll("[data-loop]")).toHaveLength(0); assertPending();
     await act(async () => useSecurity.setState({ appState: "active", windowFocused: true }));
-    expect(container.querySelectorAll("[data-loop]")).toHaveLength(5); assertPending();
+    expect(container.querySelectorAll("[data-loop]")).toHaveLength(4); assertPending();
   });
 }
 
@@ -168,7 +171,7 @@ it("supports navigator-absent boot and live reduced motion without enabling pend
   await act(async () => preference.setState({ reduced: true }));
   expect(container.querySelectorAll("[data-loop]")).toHaveLength(0); assertPending();
   await act(async () => preference.setState({ reduced: false }));
-  expect(container.querySelectorAll("[data-loop]")).toHaveLength(5); assertPending();
+  expect(container.querySelectorAll("[data-loop]")).toHaveLength(4); assertPending();
 });
 
 it("adds no route subscriptions for normal buttons and removes busy-only subscriptions when pending ends", async () => {
@@ -192,8 +195,18 @@ it("keeps default and button spinner footprints consistent when animation is sus
       createElement(IconButton, { label: "Refresh", busy: true, onPress: command }), createElement(BusyIndicator)))));
   const footprints = () => [...container.querySelectorAll("[data-ring-width]")].map((node) => node.getAttribute("data-ring-width"));
   const active = footprints();
-  expect(active).toEqual(["16", "16", "24"]);
+  expect(active).toEqual(["16", "24"]);
   await act(async () => setFocus(false));
   expect(container.querySelectorAll("[data-loop]")).toHaveLength(0);
   expect(footprints()).toEqual(active);
+});
+
+it("draws one spinner for two busy controls of one operation and keeps both busy", async () => {
+  await act(async () => root.render(createElement(NavigationContext.Provider, { value: navigation as never },
+    createElement("div", null, createElement(IconButton, { label: "More", busy: true, onPress: command }),
+      createElement(Button, { label: "Retry", busy: true, onPress: command })))));
+  expect(container.querySelectorAll("[data-loop]")).toHaveLength(1);
+  const buttons = [...container.querySelectorAll("button")];
+  expect(buttons.map((button) => button.getAttribute("data-native-busy"))).toEqual(["true", "true"]);
+  expect(buttons.every((button) => button.disabled)).toBe(true);
 });

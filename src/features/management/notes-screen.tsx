@@ -8,17 +8,19 @@ import { useLayoutEffect, useMemo, useReducer, useRef, useState, type ComponentR
 import { useMutation } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import History from "lucide-react-native/icons/rotate-ccw-clock";
-import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
+import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import Plus from "lucide-react-native/icons/plus";
 import {
   ActionMenu,
   Body,
-  Heading,
+  SectionHeader,
   IconButton,
   MutationState,
   Notice,
   QueryState,
   SearchField,
+  SearchToolbar,
+  SelectField,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useHostMutation, useHostQuery } from "@/state/queries";
@@ -26,7 +28,6 @@ import { useAsyncAction } from "@/state/actions";
 
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { identifier } from "./shared/format";
-import { colors } from "@/ui/tokens";
 import { Scope } from "./shared/scope";
 import { createNoteDraftStore, noteDraftKey, type LocalNoteDraft } from "./note-drafts";
 import { initialNoteFlow, noteFlowReducer } from "./note-flow";
@@ -41,7 +42,7 @@ import { noteDirectory, type NoteDirectoryRow, type NoteGrouping, type NoteOrder
 const draftStore = createNoteDraftStore(AsyncStorage);
 
 export function NotesScreen() {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const [search, setSearch] = useState("");
@@ -49,6 +50,7 @@ export function NotesScreen() {
   const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
   const [grouping, setGrouping] = useState<NoteGrouping>("none");
   const [ordering, setOrdering] = useState<NoteOrdering>("updated");
+  const [viewDraft, setViewDraft] = useState<{ grouping: NoteGrouping; ordering: NoteOrdering } | null>(null);
   const machine = useActiveMachine();
   const lastDraftMachine = useRef(machine?.id); if (machine?.id) lastDraftMachine.current = machine.id;
   const draftKey = lastDraftMachine.current ? noteDraftKey(lastDraftMachine.current) : "no-note-draft";
@@ -95,19 +97,29 @@ export function NotesScreen() {
   const editorOpen = flow.kind !== "closed";
   const busy = save.isPending || remove.isPending || recovery.isPending;
   const visible = useMemo(() => noteDirectory(query.data?.notes ?? [], search, grouping, ordering, locale), [query.data?.notes, search, grouping, ordering, locale]);
+  const canCreate = !editorOpen && !busy && !(!!projectId && !sourceCwd);
+  const startNew = () => {
+    recovery.reset();
+    storage.reset();
+    save.reset();
+    remove.reset();
+    dispatch({
+      type: "draft",
+      initial: {
+        id: identifier(),
+        title: "",
+        body: "",
+        tags: "",
+        sourceCwd,
+        expectedUpdatedAt: 0,
+      },
+    });
+  };
   return (
     <ScreenList<NoteDirectoryRow> title={copy("Notlar", "Notes")} query={query} data={visible} keyExtractor={(row) => row.key}
       context={!editorOpen ? <Scope allowAll /> : undefined}
       actions={!editorOpen ? (
         <>
-          <ActionMenu label={copy("Not görünümü", "Note view")} trigger={<SlidersHorizontal size={22} color={colors.accent} />} actions={[
-            { key: "group-none", label: copy("Gruplama yok", "No grouping"), selected: grouping === "none", onPress: () => setGrouping("none") },
-            { key: "group-project", label: copy("Projeye göre grupla", "Group by project"), selected: grouping === "project", onPress: () => setGrouping("project") },
-            { key: "group-tag", label: copy("Etikete göre grupla", "Group by tag"), selected: grouping === "tag", onPress: () => setGrouping("tag") },
-            { key: "sort-updated", label: copy("Son düzenlenenler", "Recently edited"), selected: ordering === "updated", onPress: () => setOrdering("updated") },
-            { key: "sort-created", label: copy("Son oluşturulanlar", "Recently created"), selected: ordering === "created", onPress: () => setOrdering("created") },
-            { key: "sort-title", label: copy("Başlığa göre sırala", "Sort by title"), selected: ordering === "title", onPress: () => setOrdering("title") },
-          ]} />
           <ActionMenu
             label={copy("Diğer not işlemleri", "More note actions")}
             busy={recovery.isPending}
@@ -130,24 +142,8 @@ export function NotesScreen() {
           />
           <IconButton
             label={copy("Yeni not", "New note")}
-            disabled={editorOpen || busy || (!!projectId && !sourceCwd)}
-            onPress={() => {
-              recovery.reset();
-              storage.reset();
-              save.reset();
-              remove.reset();
-              dispatch({
-                type: "draft",
-                initial: {
-                  id: identifier(),
-                  title: "",
-                  body: "",
-                  tags: "",
-                  sourceCwd,
-                  expectedUpdatedAt: 0,
-                },
-              });
-            }}
+            disabled={!canCreate}
+            onPress={startNew}
           >
             <Plus size={22} strokeWidth={2.2} color={colors.accent} />
           </IconButton>
@@ -156,7 +152,42 @@ export function NotesScreen() {
       header={<>
       {!editorOpen ? (
         <>
-          <SearchField ref={searchInput} label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />
+          <FilterSheet
+            visible={viewDraft !== null}
+            onClose={() => setViewDraft(null)}
+            onReset={() => setViewDraft({ grouping: "none", ordering: "updated" })}
+            onApply={() => {
+              if (viewDraft) { setGrouping(viewDraft.grouping); setOrdering(viewDraft.ordering); }
+              setViewDraft(null);
+            }}
+          >
+            <SelectField
+              label={copy("Gruplama", "Grouping")}
+              value={(viewDraft ?? { grouping }).grouping}
+              options={[
+                { value: "none", label: copy("Gruplama yok", "No grouping") },
+                { value: "project", label: copy("Projeye göre", "By project") },
+                { value: "tag", label: copy("Etikete göre", "By tag") },
+              ]}
+              onChange={(next) => setViewDraft({ grouping: next as NoteGrouping, ordering: (viewDraft ?? { ordering }).ordering })}
+            />
+            <SelectField
+              label={copy("Sıralama", "Order")}
+              value={(viewDraft ?? { ordering }).ordering}
+              options={[
+                { value: "updated", label: copy("Son düzenlenenler", "Recently edited") },
+                { value: "created", label: copy("Son oluşturulanlar", "Recently created") },
+                { value: "title", label: copy("Başlığa göre", "By title") },
+              ]}
+              onChange={(next) => setViewDraft({ grouping: (viewDraft ?? { grouping }).grouping, ordering: next as NoteOrdering })}
+            />
+          </FilterSheet>
+          <SearchToolbar
+            search={<SearchField ref={searchInput} label={copy("Başlık, metin veya etikette ara", "Search note titles, text and tags")} value={search} onChangeText={setSearch} />}
+            actions={<FilterButton count={(grouping !== "none" ? 1 : 0) + (ordering !== "updated" ? 1 : 0)} onPress={() => setViewDraft({ grouping, ordering })} />}
+          />
+          <AppliedFilters filters={[grouping !== "none" && (grouping === "project" ? copy("Projeye göre grupla", "Group by project") : copy("Etikete göre grupla", "Group by tag")),
+            ordering !== "updated" && (ordering === "created" ? copy("Son oluşturulanlar", "Recently created") : copy("Başlığa göre sırala", "Sort by title"))]} />
         </>
       ) : null}
       <MutationState mutation={recovery} />
@@ -185,7 +216,14 @@ export function NotesScreen() {
             query={query}
             empty={visible?.length === 0}
             emptyTitle={search.trim() && query.data?.notes.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz not yok", "No notes yet")}
-            emptyAction={search.trim() && query.data?.notes.length ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
+            emptyDetail={query.data?.notes.length ? undefined : copy("Notlar bilgisayarınıza kaydedilir ve oturumlarda bağlam olarak kullanılabilir.", "Notes are saved on your computer and can be used as context in sessions.")}
+            emptyAction={
+              search.trim() && query.data?.notes.length
+                ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+                : !search.trim() && canCreate
+                  ? { label: copy("Yeni not", "New note"), onPress: startNew }
+                  : undefined
+            }
           />
           {!!query.data && query.data.total > query.data.notes.length && (
             <Body muted>
@@ -198,7 +236,7 @@ export function NotesScreen() {
         </>
       ) : null}
     </>}
-      renderItem={({ item }) => item.kind === "heading" ? <Heading>{item.group === null ? (item.grouping === "tag" ? copy("Etiketsiz", "Untagged") : copy("Projesiz notlar", "Notes without a project")) : item.grouping === "tag" ? `#${item.group}` : projects.data?.find((project) => project.cwd === item.group)?.name ?? item.group} · {item.count}</Heading>
+      renderItem={({ item }) => item.kind === "heading" ? <SectionHeader count={item.count} title={item.group === null ? (item.grouping === "tag" ? copy("Etiketsiz", "Untagged") : copy("Projesiz notlar", "Notes without a project")) : item.grouping === "tag" ? `#${item.group}` : projects.data?.find((project) => project.cwd === item.group)?.name ?? item.group} />
         : <NoteSummaryRow note={item.note} disabled={editorOpen || busy} onPress={() => { recovery.reset(); storage.reset(); save.reset(); remove.reset(); dispatch({ type: "open", id: item.note.id }); }} />}
     />
   );

@@ -64,6 +64,12 @@ offline/reconnect, denied access, unsupported capability, error/retry, pending
 write and completion. Keep the previous useful content on ordinary refresh
 failure when access remains valid; remove private data when access is lost.
 
+Connection state has one owner, the computer pill; no screen or app-chrome banner
+repeats it. A region with nothing to show (waiting, unreachable, access needed,
+unavailable) is one centered `StateView` with an illustration, a human title and
+at most one primary action. Shown data stays unmarked when a refresh fails or
+pauses. `Notice` is for feedback tied to an action or a contextual explanation.
+
 Forms retain values on error. Field errors stay near their inputs; operation
 errors stay near the action. Long forms target a scrolling body with persistent
 actions above the keyboard; short confirmations can stay compact. Guard dirty

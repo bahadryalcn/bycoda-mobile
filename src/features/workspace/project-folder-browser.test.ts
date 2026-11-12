@@ -11,7 +11,7 @@ const fixture = vi.hoisted(() => ({
 }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("expo-router", () => ({ router: { push: () => fixture.events.push("route") } }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/tokens", () => ({ space: {}, colors: {} }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));

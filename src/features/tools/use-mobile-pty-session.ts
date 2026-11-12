@@ -1,3 +1,4 @@
+import { createPtyTail } from "./mobile-pty-tail";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { randomUUID, digestStringAsync, CryptoDigestAlgorithm } from "expo-crypto";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +23,7 @@ import {
   readMobilePtyOutput,
   type MobilePtyLease,
   type MobilePtyTerminal,
+  PTY_KEYS,
 } from "./mobile-pty-model";
 
 /**
@@ -80,6 +82,8 @@ export function useMobilePtySession({
   const [gap, setGap] = useState(false);
   const viewport = useRef<TerminalViewportHandle>(null);
   const cursor = useRef(0);
+  const tail = useRef(createPtyTail());
+  const posted = useRef<{ next: number; dataBase64: string } | null>(null);
   const waiting = useRef<number | null>(null);
   const wakeReader = useRef<(() => void) | undefined>(undefined);
   const sequence = useRef(0);
@@ -153,6 +157,8 @@ export function useMobilePtySession({
     setSynced(false);
     readyDocument.current = false;
     cursor.current = 0;
+    tail.current.clear();
+    posted.current = null;
     waiting.current = null;
     setNonce(randomUUID());
     setReady(false);
@@ -287,6 +293,9 @@ export function useMobilePtySession({
     }
     if (packet.type === "ack" && waiting.current === packet.next) {
       cursor.current = packet.next!;
+      // The terminal showed this chunk; keep it once for "Attach output".
+      if (posted.current?.next === packet.next) tail.current.push(posted.current.dataBase64);
+      posted.current = null;
       waiting.current = null;
       wakeReader.current?.();
       return;
@@ -361,6 +370,7 @@ export function useMobilePtySession({
         }
         if (result.next > after) {
           waiting.current = result.next;
+          posted.current = { next: result.next, dataBase64: result.dataBase64 };
           viewport.current?.post({
             type: "output",
             after,
@@ -424,10 +434,21 @@ export function useMobilePtySession({
     canInterrupt: allowed.current,
     showTerminal: !!lease && supported && security.unlocked && !list.isError,
     viewport,
+    /** Plain text of the last `count` terminal lines the screen has shown. */
+    recentOutput: (count: number) => tail.current.lines(count),
     create,
     attach,
     onPacket: packet,
-    interrupt: () => input("Aw=="),
+    interrupt: () => input(PTY_KEYS.interrupt),
+    /** Sends one key (base64 bytes) through the same ordered, receipt-checked input queue. */
+    sendKey: input,
+    /** Back to the terminal list without closing the terminal. */
+    detach: () => {
+      generation.current++;
+      setPaused(true);
+      setLease(null);
+      fresh();
+    },
     checkCreation: () => {
       if (!attempt) return;
       void run(async () => {

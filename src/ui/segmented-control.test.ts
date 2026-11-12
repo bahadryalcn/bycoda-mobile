@@ -21,7 +21,7 @@ vi.mock("react-native", () => ({
   },
   useWindowDimensions: () => ({ width: state.width, fontScale: state.fontScale }),
 }));
-vi.mock("./theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("./use-reduced-motion", () => ({
   useReducedMotionPreference: () => true,
 }));

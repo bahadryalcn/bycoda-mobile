@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
-import { Body, Button, ErrorText, Field, FormActions, Notice, QueryState, SelectField, Sheet } from "@/ui/primitives";
+import { NumberField } from "@/ui/number-field";
+import { Body, Button, ErrorText, Field, FormActions, Notice, QueryState, Section, SelectField, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { REMOTE_PROVIDERS } from "../../../../../src/features/connections/model/protocol";
@@ -56,13 +57,17 @@ export function SocialPolicyEditor({ snapshot, scope, machineId, onClose, onSave
     onClose={onClose} dirty={JSON.stringify(draft) !== (savedDraft ?? initial.current)} dismissible={!busy}>
     <Body>{machine?.id === machineId ? machine.name : ""}</Body>
     <Notice message={copy("Boş alanlar üst politikadan devralınır; platform değerleri genel değerlerin önüne geçer.", "Blank fields inherit; platform values override global values.")} />
+    <Section title={copy("Ajan", "Agent")}>
     <SelectField label={copy("Ajan", "Agent")} value={draft.provider} disabled={disabled}
       options={[{ value: "", label: copy("Devral", "Inherit") }, ...REMOTE_PROVIDERS.map((value) => ({ value, label: value }))]}
       onChange={(provider) => setDraft((value) => ({ ...value, provider, model: provider ? value.model : "" }))} />
     <Field label={copy("Model", "Model")} value={draft.model} editable={!disabled && !!draft.provider}
       onChangeText={(model) => setDraft((value) => ({ ...value, model }))} />
-    {SOCIAL_LIMIT_FIELDS.map((key) => <Field key={key} label={labels[key]} value={draft.limits[key]} editable={!disabled}
-      keyboardType="number-pad" onChangeText={(text) => setDraft((value) => ({ ...value, limits: { ...value.limits, [key]: text } }))} />)}
+    </Section>
+    <Section title={copy("Karakter sınırları", "Character limits")}>
+    {SOCIAL_LIMIT_FIELDS.map((key) => <NumberField key={key} label={labels[key]} value={draft.limits[key]} editable={!disabled}
+      onChangeText={(text) => setDraft((value) => ({ ...value, limits: { ...value.limits, [key]: text } }))} />)}
+    </Section>
     {!valid ? <Notice tone="warning" message={copy("Seçili bilgisayar değişti. Ayarları yeniden açın.", "The selected computer changed. Reopen the settings.")} /> : null}
     {uncertain ? <Notice tone="warning" message={copy("Kaydetmenin sonucu bilinmiyor. Tekrar göndermeden güncel politikayı kontrol edin.", "The save outcome is unknown. Check the current policy before sending again.")} /> : null}
     {saved ? <Notice message={copy("Politika kaydedildi.", "Policy saved.")} /> : null}

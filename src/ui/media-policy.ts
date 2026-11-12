@@ -58,6 +58,10 @@ export function mediaMime(name: string) {
         txt: "text/plain",
         json: "application/json",
         pdf: "application/pdf",
+        mp4: "video/mp4",
+        m4v: "video/mp4",
+        mov: "video/quicktime",
+        webm: "video/webm",
       } as Record<string, string>
     )[ext ?? ""] ?? "application/octet-stream"
   );

@@ -10,7 +10,9 @@ import { useFormDraft } from "@/state/form-draft";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
+import { HintSection } from "@/ui/info-hint";
 import { confirmAction } from "@/ui/confirm";
+import { NumberField } from "@/ui/number-field";
 import {
   Body,
   Button,
@@ -21,6 +23,7 @@ import {
   MutationState,
   NavigationGroup,
   NavigationRow,
+  Section,
   SelectField,
   Sheet,
   Stack,
@@ -30,6 +33,8 @@ import { useSheetGuard } from "@/ui/sheet-guard";
 import { identifier } from "../shared/format";
 import { copyLibraryMember, crewMemberPresentation, crewNameError, crewValidation, crewValidationMessage, memberValidation, newMember } from "./model";
 import { MemberEditor, useRoleOptions } from "./member-editor";
+import { handleLabel, linkState, rosterTraits } from "./identity-model";
+import { MemberAvatar } from "./member-avatar";
 import type { CrewCatalogRead } from "./presentation";
 
 type NumericPolicy =
@@ -72,6 +77,7 @@ export function CrewEditor({
   const supported =
     machine?.id === machineId && machine?.capabilities?.includes("crews.v1") === true;
   const groupsSupported = machine?.capabilities?.includes("crews.agent-groups.v1") === true;
+  const lookSupported = machine?.capabilities?.includes("crews.identity.v1") === true;
   const form = useFormDraft(() => structuredClone(opening));
   const draft = form.values;
   const [numbers, setNumbers] = useState(
@@ -118,6 +124,7 @@ export function CrewEditor({
   const error = invalidNumbers
     ? copy("Geçerli sayısal sınırlar girin.", "Enter valid numeric limits.")
     : crewValidation(normalized);
+  const traits = rosterTraits(draft.agents);
   const invalidMember = draft.agents.some((agent) => !!memberValidation(agent));
   const visibleError = invalidNumbers && (submitted || changedNumbers)
     ? error
@@ -162,6 +169,7 @@ export function CrewEditor({
   };
   return (
     <Stack>
+      <Section title={copy("Ekip", "Crew")}>
       <Field
         label={copy("Ekip adı", "Crew name")}
         value={draft.name}
@@ -183,21 +191,22 @@ export function CrewEditor({
         ]}
         onChange={(scope) => form.patch({ projectId: scope === "project" ? projectId : undefined })}
       />
-      <Body muted>
-        {copy(
+      </Section>
+      <HintSection title={copy("Üyeler", "Members")} help={copy(
           "Bir koordinatör, bir inceleyen ve en az bir uzman ekleyin. Kaydetmek işi başlatmaz.",
           "Include one coordinator, one reviewer and at least one specialist. Saving does not start work.",
-        )}
-      </Body>
+        )}>
       <NavigationGroup>
         {draft.agents.map((agent) => {
+          const link = linkState(agent, directory.agents);
           const presentation = crewMemberPresentation(agent,
             roles.find((role) => role.value === agent.role)!.label, copy,
             submitted || interactedMembers.has(agent.id));
           return <NavigationRow
             key={agent.id}
             label={presentation.label}
-            detail={presentation.detail}
+            icon={<MemberAvatar member={agent} traits={traits.get(agent.id)} />}
+            detail={presentation.error ? presentation.detail : [handleLabel(agent.handle), link && (link === "linked" ? copy("Kütüphane", "Library") : copy("Özelleştirildi", "Customized")), presentation.detail].filter(Boolean).join(" · ")}
             detailLines={2}
             tone={presentation.error ? "danger" : undefined}
             disabled={busy || !supported}
@@ -211,6 +220,7 @@ export function CrewEditor({
         disabled={busy || !supported || draft.agents.length >= 20}
         onPress={() => setMember(newMember(identifier(), "specialist", ""))}
       />
+      </HintSection>
       {directory.agents.length > 0 && (
         <Disclosure label={copy("Kütüphaneden üye ekle", "Add a library member")}>
           <SelectField
@@ -259,12 +269,12 @@ export function CrewEditor({
           onChange={(preset) => form.patch({ policy: { ...draft.policy, preset } })}
         />
         {numericPolicy.map((key) => (
-          <Field
+          <NumberField
             key={key}
             label={labels[key]}
             value={numbers[key]}
             editable={!busy && supported}
-            keyboardType="decimal-pad"
+            decimal
             onChangeText={(text) => setNumbers((current) => ({ ...current, [key]: text }))}
           />
         ))}
@@ -332,6 +342,7 @@ export function CrewEditor({
             catalog={catalog}
             catalogRead={catalogRead}
             groupsSupported={groupsSupported}
+            lookSupported={lookSupported}
             busy={busy}
             disabled={!supported}
             onClose={closeMember}

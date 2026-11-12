@@ -4,8 +4,7 @@ import { Badge, Body, CodePanel, CodeText, Row } from "@/ui/primitives";
 import { MessageText } from "@/ui/message-text";
 import type { MessageContext } from "@/ui/media-policy";
 import { useCopy } from "@/ui/copy";
-import { colors, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { space } from "@/ui/tokens";
 import { TranscriptToolPreview } from "./transcript-tool-preview";
 import type { Block } from "./wire";
 import { PlanSteps } from "@/ui/plan-steps";
@@ -21,7 +20,7 @@ export function TranscriptStructured({
   compactAgent?: boolean;
   compactOrchestration?: boolean;
 }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const list = block.taskList;
   const done = list?.items.filter((item) => item.status === "completed").length ?? 0;

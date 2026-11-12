@@ -8,7 +8,7 @@ vi.mock("react-native", () => ({
   RefreshControl: (props: any) => { fixture.refresh = props; return null; }, View: () => null,
 }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-vi.mock("./theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("./tokens", () => ({ colors: {}, space: {}, metrics: {} }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
 vi.mock("./layout", () => ({ useScreenHeading: () => null, useScreenChrome: () => ({ bottomSafeArea: false }) }));

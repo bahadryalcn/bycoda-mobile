@@ -52,6 +52,18 @@ const connection = {
   isCurrent: () => fixture.current,
 };
 const transport = { request: vi.fn() };
+vi.mock("react-native", () => ({ View: ({ children }: { children?: unknown }) => children }));
+vi.mock("../workspace/session-keyboard-frame", () => ({
+  SessionKeyboardFrame: ({ children, composer }: any) =>
+    createElement("div", null, children, composer),
+}));
+vi.mock("../approvals/use-approvals", () => ({ usePendingApprovalCount: () => 0 }));
+vi.mock("./assistant-composer", () => ({ AssistantComposer: () => null }));
+vi.mock("./assistant-jobs-section", () => ({ AssistantJobsSection: () => null }));
+vi.mock("./assistant-questions-section", () => ({ AssistantQuestionsSection: () => null }));
+vi.mock("./assistant-message-row", () => ({
+  AssistantMessageRow: ({ message }: any) => createElement("p", null, message.text),
+}));
 vi.mock("expo-router", () => ({
   router: { push: vi.fn() },
   Stack: { Screen: ({ options }: { options: { title: string } }) => { fixture.headerTitle = options.title; return null; } },

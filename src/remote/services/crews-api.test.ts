@@ -18,6 +18,12 @@ it("scopes lifecycle operations to the requested project and keeps start request
     ["crews.delete", { projectId: "project", definitionId: "definition", expectedUpdatedAt: 42 }, undefined],
     ["crews.deleteRun", { projectId: "project", runId: "run", expectedUpdatedAt: 43 }, undefined],
   ]);
-  for (const method of ["crews.list", "crews.get", "crews.schema", "crews.inspect"]) expect(readonlyRequest(method, {})).toBe(true);
+  for (const method of ["crews.list", "crews.active.list", "crews.get", "crews.schema", "crews.inspect"]) expect(readonlyRequest(method, {})).toBe(true);
   for (const method of ["crews.save", "crews.agent.save", "crews.agent.delete", "crews.start", "crews.resume", "crews.stop"]) expect(readonlyRequest(method, {})).toBe(false);
+});
+
+it("reads active members host-wide without a project", async () => {
+  const request = vi.fn(async () => ({ items: [] }));
+  await createCrewsApi(request as HostRequest).crews.activeList();
+  expect(request.mock.calls).toEqual([["crews.active.list", { limit: 200 }, undefined]]);
 });

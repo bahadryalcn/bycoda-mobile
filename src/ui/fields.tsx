@@ -1,40 +1,46 @@
 import { useMobileTheme } from "./theme";
-import { useState } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { StyleSheet, View, type TextInputProps } from "react-native";
 import { Switch } from "panelui-native/components/switch";
 import { Input as PanelInput } from "panelui-native/components/input";
+import { InputGroup } from "panelui-native/components/input-group";
 import { Body } from "./typography";
+import { FieldError } from "./feedback";
 import { haptic } from "./motion";
-import { colors, metrics, semanticColors, space } from "./tokens";
-import { uiStyles } from "./styles";
+import { metrics, space, gapIcon } from "./tokens";
 import type { ToggleFieldProps, InputProps } from "./component-props";
 import { useInNavigationGroup } from "./navigation-row";
+import { HintLabel, InfoHint, InfoPanel, UnitHint, isUnitHint } from "./info-hint";
 
-export function ToggleField({ label, labelLines, detail, value, onChange, disabled }: ToggleFieldProps) {
-  useMobileTheme();
+export function ToggleField({ label, labelLines, detail, help, value, onChange, disabled, icon }: ToggleFieldProps) {
+  const { uiStyles } = useMobileTheme();
   const grouped = useInNavigationGroup();
-  return (
+  const [helpOpen, setHelpOpen] = useState(false);
+  const row = (
     <View
       style={{
         flexDirection: "row",
         alignItems: "center",
-        gap: space.sm,
-        minHeight: grouped ? 52 : metrics.selectionHeight,
+        gap: gapIcon,
+        minHeight: grouped ? metrics.rowHeightProject : metrics.touchTarget,
         paddingHorizontal: 0,
         paddingVertical: grouped ? space.sm : 0,
       }}
     >
-      <View style={[uiStyles.grow, { gap: 2 }]}>
+      {icon ? <View style={{ alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</View> : null}
+      <View style={[uiStyles.grow, { gap: space.xxs }]}>
         <Body style={uiStyles.label} numberOfLines={labelLines}>{label}</Body>
         {detail ? (
           <Body muted style={uiStyles.caption}>
             {detail}
           </Body>
         ) : null}
+        <InfoPanel text={help ?? ""} open={helpOpen} />
       </View>
+      {help ? <InfoHint text={help} open={helpOpen} onToggle={() => setHelpOpen((v) => !v)} /> : null}
       <Switch
         accessibilityLabel={label}
-        accessibilityHint={detail}
+        accessibilityHint={help ?? detail}
         value={value}
         onValueChange={(next: boolean) => {
           haptic.select();
@@ -44,6 +50,8 @@ export function ToggleField({ label, labelLines, detail, value, onChange, disabl
       />
     </View>
   );
+  // Same rhythm as NavigationRow: optional leading icon slot and an inset separator in groups.
+  return grouped ? <View>{row}<View accessible={false} style={uiStyles.separator} /></View> : row;
 }
 
 /** One field adapter owns native refs, composer resizing and validation styling. */
@@ -57,9 +65,11 @@ export function Input({
   onFocus,
   onBlur,
   ref,
+  suffix,
   ...props
-}: InputProps) {
-  useMobileTheme();
+}: InputProps & { suffix?: string }) {
+  const { colors, semanticColors, uiStyles } = useMobileTheme();
+  const Control = suffix ? InputGroup.Input : PanelInput;
   const [focused, setFocused] = useState(false);
   const semantic = error
     ? semanticColors.danger
@@ -83,9 +93,10 @@ export function Input({
         maxWidth,
       }}
     >
-      <PanelInput
+      <FieldGroup suffix={suffix} disabled={props.editable === false}>
+      <Control
         {...props}
-        ref={ref}
+        ref={ref as ComponentProps<typeof PanelInput>["ref"]}
         disabled={props.editable === false}
         aria-disabled={props.editable === false}
         accessibilityLabel={label}
@@ -110,32 +121,39 @@ export function Input({
           // Monospace is a font choice, not a smaller editable text size.
           mono && { fontFamily: uiStyles.mono.fontFamily },
           semantic && { borderColor: semantic.border },
-          focused && { borderColor: semantic?.text ?? colors.accent },
+          focused && { borderWidth: 1, borderColor: semantic?.text ?? colors.accent },
           props.editable === false && { color: colors.muted },
           fieldStyle,
           // Keep focus local to the editable field; never recolor its containing panel.
           process.env.EXPO_OS === "web" && ({ outlineStyle: "none", resize: "none" } as object),
         ])}
       />
+      </FieldGroup>
     </View>
   );
 }
 
-export function Field({ label, hint, error, ...props }: InputProps) {
-  useMobileTheme();
+/** A trailing unit uses PanelUI InputGroup so the text never runs under it. */
+function FieldGroup({ suffix, disabled, children }: { suffix?: string; disabled: boolean; children: ReactNode }) {
+  const { colors, uiStyles } = useMobileTheme();
+  if (!suffix) return <>{children}</>;
   return (
-    <View style={uiStyles.field}>
-      <Body style={uiStyles.fieldLabel}>{label}</Body>
+    <InputGroup isDisabled={disabled}>
+      {children}
+      <InputGroup.Suffix isDecorative>
+        <Body style={[uiStyles.caption, { color: colors.muted }]}>{suffix}</Body>
+      </InputGroup.Suffix>
+    </InputGroup>
+  );
+}
+
+export function Field({ label, hint, error, ...props }: InputProps) {
+  const { uiStyles } = useMobileTheme();
+  return (
+    <View style={[uiStyles.field, (error || isUnitHint(hint)) && { paddingBottom: space.xs }]}>
+      <HintLabel label={label} help={hint} />
       <Input label={label} error={error} hint={hint} {...props} />
-      {error ? (
-        <Body accessibilityRole="alert" style={uiStyles.error}>
-          {error}
-        </Body>
-      ) : hint ? (
-        <Body muted style={uiStyles.caption}>
-          {hint}
-        </Body>
-      ) : null}
+      {error ? <FieldError message={error} /> : <UnitHint hint={hint} />}
     </View>
   );
 }

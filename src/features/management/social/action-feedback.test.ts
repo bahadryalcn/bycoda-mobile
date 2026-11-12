@@ -130,3 +130,12 @@ it("keeps a pending operation visible when its target is not in the rendered bat
  const html = renderToStaticMarkup(createElement(SocialCollectionFeedback, { action, collection: "jobs", visible: [] }));
  expect(html).toContain("Working…");
 });
+
+it("does not repeat a busy row button's progress in record feedback", () => {
+  const record = (name: string) => renderToStaticMarkup(createElement(SocialRecordFeedback, {
+    collection: name.startsWith("jobs") ? "jobs" : "campaigns", id: "x",
+    action: { isPending: true, variables: { action: name, input: { id: "x" } } } as unknown as SocialPanelContext["action"],
+  }));
+  expect(record("jobs.retry")).not.toContain("Working");
+  expect(record("campaigns.schedule")).toContain("Working");
+});

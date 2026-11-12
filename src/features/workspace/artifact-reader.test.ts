@@ -15,7 +15,7 @@ vi.mock("@/ui/html-document",()=>({HtmlDocument:({fill,interaction}:any)=>{f.fil
 vi.mock("@/ui/primitives",()=>{
  const wrap=({children}:PropsWithChildren)=>createElement("div",null,children);
  const button=({label,onPress,disabled}:any)=>{f.callbacks.set(label,onPress);return createElement("button",{onClick:onPress,disabled},label);};
- return{Body:wrap,Row:wrap,Stack:wrap,Button:button,NavigationRow:button,ErrorText:()=>null,Notice:({message}:any)=>createElement("div",null,message),QueryState:()=>null,
+ return{Body:wrap,Row:wrap,Stack:wrap,Button:button,NavigationRow:button,ErrorText:()=>null,Notice:({message}:any)=>createElement("div",null,message), StateView: ({ title }:any) => createElement("div",null,title),QueryState:()=>null,
  FormActions:({submitLabel,onSubmit,cancelLabel,onCancel}:any)=>createElement("div",null,button({label:submitLabel,onPress:onSubmit}),onCancel?button({label:cancelLabel,onPress:onCancel}):null),ActionMenu:({actions}:any)=>createElement("div",null,...actions.map((a:any)=>createElement("div",{key:a.key},button(a)))),
  Sheet:({children,footer,headerAction,scroll,title}:any)=>createElement("section",{"data-scroll":String(scroll),"aria-label":title},headerAction,children,createElement("footer",null,footer))};
 });

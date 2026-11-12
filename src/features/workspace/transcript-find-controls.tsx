@@ -5,8 +5,7 @@ import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { Body, Button, Disclosure, IconButton, Row, SearchField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { colors, space } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
+import { space } from "@/ui/tokens";
 import type { TranscriptFindResult } from "./transcript-find-model";
 
 export function TranscriptFindControls({
@@ -42,7 +41,7 @@ export function TranscriptFindControls({
   onRetry: () => void;
   onInspect?: () => void;
 }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   if (!open) return null;
   return (

@@ -1,21 +1,15 @@
 import { useMobileTheme } from "@/ui/theme";
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
-import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Plus from "lucide-react-native/icons/plus";
 import X from "lucide-react-native/icons/x";
-import Check from "lucide-react-native/icons/check";
+import Square from "lucide-react-native/icons/square";
 import { randomUUID } from "expo-crypto";
-import ImageIcon from "lucide-react-native/icons/image";
-import File from "lucide-react-native/icons/file";
 import { useHostClient } from "@/state/queries";
 import { useMachines } from "@/state/machines";
-import { Body, Button, Row, Stack, NavigationGroup, NavigationRow, Sheet } from "@/ui/primitives";
-import { uiStyles } from "@/ui/styles";
-import { colors, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { registerWorkspaceDraft } from "./draft-guard";
-import { ErrorText } from "./shared";
 import { useLocalDraft } from "./use-local-draft";
 import type { SessionComposerProps } from "./session-types";
 import { SessionKeyboardSpace } from "./session-keyboard-frame";
@@ -31,9 +25,12 @@ import {
 import { useComposerSuggestions } from "./use-composer-suggestions";
 import { useComposerDelivery } from "./use-composer-delivery";
 import { useComposerAttachments } from "./use-composer-attachments";
+import { useDraftAppend } from "./use-draft-append";
 import { useMounted } from "@/state/use-mounted";
 import { ComposerSuggestions } from "./composer-suggestions";
 import { ComposerAttachments } from "./composer-attachments";
+import { ComposerLinks } from "./composer-links";
+import { composerLinks } from "./attachment-presentation";
 import { removeStagedFile, stageBrowserCapture } from "./attachment-files";
 import { ATTACHMENT_COUNT, type StagedAttachment } from "./attachment-model";
 import {
@@ -41,17 +38,21 @@ import {
   composerDraftKey,
   supportsAttachmentOwnership,
 } from "./attachment-ownership";
-import { ChatCircleAction, ChatToolbarAction } from "@/ui/chat-controls";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
+import { ChatCircleAction } from "@/ui/chat-controls";
+import { ComposerModeChip, ComposerModeMenu, DeliveryModeButton } from "./composer-mode-controls";
+import { activeComposerMode, setComposerMode, type ComposerMode } from "./composer-mode";
 import { ChatComposer } from "@/ui/chat-composer";
+import { ComposerModelChip } from "./composer-model-chip";
 import { ComposerActionsProvider } from "@/ui/composer-actions";
-import { composerInputLimits, composerSuggestionLimits, COMPOSER_LINE_HEIGHT } from "@/ui/chat-composer-model";
+import { composerInputLimits, composerSuggestionLimits } from "@/ui/chat-composer-model";
 import { haptic } from "@/ui/motion";
-import { composerCommand, queuedComposerMessage, validateNoteDelivery } from "./composer-delivery";
+import { composerCommand, queuedComposerMessage, validateNoteDelivery, type ComposerDelivery } from "./composer-delivery";
+import { ComposerSendButton } from "./composer-send-button";
+import { busyAlternateMode } from "./busy-send";
+import { useBusySend } from "@/state/busy-send";
 import { useSessionQueue } from "./use-session-queue";
 import { SessionQueue } from "./session-queue";
 import { composerDeliveryError } from "./composer-delivery-copy";
-import { TemplateLibrary } from "@/features/management/templates/template-library";
 import {
   expandTemplateTrigger,
   insertTemplate,
@@ -59,7 +60,10 @@ import {
 import { useTemplateHydration, useTemplates } from "@/features/management/templates/template-store";
 import { useComposerTransfer } from "./composer-transfer";
 import { appendComposerTransfer } from "./composer-transfer-model";
-import { captureSessionAuthority } from "@/domain/session-authority";
+import { captureSessionAuthority, sessionIntent } from "@/domain/session-authority";
+import { ComposerSheets } from "./composer-sheets";
+import { ComposerNotices } from "./composer-notices";
+import { ComposerNoteCard } from "./composer-note-card";
 
 export function SessionComposer({
   scope,
@@ -67,8 +71,8 @@ export function SessionComposer({
   blocked,
   busy,
   onCommand,
-}: SessionComposerProps) {
-  useMobileTheme();
+}: SessionComposerProps & { onOpenSettings?: () => void }) {
+  const { colors } = useMobileTheme();
   useTemplateHydration();
   const copy = useCopy();
   const client = useHostClient();
@@ -83,6 +87,7 @@ export function SessionComposer({
   const templateDestination = useRef<{ machineId: string; sessionId: string } | null>(null);
   const [modePicker, setModePicker] = useState(false);
   const [retryingDraft, setRetryingDraft] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [localError, setLocalError] = useState<unknown>(null);
   const mounted = useMounted();
   const [prefixHeight, measurePrefix] = useComposerHeight();
@@ -96,7 +101,9 @@ export function SessionComposer({
   const composerTransfer = useComposerTransfer();
   const value = draft.value ?? emptyComposerDraft();
   const prompt = value.text;
-  const delivery = useComposerDelivery({ session, client, queueSupported: queue.supported });
+  const links = useMemo(() => composerLinks(prompt), [prompt]);
+  const busyPreferred = useBusySend((state) => state.mode);
+  const delivery = useComposerDelivery({ session, client, queueSupported: queue.supported, busyPreferred });
   const { mode, running, supportsSteer, desktopOwned, canSteer } = delivery;
   const noteContextSupported =
     client?.machine.id === scope.machineId &&
@@ -133,9 +140,12 @@ export function SessionComposer({
     setLocalError,
   });
   const { uploading, picking, transfers, transfer, claimedFiles } = uploads;
-  const submit = async () => {
+  useDraftAppend({ draftKey, scopeKey: `${scope.machineId}:${scope.sessionId}`, ready, draft, mounted, setLocalError, locked: () => submission.current || !!transfer.current });
+  const submit = async (override?: ComposerDelivery) => {
+    // Draft mode saves the message on the Host, whatever the delivery mode is.
+    const sendMode = activeComposerMode(valueRef.current?.text ?? "") === "draft" ? "send" : (override ?? mode);
     if (!ready || blocked || busy || uploading || submission.current || !client || !session) return;
-    if (mode === "queue" && (!queue.supported || !!queue.error || queue.changing)) return;
+    if (sendMode === "queue" && (!queue.supported || !!queue.error || queue.changing)) return;
     const submitted = valueRef.current;
     if (
       !submitted ||
@@ -148,7 +158,7 @@ export function SessionComposer({
         useMachines.getState().activeId !== scope.machineId
       )
         return;
-      validateNoteDelivery(submitted.noteCard, mode, submitted.text, noteContextSupported);
+      validateNoteDelivery(submitted.noteCard, sendMode, submitted.text, noteContextSupported);
       captureSessionAuthority(session);
     } catch (cause) {
       setLocalError(cause);
@@ -156,7 +166,7 @@ export function SessionComposer({
     }
     if (
       /^\s*\/compact\s*$/.test(submitted.text) &&
-      (mode === "steer" || submitted.attachments.length)
+      (sendMode === "steer" || submitted.attachments.length)
     ) {
       setLocalError(
         new Error(
@@ -179,7 +189,7 @@ export function SessionComposer({
     const controller = new AbortController();
     // Capture before uploads, attachment persistence or queue baseline reads.
     const intendedSession = { ...session, ...captureSessionAuthority(session) };
-    if (mode === "queue")
+    if (sendMode === "queue")
       queuedDraft.current = queuedComposerDraft(
         queuedDraft.current,
         submitted,
@@ -190,7 +200,7 @@ export function SessionComposer({
     uploads.begin(controller);
     setLocalError(null);
     try {
-      if (mode === "queue") {
+      if (sendMode === "queue") {
         setValue((current) =>
           current ? retainQueuedComposerIntent(current, queuedDraft.current!) : current,
         );
@@ -208,7 +218,7 @@ export function SessionComposer({
         scope.sessionId,
         submitted.attachments.map((file) => claimedFiles.current.get(file.id) ?? file),
       );
-      if (mode === "queue") {
+      if (sendMode === "queue") {
         await queue.enqueue(
           queuedComposerMessage(
             queuedDraft.current!.id,
@@ -220,7 +230,7 @@ export function SessionComposer({
         );
       } else
         await onCommand(
-          composerCommand(intendedSession, mode, submitted.text, attachments, submitted.noteCard),
+          composerCommand(intendedSession, sendMode, submitted.text, attachments, submitted.noteCard),
         );
       if (!mounted.current) return;
       if (sameComposerContent(valueRef.current, submitted)) {
@@ -325,216 +335,231 @@ export function SessionComposer({
       noteContextSupported,
     ],
   );
-  const sendDisabled =
+  const sendDisabledFor = (target: ComposerDelivery) =>
     !client ||
     !session ||
     (!prompt.trim() && !value.attachments.length && !value.noteCard) ||
     !!noteError ||
     unavailable ||
-    (mode === "queue" && (!queue.supported || !!queue.error)) ||
-    (mode === "send" && running) ||
-    (mode === "steer" && !canSteer);
+    (target === "queue" && (!queue.supported || !!queue.error)) ||
+    (target === "send" && running) ||
+    (target === "steer" && !canSteer);
+  const sendDisabled = sendDisabledFor(mode);
+  const alternateMode = running ? busyAlternateMode(mode, delivery.available) : null;
+  const alternate = alternateMode && !sendDisabledFor(alternateMode) ? alternateMode : null;
+  const insertTemplateBody = (body: string) => {
+    if (
+      !ready ||
+      uploading ||
+      submission.current ||
+      useMachines.getState().activeId !== scope.machineId ||
+      templateDestination.current?.machineId !== scope.machineId ||
+      templateDestination.current?.sessionId !== scope.sessionId
+    )
+      throw new Error(copy(
+        "Bu konuşmaya şu anda ekleme yapılamıyor. Taslağınız değişmedi.",
+        "This conversation is not available for insertion. Your draft is unchanged.",
+      ));
+    const current = valueRef.current ?? emptyComposerDraft();
+    const result = insertTemplate(current.text, selection, body);
+    if (result.text.length > 256_000) {
+      throw new Error(copy("Mesaj çok uzun.", "The message is too long."));
+    }
+    setValue({ ...current, text: result.text });
+    setSelection(result.selection);
+    suggestions.reopen();
+  };
+  const hasContent = !!prompt.trim() || value.attachments.length > 0 || !!value.noteCard;
+  const canStop = running && !!session?.runId;
+  const stop = () => {
+    if (!session || !session.runId || stopping) return;
+    const intent = sessionIntent(session, { type: "cancel", sessionId: scope.sessionId, runId: session.runId });
+    // Pause durable follow-ups before stopping the exact active run.
+    // A pause failure must not hide the session's primary Stop action.
+    void (async () => {
+      setStopping(true);
+      try {
+        if (queue.supported) await queue.pause().catch(() => {});
+        await onCommand(intent);
+      } finally {
+        if (mounted.current) setStopping(false);
+      }
+    })().catch(() => {});
+  };
+  const activeMode = activeComposerMode(prompt);
+  const hostDraftExists = !!session?.session.blocks.some((block) => block.draft);
+  const modeBlockedReasons: Partial<Record<ComposerMode, string>> = {
+    ...(value.noteCard || mode === "steer"
+      ? {
+          plan: value.noteCard
+            ? copy("Not bağlamıyla kullanılamaz", "Not available with note context")
+            : copy("Yönlendirmede kullanılamaz", "Not available when steering"),
+        }
+      : {}),
+    ...(value.noteCard
+      ? { draft: copy("Not bağlamıyla kullanılamaz", "Not available with note context") }
+      : running
+        ? { draft: copy("Agent çalışırken kullanılamaz", "Not available while the agent is running") }
+        : hostDraftExists
+          ? { draft: copy("Zaten kayıtlı bir taslak var", "A draft is already saved") }
+          : {}),
+  };
+  const chooseMode = (next: ComposerMode) => {
+    if (unavailable || (activeMode !== next && modeBlockedReasons[next])) return;
+    const text = setComposerMode(valueRef.current?.text ?? prompt, next);
+    setValue((current) => ({ ...(current ?? emptyComposerDraft()), text }));
+    setSelection({ start: text.length, end: text.length });
+  };
   return (
-    <ComposerActionsProvider><View
-      style={{
-        paddingVertical: space.sm,
-        gap: 0,
-        backgroundColor: colors.background,
-      }}
-    >
-      {token ? (
-        <View onLayout={measureSuggestions} style={{marginBottom:space.xs}}>
-          <ComposerSuggestions
-            maximumHeight={suggestionLimits.maximum}
-            compact={suggestionLimits.compact}
-            items={suggestions.items}
-            loading={suggestions.catalog.isFetching}
-            error={suggestions.catalog.error}
-            trigger={token.trigger}
-            selected={suggestions.selected}
-            onPick={suggestions.choose}
-            onRetry={() => {
-              void suggestions.catalog.refetch();
-            }}
-            onClose={suggestions.close}
-          />
-        </View>
-      ) : null}
-      <View onLayout={measurePrefix} style={{gap:space.xs,marginBottom:prefixHeight>0?space.xs:0}}>
-      {value.noteCard ? (
-        <Stack>
-          <Row>
-            <Stack style={{ flex: 1, minWidth: 0 }}>
-              <Body>{value.noteCard.title || copy("Başlıksız", "Untitled")}</Body>
-              <Body muted>
-                {copy("Not bağlamı · incelenen kopya", "Note context · reviewed copy")}
-              </Body>
-            </Stack>
-            <Button
-              tone="quiet"
-              label={copy("Not bağlamını kaldır", "Remove note context")}
-              disabled={unavailable}
-              onPress={() =>
-                setValue((current) => (current ? { ...current, noteCard: undefined } : current))
-              }
+    <ComposerActionsProvider>
+      <View style={{ gap: space.xs }}>
+        {token ? (
+          <View onLayout={measureSuggestions}>
+            <ComposerSuggestions
+              maximumHeight={suggestionLimits.maximum}
+              compact={suggestionLimits.compact}
+              items={suggestions.items}
+              loading={suggestions.catalog.isFetching}
+              error={suggestions.catalog.error}
+              trigger={token.trigger}
+              selected={suggestions.selected}
+              onPick={suggestions.choose}
+              onRetry={() => {
+                void suggestions.catalog.refetch();
+              }}
+              onClose={suggestions.close}
             />
-          </Row>
-          {noteError ? (
-            <Body muted>{composerDeliveryError(noteError, copy) ?? noteError.message}</Body>
-          ) : null}
-        </Stack>
-      ) : null}
-      {value.attachments.length ? (
-        <ComposerAttachments
-          files={value.attachments}
-          transfers={transfers}
-          disabled={unavailable}
-          onRetry={(file) => {
-            void uploads.retry(file);
+          </View>
+        ) : null}
+        <SessionQueue scope={scope} queue={queue} blocked={blocked || unavailable} running={running} onCommand={onCommand} />
+        <ChatComposer
+          onToolbarLayout={measureToolbar}
+          value={prompt}
+          onValueChange={(text) => {
+            const templates = useTemplates.getState();
+            const expanded =
+              templates.hydrated && !templates.error
+                ? expandTemplateTrigger(prompt, text, selection, templates.rows)
+                : null;
+            setValue((current) => ({
+              ...(current ?? emptyComposerDraft()),
+              text: expanded?.text ?? text,
+            }));
+            if (expanded) setSelection(expanded.selection);
+            suggestions.reopen();
           }}
-          onRemove={uploads.remove}
-        />
-      ) : null}
-      </View>
-      <SessionQueue
-        scope={scope}
-        queue={queue}
-        blocked={blocked || unavailable}
-        running={running}
-        onCommand={onCommand}
-      />
-      <ChatComposer
-        onToolbarLayout={measureToolbar}
-        value={prompt}
-        onValueChange={(text) => {
-          const templates = useTemplates.getState();
-          const expanded =
-            templates.hydrated && !templates.error
-              ? expandTemplateTrigger(prompt, text, selection, templates.rows)
-              : null;
-          setValue((current) => ({
-            ...(current ?? emptyComposerDraft()),
-            text: expanded?.text ?? text,
-          }));
-          if (expanded) setSelection(expanded.selection);
-          suggestions.reopen();
-        }}
-        disabled={!ready}
-        mode={
-          delivery.showModeChip ? (
-            <ChatToolbarAction
-              label={delivery.modeLabel}
-              accessibilityLabel={`${copy("Gönderme biçimi", "Delivery mode")}: ${delivery.modeLabel}`}
-              disabled={unavailable}
-              onPress={() => setModePicker(true)}
-            >
-              <ChevronDown size={12} color={colors.muted} />
-            </ChatToolbarAction>
-          ) : undefined
-        }
-        leading={
-          <ChatCircleAction
-            label={compactSuggestions ? copy("Kapat", "Close") : copy("Mesaja ekle", "Add to message")}
-            disabled={compactSuggestions ? false : unavailable}
-            busy={compactSuggestions ? false : picking}
-            onPress={compactSuggestions ? suggestions.close : () => setPicker(true)}
-          >
-            {compactSuggestions ? <X size={19} strokeWidth={2.4} color={colors.text} /> : <Plus size={19} strokeWidth={2.4} color={colors.text} />}
-          </ChatCircleAction>
-        }
-        field={{
-          accessibilityLabel: copy("Mesaj", "Message"),
-          selection,
-          onSelectionChange: (event) => setSelection(event.nativeEvent.selection),
-          onKeyPress: suggestions.onKeyPress,
-          disableFullscreenUI: true,
-          submitBehavior: "newline",
-          maxLength: 256_000,
-          placeholder: copy("Mesaj yaz…", "Write a message…"),
-          style: {
-            minWidth: 0,
-            minHeight: minimumInputHeight,
-            maxHeight: maximumInputHeight,
-            borderWidth: 0,
-            backgroundColor: "transparent",
-            lineHeight: COMPOSER_LINE_HEIGHT,
-            includeFontPadding: false,
-            paddingVertical: space.sm,
-            paddingHorizontal: space.sm,
-          },
-        }}
-        submit={
-          <ChatCircleAction
-            label={
-              mode === "queue"
-                ? copy("Sıraya al", "Queue")
-                : mode === "steer"
-                  ? copy("Yönlendir", "Steer")
-                  : copy("Gönder", "Send")
-            }
-            active={!sendDisabled}
-            disabled={sendDisabled}
-            busy={uploading || (!ready && !!session && !error)}
-            onPress={() => {
-              void submit();
-            }}
-          >
-            <ArrowUp
-              size={18}
-              strokeWidth={2.6}
-              color={sendDisabled ? colors.muted : colors.primaryText}
-            />
-          </ChatCircleAction>
-        }
-      />
-      <View onLayout={measureFooter} style={{gap:space.xs,marginTop:footerHeight>0?space.xs:0}}>
-      {uploading && Object.values(transfers).some((state) => state.status === "uploading") ? (
-        <Button
-          tone="quiet"
-          density="compact"
-          label={copy("Yüklemeyi iptal et", "Cancel upload")}
-          onPress={uploads.cancel}
-        />
-      ) : null}
-      <ErrorText
-        error={error || localError}
-        message={composerDeliveryError(error || localError, copy)}
-      />
-      {mode === "send" && running ? (
-        <Body muted style={uiStyles.caption}>
-          {queue.supported && supportsSteer
-            ? copy(
-                "Çalışıyor · Sıraya al veya Yönlendir’i seç.",
-                "Running · choose Queue or Steer.",
-              )
-            : queue.supported
-              ? copy("Çalışıyor · Sıraya al’ı seç.", "Running · choose Queue.")
-              : supportsSteer
-                ? copy("Çalışıyor · Yönlendir’i seç.", "Running · choose Steer.")
-                : copy("Bu turun bitmesini bekle.", "Wait for this turn to finish.")}
-        </Body>
-      ) : null}
-      {mode === "steer" && running && desktopOwned ? (
-        <Body muted style={uiStyles.caption}>
-          {copy(
-            "Bu tur masaüstü uygulamasında çalışıyor. Oradan yönlendir veya mesajı sıraya al.",
-            "This turn is running in the desktop app. Steer it there or queue your message.",
-          )}
-        </Body>
-      ) : mode === "steer" && running && !session?.runId ? (
-        <Body muted style={uiStyles.caption}>
-          {composerDeliveryError(new Error("Refresh the running turn before steering it."), copy)}
-        </Body>
-      ) : null}
-      {error ? (
-        <Button
-          busy={retryingDraft}
-          label={
-            ready
-              ? copy("Taslağı kaydetmeyi yeniden dene", "Retry saving draft")
-              : copy("Taslağı yeniden yükle", "Retry loading draft")
+          disabled={!ready}
+          top={
+            value.noteCard || value.attachments.length || links.length || activeMode ? (
+              <View onLayout={measurePrefix} style={{ gap: space.xs, paddingHorizontal: space.md, paddingTop: space.sm }}>
+                {value.noteCard ? (
+                  <ComposerNoteCard
+                    card={value.noteCard}
+                    error={noteError ? composerDeliveryError(noteError, copy) ?? noteError.message : undefined}
+                    disabled={unavailable}
+                    onRemove={() => setValue((current) => (current ? { ...current, noteCard: undefined } : current))}
+                  />
+                ) : null}
+                {activeMode ? (
+                  <View style={{ flexDirection: "row" }}>
+                    <ComposerModeChip mode={activeMode} disabled={unavailable} onRemove={() => chooseMode(activeMode)} />
+                  </View>
+                ) : null}
+                {links.length ? <ComposerLinks links={links} /> : null}
+                {value.attachments.length ? (
+                  <ComposerAttachments
+                    files={value.attachments}
+                    transfers={transfers}
+                    disabled={unavailable}
+                    onRetry={(file) => {
+                      void uploads.retry(file);
+                    }}
+                    onRemove={uploads.remove}
+                  />
+                ) : null}
+              </View>
+            ) : null
           }
-          onPress={() => {
+          mode={
+            <>
+              {delivery.showModeChip ? (
+                <DeliveryModeButton
+                  mode={mode}
+                  modeLabel={delivery.modeLabel}
+                  disabled={unavailable}
+                  onPress={() => setModePicker(true)}
+                />
+              ) : null}
+              <ComposerModeMenu
+                active={activeMode}
+                blockedReasons={modeBlockedReasons}
+                onSelect={chooseMode}
+              />
+            </>
+          }
+          model={
+            session ? <ComposerModelChip session={session} blocked={blocked} onCommand={onCommand} /> : undefined
+          }
+          leading={
+            <ChatCircleAction
+              label={compactSuggestions ? copy("Kapat", "Close") : copy("Mesaja ekle", "Add to message")}
+              disabled={compactSuggestions ? false : unavailable}
+              busy={compactSuggestions ? false : picking}
+              onPress={compactSuggestions ? suggestions.close : () => setPicker(true)}
+            >
+              {compactSuggestions ? <X size={19} strokeWidth={2.4} color={colors.text} /> : <Plus size={19} strokeWidth={2.4} color={colors.text} />}
+            </ChatCircleAction>
+          }
+          field={{
+            accessibilityLabel: copy("Mesaj", "Message"),
+            selection,
+            onSelectionChange: (event) => setSelection(event.nativeEvent.selection),
+            onKeyPress: suggestions.onKeyPress,
+            disableFullscreenUI: true,
+            submitBehavior: "newline",
+            maxLength: 256_000,
+            placeholder: copy("Mesaj yaz…", "Write a message…"),
+            style: { maxHeight: maximumInputHeight },
+          }}
+          submit={
+            <>
+              {canStop ? (
+                <ChatCircleAction label={copy("Durdur", "Stop")} danger busy={stopping} disabled={blocked} onPress={stop}>
+                  <Square size={13} strokeWidth={0} fill={colors.primaryText} color={colors.primaryText} />
+                </ChatCircleAction>
+              ) : null}
+              {canStop && !hasContent ? null : (
+                <ComposerSendButton
+                  mode={mode}
+                  alternate={alternate}
+                  disabled={sendDisabled}
+                  busy={uploading || (!ready && !!session && !error)}
+                  onSend={(target) => {
+                    void submit(target);
+                  }}
+                />
+              )}
+            </>
+          }
+        />
+        <View onLayout={measureFooter} style={{ gap: space.xs }}>
+        <ComposerNotices
+          error={error || localError}
+          mode={mode}
+          running={running}
+          queueSupported={queue.supported}
+          desktopOwned={desktopOwned}
+          missingRun={!session?.runId}
+          cancellable={uploading && Object.values(transfers).some((state) => state.status === "uploading")}
+          onCancelUpload={uploads.cancel}
+          draftError={!!error}
+          ready={ready}
+          retrying={retryingDraft}
+          onRetrySend={() => {
+            void submit();
+          }}
+          sending={busy || uploading}
+          onRetryDraft={() => {
             if (retryingDraft) return;
             setRetryingDraft(true);
             void (ready ? persist() : load())
@@ -544,129 +569,32 @@ export function SessionComposer({
               });
           }}
         />
-      ) : null}
-      {(mode === "steer" && !running) || (mode === "queue" && !queue.supported) ? (
-        <Body muted style={uiStyles.caption}>
-          {mode === "steer"
-            ? copy(
-                "Yönlendirmek için çalışan bir tur gerekiyor.",
-                "Steering requires a running turn.",
-              )
-            : copy(
-                "Bu bilgisayarda sıra desteklenmiyor. Çalışmanın bitmesini bekle.",
-                "This computer does not support queuing. Wait for the turn to finish.",
-              )}
-        </Body>
-      ) : null}
+        </View>
       </View>
-      <Sheet
-        visible={modePicker}
-        title={copy("Gönderme biçimi", "Delivery mode")}
-        size="compact"
-        onClose={() => setModePicker(false)}
-      >
-        <NavigationGroup>
-          {delivery.options.map((option) => (
-            <NavigationRow
-              key={option.value}
-              label={option.label}
-              detail={
-                option.value === "steer"
-                  ? copy(
-                      "Aktif çalışmayı bu mesajla yönlendirir.",
-                      "Redirects the active turn with this message.",
-                    )
-                  : option.value === "queue"
-                    ? copy(
-                        "Tur bitince gönderilir. Duraklatılmış bir sıra için Sırayı başlat’ı seç.",
-                        "Sends after this turn. Choose Start queue if the queue is paused.",
-                      )
-                    : undefined
-              }
-              trailing={
-                option.value === mode ? (
-                  <Check size={18} strokeWidth={2.4} color={colors.accent} />
-                ) : undefined
-              }
-              onPress={() => {
-                delivery.choose(option.value);
-                setModePicker(false);
-              }}
-            />
-          ))}
-        </NavigationGroup>
-      </Sheet>
-      <Sheet
-        visible={templatePicker}
-        title={copy("Telefon şablonları", "Phone templates")}
-        size="full"
-        scroll={false}
-        onClose={() => setTemplatePicker(false)}
-      >
-        {templatePicker ? (
-          <TemplateLibrary
-            scope={scope}
-            projectId={session?.projectId}
-            onClose={() => setTemplatePicker(false)}
-            onInsert={(body) => {
-              if (
-                !ready ||
-                uploading ||
-                submission.current ||
-                useMachines.getState().activeId !== scope.machineId ||
-                templateDestination.current?.machineId !== scope.machineId ||
-                templateDestination.current?.sessionId !== scope.sessionId
-              )
-                throw new Error(copy(
-                  "Bu konuşmaya şu anda ekleme yapılamıyor. Taslağınız değişmedi.",
-                  "This conversation is not available for insertion. Your draft is unchanged.",
-                ));
-              const current = valueRef.current ?? emptyComposerDraft();
-              const result = insertTemplate(current.text, selection, body);
-              if (result.text.length > 256_000) {
-                throw new Error(copy("Mesaj çok uzun.", "The message is too long."));
-              }
-              setValue({ ...current, text: result.text });
-              setSelection(result.selection);
-              suggestions.reopen();
-            }}
-          />
-        ) : null}
-      </Sheet>
-      <Sheet
-        visible={picker}
-        title={copy("Mesaja ekle", "Add to message")}
-        size="compact"
-        onClose={() => setPicker(false)}
-      >
-        <NavigationGroup>
-          <NavigationRow
-            label={copy("Telefon şablonları", "Phone templates")}
-            onPress={() => {
-              templateDestination.current = { ...scope };
-              setPicker(false);
-              setTemplatePicker(true);
-            }}
-          />
-          <NavigationRow
-            label={copy("Fotoğraflar", "Photos")}
-            icon={<ImageIcon size={22} color={colors.text} />}
-            onPress={() => {
-              setPicker(false);
-              void uploads.choose("photo");
-            }}
-          />
-          <NavigationRow
-            label={copy("Dosyalar", "Files")}
-            icon={<File size={22} color={colors.text} />}
-            onPress={() => {
-              setPicker(false);
-              void uploads.choose("document");
-            }}
-          />
-        </NavigationGroup>
-      </Sheet>
-    </View></ComposerActionsProvider>
+      <ComposerSheets
+        scope={scope}
+        projectId={session?.projectId}
+        mode={mode}
+        options={delivery.options}
+        onChooseMode={delivery.choose}
+        modeOpen={modePicker}
+        onModeClose={() => setModePicker(false)}
+        pickerOpen={picker}
+        onPickerClose={() => setPicker(false)}
+        templateOpen={templatePicker}
+        onTemplateOpen={() => {
+          templateDestination.current = { ...scope };
+          setPicker(false);
+          setTemplatePicker(true);
+        }}
+        onTemplateClose={() => setTemplatePicker(false)}
+        onChoose={(kind) => {
+          setPicker(false);
+          void uploads.choose(kind);
+        }}
+        onInsertTemplate={insertTemplateBody}
+      />
+    </ComposerActionsProvider>
   );
 }
 

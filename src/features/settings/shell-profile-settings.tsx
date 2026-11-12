@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
-import { Body, Disclosure, ErrorText, FormActions, MutationState, NavigationRow, Notice, QueryState, SelectField, Sheet, Stack } from "@/ui/primitives";
+import { Body, Disclosure, ErrorNotice, ErrorText, FormActions, MutationState, NavigationRow, Notice, QueryState, SelectField, Sheet, Stack, StateView } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { readShellChoices, shellChoiceRequest, type ShellChoices } from "./shell-profile-model";
 
@@ -41,17 +41,16 @@ export function ShellPreference({ snapshot, machineId, machineName, target, onCl
   };
   return <Sheet visible size="compact" title={copy("Komut kabuğu", "Command shell")} onClose={() => onClose(uncertain || !!error)} dirty={changed && !saved} dismissible={!mutation.isPending}>
     <Body>{opening.machineName}</Body>
-    <SelectField label={copy("Komut kabuğu", "Command shell")} value={selected} disabled={!validMachine || !supported || mutation.isPending || uncertain || saved}
+    <SelectField label={copy("Komut kabuğu", "Command shell")} hint={copy("Bu bilgisayardaki yeni !komut isteklerinin kabuğunu değiştirir. Açık terminaller ve çalışan komutlar etkilenmez.", "Changes the shell for new !command requests on this computer. Open terminals and running commands are unaffected.")} value={selected} disabled={!validMachine || !supported || mutation.isPending || uncertain || saved}
       options={[{ value: "", label: copy("Sistem varsayılanı", "System default") }, ...opening.snapshot.profiles.map((profile) => ({ value: profile.id, label: profile.name })),
         ...(opening.snapshot.chosenId && !opening.snapshot.profiles.some(profile => profile.id === opening.snapshot.chosenId) ? [{ value: opening.snapshot.chosenId, label: copy("Kullanılamıyor", "Unavailable"), disabled: true }] : [])]} onChange={setSelected} />
-    <Body muted>{copy("Bu bilgisayardaki yeni !komut isteklerinin kabuğunu değiştirir. Açık terminaller ve çalışan komutlar etkilenmez.", "Changes the shell for new !command requests on this computer. Open terminals and running commands are unaffected.")}</Body>
     {opening.snapshot.chosenId && !opening.snapshot.profiles.some((profile) => profile.id === opening.snapshot.chosenId) ? <Notice tone="warning" message={copy("Kaydedilen kabuk artık kurulu değil; sistem varsayılanı kullanılır.", "The saved shell is no longer installed; the system default is used.")} /> : null}
     {!validMachine ? <Notice tone="warning" message={copy("Seçili bilgisayar değişti. Ayarları yeniden açın.", "The selected computer changed. Reopen the settings.")} /> : null}
-    {validMachine && !supported ? <Notice message={copy("Komut kabuğunu değiştirmek için bu bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to change the command shell.")} /> : null}
+    {validMachine && !supported ? <StateView compact illustration="error" title={copy("Komut kabuğu değiştirilemiyor", "Command shell unavailable")} description={copy("Komut kabuğunu değiştirmek için bu bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to change the command shell.")} /> : null}
     {uncertain ? <Notice tone="warning" message={copy("Kaydetmenin sonucu bilinmiyor. Tekrar göndermeden bilgisayardaki tercihi kontrol edin.", "The save outcome is unknown. Check the preference on the computer before sending again.")} /> : null}
     <Disclosure label={copy("Ayrıntılar", "Details")}><Body mono>{opening.machineId}</Body>{opening.snapshot.profiles.map(profile => <Body mono key={profile.id}>{profile.name} · {profile.path}</Body>)}{uncertain ? <ErrorText error={error} /> : null}</Disclosure>
-    <FormActions submitLabel={copy("Komut kabuğunu kaydet", "Save command shell")} busy={mutation.isPending} disabled={!validMachine || !supported || !changed || uncertain || saved} onSubmit={() => { void submit(); }}
-      feedback={validMachine && !uncertain ? <><ErrorText error={error === mutation.error ? undefined : error} /><MutationState mutation={mutation} success={saved ? copy("Komut kabuğu kaydedildi.", "Command shell saved.") : undefined} /></> : null} />
+    <FormActions submitLabel={copy("Komut kabuğunu kaydet", "Save command shell")} busy={mutation.isPending} dirty={changed && !saved} disabled={!validMachine || !supported || !changed || uncertain || saved} onSubmit={() => { void submit(); }}
+      feedback={validMachine && !uncertain ? <><ErrorNotice error={error === mutation.error ? undefined : error} /><MutationState mutation={mutation} success={saved ? copy("Komut kabuğu kaydedildi.", "Command shell saved.") : undefined} /></> : null} />
   </Sheet>;
 }
 

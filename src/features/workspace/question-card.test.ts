@@ -8,58 +8,80 @@ import type { QuestionCardProps } from "./session-types";
 
 const state = vi.hoisted(() => ({
   fields: new Map<string, (value: string) => void>(),
-  singles: new Set<string>(),
-  multis: new Set<string>(),
+  choices: new Set<string>(),
 }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
 }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: { panel: "panel" }, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/tokens", () => ({ colors: { panel: "panel" } }));
 vi.mock("./shared", () => ({ workspaceStyles: { stack: {} } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("panelui-native/components/questionnaire", async () => {
+  const React = await import("react");
+  type Ctx = {
+    answers: Record<string, string | string[]>;
+    set: (name: string, value: string | string[]) => void;
+  };
+  const Root = React.createContext<Ctx>({ answers: {}, set: () => {} });
+  const ItemCtx = React.createContext({ name: "", multiple: false });
+  const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
+  const Questionnaire = Object.assign(
+    ({
+      answers,
+      onAnswersChange,
+      children,
+    }: PropsWithChildren<{
+      answers: Record<string, string | string[]>;
+      onAnswersChange: (next: Record<string, string | string[]>) => void;
+    }>) =>
+      createElement(
+        Root.Provider,
+        { value: { answers, set: (name, value) => onAnswersChange({ ...answers, [name]: value }) } },
+        children,
+      ),
+    {
+      Progress: () => createElement("span", null, "progress"),
+      Item: ({ name, multiple, children }: PropsWithChildren<{ name: string; multiple: boolean }>) =>
+        createElement(ItemCtx.Provider, { value: { name, multiple } }, children),
+      Question: Wrap,
+      Choices: Wrap,
+      Choice: ({ value, label, disabled }: { value: string; label: string; disabled?: boolean }) => {
+        const root = React.useContext(Root);
+        const item = React.useContext(ItemCtx);
+        state.choices.add(`${item.multiple ? "multi" : "single"}:${label}`);
+        return createElement(
+          "button",
+          {
+            "data-choice": value,
+            disabled,
+            onClick: () => root.set(item.name, item.multiple ? [value] : value),
+          },
+          label,
+        );
+      },
+      Footer: Wrap,
+      Spacer: () => null,
+      Back: () => null,
+      Next: () => null,
+      Submit: ({
+        children,
+        disabled,
+        onPress,
+      }: PropsWithChildren<{ disabled?: boolean; onPress: () => void }>) =>
+        createElement("button", { disabled, onClick: onPress }, children),
+    },
+  );
+  return { Questionnaire };
+});
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  const choice =
-    (multi: boolean) =>
-    ({
-      label,
-      disabled,
-      options,
-      onChange,
-    }: {
-      label: string;
-      disabled?: boolean;
-      options: { value: string }[];
-      onChange: (value: string | string[]) => void;
-    }) => {
-      (multi ? state.multis : state.singles).add(label);
-      return createElement(
-        "select",
-        {
-          "aria-label": label,
-          disabled,
-          multiple: multi,
-          onChange: (event) =>
-            onChange(
-              multi
-                ? [(event.currentTarget as HTMLSelectElement).value]
-                : (event.currentTarget as HTMLSelectElement).value,
-            ),
-        },
-        options.map((option) =>
-          createElement("option", { key: option.value, value: option.value }, option.value),
-        ),
-      );
-    };
   return {
     Body: Wrapper,
     Card: Wrapper,
     Row: Wrapper,
     Disclosure: Wrapper,
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
-    SelectField: choice(false),
-    MultiSelectField: choice(true),
     Field: ({
       label,
       value,
@@ -103,11 +125,11 @@ const scope = "question-presentation-test";
 let props: QuestionCardProps;
 async function render(update: Partial<QuestionCardProps> = {}) {
   props = { ...props, ...update };
-  state.singles.clear();
-  state.multis.clear();
+  state.choices.clear();
   state.fields.clear();
   await act(async () => root.render(createElement(QuestionCard, props)));
 }
+const pick = (id: string) => container.querySelector<HTMLButtonElement>(`[data-choice="${id}"]`)!;
 const send = () =>
   [...container.querySelectorAll("button")].find((button) => button.textContent === "Send answer")!;
 beforeEach(() => {
@@ -131,8 +153,8 @@ it.each([false, true])(
   "uses one prompt-labelled text field for a choice-free custom question (multi=%s)",
   async (multiSelect) => {
     await render({ question: question(multiSelect) });
-    expect(container.querySelector("select")).toBeNull();
-    expect(container.querySelector("textarea")?.getAttribute("aria-label")).toBe(prompt);
+    expect(container.querySelector("[data-choice]")).toBeNull();
+    expect(container.querySelector("textarea")?.getAttribute("aria-label")).toBe("Your answer");
     expect(send().disabled).toBe(true);
   },
 );
@@ -143,8 +165,8 @@ it.each([false, true])(
     const value = question(multiSelect);
     value.questions[0].options = [{ id: "a", label: "Choice A" }];
     await render({ question: value });
-    expect((multiSelect ? state.multis : state.singles).has(prompt)).toBe(true);
-    expect(container.querySelector("select")?.querySelectorAll("option")).toHaveLength(1);
+    expect(state.choices.has(`${multiSelect ? "multi" : "single"}:Choice A`)).toBe(true);
+    expect(container.querySelectorAll("[data-choice]")).toHaveLength(1);
     expect(state.fields.has("Your own answer")).toBe(true);
   },
 );
@@ -155,7 +177,7 @@ it.each([false, true])(
     const value = question();
     value.questions[0].preserveCustomWhitespace = preserveCustomWhitespace;
     await render({ question: value });
-    await act(async () => state.fields.get(prompt)!("  keep these steps  "));
+    await act(async () => state.fields.get("Your answer")!("  keep these steps  "));
     expect(send().disabled).toBe(false);
     await act(async () => {
       send().click();
@@ -177,14 +199,14 @@ it.each(["sending", "queued", "unknown"] as const)(
     await render({ question: { ...question(), delivery } });
     expect(container.querySelector("textarea")?.disabled).toBe(true);
     expect(send().disabled).toBe(true);
-    expect(container.querySelector("select")).toBeNull();
+    expect(container.querySelector("[data-choice]")).toBeNull();
     expect(props.onAnswer).not.toHaveBeenCalled();
   },
 );
 
 it("retains the real draft and uncertain delivery across remount without resending", async () => {
   await render({ onAnswer: vi.fn().mockRejectedValue(new Error("Uncertain transport")) });
-  await act(async () => state.fields.get(prompt)!("Preserved recovery draft"));
+  await act(async () => state.fields.get("Your answer")!("Preserved recovery draft"));
   await act(async () => send().click());
   expect(container.textContent).toContain("Answer delivery not confirmed");
   await act(async () => root.unmount());
@@ -202,7 +224,6 @@ it("keeps external permission disabling and malformed choice-only prompts unchan
   const value = question();
   value.questions[0].allowCustom = false;
   await render({ disabled: false, question: value });
-  expect(container.querySelector("select")?.getAttribute("aria-label")).toBe(prompt);
   expect(container.querySelector("textarea")).toBeNull();
   expect(send().disabled).toBe(true);
 });
@@ -213,11 +234,7 @@ it.each([false, true])(
     const value = question(multiSelect);
     value.questions[0].options = [{ id: "a", label: "Choice A" }];
     await render({ question: value });
-    const select = container.querySelector("select")!;
-    await act(async () => {
-      select.value = "a";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+        await act(async () => pick("a").click());
     await act(async () =>
       state.fields.get("Additional note (optional)")!("  Keep this constraint  "),
     );
@@ -249,11 +266,7 @@ it.each(["fixed", "typed"])("omits note controls for %s questions", async (kind)
   if (kind === "fixed") value.questions[0].allowCustom = false;
   else value.questions[0].preserveCustomWhitespace = true;
   await render({ question: value });
-  const select = container.querySelector("select")!;
-  await act(async () => {
-    select.value = "a";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  });
+    await act(async () => pick("a").click());
   expect(state.fields.has("Additional note (optional)")).toBe(false);
 });
 
@@ -266,16 +279,9 @@ it.each([false, true])(
       { id: "provider-other", label: " Other ", literal },
     ];
     await render({ question: value });
-    const select = container.querySelector("select")!;
-    await act(async () => {
-      select.value = "a";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+        await act(async () => pick("a").click());
     await act(async () => state.fields.get("Additional note (optional)")!("Existing note"));
-    await act(async () => {
-      select.value = "provider-other";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await act(async () => pick("provider-other").click());
     expect(container.querySelector('[aria-label="Additional note (optional)"]') !== null).toBe(literal);
     await act(async () => send().click());
     expect(props.onAnswer).toHaveBeenCalledWith({

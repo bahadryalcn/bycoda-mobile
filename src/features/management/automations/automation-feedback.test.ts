@@ -13,9 +13,17 @@ const navigation = vi.hoisted(() => ({ current: true, push: vi.fn() }));
 vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ isCurrent: () => navigation.current }) }));
 vi.mock("@/ui/layout", () => ({ ScreenChromeProvider: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "computer" }) }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: { caption: {} } }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { caption: {} } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("lucide-react-native/icons/play", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pause", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/history", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
+vi.mock("@/ui/week-hours", () => ({ HoursOverview: () => null }));
+vi.mock("../shared/record-bits", () => ({ RecordTrailing: ({ children }: PropsWithChildren) => createElement("div", null, children), useMenuGlyph: () => () => null, useRelativeTime: () => () => "soon", joinMeta: (parts: unknown[]) => parts.filter(Boolean).join(" · ") }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
 vi.mock("expo-router", () => ({ router: { push: navigation.push } }));
 vi.mock("@/ui/record-card", () => ({ RecordCard: ({ title, children }: PropsWithChildren<{ title: string }>) => createElement("section", null, title, children) }));
@@ -26,7 +34,8 @@ vi.mock("@/ui/primitives", () => {
   return { Body: Wrapper, Button: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label), Row: Wrapper, Stack: Wrapper, Separator: () => null,
     Sheet: Wrapper,
     ScreenList: ({ data, header, renderItem }: { data: HostAutomationRun[]; header: import("react").ReactNode; renderItem: (entry: { item: HostAutomationRun }) => import("react").ReactNode }) => createElement("div", null, header, data.map(item => createElement("div", { key: item.id }, renderItem({ item })))),
-    ActionMenu: () => null, MutationState: () => null,
+    ActionMenu: () => null, IconButton: () => null, MutationState: () => null,
+    ErrorNotice: ({ error }: { error?: string }) => error ? createElement("p", { role: "alert" }, error) : null,
     ErrorText: ({ error }: { error?: string }) => error ? createElement("p", { role: "alert" }, error) : null,
     QueryState: ({ query: result }: { query: typeof query }) => result.error
       ? createElement("p", { role: "alert" }, result.error.message)

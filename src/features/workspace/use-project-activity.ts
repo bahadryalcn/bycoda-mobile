@@ -5,10 +5,15 @@ import { readProjectSummaries, type ProjectSummaries } from "./project-summaries
 import { projectSessionDirectory } from "./activity-model";
 import { useProjectList } from "./use-project-directory";
 import { remoteErrorKind } from "@/ui/error-message";
-import { useEffect, useRef, useState } from "react";
-import { watchProjectStream } from "@/remote/session-sync";
-import type { MobileStreamSubscription } from "@/remote/host-transport";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { backoffMs } from "./session-read-schedule";
+import { retainProjectStream } from "@/remote/project-stream-hub";
 import { RemoteHostError } from "@/remote/host-error";
+
+/** 5s while healthy; doubles per consecutive failure up to 60s. Resets when a read succeeds. */
+export function activityPollDelay(failures: number) {
+  return backoffMs(5_000, failures - 1, 60_000);
+}
 
 export function useProjectActivity() {
   const machine = useActiveMachine();
@@ -16,23 +21,29 @@ export function useProjectActivity() {
   const active = useHostReadActive();
   const cache = useQueryClient();
   const projects = useProjectList();
-  const ids = (projects.data ?? []).map((project) => project.id).sort();
-  const groups: string[][] = [];
-  for (let i = 0; i < ids.length; i += 32) groups.push(ids.slice(i, i + 32));
+  const idKey = (projects.data ?? []).map((project) => project.id).sort().join("\n");
+  const { ids, groups, liveIds } = useMemo(() => {
+    const ids = idKey ? idKey.split("\n") : [];
+    const groups: string[][] = [];
+    for (let i = 0; i < ids.length; i += 32) groups.push(ids.slice(i, i + 32));
+    return { ids, groups, liveIds: ids.slice(0, 32) };
+  }, [idKey]);
   const streaming =
     !!client && active && projects.directoryReady && (client.supportsStreams?.() ?? false);
-  const liveIds = ids.slice(0, 32);
   const liveIdentity = JSON.stringify([machine?.id, liveIds]);
   const liveAccess = useRef({ enabled: streaming, identity: liveIdentity });
   liveAccess.current = { enabled: streaming, identity: liveIdentity };
   const [streamError, setStreamError] = useState<Error | undefined>();
+  // While the live stream is failing, the 5s summary poll takes over.
+  const streamFailing = useRef(false);
   useEffect(() => {
     if (!streaming || !client || !liveIds.length) {
+      streamFailing.current = false;
       setStreamError(undefined);
       return;
     }
     let disposed = false;
-    const subscriptions: MobileStreamSubscription[] = [];
+    const releases: (() => void)[] = [];
     const queryKey = hostKey(machine?.id ?? null, ["project-summaries", liveIds]);
     const current = () => {
       client.assertCurrentAccess();
@@ -44,38 +55,33 @@ export function useProjectActivity() {
         );
     };
     for (const projectId of liveIds)
-      void watchProjectStream(
-        client,
-        projectId,
-        async (value, assertCurrent) => {
-          current();
-          assertCurrent();
-          await cache.cancelQueries({ queryKey, exact: true }, { silent: true, revert: false });
-          current();
-          assertCurrent();
-          cache.setQueryData<ProjectSummaries>(queryKey, (current) => ({
-            ...current,
-            projects: { ...current?.projects, [projectId]: value },
-          }));
-          setStreamError(undefined);
-        },
-        (error) => {
-          if (!disposed) setStreamError(error);
-        },
-      )
-        .then((subscription) => {
-          if (disposed) subscription.close();
-          else subscriptions.push(subscription);
-        })
-        .catch((error) => {
-          if (!disposed)
-            setStreamError(
-              error instanceof Error ? error : new Error("The project stream could not be opened."),
+      releases.push(
+        retainProjectStream(client, projectId, {
+          apply: async (value, assertCurrent) => {
+            current();
+            assertCurrent();
+            await cache.cancelQueries({ queryKey, exact: true }, { silent: true, revert: false });
+            current();
+            assertCurrent();
+            // Sibling consumers receive the same object; the first write wins.
+            cache.setQueryData<ProjectSummaries>(queryKey, (previous) =>
+              previous?.projects?.[projectId] === value
+                ? previous
+                : { ...previous, projects: { ...previous?.projects, [projectId]: value } },
             );
-        });
+            streamFailing.current = false;
+            setStreamError(undefined);
+          },
+          onError: (error) => {
+            if (disposed) return;
+            streamFailing.current = true;
+            setStreamError(error);
+          },
+        }),
+      );
     return () => {
       disposed = true;
-      for (const subscription of subscriptions) subscription.close();
+      for (const release of releases) release();
     };
     // The stable identity includes the exact sorted project demand; the first
     // 32 reserve room for the mounted transcript within the 64-stream budget.
@@ -89,18 +95,22 @@ export function useProjectActivity() {
         enabled: !!client && active && projects.directoryReady,
         retry: false,
         staleTime: 5_000,
-        refetchInterval: (query: { state: { error: unknown } }) =>
-          liveGroup ||
+        refetchInterval: (query: { state: { error: unknown; fetchFailureCount?: number } }) =>
+          (liveGroup && !streamFailing.current) ||
           ["auth", "identity", "unsupported"].includes(remoteErrorKind(query.state.error) ?? "")
             ? false
-            : 5_000,
+            : activityPollDelay(query.state.fetchFailureCount ?? 0),
         networkMode: "always" as const,
         queryFn: ({ signal }: { signal: AbortSignal }) =>
           readProjectSummaries(
             client!,
             projectIds,
             cache.getQueryData<ProjectSummaries>(queryKey),
-            liveGroup ? false : (machine?.capabilities?.includes("machine.changes") ?? true),
+            // One batched read for every group, the live one included: 32 per-project
+            // sessions.list reads per poll (cancelled again by each stream event, while the
+            // Host keeps running them) filled the Host's per-device read slots ("busy").
+            // A stream-applied baseline that does not match falls back to a fresh read.
+            machine?.capabilities?.includes("machine.changes") ?? true,
             { signal },
           ),
       };
@@ -126,6 +136,7 @@ export function useProjectActivity() {
         (query, index) =>
           query.isSuccess &&
           !query.data?.limited &&
+          !query.data?.failed?.length &&
           groups[index]!.every((id) => query.data?.projects[id]),
       ),
     pending: projects.verifying || queries.some((query) => query.isLoading),

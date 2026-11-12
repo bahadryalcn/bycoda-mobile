@@ -4,7 +4,9 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { DevicePreviewSheet } from "./device-preview";
 const state = vi.hoisted(() => ({ id: "machine", writes: [] as { method: string; params: Record<string, unknown> }[], reads: [] as { method: string; params: Record<string, unknown>; enabled: boolean }[], values: new Map<string, string>(), uncertain: false, failStorage: false, readError: false, failRead: 0 }));
-vi.mock("expo-crypto", () => ({ randomUUID: () => "request" }));
+vi.mock("expo-crypto", () => ({ randomUUID: () => "request" }));vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
+
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
   getItem: async (key: string) => { if (state.failRead > 0) { state.failRead -= 1; throw new Error("Storage read failed"); } return state.values.get(key) ?? null; },
   setItem: async (key: string, value: string) => { if (state.failStorage) throw new Error("Storage failed"); state.values.set(key, value); },
@@ -24,7 +26,8 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
   return {
-    Disclosure: Wrapper, Stack: Wrapper,
+    Disclosure: Wrapper, Stack: Wrapper, Row: Wrapper,
+    IconButton: ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),
     FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, submitLabel === "Review changes" ? submitLabel : "Confirm")), Body: Wrapper, Sheet: Wrapper, QueryState: () => null, MutationState: () => null, ErrorText: () => null,
     Notice: ({ message, onRetry }: { message: string; onRetry?: () => void }) => createElement("div", null, createElement("p", null, message), onRetry ? createElement("button", { onClick: onRetry }, "Retry") : null), Button, Loading: () => null,
     Field: ({ label, onChangeText }: { label: string; onChangeText: (value: string) => void }) => createElement(Button, { label, onPress: () => onChangeText("exp://127.0.0.1:8081") }),

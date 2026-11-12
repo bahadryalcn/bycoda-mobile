@@ -10,6 +10,7 @@ import { sessionReadSchedule, unsupportedSessionWait } from "./session-read-sche
 import { pruneInactiveSessionCache } from "./session-cache";
 import { retainSessionAuthority } from "@/domain/session-authority";
 import { watchSessionStream } from "@/remote/session-sync";
+import { isTransientConnectionError } from "@/state/query-retry";
 import type { MobileStreamSubscription } from "@/remote/host-transport";
 
 export function useSessionSnapshot(
@@ -48,6 +49,8 @@ export function useSessionSnapshot(
   // A stream error belongs to the query data it was raised against; newer data supersedes it.
   const [streamFailure, setStreamError] = useState<{ error: Error; at: number } | undefined>();
   const dataStamp = useRef(0);
+  // While the stream is failing the normal snapshot poll takes over.
+  const streamFailing = useRef(false);
   const observedKey = useMemo(
     () => (active ? key : hostKey(scope.machineId, ["parked-session", scope.sessionId])),
     [active, key, scope.machineId, scope.sessionId],
@@ -66,6 +69,7 @@ export function useSessionSnapshot(
   }, [cache, key, enabled]);
   useEffect(() => {
     if (!streaming || !client || !options.projectId) {
+      streamFailing.current = false;
       setStreamError(undefined);
       return;
     }
@@ -119,10 +123,13 @@ export function useSessionSnapshot(
             ? previous
             : retainSessionAuthority(previous, value),
         );
+        streamFailing.current = false;
         setStreamError(undefined);
       },
       onError: (error) => {
-        if (!disposed) setStreamError({ error, at: dataStamp.current });
+        if (disposed) return;
+        streamFailing.current = true;
+        setStreamError({ error, at: dataStamp.current });
       },
     })
       .then((value) => {
@@ -130,6 +137,7 @@ export function useSessionSnapshot(
         else subscription = value;
       })
       .catch((error) => {
+        if (!disposed) streamFailing.current = true;
         if (!disposed)
           setStreamError({
             error:
@@ -214,19 +222,27 @@ export function useSessionSnapshot(
     enabled,
     staleTime: 1_000,
     refetchInterval: (query) => {
-      if (streaming) return false;
+      if (streaming && !streamFailing.current) return false;
       if (!enabled || query.state.fetchStatus === "fetching") return false;
       const kind = (query.state.error as { kind?: string } | null)?.kind;
       if (kind === "auth" || kind === "identity" || kind === "unsupported") return false;
       return sessionReadSchedule(query, identity).delay(
         query.state.data?.status === "running",
         !!query.state.error,
+        Date.now(),
+        query.state.fetchFailureCount,
       );
     },
   });
   dataStamp.current = query.dataUpdatedAt;
+  // A busy or briefly dropped stream is covered by the snapshot poll (and its quiet retries);
+  // only a lasting stream failure replaces the transcript with an error.
   const streamError =
-    streamFailure && streamFailure.at === query.dataUpdatedAt ? streamFailure.error : undefined;
+    streamFailure &&
+    streamFailure.at === query.dataUpdatedAt &&
+    !isTransientConnectionError(streamFailure.error)
+      ? streamFailure.error
+      : undefined;
   const denied = ["auth", "identity"].includes(
     ((streamError ?? query.error) as { kind?: string } | null)?.kind ?? "",
   );
@@ -258,17 +274,29 @@ export function useEarlierSession(scope: SessionScope, session?: HostSession) {
   });
 }
 
-export function useSessionBlock({ scope, blockId, revision, enabled }: SessionBlockRequest) {
+/** Block content stays valid until its own content digest changes, not whenever the session revision does. */
+const BLOCK_GC_MS = 2 * 60_000;
+
+export function useSessionBlock({ scope, blockId, getRevision, digest, enabled }: SessionBlockRequest) {
   const client = useHostClient();
   const active = useHostReadActive();
+  const cache = useQueryClient();
+  // The Host pins a session revision per read; the key must not, or every revision refetches every block.
+  // Legacy Hosts without digests key by the revision seen at render time.
+  const identity = digest ? `digest:${digest}` : getRevision();
+  const getRevisionRef = useRef(getRevision);
+  getRevisionRef.current = getRevision;
+  const queryKey = hostKey(scope.machineId, ["session-block", scope.sessionId, blockId, identity]);
 
   return useQuery({
-    queryKey: hostKey(scope.machineId, ["session-block", scope.sessionId, blockId, revision]),
+    queryKey,
     enabled: !!client && active && enabled,
+    gcTime: BLOCK_GC_MS,
+    staleTime: digest ? Infinity : 0,
     queryFn: async ({ signal }) => {
       const response = await client!.request<SessionSyncResponse>(
         "sessions.block",
-        { sessionId: scope.sessionId, blockId, revision },
+        { sessionId: scope.sessionId, blockId, revision: getRevisionRef.current() },
         { signal },
       );
       const sync = await resolveSync(client!, scope.sessionId, response, { signal });
@@ -280,6 +308,10 @@ export function useSessionBlock({ scope, blockId, revision, enabled }: SessionBl
       }
       const block = sync.value.session.blocks.find((value) => value.id === blockId);
       if (!block) throw new Error("Transcript block not found.");
+      // Drop superseded versions of this block so the cache holds one entry per block.
+      for (const stale of cache.getQueryCache().findAll({ queryKey: queryKey.slice(0, -1) }))
+        if (stale.queryKey.length === queryKey.length && stale.queryKey[queryKey.length - 1] !== identity)
+          cache.removeQueries({ queryKey: stale.queryKey, exact: true });
       return block;
     },
   });

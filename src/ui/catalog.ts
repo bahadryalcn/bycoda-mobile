@@ -1,4 +1,4 @@
-/** Complete module inventory of installed panelui-native 0.112.0.
+/** Complete module inventory of installed panelui-native 1.4.0.
  * Availability does not enable external services or bypass product permission gates.
  */
 export const componentCatalog = [
@@ -120,6 +120,13 @@ export const componentCatalog = [
     "capability": "universal",
     "priority": "core",
     "docs": "https://panelui.dev/docs/components/calendar"
+  },
+  {
+    "id": "camera",
+    "group": "media",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/camera"
   },
   {
     "id": "candlestick-chart",
@@ -981,6 +988,20 @@ export const componentCatalog = [
     "capability": "universal",
     "priority": "available",
     "docs": "https://panelui.dev/docs/charts/waterfall-chart"
+  },
+  {
+    "id": "week-hours-grid",
+    "group": "data",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/week-hours-grid"
+  },
+  {
+    "id": "week-strip",
+    "group": "forms",
+    "capability": "universal",
+    "priority": "available",
+    "docs": "https://panelui.dev/docs/components/week-strip"
   }
 ] as const;
 

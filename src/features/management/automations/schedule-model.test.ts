@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { integerInRange, scheduleLabel, validScheduleTime } from "./schedule-model";
+import { integerInRange, scheduleLabel, scheduleSentence, validScheduleTime } from "./schedule-model";
 
 describe("mobile automation schedules", () => {
   it("rejects partial and out-of-range times without changing user input", () => {
@@ -18,5 +18,15 @@ describe("mobile automation schedules", () => {
     expect(scheduleLabel(item, copy)).toBe("Weekdays · 09:30");
     expect(scheduleLabel({ ...item, scheduleKind: "weekly" }, copy)).toBe("Monday · 09:30");
     expect(scheduleLabel({ ...item, scheduleKind: "hourly" }, copy)).toBe("Hourly · :05");
+  });
+
+  it("describes each schedule as a sentence", () => {
+    const copy = (_tr: string, en: string, values: Record<string, string | number> = {}) =>
+      en.replace(/\{(p\d)\}/g, (_m, key: string) => String(values[key]));
+    const item = { scheduleKind: "weekdays" as const, time: "09:00", minute: 15, dayOfWeek: 1 };
+    expect(scheduleSentence(item, copy)).toBe("Every weekday at 09:00");
+    expect(scheduleSentence({ ...item, scheduleKind: "daily" }, copy)).toBe("Every day at 09:00");
+    expect(scheduleSentence({ ...item, scheduleKind: "weekly" }, copy)).toBe("Every Monday at 09:00");
+    expect(scheduleSentence({ ...item, scheduleKind: "hourly" }, copy)).toBe("Every hour at minute 15");
   });
 });

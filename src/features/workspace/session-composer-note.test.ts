@@ -10,19 +10,32 @@ const state = vi.hoisted(() => ({ activeId: "machine", supported: true, browserS
   templateInsert: null as null | ((body: string) => void),
   selection: { start: 0, end: 0 }, select: null as null | ((selection: { start: number; end: number }) => void),
   receiver: null as null | ((request: ComposerTransfer) => void), renderDraft: null as null | (() => void),
-  onCommand: vi.fn(async () => undefined), persist: vi.fn(async () => undefined), enqueue: vi.fn(),
+  onCommand: vi.fn(async () => undefined), persist: vi.fn(async () => undefined), enqueue: vi.fn(), pause: vi.fn(async () => undefined),
   register: (receiver: (request: ComposerTransfer) => void) => { state.receiver = receiver; return () => { state.receiver = null; }; },
 }));
+vi.mock("./composer-model-chip", () => ({ ComposerModelChip: () => null }));
+vi.mock("./composer-mode-controls", () => ({ ComposerModeMenu: () => null, DeliveryModeButton: () => null }));
+vi.mock("lucide-react-native/icons/send", () => ({ default: () => null }));
+vi.mock("expo-image",() => ({ Image: () => null }));
+vi.mock("./composer-links", () => ({ ComposerLinks: () => null }));
+vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children), useWindowDimensions: () => ({ height: 800, fontScale: 1 }) }));
 vi.mock("lucide-react-native/icons/arrow-up", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/corner-down-right", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/list-plus", () => ({ default: () => null }));
+vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
+vi.mock("@/state/busy-send", () => ({ useBusySend: () => "steer" }));
 vi.mock("lucide-react-native/icons/x", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/image", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/file", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/layout-template", () => ({ default: () => null }));
+vi.mock("@/ui/icon-tile", () => ({ IconTile: ({ children }: PropsWithChildren) => children }));
 vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "request" }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => null }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/tokens", async () => ({ ...await vi.importActual<typeof import("@/ui/tokens")>("@/ui/tokens"), colors: {} }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -52,7 +65,7 @@ vi.mock("./attachment-files", () => ({ pickAttachments: vi.fn(), removeStagedFil
 vi.mock("./attachment-transfer", () => ({ uploadAttachment: vi.fn() }));
 vi.mock("./attachment-ownership", () => ({ composerDraftKey: () => "key", supportsAttachmentOwnership: () => state.browserSupported,
   attachmentReleases: { stage: vi.fn(async () => undefined), flush: vi.fn(async () => undefined) } }));
-vi.mock("./use-session-queue", () => ({ useSessionQueue: () => ({ supported: true, enqueue: state.enqueue }) }));
+vi.mock("./use-session-queue", () => ({ useSessionQueue: () => ({ supported: true, enqueue: state.enqueue, pause: state.pause }) }));
 vi.mock("./session-queue", () => ({ SessionQueue: () => null }));
 vi.mock("@/features/management/templates/template-library", () => ({ TemplateLibrary: ({ onInsert }: { onInsert: (body: string) => void }) => {
   state.templateInsert = onInsert;
@@ -62,19 +75,19 @@ vi.mock("@/features/management/templates/template-store", () => ({ useTemplateHy
 vi.mock("./shared", () => ({ ErrorText: () => null }));
 vi.mock("@/ui/chat-controls", () => {
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
-  return { ChatCircleAction: Button, ChatToolbarAction: Button };
+  return { ChatCircleAction: Button, ChatToolbarAction: Button, ChatAction: Button };
 });
-vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, submit, mode, leading, field }: {
-  value: string; submit: ReactNode; mode: ReactNode; leading: ReactNode;
+vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, submit, mode, leading, field, top }: {
+  value: string; submit: ReactNode; mode: ReactNode; leading: ReactNode; top?: ReactNode;
   field: { selection: { start: number; end: number }; onSelectionChange: (event: unknown) => void };
 }) => {
   state.selection = field.selection;
   state.select = (selection) => field.onSelectionChange({ nativeEvent: { selection } });
-  return createElement("div", null, createElement("textarea", { value, readOnly: true }), leading, mode, submit);
+  return createElement("div", null, top, createElement("textarea", { value, readOnly: true }), leading, mode, submit);
 } }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Wrap, Stack: Wrap, Row: Wrap, NavigationGroup: Wrap,
+  return { ErrorNotice: () => null, Body: Wrap, Stack: Wrap, Row: Wrap, NavigationGroup: Wrap,
     Sheet: ({ children, visible }: PropsWithChildren<{ visible: boolean }>) => visible ? createElement("div", null, children) : null,
     Button: ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),
     NavigationRow: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
@@ -161,4 +174,14 @@ it("rejects wrong browser conversation/project or old host before staging a file
   expect(() => state.receiver!(request)).toThrow(/cannot be added/); state.browserSupported = false;
   expect(() => state.receiver!({ ...request, browserCapture: { ...request.browserCapture, capture: browserCapture() } })).toThrow(/cannot be added/);
   expect(state.stageBrowser).not.toHaveBeenCalled(); expect(state.draft).toBeNull();
+});
+
+it("shows a direct Stop while a run is active and cancels that exact run after pausing the queue", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); root = createRoot(container);
+  const running = { ...props, session: { ...props.session, status: "running", runId: "run-1" } };
+  await act(async () => root.render(createElement(SessionComposer, running as never)));
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Send")).toBe(false);
+  await click("Stop");
+  expect(state.pause).toHaveBeenCalledTimes(1);
+  expect(state.onCommand).toHaveBeenCalledWith(expect.objectContaining({ type: "cancel", runId: "run-1", sessionId: "session" }));
 });

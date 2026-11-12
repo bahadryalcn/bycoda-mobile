@@ -1,69 +1,83 @@
-import { HierarchyFrame } from "@/ui/hierarchy-frame";
 import { router, Stack } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useHostQuery } from "@/state/queries";
+import { NewSessionSheet } from "./new-session-sheet";
+import { useLatestCallback } from "./use-latest-callback";
 import { useAsyncAction } from "@/state/actions";
-import { View } from "react-native";
-import Plus from "lucide-react-native/icons/plus";
-import ListFilter from "lucide-react-native/icons/list-filter";
-import { AppliedFilters, FilterSheet } from "@/ui/filter-sheet";
+import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import {
-  Empty,
-  FormActions,
-  IconButton,
-  Notice,
   QueryState,
   ScreenList,
   SearchField,
   SearchToolbar,
   SegmentedControl,
-  ToggleField,
   SelectField,
-  Sheet,
+  StateView,
+  ToggleField,
 } from "@/ui/primitives";
+import { queryOwnsRegion } from "./query-region";
+import { ProjectDirectoryFeedback } from "./project-directory-feedback";
 import { useCopy } from "@/ui/copy";
-import { colors, metrics, space } from "@/ui/tokens";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useProjectActivity } from "./use-project-activity";
-import { useMobileTheme } from "@/ui/theme";
 import { SessionListRow } from "./session-list-row";
-import {
-  GroupedListRow,
-  rowInset,
-} from "./shared";
+import { filterProjectSessionDirectory, type SessionShelfId } from "./session-collection";
+import { globalSessionRows, type FolderCollapse, type GlobalSessionRow } from "./global-session-shelves";
 import { toggleSessionDirectoryFolder } from "./session-directory";
+import { SessionShelfHeader } from "./session-shelf-header";
 import { SessionFolderRow } from "./session-folder-row";
-import { filterProjectSessionDirectory, projectSessionCollectionRows, sessionCollectionScope, type ProjectSessionCollectionRow } from "./session-collection";
-import { SessionProjectRow } from "./session-project-row";
+import { HierarchyFrame, HierarchyWidthProvider } from "@/ui/hierarchy-frame";
+import { View } from "react-native";
+import { space } from "@/ui/tokens";
 
 type StatusFilter = "all" | "running" | "reply";
+type FilterDraft = { status: StatusFilter; archived: boolean; project: string };
 
-export function ActiveSessionsScreen({ overview = false }: { overview?: boolean }) {
-  useMobileTheme();
+export function ActiveSessionsScreen({
+  overview = false,
+  initialCreate = false,
+}: {
+  overview?: boolean;
+  /** Opens the new-session sheet once, e.g. from the "New session" quick action. */
+  initialCreate?: boolean;
+}) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const hydrated = useMachines((state) => state.hydrated);
   const storageError = useMachines((state) => state.storageError);
   const connectionPending = useMachines((state) => state.connectionPending);
   const activity = useProjectActivity();
+  const machineId = machine?.id;
+  const canReadProject = useLatestCallback((projectId: string) => activity.projects.isProjectVisible(projectId));
+  const openSession = useLatestCallback((sessionId: string, projectId: string) => {
+    if (machineId && useMachines.getState().activeId === machineId)
+      router.push({ pathname: "/session/[id]", params: { id: sessionId, projectId, machineId } });
+  });
   const retry = useAsyncAction();
   const retryActivity = () => { void retry.run(() => activity.refetch()); };
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [archived, setArchived] = useState(false);
   const [projectFilter, setProjectFilter] = useState("");
-  const [filterDraft, setFilterDraft] = useState<{ filter: StatusFilter; archived: boolean; projectId: string } | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [newProjectId, setNewProjectId] = useState("");
-  const [collapsed, setCollapsed] = useState<Record<string, Record<string, boolean>>>({});
-  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
-  const selectedProjectId = useMachines((state) => state.selectedProjectId);
+  const [draft, setDraft] = useState<FilterDraft | null>(null);
+  const [creating, setCreating] = useState(overview && initialCreate);
+  const [collapsed, setCollapsed] = useState<Partial<Record<SessionShelfId, boolean>>>({});
+  const [folderCollapse, setFolderCollapse] = useState<FolderCollapse>({});
   const projectOptions = (activity.projects.data ?? []).map((project) => ({
     value: project.id,
     label: project.name,
     detail: project.cwd,
   }));
-  const creationProject = [newProjectId, projectFilter, selectedProjectId, projectOptions[0]?.value]
-    .find((id) => projectOptions.some((project) => project.value === id));
+  const lifecycle = useHostQuery<{ records: { sessionId: string; state: string }[] }>(
+    ["sessions-lifecycle"],
+    "sessions.lifecycle.list",
+    {},
+    { enabled: overview, interval: 15_000 },
+  );
+  const settledIds = useMemo(
+    () => new Set((lifecycle.data?.records ?? []).filter((r) => r.state === "settled").map((r) => r.sessionId)),
+    [lifecycle.data],
+  );
   const directory = overview ? activity.directory : activity.sessions;
   const filtered = directory.filter(
     ({ project, session }) =>
@@ -74,34 +88,29 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
         (filter === "reply" ? session.needsInput : session.status === "running")),
   );
   const visible = filterProjectSessionDirectory(activity.projects.data ?? [], filtered, search);
-  const rows: ProjectSessionCollectionRow[] = overview
-    ? projectSessionCollectionRows(activity.projects.data ?? [], visible, machine?.id ?? "", collapsed, collapsedProjects, !!search.trim())
-    : visible.map(({ project, session }) => ({ kind: "session", key: `${project.id}:${session.id}`, project, session, depth: 0 }));
+  const rows: GlobalSessionRow[] = globalSessionRows(visible, folderCollapse, collapsed, !!search.trim(), overview && archived, settledIds);
   const narrowed = !!search.trim() || !!projectFilter || (!archived && filter !== "all");
   const title = overview ? copy("Oturumlar", "Sessions") : copy("Aktif oturumlar", "Active sessions");
-  const newSessionButton = overview ? (
-    <IconButton
-      label={copy("Yeni oturum", "New session")}
-      tone="default"
-      disabled={!projectOptions.length || activity.privacyPending}
-      onPress={() => setCreating(true)}
-    >
-      <Plus size={20} strokeWidth={2} color={colors.accent} />
-    </IconButton>
-  ) : null;
-  const filterCount = Number(!archived && filter !== "all") + Number(archived) + Number(!!projectFilter);
-  const filters = overview ? <IconButton label={copy("Filtreler", "Filters")}
-    tone={filterCount > 0 ? "primary" : "default"}
-    expanded={filterDraft !== null}
-    onPress={() => setFilterDraft({ filter, archived, projectId: projectFilter })}>
-    <ListFilter size={20} color={filterCount ? colors.primaryText : colors.muted} />
-  </IconButton> : null;
+  const projectLabel = projectOptions.find((project) => project.value === projectFilter)?.label;
+  const statusOptions = [
+    { value: "all" as const, label: copy("Tümü", "All") },
+    { value: "running" as const, label: copy("Çalışıyor", "Running") },
+    { value: "reply" as const, label: copy("Yanıt bekleyenler", "Awaiting reply") },
+  ];
+  const statusLabel = statusOptions.find((option) => option.value === filter)?.label;
+  const filterCount = Number(archived) + Number(!!projectFilter) + Number(!archived && filter !== "all");
+  const appliedFilters = [
+    !archived && filter !== "all" && `${copy("Durum", "Status")}: ${statusLabel}`,
+    archived && copy("Arşivlenmiş", "Archived"),
+    projectFilter && `${copy("Proje", "Project")}: ${projectLabel ?? projectFilter}`,
+  ];
+  const waitingForConnection = !visible.length && !activity.error && (activity.privacyUnavailable || activity.readiness === "waiting");
   if (!hydrated || storageError || (!machine && connectionPending))
     return <ScreenList
       data={[]}
       renderItem={() => null}
       title={title}
-      header={<QueryState query={{
+      ListEmptyComponent={<QueryState query={{
         isPending: !storageError,
         error: storageError,
         refetch: () => useMachines.getState().hydrate(),
@@ -113,9 +122,14 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
         data={[]}
         renderItem={() => null}
         title={title}
-        header={
-          <Empty
+        ListEmptyComponent={
+          <StateView
+            illustration="connect-computer"
             title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
+            description={copy(
+              "Oturumlarını görmek için bilgisayarını bağla.",
+              "Connect your computer to see and start sessions.",
+            )}
             action={{
               label: copy("Bilgisayar bağla", "Connect a computer"),
               onPress: () => router.push("/machines"),
@@ -124,165 +138,106 @@ export function ActiveSessionsScreen({ overview = false }: { overview?: boolean 
         }
       />
     );
-  return (
-    <ScreenList
+  const listQuery = {
+    data: directory.length ? directory : undefined,
+    isPending: activity.pending,
+    error: activity.error,
+    isFetching: retry.isPending,
+    refetch: retryActivity,
+  };
+  const listLabel = copy("Oturumlar yükleniyor…", "Loading sessions…");
+  const resetFilters = () => { setSearch(""); setFilter("all"); setProjectFilter(""); setArchived(false); };
+  const showEmpty = activity.directoryReady && !visible.length;
+  const canCreate = overview && !!projectOptions.length && !activity.privacyPending;
+  const emptyState = waitingForConnection ? (
+    <ProjectDirectoryFeedback query={listQuery} readiness={activity.readiness} privacyUnavailable={activity.privacyUnavailable} />
+  ) : queryOwnsRegion(listQuery) ? (
+    <QueryState query={listQuery} loading="list" loadingLabel={listLabel} />
+  ) : showEmpty ? (
+    narrowed || search.trim() ? (
+      <StateView
+        illustration="search-empty"
+        title={search.trim()
+          ? copy("Aramana uyan oturum yok.", "No sessions match your search.")
+          : copy("Filtrelere uyan oturum yok.", "No sessions match these filters.")}
+        action={{ label: copy("Filtreleri temizle", "Clear filters"), onPress: resetFilters }}
+      />
+    ) : overview && archived ? (
+      <StateView illustration="inbox-empty" title={copy("Arşivlenmiş oturum yok.", "No archived sessions.")} />
+    ) : (
+      <StateView
+        illustration="no-sessions"
+        title={overview ? copy("Henüz oturum yok.", "No sessions yet.") : copy("Aktif oturum yok", "No active sessions")}
+        description={canCreate ? copy("Bir proje seçip ilk oturumunu başlat.", "Pick a project and start your first session.") : undefined}
+        action={canCreate ? { label: copy("Yeni oturum", "New session"), onPress: () => setCreating(true) } : undefined}
+      />
+    )
+  ) : null;
+  const list = (
+    <HierarchyWidthProvider><ScreenList<GlobalSessionRow>
       data={rows}
       grouped
       keyExtractor={(row) => row.key}
       title={title}
-      actions={newSessionButton}
       refresh={activity.refetch}
+      ListEmptyComponent={emptyState ?? undefined}
       query={{ ...activity.projects, isFetching: activity.refreshing, isPending: activity.pending }}
       header={
         <>
           <Stack.Screen options={{ title }} />
-          <SearchToolbar search={<SearchField
-            label={copy("Oturum ara", "Search sessions")}
-            value={search}
-            onChangeText={setSearch}
-          />} actions={filters} />
-          <AppliedFilters filters={[
-            projectFilter && `${copy("Proje", "Project")}: ${projectOptions.find(project => project.value === projectFilter)?.label ?? projectFilter}`,
-            overview && archived && copy("Arşiv", "Archive"),
-            !archived && filter !== "all" && (filter === "running" ? copy("Çalışıyor", "Running") : copy("Yanıt bekleyenler", "Awaiting reply")),
-          ]} />
-          {filterDraft ? <FilterSheet visible onClose={() => setFilterDraft(null)}
-            onReset={() => setFilterDraft({ filter: "all", archived: false, projectId: "" })}
-            onApply={() => {
-              setFilter(filterDraft.filter); setArchived(filterDraft.archived); setProjectFilter(filterDraft.projectId); setFilterDraft(null);
-            }}>
-            <SelectField label={copy("Proje", "Project")} searchable value={filterDraft.projectId}
-              options={[{ value: "", label: copy("Tüm projeler", "All projects") }, ...projectOptions]}
-              disabled={activity.privacyPending} onChange={(projectId) => setFilterDraft({ ...filterDraft, projectId })} />
-            <SegmentedControl label={copy("Oturum filtreleri", "Session filters")} value={filterDraft.filter}
-              disabled={filterDraft.archived} onChange={(filter) => setFilterDraft({ ...filterDraft, filter })}
-              options={[
-                { value: "all", label: copy("Tümü", "All") },
-                { value: "running", label: copy("Çalışıyor", "Running") },
-                { value: "reply", label: copy("Yanıt bekleyenler", "Awaiting reply") },
-              ]} />
-            <ToggleField label={copy("Arşiv", "Archive")} value={filterDraft.archived}
-              onChange={(archived) => setFilterDraft({ ...filterDraft, archived })} />
-          </FilterSheet> : null}
-          <QueryState
-            query={{
-              data: directory.length ? directory : undefined,
-              isPending: activity.pending,
-              error: activity.error,
-              isFetching: retry.isPending,
-              refetch: retryActivity,
-            }}
-            loading="list"
-            loadingLabel={copy("Oturumlar yükleniyor…", "Loading sessions…")}
-          />
-          {!activity.error && activity.privacyUnavailable ? (
-            <Notice
-              tone="info"
-              message={copy(
-                "Oturumları görmek için bilgisayarda bycoda’yı aç ve proje listesini eşitle.",
-                "Open bycoda on the computer and sync the project directory to see sessions.",
+          {overview ? (
+            <>
+              <SearchToolbar
+                search={<SearchField label={copy("Oturum ara", "Search sessions")} value={search} onChangeText={setSearch} />}
+                actions={waitingForConnection ? null : (
+                  <FilterButton count={filterCount} onPress={() => setDraft({ status: filter, archived, project: projectFilter })} />
+                )}
+              />
+              {waitingForConnection ? null : (
+                <>
+                  <AppliedFilters filters={appliedFilters} />
+                </>
               )}
-              retrying={retry.isPending}
-              onRetry={retryActivity}
-            />
-          ) : !activity.error && activity.readiness === "waiting" ? (
-            <Notice message={copy("Bağlantı bekleniyor.", "Waiting for a connection.")}
-              action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: () => router.push("/machines") }} />
-          ) : !activity.complete && !activity.pending && !activity.error ? (
-            <Notice
-              tone="warning"
-              message={copy(
-                "Bazı projelerin oturumları henüz alınamadı.",
-                "Sessions from some projects are not available yet.",
-              )}
-              retrying={retry.isPending}
-              onRetry={retryActivity}
-            />
-          ) : null}
-          {activity.directoryReady && activity.complete && !visible.length ? (
-            <Empty
-              title={
-                search.trim()
-                  ? copy("Aramana uyan oturum yok.", "No sessions match your search.")
-                  : narrowed
-                    ? copy("Filtrelere uyan oturum yok.", "No sessions match these filters.")
-                  : overview
-                    ? archived
-                      ? copy("Arşivlenmiş oturum yok.", "No archived sessions.")
-                      : copy("Henüz oturum yok.", "No sessions yet.")
-                    : copy("Aktif oturum yok", "No active sessions")
-              }
-              action={narrowed ? {
-                label: copy("Sıfırla", "Reset"),
-                onPress: () => { setSearch(""); setFilter("all"); setProjectFilter(""); },
-              } : undefined}
-            />
-          ) : null}
-          <Sheet
-            visible={creating}
-            title={copy("Yeni oturum", "New session")}
-            size="form"
-            onClose={() => setCreating(false)}
-          >
-            <SelectField
-              label={copy("Proje", "Project")}
-              value={creationProject ?? undefined}
-              options={projectOptions}
-              searchable
-              onChange={setNewProjectId}
-            />
-            <FormActions
-              submitLabel={copy("Yeni oturum", "New session")}
-              tone="primary"
-              disabled={!creationProject || activity.privacyPending}
-              onSubmit={() => {
-                if (!creationProject || useMachines.getState().activeId !== machine.id) return;
-                useMachines.getState().selectProject(creationProject);
-                setCreating(false);
-                router.push({
-                  pathname: "/project/[id]",
-                  params: { id: creationProject, machineId: machine.id, create: "session" },
-                });
-              }}
-            />
-          </Sheet>
+              {draft ? <FilterSheet visible onClose={() => setDraft(null)}
+                onReset={() => setDraft({ status: "all", archived: false, project: "" })}
+                onApply={() => { setFilter(draft.status); setArchived(draft.archived); setProjectFilter(draft.project); setDraft(null); }}>
+                <SegmentedControl label={copy("Durum", "Status")} value={draft.status} options={statusOptions}
+                  disabled={draft.archived} onChange={(status) => setDraft({ ...draft, status })} />
+                <ToggleField label={copy("Arşivlenmiş oturumlar", "Archived sessions")} value={draft.archived}
+                  onChange={(value) => setDraft({ ...draft, archived: value })} />
+                <SelectField label={copy("Proje", "Project")} searchable value={draft.project}
+                  options={[{ value: "", label: copy("Tüm projeler", "All projects") }, ...projectOptions]}
+                  disabled={activity.privacyPending} onChange={(project) => setDraft({ ...draft, project })} />
+              </FilterSheet> : null}
+            </>
+          ) : (
+            <SearchField label={copy("Oturum ara", "Search sessions")} value={search} onChangeText={setSearch} />
+          )}
+          <NewSessionSheet visible={creating} onClose={() => setCreating(false)} />
         </>
       }
-      renderItem={({ item, index }) => {
-        const project = item.project;
-        const scope = sessionCollectionScope(machine.id, project.id);
-        if (item.kind === "project") return <SessionProjectRow row={item}
-          onToggle={() => {
-            if (!search.trim()) setCollapsedProjects((current) => ({ ...current, [scope]: item.expanded }));
-          }} />;
-        if (item.kind === "folder") {
-          return <SessionFolderRow row={item}
-            onToggle={() => setCollapsed((current) => ({ ...current,
-              [scope]: toggleSessionDirectoryFolder(current[scope] ?? {}, item, !!search.trim()) }))} />;
-        }
-        const session = item.session;
+      renderItem={({ item }) => {
+        if (item.kind === "header") return <SessionShelfHeader row={item}
+          onToggle={(shelf) => { if (!search.trim()) setCollapsed((current) => ({ ...current, [shelf]: item.expanded })); }} />;
+        if (item.kind === "folder") return <SessionFolderRow row={item} projectName={item.project.name}
+          onToggle={() => setFolderCollapse((current) => ({
+            ...current,
+            [item.project.id]: toggleSessionDirectoryFolder(current[item.project.id] ?? {}, item, !!search.trim()),
+          }))} />;
+        const { project, session } = item;
         return (
-          <GroupedListRow
-            first={index === 0 || rows[index - 1]?.kind !== "session" || rows[index - 1]?.project.id !== project.id}
-            last={index === rows.length - 1 || rows[index + 1]?.kind !== "session" || rows[index + 1]?.project.id !== project.id}
-            inset={rowInset}
-          >
-            <HierarchyFrame depth={item.depth} reservedWidth={metrics.touchTarget + space.sm * 2}>{({indent,compressed}) => <View style={{ paddingStart: indent }}>
+          <HierarchyFrame depth={item.depth} reservedWidth={space.sm * 2}>{({ indent, compressed }) => <View style={{ paddingStart: indent }}>
             <SessionListRow machineId={machine.id} projectId={project.id} projectName={project.name}
-              projectCwd={project.cwd} session={session} ancestors={item.ancestors} compressed={compressed}
-              canRead={() => activity.projects.isProjectVisible(project.id)}
-              onPress={() => {
-                if (useMachines.getState().activeId === machine.id)
-                  router.push({
-                    pathname: "/session/[id]",
-                    params: { id: session.id, projectId: project.id, machineId: machine.id },
-                  });
-              }}
+              projectCwd={project.cwd} projectAppearance={project.appearance} showProject session={session}
+              ancestors={item.ancestors} compressed={compressed}
+              canRead={canReadProject}
+              settled={settledIds.has(session.id)}
+              onPress={openSession}
             />
-            </View>}</HierarchyFrame>
-          </GroupedListRow>
+          </View>}</HierarchyFrame>
         );
       }}
-    />
+    /></HierarchyWidthProvider>
   );
+  return list;
 }

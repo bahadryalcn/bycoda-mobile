@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HostProjectDirectory, HostSessionSummary } from "@/domain/types";
-import { filterProjectSessionDirectory, projectSessionCollectionRows, sessionCollectionScope } from "./session-collection";
+import { filterProjectSessionDirectory, sessionShelfRows } from "./session-collection";
 
 type Project = HostProjectDirectory["projects"][number];
 const projects: Project[] = ["one", "two"].map((id) => ({
@@ -16,37 +16,23 @@ const directory = [
 ];
 
 describe("all-project session collection", () => {
-  it("promotes whole running project sections and keeps nested rows in their own project", () => {
-    const rows = projectSessionCollectionRows(projects, directory, "machine");
-    expect(rows.map((row) => row.key)).toEqual([
-      "project:two", "two:session:two-running", "two:folder:folder", "two:session:two-idle",
-      "project:one", "one:folder:folder", "one:session:one-idle",
+  it("groups sessions into needs-you, running and recent shelves in directory order", () => {
+    const rows = sessionShelfRows([
+      { project: projects[0]!, session: { ...session("one", "reply"), needsInput: true } },
+      ...directory.slice().reverse(),
     ]);
-    expect(rows[0]).toMatchObject({ kind: "project", count: 2, running: 1 });
-    expect(new Set(rows.map((row) => row.key)).size).toBe(rows.length);
+    expect(rows.map((row) => row.key)).toEqual([
+      "shelf:needs", "one:reply", "shelf:running", "two:two-running", "shelf:recent", "two:two-idle", "one:one-idle",
+    ]);
+    expect(rows[0]).toMatchObject({ kind: "header", count: 1, expanded: true });
   });
-  it("keeps host IDs distinct for aliases and scopes project/folder collapse to the selected machine", () => {
-    const projectScope = sessionCollectionScope("machine", "one");
-    const folderScope = sessionCollectionScope("machine", "two");
-    const folders = { [folderScope]: { folder: true } };
-    const collapsed = { [projectScope]: true };
-    const rows = projectSessionCollectionRows(projects, directory, "machine", folders, collapsed);
-    expect(rows.find((row) => row.key === "project:one")).toMatchObject({ expanded: false, count: 1 });
-    expect(rows.find((row) => row.key === "two:folder:folder")).toMatchObject({ expanded: false, count: 1 });
-    expect(rows.filter((row) => row.kind === "session").map((row) => row.key)).toEqual(["two:session:two-running"]);
-    expect(projectSessionCollectionRows(projects, directory, "other", folders, collapsed).filter((row) => row.kind === "session")).toHaveLength(3);
-  });
-  it("temporarily expands project and folder ancestors during search without editing collapse preferences", () => {
-    const scope = sessionCollectionScope("machine", "one");
-    const folders = { [scope]: { folder: true } };
-    const collapsed = { [scope]: true };
-    const matching = filterProjectSessionDirectory(projects, directory, "Folder one");
-    const rows = projectSessionCollectionRows(projects, matching, "machine", folders, collapsed, true);
-    expect(rows.map((row) => row.key)).toEqual(["project:one", "one:folder:folder", "one:session:one-idle"]);
-    expect(rows[0]).toMatchObject({ count: 1, expanded: true });
-    expect(rows[1]).toMatchObject({ expanded: true });
-    expect(folders).toEqual({ [scope]: { folder: true } });
-    expect(collapsed).toEqual({ [scope]: true });
+  it("hides collapsed shelf members but expands them while searching, and shows one archive shelf", () => {
+    expect(sessionShelfRows(directory, { recent: true }).map((row) => row.key)).toEqual([
+      "shelf:running", "two:two-running", "shelf:recent"]);
+    expect(sessionShelfRows(directory, { recent: true }, true)).toHaveLength(5);
+    expect(sessionShelfRows(directory, {}, false, true).filter((row) => row.kind === "header")
+      .map((row) => row.key)).toEqual(["shelf:archived"]);
+    expect(sessionShelfRows([])).toEqual([]);
   });
   it("finds names and folder paths while retaining activity order for the flat active-session view", () => {
     expect(filterProjectSessionDirectory(projects, directory, "G:/Shared")).toEqual(directory);
@@ -54,6 +40,5 @@ describe("all-project session collection", () => {
       .toEqual(["two-idle", "two-running"]);
     expect(filterProjectSessionDirectory(projects, directory, "Folder two").map((row) => row.session.id))
       .toEqual(["two-idle"]);
-    expect(projectSessionCollectionRows(projects, [], "machine")).toEqual([]);
   });
 });

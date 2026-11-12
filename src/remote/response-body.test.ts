@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { boundedResponseText } from "./response-body";
+import { boundedResponse, boundedResponseText, markBounded } from "./response-body";
 it("counts UTF-8 bytes while retaining split code points", async () => {
   const value = String.fromCodePoint(233, 128512);
   const bytes = new TextEncoder().encode(value);
@@ -22,4 +22,21 @@ it("rejects unsupported non-streaming bodies before an unbounded read", async ()
   const text = vi.fn();
   await expect(boundedResponseText({ headers: new Headers(), text } as unknown as Response, 7, () => new Error("large"))).rejects.toThrow("Streaming");
   expect(text).not.toHaveBeenCalled();
+});
+it("reads an in-memory bounded body when the platform Response has no stream (React Native)", async () => {
+  // React Native's global Response (whatwg-fetch) exposes no body stream.
+  const streamless = (text: string) =>
+    ({ headers: new Headers(), body: undefined, text: async () => text }) as unknown as Response;
+  await expect(
+    boundedResponseText(boundedResponse('{"ok":true}', 200), 100, () => new Error("large")),
+  ).resolves.toBe('{"ok":true}');
+  await expect(
+    boundedResponseText(markBounded(streamless("abc")), 100, () => new Error("large")),
+  ).resolves.toBe("abc");
+  await expect(
+    boundedResponseText(markBounded(streamless("abcdef")), 3, () => new Error("large")),
+  ).rejects.toThrow("large");
+  await expect(
+    boundedResponseText(streamless("abc"), 100, () => new Error("large")),
+  ).rejects.toThrow("Streaming host responses are unavailable.");
 });

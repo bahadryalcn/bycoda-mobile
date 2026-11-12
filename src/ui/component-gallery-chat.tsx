@@ -21,13 +21,14 @@ import { Body, Heading, CodeText } from "./typography";
 import { NavigationGroup, NavigationRow } from "./navigation-row";
 import { Sheet } from "./dialogs";
 import { Notice, Badge } from "./feedback";
-import { colors } from "./tokens";
 import { haptic } from "./motion";
 import { useCopy } from "./copy";
+import { useMobileTheme } from "./theme";
 
 type Mode = "send" | "queue" | "steer";
 
 export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "tour" } = {}) {
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const tour = scenario === "tour";
   const tourReply = copy(
@@ -65,7 +66,7 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
       <Card>
         <Heading>{copy("Sohbet ve dosyalar", "Chat and files")}</Heading>
         <Badge label={copy("Çevrimdışı örnek", "Offline example")} />
-        <ChatMessage role="user" style={chatUserBubbleStyle()}>
+        <ChatMessage role="user" style={chatUserBubbleStyle(colors)}>
           <ChatMessageContent>
             <Body>{tour ? copy("Kişisel web sitem için bir plan hazırla.", "Plan a personal website for me.") : copy("Mobil konuşmayı sadeleştir.", "Simplify the mobile conversation.")}</Body>
           </ChatMessageContent>

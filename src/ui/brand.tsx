@@ -1,24 +1,24 @@
-import { createThemedStyles } from "./themed-styles";
+import { createThemedStyles, useThemedStyles } from "./themed-styles";
 import { useMobileTheme } from "./theme";
 import { Image } from "expo-image";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useCopy } from "./copy";
 import { colors, fontSize, metrics, opacity, space } from "./tokens";
-import { uiStyles } from "./styles";
 
 const logo = require("../../../public/brand/bycoda/logo-horizontal-white.png");
 const mark = require("../../../public/brand/bycoda/mark-white.png");
 
 export type LegalLinkTarget = "privacy" | "terms" | "help";
 
-export function BrandLogo({ compact = false }: { compact?: boolean }) {
-  useMobileTheme();
+export function BrandLogo({ compact = false, centered = false }: { compact?: boolean; centered?: boolean }) {
+  const { colors } = useMobileTheme();
+  const styles = useThemedStyles(brandStyles);
   return (
     <Image
       source={logo}
       tintColor={colors.brand}
       contentFit="contain"
-      contentPosition="left"
+      contentPosition={centered ? "center" : "left"}
       accessible
       accessibilityLabel="bycoda"
       style={[styles.logo, compact && styles.compactLogo]}
@@ -30,7 +30,7 @@ export const Brand = BrandLogo;
 
 /** The product mark accompanies the current workspace title without replacing its identity. */
 export function BrandTitle({ title }: { title: string }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   return <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, minWidth: 0, flexShrink: 1 }}>
     <Image source={mark} tintColor={colors.brand} contentFit="contain" accessible={false}
       style={{ width: 24, height: 24, flexShrink: 0 }} />
@@ -40,7 +40,7 @@ export function BrandTitle({ title }: { title: string }) {
 
 /** Receives navigation so the same links also work before the router is mounted. */
 export function LegalLinks({ onOpen }: { onOpen: (document: LegalLinkTarget) => void }) {
-  useMobileTheme();
+  const styles = useThemedStyles(brandStyles);
   const copy = useCopy();
   const links: { document: LegalLinkTarget; label: string }[] = [
     { document: "privacy", label: copy("Gizlilik", "Privacy") },
@@ -64,7 +64,7 @@ export function LegalLinks({ onOpen }: { onOpen: (document: LegalLinkTarget) => 
   );
 }
 
-const styles = createThemedStyles(() => ({
+const brandStyles = createThemedStyles(() => ({
   logo: { width: "100%", maxWidth: 254, aspectRatio: 390 / 80 },
   compactLogo: { maxWidth: 152 },
   links: {

@@ -8,6 +8,7 @@ import {
   ContextControls,
   SelectField,
   Notice,
+  StateView,
   QueryState,
   Row,
   Screen,
@@ -119,7 +120,7 @@ export function SocialScreen() {
           onChange={(tab) => dispatch({ type: "tab", tab })}
         />
       } />}>
-      {missingEnvironment ? <Notice tone="warning" message={copy(
+      {missingEnvironment ? <StateView illustration="permission" title={copy("Güncelleme gerekiyor", "Update needed")} description={copy(
         "Sosyal medya geçmişini görüntülemek için bilgisayardaki bycoda’yı güncelleyin.",
         "Update bycoda on the computer to view social history.",
       )} /> : <QueryState query={query} empty={!page?.loading && !page?.search.trim() && itemCount === 0} emptyTitle={emptyTitles[tab]} />}

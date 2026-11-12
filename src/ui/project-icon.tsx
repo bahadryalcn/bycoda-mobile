@@ -6,22 +6,23 @@ import { View } from "react-native";
 import Svg, { ClipPath, Defs, G, LinearGradient, Path, Stop, Text as SvgText } from "react-native-svg";
 import type { HostProjectAppearance } from "../../../src/features/connections/model/protocol";
 import { useMobileTheme } from "./theme";
-import { colors } from "./tokens";
 
 /** Project identity only. Session activity belongs to a separate, labelled status. */
-export function ProjectIcon({ appearance, group = false, size = 20 }: {
+export function ProjectIcon({ appearance, group = false, size = 20, box = 32 }: {
   appearance?: HostProjectAppearance;
   group?: boolean;
   size?: number;
+  /** Square footprint; rows that show the icon beside meta text use a smaller one. */
+  box?: number;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const clipId = `project-${useId().replace(/:/g, "")}`;
   const [failedLogo, setFailedLogo] = useState<string>();
   const color = appearance?.color ?? colors.muted;
   const logo = appearance?.logo;
   const Fallback = group ? Layers : Folder;
   return (
-    <View accessible={false} style={{ width: 32, height: 32, flexShrink: 0, alignItems: "center", justifyContent: "center" }}>
+    <View accessible={false} style={{ width: box, height: box, flexShrink: 0, alignItems: "center", justifyContent: "center" }}>
       {logo && failedLogo !== logo ? (
         <Image key={logo} source={{ uri: logo }} style={{ width: size, height: size }} contentFit="cover"
           recyclingKey={logo} onError={() => setFailedLogo(logo)} accessible={false} />

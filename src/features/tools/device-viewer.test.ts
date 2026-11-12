@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { DeviceViewer } from "./device-viewer";
 const state = vi.hoisted(() => ({ id: "machine", writes: [] as { method: string; params: unknown }[], refresh: vi.fn(), finishBoot: undefined as undefined | ((value: unknown) => void) }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("lucide-react-native/icons/house", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("@/state/machines", () => {

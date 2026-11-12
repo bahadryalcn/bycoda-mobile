@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { SessionReadSchedule, sessionReadSchedule, unsupportedSessionWait } from "./session-read-schedule";
+import { backoffMs, SessionReadSchedule, sessionReadSchedule, unsupportedSessionWait } from "./session-read-schedule";
 
 it("waits for a known revision and backs off hosts that immediately return unchanged", () => {
   const policy = new SessionReadSchedule();
@@ -32,4 +32,12 @@ it("falls back only for an explicit wait parameter rejection, never lost authori
   expect(unsupportedSessionWait(new Error("Unknown session"))).toBe(false);
   const schedule = new SessionReadSchedule(); schedule.rejectWait(100);
   expect(schedule.waitMs({}, 200)).toBe(0);
+});
+it("grows the error cadence per consecutive failure and caps it", () => {
+  const policy = new SessionReadSchedule();
+  expect(policy.delay(true, true, 0, 1)).toBe(2_500);
+  expect(policy.delay(true, true, 0, 3)).toBe(10_000);
+  expect(policy.delay(true, true, 0, 30)).toBe(30_000);
+  expect(policy.delay(false, true, 0, 4)).toBe(30_000);
+  expect(backoffMs(5_000, -1, 60_000)).toBe(5_000);
 });

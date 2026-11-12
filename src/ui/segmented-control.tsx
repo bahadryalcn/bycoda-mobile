@@ -4,7 +4,7 @@ import { View, useWindowDimensions } from "react-native";
 import { useMobileTheme } from "./theme";
 import type { SelectionOption } from "./selection-model";
 import { Body } from "./typography";
-import { colors, fontSize, metrics, space } from "./tokens";
+import { fontSize, hitSlopFor, metrics, space } from "./tokens";
 import { useReducedMotionPreference } from "./use-reduced-motion";
 import { SelectField } from "./select-field";
 
@@ -26,7 +26,7 @@ export function SegmentedControl<T extends string>({
   compact?: boolean;
   hideLabel?: boolean;
 }) {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const reducedMotion = useReducedMotionPreference();
   const { width: windowWidth, fontScale } = useWindowDimensions();
   const [width, setWidth] = useState<number>();
@@ -68,14 +68,15 @@ export function SegmentedControl<T extends string>({
     >
       <Tabs.List
         accessibilityLabel={label}
-        className="min-w-0 overflow-hidden rounded-none bg-background p-0"
+        className="min-w-0 overflow-hidden rounded-control bg-fill p-ui-xxs"
       >
         {options.map((option) => (
           <Tabs.Trigger
             key={option.value}
             value={option.value}
             disabled={disabled || option.disabled}
-            className="min-h-control min-w-touch flex-1 basis-0 shrink rounded-none bg-fill border-0 shadow-none px-ui-xs"
+            {...{ hitSlop: hitSlopFor(metrics.controlHeight) }}
+            className="min-h-control min-w-touch flex-1 basis-0 shrink rounded-control bg-transparent border-0 shadow-none px-ui-xs"
           >
             <Body
               selectable={false}

@@ -2,13 +2,11 @@ import { useMobileTheme } from "@/ui/theme";
 import { mediaQueryKey } from "@/ui/media-policy";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
-import { useQuery } from "@tanstack/react-query";
-import File from "lucide-react-native/icons/file";
-import ImageIcon from "lucide-react-native/icons/image";
-import { ErrorText, FormActions, Loading, Notice, Sheet } from "@/ui/primitives";
-import { ChatSummary } from "@/ui/chat-controls";
+import { ErrorText, FormActions, Loading, Sheet } from "@/ui/primitives";
+import { AttachmentPreview, useSessionFile } from "./transcript-attachment-preview";
+import { attachmentKind } from "@/ui/media-inline-policy";
 import { DocumentPreview } from "@/ui/document-preview";
-import { loadSessionMedia, type LoadedMedia } from "@/ui/media-loader";
+import type { LoadedMedia } from "@/ui/media-loader";
 import type { MessageContext } from "@/ui/media-policy";
 import { useCopy } from "@/ui/copy";
 import { useHostClient, useHostReadActive } from "@/state/queries";
@@ -17,9 +15,12 @@ import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import { usePrivateMediaData } from "@/ui/use-private-media-data";
 import { useReaderContentAccess, useReaderRetry, useReaderScope } from "@/ui/use-reader-scope";
-import { colors, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import type { Block } from "./wire";
 import { ReaderContext } from "@/ui/reader-context";
+import { RecordAccessUnavailable } from "./unavailable-state";
+import { ComposerLinks } from "./composer-links";
+import { composerLinks } from "./attachment-presentation";
 
 export function AttachmentFile({
   id,
@@ -28,6 +29,7 @@ export function AttachmentFile({
   mimeType,
   image,
   context,
+  thumbnail,
 }: {
   id: string;
   name: string;
@@ -35,9 +37,8 @@ export function AttachmentFile({
   mimeType?: string;
   image: boolean;
   context: MessageContext;
+  thumbnail?: boolean;
 }) {
-  useMobileTheme();
-  const copy = useCopy();
   const active = useHostReadActive();
   const access = usePrivateContentAccess(), mounted = useRef(false);
   useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -57,24 +58,7 @@ export function AttachmentFile({
   const close = () => { if (mounted.current && live.current.identity === identity && live.current.selection === identity) { live.current.selection = null; setSelection(null); } };
   return (
     <>
-      <ChatSummary
-        label={name}
-        detail={[
-          size !== undefined ? `${Math.ceil(size / 1024)} KB` : "",
-          image ? copy("Resmi aç", "Open image") : copy("Dosyayı aç", "Open file"),
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-        icon={
-          image ? (
-            <ImageIcon size={16} color={colors.muted} />
-          ) : (
-            <File size={16} color={colors.muted} />
-          )
-        }
-        disabled={!available}
-        onPress={open}
-      />
+      <AttachmentPreview key={key} id={id} name={name} size={size} mimeType={mimeType} kind={attachmentKind(name, mimeType, image)} context={context} onOpenFile={open} thumbnail={thumbnail} />
       {selection === identity ? <AttachmentReader id={id} name={name} mimeType={mimeType} context={context} onClose={close} /> : null}
     </>
   );
@@ -86,13 +70,7 @@ function AttachmentReader({ id, name, mimeType, context, onClose }: {
 }) {
   const copy = useCopy(), scope = useReaderScope(context, id);
   const { ready, available } = scope;
-  const queryKey = mediaQueryKey(context, ["session-file", context.machineId, context.sessionId, id]);
-  const query = useQuery({
-    queryKey,
-    queryFn: async ({ signal }) => { scope.assertCurrent(); const value = await loadSessionMedia(context, id, name, mimeType || "application/octet-stream", signal); scope.assertCurrent(); return value; },
-    enabled: available, retry: false, staleTime: Infinity, gcTime: 60_000, networkMode: "always",
-  });
-  const data = usePrivateMediaData(queryKey, query);
+  const { query, data } = useSessionFile(scope, context, id, name, mimeType, true);
   const content = useReaderContentAccess(scope, data ? JSON.stringify([data.uri, data.name, data.mimeType]) : undefined, available && !!data);
   const { retry, retryError } = useReaderRetry(scope, query);
   const close = () => scope.close(onClose);
@@ -102,7 +80,7 @@ function AttachmentReader({ id, name, mimeType, context, onClose }: {
       feedback={<ErrorText error={query.error} />}
       cancelLabel={copy("Kapat", "Close")} onCancel={close} allowCancelWhileBusy /> : <FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />}>
     {!ready || available && query.isFetching && !query.error ? <Loading /> : null}
-    {!available && ready ? <Notice message={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} /> : null}
+    {!available && ready ? <RecordAccessUnavailable /> : null}
     {available ? <>{data ? <PrivateContentAccessProvider value={content.access}>
       <ScopedAttachmentContent data={data} context={context} onReload={reloadContent} />
     </PrivateContentAccessProvider> : null}</> : null}
@@ -121,30 +99,21 @@ export function TranscriptAttachments({
   context?: MessageContext;
 }) {
   useMobileTheme();
-  if (!context || (!block.image && !block.attachments?.length)) return null;
+  // Sent messages mirror the composer: image tiles, file chips and link chips.
+  const sent = block.role === "user";
+  const links = useMemo(() => (sent ? composerLinks(block.text ?? "") : []), [sent, block.text]);
+  const files = [
+    ...(block.image ? [{ id: block.id, name: block.image.name, size: block.image.size, mimeType: block.image.mimeType, image: true }] : []),
+    ...(block.attachments ?? []).map((file) => ({ id: file.id, name: file.name, size: file.size, mimeType: file.mimeType, image: file.kind === "image" })),
+  ];
+  if (!context || (!files.length && !links.length)) return null;
+  const attach = (file: (typeof files)[number]) => <AttachmentFile key={file.id} {...file} context={context} thumbnail={sent} />;
+  const tiles = sent ? files.filter((file) => file.image) : [];
   return (
     <View style={{ gap: space.xs }}>
-      {block.image ? (
-        <AttachmentFile
-          id={block.id}
-          name={block.image.name}
-          image
-          size={block.image.size}
-          mimeType={block.image.mimeType}
-          context={context}
-        />
-      ) : null}
-      {block.attachments?.map((file) => (
-        <AttachmentFile
-          key={file.id}
-          id={file.id}
-          name={file.name}
-          size={file.size}
-          image={file.kind === "image"}
-          mimeType={file.mimeType}
-          context={context}
-        />
-      ))}
+      {tiles.length ? <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>{tiles.map(attach)}</View> : null}
+      {files.filter((file) => !tiles.includes(file)).map(attach)}
+      {links.length ? <ComposerLinks links={links} /> : null}
     </View>
   );
 }

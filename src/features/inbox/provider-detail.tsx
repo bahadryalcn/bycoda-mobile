@@ -1,4 +1,4 @@
-import { providerStateLabel } from "./provider-labels";
+import { providerStateLabel, providerStateTone } from "./provider-labels";
 import { router } from "expo-router";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +15,7 @@ import {
   Body,
   Heading,
   Button,
+  Disclosure,
   MutationState,
   Notice,
   QueryState,
@@ -184,7 +185,11 @@ export function ProviderInboxDetail({
     >
       {contentAvailable ? <>
         <Heading>{item.title}</Heading>
-        <Body muted>{`${providerName(item.provider)} · ${item.identifier ?? `#${item.number}`} · ${providerStateLabel(item.state, copy)}`}</Body>
+        <Row>
+          <Badge label={providerStateLabel(item.state, copy)} tone={providerStateTone(item.state)} />
+          {item.draft ? <Badge label={copy("Taslak", "Draft")} /> : null}
+        </Row>
+        <Body muted>{`${providerName(item.provider)} · ${item.identifier ?? `#${item.number}`}`}</Body>
       </> : null}
       <Row>
         {!contentAvailable ? <Button
@@ -265,7 +270,9 @@ function ProviderInboxDescription({ details }: ProviderInboxDescriptionProps) {
   return (
     <Stack>
       <Body muted>{details.author}</Body>
-      <MessageText text={details.body || copy("Açıklama yok.", "No description.")} role="assistant" />
+      <Disclosure label={copy("Açıklama", "Description")} defaultExpanded={(details.body?.length ?? 0) < 1200}>
+        <MessageText text={details.body || copy("Açıklama yok.", "No description.")} role="assistant" />
+      </Disclosure>
       {details.headRefName && details.baseRefName ? (
         <Body mono>
           {details.headRefName} → {details.baseRefName}

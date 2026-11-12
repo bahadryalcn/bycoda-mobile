@@ -46,7 +46,7 @@ export function AgentModelPicker({ catalog, harness, selected, disabled, query, 
     <ScreenChromeProvider nativeTitle bottomSafeArea={false}>
       <ScreenList {...position.listProps} grouped data={choices} keyExtractor={item => item.value}
         header={<QueryState query={query} loading="inline" />}
-        ListEmptyComponent={catalog ? <Body muted>{copy("Eşleşen model yok. Model kimliğini doğrudan girmek için bu listeyi kapatın.", "No matching models. Close this list to enter a model ID directly.")}</Body> : null}
+        ListEmptyComponent={catalog ? <Body muted>{copy("Eşleşen model yok. Model kimliğini doğrudan girmek için bu listeyi kapatın.", "No matching models. Close this list to enter a model ID directly.")}</Body> : undefined}
         renderItem={({ item }) => <NavigationRow label={item.label} detail={item.detail} detailLines={0} selected={selected === item.value}
           onPress={() => {
             if (!active() || !current.current.choices.includes(item)) return;

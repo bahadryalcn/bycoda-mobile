@@ -1,4 +1,4 @@
-import type { SessionUsageReport } from "../../../../host/usage-report";
+import type { SessionUsageReport } from "../../../../host/usage/usage-report";
 export type { SessionUsageReport };
 const tokenKeys = ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"] as const;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);

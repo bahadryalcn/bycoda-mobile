@@ -9,8 +9,6 @@ import type { HostProject } from "@/domain/types";
 import { ActionMenu, Badge, Body, CodePanel, CodeText, Empty, ErrorText, IconButton, NavigationGroup, NavigationRow, Notice, QueryState, Row, ScreenList, SearchField, SearchToolbar, SelectField, Sheet, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
-import { colors } from "@/ui/tokens";
-import { uiStyles } from "@/ui/styles";
 import { useMobileTheme } from "@/ui/theme";
 import { IssueSummary } from "@/ui/issue-summary";
 import { stamp } from "../management/shared/format";
@@ -24,7 +22,7 @@ import { RuntimeMonitors } from "./runtime-monitors";
 import { LOG_SEARCH_LIMIT, logDetails, logSearch } from "./runtime-log-presentation";
 
 export function RuntimeLogsScreen({ project }: { project: HostProject }) {
-  useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const [search, setSearch] = useState("");
@@ -144,24 +142,22 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
                 query={logs}
                 empty={!entries.length && sources.isSuccess && !sources.error && !unavailableSources.length}
                 emptyTitle={source || level || query ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz günlük yok.", "No logs yet.")}
+                emptyDetail={source || level || query ? undefined : copy(
+                  "Projenin çalışan araçlarının ve geliştirme sunucularının çıktısı burada görünür. Bir araç başlatın, ardından yenileyin.",
+                  "Output from this project's running tools and dev servers appears here. Start one, then refresh.",
+                )}
                 emptyAction={source || level ? {
                   label: copy("Filtreleri temizle", "Clear filters"),
                   onPress: () => { setSource(""); setLevel(""); clearSearch(); },
                 } : query ? {
                   label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
-                } : undefined}
+                } : {
+                  label: copy("Yenile", "Refresh"), onPress: () => { void refresh.onRefresh(); },
+                }}
               />
             ) : null}
             {!filterDraft ? <QueryState query={sources} loading="none" /> : null}
             {!filterDraft ? sourceIssues : null}
-            {logs.data && entries.length >= 200 ? (
-              <Notice
-                message={copy(
-                  "Son 200 kayıt gösteriliyor. Aramayla daraltabilirsin.",
-                  "Showing the latest 200 entries. Use search to narrow the results.",
-                )}
-              />
-            ) : null}
 
           </>
         }
@@ -286,7 +282,7 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
             ) : null}
           </>
         ) : (
-          <Empty title={copy("Henüz günlük yok.", "No logs yet.")} />
+          <Empty compact={false} illustration="inbox-empty" title={copy("Henüz günlük yok.", "No logs yet.")} />
         )}
       </Sheet>
     </>

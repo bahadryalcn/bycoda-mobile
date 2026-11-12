@@ -8,6 +8,7 @@ const f = vi.hoisted(() => ({ store: undefined as any, uuid: 0,
   editUrl: undefined as any, claim: vi.fn(async () => {}), clear: vi.fn(async () => {}),
   frameAccess: undefined as any,
 }));
+vi.mock("lucide-react-native/icons/wrench", () => ({ default: () => null }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => String(++f.uuid) }));
 vi.mock("@/state/machines", async () => {
@@ -20,7 +21,7 @@ vi.mock("lucide-react-native/icons/smartphone", () => ({ default: () => null }))
 vi.mock("lucide-react-native/icons/house", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => {} }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, space: {} }));
 vi.mock("@/ui/issue-summary", () => ({ IssueSummary: () => null }));
@@ -48,7 +49,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: any) => { if (label === "Home") f.home = onPress; return createElement("button", { onClick: onPress, disabled }, label); };
   return { StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children), Body: Wrap, Row: Wrap, Stack: Wrap, Sheet: ({children,onClose}:any)=>createElement("div",null,children,createElement(Button,{label:"Close",onPress:onClose})), Disclosure: Wrap, NavigationGroup: Wrap,
-    Badge: () => null, Notice: () => null, MutationState: () => null, QueryState: () => null, ErrorText: () => null, Loading: () => null,
+    Badge: () => null, StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: () => null, MutationState: () => null, QueryState: () => null, ErrorText: () => null, Loading: () => null,
     Button, IconButton: Button, NavigationRow: Button,
     FormActions: ({onSubmit,submitLabel}:any) => { f.confirm = onSubmit; return createElement(Button,{label:submitLabel,onPress:onSubmit}); },
     ToggleField: ({label,value,onChange}:any) => createElement(Button,{label,onPress:()=>onChange(!value)}),

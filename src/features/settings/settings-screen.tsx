@@ -1,24 +1,28 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import Laptop from "lucide-react-native/icons/laptop";
 import Server from "lucide-react-native/icons/server";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
+import Smartphone from "lucide-react-native/icons/smartphone";
+import LayoutDashboard from "lucide-react-native/icons/layout-dashboard";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
 import LifeBuoy from "lucide-react-native/icons/life-buoy";
 import Info from "lucide-react-native/icons/info";
 import Type from "lucide-react-native/icons/type";
-import Moon from "lucide-react-native/icons/moon";
-import Sun from "lucide-react-native/icons/sun";
+import MessageSquare from "lucide-react-native/icons/message-square";
 import Globe from "lucide-react-native/icons/globe";
 import Flag from "lucide-react-native/icons/flag";
+import UserRound from "lucide-react-native/icons/user-round";
+import { ThemeSelector } from "panelui-native/components/theme-selector";
 import { IconTile } from "../../ui/icon-tile";
 import { LANGUAGES } from "../../localization";
 import { useActiveMachine, useMachines } from "../../state/machines";
 import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { useAppearance } from "../../state/appearance";
 import { useChatAppearance } from "../../state/chat-appearance";
+import { busySendStore, useBusySend } from "../../state/busy-send";
 import { chatTextSizeOptions } from "./chat-appearance-options";
 import { chatAppearanceFeedback } from "./chat-appearance-feedback";
 import {
@@ -29,18 +33,21 @@ import {
   Section,
   SelectField,
   Sheet,
+  StateView,
 } from "../../ui/primitives";
-import { colors } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
 import { SecuritySettings } from "../security/security-settings";
 import { EngagementSettings } from "../engagement/engagement-settings";
 import { HostSettingsEditor } from "./host-settings-editor";
 import { LocalDataControls } from "./local-data-controls";
+import { DiagnosticsSettings } from "../diagnostics/DiagnosticsSettings";
 import { ChatAppearanceSettings } from "./chat-appearance-settings";
+import { PalettePicker } from "./palette-picker";
+import { WidgetSettings } from "../widgets";
 import { DevicePermissionSettings } from "../permissions/device-permission-settings";
 
 export function SettingsScreen() {
-  useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const language = useMachines((s) => s.language);
@@ -49,8 +56,12 @@ export function SettingsScreen() {
   const storageHydrated = useMachines((s) => s.hydrated);
   const themeMode = useAppearance((s) => s.themeMode);
   const setThemeMode = useAppearance((s) => s.setThemeMode);
+  const palette = useAppearance((s) => s.palette);
+  const setPalette = useAppearance((s) => s.setPalette);
   const appearanceHydrated = useAppearance((s) => s.hydrated);
   const appearanceError = useAppearance((s) => s.storageError);
+  const busySend = useBusySend((s) => s.mode);
+  const busySendHydrated = useBusySend((s) => s.hydrated);
   const chatTextSize = useChatAppearance((s) => s.textSize);
   const chatHydrated = useChatAppearance((s) => s.hydrated);
   const chatStorageError = useChatAppearance((s) => s.storageError);
@@ -76,23 +87,29 @@ export function SettingsScreen() {
   return (
     <Screen title={copy("Ayarlar", "Settings")}>
       <Section title={copy("Tercihler", "Preferences")}>
+        <ThemeSelector
+          label={copy("Tema", "Theme")}
+          size="sm"
+          value={themeMode}
+          applyTheme={false}
+          disabled={!appearanceHydrated}
+          onValueChange={(value) => {
+            void setThemeMode(value);
+          }}
+        >
+          <ThemeSelector.Option value="system" label={copy("Sistem", "System")} />
+          <ThemeSelector.Option value="light" label={copy("Açık", "Light")} />
+          <ThemeSelector.Option value="dark" label={copy("Koyu", "Dark")} />
+        </ThemeSelector>
+        <PalettePicker
+          value={palette}
+          disabled={!appearanceHydrated}
+          onChange={(value) => {
+            void setPalette(value);
+          }}
+        />
+        {appearanceError ? <Notice tone="warning" message={copy("Tema tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The theme preference could not be read or saved. Select it again to retry.")} /> : null}
         <NavigationGroup>
-          <SelectField
-            variant="row"
-            icon={tile(themeMode === "dark" ? Moon : Sun)}
-            label={copy("Tema", "Theme")}
-            value={themeMode}
-            disabled={!appearanceHydrated}
-            error={appearanceError ? copy("Tema tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The theme preference could not be read or saved. Select it again to retry.") : undefined}
-            options={[
-              { value: "system" as const, label: copy("Sistem", "System") },
-              { value: "light" as const, label: copy("Açık", "Light") },
-              { value: "dark" as const, label: copy("Koyu", "Dark") },
-            ]}
-            onChange={(value) => {
-              void setThemeMode(value);
-            }}
-          />
           <SelectField
             variant="row"
             icon={tile(Globe)}
@@ -102,8 +119,6 @@ export function SettingsScreen() {
             options={[{ value: "system" as const, label: copy("Sistem", "System") }, ...LANGUAGES]}
             onChange={setLanguage}
           />
-          {storageError ? <Notice tone="warning" message={storageError}
-            retryLabel={copy("Depolamayı kurtar", "Recover saved connections")} onRetry={() => router.push("/machines")} /> : null}
           <NavigationRow
             label={copy("Mesaj yazı boyutu", "Message text size")}
             detailLines={0}
@@ -112,8 +127,19 @@ export function SettingsScreen() {
             onPress={() => setPanel("appearance")}
           />
         </NavigationGroup>
-
+        {storageError ? <StateView compact tone="warning" illustration="error"
+          title={copy("Kaydedilmiş bağlantılar kullanılamıyor", "Saved connections are unavailable")}
+          description={storageError}
+          action={{ label: copy("Depolamayı kurtar", "Recover saved connections"), onPress: () => router.push("/machines") }} /> : null}
       </Section>
+      <Section title={copy("Hesap", "Account")}><NavigationGroup>
+        <NavigationRow
+          label={copy("bycoda hesabı", "bycoda account")}
+          detail={copy("İsteğe bağlı giriş, cihazlar ve aktif süre", "Optional sign-in, devices and active time")}
+          icon={tile(UserRound)}
+          onPress={() => router.push("/account" as Href)}
+        />
+      </NavigationGroup></Section>
       <Section title={copy("Bilgisayar", "Computer")}><NavigationGroup>
         <NavigationRow
           label={copy("Bilgisayarlar", "Computers")}
@@ -135,8 +161,9 @@ export function SettingsScreen() {
           icon={tile(ShieldCheck)}
           onPress={() => setPanel("security")}
         />
-        <NavigationRow label={titles.permissions} icon={tile(ShieldCheck)}
+        <NavigationRow label={titles.permissions} icon={tile(Smartphone)}
           onPress={() => setPanel("permissions")} />
+        <WidgetSettings icon={tile(LayoutDashboard)} />
         <NavigationRow
           label={titles.privacy}
           icon={tile(LockKeyhole)}
@@ -190,6 +217,7 @@ export function SettingsScreen() {
                   }}
                 />
               </NavigationGroup>
+              <DiagnosticsSettings />
               <LocalDataControls />
             </>
           ) : (

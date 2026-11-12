@@ -30,7 +30,6 @@ import { initialAgent } from "./shared/agent";
 import { Scope } from "./shared/scope";
 import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite";
 import { taskMatchesFilter } from "./task-actions";
-import { colors } from "@/ui/tokens";
 
 import { TaskEditor } from "./tasks/task-editor";
 import { DeliveryEditor } from "./tasks/delivery-editor";
@@ -38,8 +37,10 @@ import { TaskCard } from "./tasks/task-card";
 import { TaskDeclineFeedback } from "./tasks/task-feedback";
 import { TaskBulkActions } from "./tasks/bulk-actions";
 import type { TaskEditorFlow } from "./tasks/types";
+import { useMobileTheme } from "@/ui/theme";
 
 export function TasksScreen() {
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const [search, setSearch] = useState("");
@@ -170,7 +171,7 @@ export function TasksScreen() {
               onChange={setFilterDraft}
             />
           </FilterSheet>
-          <SearchToolbar search={<SearchField ref={searchInput} label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />}
+          <SearchToolbar search={<SearchField ref={searchInput} label={copy("Görevlerde ara", "Search tasks")} value={search} onChangeText={setSearch} />}
             actions={<FilterButton count={filter !== "active" ? 1 : 0} onPress={() => setFilterDraft(filter)} />} />
           {machine ? <TaskBulkActions key={`${machine.id}:${projectId ?? "all"}`} tasks={visible ?? []} machineId={machine.id} disabled={busy && !bulkBusy || !!editor || !!deliveryTask}
             context={filterContext} onBusy={setBulkBusy} onComplete={async () => { await query.refetch(); if (projectId) await allTasks.refetch(); }} /> : filterContext}
@@ -246,7 +247,8 @@ export function TasksScreen() {
             emptyAction={query.data?.length ? search.trim()
               ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
               : filter !== "all" ? { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") } : undefined
-              : undefined}
+              : projectId && machine?.providers?.length && !busy && !editor
+                ? { label: copy("Yeni görev", "New task"), onPress: start } : undefined}
           />
         </>
       }

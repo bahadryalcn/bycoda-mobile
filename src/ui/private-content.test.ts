@@ -33,7 +33,7 @@ vi.mock("react-native-reanimated", () => ({ default: { View: ({ children, style,
 } }, useSharedValue: (value: number) => ({ value }), useAnimatedStyle: (fn: () => unknown) => fn(), withTiming: (value: number) => value, Easing: { bezier: () => undefined } }));
 vi.mock("react-native-worklets", () => ({ scheduleOnRN: vi.fn() }));
 vi.mock("../state/security", () => ({ useSecurity: Object.assign((select: (value: { status: string }) => unknown) => select({ status: state.unlocked ? "unlocked" : "locked" }), { getState: () => ({ status: state.unlocked ? "unlocked" : "locked" }) }) }));
-vi.mock("./theme", () => ({ useMobileTheme: () => {} }));
+vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: { screen: { flex: 1 } } }) }));
 vi.mock("./styles", () => ({ uiStyles: { screen: { flex: 1 } } }));
 vi.mock("./motion", () => ({ motionTiming: {} }));
 vi.mock("./tokens", () => ({ motion: { sheet: 1 } }));

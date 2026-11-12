@@ -38,7 +38,7 @@ export function Status({ value }: StatusProps) {
       ? "success"
       : ["review", "awaiting-approval"].includes(value)
         ? "warning"
-        : ["running", "verifying", "planning"].includes(value)
+        : ["running", "verifying", "planning", "active"].includes(value)
           ? "live"
           : "default";
   return (
