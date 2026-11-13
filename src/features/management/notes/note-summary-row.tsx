@@ -1,3 +1,4 @@
+import { truncateGraphemes } from "../../../../../src/shared/lib/text/truncate";
 import { StyleSheet, View } from "react-native";
 import { useMobileTheme } from "@/ui/theme";
 import type { Note } from "@/domain/types";
@@ -24,7 +25,7 @@ export function NoteSummaryRow({
   const copy = useCopy();
   const relative = useRelativeTime();
   const title = note.title.trim() || copy("Başlıksız", "Untitled");
-  const excerpt = note.body.replace(/\s+/g, " ").trim().slice(0, 600);
+  const excerpt = truncateGraphemes(note.body.replace(/\s+/g, " ").trim(), 600);
   const edited = relative(note.updatedAt);
   const tags = note.tags.slice(0, MAX_TAG_BADGES);
   const extraTags = note.tags.length - tags.length;

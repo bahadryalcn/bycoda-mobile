@@ -6,8 +6,19 @@ const fixture = vi.hoisted(() => ({
   machineId: "computer", endpoint: "https://synthetic.invalid", environmentId: "environment", lanKey: "synthetic", projectId: "project", supported: true,
   fetching: false, error: false, emptyPage: false, emptyAll: false, params: {} as any, reads: [] as any[], refresh: undefined as any, oldNext: undefined as any,
   refetch: vi.fn(async () => ({})),
+  reportSupported: false,
+  refetchReports: vi.fn(async () => undefined),
 }));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@tanstack/react-query")>(),
+  useQueryClient: () => ({ refetchQueries: fixture.refetchReports }),
+  useIsFetching: () => 0,
+}));
+vi.mock("./usage-limits", () => ({ UsageLimits: () => createElement("div", null, "Synthetic limits report") }));
+vi.mock("./usage-cost", () => ({ UsageCost: () => createElement("div", null, "Synthetic cost report") }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/user-round", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/briefcase", () => ({ default: () => null }));
 vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
 vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
@@ -19,7 +30,7 @@ vi.mock("@/ui/tokens", () => ({ space: {}, fontSize: {}, radii: {} }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/state/machines", () => {
-  const machine = () => ({ id: fixture.machineId, name: "Computer", endpoint: fixture.endpoint, environmentId: fixture.environmentId, lanKey: fixture.lanKey, capabilities: fixture.supported ? ["usage.sessions.read"] : [] });
+  const machine = () => ({ id: fixture.machineId, name: "Computer", endpoint: fixture.endpoint, environmentId: fixture.environmentId, lanKey: fixture.lanKey, capabilities: [...(fixture.supported ? ["usage.sessions.read"] : []), ...(fixture.reportSupported ? ["usage.limits.read", "usage.cost.read"] : [])] });
   return { useActiveMachine: machine, useMachines: { getState: () => ({ activeId: fixture.machineId, machines: [machine()] }) } };
 });
 vi.mock("@/state/queries", () => ({ useHostQuery: (_key: unknown, _method: string, params: any) => {
@@ -58,6 +69,7 @@ beforeEach(() => {
   fixture.machineId = "computer"; fixture.endpoint = "https://synthetic.invalid"; fixture.environmentId = "environment"; fixture.lanKey = "synthetic"; fixture.projectId = "project";
   fixture.supported = true; fixture.fetching = false; fixture.error = false; fixture.emptyPage = false; fixture.emptyAll = false; fixture.reads = [];
   fixture.refetch.mockReset().mockResolvedValue({}); node = document.createElement("div"); document.body.append(node); root = createRoot(node);
+  fixture.reportSupported = false; fixture.refetchReports.mockReset().mockResolvedValue(undefined);
 });
 afterEach(() => { act(() => root.unmount()); node.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 it.each(["machine", "endpoint", "project", "environment", "key"])("drops the previous page before the first %s scope read and rejects a stale action", async kind => {
@@ -115,4 +127,30 @@ it("shows token breakdown by default and a Host-update state for Cost and Limits
   expect(node.textContent).not.toContain("Provider"); expect(node.textContent).not.toContain("Next page");
   await click("Limits"); expect(node.textContent).toContain("Limits are not available on mobile yet");
   await click("Tokens"); expect(node.textContent).toContain("Next page");
+});
+it("refreshes the visible Limits or Cost report without changing the token page", async () => {
+  fixture.reportSupported = true;
+  await render();
+  await click("Next page");
+  const until = fixture.params.untilMs;
+  await click("Limits");
+  await click("Refresh");
+  expect(fixture.refetchReports).toHaveBeenLastCalledWith({ queryKey: ["machine", "computer", "usage-limits"], type: "active" }, { cancelRefetch: false });
+  expect(fixture.params.cursor).toBe("page-2");
+  expect(fixture.params.untilMs).toBe(until);
+  await click("Cost");
+  await act(() => fixture.refresh.onRefresh());
+  expect(fixture.refetchReports).toHaveBeenLastCalledWith({ queryKey: ["machine", "computer", "usage-cost"], type: "active" }, { cancelRefetch: false });
+  expect(fixture.refetch).not.toHaveBeenCalled();
+});
+it("permits Limits refresh without session usage capability and rejects a stale computer action", async () => {
+  fixture.reportSupported = true; fixture.supported = false;
+  await render();
+  await click("Limits");
+  const stale = fixture.refresh.onRefresh;
+  await click("Refresh");
+  expect(fixture.refetchReports).toHaveBeenCalledOnce();
+  fixture.endpoint = "https://changed.synthetic.invalid";
+  await act(() => stale());
+  expect(fixture.refetchReports).toHaveBeenCalledOnce();
 });

@@ -26,9 +26,10 @@ import { useCopy } from "@/ui/copy";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useAsyncAction } from "@/state/actions";
 
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import { identifier } from "./shared/format";
 import { Scope } from "./shared/scope";
+import { useLocalProjectScope } from "./shared/local-project-scope";
 import { createNoteDraftStore, noteDraftKey, type LocalNoteDraft } from "./note-drafts";
 import { initialNoteFlow, noteFlowReducer } from "./note-flow";
 
@@ -56,7 +57,7 @@ export function NotesScreen() {
   const draftKey = lastDraftMachine.current ? noteDraftKey(lastDraftMachine.current) : "no-note-draft";
   const draftEpoch = useLocalDraftEpoch(draftKey);
   const localDraft = useMemo(() => machine ? draftStore.bind(machine.id) : null, [machine?.id, draftEpoch]);
-  const projectId = useMachines((state) => state.selectedProjectId);
+  const { projectId, setProjectId } = useLocalProjectScope();
   const projects = useProjectList();
   const query = useHostQuery<NoteList>(
     ["notes", projectId],
@@ -117,7 +118,7 @@ export function NotesScreen() {
   };
   return (
     <ScreenList<NoteDirectoryRow> title={copy("Notlar", "Notes")} query={query} data={visible} keyExtractor={(row) => row.key}
-      context={!editorOpen ? <Scope allowAll /> : undefined}
+      context={!editorOpen ? <Scope allowAll projectId={projectId} onChange={setProjectId} /> : undefined}
       actions={!editorOpen ? (
         <>
           <ActionMenu

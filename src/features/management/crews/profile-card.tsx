@@ -10,15 +10,17 @@ import { RecordCard } from "@/ui/record-card";
 import { joinMeta, RecordTrailing, useMenuGlyph } from "../shared/record-bits";
 import { handleLabel } from "./identity-model";
 import { MemberAvatars } from "./member-avatars";
+import { memberModelSource } from "./model";
 
 /** A library member: role badge, provider mark, model and its edit/delete menu. */
-export function CrewProfileCard({ value, roleLabel, busy, editorOpen, machineId, projectId, remove, onEdit }: {
+export function CrewProfileCard({ value, roleLabel, busy, editorOpen, machineId, projectId, isScopeCurrent, remove, onEdit }: {
   value: SavedCrewAgent;
   roleLabel: (role: SavedCrewAgent["role"]) => string;
   busy: boolean;
   editorOpen: boolean;
   machineId?: string;
   projectId: string | null;
+  isScopeCurrent: () => boolean;
   remove: ReturnType<typeof useHostMutation>;
   onEdit: (profile: SavedCrewAgent) => void;
 }) {
@@ -31,7 +33,7 @@ export function CrewProfileCard({ value, roleLabel, busy, editorOpen, machineId,
       status={<Badge label={roleLabel(value.role)} />}
       metadata={joinMeta([
         handleLabel(value.handle),
-        candidate && `${candidate.harness} · ${candidate.model}`,
+        memberModelSource(value, copy) ?? (candidate && `${candidate.harness} · ${candidate.model}`),
         value.projectId ? copy("Bu proje", "This project") : copy("Bilgisayar geneli", "Host-wide"),
       ])}
       preview={<MemberAvatars agents={[value]} />}
@@ -55,7 +57,7 @@ export function CrewProfileCard({ value, roleLabel, busy, editorOpen, machineId,
                     ),
                     copy("Sil", "Delete"),
                     () => {
-                      if (useMachines.getState().activeId === machineId && useMachines.getState().selectedProjectId === projectId)
+                      if (useMachines.getState().activeId === machineId && isScopeCurrent())
                         remove.mutate({ projectId, agentId: value.id });
                     },
                   ) },

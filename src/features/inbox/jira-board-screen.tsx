@@ -1,11 +1,13 @@
+import { useInboxLocalScope } from "./inbox-local-scope";
 import { useLayoutEffect, useRef, useState } from "react";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
 import { ActionMenu, Body, Button, Notice, QueryState, Row, ScreenList, SelectField, Sheet, Stack, StateView } from "@/ui/primitives";
 import { AppliedFilters, FilterButton } from "@/ui/filter-sheet";
 import { CollectionToolbar } from "@/ui/search-field";
 import { useInboxRead } from "./provider-queries";
-import { isInboxOriginCurrent, isInboxPrivateFailure } from "./provider-model";
+import { isInboxPrivateFailure } from "./provider-model";
 import type { InboxOrigin } from "./provider-protocol";
 import type { JiraBoardSnapshot, JiraMobileIssue } from "./jira-board-model";
 import { JiraBoardIssueActions } from "./jira-board-issue";
@@ -17,7 +19,9 @@ type FilterDraft = { boardId: string; value: JiraBoardFilterValue };
 export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
   origin: InboxOrigin; canRead: boolean; canWrite: boolean; onClose: () => void;
 }) {
+  const inboxScope = useInboxLocalScope();
   const copy = useCopy(), machine = useActiveMachine();
+  const locale = useLocale();
   const [opening] = useState(origin);
   const [computerName] = useState(machine?.id === origin.machineId ? machine.name || origin.machineId : origin.machineId);
   const [boardId, setBoard] = useState("");
@@ -36,11 +40,11 @@ export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
     return () => { mounted.current = false; filterOwner.current = null; };
   }, []);
   const [sprintCache, setSprintCache] = useState<{ boardId: string; sprints: JiraBoardSnapshot["configuration"]["sprints"] }>({ boardId: "", sprints: [] });
-  const supported = isInboxOriginCurrent(opening, useMachines.getState()) && machine?.id === opening.machineId &&
+  const supported = inboxScope.matches(opening) && machine?.id === opening.machineId &&
     !!machine.capabilities?.includes("inbox.jiraBoard.v1") && !!opening.projectId;
   const readable = supported && canRead;
   const readAccess = useRef(readable); readAccess.current = readable;
-  const available = () => mounted.current && readAccess.current && isInboxOriginCurrent(opening, useMachines.getState());
+  const available = () => mounted.current && readAccess.current && inboxScope.matches(opening);
   const boards = useInboxRead({ action: "jira-boards", input: { projectId: opening.projectId ?? "" } }, readable);
   const pageToken = pages.at(-1);
   const board = useInboxRead({ action: "jira-board-read", input: {
@@ -74,8 +78,8 @@ export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
     `${copy("Sprint", "Sprint")} · ${sprints.find((sprint) => String(sprint.id) === sprintId)?.name ?? `#${sprintId}`}`;
   const projectName = snapshot?.projectCwd.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || snapshot?.projectCwd;
   const pageSummary = snapshot ? column
-    ? copy("Bu sayfada {p1} kayıttan {p0} tanesi gösteriliyor.", "Showing {p0} of {p1} issues on this page.", { p0: rows.length, p1: snapshot.page.issues.length })
-    : copy("Bu sayfadaki kayıtlar: {p0}", "Issues on this page: {p0}", { p0: snapshot.page.issues.length }) : undefined;
+    ? copy("Bu sayfada {p1} kayıttan {p0} tanesi gösteriliyor.", "Showing {p0} of {p1} issues on this page.", { p0: new Intl.NumberFormat(locale).format(rows.length), p1: new Intl.NumberFormat(locale).format(snapshot.page.issues.length) })
+    : copy("Bu sayfadaki kayıtlar: {p0}", "Issues on this page: {p0}", { p0: new Intl.NumberFormat(locale).format(snapshot.page.issues.length) }) : undefined;
   const nextPage = snapshot?.page.nextPageToken;
   const cursorStopped = !!nextPage && (pages.length >= 100 || pages.includes(nextPage));
   return <Sheet visible title={copy("Jira panoları", "Jira boards")} size="full" scroll={false} onClose={onClose}>

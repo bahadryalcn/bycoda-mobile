@@ -14,7 +14,6 @@ export function CrewMemberInspection({ definition, memberId, projectId }: { defi
     <QueryState query={query} />
     {query.data?.candidates?.map((candidate) => <Stack key={candidate.id}>
       <Body>{candidate.harness} · {candidate.model}</Body>
-      <Body muted>{copy("Maliyet tahmini", "Cost estimate")}: {candidate.cost ?? copy("Bilinmiyor", "Unknown")} · {copy("Kalite tahmini", "Quality estimate")}: {candidate.quality ?? copy("Bilinmiyor", "Unknown")}</Body>
       {Object.entries(candidate.capabilities).map(([name, evidence]) => <Body key={name} muted>{name}: {evidence?.state ?? copy("Bilinmiyor", "Unknown")}</Body>)}
       {candidate.imageGeneration?.state && <Body muted>{copy("Görüntü oluşturma", "Image generation")}: {candidate.imageGeneration.state}</Body>}
     </Stack>)}

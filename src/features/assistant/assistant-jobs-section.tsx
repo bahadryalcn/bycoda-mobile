@@ -36,6 +36,7 @@ export function AssistantJobsSection({
   const [busy, setBusy] = useState<{ id: string; action: AssistantJobAction } | null>(null);
   const [errors, setErrors] = useState<Record<string, unknown>>({});
   const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(MAX_JOBS);
   // Always act on the Host's latest version of the job, never a copy captured when the sheet opened.
   const stopping =
     jobs.find((job) => job.id === stoppingId && jobActions(job).includes("stop")) ?? null;
@@ -63,9 +64,11 @@ export function AssistantJobsSection({
     stop: copy("Durdur", "Stop"),
   };
   const stopError = stopping ? errors[stopping.id] : undefined;
+  const visibleJobs = jobs.slice(0, visibleCount);
   return (
     <Section title={copy("İşler", "Jobs")}>
-      {jobs.slice(0, MAX_JOBS).map((job) => {
+      {jobs.length > MAX_JOBS ? <Body muted>{copy("{p0}/{p1} iş gösteriliyor", "Showing {p0} of {p1} jobs", { p0: visibleJobs.length, p1: jobs.length })}</Body> : null}
+      {visibleJobs.map((job) => {
         const hold = jobHold(job, holds);
         const actions = jobActions(job);
         return (
@@ -114,6 +117,7 @@ export function AssistantJobsSection({
           </View>
         );
       })}
+      {visibleJobs.length < jobs.length ? <Button label={copy("Daha fazla iş göster", "Show more jobs")} onPress={() => setVisibleCount((count) => count + MAX_JOBS)} /> : null}
       {stopping ? (
         <Sheet
           visible

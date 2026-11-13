@@ -7,12 +7,17 @@ const mobileRoot = fileURLToPath(new URL("../", import.meta.url));
 const desktopSource = path.resolve(mobileRoot, "../src");
 // These contracts are deliberately free of desktop UI, browser storage and Tauri.
 const pureContracts = new Set([
+  "shared/lib/text/truncate",
   "shared/model/host-contracts",
   // Assistant wire validation is pure; mobile still uses the paired transport and owner gates.
   "shared/model/host-contracts/assistant",
   // Delegation and image-model keys are pure wire contracts (zod and each other only).
   "shared/model/host-contracts/delegation",
   "shared/model/host-contracts/image-models",
+  // Findings eligibility uses primitives only; authority remains on the Host.
+  "shared/model/host-contracts/task-findings",
+  // Work caps share the canonical pure model routing schema; no desktop UI runtime.
+  "shared/model/host-contracts/model-routing",
   "shared/model/approvalOccurrence",
   "shared/model/productProviderDefaults",
   // Portable session execution policy has no desktop runtime dependencies.

@@ -9,7 +9,7 @@ import type {
   SavedCrewAgent,
 } from "@/remote/contracts/crews";
 import type { HostModelCatalog } from "@/domain/types";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import {
@@ -23,6 +23,7 @@ import {
 } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
 import { Scope } from "./shared/scope";
+import { useLocalProjectScope } from "./shared/local-project-scope";
 import { identifier } from "./shared/format";
 import { CrewEditor } from "./crews/crew-editor";
 import { ProfileEditor } from "./crews/profile-editor";
@@ -54,7 +55,7 @@ export function CrewsScreen() {
   const roleLabel = (role: SavedCrewAgent["role"]) =>
     roleLabels.find((option) => option.value === role)?.label ?? role;
   const machine = useActiveMachine();
-  const projectId = useMachines((state) => state.selectedProjectId);
+  const { projectId, setProjectId, current: localScope, revision } = useLocalProjectScope();
   const supported = machine?.capabilities?.includes("crews.v1") === true;
   const executionSupported =
     machine?.capabilities?.includes("crews.tasks.v1") === true;
@@ -148,7 +149,7 @@ export function CrewsScreen() {
       keyExtractor={(row) =>
         `${machine?.id}:${projectId}:${row.kind}:${row.value.id}`
       }
-      context={<Scope />}
+      context={<Scope projectId={projectId} onChange={setProjectId} />}
       actions={
         supported && tab !== "runs" ? (
           <IconButton
@@ -183,7 +184,7 @@ export function CrewsScreen() {
             />
           ) : (
             <>
-              <SegmentedControl
+              <SegmentedControl hideLabel
                 label={copy("Ekip görünümü", "Crew view")}
                 value={tab}
                 onChange={setTab}
@@ -297,6 +298,7 @@ export function CrewsScreen() {
             deleteSupported={deleteSupported}
             machineId={machine?.id}
             projectId={projectId}
+            isScopeCurrent={() => localScope.current.machineId === machine?.id && localScope.current.projectId === projectId && localScope.current.revision === revision}
             remove={remove}
             library={directory?.agents}
             onStart={(value) => open({ kind: "start", value })}
@@ -310,6 +312,7 @@ export function CrewsScreen() {
             editorOpen={!!editor}
             machineId={machine?.id}
             projectId={projectId}
+            isScopeCurrent={() => localScope.current.machineId === machine?.id && localScope.current.projectId === projectId && localScope.current.revision === revision}
             remove={removeAgent}
             onEdit={(value) => open({ kind: "profile", value })}
           />

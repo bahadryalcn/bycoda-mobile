@@ -3,11 +3,10 @@ import { useWindowDimensions } from "react-native";
 import Pencil from "lucide-react-native/icons/pencil";
 import { useConnectionScope } from "@/state/connection-scope";
 import { useMachines } from "@/state/machines";
-import { ActionMenu, Body, Disclosure, Empty, ErrorText, Input, Loading, FormActions, Notice, Sheet, Stack } from "@/ui/primitives";
+import { ActionMenu, Button, Body, Disclosure, Empty, ErrorText, Input, Loading, FormActions, Notice, Sheet, Stack } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
 import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider,usePrivateContentAccess } from "@/ui/private-access";
-import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { QueueEditReview } from "./queue-edit-review";
@@ -34,17 +33,17 @@ export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typ
   const disabled=blocked||editor.working||!editor.ready;
   const lease=useMemo(()=>({active:false}),[editor.visible,available,edit,disabled]);
   useLayoutEffect(()=>{lease.active=true;return()=>{lease.active=false;};},[lease]);
-  type Approval={kind:"reload"|"discard";edit:NonNullable<typeof edit>;lease:typeof lease};
+  type Approval={kind:"reload"|"discard";inline:boolean;edit:NonNullable<typeof edit>;lease:typeof lease};
   const [approval,setApproval]=useState<Approval>(),issued=useRef<Approval|undefined>(undefined);
   const [needsResume,setNeedsResume]=useState(false);
   useLayoutEffect(()=>{if(!editor.visible)setNeedsResume(false);},[editor.visible]);
   useLayoutEffect(()=>{if(issued.current&&issued.current.lease!==lease){issued.current=undefined;setApproval(undefined);}},[lease]);
   useLayoutEffect(()=>()=>{issued.current=undefined;},[]);
   const close=()=>{if(!mounted.current||!window.active||!live.current.editor.visible||live.current.editor.working)return;issued.current=undefined;setApproval(undefined);live.current.editor.hide();};
-  const openReview=(kind:"reload"|"discard")=>{if(!current()||!lease.active||disabled||!edit||issued.current||editor.valueRef.current!==edit)return;const value={kind,edit,lease};issued.current=value;setApproval(value);};
+  const openReview=(kind:"reload"|"discard",inline=false)=>{if(!(inline?origin()&&window.active:current())||!lease.active||disabled||!edit||issued.current||editor.valueRef.current!==edit)return;const value={kind,inline,edit,lease};issued.current=value;setApproval(value);};
   const cancelReview=()=>{if(approval&&issued.current===approval){issued.current=undefined;setApproval(undefined);}};
   const confirm=()=>{
-    if(!approval||issued.current!==approval||approval.lease!==lease||!lease.active||!current()||disabled||live.current.editor.valueRef.current!==approval.edit)return;
+    if(!approval||issued.current!==approval||approval.lease!==lease||!lease.active||!(approval.inline?origin()&&window.active:current())||disabled||live.current.editor.valueRef.current!==approval.edit)return;
     issued.current=undefined;setApproval(undefined);if(approval.kind==="reload"){setNeedsResume(false);live.current.editor.reload();}else live.current.editor.discard();
   };
   const change=(text:string)=>{if(!current()||live.current.blocked||live.current.editor.working||!live.current.editor.ready||!edit||live.current.editor.valueRef.current?.original!==edit.original)return;live.current.editor.setValue(value=>value&&value.original===edit.original?{...value,text}:value);};
@@ -54,7 +53,9 @@ export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typ
   const resume=()=>{if(current()&&!disabled&&!issued.current&&live.current.editor.valueRef.current){setNeedsResume(false);live.current.editor.open();}};
   const feedback=<ErrorText error={editor.error||editor.editError} message={composerDeliveryError(editor.error||editor.editError,copy)}/>;
   return <>
-    {edit||editor.error?<ChatToolbarAction label={copy("Sıradaki mesajın taslağı", "Queued message draft")} onPress={()=>{if(origin())live.current.editor.open();}} disabled={!available}><Pencil size={14} color={colors.muted}/></ChatToolbarAction>:null}
+    {edit||editor.error?<Button tone="quiet" style={{ minHeight: 48 }} label={edit?copy("Sıradaki mesaj düzenleniyor", "Editing queued message"):copy("Sıradaki mesajın taslağı", "Queued message draft")} onPress={()=>{if(origin())live.current.editor.open();}} disabled={!available}><Pencil size={14} color={colors.muted}/></Button>:null}
+    {edit?<Button tone="quiet" style={{ minHeight: 48 }} label={copy("Düzenlemeyi iptal et", "Cancel editing")} busy={editor.working} disabled={!available||disabled||!!approval} onPress={()=>openReview("discard",true)}/>:null}
+    {!editor.visible?<ErrorText error={editor.editError} message={composerDeliveryError(editor.editError,copy)}/>:null}
     <Sheet visible={editor.visible} title={copy("Sıradaki mesajı düzenle", "Edit queued message")} dismissible={!editor.working} dirty={!!edit && edit.text !== edit.original.text} onClose={close} size="form" scroll={false}>
       <ScreenList data={available&&edit?edit.original.attachments:[]} keyExtractor={file=>file.id} header={<Stack>
         {available?<>
@@ -78,8 +79,8 @@ export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typ
         available&&edit&&editor.ready?<FormActions submitLabel={needsResume?copy("Düzenlemeye devam et", "Continue editing"):copy("Değişiklikleri kaydet", "Save changes")} onSubmit={needsResume?resume:save} busy={editor.working} disabled={blocked||!!approval} feedback={feedback} onCancel={close} cancelLabel={copy("Kapat", "Close")}/>:
           <FormActions submitLabel={copy("Kapat", "Close")} onSubmit={close} disabled={editor.working} feedback={available?feedback:undefined}/>}
     </Sheet>
-    <PrivateContentAccessProvider value={{allowed:available,check:current}}>
-      {approval&&approval.lease===lease&&available&&editor.visible&&!disabled?<QueueEditReview kind={approval.kind} edit={approval.edit} machineName={opening.name} onClose={cancelReview} onConfirm={confirm}/>:null}
+    <PrivateContentAccessProvider value={{allowed:available,check:()=>approval?.inline?origin()&&window.active:current()}}>
+      {approval&&approval.lease===lease&&available&&(approval.inline||editor.visible)&&!disabled?<QueueEditReview kind={approval.kind} edit={approval.edit} machineName={opening.name} onClose={cancelReview} onConfirm={confirm}/>:null}
     </PrivateContentAccessProvider>
   </>;
 }

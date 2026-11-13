@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { QuestionCard } from "./question-card";
 import { questionCardStates } from "./question-card-state";
 import type { QuestionCardProps } from "./session-types";
+import { RemoteHostError } from "@/remote/host-error";
 
 const state = vi.hoisted(() => ({
   fields: new Map<string, (value: string) => void>(),
@@ -14,7 +15,7 @@ vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: { panel: "panel" }, semanticColors: {}, uiStyles: {} }) }));
-vi.mock("@/ui/tokens", () => ({ colors: { panel: "panel" } }));
+vi.mock("@/ui/tokens", () => ({ colors: { panel: "panel" }, space: { xs: 4 } }));
 vi.mock("./shared", () => ({ workspaceStyles: { stack: {} } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("panelui-native/components/questionnaire", async () => {
@@ -78,6 +79,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
     Body: Wrapper,
+    ErrorText: ({ error }: { error: unknown }) => error ? createElement("p", null, String(error)) : null,
     Card: Wrapper,
     Row: Wrapper,
     Disclosure: Wrapper,
@@ -283,12 +285,58 @@ it.each([false, true])(
     await act(async () => state.fields.get("Additional note (optional)")!("Existing note"));
     await act(async () => pick("provider-other").click());
     expect(container.querySelector('[aria-label="Additional note (optional)"]') !== null).toBe(literal);
+    if (!literal) {
+      expect(send().disabled).toBe(true);
+      await act(async () => state.fields.get("Your own answer")!("Use a separate release branch"));
+    }
     await act(async () => send().click());
     expect(props.onAnswer).toHaveBeenCalledWith({
       kind: "answered",
       answers: { response: ["provider-other"] },
-      custom: {},
+      custom: literal ? {} : { response: "Use a separate release branch" },
       ...(literal ? { notes: { response: "Existing note" } } : {}),
     });
   },
 );
+
+it("replaces a single fixed selection when typing a custom answer", async () => {
+  const value = question();
+  value.questions[0].options = [{ id: "a", label: "Choice A" }];
+  await render({ question: value });
+  await act(async () => pick("a").click());
+  await act(async () => state.fields.get("Your own answer")!("Keep the original folder"));
+  await act(async () => send().click());
+  expect(props.onAnswer).toHaveBeenCalledWith({
+    kind: "answered", answers: { response: ["__custom__"] }, custom: { response: "Keep the original folder" },
+  });
+});
+
+it("does not leak a draft or uncertain latch to a new occurrence without remounting the parent", async () => {
+  await render({ question: { ...question(), occurrenceId: "first" }, onAnswer: vi.fn().mockRejectedValue(new Error("Unknown result")) });
+  await act(async () => state.fields.get("Your answer")!("First occurrence draft"));
+  await act(async () => send().click());
+  await render({ question: { ...question(), occurrenceId: "second" } });
+  expect(container.querySelector("textarea")?.value).toBe("");
+  expect(container.querySelector("textarea")?.disabled).toBe(false);
+  expect(container.textContent).not.toContain("Answer delivery not confirmed");
+});
+
+it("submits attachment-only answers through the captured owner and strips local custody fields", async () => {
+  const file = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", claimId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", name: "proof.png", size: 4, mimeType: "image/png", kind: "image" as const, uri: "file:///private/proof" };
+  const submitAnswer = vi.fn(async () => {});
+  await render({ attachments: { response: [file] }, submitAnswer });
+  expect(send().disabled).toBe(false);
+  await act(async () => send().click());
+  expect(submitAnswer).toHaveBeenCalledWith({ kind: "answered", answers: {}, custom: {}, attachments: { response: [{ id: file.id, name: file.name, size: 4, mimeType: file.mimeType, kind: file.kind }] } }, expect.objectContaining({ attachments: { response: [file] } }));
+  expect(props.onAnswer).not.toHaveBeenCalled();
+});
+
+it("retains typed text and allows retry after a definitive command refusal", async () => {
+  await render({ onAnswer: vi.fn().mockRejectedValue(new RemoteHostError("machine", "host", "Question is not ready", false)) });
+  await act(async () => state.fields.get("Your answer")!("Keep my recovery steps"));
+  await act(async () => send().click());
+  expect(send().disabled).toBe(false);
+  expect(container.querySelector("textarea")?.value).toBe("Keep my recovery steps");
+  expect(container.textContent).toContain("Question is not ready");
+  expect(container.textContent).toContain("Answer not sent");
+});

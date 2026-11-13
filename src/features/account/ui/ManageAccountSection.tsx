@@ -1,3 +1,4 @@
+import { useLocale } from "@/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, type Href } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -12,6 +13,7 @@ export const DELETE_ACCOUNT_URL = "https://account.bycoda.codes/delete";
 /** Notification settings, export/delete in the portal, and in-app deletion with its 14-day grace. */
 export function ManageAccountSection() {
   const copy = useCopy();
+  const locale = useLocale();
   const { runtime, device } = useAccount();
   const queries = useQueryClient();
   const me = useQuery({
@@ -30,7 +32,7 @@ export function ManageAccountSection() {
   });
   const portal = useMutation({ mutationFn: () => WebBrowser.openBrowserAsync(DELETE_ACCOUNT_URL) });
   const pending = me.data?.user.deletion ?? null;
-  const scheduled = pending ? new Date(pending.purgeAfter).toLocaleDateString() : "";
+  const scheduled = pending ? new Date(pending.purgeAfter).toLocaleDateString(locale) : "";
 
   return (
     <Section title={copy("Hesabı yönet veya sil", "Manage or delete account")}>

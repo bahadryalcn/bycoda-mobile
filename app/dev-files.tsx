@@ -1,0 +1,5 @@
+import { lazy, Suspense } from "react";
+const FileStressScreen = lazy(() => import("@/features/workspace/file-stress-screen").then(module => ({ default: module.FileStressScreen })));
+export default function DevFiles() {
+  return __DEV__ ? <Suspense fallback={null}><FileStressScreen /></Suspense> : null;
+}

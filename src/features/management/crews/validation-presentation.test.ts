@@ -67,8 +67,9 @@ describe("crew validation presentation", () => {
     expect(crewValidationMessage(rolesError, tr)).toContain("koordinatör");
     const limitsError = crewValidation({ ...valid, policy: { ...valid.policy, maxParallel: 5 } });
     expect(crewValidationMessage(limitsError, tr)).toContain("Çalışma sınırlarını");
-    const invalidEstimate = { ...member(), candidates: [{ ...member().candidates[0], cost: NaN }] };
-    expect(crewValidationMessage(memberValidation(invalidEstimate), tr, true)).toContain("maliyet");
+    const invalidSettings = { ...member(), candidates: [{ ...member().candidates[0], modelSettings: { effort: "x".repeat(257) } }] };
+    expect(memberValidation(invalidSettings)).toBe("Invalid model settings");
+    expect(crewValidationMessage(memberValidation(invalidSettings), tr, true)).toContain("model ayarlarını");
     expect(crewValidationMessage("Internal parser diagnostic", tr)).not.toContain("Internal parser diagnostic");
   });
 });

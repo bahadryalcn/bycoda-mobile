@@ -8,7 +8,6 @@ import { useMachines } from "../../state/machines";
 import { collectEnvironment } from "./diagnostic-environment";
 import { collectConnectedHostLogs } from "./host-log-transport";
 import { logDiagnostic } from "./diagnostic-log";
-import { create } from "zustand";
 import {
   createAccountClient,
   type DiagnosticReportCreate,
@@ -20,7 +19,7 @@ import type { AccountState } from "../account/ui/account-context";
 import { installDiagnosticCapture, readCrashMarker, type DiagnosticCapture } from "./diagnostic-capture";
 import { CRASH_MARKER } from "./diagnostic-files";
 import { expoDiagnosticFiles } from "./expo-diagnostic-files";
-import { createDiagnosticPrefs, type DiagnosticConsent, type DiagnosticMode } from "./diagnostic-prefs";
+import { createDiagnosticPrefs, createDiagnosticPreferenceStore } from "./diagnostic-prefs";
 import { buildDiagnosticReport, sendDiagnosticReport, type DiagnosticSendResult } from "./diagnostic-report";
 
 const files = expoDiagnosticFiles();
@@ -100,24 +99,7 @@ export const hasCrashMarker = () => readCrashMarker(files) !== null;
 export const clearCrashMarker = () => files.remove(CRASH_MARKER);
 export const crashMarker = () => readCrashMarker(files);
 
-type PrefsState = {
-  consent: DiagnosticConsent;
-  hydrated: boolean;
-  hydrate(): Promise<void>;
-  setMode(mode: DiagnosticMode): Promise<void>;
-};
-
-export const useDiagnosticPrefs = create<PrefsState>((set, get) => ({
-  consent: { mode: null, decidedAt: null },
-  hydrated: false,
-  async hydrate() {
-    if (get().hydrated) return;
-    set({ consent: await diagnosticPrefs.readConsent(), hydrated: true });
-  },
-  async setMode(mode) {
-    set({ consent: await diagnosticPrefs.writeConsent(mode) });
-  },
-}));
+export const useDiagnosticPrefs = createDiagnosticPreferenceStore(diagnosticPrefs);
 
 async function signedInEmail(account: AccountState): Promise<string | null> {
   if (account.status !== "signedIn" || !account.runtime) return null;

@@ -9,6 +9,7 @@ import type {
 export type SessionScreenProps = {
   id: string;
   projectId?: string;
+  targetTurnId?: string;
 };
 
 export type SessionScope = {
@@ -55,6 +56,7 @@ export type SessionToolbarProps = {
 export type SessionWorkspaceProps = SessionScreenProps & { machineId: string; machineName: string };
 
 export type SessionTranscriptProps = {
+  targetTurnId?: string;
   findOpen: boolean;
   onFindOpenChange: (open: boolean) => void;
   navigation?: import("./transcript-scroll").TranscriptScrollPosition;
@@ -93,12 +95,19 @@ export type QuestionCardProps = {
   deliveryVersion?: number;
   disabled: boolean;
   onAnswer: QuestionAnswer;
+  initialDraft?: QuestionDraft;
+  onDraftChange?: (draft: QuestionDraft) => void;
+  attachmentControls?: (questionId: string, held: boolean) => import("react").ReactNode;
+  attachments?: Record<string, import("./attachment-model").StagedAttachment[]>;
+  attachmentBusy?: boolean;
+  submitAnswer?: (reply: UserQuestionReply, draft: QuestionDraft) => Promise<unknown>;
 };
 
 export type QuestionDraft = {
   answers: Record<string, string[]>;
   custom: Record<string, string>;
   notes?: Record<string, string>;
+  attachments?: Record<string, import("./attachment-model").StagedAttachment[]>;
 };
 
 export type SessionBlockRequest = {

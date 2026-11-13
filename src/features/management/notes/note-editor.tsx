@@ -81,7 +81,7 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
   };
   return (
     <Stack>
-      <SegmentedControl label={copy("Görünüm", "View")} value={mode} options={[{value:"edit",label:copy("Düzenle","Edit")},{value:"preview",label:copy("Önizleme","Preview")}]} onChange={setMode} />
+      <SegmentedControl hideLabel label={copy("Görünüm", "View")} value={mode} options={[{value:"edit",label:copy("Düzenle","Edit")},{value:"preview",label:copy("Önizleme","Preview")}]} onChange={setMode} />
       {mode === "preview" ? <MessageText text={draft.body || copy("Not henüz boş.", "The note is empty.")} role="assistant" /> : <>
       <Section title={copy("Not", "Note")}>
       <Field

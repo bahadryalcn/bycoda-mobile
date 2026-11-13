@@ -218,7 +218,7 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
         <>
           <Row style={{ gap: space.xs }}>
             <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 180 }}>
-              <SegmentedControl
+              <SegmentedControl hideLabel
                 label={copy("Düzenle veya önizle", "Edit or preview")}
                 value={editing ? "edit" : "preview"}
                 disabled={transition.isPending}

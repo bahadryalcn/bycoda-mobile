@@ -25,3 +25,13 @@ it("uses an external controller without requiring or leaking a query or refresh 
   act(() => root!.render(createElement(ScreenList, { data: [], renderItem: () => null, refreshState: { ...state, refreshing: false } })));
   expect(fixture.refresh.refreshing).toBe(false); expect(fixture.refresh.onRefresh).toBe(onRefresh);
 });
+
+it("lets empty and loading states occupy the remaining list viewport", () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  root = createRoot(document.createElement("div"));
+  const empty = createElement("span", null, "Loading");
+  act(() => root!.render(createElement(ScreenList, { data: [], renderItem: () => null, ListEmptyComponent: empty })));
+  expect(fixture.props.ListEmptyComponent.props.style.flexGrow).toBe(1);
+  expect(fixture.props.ListEmptyComponent.props.collapsable).toBe(false);
+  expect(fixture.props.ListEmptyComponent.props.children).toBe(empty);
+});

@@ -8,6 +8,7 @@ import {
   assistantMessageVisible,
   assistantSummaryVisible,
   assistantThreadVisible,
+  assistantActivityVisible,
 } from "./assistant-history";
 const message = (id: string, createdAt: number, projectIds?: string[]): AssistantMessage => ({
   id,
@@ -20,6 +21,15 @@ const message = (id: string, createdAt: number, projectIds?: string[]): Assistan
   text: "Canonical text",
   jobIds: [],
   ...(projectIds ? { projectIds } : {}),
+});
+it("shows only actual journal operations with explicit visible contributors", () => {
+  const access = { ready: true, visible: (id: string) => id === "visible" };
+  const activity = { id: "operation", version: 1, createdAt: 1, updatedAt: 1, kind: "action.completed", summary: "Actual result", operation: { identity: "identity", tool: "files:write", target: "file", outcome: "completed" }, projectIds: [] as string[] };
+  expect(assistantActivityVisible(activity, access)).toBe(true);
+  expect(assistantActivityVisible({ ...activity, projectIds: ["visible", "hidden"] }, access)).toBe(false);
+  expect(assistantActivityVisible({ ...activity, projectIds: undefined }, access)).toBe(false);
+  expect(assistantActivityVisible({ ...activity, operation: undefined }, access)).toBe(false);
+  expect(assistantActivityVisible({ ...activity, projectIds: ["visible"] }, { ...access, ready: false })).toBe(false);
 });
 it("hides unknown or mixed hidden contributors and unproven summaries instead of treating them as global", () => {
   const access = { ready: true, visible: (id: string) => id === "visible" };

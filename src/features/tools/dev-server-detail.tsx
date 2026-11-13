@@ -1,3 +1,4 @@
+import { graphemes } from "../../../../src/shared/lib/text/truncate";
 import { useEffect, useRef, useState } from "react";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import {
@@ -50,6 +51,8 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
     ["dev-server-output", projectId, server.id], "devServers.logs", { projectId, id: server.id },
     { enabled: validScope && showLogs, interval: showLogs ? 5_000 : undefined },
   );
+  const logParts = graphemes(logs.data?.output ?? "");
+  const logTail = logParts.slice(-32_000).join("");
   const stop = useHostMutation<DevServerStop>("devServers.stop", ["dev-servers", projectId]);
   const restart = useHostMutation<DevServerStartResult>("devServers.restart", ["dev-servers", projectId]);
   const kill = useHostMutation<DevServerStop>("devServers.kill", ["dev-servers", projectId]);
@@ -140,7 +143,7 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
           {restart.data?.conflict ? <Notice tone="warning" message={copy("{p0} portu zaten kullanılıyor.", "Port {p0} is already in use.", { p0: restart.data.conflict.port })} /> : null}
           {showLogs ? <>
             <QueryState query={logs} />
-            {logs.data?.available ? <CodePanel horizontal={false}><CodeText>{logs.data.output.slice(-32_000)}</CodeText></CodePanel> : getQueryPresentation(logs) === "ready" ? <StateView compact title={copy("Bu sunucunun günlükleri kullanılamıyor.", "Logs are not available for this server.")} /> : null}
+            {logs.data?.available ? <>{logParts.length > 32_000 ? <Notice message={copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")} /> : null}<CodePanel horizontal={false}><CodeText>{logTail}</CodeText></CodePanel></> : getQueryPresentation(logs) === "ready" ? <StateView compact title={copy("Bu sunucunun günlükleri kullanılamıyor.", "Logs are not available for this server.")} /> : null}
           </> : null}
         </>
       ) : null}

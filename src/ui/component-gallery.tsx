@@ -25,7 +25,7 @@ export function ComponentGallery() {
           "Try real components with sample data. Actions here only change this tour.",
         )}
       </Body>
-      <SegmentedControl
+      <SegmentedControl hideLabel
         label={copy("Bileşen görünümü", "Component view")}
         value={view}
         onChange={setView}
@@ -43,7 +43,7 @@ export function ComponentGallery() {
         />
       ) : (
         <>
-          <SegmentedControl
+          <SegmentedControl hideLabel
             label={copy("Örnek türü", "Example type")}
             value={example}
             onChange={setExample}

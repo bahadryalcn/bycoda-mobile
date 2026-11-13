@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { isManagementSection, managementSections } from "./sections";
 
 describe("management route identity", () => {
+  it("keeps the goals route while naming the planned work Epics", () => {
+    expect(isManagementSection("goals")).toBe(true);
+    expect(managementSections.goals).toEqual(["Epicler", "Epics"]);
+  });
   it("recognizes the stewards route and its product label", () => {
     expect(isManagementSection("stewards")).toBe(true);
     expect(managementSections.stewards).toEqual(["Proje sorumluları", "Project stewards"]);

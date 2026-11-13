@@ -123,7 +123,7 @@ export function derivePaletteColors(definition: PaletteDefinition, mode: MobileT
       brand: hsl(s * 0.3, 96),
       selected: hsl(Math.min(60, s * 1.6), lb + 12),
       userMessage: raised,
-      glass: elevated + "B8",
+      glass: elevated + "F5",
     };
   }
   const background = hsl(s * 0.2, 98.6);
@@ -154,7 +154,7 @@ export function derivePaletteColors(definition: PaletteDefinition, mode: MobileT
     brand: hsl(s * 0.35, 13),
     selected,
     userMessage,
-    glass: panel + "B8",
+    glass: panel + "F5",
   };
 }
 

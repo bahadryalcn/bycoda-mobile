@@ -61,7 +61,9 @@ export function ShellProfileSettings({ target, enabled = true }: { target?: Revi
     queryFn: async (client, signal) => readShellChoices(await client.request("shell.profiles", {}, { signal })) });
   const [review, setReview] = useState<{ snapshot: ShellChoices; machineId: string; machineName: string; target: ReviewedMachine | undefined }>();
   return <Stack>{supported ? <><QueryState query={query} />
-    <NavigationRow label={copy("Komut kabuğu", "Command shell")} detail={query.data?.profiles.find((profile) => profile.id === query.data?.chosenId)?.name ?? copy("Sistem varsayılanı", "System default")} disabled={!query.data || query.isError || query.isFetching} onPress={() => { if (query.data && machine && !query.isError && !query.isFetching) setReview({ snapshot: query.data, machineId: machine.id, machineName: machine.name, target: reviewedMachine(machine) }); }} /></> : null}
+    <NavigationRow label={copy("Komut kabuğu", "Command shell")} detailLines={0}
+      detail={query.data ? query.data.profiles.find((profile) => profile.id === query.data?.chosenId)?.name ?? copy("Sistem varsayılanı", "System default") : undefined}
+      disabled={!query.data || query.isError || query.isFetching} onPress={() => { if (query.data && machine && !query.isError && !query.isFetching) setReview({ snapshot: query.data, machineId: machine.id, machineName: machine.name, target: reviewedMachine(machine) }); }} /></> : null}
     {review ? <ShellPreference key={review.machineId} {...review} onClose={(refresh) => { setReview(latest => latest === review ? undefined : latest); if (refresh && isReviewedMachine(review.target, useMachines.getState())) void query.refetch(); }} onSaved={() => { if (isReviewedMachine(review.target, useMachines.getState())) void query.refetch(); }} /> : null}
   </Stack>;
 }

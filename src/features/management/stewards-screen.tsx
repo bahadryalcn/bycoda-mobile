@@ -4,7 +4,7 @@ import { matchesSearch } from "./shared/search";
 import Plus from "lucide-react-native/icons/plus";
 import Pencil from "lucide-react-native/icons/pencil";
 import type { HostSteward, HostStewardInput } from "@/remote/types";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import {
@@ -18,8 +18,9 @@ import {
 } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
 import { Scope } from "./shared/scope";
+import { useLocalProjectScope } from "./shared/local-project-scope";
 import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite";
-import { initialAgent } from "./shared/agent";
+import { initialAgent, useAgentProviders } from "./shared/agent";
 import { identifier } from "./shared/format";
 import { StewardCard } from "./stewards/steward-card";
 import { savedStewardId } from "./stewards/steward-feedback";
@@ -31,7 +32,8 @@ export function StewardsScreen() {
   const copy = useCopy();
   const locale = useLocale();
   const machine = useActiveMachine();
-  const projectId = useMachines((state) => state.selectedProjectId);
+  const { projectId, setProjectId } = useLocalProjectScope();
+  const { providers, query: providerQuery } = useAgentProviders(projectId);
   const supported = machine?.capabilities?.includes("stewards") === true;
   const [search, setSearch] = useState("");
   const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
@@ -52,18 +54,18 @@ export function StewardsScreen() {
   const existingSteward = projectId
     ? query.data?.find((item) => item.projectId === projectId)
     : undefined;
-  const canCreate = !!projectId && !!machine?.providers?.length && !busy && !editor && !existingSteward;
+  const canCreate = !!projectId && !!providers.length && !busy && !editor && !existingSteward;
   const create = () => {
     if (
       !projectId ||
-      !machine?.providers?.length ||
+      !providers.length ||
       busy ||
       editor ||
       existingSteward
     )
       return;
     const { maxRunMinutes: _minutes, ...agent } = initialAgent(
-      machine.providers,
+      providers,
     );
     setEditor({
       ...agent,
@@ -87,7 +89,7 @@ export function StewardsScreen() {
       query={supported ? query : undefined}
       data={rows}
       keyExtractor={(item) => item.id}
-      context={<Scope allowAll />}
+      context={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
       actions={
         supported ? (
           <IconButton
@@ -101,7 +103,7 @@ export function StewardsScreen() {
             }
             disabled={
               !projectId ||
-              (!existingSteward && !machine?.providers?.length) ||
+              (!existingSteward && !providers.length) ||
               busy ||
               !!editor
             }
@@ -134,8 +136,8 @@ export function StewardsScreen() {
                     "Choose a project to create a steward.",
                   )}
                 </Body>
-              ) : !existingSteward && !machine?.providers?.length ? (
-                <AgentProviderPrerequisite />
+              ) : !existingSteward && !providers.length ? (
+                <>{providerQuery.isLoading || providerQuery.error ? <QueryState query={providerQuery} loading="inline" /> : <AgentProviderPrerequisite />}</>
               ) : null}
               <SearchField
                 ref={searchInput}

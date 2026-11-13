@@ -149,7 +149,7 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                       </IconTile>
                       <View style={{ flex: 1, gap: space.xxs }}>
                         <Body>{machine?.name ?? copy("Bilgisayar", "Computer")}</Body>
-                        <Body muted numberOfLines={1}>{machine?.endpoint}</Body>
+                        <Body muted>{machine?.endpoint}</Body>
                       </View>
                     </View>
                   </Stack>

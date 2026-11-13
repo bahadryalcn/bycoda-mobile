@@ -20,6 +20,15 @@ import { toolPreviewPage, toolPreviewSource } from "./tool-preview-source";
 type PreviewProps = { preview: NonNullable<Block["tool"]>["preview"]; status?: string; context?: MessageContext };
 type RecordedPreview = PreviewProps & { preview: NonNullable<PreviewProps["preview"]> };
 
+function writeState(preview: RecordedPreview["preview"], status: string | undefined, copy: (tr: string, en: string) => string) {
+  if (preview.kind !== "write") return undefined;
+  return ["denied", "rejected", "failed", "error"].includes(status ?? "")
+    ? copy("Uygulanmadı", "Not applied")
+    : ["completed", "done", "success"].includes(status ?? "")
+      ? copy("Uygulandı", "Applied")
+      : copy("Önerilen değişiklik", "Proposed change");
+}
+
 export function TranscriptToolPreview(props: PreviewProps) {
   if (!props.preview) return null;
   const identity = JSON.stringify(mediaQueryKey(props.context, ["tool-preview-reader", props.preview.kind, props.preview.path, props.preview.fileName]));
@@ -32,7 +41,9 @@ function PreviewOwner(props: RecordedPreview) {
   const { preview } = props;
   const name = preview.path || preview.fileName || preview.title || copy("Değişiklik", "Change");
   return <>
-    <ChatSummary label={name} detail={[copy("Değişikliği aç", "Open change"), preview.additions ? `+${preview.additions}` : "", preview.deletions ? `−${preview.deletions}` : ""].filter(Boolean).join(" · ")}
+    <ChatSummary label={name} detail={[preview.kind === "write" ? copy("Değişikliği aç", "Open change") : copy("Çıktıyı aç", "Open output"), preview.additions ? `+${preview.additions}` : "", preview.deletions ? `−${preview.deletions}` : ""].filter(Boolean).join(" · ")}
+      status={writeState(preview, props.status, copy)}
+      color={["denied", "rejected", "failed", "error"].includes(props.status ?? "") ? colors.danger : colors.muted}
       icon={<File size={16} color={colors.muted} />} onPress={() => setOpen(true)} />
     {open ? <PreviewReader {...props} name={name} onClose={() => setOpen(false)} /> : null}
   </>;
@@ -49,8 +60,7 @@ function PreviewReader({ preview, status, context, name, onClose }: RecordedPrev
   const clipboard = useClipboardFeedback(source.text, !!source.text, flight);
   const pathCopy = useClipboardFeedback(preview.path ?? "", !!preview.path, flight);
   const busy = clipboard.busy || pathCopy.busy;
-  const rejected = ["denied", "rejected", "failed", "error"].includes(status ?? "");
-  const state = preview.kind === "write" ? rejected ? copy("Uygulanmadı", "Not applied") : ["completed", "done", "success"].includes(status ?? "") ? copy("Uygulandı", "Applied") : copy("Önerilen değişiklik", "Proposed change") : undefined;
+  const state = writeState(preview, status, copy);
   return <Sheet visible title={name} size="full" scroll={false} onClose={onClose} footer={<>
     <ReaderActions page={pagination.page} pages={pagination.pages} onPage={pagination.setPage}
       copyLabel={clipboard.copied ? copy("Kopyalandı", "Copied") : copy("Kopyala", "Copy")}

@@ -29,7 +29,7 @@ export const darkColors = {
   userMessage: "#1A1A1E",
   scrim: "#00000099",
   /** Translucent tint over the blurred floating tab bar; keeps labels readable. */
-  glass: "#1F1F24B8",
+  glass: "#1F1F24F5",
   /** Full-screen media viewer: always a black stage with light controls, in both themes. */
   viewer: "#000000",
   viewerText: "#FFFFFF",
@@ -61,7 +61,7 @@ export const lightColors: MobileColors = {
   selected: "#E6EFFA",
   userMessage: "#EFEFF2",
   scrim: "#00000059",
-  glass: "#FFFFFFB8",
+  glass: "#FFFFFFF5",
   viewer: "#000000",
   viewerText: "#FFFFFF",
 };
@@ -188,7 +188,7 @@ export const lineHeight = {
 export const metrics = {
   controlHeight: 40,
   compactControlHeight: 32,
-  inputHeight: 40,
+  inputHeight: 48,
   selectionHeight: 40,
   iconTarget: 48,
   touchTarget: 48,
@@ -204,7 +204,7 @@ export const metrics = {
   groupGuide: 2,
   toolRowHeight: 28,
   headerHeight: 48,
-  composerFieldMin: 40,
+  composerFieldMin: 48,
   multilineHeight: 96,
   contentWidth: 760,
   entryWidth: 520,

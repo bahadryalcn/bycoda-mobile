@@ -48,9 +48,12 @@ afterEach(async () => { await act(async () => root.unmount()); vi.clearAllMocks(
 
 it("retains local crew draft and opening conflict token across parent polling", async () => {
   const original = validCrew();
+  original.agents[0].modelChoice = { kind: "pool", poolId: "review-models" };
   const close = vi.fn();
   const render = (initial = original) => root.render(createElement(CrewEditor, { initial, projectId: "project", directory: { definitions: [], agents: [], runs: [] }, onClose: close }));
   await act(async () => render());
+  expect(state.fields.has("Allocation preference")).toBe(false);
+  expect(state.fields.has("Estimated cost limit (optional)")).toBe(false);
   await act(async () => state.fields.get("Crew name")!("My local crew"));
   await act(async () => render({ ...original, updatedAt: 99, name: "Remote rename", policy: { ...original.policy, maxParallel: 4 } }));
   act(() => state.submit!());

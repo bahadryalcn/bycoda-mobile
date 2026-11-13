@@ -2,15 +2,16 @@
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const fixture = vi.hoisted(() => ({ activeId: "machine", epoch: 0, push: vi.fn(), selectProject: vi.fn(), clear: vi.fn() }));
+const fixture = vi.hoisted(() => ({ activeId: "machine", epoch: 0, locale: "en", push: vi.fn(), selectProject: vi.fn(), clear: vi.fn(), capabilities: undefined as string[] | undefined }));
 vi.mock("@/state/connection-scope", () => { const epochs = new Map<number, any>(); return { useConnectionScope: () => {
   const epoch = fixture.epoch; if (!epochs.has(epoch)) epochs.set(epoch, { token: String(epoch), isCurrent: () => fixture.epoch === epoch }); return epochs.get(epoch);
 } }; });
 vi.mock("expo-router", () => ({ router: { push: fixture.push } }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/tokens", () => ({ colors: {} }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "machine" }), useMachines: { getState: () => ({ activeId: fixture.activeId, selectProject: fixture.selectProject }) } }));
+vi.mock("@/ui/copy", () => ({ useCopy: () => (tr: string, en: string) => fixture.locale === "tr" ? tr : en }));
+vi.mock("@/i18n", () => ({ useLocale: () => fixture.locale }));
+vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "machine", capabilities: fixture.capabilities }), useMachines: { getState: () => ({ activeId: fixture.activeId, selectProject: fixture.selectProject }) } }));
 vi.mock("lucide-react-native/icons/folder-open", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
@@ -46,7 +47,7 @@ vi.mock("../workspace/project-picker", async () => {
 vi.mock("@/ui/primitives", () => ({
   NavigationGroup: ({ children }: PropsWithChildren) => createElement("div", null, children),
   Section: ({ children, title }: PropsWithChildren<{ title: string }>) => createElement("section", null, createElement("h2", null, title), children),
-  NavigationRow: ({ label, onPress }: any) => createElement("button", { onClick: onPress }, label),
+  NavigationRow: ({ label, detail, onPress }: any) => createElement("div", null, createElement("button", { onClick: onPress }, label), detail),
   Empty: ({ title, action }: any) => createElement("div", null, title, action ? createElement("button", { onClick: action.onPress }, action.label) : null),
 }));
 import { ToolDirectory } from "./tool-directory";
@@ -58,8 +59,8 @@ async function render(query = "", projectId: string | null = null, extra: Partia
   await act(async () => root.render(createElement(ToolDirectory, { query, projectId, onClearSearch: fixture.clear, ...extra })));
 }
 async function click(label: string) { await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === label)!.click()); }
-beforeEach(() => { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); fixture.activeId = "machine"; fixture.epoch = 0; container = document.createElement("div"); document.body.append(container); root = createRoot(container); });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
+beforeEach(() => { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); fixture.activeId = "machine"; fixture.epoch = 0; fixture.locale = "en"; container = document.createElement("div"); document.body.append(container); root = createRoot(container); });
+afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 it("offers clear recovery without empty headings and preserves an already-open picker/search through filtering", async () => {
   await render(); await click("Files");
   const field = container.querySelector("input")!;
@@ -86,4 +87,23 @@ it("rejects deferred navigation from a retired connection with the same computer
 it("does not reopen a pending project picker across connection replacement", async () => {
   await render(); await click("Files"); expect(container.querySelector("aside")).not.toBeNull(); fixture.epoch++; await render();
   expect(container.querySelector("aside")).toBeNull(); await click("Files"); expect(container.querySelector("aside")).not.toBeNull();
+});
+
+it("matches Turkish tool and group labels using selected app language", async () => {
+  const lower = String.prototype.toLocaleLowerCase;
+  vi.spyOn(String.prototype, "toLocaleLowerCase").mockImplementation(function (this: string, locale) { return lower.call(this, locale ?? "en"); });
+  fixture.locale = "tr"; await render("BİLGİSAYARLAR");
+  expect(container.textContent).toContain("Bilgisayarlar");
+  await render("iletişim"); expect(container.textContent).toContain("Asistan");
+  expect(fixture.push).not.toHaveBeenCalled();
+});
+
+it("shows project and unsupported capability before opening tools", async () => {
+  fixture.capabilities = [];
+  await render();
+  expect(container.textContent).toContain("Update needed");
+  expect(container.textContent).toContain("Project required");
+  await click("Browser");
+  expect(container.querySelector("aside")).toBeNull();
+  expect(fixture.push).toHaveBeenCalledWith({ pathname: "/tools/[tool]", params: { tool: "browser", projectId: "", machineId: "machine" } });
 });

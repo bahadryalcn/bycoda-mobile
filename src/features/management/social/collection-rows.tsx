@@ -1,3 +1,4 @@
+import { useLocale } from "@/i18n";
 import type { ReactNode } from "react";
 import { Body, Button, Row } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -13,13 +14,15 @@ export function CollectionRows<T>({ items, renderItem, page, beforeRows }: {
   beforeRows?: (visible: readonly T[]) => ReactNode;
 }) {
   const copy = useCopy();
+  const locale = useLocale();
+  const format = new Intl.NumberFormat(locale);
   if (!page) return <PagedRows items={items} renderItem={renderItem} beforeRows={beforeRows} />;
   const navigation = page.page && pageNavigation(page.page);
   return <>
     {beforeRows?.(page.loading ? [] : items)}
     {!page.loading && items.map(renderItem)}
     {navigation && !page.loading ? <>
-      <Body muted>{copy("{p0}–{p1} / {p2}", "{p0}–{p1} / {p2}", { p0: navigation.first, p1: navigation.last, p2: page.page!.total })}</Body>
+      <Body muted>{copy("{p0}–{p1} / {p2}", "{p0}–{p1} / {p2}", { p0: format.format(navigation.first), p1: format.format(navigation.last), p2: format.format(page.page!.total) })}</Body>
       {(navigation.hasPrevious || navigation.hasNext) ? <Row>
         <Button tone="quiet" label={copy("Önceki sayfa", "Previous page")} disabled={page.busy || !navigation.hasPrevious}
           onPress={() => page.onOffset(navigation.previous)} />

@@ -1,7 +1,7 @@
 import { lineHeight, metrics, space } from "./tokens";
 import { workspaceFrameBudget } from "./workspace-frame-model";
 export const COMPOSER_LINE_HEIGHT = lineHeight.input;
-/** Vertical padding that makes one line exactly fill the 40dp field floor. */
+/** Vertical padding that makes one line fill the 48dp touch target. */
 export const COMPOSER_FIELD_PADDING = Math.floor((metrics.composerFieldMin - COMPOSER_LINE_HEIGHT) / 2);
 /** The field grows to this many lines, then scrolls. */
 export const COMPOSER_MAX_LINES = 5;

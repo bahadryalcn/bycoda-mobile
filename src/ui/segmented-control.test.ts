@@ -133,3 +133,14 @@ it("can omit a repeated visible selector label while retaining its accessible na
  renderToStaticMarkup(createElement(SegmentedControl,{label:"Inbox",hideLabel:true,value:"one",options:["one","two","three","four"].map(value=>({value,label:value})),onChange:vi.fn()}));
  expect(state.kind).toBe("selector");expect(state.hideLabel).toBe(true);expect(state.selectorLabel).toBe("Inbox");expect(state.value).toBe("one");
 });
+it("shows direct-choice field context and hides it only for explicit compact toolbars", () => {
+  state.width = 800; state.fontScale = 1;
+  const props = { label: "Reasoning", value: "medium", options: [{ value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" }], onChange: vi.fn() };
+  const visible = renderToStaticMarkup(createElement(SegmentedControl, props));
+  expect(visible.replace(/<[^>]+>/g, "")).toContain("Reasoning");
+  const compact = renderToStaticMarkup(createElement(SegmentedControl, { ...props, hideLabel: true }));
+  expect(compact.replace(/<[^>]+>/g, "")).not.toContain("Reasoning");
+  expect(state.value).toBe("medium");
+  expect(props.onChange).not.toHaveBeenCalled();
+  state.width = 320;
+});

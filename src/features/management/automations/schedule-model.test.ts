@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { integerInRange, scheduleLabel, scheduleSentence, validScheduleTime } from "./schedule-model";
+import { automationTriggerValid, integerInRange, scheduleLabel, scheduleSentence, validScheduleTime } from "./schedule-model";
 
 describe("mobile automation schedules", () => {
+  it("validates continuous bounds and keeps events independent of hidden schedule input", () => {
+    for (const gap of ["1", "10080"]) expect(automationTriggerValid("continuous", gap, false)).toBe(true);
+    for (const gap of ["0", "10081", "", "1.5"]) expect(automationTriggerValid("continuous", gap, true)).toBe(false);
+    expect(automationTriggerValid("event", "", false)).toBe(true);
+    expect(automationTriggerValid("scheduled", "1", false)).toBe(false);
+  });
   it("rejects partial and out-of-range times without changing user input", () => {
     for (const value of ["", "9:00", "24:00", "12:60", "-1:20", "12:00 "])
       expect(validScheduleTime(value)).toBe(false);

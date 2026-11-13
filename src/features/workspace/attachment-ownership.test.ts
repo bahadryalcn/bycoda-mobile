@@ -4,6 +4,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem
 import type { HostTransport } from "@/remote/transport";
 import { AttachmentReleaseOutbox, ATTACHMENT_OWNERSHIP_CAPABILITY, composerDraftKey } from "./attachment-ownership";
 import { emptyComposerDraft, encodeComposerDraft } from "./composer-draft";
+import { questionAttachmentStore } from "./question-attachment-draft";
 const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const claimId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const file = { id, claimId };
@@ -19,6 +20,43 @@ function fixture() {
   };
   return { data, storage, request, client, save, outbox: new AttachmentReleaseOutbox(storage) };
 }
+it.each(["sending", "unknown", "failed", undefined])("retains question-only durable custody across restart (%s)", async delivery => {
+  const f = fixture();
+  const key = "bycoda.mobile.question-attachments.v1:m:s";
+  f.data.set(key, JSON.stringify({ version: 1, entries: { occurrence: { environmentId: "env", draft: { answers: {}, custom: {}, attachments: { q: [{ ...file, name: "proof", size: 1, mimeType: "text/plain", kind: "file", uri: "file:///draft" }] } }, delivery } } }));
+  await f.outbox.stage(f.client, "s", [file]);
+  await new AttachmentReleaseOutbox(f.storage).flush(f.client);
+  expect(f.request).not.toHaveBeenCalled();
+  f.data.delete(key);
+  await f.outbox.flush(f.client);
+  expect(f.request).toHaveBeenCalledOnce();
+});
+it("fails closed on malformed question custody even when composer is empty", async () => {
+  const f = fixture();
+  f.data.set("bycoda.mobile.question-attachments.v1:m:s", '{"version":1,"entries":{"x":{"draft":{"attachments":null}}}}');
+  await f.outbox.stage(f.client, "s", [file]);
+  await expect(f.outbox.flush(f.client)).rejects.toThrow();
+  expect(f.request).not.toHaveBeenCalled();
+});
+it("retains a failed question save in memory while an older durable release intent exists", async () => {
+  const f = fixture();
+  const store = questionAttachmentStore(f.storage, "m", "s"); await store.hydrate();
+  f.storage.setItem.mockRejectedValueOnce(new Error("disk full"));
+  await expect(store.save("occurrence", { environmentId: "env", draft: { answers: {}, custom: {}, attachments: { q: [{ ...file, name: "proof", size: 1, mimeType: "text/plain", kind: "file", uri: "file:///draft" }] } } })).rejects.toThrow();
+  await f.outbox.stage(f.client, "s", [file]);
+  await f.outbox.flush(f.client);
+  expect(f.request).not.toHaveBeenCalled();
+});
+it("keeps concurrent queue custody and fails closed on malformed queue ownership", async () => {
+  const f = fixture();
+  const key = "bycoda.mobile.queue-attachments.v1:m:env:s";
+  f.data.set(key, JSON.stringify({ version: 1, generation: claimId, snapshot: [file], held: [file], releasing: [], reserved: [] }));
+  await f.outbox.stage(f.client, "s", [file]); await f.outbox.flush(f.client);
+  expect(f.request).not.toHaveBeenCalled();
+  f.data.set(key, '{"version":1,"snapshot":null}');
+  await expect(f.outbox.flush(f.client)).rejects.toThrow(); expect(f.request).not.toHaveBeenCalled();
+  f.data.delete(key); await f.outbox.flush(f.client); expect(f.request).toHaveBeenCalledOnce();
+});
 it("keeps a tombstoned attachment claimed while its durable draft still references it", async () => {
   const f = fixture(); f.save("s", true);
   await f.outbox.stage(f.client, "s", [file]);

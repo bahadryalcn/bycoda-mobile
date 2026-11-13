@@ -3,42 +3,189 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { DeviceViewer } from "./device-viewer";
-const state = vi.hoisted(() => ({ id: "machine", writes: [] as { method: string; params: unknown }[], refresh: vi.fn(), finishBoot: undefined as undefined | ((value: unknown) => void) }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
+const state = vi.hoisted(() => ({
+  id: "machine",
+  writes: [] as { method: string; params: unknown }[],
+  refresh: vi.fn(),
+  finishBoot: undefined as undefined | ((value: unknown) => void),
+  deferAction: false,
+  finishAction: undefined as undefined | ((value: unknown) => void),
+  fields: new Map<string, { value: string; onChangeText(value: string): void }>(),
+}));
+vi.mock("@/ui/theme", () => ({
+  useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }),
+}));
 vi.mock("lucide-react-native/icons/house", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("@/state/machines", () => {
   const machine = () => ({ id: state.id, environmentId: "host" });
-  const useMachines = Object.assign(() => state.id, { getState: () => ({ activeId: state.id, machines: [machine()] }), subscribe: () => () => {} });
+  const useMachines = Object.assign(() => state.id, {
+    getState: () => ({ activeId: state.id, machines: [machine()] }),
+    subscribe: () => () => {},
+  });
   return { useMachines, useActiveMachine: machine };
 });
-vi.mock("expo-crypto", () => { let id = 0; return { randomUUID: () => String(++id) }; });
+vi.mock("expo-crypto", () => {
+  let id = 0;
+  return { randomUUID: () => String(++id) };
+});
 vi.mock("@/state/queries", () => ({
-  useHostQuery: () => ({ data: { mime: "image/png", base64: "YWJj" }, isFetching: false, refetch: state.refresh }),
-  useHostMutation: (method: string) => ({ isPending: false, mutateAsync: async (params: unknown) => { state.writes.push({ method, params }); if (method === "devices.boot") return new Promise((resolve) => { state.finishBoot = resolve; }); return "ok"; } }),
+  useHostQuery: () => ({
+    data: { mime: "image/png", base64: "YWJj" },
+    isFetching: false,
+    refetch: state.refresh,
+  }),
+  useHostMutation: (method: string) => ({
+    isPending: false,
+    mutateAsync: async (params: unknown) => {
+      state.writes.push({ method, params });
+      if (method === "devices.boot")
+        return new Promise((resolve) => {
+          state.finishBoot = resolve;
+        });
+      if (state.deferAction)
+        return new Promise((resolve) => {
+          state.finishAction = resolve;
+        });
+      return "ok";
+    },
+  }),
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/tokens", () => ({ colors: {} }));
 vi.mock("./device-runtime", () => ({ DeviceRuntime: () => null }));
 vi.mock("./device-preview", () => ({ DevicePreviewSheet: () => null }));
-vi.mock("@/ui/remote-frame", () => ({ RemoteFrame: ({ onPress }: { onPress: (point: { x: number; y: number }) => void }) => createElement("button", { onClick: () => onPress({ x: 10, y: 20 }) }, "Frame") }));
+vi.mock("@/ui/remote-frame", () => ({
+  RemoteFrame: ({ onPress }: { onPress: (point: { x: number; y: number }) => void }) =>
+    createElement("button", { onClick: () => onPress({ x: 10, y: 20 }) }, "Frame"),
+}));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
+  const Button = ({
+    label,
+    disabled,
+    onPress,
+  }: {
+    label: string;
+    disabled?: boolean;
+    onPress: () => void;
+  }) => createElement("button", { disabled, onClick: onPress }, label);
   return {
-    NavigationRow: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label), Body: Wrapper, Sheet: Wrapper, Row: Wrapper, Disclosure: Wrapper, NavigationGroup: Wrapper, QueryState: () => null, MutationState: () => null, Notice: () => null, Badge: () => null, Field: () => null, Button, IconButton: Button,
-    ToggleField: ({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) => createElement(Button, { label, onPress: () => onChange(!value) }) };
+    NavigationRow: ({
+      label,
+      onPress,
+      disabled,
+    }: {
+      label: string;
+      onPress: () => void;
+      disabled?: boolean;
+    }) => createElement("button", { onClick: onPress, disabled }, label),
+    Body: Wrapper,
+    Sheet: Wrapper,
+    Row: Wrapper,
+    Disclosure: Wrapper,
+    NavigationGroup: Wrapper,
+    QueryState: () => null,
+    MutationState: () => null,
+    Notice: () => null,
+    Badge: () => null,
+    Field: (props: { label: string; value: string; onChangeText(value: string): void }) => {
+      state.fields.set(props.label, props);
+      return null;
+    },
+    Button,
+    IconButton: Button,
+    ToggleField: ({
+      label,
+      value,
+      onChange,
+    }: {
+      label: string;
+      value: boolean;
+      onChange: (value: boolean) => void;
+    }) => createElement(Button, { label, onPress: () => onChange(!value) }),
+  };
 });
-let root: ReturnType<typeof createRoot> | undefined; let container: HTMLDivElement; const onDevice = vi.fn();
-async function render(booted: boolean) { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); root = createRoot(container); await act(async () => root!.render(createElement(DeviceViewer, { projectId: "project", device: { id: "device", name: "Device", platform: "android", version: "1", booted, physical: false }, canControl: true, onDevice, onClose: vi.fn() }))); }
-async function click(label: string) { await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === label)!.click()); }
-afterEach(async () => { await act(async () => root?.unmount()); root = undefined; state.id = "machine"; state.writes = []; state.refresh.mockClear(); state.finishBoot = undefined; onDevice.mockClear(); vi.unstubAllGlobals(); });
+let root: ReturnType<typeof createRoot> | undefined;
+let container: HTMLDivElement;
+const onDevice = vi.fn();
+async function render(booted: boolean) {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  container = document.createElement("div");
+  root = createRoot(container);
+  await act(async () =>
+    root!.render(
+      createElement(DeviceViewer, {
+        projectId: "project",
+        device: {
+          id: "device",
+          name: "Device",
+          platform: "android",
+          version: "1",
+          booted,
+          physical: false,
+        },
+        canControl: true,
+        onDevice,
+        onClose: vi.fn(),
+      }),
+    ),
+  );
+}
+async function click(label: string) {
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === label)!
+      .click(),
+  );
+}
+afterEach(async () => {
+  await act(async () => root?.unmount());
+  root = undefined;
+  state.id = "machine";
+  state.writes = [];
+  state.refresh.mockClear();
+  state.finishBoot = undefined;
+  state.finishAction = undefined;
+  state.deferAction = false;
+  state.fields.clear();
+  onDevice.mockClear();
+  vi.unstubAllGlobals();
+});
 it("stale machine callbacks cannot capture or control the formerly selected device", async () => {
-  await render(true); await click("Control device"); state.id = "other"; await click("Frame"); await click("Refresh screen");
-  expect(state.writes).toEqual([]); expect(state.refresh).not.toHaveBeenCalled();
+  await render(true);
+  await click("Control device");
+  state.id = "other";
+  await click("Frame");
+  await click("Refresh screen");
+  expect(state.writes).toEqual([]);
+  expect(state.refresh).not.toHaveBeenCalled();
 });
 it("late boot completion cannot replace the selected device after a machine switch", async () => {
-  await render(false); await click("Boot device"); expect(state.writes).toEqual([{ method: "devices.boot", params: { projectId: "project", deviceId: "device" } }]);
-  state.id = "other"; await act(async () => state.finishBoot!({ id: "foreign-running-serial", booted: true })); expect(onDevice).not.toHaveBeenCalled();
+  await render(false);
+  await click("Boot device");
+  expect(state.writes).toEqual([
+    { method: "devices.boot", params: { projectId: "project", deviceId: "device" } },
+  ]);
+  state.id = "other";
+  await act(async () => state.finishBoot!({ id: "foreign-running-serial", booted: true }));
+  expect(onDevice).not.toHaveBeenCalled();
+});
+
+it("keeps newer device text when an earlier Type text request completes", async () => {
+  state.deferAction = true;
+  await render(true);
+  await click("Control device");
+  await act(async () => state.fields.get("Text")!.onChangeText("First text"));
+  await click("Type text");
+  await act(async () => state.fields.get("Text")!.onChangeText("New unsent text"));
+  await act(async () => state.finishAction!("ok"));
+  expect(state.fields.get("Text")!.value).toBe("New unsent text");
+  expect(state.writes).toHaveLength(1);
+  expect(state.writes[0].params).toEqual({
+    projectId: "project",
+    deviceId: "device",
+    action: { type: "type", text: "First text" },
+  });
 });

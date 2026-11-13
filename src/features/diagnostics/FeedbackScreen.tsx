@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Stack as RouterStack, useLocalSearchParams } from "expo-router";
 import { useAccount } from "../account/ui/account-context";
 import { Body, ChoiceChip, Field, FormActions, Notice, Row, Screen, SegmentedControl, Stack, ToggleField, showToast } from "../../ui/primitives";
@@ -20,10 +20,14 @@ export function FeedbackScreen() {
   const account = useAccount();
   const resultText = useDiagnosticResultText();
   const { crash } = useLocalSearchParams<{ crash?: string }>();
-  const { draft, attachTouched, patch, clear } = useFeedbackDraft();
+  const { draft, attachTouched, patch, clearIfCurrent } = useFeedbackDraft();
   const mode = useDiagnosticPrefs((state) => state.consent.mode);
   const hydrate = useDiagnosticPrefs((state) => state.hydrate);
   const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
+  const mounted = useRef(true);
+  // Delivery can outlive this screen; it must not replace a reopened draft.
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [result, setResult] = useState<FeedbackSubmitResult | null>(null);
   const fromCrash = crash === "1";
 
@@ -62,7 +66,9 @@ export function FeedbackScreen() {
         : undefined;
 
   const send = async () => {
-    if (busy) return;
+    if (pending.current || !mounted.current) return;
+    pending.current = true;
+    const submitted = draft;
     setBusy(true);
     const { signedIn, client } = feedbackClient(account);
     try {
@@ -74,15 +80,17 @@ export function FeedbackScreen() {
           return logs;
         },
       });
-      setResult(outcome);
       if (outcome.status === "sent") {
-        clear();
+        const cleared = clearIfCurrent(submitted);
+        if (!mounted.current) return;
+        setResult(cleared ? outcome : null);
         showToast({ tone: "success", message: copy("Geri bildirimin için teşekkürler!", "Thank you for your feedback!") });
-      }
+      } else if (mounted.current && useFeedbackDraft.getState().draft === submitted) setResult(outcome);
     } catch {
-      setResult({ status: "failed" });
+      if (mounted.current && useFeedbackDraft.getState().draft === submitted) setResult({ status: "failed" });
     } finally {
-      setBusy(false);
+      pending.current = false;
+      if (mounted.current) setBusy(false);
     }
   };
 
@@ -148,7 +156,7 @@ export function FeedbackScreen() {
             value={attachLogs}
             onChange={(value) => patch({ attachLogs: value })}
           />
-          <Body muted>{copy("Yalnızca yazdıkların gönderilir. Gizli bilgileri yapıştırma.", "Only what you write is sent. Do not paste secrets.")}</Body>
+          <Body muted>{copy("Gizli bilgileri yapıştırma.", "Do not paste secrets.")}</Body>
           {result?.status === "rate-limited" ? (
             <Notice tone="danger" message={copy("Çok fazla istek. Biraz bekleyip tekrar dene; mesajın korunuyor.", "Too many requests. Wait a little and try again; your message is kept.")} />
           ) : null}

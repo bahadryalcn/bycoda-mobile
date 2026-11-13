@@ -2,6 +2,8 @@ import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
 import { useEffect, useRef, useState } from "react";
 import { useFormDraft } from "@/state/form-draft";
+import { RemoteHostError } from "@/remote/host-error";
+import { space } from "@/ui/tokens";
 import {
   Badge,
   Body,
@@ -9,6 +11,7 @@ import {
   Card,
   Disclosure,
   Field,
+  ErrorText,
 } from "@/ui/primitives";
 import { Questionnaire } from "panelui-native/components/questionnaire";
 import { useCopy } from "@/ui/copy";
@@ -19,14 +22,15 @@ import {
   questionStatusLabel,
   questionSubmissionHeld,
 } from "./question-status";
-import { questionCardStates } from "./question-card-state";
+import { questionCardIdentity, questionCardStates } from "./question-card-state";
 import {
-  CUSTOM_OPTION,
   buildReply,
   fromQuestionnaireAnswer,
   noteApplies,
   questionComplete,
   toQuestionnaireAnswers,
+  isCustomChoice,
+  updateCustomAnswer,
 } from "./question-card-model";
 
 const RETAINED = Symbol("retained");
@@ -34,27 +38,40 @@ type LocalDelivery = {
   value: NonNullable<QuestionCardProps["question"]["delivery"]>;
   base: QuestionCardProps["question"]["delivery"] | typeof RETAINED;
   version?: number;
+  error?: unknown;
 };
 
-export function QuestionCard({
+export function QuestionCard(props: QuestionCardProps) {
+  return <QuestionCardOwner key={questionCardIdentity(props.draftScope, props.question)} {...props} />;
+}
+
+function QuestionCardOwner({
   question,
   draftScope,
   deliveryVersion,
   disabled,
   onAnswer,
+  initialDraft,
+  onDraftChange,
+  attachmentControls,
+  attachments,
+  attachmentBusy,
+  submitAnswer,
 }: QuestionCardProps) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const [retained] = useState(() => questionCardStates.read(draftScope, question));
-  const form = useFormDraft<QuestionDraft>(() => retained?.draft ?? { answers: {}, custom: {} });
+  const form = useFormDraft<QuestionDraft>(() => initialDraft ?? retained?.draft ?? { answers: {}, custom: {} });
+  const draft = { ...form.values, ...(attachments ? { attachments } : {}) };
   const { answers, custom, notes = {} } = form.values;
+  const [activeItem, setActiveItem] = useState(question.questions[0]?.id);
   const submitting = useRef(
     !!retained?.delivery && questionSubmissionHeld({ ...question, delivery: retained.delivery }),
   );
   // A local latch belongs to the authoritative delivery it was set under. Once the host
   // reports a different delivery (or a new revision) the host value wins again.
   const [local, setLocal] = useState<LocalDelivery | undefined>(
-    retained?.delivery ? { value: retained.delivery, base: RETAINED } : undefined,
+    retained?.delivery ? { value: retained.delivery, base: RETAINED, error: retained.error } : undefined,
   );
   const superseded =
     !!local &&
@@ -62,36 +79,46 @@ export function QuestionCard({
     !(local.base === question.delivery && local.version === deliveryVersion);
   if (superseded) setLocal(undefined);
   const localDelivery = local && !superseded ? local.value : undefined;
-  const setLocalDelivery = (value: NonNullable<QuestionCardProps["question"]["delivery"]>) =>
-    setLocal({ value, base: question.delivery, version: deliveryVersion });
+  const setLocalDelivery = (value: NonNullable<QuestionCardProps["question"]["delivery"]>, error?: unknown) =>
+    setLocal({ value, base: question.delivery, version: deliveryVersion, error });
+  // Only an authoritative failed delivery permits another attempt.
   useEffect(() => {
     if (question.delivery === "failed") submitting.current = false;
   }, [question.delivery, deliveryVersion]);
+  // Retain the editor and local delivery across navigation for this exact occurrence.
   useEffect(() => {
     questionCardStates.write(draftScope, question, {
       draft: form.values,
       delivery: localDelivery ?? (question.delivery === "failed" ? undefined : question.delivery),
+      error: local && !superseded ? local.error : undefined,
     });
-  }, [draftScope, question, form.values, localDelivery]);
+  }, [draftScope, question, form.values, localDelivery, local, superseded]);
+  // The attachment custody owner persists text alongside files for process restart.
+  useEffect(() => { onDraftChange?.(form.values); }, [onDraftChange, form.values]);
   const current = localDelivery ? { ...question, delivery: localDelivery } : question;
   // A host command receipt is not provider delivery. Keep the latch until the
   // authoritative question resolves or explicitly reports an undelivered failure.
-  const held = disabled || questionSubmissionHeld(current);
+  const held = disabled || !!attachmentBusy || questionSubmissionHeld(current);
   const submit: QuestionCardProps["onAnswer"] = async (reply) => {
     if (held || submitting.current) return;
     submitting.current = true;
     setLocalDelivery("sending");
     questionCardStates.write(draftScope, question, { draft: form.values, delivery: "sending" });
     try {
-      await onAnswer(reply);
-    } catch {
-      setLocalDelivery("unknown");
-      questionCardStates.write(draftScope, question, { draft: form.values, delivery: "unknown" });
+      if (submitAnswer) await submitAnswer(reply, draft);
+      else await onAnswer(reply);
+    } catch (cause) {
+      const delivery = cause instanceof RemoteHostError && !cause.uncertain ? "failed" : "unknown";
+      if (delivery === "failed") submitting.current = false;
+      setLocalDelivery(delivery, cause);
+      questionCardStates.write(draftScope, question, { draft: form.values, delivery, error: cause });
     }
   };
-  const complete = question.questions.every((item) => questionComplete(item, form.values));
+  const complete = question.questions.length > 0 && question.questions.every((item) => questionComplete(item, draft));
+  const currentItem = question.questions.find((item) => item.id === activeItem);
   const answer = () => {
-    void submit(buildReply(question.questions, form.values));
+    if (!complete) return;
+    void submit(buildReply(question.questions, draft));
   };
   const customField = (item: QuestionCardProps["question"]["questions"][number]) => (
     <Field
@@ -99,7 +126,7 @@ export function QuestionCard({
       value={custom[item.id] ?? ""}
       editable={!held}
       onChangeText={(text) =>
-        form.patch((current) => ({ custom: { ...current.custom, [item.id]: text } }))
+        !held && form.patch((current) => updateCustomAnswer(item, current, text))
       }
       multiline
     />
@@ -120,6 +147,7 @@ export function QuestionCard({
           tone={questionNeedsAttention(current) ? "warning" : "default"}
         />
         {current.error ? <Body accessibilityRole="alert">{current.error}</Body> : null}
+        <ErrorText error={local && !superseded ? local.error : undefined} />
         {current.delivery === "unknown" ? (
           <Body muted>
             {copy(
@@ -131,8 +159,11 @@ export function QuestionCard({
         <Questionnaire
           frame={false}
           swipeable={false}
-          answers={toQuestionnaireAnswers(question.questions, form.values)}
-          onAnswersChange={(next) =>
+          item={activeItem}
+          onItemChange={setActiveItem}
+          answers={toQuestionnaireAnswers(question.questions, draft)}
+          onAnswersChange={(next) => {
+            if (held) return;
             form.patch((current) => {
               const nextAnswers = { ...current.answers };
               for (const item of question.questions) {
@@ -141,8 +172,8 @@ export function QuestionCard({
                   nextAnswers[item.id] = ids;
               }
               return { answers: nextAnswers };
-            })
-          }
+            });
+          }}
         >
           {question.questions.length > 1 ? <Questionnaire.Progress variant="count" /> : null}
           {question.questions.map((item) => (
@@ -151,13 +182,14 @@ export function QuestionCard({
               name={item.id}
               required
               multiple={!!item.multiSelect}
-              invalid={(answers[item.id] ?? []).includes(CUSTOM_OPTION) && !custom[item.id]?.trim()}
+              invalid={(answers[item.id] ?? []).some((id) => isCustomChoice(item, id)) && !questionComplete(item, draft)}
             >
               <Questionnaire.Question>{item.prompt}</Questionnaire.Question>
               {item.options.length ? (
                 <Questionnaire.Choices>
                   {item.options.map((option) => (
                     <Questionnaire.Choice
+                      className="min-h-12"
                       key={option.id}
                       value={option.id}
                       label={option.label}
@@ -168,7 +200,7 @@ export function QuestionCard({
                 </Questionnaire.Choices>
               ) : null}
               {item.allowCustom ? (
-                !item.options.length || answers[item.id]?.includes(CUSTOM_OPTION) ? (
+                !item.options.length || answers[item.id]?.some((id) => isCustomChoice(item, id)) ? (
                   customField(item)
                 ) : (
                   <Disclosure
@@ -179,20 +211,21 @@ export function QuestionCard({
                   </Disclosure>
                 )
               ) : null}
+              {attachmentControls?.(item.id, held)}
               {noteApplies(item, form.values) ? (
                 <Field
                   label={copy("Ek not (isteğe bağlı)", "Additional note (optional)")}
                   value={notes[item.id] ?? ""}
                   editable={!held}
                   onChangeText={(text) =>
-                    form.patch((current) => ({ notes: { ...current.notes, [item.id]: text } }))
+                    !held && form.patch((current) => ({ notes: { ...current.notes, [item.id]: text } }))
                   }
                   multiline
                 />
               ) : null}
             </Questionnaire.Item>
           ))}
-          <Questionnaire.Footer>
+          <Questionnaire.Footer style={{ flexWrap: "wrap", gap: space.xs }}>
             <Questionnaire.Back disabled={held}>{copy("Geri", "Back")}</Questionnaire.Back>
             <Questionnaire.Spacer />
             <Button
@@ -204,7 +237,7 @@ export function QuestionCard({
                 void submit({ kind: "skipped" });
               }}
             />
-            <Questionnaire.Next disabled={held}>{copy("Devam", "Continue")}</Questionnaire.Next>
+            <Questionnaire.Next disabled={held || !currentItem || !questionComplete(currentItem, draft)}>{copy("Devam", "Continue")}</Questionnaire.Next>
             <Questionnaire.Submit
               disabled={held || !complete}
               loading={current.delivery === "sending"}

@@ -39,6 +39,7 @@ export function DemoScreen() {
     <Screen title={copy("Uygulamayı keşfet", "Explore the app")}>
       <Stack.Screen options={{ title: copy("Uygulamayı keşfet", "Explore the app") }} />
       <Badge label={copy("Çevrimdışı örnek", "Offline example")} />
+      {__DEV__ ? <Button label="Workspace fixtures" tone="quiet" onPress={() => router.push("./dev-workspace")} /> : null}
       <Disclosure label={copy("Yardım", "Help")}>
         <Body muted>
           {copy(
@@ -47,7 +48,7 @@ export function DemoScreen() {
           )}
         </Body>
       </Disclosure>
-      <SegmentedControl
+      <SegmentedControl hideLabel
         label={copy("Tur bölümü", "Tour section")}
         value={page}
         onChange={setPage}

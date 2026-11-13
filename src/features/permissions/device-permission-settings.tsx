@@ -50,9 +50,11 @@ export function DevicePermissionSettings() {
   const badge = (read: PermissionRead) => {
     if (read.status !== "ready") return null;
     if (read.permission.granted) return <Badge label={copy("İzin verildi", "Granted")} tone="success" />;
-    return read.permission.canAskAgain
+    return read.permission.status === "undetermined"
       ? <Badge label={copy("Henüz sorulmadı", "Not asked")} />
-      : <Badge label={copy("Reddedildi", "Denied")} tone="danger" />;
+      : read.permission.status === "denied"
+        ? <Badge label={copy("Reddedildi", "Denied")} tone="danger" />
+        : <Badge label={copy("Kullanılamıyor", "Unavailable")} />;
   };
   const failed = failedPermissionKinds(reads);
   const labels = { camera: copy("Kamera", "Camera"), notifications: copy("Bildirimler", "Notifications") };

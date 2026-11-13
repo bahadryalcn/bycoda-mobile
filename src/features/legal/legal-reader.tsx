@@ -26,7 +26,10 @@ export function LegalReader({ document }: { document: Exclude<LegalDocumentId, "
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={{
           width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center",
-          paddingTop: space.md, paddingHorizontal: Math.max(insets.left, space.screen),
+          paddingTop: space.md,
+          // Safe-area edges are physical even when text and section navigation are RTL.
+          paddingLeft: Math.max(insets.left, space.screen),
+          paddingRight: Math.max(insets.right, space.screen),
           paddingBottom: insets.bottom + space.lg + sectionNavigatorClearance(fontScale),
         }}>
         <LegalDocument document={document} sectionLayout={tracker.measure} />

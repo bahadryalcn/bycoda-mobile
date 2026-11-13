@@ -1,3 +1,4 @@
+import { useInboxLocalScope } from "./inbox-local-scope";
 import { providerStateLabel, providerStateTone } from "./provider-labels";
 import { router } from "expo-router";
 import { getQueryPresentation } from "@/ui/query-presentation";
@@ -7,7 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { RemoteInboxPrAction } from "../../../../src/features/inbox/model/remoteInbox";
 import { useAsyncAction } from "@/state/actions";
 import { useFormDraft } from "@/state/form-draft";
-import { useMachines } from "@/state/machines";
+
 import { hostKey, useHostClient } from "@/state/queries";
 import {
   Badge,
@@ -41,7 +42,6 @@ import { ProviderInboxConversation } from "./provider-conversation";
 import { InboxJobError, isInboxWriteUncertain, runInboxJob } from "./provider-jobs";
 import {
   inboxItemInput,
-  isInboxOriginCurrent,
   isInboxPrivateFailure,
   providerInboxAccess,
   providerName,
@@ -62,6 +62,7 @@ export function ProviderInboxDetail({
   availability,
   onClose,
 }: ProviderInboxDetailProps) {
+  const inboxScope = useInboxLocalScope();
   const copy = useCopy();
   const [item] = useState(incomingItem), [origin] = useState(incomingOrigin);
   const client = useHostClient();
@@ -81,7 +82,7 @@ export function ProviderInboxDetail({
   const submission = useAsyncAction<InboxWriteResult>();
   const openProvider = useAsyncAction<void>();
   const access = providerInboxAccess(availability);
-  const scopeCurrent = isInboxOriginCurrent(origin, useMachines.getState());
+  const scopeCurrent = inboxScope.matches(origin);
   const readAllowed = access.canRead && scopeCurrent;
   const input = inboxItemInput(item, origin.projectId);
   const details = useInboxRead<"details">({ action: "details", input }, readAllowed);
@@ -99,7 +100,7 @@ export function ProviderInboxDetail({
   const { requestClose, requestCloseThen } = useSheetGuard({ dirty: !!form.values.body.trim(), pending: busy, onClose });
   const manageConnections = () => requestCloseThen(() => router.push("/machines"));
   const currentOrigin = () =>
-    mounted.current && isInboxOriginCurrent(origin, useMachines.getState());
+    mounted.current && inboxScope.matches(origin);
 
   const readableNow = () => contentLease.active && currentOrigin() && latest.current.contentAvailable;
   const editableNow = () => readableNow() && latest.current.writeAllowed && !latest.current.busy;
@@ -266,6 +267,7 @@ export function ProviderInboxDetail({
 }
 
 function ProviderInboxDescription({ details }: ProviderInboxDescriptionProps) {
+  const inboxScope = useInboxLocalScope();
   const copy = useCopy();
   return (
     <Stack>

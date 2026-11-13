@@ -1,8 +1,8 @@
 import {expect,it} from "vitest";
 import {workspaceHeaderMaximum} from "./workspace-frame-model";
 it("keeps normal two-row navigation possible beside a useful body",()=>{
- expect(workspaceHeaderMaximum(230,1)).toBe(126);
- expect(workspaceHeaderMaximum(560,1)).toBe(456);
+ expect(workspaceHeaderMaximum(230,1)).toBe(118);
+ expect(workspaceHeaderMaximum(560,1)).toBe(448);
 });
 it("reserves a readable input/action pair even when expanded feedback is very long",()=>{
  for(const height of [144,230,375,640])for(const [scale,budget] of [[1,104],[2,120],[3,142]]){

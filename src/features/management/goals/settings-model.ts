@@ -12,7 +12,7 @@ export function goalSettings(goal: HostGoal): GoalSettings {
 
 export function validGoalSettings(goal: HostGoal, settings: GoalSettings, concurrency: string, minutes: string) {
   return !["done", "cancelled"].includes(goal.status) &&
-    integerInRange(concurrency, 0, 8) && integerInRange(minutes, 0, 10_080) &&
+    integerInRange(concurrency, 0, Number.MAX_SAFE_INTEGER) && integerInRange(minutes, 0, 10_080) &&
     !(settings.autoMerge && goal.isolate === false) &&
     !(goal.status === "planning" && Number(minutes) !== goal.maxRunMinutes);
 }

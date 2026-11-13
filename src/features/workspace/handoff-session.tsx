@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
+import { truncateGraphemes } from "../../../../src/shared/lib/text/truncate";
 import type {
   ContextualSessionInput,
   ContextualSessionPreview,
@@ -51,9 +52,8 @@ export function HandoffSession({
   const copy = useCopy();
   const [openingScope] = useState(scope);
   const machine = useActiveMachine();
-  const [openingIdentity] = useState(
-    () =>
-      machine?.id === scope.machineId ? machine.name : scope.machineId,
+  const [openingIdentity] = useState(() =>
+    machine?.id === scope.machineId ? machine.name : scope.machineId,
   );
   const matches =
     scope.machineId === openingScope.machineId &&
@@ -207,7 +207,9 @@ export function HandoffSession({
         value={form.values.sourceBlockId}
         options={replies.map((block) => ({
           value: block.id,
-          label: block.text.replace(/\s+/g, " ").trim().slice(0, 120) || copy("Yanıt", "Reply"),
+          label:
+            truncateGraphemes(block.text.replace(/\s+/g, " ").trim(), 120) ||
+            copy("Yanıt", "Reply"),
         }))}
         onChange={(sourceBlockId) => form.patch({ sourceBlockId })}
         searchable
@@ -288,12 +290,14 @@ export function HandoffSession({
             {preview.data.sourceProvider} → {preview.data.harness} · {preview.data.model}
           </Body>
           <Body mono>{preview.data.cwd}</Body>
-          <Body muted>{{
-            supervised: copy("Onay iste", "Ask for approval"),
-            "auto-accept-edits": copy("Düzenlemeleri otomatik kabul et", "Auto-accept edits"),
-            auto: copy("Otomatik", "Auto"),
-            "full-access": copy("Tam erişim", "Full access"),
-          }[preview.data.runtimeMode as string] ?? preview.data.runtimeMode}</Body>
+          <Body muted>
+            {{
+              supervised: copy("Onay iste", "Ask for approval"),
+              "auto-accept-edits": copy("Düzenlemeleri otomatik kabul et", "Auto-accept edits"),
+              auto: copy("Otomatik", "Auto"),
+              "full-access": copy("Tam erişim", "Full access"),
+            }[preview.data.runtimeMode as string] ?? preview.data.runtimeMode}
+          </Body>
           <MessageText text={preview.data.contextText} compactMedia />
           {preview.data.files.length ? (
             <Disclosure label={copy("Kaydedilmiş dosya kapsamı", "Recorded file scope")}>

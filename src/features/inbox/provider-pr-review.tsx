@@ -1,10 +1,11 @@
+import { useInboxLocalScope } from "./inbox-local-scope";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   RemoteInboxItem,
   RemoteInboxReviewComment,
   RemoteInboxReview,
 } from "../../../../src/features/inbox/model/remoteInbox";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import {
   Body,
   Button,
@@ -23,7 +24,7 @@ import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { ErrorText } from "../workspace/shared";
 import { useInboxRead } from "./provider-queries";
-import { inboxItemInput, isInboxOriginCurrent, isInboxPrivateFailure } from "./provider-model";
+import { inboxItemInput, isInboxPrivateFailure } from "./provider-model";
 import type { InboxOrigin } from "./provider-protocol";
 import { prReviewLines, reviewedPrSubmission, type PrReviewLine } from "./provider-review-model";
 import { usePrReviewDelivery } from "./provider-review-delivery";
@@ -45,6 +46,7 @@ export function ProviderPrReview({
   canWrite: boolean;
   onClose: () => void;
 }) {
+  const inboxScope = useInboxLocalScope();
   const copy = useCopy();
   const machine = useActiveMachine();
   const [opening] = useState(origin);
@@ -61,7 +63,7 @@ export function ProviderPrReview({
     item.provider === "github" &&
     machine?.id === opening.machineId &&
     !!machine.capabilities?.includes("inbox.review.v1");
-  const originCurrent = isInboxOriginCurrent(opening, useMachines.getState());
+  const originCurrent = inboxScope.matches(opening);
   const readAllowed = supported && canRead && originCurrent;
   const readAccess = useRef(readAllowed); readAccess.current = readAllowed;
   const input = inboxItemInput(item, opening.projectId);
@@ -106,7 +108,7 @@ export function ProviderPrReview({
       return { lines: [] as Array<PrReviewLine & { commentable: boolean }>, error: cause };
     }
   }, [context]);
-  const current = () => mounted.current && isInboxOriginCurrent(opening, useMachines.getState());
+  const current = () => mounted.current && inboxScope.matches(opening);
   const refreshContext = () => {
     if (readAccess.current && current()) return query.refetch();
   };

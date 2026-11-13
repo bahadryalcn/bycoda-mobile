@@ -1,14 +1,14 @@
 import { useCopy } from "@/ui/copy";
 import { ErrorNotice, Loading, SelectField } from "@/ui/primitives";
 import { useProjectList } from "../../workspace/use-project-directory";
-import { useMachines } from "@/state/machines";
+
 import type { ScopeProps } from "./types";
 import { deduplicateProjects } from "../../workspace/activity-model";
 
-export function Scope({ allowAll = false }: ScopeProps) {
+export function Scope({ allowAll = false, projectId, onChange }: ScopeProps) {
   const copy = useCopy();
-  const projectId = useMachines((state) => state.selectedProjectId);
-  const selectProject = useMachines((state) => state.selectProject);
+
+
   const projects = useProjectList();
   const options = deduplicateProjects(projects.data ?? [], projectId).map((project) => ({
     value: project.id,
@@ -18,7 +18,7 @@ export function Scope({ allowAll = false }: ScopeProps) {
   return (
     <>
       <SelectField
-        label={copy("Proje", "Project")}
+        label={copy("Proje filtresi", "Project filter")}
         compact
         hideLabel
         disabled={!projects.directoryReady}
@@ -37,7 +37,7 @@ export function Scope({ allowAll = false }: ScopeProps) {
         }
         onChange={(id) => {
           if (!projects.directoryReady || id && !projects.isProjectVisible(id)) return;
-          selectProject(id || null);
+          onChange(id || null);
         }}
       />
       {/* Field-level feedback stays one compact line: a full StateView here would stretch the

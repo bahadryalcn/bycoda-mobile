@@ -34,6 +34,7 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
   const project = visibleProject ?? (remembered?.machineId === machine?.id && remembered?.projectId === projectId ? remembered?.project : undefined);
   const capability = tool === "servers" ? "dev.servers" : tool === "devices" ? "device.host" : tool === "browser" ? "browser.shared" : tool === "terminals" ? "terminals.v1" : tool === "logs" ? "runtime.logs" : tool === "diagnostics" ? "resources.diagnostics" : tool === "usage" ? "usage.sessions.read" : null;
   const supported = !!capability && machine?.capabilities?.includes(capability);
+  const toolName = ({ servers: copy("Geliştirme sunucuları", "Dev servers"), logs: copy("Çalışma günlükleri", "Runtime logs"), devices: copy("Cihazlar", "Devices"), browser: copy("Tarayıcı", "Browser"), terminals: copy("Terminaller", "Terminals"), diagnostics: copy("Tanılama", "Diagnostics"), usage: copy("Oturum kullanımı", "Session usage") } as Record<string, string>)[tool] ?? copy("Araçlar", "Tools");
   if (!capability) return (
     <Screen title={copy("Araçlar", "Tools")} scroll={false}>
       <View style={{ flex: 1 }}>
@@ -44,11 +45,11 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
   );
   return (
     <View style={{ flex: 1 }}>
-      {!visibleProject || !supported ? <Screen title={copy("Araçlar", "Tools")} scroll={false}><View style={{ flex: 1 }}>
+      {!visibleProject || !supported ? <Screen title={toolName} scroll={false}><View style={{ flex: 1 }}>
         <ProjectDirectoryFeedback query={projects} readiness={projects.readiness}
           privacyUnavailable={projects.privacyUnavailable}
           loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
-        {projects.directoryReady && machine?.capabilities && !supported ? <Empty compact={false} illustration="permission"
+        {machine?.capabilities && !supported ? <Empty compact={false} illustration="permission"
           title={copy("Güncelleme gerekiyor", "Update needed")}
           detail={copy("Bu araç için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on your computer to use this tool.")}
           action={{ label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} /> : null}

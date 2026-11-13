@@ -46,3 +46,38 @@ export function withDraftStorageCleanup<T>(storage: object, operation: (retire: 
   })).finally(() => { state.cleanups--; });
   state.barrier = task.then(() => {}, () => {}); return task;
 }
+
+// Presence is durable metadata, independent of editor ownership epochs.
+type Presence = { value: boolean; loaded: boolean; pending?: Promise<void>; listeners: Set<() => void> };
+const presenceStates = new WeakMap<object, Map<string, Presence>>();
+function presenceFor(storage: object, key: string) {
+  let keys = presenceStates.get(storage);
+  if (!keys) { keys = new Map(); presenceStates.set(storage, keys); }
+  let entry = keys.get(key);
+  if (!entry) {
+    entry = { value: false, loaded: false, listeners: new Set() }; keys.set(key, entry);
+    subscribeDraftEpoch(storage, key, () => publishDraftPresence(storage, key, false));
+  }
+  return entry;
+}
+export function publishDraftPresence(storage: object, key: string, value: boolean) {
+  const entry = presenceFor(storage, key);
+  entry.loaded = true; entry.value = value;
+  for (const listener of entry.listeners) listener();
+}
+export const draftPresence = (storage: object, key: string) => presenceFor(storage, key).value;
+export function subscribeDraftPresence(storage: object, key: string, listener: () => void) {
+  const entry = presenceFor(storage, key); entry.listeners.add(listener);
+  return () => { entry.listeners.delete(listener); };
+}
+export function hydrateDraftPresence(storage: { getItem(key: string): Promise<string | null> }, key: string, hasContent: (raw: string) => boolean): Promise<void> {
+  const entry = presenceFor(storage, key);
+  if (entry.pending) return entry.pending;
+  if (entry.loaded) return Promise.resolve();
+  const owner = createDraftStorageOwner(storage, key);
+  entry.pending = owner.run(async () => {
+    const raw = await storage.getItem(key);
+    if (owner.current()) publishDraftPresence(storage, key, raw !== null && hasContent(raw));
+  }).finally(() => { entry.pending = undefined; });
+  return entry.pending;
+}

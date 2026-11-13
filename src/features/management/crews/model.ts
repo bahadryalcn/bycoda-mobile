@@ -2,6 +2,21 @@ import { defaultCrewPolicy, parseCrewAgent, parseCrewDefinition } from "../../..
 import type { CrewAgent, CrewDefinition, CrewDirectory, CrewRole, SavedCrewAgent } from "@/remote/contracts/crews";
 import type { HostModelCatalog } from "@/domain/types";
 import type { CrewCopy } from "./presentation";
+import type { ModelRoutingItemChoice } from "../../../../../src/shared/model/host-contracts/model-routing";
+
+/** An explicit owner routing change updates only execution binding, never member instructions. */
+export function memberRoutingPatch(choice: ModelRoutingItemChoice): Pick<CrewAgent, "selection" | "modelChoice"> {
+  return { selection: choice.kind === "fixed" ? "fixed" : "automatic", modelChoice: choice };
+}
+export function memberModelSource(agent: CrewAgent, copy: CrewCopy): string | undefined {
+  if (agent.selection !== "automatic") return undefined;
+  switch (agent.modelChoice?.kind) {
+    case "order": return copy("Bilgisayar model sırası", "Host model order");
+    case "default": return copy("Crew üyesi rolü", "Crew member role");
+    case "pool": return `${copy("Havuz", "Pool")} · ${agent.modelChoice.poolId}`;
+    default: return undefined;
+  }
+}
 
 export function newMember(id: string, role: CrewRole, name: string): CrewAgent {
   return { id, role, name, instructions: "", selection: "fixed", candidates: [] };
@@ -85,11 +100,11 @@ export function crewMemberPresentation(agent: CrewAgent, roleLabel: string, copy
   const error = interacted
     ? crewNameError(agent.name, copy, true) ?? crewValidationMessage(memberValidation(agent), copy, true)
     : undefined;
-  const model = agent.candidates.length
+  const model = memberModelSource(agent, copy) ?? (agent.candidates.length
     ? agent.selection === "automatic" && agent.candidates.length > 1
       ? `${agent.candidates.length} ${copy("model", "models")}`
       : agent.candidates[0].model
-    : copy("Model seçilmedi", "No model selected");
+    : copy("Model seçilmedi", "No model selected"));
   const detail = error ?? [name && name.toLocaleLowerCase() !== roleLabel.toLocaleLowerCase() ? roleLabel : undefined, model].filter(Boolean).join(" · ");
   return { label, detail, error };
 }

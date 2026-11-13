@@ -3,6 +3,7 @@ import { act, createElement, type ComponentProps, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProviderJiraBoards } from "./jira-board-screen";
+vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
 
 type Request = { action: string; input?: { boardId?: number; scope?: string; sprintId?: number; pageToken?: string } };
 const state = vi.hoisted(() => ({

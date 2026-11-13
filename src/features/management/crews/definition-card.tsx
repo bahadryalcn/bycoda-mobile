@@ -17,7 +17,7 @@ import { MemberAvatars } from "./member-avatars";
 import { MemberLines } from "./member-lines";
 
 /** A saved crew: member marks, scope, start-work command and its secondary actions. */
-export function CrewDefinitionCard({ value, roleLabel, busy, editorOpen, executionSupported, deleteSupported, machineId, projectId, remove, library, onStart, onEdit }: {
+export function CrewDefinitionCard({ value, roleLabel, busy, editorOpen, executionSupported, deleteSupported, machineId, projectId, isScopeCurrent, remove, library, onStart, onEdit }: {
   value: CrewDefinition;
   roleLabel: (role: CrewDefinition["agents"][number]["role"]) => string;
   busy: boolean;
@@ -26,6 +26,7 @@ export function CrewDefinitionCard({ value, roleLabel, busy, editorOpen, executi
   deleteSupported: boolean;
   machineId?: string;
   projectId: string | null;
+  isScopeCurrent: () => boolean;
   remove: ReturnType<typeof useHostMutation>;
   /** Saved library members, for each member's Library/Customized state. */
   library?: readonly SavedCrewAgent[];
@@ -67,7 +68,7 @@ export function CrewDefinitionCard({ value, roleLabel, busy, editorOpen, executi
                     ),
                     copy("Sil", "Delete"),
                     () => {
-                      if (useMachines.getState().activeId !== machineId || useMachines.getState().selectedProjectId !== projectId) return;
+                      if (useMachines.getState().activeId !== machineId || !isScopeCurrent()) return;
                       remove.mutate({ projectId, definitionId: value.id, expectedUpdatedAt: value.updatedAt });
                     },
                   ) },

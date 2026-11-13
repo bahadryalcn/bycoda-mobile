@@ -4,7 +4,7 @@ export type SettingsFields = { maxRunning: string; dailyMinutes: string };
 export type SettingsDraft = { override: SettingsFields | null };
 export function readHostSettingsState(value: unknown): HostSettingsState {
   const row = value as HostSettingsState | null;
-  if (!row || !Number.isInteger(row.maxRunningTasks) || row.maxRunningTasks < 1 || row.maxRunningTasks > 8 ||
+  if (!row || !Number.isSafeInteger(row.maxRunningTasks) || row.maxRunningTasks < 1 ||
     !Number.isSafeInteger(row.dailyAgentMinutes) || row.dailyAgentMinutes < 0 ||
     typeof row.usedMinutes !== "number" || !Number.isFinite(row.usedMinutes) || row.usedMinutes < 0 || typeof row.limitReached !== "boolean")
     throw new Error("Invalid computer task settings");
@@ -22,9 +22,8 @@ export function validSettingsFields(fields: SettingsFields): boolean {
   return (
     /^\d+$/.test(fields.maxRunning) &&
     /^\d+$/.test(fields.dailyMinutes) &&
-    Number.isInteger(max) &&
+    Number.isSafeInteger(max) &&
     max >= 1 &&
-    max <= 8 &&
     Number.isSafeInteger(minutes) &&
     minutes >= 0
   );

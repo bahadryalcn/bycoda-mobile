@@ -1,8 +1,8 @@
+import { isBinaryDocument } from "@/ui/media-policy";
+
 /** Binary paths never enter the text editor or expected-content write flow. */
 export function isMediaFile(path: string): boolean {
-  return /\.(?:png|jpe?g|gif|webp|avif|heic|ico|bmp|svg|pdf|mp[34]|m4[av]|wav|ogg|flac|webm|mov|zip|gz|7z|exe|dll|woff2?|ttf|sqlite|db)$/i.test(
-    path,
-  );
+  return isBinaryDocument(path);
 }
 
 export function isFileConflict(error: unknown): boolean {

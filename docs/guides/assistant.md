@@ -10,4 +10,8 @@ Only messages whose complete project scope is verified and currently visible are
 
 This mobile consumer reads history and changes manual presence. It does not start a provider turn, answer an approval, operate desktop input, or add push notifications, Telegram or a wake word. Those capabilities retain their existing owners and permission contracts.
 
+**Assistant preferences** also edits whether this computer stays awake while you are away, urgent notification repeats (0–10, with 0 disabling repeats), and the repeat interval (1–1440 minutes). Missing values display the Host defaults: enabled, 2 repeats and 30 minutes. Edits stay local until **Save preferences**, using the original computer and opening profile version. A conflicting version or unconfirmed save requires **Load current preferences** before another write.
+
+For Telegram delivery, use **Load Telegram conversations**, then select a permitted account/conversation by its labels. The destination is read and revalidated on the original computer before a changed destination is saved. No account or conversation IDs need to be typed. An unavailable saved destination is retained without choosing a replacement; choose another allowed destination or **Do not send to Telegram** to clear it explicitly. These preferences configure existing Host delivery; they do not connect an account, send a message or grant native authority.
+
 Source verification uses the nested repository's normal `pnpm typecheck` and focused tests for paired identity, capability/version validation, actual temporary Host data, lost acknowledgements, privacy, navigation and rendered recovery. Fake transports and web renderers do not establish physical mobile, audio, remote-network, APK/IPA or release acceptance.

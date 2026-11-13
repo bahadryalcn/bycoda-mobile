@@ -99,7 +99,7 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
           <NavigationGroup>
             {state.computers.map((item) => {
               const online = isComputerOnline(item, now);
-              const connected = !!savedComputerFor(item, machines);
+              const paired = !!savedComputerFor(item, machines);
               const kinds = routeKinds(item);
               return (
                 <NavigationRow
@@ -112,8 +112,8 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
                       {kinds.lan ? <Wifi size={16} strokeWidth={2} color={colors.muted} /> : null}
                       {kinds.tailscale ? <Network size={16} strokeWidth={2} color={colors.muted} /> : null}
                       <Badge
-                        label={connected ? copy("Bağlı", "Connected") : copy("Bağlan", "Connect")}
-                        tone={connected ? "success" : "active"}
+                        label={paired ? copy("Eşlenmiş", "Paired") : copy("Bağlan", "Connect")}
+                        tone={paired ? "default" : "active"}
                       />
                     </View>
                   }

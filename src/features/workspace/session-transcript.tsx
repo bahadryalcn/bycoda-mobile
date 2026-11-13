@@ -6,13 +6,13 @@ import type { ReactNode } from "react";
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import CircleCheck from "lucide-react-native/icons/circle-check";
-import { Body, Button, Empty, MutationState, Row } from "@/ui/primitives";
+import { Body, Button, Empty, Loading, MutationState, Row } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useHostClient } from "@/state/queries";
 import { CommandError } from "./shared";
 import { useEarlierSession } from "./session-queries";
-import { QuestionCard } from "./question-card";
+import { SessionQuestions } from "./session-questions";
 import { questionCardStates } from "./question-card-state";
 import {
   completeResponseText,
@@ -21,11 +21,7 @@ import {
 } from "./transcript-model";
 import { ActivityInspector, type ActivityInspection } from "./activity-inspector";
 import type { SessionCommand, SessionTranscriptProps } from "./session-types";
-import {
-  distanceFromEnd,
-  TranscriptScrollPosition,
-  type FollowEvent,
-} from "./transcript-scroll";
+import { distanceFromEnd, TranscriptScrollPosition, type FollowEvent } from "./transcript-scroll";
 import { useReducedMotionPreference } from "@/ui/use-reduced-motion";
 import { ChatConversation } from "@/ui/chat";
 import { TranscriptFindControls } from "./transcript-find-controls";
@@ -35,6 +31,7 @@ import {
   nextTranscriptResult,
   type TranscriptFindResult,
 } from "./transcript-find-model";
+import { citedTurnEntry } from "./session-reference-target";
 import { TranscriptJumpPill } from "./transcript-jump-pill";
 import { TranscriptRow, transcriptItemSize, type TranscriptRowProps } from "./transcript-row";
 
@@ -47,6 +44,7 @@ const typeOf = (item: TranscriptEntry) => item.kind;
 
 export function SessionTranscript({
   header,
+  targetTurnId,
   findOpen,
   onFindOpenChange,
   navigation,
@@ -142,7 +140,10 @@ export function SessionTranscript({
   const onMomentumScrollEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const native = event.nativeEvent;
-      applyScroll({ type: "endMomentum", distance: distanceFromEnd(native) }, native.contentOffset.y);
+      applyScroll(
+        { type: "endMomentum", distance: distanceFromEnd(native) },
+        native.contentOffset.y,
+      );
     },
     [applyScroll],
   );
@@ -161,6 +162,46 @@ export function SessionTranscript({
     [blocks, session?.session.harness, session?.status, view],
   );
   const live = session?.status === "running";
+  const [targetState, setTargetState] = useState<"searching" | "ready" | "failed" | "dismissed">(
+    targetTurnId ? "searching" : "dismissed",
+  );
+  const targetEntry = targetTurnId ? citedTurnEntry(visibleBlocks, targetTurnId) : undefined;
+  const targetPages = useRef(new Set<number>());
+  // Resolve the exact cited user turn using the same bounded, revision-checked history reader.
+  useEffect(() => {
+    if (targetState !== "searching" || !session || session.session.id !== scope.sessionId) return;
+    if (targetEntry) {
+      setTargetState("ready");
+      return;
+    }
+    if (earlier.isPending) return;
+    const before = session.history?.before;
+    if (before === undefined || targetPages.current.size >= 20 || targetPages.current.has(before)) {
+      setTargetState("failed");
+      return;
+    }
+    targetPages.current.add(before);
+    void earlier.mutateAsync().catch(() => setTargetState("failed"));
+  }, [targetState, targetEntry, session, scope.sessionId, earlier.isPending]);
+  // Wait until the virtual list mounts before locating the cited entry.
+  useEffect(() => {
+    if (targetState !== "ready" || !targetEntry || !listRef.current) return;
+    applyScroll({ type: "release" });
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    void listRef.current
+      .scrollToKey({ key: targetEntry.id, viewPosition: 0.5, animated: !reduceMotion })
+      .then(() => {
+        if (!cancelled) timer = setTimeout(() => setTargetState("dismissed"), 3500);
+      })
+      .catch(() => {
+        if (!cancelled) setTargetState("failed");
+      });
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [targetState, targetEntry, applyScroll, reduceMotion]);
 
   // Content that arrives while the user reads earlier messages raises the "new" marker.
   const last = visibleBlocks.at(-1);
@@ -256,7 +297,11 @@ export function SessionTranscript({
   };
   const onInspect = useCallback<TranscriptRowProps["onInspect"]>(
     (entry, selectedId) =>
-      setInspection({ ids: entry.blocks.map((block) => block.id), selectedId, author: entry.author }),
+      setInspection({
+        ids: entry.blocks.map((block) => block.id),
+        selectedId,
+        author: entry.author,
+      }),
     [],
   );
   const revision = session?.revision ?? 0;
@@ -265,7 +310,7 @@ export function SessionTranscript({
   const getRevision = useCallback(() => revisionRef.current, []);
   const runId = session?.runId;
   const harness = session?.session.harness;
-  const activeEntryId = activeFind?.entryId;
+  const activeEntryId = targetState === "ready" ? targetEntry?.id : activeFind?.entryId;
   const renderItem = useCallback(
     ({ item }: { item: TranscriptEntry }) => (
       <TranscriptRow
@@ -283,12 +328,47 @@ export function SessionTranscript({
         onInspect={onInspect}
       />
     ),
-    [activeEntryId, live, getRevision, harness, context, responseText, rowScope, runId, blocked, rowCommand, onInspect],
+    [
+      activeEntryId,
+      live,
+      getRevision,
+      harness,
+      context,
+      responseText,
+      rowScope,
+      runId,
+      blocked,
+      rowCommand,
+      onInspect,
+    ],
   );
   const getFixedItemSize = useCallback((item: TranscriptEntry) => transcriptItemSize(item), []);
   const loadEarlier = () => {
     void earlier.mutateAsync().catch(() => {});
   };
+
+  if (targetState === "searching" || targetState === "failed") {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", gap: space.md }}>
+        {targetState === "searching" ? (
+          <Loading label={copy("Alıntılanan mesaj aranıyor…", "Finding cited message…")} />
+        ) : (
+          <>
+            <Body>
+              {copy(
+                "Alıntılanan mesaj bulunamadı veya yüklenemedi.",
+                "The cited message could not be found or loaded.",
+              )}
+            </Body>
+            <Button
+              label={copy("Oturumun tamamını aç", "Open full conversation")}
+              onPress={() => setTargetState("dismissed")}
+            />
+          </>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, minHeight: 0 }}>
@@ -367,28 +447,22 @@ export function SessionTranscript({
                   onPress={loadEarlier}
                 />
               ) : null}
-              <MutationState mutation={earlier} />
+              {!findOpen ? <MutationState mutation={earlier} /> : null}
               {header}
             </View>
           }
           ListFooterComponent={
             <View style={uiStyles.stack}>
-              {pending && session?.runId ? (
-                <QuestionCard
-                  key={`${session.runId}:${pending.requestId}`}
-                  question={pending}
-                  draftScope={questionScope}
-                  deliveryVersion={session.revision}
+              {session?.runId ? (
+                <SessionQuestions
+                  client={client ?? undefined}
+                  pending={pending}
+                  submitted={session.session.submittedQuestions}
+                  scope={scope}
+                  runId={session.runId}
+                  revision={session.revision}
                   disabled={blocked}
-                  onAnswer={(reply) =>
-                    onCommand({
-                      type: "answer",
-                      sessionId: scope.sessionId,
-                      runId: session.runId,
-                      requestId: pending.requestId,
-                      reply,
-                    })
-                  }
+                  onCommand={onCommand}
                 />
               ) : null}
               {command.isSuccess ? (
@@ -424,7 +498,10 @@ export function SessionTranscript({
           />
         ) : null}
         {!visibleBlocks.length && !!session && !pending ? (
-          <View pointerEvents="none" style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}>
+          <View
+            pointerEvents="none"
+            style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+          >
             <Empty
               compact={false}
               illustration="chat-empty"

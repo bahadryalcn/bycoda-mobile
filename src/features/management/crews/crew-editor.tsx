@@ -14,7 +14,6 @@ import { HintSection } from "@/ui/info-hint";
 import { confirmAction } from "@/ui/confirm";
 import { NumberField } from "@/ui/number-field";
 import {
-  Body,
   Button,
   Disclosure,
   ErrorText,
@@ -37,23 +36,8 @@ import { handleLabel, linkState, rosterTraits } from "./identity-model";
 import { MemberAvatar } from "./member-avatar";
 import type { CrewCatalogRead } from "./presentation";
 
-type NumericPolicy =
-  | "maxParallel"
-  | "maxAssignments"
-  | "maxRunMinutes"
-  | "maxEstimatedCost"
-  | "minimumQuality"
-  | "costWeight"
-  | "qualityWeight";
-const numericPolicy: NumericPolicy[] = [
-  "maxParallel",
-  "maxAssignments",
-  "maxRunMinutes",
-  "maxEstimatedCost",
-  "minimumQuality",
-  "costWeight",
-  "qualityWeight",
-];
+const numericPolicy = ["maxParallel", "maxAssignments", "maxRunMinutes"] as const;
+type NumericPolicy = (typeof numericPolicy)[number];
 
 export function CrewEditor({
   initial,
@@ -156,16 +140,6 @@ export function CrewEditor({
     maxParallel: copy("Eşzamanlı görevler (1–4)", "Parallel tasks (1–4)"),
     maxAssignments: copy("Görev sayısı sınırı (1–20)", "Assignment limit (1–20)"),
     maxRunMinutes: copy("Süre sınırı (dakika, 1–240)", "Run limit (minutes, 1–240)"),
-    maxEstimatedCost: copy(
-      "Tahmini maliyet sınırı (isteğe bağlı)",
-      "Estimated cost limit (optional)",
-    ),
-    minimumQuality: copy(
-      "Asgari kalite (0–100, isteğe bağlı)",
-      "Minimum quality (0–100, optional)",
-    ),
-    costWeight: copy("Maliyet ağırlığı (0–1, isteğe bağlı)", "Cost weight (0–1, optional)"),
-    qualityWeight: copy("Kalite ağırlığı (0–1, isteğe bağlı)", "Quality weight (0–1, optional)"),
   };
   return (
     <Stack>
@@ -257,17 +231,6 @@ export function CrewEditor({
         </Disclosure>
       )}
       <Disclosure label={copy("Çalışma ilkeleri", "Working policy")}>
-        <SelectField
-          label={copy("Model seçme yaklaşımı", "Allocation preference")}
-          value={draft.policy.preset}
-          disabled={busy || !supported}
-          options={[
-            { value: "economy", label: copy("Ekonomik", "Economy") },
-            { value: "balanced", label: copy("Dengeli", "Balanced") },
-            { value: "quality", label: copy("Kalite", "Quality") },
-          ]}
-          onChange={(preset) => form.patch({ policy: { ...draft.policy, preset } })}
-        />
         {numericPolicy.map((key) => (
           <NumberField
             key={key}
@@ -278,14 +241,6 @@ export function CrewEditor({
             onChangeText={(text) => setNumbers((current) => ({ ...current, [key]: text }))}
           />
         ))}
-        <ToggleField
-          label={copy("Maliyeti bilinmeyen modellere izin ver", "Allow models with unknown cost")}
-          value={draft.policy.allowUnknownCost}
-          disabled={busy || !supported}
-          onChange={(allowUnknownCost) =>
-            form.patch({ policy: { ...draft.policy, allowUnknownCost } })
-          }
-        />
         <ToggleField
           label={copy("Alt ajanlara izin ver", "Allow subagents")}
           value={draft.policy.allowSubagents}

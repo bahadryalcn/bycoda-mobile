@@ -23,6 +23,7 @@ export type TaskCardProps = {
   remove: ReturnType<typeof useHostMutation>;
   decline: ReturnType<typeof useHostMutation>;
   recheck: ReturnType<typeof useHostMutation>;
+  finish: ReturnType<typeof useHostMutation<HostTask>>;
   start: ReturnType<typeof useHostMutation<HostTask>>;
   reorder: ReturnType<typeof useHostMutation>;
   tasks: HostTask[];

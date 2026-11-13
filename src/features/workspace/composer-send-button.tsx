@@ -4,7 +4,6 @@ import ListPlus from "lucide-react-native/icons/list-plus";
 import { ChatCircleAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
 import { haptic } from "@/ui/motion";
-import { showToast } from "@/ui/toast";
 import { useMobileTheme } from "@/ui/theme";
 import type { ComposerDelivery } from "./composer-delivery";
 
@@ -38,18 +37,18 @@ export function ComposerSendButton({
   return (
     <ChatCircleAction
       label={label}
-      hint={alternate ? copy("Basýlý tut: {p0}", "Press and hold for {p0}", { p0: alternateName }) : undefined}
+      hint={alternate ? copy("BasÄ±lÄ± tut: {p0}", "Press and hold for {p0}", { p0: alternateName }) : undefined}
       active={!disabled}
       disabled={disabled}
       busy={busy}
-      onPress={() => onSend()}
+      onPress={() => {
+        if (disabled || busy) return;
+        onSend();
+      }}
       onLongPress={alternate ? () => {
+        if (disabled || busy) return;
         haptic.select();
         onSend(alternate);
-        showToast({
-          tone: "neutral",
-          message: copy("{p0} olarak gönderildi. Dokunma {p1} olarak gönderir.", "Sent as {p0}. Tapping sends as {p1}.", { p0: alternateName, p1: label }),
-        });
       } : undefined}
       longPressLabel={alternate ? alternateName : undefined}
     >

@@ -7,7 +7,7 @@ vi.mock("./composer-actions", () => ({ ComposerActionArea: () => null }));
 import { ChatComposer } from "./chat-composer";
 const render = (props: Partial<Parameters<typeof ChatComposer>[0]> = {}) =>
   ChatComposer({ value: "Draft", onValueChange: () => {}, leading: null, submit: null, field: {}, ...props });
-it("starts as a 40dp multiline field that grows to five lines, with exact field callbacks", () => {
+it("starts as a 48dp multiline field that grows to five lines, with exact field callbacks", () => {
   const selection = vi.fn(), change = vi.fn(), layout = vi.fn();
   const view = render({ onValueChange: change, onToolbarLayout: layout, field: { onSelectionChange: selection } });
   const [, field, row] = view.props.children;
@@ -17,7 +17,7 @@ it("starts as a 40dp multiline field that grows to five lines, with exact field 
   expect(field.props.onSelectionChange).toBe(selection);
   expect(row.props.onLayout).toBe(layout);
   const style = flatten(field.props.style);
-  expect(style.minHeight).toBe(40);
+  expect(style.minHeight).toBe(48);
   expect(style.maxHeight).toBeGreaterThan(40 * 2);
 });
 it("locks the field when disabled and lets the feature cap the height", () => {

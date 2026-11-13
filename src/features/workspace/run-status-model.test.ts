@@ -9,6 +9,14 @@ const agent = (id: string, status: string, extra: Partial<Block> = {}) =>
 const tool = (id: string, status: string) => ({ id, role: "tool", text: id, tool: { callId: id, status, kind: "execute" } }) as Block;
 
 describe("run status", () => {
+  it("keeps queued drafts from replacing the active turn and hiding its tools", () => {
+    const turn = { ...user, startedAt: 500 };
+    const working = tool("working", "running");
+    const draft = { ...user, id: "draft", draft: true, startedAt: 8000 };
+    const status = runStatus([turn, working, draft], true);
+    expect(status.startedAt).toBe(500);
+    expect(status.tools).toBe(1);
+  });
   it("is empty when the session is idle", () => {
     expect(hasRunStatus(runStatus([user, agent("x", "running")], false))).toBe(false);
   });
@@ -18,7 +26,7 @@ describe("run status", () => {
     expect(status.tools).toBe(1);
     expect(status.running.map((item) => item.id)).toEqual(["s1", "t1"]);
     expect(status.running[0]).toMatchObject({ kind: "subagent", detail: "Edit file", startedAt: 1000 });
-    expect(status.startedAt).toBe(1000);
+    expect(status.startedAt).toBeUndefined();
   });
   it("counts undecided approvals as waiting, not running", () => {
     const status = runStatus([user, agent("s1", "running", { approval: { requestId: 1 } })], true);
@@ -34,5 +42,20 @@ describe("run status", () => {
     expect(formatElapsed(65_000)).toBe("1:05");
     expect(formatElapsed(3_725_000)).toBe("1:02:05");
     expect(formatElapsed(-5)).toBe("0:00");
+  });
+  it("uses the turn start, not the currently running tool start", () => {
+    const turn = { ...user, startedAt: 500 };
+    const early = { ...tool("early", "completed"), startedAt: 1000 };
+    const later = { ...tool("later", "running"), startedAt: 5000 };
+    expect(runStatus([turn, early, later], true).startedAt).toBe(500);
+    expect(runStatus([turn, early, { ...later, tool: { ...later.tool!, status: "completed" } }], true).startedAt).toBe(500);
+  });
+  it("keeps a text-only run visible without fabricating elapsed time", () => {
+    const status = runStatus([user], true);
+    expect(hasRunStatus(status)).toBe(true);
+    expect(status.startedAt).toBeUndefined();
+  });
+  it("does not substitute a tool timestamp for an unknown turn start", () => {
+    expect(runStatus([user, agent("s1", "running")], true).startedAt).toBeUndefined();
   });
 });

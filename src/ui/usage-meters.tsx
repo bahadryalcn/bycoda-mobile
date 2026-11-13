@@ -16,12 +16,13 @@ const LEFT_THRESHOLDS = [
 /**
  * Share of a quota window left, with a marker where an even spender would be:
  * the share of the window's time still ahead. A bar left of the marker is ahead of pace.
+ * The caller renders its caption; label supplies the meter's accessible name.
  */
 export function RemainingMeter({ left, timeLeft, label }: { left: number; timeLeft: number | null; label: string }) {
   const { colors } = useMobileTheme();
   return (
     <View>
-      <Meter value={left} label={label} size="lg" color="success" thresholds={[...LEFT_THRESHOLDS]} />
+      <Meter value={left} accessibilityLabel={label} size="lg" color="success" thresholds={[...LEFT_THRESHOLDS]} />
       {timeLeft !== null ? (
         <View
           accessible={false}
@@ -34,9 +35,9 @@ export function RemainingMeter({ left, timeLeft, label }: { left: number; timeLe
   );
 }
 
-/** A small meter for one account's share left. */
+/** A small meter for one account's share left; label names it without repeating the visible row. */
 export function AccountMeter({ left, label }: { left: number; label: string }) {
-  return <Meter value={left} label={label} size="sm" color="success" thresholds={[...LEFT_THRESHOLDS]} />;
+  return <Meter value={left} accessibilityLabel={label} size="sm" color="success" thresholds={[...LEFT_THRESHOLDS]} />;
 }
 
 /** One headline figure with an optional footnote line; cost rising is the bad direction. */

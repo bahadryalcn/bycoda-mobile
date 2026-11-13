@@ -7,7 +7,6 @@ import { SessionOptionsMenu } from "./session-options-menu";
 import { useCopy } from "@/ui/copy";
 import type { SessionToolbarProps } from "./session-types";
 import type { TranscriptView } from "./transcript-model";
-import { SessionArtifacts } from "./session-artifacts";
 import { ChatAction } from "@/ui/chat-controls";
 import { SessionFiles } from "./session-files";
 import { SessionCheckpoints } from "./session-checkpoints";
@@ -56,9 +55,7 @@ export function SessionToolbar({
   const [desktopPreferences, setDesktopPreferences] = useState(false);
   const [mobilePty, setMobilePty] = useState(false);
   const [providerDesktop, setProviderDesktop] = useState(false);
-  const [contextual, setContextual] = useState<
-    "handoff" | "secondOpinion" | null
-  >(null);
+  const [contextual, setContextual] = useState<"handoff" | "secondOpinion" | null>(null);
   const [contextualCompact, setContextualCompact] = useState(false);
   // The open view reports compact sizing; every open starts from the default so a previous
   // report can never size the next sheet.
@@ -74,9 +71,7 @@ export function SessionToolbar({
       params: {
         id: projectId,
         machineId: scope.machineId,
-        ...(session?.session.worktreeCwd
-          ? { cwd: session.session.worktreeCwd }
-          : {}),
+        ...(session?.session.worktreeCwd ? { cwd: session.session.worktreeCwd } : {}),
       },
     });
   };
@@ -84,7 +79,10 @@ export function SessionToolbar({
   return (
     <>
       {session ? <SessionFiles scope={scope} session={session} /> : null}
-      <ChatAction label={copy("Oturum seçenekleri", "Session options")} onPress={() => setMenu(true)}>
+      <ChatAction
+        label={copy("Oturum seçenekleri", "Session options")}
+        onPress={() => setMenu(true)}
+      >
         <Ellipsis size={20} color={colors.muted} />
       </ChatAction>
       <SessionOptionsMenu

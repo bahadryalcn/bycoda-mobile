@@ -1,4 +1,7 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import type { TextInputInstance } from "react-native";
+import { useLocale } from "@/i18n";
+import { matchesSearch } from "@/ui/search-matching";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import { useIsFocused } from "expo-router/react-navigation";
@@ -44,7 +47,7 @@ export function GitHistoryPanel({ scope, onClose }: { scope: GitScope; onClose: 
   if (view.kind === "commit") return <CommitFiles scope={scope} commit={view.commit} header={header} onSelect={(path) => setView({ kind: "file", commit: view.commit, path, mode: "diff" })} />;
   return <HistoricalFile scope={scope} commit={view.commit} path={view.path} mode={view.mode}
     header={<View style={{ gap: space.sm }}>{header}<Body mono>{view.path}</Body>
-      <SegmentedControl label={copy("Görünüm", "View")} value={view.mode}
+      <SegmentedControl hideLabel label={copy("Görünüm", "View")} value={view.mode}
         options={[
           { value: "diff", label: copy("Diff", "Diff") },
           { value: "blame", label: copy("Satır geçmişi", "Blame") },
@@ -57,19 +60,21 @@ export function GitHistoryPanel({ scope, onClose }: { scope: GitScope; onClose: 
 type ListProps = { scope: GitScope; header: ReactNode; onSelect: (commit: GitHistoryCommit) => void };
 function CommitList({ scope, header, onSelect, path }: ListProps & { path?: string }) {
   const copy = useCopy();
+  const locale = useLocale();
   const [limit, setLimit] = useState(100);
   const [search, setSearch] = useState("");
+  const searchRef = useRef<TextInputInstance>(null);
   const query = useGitHistoryRead<GitHistory | GitHistoryCommit[]>(scope, path
     ? { kind: "fileHistory", path, limit } : { kind: "history", limit });
   const commits = query.data ? (Array.isArray(query.data) ? query.data : query.data.commits) : [];
-  const filtered = commits.filter((commit) => `${commit.subject} ${commit.author} ${commit.sha}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const filtered = commits.filter((commit) => matchesSearch(`${commit.subject} ${commit.author} ${commit.sha}`, search, locale));
   return <ScreenList data={filtered} keyExtractor={(commit) => commit.sha} query={query}
     header={<View style={{ gap: space.sm }}>{header}
       <Body>{path ? copy("Dosya geçmişi · mevcut dal", "File history · current branch") : copy("Commit geçmişi", "Commit history")}</Body>
-      <SearchField label={copy("Yüklenen commitlerde ara", "Search loaded commits")} value={search} maxLength={200} onChangeText={setSearch} />
+      <SearchField ref={searchRef} label={copy("Yüklenen commitlerde ara", "Search loaded commits")} value={search} maxLength={200} onChangeText={setSearch} />
       <QueryState query={commits.length ? query : { ...query, data: undefined }} empty={!filtered.length}
         emptyTitle={search.trim() ? copy("Aramana uyan commit yok.", "No commits match your search.") : copy("Commit bulunamadı", "No commits found")}
-        emptyAction={search.trim() ? { label: copy("Aramayı temizle", "Clear search"), onPress: () => setSearch("") } : undefined} />
+        emptyAction={search.trim() ? { label: copy("Aramayı temizle", "Clear search"), onPress: () => { setSearch(""); searchRef.current?.focus(); } } : undefined} />
     </View>}
     footer={commits.length >= limit ? (limit < 500
       ? <Button label={copy("Daha fazla yükle", "Load more")} onPress={() => setLimit((current) => Math.min(500, current + 100))} disabled={query.isFetching} />

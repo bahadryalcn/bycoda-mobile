@@ -139,3 +139,4 @@ it("does not repeat a busy row button's progress in record feedback", () => {
   expect(record("jobs.retry")).not.toContain("Working");
   expect(record("campaigns.schedule")).toContain("Working");
 });
+vi.mock("@/i18n", () => ({ useLocale: () => "en" }));

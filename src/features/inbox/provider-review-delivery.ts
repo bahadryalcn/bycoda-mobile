@@ -1,3 +1,4 @@
+import { useInboxLocalScope } from "./inbox-local-scope";
 import { useEffect, useRef, useState } from "react";
 import { randomUUID } from "expo-crypto";
 import { useHostClient } from "@/state/queries";
@@ -9,7 +10,7 @@ import type {
   RemoteInboxItem,
   RemoteInboxReview,
 } from "../../../../src/features/inbox/model/remoteInbox";
-import { isInboxOriginCurrent } from "./provider-model";
+
 import { InboxJobError, runInboxJob } from "./provider-jobs";
 import {
   decodePrReviewDraft,
@@ -28,6 +29,7 @@ export function usePrReviewDelivery(
   item: RemoteInboxItem,
   input: InboxItemInput,
 ) {
+  const inboxScope = useInboxLocalScope();
   const client = useHostClient();
   const draft = useLocalDraft(
     prReviewDraftKey(origin, item),
@@ -49,7 +51,7 @@ export function usePrReviewDelivery(
   const current = () =>
     !!client &&
     client.machine.id === origin.machineId &&
-    isInboxOriginCurrent(origin, useMachines.getState()) &&
+    inboxScope.matches(origin) &&
     isReviewedMachine(opening.current, useMachines.getState());
   const settle = async (requestId: string, state: "completed" | "failed") => {
     if (!mounted.current) return;

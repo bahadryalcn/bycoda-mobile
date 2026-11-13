@@ -1,9 +1,15 @@
 import type {
   AssistantMessage,
   AssistantThread,
+  AssistantActivity,
 } from "../../../../src/shared/model/host-contracts/assistant";
 
 export type AssistantHistoryAccess = { ready: boolean; visible(id: string): boolean };
+/** Only Host-journal operations with proven project contributors belong in What I did. */
+export function assistantActivityVisible(activity: AssistantActivity, access: AssistantHistoryAccess) {
+  return !!activity.operation && Array.isArray(activity.projectIds) &&
+    (activity.projectIds.length === 0 || (access.ready && activity.projectIds.every(id => access.visible(id))));
+}
 export function assistantThreadVisible(thread: AssistantThread, access: AssistantHistoryAccess) {
   return !thread.projectId || (access.ready && access.visible(thread.projectId));
 }

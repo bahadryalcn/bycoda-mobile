@@ -15,7 +15,8 @@ describe("goal settings safety", () => {
     const valid = (record: HostGoal, count = "0", minutes = "20", autoMerge = false) =>
       validGoalSettings(record, { ...goalSettings(record), autoMerge }, count, minutes);
     expect(valid(goal)).toBe(true);
-    for (const count of ["-1", "9", "1.5", "", "2x"]) expect(valid(goal, count)).toBe(false);
+    for (const count of ["9", "99", String(Number.MAX_SAFE_INTEGER)]) expect(valid(goal, count)).toBe(true);
+    for (const count of ["-1", String(Number.MAX_SAFE_INTEGER + 1), "1.5", "", "2x"]) expect(valid(goal, count)).toBe(false);
     for (const minutes of ["-1", "10081", "1.5", ""]) expect(valid(goal, "0", minutes)).toBe(false);
     expect(valid({ ...goal, status: "done" })).toBe(false);
     expect(valid({ ...goal, status: "cancelled" })).toBe(false);

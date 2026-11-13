@@ -19,8 +19,12 @@ vi.mock("react-native", () => ({
   Text: ({ children }: PropsWithChildren) => createElement("span", null, children),
   StyleSheet: { flatten: (style: unknown) => style },
 }));
+const layout = vi.hoisted(() => ({ onLayout: undefined as undefined | ((event: any) => void) }));
 vi.mock("react-native-reanimated", () => ({
-  default: { View: ({ children }: PropsWithChildren) => createElement("div", null, children) },
+  default: { View: ({ children, accessibilityRole, onLayout }: PropsWithChildren<any>) => {
+    if (accessibilityRole === "progressbar") layout.onLayout = onLayout;
+    return createElement("div", null, children);
+  } },
   useAnimatedStyle: () => ({}),
 }));
 vi.mock("panelui-native/hooks/use-skeleton-handoff", () => ({ useSkeletonHandoff: () => ({ mounted: true, opacity: { value: 1 } }) }));
@@ -32,7 +36,7 @@ vi.mock("./layout", () => ({ Row: "div" }));
 vi.mock("./state-view", () => ({ StateView: "div" }));
 vi.mock("./buttons", () => ({ Button: "button" }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
-vi.mock("./tokens", () => ({ colors: {}, semanticColors: {}, space: {}, radii: {}, metrics: {} }));
+vi.mock("./tokens", () => ({ colors: {}, semanticColors: {}, space: {}, radii: {}, metrics: { rowHeightSession: 64 } }));
 vi.mock("lucide-react-native/icons/info", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/circle-check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: () => null }));
@@ -138,4 +142,14 @@ it("reacts to live reduced-motion changes while keeping loading content", async 
   expect(container.textContent).toContain("Connecting");
   await act(async () => preference.setState({ reduced: false }));
   expect(container.querySelectorAll("[data-loop]")).toHaveLength(7);
+});
+
+it("fills a measured list region and keeps explicit row counts for inline placeholders", async () => {
+  await act(async () => root.render(createElement(Skeleton)));
+  await act(async () => vi.advanceTimersByTime(300));
+  expect(layout.onLayout).toBeTypeOf("function");
+  await act(async () => layout.onLayout!({ nativeEvent: { layout: { height: 640 } } }));
+  expect(container.querySelectorAll('[data-loop="skeleton"]')).toHaveLength(30);
+  await act(async () => root.render(createElement(Skeleton, { rows: 2 })));
+  expect(container.querySelectorAll('[data-loop="skeleton"]')).toHaveLength(6);
 });

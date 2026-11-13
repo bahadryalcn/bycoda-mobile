@@ -2,4 +2,4 @@
 export const decorativeSvgProps =
   process.env.EXPO_OS === "web"
     ? { "aria-hidden": true as const, focusable: false }
-    : { accessible: false };
+    : { accessible: false, accessibilityElementsHidden: true, importantForAccessibility: "no-hide-descendants" as const };

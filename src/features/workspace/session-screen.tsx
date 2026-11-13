@@ -20,7 +20,6 @@ import { useSessionSnapshot } from "./session-queries";
 import { SessionSettings } from "./session-settings";
 import { SessionToolbar } from "./session-toolbar";
 import { SessionTranscript } from "./session-transcript";
-import { SessionAgents } from "./session-agents";
 import { SessionHeader } from "./session-header";
 import { SessionParentBar } from "./session-parent-bar";
 import { sessionHeaderStatus } from "./session-header-model";
@@ -33,16 +32,18 @@ import type { HostSession } from "./wire";
 import { sessionIntent } from "@/domain/session-authority";
 import { TranscriptScrollPosition } from "./transcript-scroll";
 
-export function SessionScreen({ id, projectId }: SessionScreenProps) {
+export function SessionScreen({ id, projectId, targetTurnId }: SessionScreenProps) {
   const machine = useActiveMachine();
   const copy = useCopy();
   const environmentId = machine?.environmentId;
   // Pushes about the conversation on screen are listed without a banner.
-  useFocusEffect(useCallback(() => {
-    if (!environmentId) return;
-    setViewingSession({ environmentId, sessionId: id });
-    return () => setViewingSession(null);
-  }, [environmentId, id]));
+  useFocusEffect(
+    useCallback(() => {
+      if (!environmentId) return;
+      setViewingSession({ environmentId, sessionId: id });
+      return () => setViewingSession(null);
+    }, [environmentId, id]),
+  );
   if (!machine) {
     return (
       <Screen>
@@ -62,6 +63,7 @@ export function SessionScreen({ id, projectId }: SessionScreenProps) {
     <SessionWorkspace
       key={`${machine.id}:${id}`}
       id={id}
+      targetTurnId={targetTurnId}
       projectId={projectId}
       machineId={machine.id}
       machineName={machine.name}
@@ -69,7 +71,13 @@ export function SessionScreen({ id, projectId }: SessionScreenProps) {
   );
 }
 
-function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineName }: SessionWorkspaceProps) {
+function SessionWorkspace({
+  id,
+  projectId: routeProjectId,
+  machineId,
+  machineName,
+  targetTurnId,
+}: SessionWorkspaceProps) {
   const copy = useCopy();
   const insets = useSafeAreaInsets();
   const scope = useMemo<SessionScope>(() => ({ machineId, sessionId: id }), [machineId, id]);
@@ -117,13 +125,12 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineNam
   if (snapshot.parked) retained.current = undefined;
   const session = visible ? snapshot.data : retained.current;
   const projectId = privacy.projectId ?? session?.projectId;
-  const command = useCommands();
+  const command = useCommands(["session", id, projectId]);
   const [settings, setSettings] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [transcriptView, setTranscriptView] = useState<TranscriptView>("messages");
   const blocked = !visible || command.isPending || command.error instanceof UncertainCommand;
   const sendCommand = command.mutateAsync;
-  const refetchSnapshot = snapshot.refetch;
   const dispatch = useCallback(
     async (params: Record<string, unknown>) => {
       const state = cache.getQueryState(key);
@@ -139,14 +146,18 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineNam
       if (!session) throw new Error("The displayed session is unavailable.");
       const intent = sessionIntent(session, params);
       const receipt = await sendCommand(intent);
-      void refetchSnapshot();
       return receipt;
     },
-    [sendCommand, refetchSnapshot, cache, machineId, id, privacy.projectId, canRead, session],
+    [sendCommand, cache, machineId, id, privacy.projectId, canRead, session],
   );
 
   const projectName = projects.data?.find((project) => project.id === projectId)?.name;
-  const headerStatus = sessionHeaderStatus(session, !!snapshot.error, copy, snapshot.fetchStatus === "paused");
+  const headerStatus = sessionHeaderStatus(
+    session,
+    !!snapshot.error,
+    copy,
+    snapshot.fetchStatus === "paused",
+  );
   // Only credential/identity failures need the in-flow state; transient drops show in the header.
   const repairKind = remoteErrorKind(snapshot.error);
   const needsRepair = repairKind === "auth" || repairKind === "identity";
@@ -162,7 +173,11 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineNam
     <ComposerTransferProvider scope={scope}>
       <Screen scroll={false}>
         <SessionHeader
-          title={visible ? session?.session.title || copy("Oturum", "Session") : copy("Oturum", "Session")}
+          title={
+            visible
+              ? session?.session.title || copy("Oturum", "Session")
+              : copy("Oturum", "Session")
+          }
           context={visible ? (projectName ?? machineName) : undefined}
           provider={visible ? session?.session.harness : undefined}
           status={headerStatus.label}
@@ -170,11 +185,20 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineNam
           actions={
             visible && session ? (
               <PrivateContentBoundary visible={visible} isAllowed={canRead}>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: space.xs }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "flex-end",
+                    gap: space.xs,
+                  }}
+                >
                   <SessionToolbar
                     scope={scope}
                     projectId={projectId}
-                    contextLabel={[machineName, projectName ?? projectId].filter(Boolean).join(" · ")}
+                    contextLabel={[machineName, projectName ?? projectId]
+                      .filter(Boolean)
+                      .join(" · ")}
                     query={{ ...snapshot, data: session }}
                     command={command}
                     blocked={blocked}
@@ -194,9 +218,13 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineNam
         {!visible ? (
           <View style={{ flex: 1 }}>
             {!projects.directoryReady ? (
-              <ProjectDirectoryFeedback query={projects.error ? { ...projects, data: undefined } : projects} readiness={projects.readiness}
-                privacyUnavailable={projects.privacyUnavailable} loading="content"
-                loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
+              <ProjectDirectoryFeedback
+                query={projects.error ? { ...projects, data: undefined } : projects}
+                readiness={projects.readiness}
+                privacyUnavailable={projects.privacyUnavailable}
+                loading="content"
+                loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")}
+              />
             ) : privacy.canRead ? (
               snapshot.data === undefined && !snapshot.error ? (
                 <TranscriptSkeleton label={copy("Oturum yükleniyor…", "Loading session…")} />
@@ -254,24 +282,27 @@ function SessionWorkspace({ id, projectId: routeProjectId, machineId, machineNam
               paddingRight: Math.max(insets.right, space.screen),
             }}
           >
-            {visible && needsRepair ? <View style={{ flex: 1 }}><QueryState query={snapshot} /></View> : (
-            <View style={{ flex: 1 }}>
-            <SessionAgents session={session} scope={scope} disabled={blocked} onCommand={dispatch}>
-            {(agentsChip) => <View style={{ flex: 1 }}>
-            <SessionTranscript
-              header={agentsChip}
-              findOpen={findOpen}
-              onFindOpenChange={setFindOpen}
-              navigation={navigation.current}
-              view={transcriptView}
-              scope={scope}
-              session={session}
-              blocked={blocked}
-              command={command}
-              onCommand={dispatch}
-              onReceiptHandled={receiptHandled}
-            /></View>}
-            </SessionAgents></View>)}
+            {visible && needsRepair ? (
+              <View style={{ flex: 1 }}>
+                <QueryState query={snapshot} />
+              </View>
+            ) : (
+              <View style={{ flex: 1 }}>
+                <SessionTranscript
+                  targetTurnId={targetTurnId}
+                  findOpen={findOpen}
+                  onFindOpenChange={setFindOpen}
+                  navigation={navigation.current}
+                  view={transcriptView}
+                  scope={scope}
+                  session={session}
+                  blocked={blocked}
+                  command={command}
+                  onCommand={dispatch}
+                  onReceiptHandled={receiptHandled}
+                />
+              </View>
+            )}
           </SessionKeyboardFrame>
           {settings && session && projectId ? (
             <SessionSettings

@@ -6,7 +6,7 @@ import { useHostClient } from "@/state/queries";
 import { Body, CodePanel, CodeText, Disclosure, Empty, ErrorText, FormActions, Loading, NavigationRow, ScreenList, SearchField, Sheet } from "./primitives";
 import { space } from "./tokens";
 import { useCopy } from "./copy";
-import { mediaQueryKey, projectMediaQueryKey, resolveMediaPath, type MessageContext, type OpenDocument } from "./media-policy";
+import { isBinaryDocument, mediaQueryKey, projectMediaQueryKey, resolveMediaPath, type MessageContext, type OpenDocument } from "./media-policy";
 import type { HostFileEntry } from "@/remote/types";
 import { DocumentContent } from "./document-content";
 import { loadProjectMedia, type LoadedMedia } from "./media-loader";
@@ -31,7 +31,7 @@ export function ScopedFilePreview(props: ScopedFilePreviewProps) {
 function ScopedFilePreviewBody({ path, context, onClose }: ScopedFilePreviewProps) {
   const copy = useCopy(), locale = useLocale(), scope = useReaderScope(context, path);
   const resolved = resolveMediaPath(context, path);
-  const binary = /\.(?:png|jpe?g|webp|gif|avif|svg|pdf|mp[34]|m4a|wav|ogg|webm|mov|zip|gz|tar|7z|woff2?|ttf|otf|sqlite|db)(?:#.*)?$/i.test(path);
+  const binary = isBinaryDocument(path);
   const folder = /[\\/]$/.test(path);
   const line = Number(/(?:#L?|:)(\d+)(?::\d+)?$/.exec(path)?.[1] ?? 0);
   const [search, setSearch] = useState("");
@@ -43,14 +43,24 @@ function ScopedFilePreviewBody({ path, context, onClose }: ScopedFilePreviewProp
       const value = folder ? await context.client.request<HostFileEntry[]>("files.list", { projectId: context.projectId, cwd: context.cwd,
         path: resolved.slice(context.cwd.replace(/\\/g, "/").replace(/\/$/, "").length + 1) }, { signal })
         : binary ? await loadProjectMedia(context, path, signal) : await context.client.request<string>("workspace.run", { command: "read_text_file", args: { path: resolved } }, { signal });
+      if (!folder && !binary) {
+        if (typeof value !== "string") throw new Error("Invalid file contents.");
+        if (value.includes("\0")) {
+          scope.assertCurrent();
+          const media = await loadProjectMedia(context, path, signal);
+          scope.assertCurrent();
+          // Successful NUL detection overrides a text suffix so the local reader never decodes it again.
+          return { ...media, mimeType: "application/x-bycoda-binary" };
+        }
+      }
       scope.assertCurrent(); return value;
     },
   });
   const raw = usePrivateMediaData(queryKey, query);
-  const data = !folder && !binary ? raw as string | undefined : undefined;
+  const data = !folder && typeof raw === "string" ? raw : undefined;
   const directoryData = folder ? raw as HostFileEntry[] | undefined : undefined;
-  const media = binary && !folder ? raw as LoadedMedia | undefined : undefined;
-  const proof = folder ? directoryData : binary ? media && JSON.stringify([media.uri, media.name, media.mimeType]) : data;
+  const media = !folder && raw !== undefined && typeof raw !== "string" && !Array.isArray(raw) ? raw as LoadedMedia : undefined;
+  const proof = folder ? directoryData : media ? JSON.stringify([media.uri, media.name, media.mimeType]) : data;
   const content = useReaderContentAccess(scope, proof, scope.available && raw !== undefined);
   const [child, setChild] = useState<{ path: string; context: MessageContext; owner: object } | null>(null);
   const currentChild = child?.owner === content.port ? child : null;
@@ -83,7 +93,7 @@ function ScopedFilePreviewBody({ path, context, onClose }: ScopedFilePreviewProp
   return <Sheet visible title={documentDisplayName(path)} size="full" scroll={!folder} onClose={close} footer={footer}>
     {!resolved ? <Body>{copy("Dosya bu projenin dışında.", "This file is outside this project.")}</Body>
       : !scope.available ? !scope.ready ? <Loading /> : unavailable
-      : binary ? <>{status}{media ? <PrivateContentAccessProvider value={content.access}><ScopedMediaContent data={media} context={context} onOpenFile={openChild}
+      : binary || media ? <>{status}{media ? <PrivateContentAccessProvider value={content.access}><ScopedMediaContent data={media} context={context} onOpenFile={openChild}
         onReload={() => { if (content.check()) selectedRetry.retry(); }} /></PrivateContentAccessProvider> : null}</>
       : folder ? <View style={{ flex: 1, minHeight: 0 }}>
         <View style={{ paddingHorizontal: space.screen, paddingTop: space.sm }}><SearchField label={copy("Yüklenen kayıtlarda ara", "Search loaded records")}

@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { useActiveMachine } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
-import { Body, Card, QueryState, SectionHeader } from "@/ui/primitives";
+import { Body, Card, QueryState, SectionHeader, StatusRow } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
 import { fontSize, radii, space } from "@/ui/tokens";
 import { AccountMeter, RemainingMeter } from "@/ui/usage-meters";
 import {
@@ -30,6 +31,7 @@ function useMinuteNow() {
 /** Provider quota windows from the Host: one card per window, one row per account. */
 export function UsageLimits() {
   const copy = useCopy();
+  const locale = useLocale();
   const machine = useActiveMachine();
   const now = useMinuteNow();
   const supported =
@@ -74,10 +76,11 @@ export function UsageLimits() {
           p0: wholePercent(reading.regainPercent),
           p1: left,
         })
-      : copy("Sıfırlanma zamanı bilinmiyor", "Reset time unknown");
+      : reading.resetsAt === null ? copy("Sıfırlanma zamanı bilinmiyor", "Reset time unknown") : null;
   };
   return (
     <View style={{ gap: space.md }}>
+      {query.data ? <Body muted>{copy("Son güncelleme: ", "Last updated: ")}{new Date(query.data.sampledAt).toLocaleString(locale)}</Body> : null}
       <QueryState
         query={query}
         empty={
@@ -90,6 +93,12 @@ export function UsageLimits() {
       {providers.map((provider) => (
         <View key={provider.provider} style={{ gap: space.sm }}>
           <SectionHeader title={PROVIDER_NAMES[provider.provider]} />
+          {provider.accounts.filter((account) => account.resetCredits !== null).map((account) => (
+            <StatusRow key={account.id} label={account.label}>
+              <ProviderAccountKind kind={account.kind} derivedKind={account.derivedKind} />
+              <Body muted>{copy("Sıfırlama hakkı: {p0}", "Reset credits: {p0}", { p0: account.resetCredits!.toLocaleString(locale) })}</Body>
+            </StatusRow>
+          ))}
           {provider.cards.map((card) => (
             <Card key={card.key} variant="surface">
               <View
@@ -105,21 +114,19 @@ export function UsageLimits() {
                 >{`${wholePercent(card.best.leftPercent)}%`}</Body>
                 <Body muted>{copy("kaldı", "left")}</Body>
               </View>
-              <Body muted>{resetLine(card.best)}</Body>
+              {resetLine(card.best) ? <Body muted>{resetLine(card.best)}</Body> : null}
+              {card.best.resetsAt !== null ? <Body muted>{copy("Sıfırlanma: {p0}", "Resets at {p0}", { p0: new Date(card.best.resetsAt).toLocaleString(locale) })}</Body> : null}
               <RemainingMeter
                 left={card.best.leftPercent}
                 timeLeft={card.best.timeLeftPercent}
-                label={`${title(card)} ${wholePercent(card.best.leftPercent)}%`}
+                label={`${title(card)} ${copy("kaldı", "left")}`}
               />
               <View style={{ gap: space.sm, marginTop: space.xs }}>
                 {card.accounts.map((account) => {
-                  const credits = provider.accounts.find(
-                    (entry) => entry.id === account.id,
-                  )?.resetCredits;
                   const countdown = resetCountdown(account.reading.resetsAt, now);
                   return (
                     <View key={account.id} style={{ gap: space.xs }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.sm }}>
                         <View
                           accessible={false}
                           style={{
@@ -129,20 +136,18 @@ export function UsageLimits() {
                             backgroundColor: account.color,
                           }}
                         />
-                        <Body style={{ flex: 1, minWidth: 0 }} numberOfLines={1}>
-                          {account.label}
-                        </Body>
-                        <ProviderAccountKind
-                          kind={account.kind}
-                          derivedKind={account.derivedKind}
-                        />
-                        <Body mono>{`${wholePercent(account.reading.leftPercent)}%`}</Body>
-                        {countdown ? <Body muted>{countdown}</Body> : null}
-                        {credits ? <Body muted>{`+${credits}`}</Body> : null}
+                        <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
+                          <StatusRow label={account.label}>
+                            <ProviderAccountKind kind={account.kind} derivedKind={account.derivedKind} />
+                            <Body mono>{`${wholePercent(account.reading.leftPercent)}% ${copy("kaldı", "left")}`}</Body>
+                            {countdown ? <Body muted>{countdown}</Body> : null}
+                          </StatusRow>
+                          <Body muted>{account.reading.resetsAt === null ? copy("Sıfırlanma zamanı bilinmiyor", "Reset time unknown") : copy("Sıfırlanma: {p0}", "Resets at {p0}", { p0: new Date(account.reading.resetsAt).toLocaleString(locale) })}</Body>
+                        </View>
                       </View>
                       <AccountMeter
                         left={account.reading.leftPercent}
-                        label={`${account.label} ${wholePercent(account.reading.leftPercent)}%`}
+                        label={`${account.label} ${copy("kaldı", "left")}`}
                       />
                     </View>
                   );

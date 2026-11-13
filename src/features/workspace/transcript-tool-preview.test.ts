@@ -11,7 +11,7 @@ vi.mock("react-native",()=>({View:({children}:PropsWithChildren)=>createElement(
 vi.mock("expo-clipboard",()=>({setStringAsync:async(value:string)=>{f.writes.push(value);}}));
 vi.mock("@/ui/message-text",()=>({ScopedFilePreview:({path}:{path:string})=>createElement("aside",null,path)}));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
-vi.mock("@/ui/chat-controls",()=>({ChatSummary:({label,onPress}:{label:string;onPress:()=>void})=>createElement("button",{onClick:onPress},label)}));
+vi.mock("@/ui/chat-controls",()=>({ChatSummary:({label,detail,status,onPress}:{label:string;detail?:string;status?:string;onPress:()=>void})=>createElement("button",{onClick:onPress,"data-detail":detail,"data-status":status},label)}));
 vi.mock("@/ui/primitives",()=>{const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);return {Body:Wrapper,Row:Wrapper,CodePanel:Wrapper,CodeText:({children}:PropsWithChildren)=>createElement("pre",null,children),ErrorText:({error}:{error:unknown})=>error?createElement("p",null,String(error)):null,
  Button:({label,onPress,disabled}:{label:string;onPress:()=>void;disabled?:boolean})=>{f.buttons.push({label,press:onPress});return createElement("button",{onClick:onPress,disabled},label);},
  Sheet:({visible,children,footer,title}:PropsWithChildren<{visible:boolean;title:string;footer?:import("react").ReactNode}>)=>visible?createElement("section",{"data-title":title},children,createElement("footer",null,footer)):null};});
@@ -42,4 +42,12 @@ it("serializes source and path copy taps before a render",async()=>{
 it("keeps proposed/applied/rejected status honest without closing a stable preview",async()=>{
  const show=(status:string)=>act(async()=>root.render(createElement(TranscriptToolPreview,{preview,context,status})));
  await show("running");await click("a.ts");expect(container.textContent).toContain("Proposed change");await show("completed");expect(container.textContent).toContain("Applied");await show("failed");expect(container.textContent).toContain("Not applied");expect(container.querySelector("section")).not.toBeNull();
+});
+
+it("shows failed write status before opening and calls read previews output", async () => {
+ await act(async()=>root.render(createElement(TranscriptToolPreview,{preview,context,status:"failed"})));
+ expect(container.querySelector("button")?.getAttribute("data-status")).toBe("Not applied");
+ preview={...preview,kind:"read"};await render();
+ expect(container.querySelector("button")?.getAttribute("data-detail")).toContain("Open output");
+ expect(container.querySelector("button")?.getAttribute("data-detail")).not.toContain("Open change");
 });

@@ -25,6 +25,7 @@ import {
 import type { HostSettingsEditorProps } from "./settings-types";
 import { ShellProfileSettings } from "./shell-profile-settings";
 import { useMobileTheme } from "../../ui/theme";
+import { WorkCapsSettings } from "./work-caps-settings";
 
 export function HostSettingsEditor({ machineId, machineName, target }: HostSettingsEditorProps) {
   const { uiStyles } = useMobileTheme();
@@ -65,7 +66,7 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
   const dirty = draft.values.override !== null;
   const { requestCloseThen } = useSheetGuard({ dirty, pending: action.isPending || save.isPending || reading });
   const writable = supported && getQueryPresentation(settings) === "ready" && !uncertain;
-  const validMax = /^\d+$/.test(fields.maxRunning) && Number(fields.maxRunning) >= 1 && Number(fields.maxRunning) <= 8;
+  const validMax = /^\d+$/.test(fields.maxRunning) && Number(fields.maxRunning) >= 1 && Number.isSafeInteger(Number(fields.maxRunning));
   const validMinutes = /^\d+$/.test(fields.dailyMinutes) && Number.isSafeInteger(Number(fields.dailyMinutes));
   const update = (key: keyof typeof fields, value: string) =>
     draft.patch((current) => ({ override: { ...(current.override ?? fields), [key]: value } }));
@@ -116,13 +117,13 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
           <Animated.View entering={enterItem(0)}>
             <Stack>
               <NumberField
-                label={copy("Aynı anda çalışan görev (1–8)", "Concurrent tasks (1–8)")}
+                label={copy("Aynı anda çalışan görev", "Concurrent tasks")}
                 value={fields.maxRunning}
                 onChangeText={(value) => update("maxRunning", value)}
                 editable={supported && !uncertain && !reading}
               />
               {!validMax ? (
-                <ErrorText error={copy("Aynı anda 1–8 görev çalışabilir.", "Choose 1–8 concurrent tasks.")} />
+                <ErrorText error={copy("Pozitif bir güvenli tam sayı girin.", "Enter a positive safe integer.")} />
               ) : null}
               <NumberField
                 label={copy(
@@ -168,6 +169,7 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
           /> : null}</>} />
         </>
       ) : null}
+      <WorkCapsSettings current={current} enabled={validScope} />
       <ShellProfileSettings target={opening.target} enabled={validScope} />
     </Stack>
   );

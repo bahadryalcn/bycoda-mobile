@@ -11,7 +11,7 @@ const TOOLBAR_HEIGHT = metrics.visualControl + space.xs * 2;
 
 /**
  * The feature owns drafts and dispatch; this facade owns composer presentation: one capsule with a
- * full-width field that starts at one line (40dp) and grows to five before scrolling, then a
+ * full-width field that starts at one line (48dp) and grows to five before scrolling, then a
  * toolbar row of attach, chips, queue actions and send/stop.
  */
 export function ChatComposer({

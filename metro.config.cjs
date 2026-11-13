@@ -47,9 +47,12 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   const name = moduleName.endsWith("?raw") ? moduleName.slice(0, -4) : moduleName;
   return (resolveRequest ?? context.resolveRequest)(context, name, platform);
 };
-module.exports = withUniwindConfig(config, {
+const themedConfig = withUniwindConfig(config, {
   cssEntryFile: "./src/global.css",
   dtsFile: "./src/uniwind-types.d.ts",
   // Keep in step with the non-default palettes in src/ui/palettes.ts (palettes.test.ts checks this).
   extraThemes: ["bycoda", "bycoda-dark", "olive", "olive-dark", "tide", "tide-dark", "kiln", "kiln-dark", "dusk", "dusk-dark", "ink", "ink-dark"],
 });
+// Preserve upstream CSS/native transformation while fixing Windows web theme registration.
+themedConfig.transformerPath = require.resolve("./scripts/uniwind-transformer.cjs");
+module.exports = themedConfig;

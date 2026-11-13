@@ -6,8 +6,8 @@ import type { Block } from "./wire";
 vi.mock("@/ui/theme", () => ({ useMobileTheme: vi.fn() }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/chat-activity", () => ({
-  ChatActivity: ({ status, detail }: { status: string; detail: string }) =>
-    createElement("button", { "data-status": status }, detail),
+  ChatActivity: ({ status, detail, title }: { status: string; detail: string; title: string }) =>
+    createElement("button", { "data-status": status, "data-title": title }, detail),
 }));
 import { ActivityGroup } from "./activity-group";
 
@@ -44,5 +44,10 @@ describe("activity group state presentation", () => {
     expect(render([action("first", "completed"), action("unknown")])).toContain(
       'data-status="record"',
     );
+  });
+  it("does not conceal a failed command when a later command is still running", () => {
+    const html = render([action("failed", "failed"), action("active", "running")], true);
+    expect(html).toContain('data-status="error"');
+    expect(html).toContain("Running");
   });
 });

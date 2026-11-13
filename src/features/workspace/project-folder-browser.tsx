@@ -1,6 +1,9 @@
+import type { TextInputInstance } from "react-native";
+import { useLocale } from "@/i18n";
+import { matchesSearch } from "@/ui/search-matching";
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { BusyIndicator } from "@/ui/busy-indicator";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
@@ -47,9 +50,11 @@ export function ProjectFolderBrowser({
 }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const locale = useLocale();
   const [path, setPath] = useState<string>();
   const [manual, setManual] = useState("");
   const [search, setSearch] = useState("");
+  const searchRef = useRef<TextInputInstance>(null);
   // Drives and home stay listed while another folder loads (its query data is briefly empty).
   const [rootsSource, setRootsSource] = useState<ProjectDirectories>();
   const folders = useHostQuery<ProjectDirectories>(["folders", path], "projects.browse", { path });
@@ -67,7 +72,7 @@ export function ProjectFolderBrowser({
   }, [rootsSource, homeLabel]);
   const current = folders.data?.path;
   const entries = (folders.data?.entries ?? []).filter((entry) =>
-    entry.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+    matchesSearch(entry.name, search, locale),
   );
   const location = useMemo(
     () =>
@@ -89,10 +94,17 @@ export function ProjectFolderBrowser({
       query={folders}
       empty={!!folders.data && !entries.length}
       emptyIllustration={search ? "search-empty" : "inbox-empty"}
-      emptyAction={search ? {
-        label: copy("Aramayı temizle", "Clear search"),
-        onPress: () => setSearch(""),
-      } : undefined}
+      emptyAction={
+        search
+          ? {
+              label: copy("Aramayı temizle", "Clear search"),
+              onPress: () => {
+                setSearch("");
+                searchRef.current?.focus();
+              },
+            }
+          : undefined
+      }
       onManageConnections={() => {
         if (mutation.isPending) return;
         onClose();
@@ -110,6 +122,7 @@ export function ProjectFolderBrowser({
       visible
       size="full"
       scroll={false}
+      dirty={!!manual.trim()}
       dismissible={!mutation.isPending}
       title={copy("Proje ekle", "Add project")}
       onClose={() => {
@@ -163,20 +176,16 @@ export function ProjectFolderBrowser({
               >
                 <ArrowUp size={18} color={colors.muted} />
               </IconButton>
-              <Body
-                mono
-                numberOfLines={2}
-                ellipsizeMode="middle"
-                style={[uiStyles.grow, uiStyles.caption]}
-              >
+              <Body mono selectable style={[uiStyles.grow, uiStyles.caption]}>
                 {current ?? path ?? copy("Bir klasör seç", "Choose a folder")}
               </Body>
               {folders.isFetching && folders.data ? (
                 <BusyIndicator size="sm" color={colors.accent} />
               ) : null}
             </Row>
-            {(folders.data?.entries.length ?? 0) > 12 ? (
+            {(folders.data?.entries.length ?? 0) > 12 || search.length > 0 ? (
               <SearchField
+                ref={searchRef}
                 label={copy("Klasör ara", "Find a folder")}
                 placeholder={copy("Klasör ara", "Find a folder")}
                 value={search}
@@ -189,11 +198,7 @@ export function ProjectFolderBrowser({
         contentContainerStyle={{ gap: 0 }}
         ListEmptyComponent={regionOwned ? regionState : undefined}
         renderItem={({ item: entry, index }) => (
-          <GroupedListRow
-            first={index === 0}
-            last={index === entries.length - 1}
-            inset={rowInset}
-          >
+          <GroupedListRow first={index === 0} last={index === entries.length - 1} inset={rowInset}>
             <NavigationRow
               variant="plain"
               label={entry.name}

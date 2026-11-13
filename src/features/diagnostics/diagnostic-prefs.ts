@@ -1,3 +1,5 @@
+import { create } from "zustand";
+
 export const DIAGNOSTIC_CONSENT_KEY = "bycoda.mobile.diagnostics-consent.v1";
 export const DIAGNOSTIC_PERIODIC_KEY = "bycoda.mobile.diagnostics-periodic.v1";
 
@@ -52,4 +54,47 @@ export function createDiagnosticPrefs(storage: Storage, now: () => Date = () => 
 
 export function periodicDue(last: Date | null, now: Date, intervalDays: number): boolean {
   return !last || now.getTime() - last.getTime() >= intervalDays * 86_400_000;
+}
+
+export type DiagnosticPreferenceState = {
+  consent: DiagnosticConsent;
+  hydrated: boolean;
+  hydrate(): Promise<void>;
+  setMode(mode: DiagnosticMode): Promise<void>;
+};
+
+/** The app's consent state, separate from native diagnostic capture and transport. */
+export function createDiagnosticPreferenceStore(prefs: Pick<ReturnType<typeof createDiagnosticPrefs>, "readConsent" | "writeConsent">) {
+  let hydration: Promise<void> | undefined;
+  let persistence: Promise<DiagnosticConsent | void> = Promise.resolve();
+  let selectionVersion = 0;
+  let confirmed: DiagnosticConsent = { mode: null, decidedAt: null };
+  return create<DiagnosticPreferenceState>((set, get) => ({
+    consent: confirmed,
+    hydrated: false,
+    hydrate() {
+      if (get().hydrated) return Promise.resolve();
+      if (hydration) return hydration;
+      const version = selectionVersion;
+      hydration = prefs.readConsent().then((consent) => {
+        if (version !== selectionVersion || get().hydrated) return;
+        confirmed = consent;
+        set({ consent });
+      }).finally(() => set({ hydrated: true }));
+      return hydration;
+    },
+    async setMode(mode) {
+      const version = ++selectionVersion;
+      const write = () => prefs.writeConsent(mode);
+      const result = persistence.then(write, write);
+      persistence = result;
+      try {
+        confirmed = await result;
+        if (version === selectionVersion) set({ consent: confirmed, hydrated: true });
+      } catch (error) {
+        if (version === selectionVersion) set({ consent: confirmed });
+        throw error;
+      }
+    },
+  }));
 }

@@ -12,29 +12,43 @@ import {
   NavigationGroup,
   Row,
   ToggleField,
+  QueryState,
+  Notice,
 } from "@/ui/primitives";
 import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { useFormDraft } from "@/state/form-draft";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useActiveMachine } from "@/state/machines";
-import type { HostGoalInput } from "@/domain/types";
+import type { HostGoal, HostGoalInput } from "@/domain/types";
 import { AgentFields } from "../shared/agent-fields";
 import { identifier } from "../shared/format";
 import { initialAgent, useEffectiveAgent } from "../shared/agent";
 import type { GoalEditorProps } from "./types";
 import { deduplicateProjects } from "../../workspace/activity-model";
+import { useHostClient, useHostQuery } from "@/state/queries";
+import { GoalCreateDelivery } from "./create-delivery";
+import { useConnectionScope } from "@/state/connection-scope";
+import type { CrewDirectory } from "@/remote/contracts/crews";
+import { validateCrewDirectory } from "../crews/model";
 
-export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalEditorProps) {
+export function GoalEditor({ projectId, projects, providers, create, busy, onClose }: GoalEditorProps) {
   const copy = useCopy();
   const [agentValid, setAgentValid] = useState(true);
   const machine = useActiveMachine();
+  const connection = useConnectionScope();
+  const [opening] = useState(connection);
+  const client = useHostClient();
+  const [originalClient] = useState(() => client);
+  const [delivery] = useState(() => new GoalCreateDelivery());
+  const [checking, setChecking] = useState(false);
+  const [deliveryError, setDeliveryError] = useState<unknown>();
   const form = useFormDraft<HostGoalInput>(() => ({
-    ...initialAgent(machine?.providers),
+    ...initialAgent(providers),
     id: identifier(),
     title: "",
     prompt: "",
-    projectIds: [projectId],
+    projectIds: projectId ? [projectId] : [],
     leadProjectId: projectId,
     verifyDefaults: { review: true },
     approvePlan: true,
@@ -42,11 +56,30 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
     continueUntilDone: true,
   }));
   const draft = form.values;
-  const { requestClose } = useSheetGuard({ dirty: form.dirty || !agentValid, pending: busy, onClose });
+  const { requestClose } = useSheetGuard({ dirty: form.dirty || !agentValid, pending: busy || checking || !!delivery.pending, onClose });
   const choices = deduplicateProjects(projects, draft.leadProjectId);
   const normalized = useEffectiveAgent(draft, draft.leadProjectId);
+  const crewsSupported = opening.isCurrent() && draft.projectIds.length === 1 && machine?.capabilities?.includes("crews.tasks.v1") === true;
+  const crews = useHostQuery<CrewDirectory>(["crews", draft.leadProjectId, opening.token], "crews.list",
+    { projectId: draft.leadProjectId }, { enabled: crewsSupported,
+      queryFn: async (client, signal) => validateCrewDirectory(await client.request("crews.list", { projectId: draft.leadProjectId }, { signal }), draft.leadProjectId) });
+  const crewDirectory = crewsSupported ? crews.data : undefined;
+  const crewValid = !draft.crewDefinitionId || (crewsSupported && crews.isSuccess && crewDirectory?.definitions.some(crew => crew.id === draft.crewDefinitionId));
   const update = (patch: Partial<HostGoalInput>) => {
-    if (!busy) form.patch(patch);
+    if (!busy && !delivery.busy && !delivery.pending) form.patch(patch);
+  };
+  const submit = async () => {
+    if (delivery.busy || !opening.isCurrent() || !crewValid || !originalClient) return;
+    setChecking(true);
+    setDeliveryError(undefined);
+    try {
+      await delivery.submit(normalized, opening.isCurrent,
+        () => originalClient.request<HostGoal[]>("goals.list", {}),
+        goal => create.mutateAsync({ goal }));
+      haptic.success();
+      onClose();
+    } catch (error) { setDeliveryError(error); }
+    finally { setChecking(false); }
   };
   return (
     <Stack>
@@ -80,10 +113,28 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
         onChange={(ids) =>
           update({
             projectIds: ids,
+            crewDefinitionId: ids.length === 1 && ids[0] === draft.leadProjectId ? draft.crewDefinitionId : undefined,
             leadProjectId: ids.includes(draft.leadProjectId) ? draft.leadProjectId : (ids[0] ?? ""),
           })
         }
       />
+      </Section>
+      <Section title={copy("Çalışan", "Worker")}>
+        {crewsSupported && crewDirectory === undefined && <QueryState query={crews} loading="inline" />}
+        {crewsSupported && crewDirectory !== undefined && crews.isError && <Notice tone="warning"
+          message={copy("Ekip listesi yenilenemedi. Seçiminiz korunur; kaydetmeden önce yeniden deneyin.", "The crew list could not be refreshed. Your selection is kept; retry before saving.")}
+          retryLabel={copy("Yeniden dene", "Retry")} retrying={crews.isFetching}
+          onRetry={() => { if (opening.isCurrent() && !crews.isFetching) void crews.refetch().catch(() => {}); }} />}
+        {!opening.isCurrent() && <Notice tone="warning" message={copy("Seçili bilgisayar değişti. Ayarları yeniden açın.", "The selected computer changed. Reopen the settings.")} />}
+        <SelectField label={copy("Çalışan türü", "Worker type")} value={draft.crewDefinitionId ? "crew" : "agent"}
+          disabled={busy || !crewsSupported || !crews.isSuccess || !crewDirectory?.definitions.length}
+          options={[{ value: "agent", label: copy("Ajan", "Agent") }, { value: "crew", label: "Crew" }]}
+          onChange={value => update({ crewDefinitionId: value === "crew" ? crewDirectory?.definitions[0]?.id : undefined })} />
+        {draft.crewDefinitionId ? <SelectField label="Crew" value={draft.crewDefinitionId} disabled={busy || !crewsSupported || !crews.isSuccess}
+          options={(crewDirectory?.definitions ?? []).map(crew => ({ value: crew.id, label: crew.name }))}
+          onChange={crewDefinitionId => update({ crewDefinitionId })} /> : null}
+        <Body muted>{copy("Crew yalnızca tek projeli epic için kullanılabilir.", "Crews are available for single-project epics.")}</Body>
+        {crewsSupported && crews.isSuccess && crewDirectory?.definitions.length === 0 && <Body muted>{copy("Henüz ekip yok", "No crews yet")}</Body>}
       </Section>
       <Section title={copy("Planlayıcı", "Planner")}>
       <SelectField
@@ -93,7 +144,7 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
           .filter((project) => draft.projectIds.includes(project.id))
           .map((project) => ({ value: project.id, label: project.name, detail: project.cwd }))}
         disabled={busy || !draft.projectIds.length}
-        onChange={(leadProjectId) => update({ leadProjectId })}
+        onChange={(leadProjectId) => update({ leadProjectId, crewDefinitionId: undefined })}
       />
       <AgentFields
         onValidityChange={setAgentValid}
@@ -126,19 +177,21 @@ export function GoalEditor({ projectId, projects, create, busy, onClose }: GoalE
       </Body>
       </Disclosure>
       <FormActions
-        feedback={<MutationState mutation={create} />}
+        feedback={<>{deliveryError != null && <Notice tone="warning" message={deliveryError instanceof Error ? deliveryError.message : String(deliveryError)} />}<MutationState mutation={create} /></>}
         submitLabel={copy("Planlamayı başlat", "Start planning")}
-        busy={create.isPending}
+        busy={create.isPending || checking}
         disabled={
           !agentValid ||
+          !opening.isCurrent() ||
+          !crewValid ||
           !draft.title.trim() ||
           !draft.prompt.trim() ||
           !normalized.model.trim() ||
           !draft.projectIds.length ||
-          busy
+          busy || checking
         }
-        onSubmit={() => create.mutate({ goal: normalized }, { onSuccess: () => { haptic.success(); onClose(); } })}
-        cancelDisabled={busy}
+        onSubmit={() => { void submit(); }}
+        cancelDisabled={busy || checking || !!delivery.pending}
         cancelLabel={copy("Vazgeç", "Cancel")}
         onCancel={requestClose}
       />

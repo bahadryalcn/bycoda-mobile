@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DIAGNOSTIC_RETENTION_DAYS } from "../account/contracts";
 import { useAccount } from "../account/ui/account-context";
 import { Body, Button, Field, Notice, Section, SelectRow, Stack } from "../../ui/primitives";
@@ -17,6 +17,11 @@ export function DiagnosticsSettings() {
   const setMode = useDiagnosticPrefs((state) => state.setMode);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const noteRevision = useRef(0);
+  const pending = useRef(false);
+  const mounted = useRef(true);
+  // An upload result belongs to this settings instance and submitted note.
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [result, setResult] = useState<DiagnosticSendResult | "save-failed" | null>(null);
   useEffect(() => {
     void hydrate();
@@ -32,12 +37,22 @@ export function DiagnosticsSettings() {
     setMode(value).catch(() => setResult("save-failed"));
   };
   const sendNow = async () => {
+    if (pending.current || !mounted.current) return;
+    pending.current = true;
+    const submittedRevision = noteRevision.current;
     setBusy(true);
     setResult(null);
-    const outcome = await sendDiagnostics(account, "manual", { note });
-    setResult(outcome);
-    if (outcome === "sent") setNote("");
-    setBusy(false);
+    try {
+      const outcome = await sendDiagnostics(account, "manual", { note });
+      if (!mounted.current) return;
+      setResult(outcome);
+      if (outcome === "sent" && submittedRevision === noteRevision.current) setNote("");
+    } catch {
+      if (mounted.current) setResult("failed");
+    } finally {
+      pending.current = false;
+      if (mounted.current) setBusy(false);
+    }
   };
   const resultText = useDiagnosticResultText();
   const shown: { tone: "success" | "danger" | "info"; text: string } | null =
@@ -73,7 +88,7 @@ export function DiagnosticsSettings() {
           label={copy("Ne ters gitti? (isteğe bağlı)", "What went wrong? (optional)")}
           value={note}
           maxLength={500}
-          onChangeText={setNote}
+          onChangeText={(value) => { noteRevision.current++; setNote(value); }}
         />
         <Button
           label={copy("Günlükleri şimdi gönder", "Send logs now")}

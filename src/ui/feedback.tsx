@@ -1,4 +1,5 @@
 import { useMobileTheme } from "./theme";
+import { useState } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Badge as PanelBadge } from "panelui-native/components/badge";
 import { Spinner } from "panelui-native/components/spinner";
@@ -64,7 +65,7 @@ export function Badge({ label, tone = "default" }: BadgeProps) {
   );
 }
 
-/** Row status: colored 13/17 semibold text with an optional 6px dot, never a filled badge. */
+/** Row status: readable semibold text with an optional dot; critical state can wrap. */
 export function StatusText({ label, tone = "default", dot = true }: {
   label: string; tone?: "default" | SemanticTone | "live" | "active"; dot?: boolean;
 }) {
@@ -74,7 +75,7 @@ export function StatusText({ label, tone = "default", dot = true }: {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2, flexShrink: 1 }}>
       {dot ? <View accessible={false} style={[uiStyles.statusDot, { backgroundColor: color }]} /> : null}
-      <Text numberOfLines={1} style={[uiStyles.statusText, { color, flexShrink: 1 }]}>{label}</Text>
+      <Text style={[uiStyles.statusText, { color, flexShrink: 1 }]}>{label}</Text>
     </View>
   );
 }
@@ -145,14 +146,16 @@ const LINE_WIDTHS = ["92%", "86%", "95%", "64%"] as const;
  * does) rather than unmounting it when data arrives.
  */
 export function Skeleton({ variant = "list", label, rows, loading = true }: { variant?: "list" | "content"; label?: string; rows?: number; loading?: boolean }) {
+  const [regionHeight, setRegionHeight] = useState(0);
   const { colors } = useMobileTheme();
   const copy = useCopy();
   const animate = useFeedbackAnimation();
-  const revealed = useDelayedVisible();
-  const { mounted, opacity } = useSkeletonHandoff(loading);
+  const revealed = useDelayedVisible(undefined, loading);
+  const { mounted, opacity } = useSkeletonHandoff(revealed);
   const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
   // Never flashed while loading (delay not elapsed), so there is nothing to dissolve either.
-  const visible = revealed && mounted;
+  const visible = loading ? revealed : mounted;
+  const rowCount = rows ?? (regionHeight > 0 ? Math.max(1, Math.floor(regionHeight / metrics.rowHeightSession)) : 6);
   if (!loading && !visible) return null;
   // Upstream has no pause prop. Unmount its loops and preserve the same shapes.
   const Placeholder = animate ? PanelSkeleton : View;
@@ -168,12 +171,13 @@ export function Skeleton({ variant = "list", label, rows, loading = true }: { va
       accessibilityState={{ busy: loading }}
       aria-busy={loading}
       importantForAccessibility={loading ? "auto" : "no-hide-descendants"}
-      style={loading ? undefined : [handoffOverlay, fade]}
+      onLayout={loading && variant === "list" && rows === undefined ? (event) => setRegionHeight(event.nativeEvent.layout.height) : undefined}
+      style={loading ? (variant === "list" && rows === undefined ? { flexGrow: 1 } : undefined) : [handoffOverlay, fade]}
     >
       {visible ? (
         <Animated.View entering={reveal} importantForAccessibility="no-hide-descendants">
           {variant === "list"
-            ? Array.from({ length: rows ?? 6 }, (_, index) => (
+            ? Array.from({ length: rowCount }, (_, index) => (
                 <View
                   key={index}
                   style={{

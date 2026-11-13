@@ -1,5 +1,5 @@
 import type { useHostMutation } from "@/state/queries";
-import type { HostGoal, HostProject } from "@/domain/types";
+import type { HostGoal, HostProject, RemoteProvider } from "@/domain/types";
 export type GoalFlow =
   | { kind: "closed" }
   | { kind: "new"; projectId: string }
@@ -13,6 +13,7 @@ export type GoalFlowEvent =
 export type GoalEditorProps = {
   projectId: string;
   projects: HostProject[];
+  providers: RemoteProvider[];
   create: ReturnType<typeof useHostMutation<HostGoal>>;
   busy: boolean;
   onClose: () => void;

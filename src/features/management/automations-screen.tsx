@@ -20,11 +20,12 @@ import {
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import type { HostAutomation } from "@/domain/types";
 import { identifier } from "./shared/format";
-import { initialAgent } from "./shared/agent";
+import { initialAgent, useAgentProviders } from "./shared/agent";
 import { Scope } from "./shared/scope";
+import { useLocalProjectScope } from "./shared/local-project-scope";
 import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite";
 
 import { AutomationEditor } from "./automations/automation-editor";
@@ -49,7 +50,8 @@ export function AutomationsScreen() {
     { value: "paused", label: copy("Duraklatılmış", "Paused") },
   ];
   const machine = useActiveMachine();
-  const projectId = useMachines((state) => state.selectedProjectId);
+  const { projectId, setProjectId } = useLocalProjectScope();
+  const { providers, query: providerQuery } = useAgentProviders(projectId);
   const query = useHostQuery<HostAutomation[]>(
     ["automations"],
     "automations.list",
@@ -74,18 +76,17 @@ export function AutomationsScreen() {
   const busy = save.isPending || run.isPending || remove.isPending;
   const scoped = query.data?.filter(item => !projectId || item.projectId === projectId);
   const visible = scoped?.filter(item => (filter === "all" || (filter === "enabled") === item.enabled) && matchesSearch(item.name + " " + item.prompt, search, locale));
-  const canCreate = !!projectId && !!machine?.providers?.length && !editor && !busy;
+  const canCreate = !!providers.length && !editor && !busy;
   const startNew = () => {
     save.reset();
-    if (projectId)
       setEditor({
         kind: "new",
         initial: {
-          ...initialAgent(machine?.providers),
+          ...initialAgent(providers),
           id: identifier(),
           name: "",
           prompt: "",
-          projectId,
+          projectId: projectId ?? "",
           enabled: true,
           scheduleKind: "daily",
           time: "09:00",
@@ -101,7 +102,7 @@ export function AutomationsScreen() {
       query={query}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
-      context={<Scope allowAll />}
+      context={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
       actions={
         <IconButton
           label={copy("Yeni otomasyon", "New automation")}
@@ -116,13 +117,12 @@ export function AutomationsScreen() {
           {!projectId ? (
             <Body muted>
               {copy(
-                "Otomasyon oluşturmak için bir proje seç.",
-                "Choose a project to create an automation.",
+                "Projesiz otomasyonlar Room içinde çalışır.",
+                "Projectless automations run in Room.",
               )}
             </Body>
-          ) : !machine?.providers?.length ? (
-            <AgentProviderPrerequisite />
           ) : null}
+          {!providers.length ? <>{providerQuery.isLoading || providerQuery.error ? <QueryState query={providerQuery} loading="inline" /> : <AgentProviderPrerequisite />}</> : null}
           <FilterSheet
             visible={filterDraft !== null}
             onClose={() => setFilterDraft(null)}

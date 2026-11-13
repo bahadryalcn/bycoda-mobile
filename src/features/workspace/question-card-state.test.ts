@@ -37,4 +37,10 @@ describe("mobile question state across navigation", () => {
     expect(store.read("one", question)).toBeUndefined();
     expect(store.read("two", question)).toEqual(state);
   });
+
+  it("isolates repeated occurrences with the same provider IDs and prompt", () => {
+    const store = new QuestionCardStateStore();
+    store.write("scope", { ...question, occurrenceId: "first" }, state);
+    expect(store.read("scope", { ...question, occurrenceId: "second" })).toBeUndefined();
+  });
 });

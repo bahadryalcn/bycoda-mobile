@@ -13,14 +13,24 @@ const accounts = {
 it("expands multi-account providers and keeps single-login providers as one choice", () => {
   const choices = providerChoices(["claude", "codex", "grok"], accounts, "Default account");
   expect(choices.map((choice) => [choice.key, choice.label, choice.detail])).toEqual([
-    ["claude:", "Default account", "Claude"],
+    ["claude:", "Host default", "Claude"],
     ["claude:account-a", "Claude account 1", "Claude"],
     ["claude:account-b", "Claude account 2", "Claude"],
-    ["codex:", "Codex", undefined],
+    ["codex:", "Host default", "Codex"],
     ["grok:", "Grok", undefined],
   ]);
   expect(choices[1]).toMatchObject({ accountId: "account-a", color: "hsl(2 2% 2%)" });
   expect(choices[0].accountId).toBeUndefined();
+});
+it("retains the actual identity of a single named account", () => {
+  const choices = providerChoices(["claude"], { claude: [accounts.claude[1]!] }, "Default account");
+  expect(choices[0]).toMatchObject({ key: "claude:account-a", accountId: "account-a", label: "Claude account 1" });
+});
+it("localizes only the generic default label and preserves a renamed default", () => {
+  const generic = providerChoices(["codex"], { codex: [{ ...accounts.codex[0]!, label: "Default account" }] }, "Varsayılan hesap");
+  expect(generic[0]?.label).toBe("Varsayılan hesap");
+  expect(generic[0]?.accountId).toBeUndefined();
+  expect(providerChoices(["codex"], accounts, "Varsayılan hesap")[0]?.label).toBe("Host default");
 });
 
 it("selects by provider and account, then falls back safely", () => {

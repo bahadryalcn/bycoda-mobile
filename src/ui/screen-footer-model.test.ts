@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { screenFooterLimits } from "./screen-footer-model";
 it("keeps a readable body inside short allocated scenes instead of spending the window",()=>{
- expect(screenFooterLimits(200,1)).toEqual({bodyMinimum:72,maximum:128});
+ expect(screenFooterLimits(200,1)).toEqual({bodyMinimum:80,maximum:120});
  expect(screenFooterLimits(200,2)).toEqual({bodyMinimum:88,maximum:112});
  for(const height of [160,200,280,400,844])for(const scale of [1,2,3,4]) {
   const result=screenFooterLimits(height,scale);

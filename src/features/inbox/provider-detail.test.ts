@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProviderInboxDetail } from "./provider-detail";
 import { InboxJobError } from "./provider-jobs";
+vi.mock("@/i18n",()=>({useLocale:()=>"tr"}));
 const state = vi.hoisted(() => ({ active: "machine", project: "project", allowed: true, error: null as Error | null,
   reads: [] as Array<{action: string; enabled: boolean}>, detailsRetry: vi.fn(), threadRetry: vi.fn(), availabilityRetry: vi.fn(),
   job: vi.fn(), open: vi.fn(), confirms: [] as Array<()=>void>, changes: new Map<string,(value:string)=>void>(), presses: new Map<string,()=>void>() }));
@@ -60,6 +61,17 @@ it("shows one authorized record identity and preserves exact reply target throug
  await mount();expect(container.textContent?.match(/Private record title/g)).toHaveLength(1);expect(container.textContent).toContain("Private description");expect(container.textContent).toContain("Private conversation");
  await click("Reply");await type("Reviewed reply");await click("Send comment");expect(state.job).not.toHaveBeenCalled();await confirm();
  expect(state.job).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({machine:expect.objectContaining({id:"machine"})}),{action:"comment",input:{item:{provider:"github",kind:"pr",number:7,repo:"private/repository",projectPath:"/private/project",identifier:"PR-7"},projectId:"project",body:"Reviewed reply",inReplyTo:"thread-1",confirm:"SEND_COMMENT"}});
+});
+it("keeps a complete multilingual reply quotation in editor and frozen confirmation",async()=>{
+ const original=comment.body;
+ const quotation="İstanbul araştırması العربية 👩🏽‍💻\n".repeat(30)+"Final decision: retain the original project.";
+ try {
+  comment.body=quotation;await mount();await click("Reply");
+  expect(container.querySelector("textarea")?.parentElement?.parentElement?.textContent).toContain(quotation);
+  await type("Reviewed response");await click("Send comment");
+  expect(container.querySelector('aside[aria-label="Send comment"]')?.textContent).toContain(quotation);
+  expect(state.job).not.toHaveBeenCalled();
+ } finally { comment.body=original; }
 });
 it.each(["read","machine","project","auth","identity"])("conceals all private detail/comment/draft content after %s loss and rejects retained actions after restoration",async(kind)=>{
  await mount();await click("Reply");await type("Private reply draft");await click("Send comment");const confirmOld=state.presses.get("Send")!,edit=state.changes.get("Comment")!,reply=state.presses.get("Reply")!,link=state.presses.get("Open in provider")!,refresh=state.presses.get("Refresh")!;

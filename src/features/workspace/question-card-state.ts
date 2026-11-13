@@ -4,7 +4,12 @@ import type { QuestionDraft } from "./session-types";
 export type QuestionCardState = {
   draft: QuestionDraft;
   delivery?: UserQuestionPrompt["delivery"];
+  error?: unknown;
 };
+
+export function questionCardIdentity(scope: string | undefined, question: UserQuestionPrompt): string {
+  return JSON.stringify([scope, question.occurrenceId, question.providerTurnId, question.callId, question.requestId, question.questions]);
+}
 
 /** Navigation may remount a card while its delivery is still uncertain. */
 export class QuestionCardStateStore {
@@ -13,7 +18,7 @@ export class QuestionCardStateStore {
   constructor(private readonly limit = 64) {}
 
   private key(scope: string, question: UserQuestionPrompt): string {
-    return JSON.stringify([scope, question.providerTurnId, question.callId, question.requestId, question.questions]);
+    return questionCardIdentity(scope, question);
   }
 
   read(scope: string | undefined, question: UserQuestionPrompt): QuestionCardState | undefined {

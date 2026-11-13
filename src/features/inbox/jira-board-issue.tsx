@@ -1,10 +1,11 @@
+import { useInboxLocalScope } from "./inbox-local-scope";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useCopy } from "@/ui/copy";
-import { useMachines } from "@/state/machines";
+
 import { Body, Button, Notice, QueryState, SelectField, Sheet, Stack } from "@/ui/primitives";
 import { ErrorText } from "../workspace/shared";
 import { useInboxRead } from "./provider-queries";
-import { isInboxOriginCurrent } from "./provider-model";
+
 import { useJiraBoardDelivery } from "./jira-board-delivery";
 import { JiraBoardActionReview, type JiraBoardReview } from "./jira-board-action-review";
 import type { InboxJobRequest, InboxOrigin } from "./provider-protocol";
@@ -25,6 +26,7 @@ export function JiraBoardIssueActions({
   onChanged: () => void;
   onClose: () => void;
 }) {
+  const inboxScope = useInboxLocalScope();
   const copy = useCopy(),
     [snapshot] = useState(incoming),
     [issue] = useState(incomingIssue),
@@ -44,7 +46,7 @@ export function JiraBoardIssueActions({
     pending = delivery.draft.value?.pending,
     writeAllowed = useRef(canWrite);
   writeAllowed.current = canWrite;
-  const current = () => isInboxOriginCurrent(origin, useMachines.getState());
+  const current = () => inboxScope.matches(origin);
   const locked =
     !canWrite ||
     delivery.busy ||

@@ -23,11 +23,12 @@ import {
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import type { HostTask } from "@/domain/types";
 import { identifier } from "./shared/format";
-import { initialAgent } from "./shared/agent";
+import { initialAgent, useAgentProviders } from "./shared/agent";
 import { Scope } from "./shared/scope";
+import { useLocalProjectScope } from "./shared/local-project-scope";
 import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite";
 import { taskMatchesFilter } from "./task-actions";
 
@@ -38,6 +39,7 @@ import { TaskDeclineFeedback } from "./tasks/task-feedback";
 import { TaskBulkActions } from "./tasks/bulk-actions";
 import type { TaskEditorFlow } from "./tasks/types";
 import { useMobileTheme } from "@/ui/theme";
+import { useLocalSearchParams } from "expo-router";
 
 export function TasksScreen() {
   const { colors } = useMobileTheme();
@@ -48,7 +50,11 @@ export function TasksScreen() {
   const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
   const [bulkBusy, setBulkBusy] = useState(false);
   const machine = useActiveMachine();
-  const projectId = useMachines((state) => state.selectedProjectId);
+  const linked = useLocalSearchParams<{ taskId?: string; projectId?: string; machineId?: string }>();
+  const { projectId: selectedProjectId, setProjectId } = useLocalProjectScope();
+  const linkedTaskId = linked.machineId === machine?.id ? linked.taskId : undefined;
+  const projectId = linkedTaskId && linked.projectId ? linked.projectId : selectedProjectId;
+  const { providers, query: providerQuery } = useAgentProviders(projectId);
   const query = useHostQuery<HostTask[]>(
     ["tasks", projectId],
     "tasks.list",
@@ -66,6 +72,7 @@ export function TasksScreen() {
   const move = useHostMutation<HostTask>("tasks.move", ["tasks"]);
   const remove = useHostMutation("tasks.delete", ["tasks"]);
   const decline = useHostMutation("stewards.decline", ["tasks"]);
+  const finish = useHostMutation<HostTask>("tasks.finishWithFindings", ["tasks"]);
   const recheck = useHostMutation("tasks.review.recheck", ["tasks"]);
   const manualStart = useHostMutation<HostTask>("tasks.start", ["tasks"]);
   const reorder = useHostMutation("tasks.reorder", ["tasks"]);
@@ -92,15 +99,16 @@ export function TasksScreen() {
   const [filterDraft, setFilterDraft] = useState<string | null>(null);
   const start = () => {
     save.reset();
-    if (projectId)
+    if (providers.length)
       setEditor({
         kind: "new",
         initial: {
-          ...initialAgent(machine?.providers),
+          ...initialAgent(providers),
+          inheritMaxRunMinutes: true,
           id: identifier(),
           title: "",
           prompt: "",
-          projectId,
+          projectId: projectId ?? "",
           isolate: true,
           review: true,
           autoMerge: false,
@@ -127,11 +135,12 @@ export function TasksScreen() {
     remove.isPending ||
     decline.isPending ||
     recheck.isPending ||
+    finish.isPending ||
     manualStart.isPending ||
     reorder.isPending;
   const visible = query.data?.filter(
     (task) =>
-      taskMatchesFilter(task, filter) &&
+      linkedTaskId ? task.id === linkedTaskId : taskMatchesFilter(task, filter) &&
       matchesSearch(task.title + " " + task.prompt, search, locale),
   );
   const filterContext = <AppliedFilters filters={[`${copy("Durum", "Status")}: ${filterOptions.find(option => option.value === filter)?.label ?? filter}`]} />;
@@ -141,12 +150,12 @@ export function TasksScreen() {
       query={query}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
-      context={<Scope allowAll />}
+      context={<Scope allowAll projectId={selectedProjectId} onChange={setProjectId} />}
       actions={
         <>
           <IconButton
             label={copy("Yeni görev", "New task")}
-            disabled={!projectId || !machine?.providers?.length || busy || !!editor}
+            disabled={!providers.length || busy || !!editor}
             onPress={start}
           >
             <Plus size={22} strokeWidth={2.2} color={colors.accent} />
@@ -175,12 +184,7 @@ export function TasksScreen() {
             actions={<FilterButton count={filter !== "active" ? 1 : 0} onPress={() => setFilterDraft(filter)} />} />
           {machine ? <TaskBulkActions key={`${machine.id}:${projectId ?? "all"}`} tasks={visible ?? []} machineId={machine.id} disabled={busy && !bulkBusy || !!editor || !!deliveryTask}
             context={filterContext} onBusy={setBulkBusy} onComplete={async () => { await query.refetch(); if (projectId) await allTasks.refetch(); }} /> : filterContext}
-          {!projectId && (
-            <Body muted>
-              {copy("Görev eklemek için projesini seçin.", "Select a project to add a task.")}
-            </Body>
-          )}
-          {projectId && !machine?.providers?.length ? <AgentProviderPrerequisite /> : null}
+          {!providers.length ? <>{providerQuery.isLoading || providerQuery.error ? <QueryState query={providerQuery} loading="inline" /> : <AgentProviderPrerequisite />}</> : null}
           {!editor && (
             <MutationState mutation={save} success={copy("Görev kaydedildi.", "Task saved.")} />
           )}
@@ -247,7 +251,7 @@ export function TasksScreen() {
             emptyAction={query.data?.length ? search.trim()
               ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
               : filter !== "all" ? { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") } : undefined
-              : projectId && machine?.providers?.length && !busy && !editor
+              : providers.length && !busy && !editor
                 ? { label: copy("Yeni görev", "New task"), onPress: start } : undefined}
           />
         </>
@@ -261,6 +265,7 @@ export function TasksScreen() {
           remove={remove}
           decline={decline}
           recheck={recheck}
+          finish={finish}
           start={manualStart}
           reorder={reorder}
           tasks={(projectId ? allTasks.data : query.data) ?? []}

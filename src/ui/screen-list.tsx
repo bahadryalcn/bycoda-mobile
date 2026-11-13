@@ -1,7 +1,7 @@
 import { useMobileTheme } from "./theme";
 import { scrollKeyboardDismissMode } from "./scroll-keyboard";
 import { FlatList, RefreshControl, View, type FlatListProps } from "react-native";
-import type { ReactNode } from "react";
+import { createElement, isValidElement, type ComponentType, type ReactNode } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useScreenHeading, useScreenChrome } from "./layout";
 import { metrics, space } from "./tokens";
@@ -44,6 +44,7 @@ export function ScreenList<T>({
   contentContainerStyle,
   ListHeaderComponent,
   ListFooterComponent,
+  ListEmptyComponent,
   refreshControl,
   ...props
 }: ScreenListProps<T>) {
@@ -64,6 +65,11 @@ export function ScreenList<T>({
       contentInsetAdjustmentBehavior="never"
       {...props}
       style={[uiStyles.screen, style]}
+      ListEmptyComponent={ListEmptyComponent ? (
+        <View collapsable={false} style={{ flexGrow: 1 }}>
+          {isValidElement(ListEmptyComponent) ? ListEmptyComponent : createElement(ListEmptyComponent as ComponentType)}
+        </View>
+      ) : undefined}
       contentContainerStyle={[
         {
           width: "100%",

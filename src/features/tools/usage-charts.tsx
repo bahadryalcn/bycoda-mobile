@@ -44,44 +44,89 @@ export function UsageKpis({ items }: { items: { title: string; value: string }[]
 export function ProviderShare({ rows }: { rows: ProviderUsage[] }) {
   const copy = useCopy();
   const { colors } = useMobileTheme();
-  const palette = [colors.accent, colors.success, colors.warning, colors.danger, colors.info, colors.tertiary];
+  const palette = [
+    colors.accent,
+    colors.success,
+    colors.warning,
+    colors.danger,
+    colors.info,
+    colors.tertiary,
+  ];
   const reported = rows.filter((row) => row.tokens !== null);
   const total = reported.reduce((sum, row) => sum + (row.tokens ?? 0), 0);
-  const colorOf = (provider: string) => palette[reported.findIndex((row) => row.provider === provider) % palette.length];
-  const fractionOf = (row: ProviderUsage) => (row.tokens !== null && total > 0 ? row.tokens / total : null);
+  const colorOf = (provider: string) =>
+    palette[reported.findIndex((row) => row.provider === provider) % palette.length];
+  const fractionOf = (row: ProviderUsage) =>
+    row.tokens !== null && total > 0 ? row.tokens / total : null;
   if (!rows.length) return null;
   const label = copy("Sağlayıcıya göre token payı", "Token share by provider");
   return (
     <View style={{ gap: space.md }}>
-      {reported.length > 1 && reported.length <= MAX_DONUT_PROVIDERS ? (
-        <View accessible accessibilityRole="image" accessibilityLabel={label} style={{ alignItems: "center" }}>
+      {total > 0 && reported.length > 1 && reported.length <= MAX_DONUT_PROVIDERS ? (
+        <View
+          accessible
+          accessibilityRole="image"
+          accessibilityLabel={label}
+          style={{ alignItems: "center" }}
+        >
           <PieChart
-            data={reported.map((row) => ({ label: row.provider, value: row.tokens ?? 0, color: colorOf(row.provider) }))}
+            data={reported.map((row) => ({
+              label: row.provider,
+              value: row.tokens ?? 0,
+              color: colorOf(row.provider),
+            }))}
             size={PIE_SIZE}
             innerRadius={0.6}
           >
-            <PieChart.Center defaultLabel={copy("Toplam", "Total")} formatValue={(value) => compactTokens(value)} />
+            <PieChart.Center
+              defaultLabel={copy("Toplam", "Total")}
+              formatValue={(value) => compactTokens(value)}
+            />
           </PieChart>
         </View>
       ) : null}
       {reported.length > MAX_DONUT_PROVIDERS ? (
-        <BarChart data={reported.map((row) => ({ provider: row.provider, tokens: row.tokens ?? 0 }))} xDataKey="provider" aspectRatio={2} accessibilityLabel={label}>
+        <BarChart
+          data={reported.map((row) => ({ provider: row.provider, tokens: row.tokens ?? 0 }))}
+          xDataKey="provider"
+          aspectRatio={2}
+          accessibilityLabel={label}
+        >
           <BarChart.Grid />
           <BarChart.Bar dataKey="tokens" />
           <BarChart.XAxis ticks={MAX_DONUT_PROVIDERS} />
         </BarChart>
       ) : null}
-      {!reported.length ? <Body muted>{copy("Sağlayıcı token bildirmedi.", "No token readings were reported.")}</Body> : null}
+      {!reported.length ? (
+        <Body muted>{copy("Sağlayıcı token bildirmedi.", "No token readings were reported.")}</Body>
+      ) : null}
       <View style={{ gap: space.xs }}>
         {rows.map((row) => {
           const fraction = fractionOf(row);
           return (
-            <View key={row.provider} style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-              <View accessible={false} style={{ width: SWATCH, height: SWATCH, borderRadius: radii.pill, backgroundColor: fraction === null ? colors.tertiary : colorOf(row.provider) }} />
+            <View
+              key={row.provider}
+              style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
+            >
+              <View
+                accessible={false}
+                style={{
+                  width: SWATCH,
+                  height: SWATCH,
+                  borderRadius: radii.pill,
+                  backgroundColor: fraction === null ? colors.tertiary : colorOf(row.provider),
+                }}
+              />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <MetricRow
                   label={row.provider}
-                  value={fraction === null ? "—" : `${compactTokens(row.tokens)} · ${Math.round(fraction * 100)}%`}
+                  value={
+                    row.tokens === null
+                      ? "—"
+                      : fraction === null
+                        ? compactTokens(row.tokens)
+                        : `${compactTokens(row.tokens)} · ${Math.round(fraction * 100)}%`
+                  }
                 />
               </View>
             </View>

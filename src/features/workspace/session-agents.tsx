@@ -12,18 +12,19 @@ import { useHostClient, useHostQuery } from "@/state/queries";
 import type { HostSessionSummary } from "@/domain/types";
 import { childSessions } from "./subagent-sessions-model";
 import { agentCounts, listAgents } from "./agents-model";
+import { runStatus } from "./run-status-model";
 import { AgentsSheet } from "./agents-sheet";
 import { RunStatusCard } from "./run-status-card";
 import type { TranscriptBlockProps } from "./session-types";
 
 type Props = Pick<TranscriptBlockProps, "scope" | "disabled" | "onCommand"> & {
   session: HostSession | undefined;
-  /** Renders the transcript; the idle "N agents" chip is handed over as its list header so it scrolls with the content. */
+  /** Operating controls rendered beside the queue above the composer. */
   children: (chip: ReactNode) => ReactNode;
 };
 
-/** Run status above the transcript plus the Agents sheet; an idle session that used subagents keeps an "N agents" chip. */
-export function SessionAgents({ session, children: transcript, ...props }: Props) {
+/** Run controls and the Agents sheet retain their existing access-aware owners. */
+export function SessionAgents({ session, children: operations, ...props }: Props) {
   const client = useHostClient();
   const { scope } = props;
   const blocks = session?.session.blocks;
@@ -36,27 +37,33 @@ export function SessionAgents({ session, children: transcript, ...props }: Props
   const [open, setOpen] = useState(false);
   const projectId = session?.projectId;
   const agentBlocks = useMemo(() => listAgents(blocks), [blocks]);
-  // Same key as the sessions panel, so the list is shared. Without subagent blocks it is only read
-  // from the cache (never fetched on open); the sheet forces a fetch when it opens.
-  const siblings = useHostQuery<HostSessionSummary[]>(["sessions", projectId], "sessions.list", { projectId }, { enabled: !!projectId && (open || agentBlocks.length > 0) });
+  // Child sessions may be created without an inline agent block. Discover them while working,
+  // sharing the sessions-panel cache and its access-aware foreground-only query owner.
+  const siblings = useHostQuery<HostSessionSummary[]>(["sessions", projectId], "sessions.list", { projectId }, {
+    enabled: !!projectId && (live || open || agentBlocks.length > 0),
+    interval: live ? 4000 : undefined,
+  });
   const children = useMemo(() => childSessions(siblings.data, scope.sessionId), [siblings.data, scope.sessionId]);
   const counts = agentCounts(agentBlocks);
   counts.total += children.length;
-  const chip = !live && counts.total ? (
+  counts.running = runStatus(blocks ?? [], live).subagents.running + children.filter((child) => child.state === "running").length;
+  const label = live && counts.running
+    ? copy("{p0}/{p1} ajan çalışıyor", "{p0}/{p1} agents running", { p0: counts.running, p1: counts.total })
+    : copy("{p0} ajan", "{p0} agents", { p0: counts.total });
+  const chip = counts.total ? (
         <PressableCard
-          label={copy("Ajanlar ({p0})", "Agents ({p0})", { p0: counts.total })}
+          label={label}
           onPress={() => setOpen(true)}
-          style={{ minHeight: 40, flexDirection: "row", alignItems: "center", gap: space.row, alignSelf: "flex-start", marginHorizontal: 0, paddingVertical: 0, paddingHorizontal: space.lg, borderRadius: radii.pill, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.separator }}
+          style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: space.row, alignSelf: "flex-start", flexShrink: 1, maxWidth: "100%", marginHorizontal: 0, paddingVertical: 0, paddingHorizontal: space.lg, borderRadius: radii.pill, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.separator }}
         >
           <Users size={14} color={colors.tertiary} />
-          <Body style={{ fontSize: fontSize.control, lineHeight: lineHeight.control }}>{copy("{p0} ajan", "{p0} agents", { p0: counts.total })}</Body>
+          <Body style={{ flexShrink: 1, fontSize: fontSize.control, lineHeight: lineHeight.control }}>{label}</Body>
           <ChevronRight size={16} color={colors.tertiary} />
         </PressableCard>
   ) : null;
   return (
     <>
-      <RunStatusCard blocks={blocks} live={live} onOpenAgents={() => setOpen(true)} />
-      {transcript(chip)}
+      {operations(<><RunStatusCard blocks={blocks} live={live} onOpenAgents={() => setOpen(true)} />{chip}</>)}
       {open ? <View><AgentsSheet blocks={blocks} childRuns={children} onClose={() => setOpen(false)} {...props} runId={session?.runId} parentProvider={session?.session.harness} context={context} /></View> : null}
     </>
   );

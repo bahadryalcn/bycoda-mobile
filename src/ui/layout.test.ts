@@ -131,9 +131,9 @@ it("retains a measured scene through transient zero layouts and keeps the body m
   expect(host.querySelector('[data-keyboard-frame="true"]')).not.toBeNull();
   expect(host.querySelector('[data-keyboard-scroll="false"]')).not.toBeNull();
   const measure=fixture.frames[0];
-  act(()=>measure({nativeEvent:{layout:{height:200}}}));expect(fixture.footerStyle.maxHeight).toBe(120);
+  act(()=>measure({nativeEvent:{layout:{height:200}}}));expect(fixture.footerStyle.maxHeight).toBe(112);
   for(const height of [0,-1,NaN,Infinity])act(()=>measure({nativeEvent:{layout:{height}}}));
-  expect(fixture.footerStyle.maxHeight).toBe(120);
+  expect(fixture.footerStyle.maxHeight).toBe(112);
   act(()=>root.render(createElement(Screen,null,body)));
   expect(host.querySelector('[data-keyboard-frame="false"]')).not.toBeNull();
   expect(host.querySelector('[data-keyboard-scroll="true"]')).not.toBeNull();

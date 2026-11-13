@@ -9,8 +9,8 @@ import { ATTACHMENT_COUNT, base64ToBytes, validateAttachment, type StagedAttachm
 import { readBrowserCapture, type BrowserCaptureScope } from "../tools/browser-annotation-model";
 import { parseBrowserAnnotation } from "../../../../src/shared/lib/browserAnnotation";
 
-export async function pickAttachments(kind: "photo" | "document", scope: string): Promise<StagedAttachment[]> {
-  const owner = createDraftStorageOwner(AsyncStorage, `bycoda.mobile.draft.v1:${scope}`);
+export async function pickAttachments(kind: "photo" | "document", scope: string, custody: "composer" | "question" = "composer"): Promise<StagedAttachment[]> {
+  const owner = createDraftStorageOwner(AsyncStorage, custody === "question" ? `bycoda.mobile.question-attachments.v1:${scope}` : `bycoda.mobile.draft.v1:${scope}`);
   const picked = kind === "photo"
     ? await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: ATTACHMENT_COUNT, quality: 1 })
     // Android's picker grants access to the content URI. Copy it directly into
@@ -19,7 +19,7 @@ export async function pickAttachments(kind: "photo" | "document", scope: string)
     : await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: Platform.OS !== "android" });
   if (picked.canceled) return [];
   return owner.run(async () => {
-  const directory = new Directory(Paths.document, "chat-drafts", encodeURIComponent(scope));
+  const directory = new Directory(Paths.document, custody === "question" ? "question-drafts" : "chat-drafts", encodeURIComponent(scope));
   directory.create({ idempotent: true, intermediates: true });
   const files: StagedAttachment[] = [];
   try {
@@ -39,8 +39,8 @@ export async function pickAttachments(kind: "photo" | "document", scope: string)
 }
 export function removeStagedFile(file: StagedAttachment) {
   // Persisted URI is untrusted. Only our app-owned staging directory is removable.
-  const root = new Directory(Paths.document, "chat-drafts").uri + "/";
-  if (file.uri.startsWith(root) && !file.uri.includes("..")) { const local = new File(file.uri); if (local.exists) local.delete(); }
+  const roots = ["chat-drafts", "question-drafts"].map(folder => new Directory(Paths.document, folder).uri + "/");
+  if (roots.some(root => file.uri.startsWith(root)) && !file.uri.includes("..")) { const local = new File(file.uri); if (local.exists) local.delete(); }
 }
 export function stageBrowserCapture(value: unknown, comment: string, scope: BrowserCaptureScope & { machineId: string }): StagedAttachment {
   return createDraftStorageOwner(AsyncStorage, `bycoda.mobile.draft.v1:${scope.machineId}:${scope.sessionId}`).runSync(() => {
@@ -57,8 +57,8 @@ export function stageBrowserCapture(value: unknown, comment: string, scope: Brow
   catch (error) { removeStagedFile(file); throw error; }
   });
 }
-export function isScopedStagedFile(file: StagedAttachment, scope: string) {
-  return file.uri === new File(Paths.document, "chat-drafts", encodeURIComponent(scope), file.id).uri;
+export function isScopedStagedFile(file: StagedAttachment, scope: string, custody: "composer" | "question" = "composer") {
+  return file.uri === new File(Paths.document, custody === "question" ? "question-drafts" : "chat-drafts", encodeURIComponent(scope), file.id).uri;
 }
 export function clearAttachmentDraftFiles(retainedScopes: readonly string[]) {
   const directory = new Directory(Paths.document, "chat-drafts");

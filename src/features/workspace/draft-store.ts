@@ -1,4 +1,4 @@
-import { createDraftStorageOwner, RetiredDraftError } from "@/state/local-draft-storage";
+import { createDraftStorageOwner, publishDraftPresence, RetiredDraftError } from "@/state/local-draft-storage";
 
 type Storage = {
   getItem(key: string): Promise<string | null>;
@@ -27,7 +27,10 @@ export class DraftStore<T> {
   get retired() { return !this.owner.current(); }
   async load(): Promise<T | null> {
     this.loaded = false;
-    const raw = await this.owner.run(() => this.storage.getItem(this.key));
+    const raw = await this.owner.run(() => this.storage.getItem(this.key).then(raw => {
+      if (this.owner.current()) publishDraftPresence(this.storage, this.key, raw !== null && this.encode(this.decode(raw)) !== null);
+      return raw;
+    }));
     if (this.retired) throw new RetiredDraftError();
     const value = raw === null ? null : this.decode(raw);
     this.loaded = true;
@@ -38,9 +41,11 @@ export class DraftStore<T> {
     if (!this.loaded)
       return Promise.reject(new Error("Read the saved draft successfully before changing it."));
     const raw = this.encode(value);
-    return this.owner.run(() =>
-        raw === null ? this.storage.removeItem(this.key) : this.storage.setItem(this.key, raw),
-      );
+    return this.owner.run(async () => {
+      if (raw === null) await this.storage.removeItem(this.key);
+      else await this.storage.setItem(this.key, raw);
+      if (this.owner.current()) publishDraftPresence(this.storage, this.key, raw !== null);
+    });
   }
 }
 

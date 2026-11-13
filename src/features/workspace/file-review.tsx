@@ -93,7 +93,7 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
       : typeof file.data === "string"
         ? file.data
         : undefined;
-  const binary = media || text?.includes("\0") === true;
+  const binary = source === "computer" && media || text?.includes("\0") === true;
   const focused = useIsFocused();
   useBackHandler(focused, onBack);
   return (

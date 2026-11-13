@@ -12,6 +12,7 @@ import FolderOpen from "lucide-react-native/icons/folder-open";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
 import { metrics, space } from "@/ui/tokens";
+import { useBottomInset } from "@/ui/layout";
 
 type Benefit = { key: string; icon: typeof Laptop; title: string; detail: string };
 
@@ -20,6 +21,7 @@ export function WelcomeScreen() {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const insets = useSafeAreaInsets();
+  const bottomInset = useBottomInset();
   const benefits: Benefit[] = [
     {
       key: "projects",
@@ -50,9 +52,10 @@ export function WelcomeScreen() {
           width: "100%",
           maxWidth: metrics.entryWidth,
           alignSelf: "center",
-          paddingHorizontal: Math.max(insets.left, space.screen),
+          paddingStart: Math.max(insets.left, space.screen),
+          paddingEnd: Math.max(insets.right, space.screen),
           paddingTop: space.lg,
-          paddingBottom: Math.max(insets.bottom, space.md),
+          paddingBottom: Math.max(bottomInset, insets.bottom, space.md),
           gap: space.md,
         }}
       >

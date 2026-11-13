@@ -4,6 +4,9 @@ import {
   type AssistantMessage,
   type AssistantResponse,
   type AssistantSnapshot,
+  type AssistantProfilePatch,
+  type AssistantProfile,
+  type AssistantNotificationTarget,
 } from "../../../../src/shared/model/host-contracts/assistant";
 import type {
   AssistantOwnerQuestion,
@@ -43,6 +46,9 @@ export type AssistantMobileRequest =
   | { op: "threads.open"; projectId?: string }
   | { op: "threads.messages"; threadId: string; limit: number; before?: number; beforeId?: string }
   | { op: "presence.set"; state: OwnerPresence }
+  | { op: "pauseAll" }
+  | { op: "notifications.targets" }
+  | { op: "profile.update"; expectedVersion: number; patch: AssistantProfilePatch }
   | { op: "threads.sendIdentity" }
   | {
       op: "threads.send";
@@ -166,6 +172,27 @@ export class AssistantMobileClient {
   }
   get pendingPresence() {
     return this.presenceAttempt;
+  }
+  /** Stops Room work after explicit owner confirmation; transport never retries writes. */
+  async pauseAll(): Promise<void> {
+    const response = await this.call({ op: "pauseAll" });
+    if (response.ok !== true) throw new AssistantMobileError("response");
+  }
+  /** Owner-readable, sanitized destinations from this captured Host only. */
+  async notificationTargets(): Promise<AssistantNotificationTarget[]> {
+    const response = await this.call({ op: "notifications.targets" });
+    if (!response.notificationTargets) throw new AssistantMobileError("response");
+    return response.notificationTargets;
+  }
+  /** Profile mirror only. This never grants native standing authority. */
+  async updateProfile(
+    expectedVersion: number,
+    patch: AssistantProfilePatch,
+  ): Promise<AssistantProfile> {
+    const response = await this.call({ op: "profile.update", expectedVersion, patch });
+    if (!response.profile || response.profile.version !== expectedVersion + 1)
+      throw new AssistantMobileError("response");
+    return response.profile;
   }
   async setPresence(state: OwnerPresence): Promise<void> {
     if (!["present", "away", "dnd"].includes(state)) throw new AssistantMobileError("unsupported");

@@ -56,7 +56,7 @@ export function ApprovalCard({
         ? copy("Telefondan yanıtlandı.", "Answered from this phone.")
         : null;
   const busy = local === "sending";
-  const actionable = open && approval.remote && canDecide && local !== "sent" && local !== "sending";
+  const actionable = open && approval.remote && canDecide && local !== "sent";
   return (
     <Card variant="surface">
       <View style={{ gap: space.sm }}>
@@ -123,7 +123,7 @@ export function ApprovalCard({
         {actionable && verified && local !== "uncertain" ? (
           <View style={{ gap: space.xs }}>
             <Button
-              label={approval.confirmLabel || copy("Onayla", "Approve")}
+              label={busy ? copy("Gönderiliyor…", "Sending…") : approval.confirmLabel || copy("Onayla", "Approve")}
               tone="primary"
               fullWidth
               busy={busy}

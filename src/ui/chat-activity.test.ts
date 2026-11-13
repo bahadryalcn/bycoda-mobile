@@ -26,13 +26,15 @@ vi.mock("react-native", () => ({
     children,
     accessibilityLabel,
     accessibilityState,
+    style,
   }: PropsWithChildren<{
     accessibilityLabel: string;
     accessibilityState?: { expanded?: boolean };
+    style?: (state: { pressed: boolean }) => object;
   }>) =>
     createElement(
       "button",
-      { "aria-label": accessibilityLabel, "aria-expanded": accessibilityState?.expanded },
+      { "aria-label": accessibilityLabel, "aria-expanded": accessibilityState?.expanded, "data-layout": JSON.stringify(style?.({ pressed: false })) },
       children,
     ),
 }));
@@ -82,6 +84,11 @@ vi.mock("panelui-native/components/shimmer", () => ({
 import { ChatActivity, ChatStreaming } from "./chat-activity";
 
 describe("chat continuous animation lifecycle", () => {
+  it("reserves a real 48dp target and lets large text grow instead of clipping a fixed-height row", () => {
+    const html = renderToStaticMarkup(createElement(ChatActivity, { title: "Read workspace recovery preferences", onInspect: vi.fn() }));
+    expect(html).toContain("&quot;minHeight&quot;:48");
+    expect(html).not.toContain("&quot;height&quot;:28");
+  });
   it("shows the filename first while retaining the full path in the accessible inspector name", () => {
     const title = "Read /Users/name/project/src/features/settings/preferences.tsx";
     const html = renderToStaticMarkup(createElement(ChatActivity, {

@@ -1,3 +1,6 @@
+import type { TextInputInstance } from "react-native";
+import { useLocale } from "@/i18n";
+import { matchesSearch } from "@/ui/search-matching";
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
 import {
@@ -12,7 +15,7 @@ import {
   SearchField,
   Sheet,
 } from "@/ui/primitives";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import { IconTile } from "@/ui/icon-tile";
 import { useCopy } from "@/ui/copy";
@@ -32,8 +35,10 @@ export function GitBranchesPanel({
 }: GitBranchesPanelProps) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
+  const locale = useLocale();
   const branches = useGitBranches(scope);
   const [search, setSearch] = useState("");
+  const searchRef = useRef<TextInputInstance>(null);
   const rows = useMemo(
     () =>
       [
@@ -48,13 +53,13 @@ export function GitBranchesPanel({
           remote: branch.remote,
         })),
       ]
-        .filter((row) => row.key.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
+        .filter((row) => matchesSearch(row.key, search, locale))
         .sort(
           (a, b) =>
             Number(!b.remote && b.branch === branches.data?.current) -
             Number(!a.remote && a.branch === branches.data?.current),
         ),
-    [branches.data, search],
+    [branches.data, search, locale],
   );
   return (
     <Sheet
@@ -94,6 +99,7 @@ export function GitBranchesPanel({
         header={
           <>
             <SearchField
+              ref={searchRef}
               label={copy("Ara", "Search")}
               placeholder={copy("Ara", "Search")}
               value={search}
@@ -101,7 +107,7 @@ export function GitBranchesPanel({
             />
             <QueryState query={branches} empty={!rows.length}
               emptyTitle={search.trim() ? copy("Aramana uyan dal yok.", "No branches match your search.") : copy("Dal bulunamadı.", "No branches found.")}
-              emptyAction={search.trim() ? { label: copy("Aramayı temizle", "Clear search"), onPress: () => setSearch("") } : undefined}
+              emptyAction={search.trim() ? { label: copy("Aramayı temizle", "Clear search"), onPress: () => { setSearch(""); searchRef.current?.focus(); } } : undefined}
               onManageConnections={() => {
                 if (creating) return;
                 onClose();

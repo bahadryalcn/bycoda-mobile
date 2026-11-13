@@ -4,8 +4,9 @@ import { useState, type ComponentType } from "react";
 import { View } from "react-native";
 import { useCopy } from "@/ui/copy";
 import { Empty, SearchField, Screen } from "@/ui/primitives";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import { Scope } from "./shared/scope";
+import { useLocalProjectScope } from "./shared/local-project-scope";
 import { TasksScreen } from "./tasks-screen";
 import { GoalsScreen } from "./goals-screen";
 import { CrewsScreen } from "./crews-screen";
@@ -21,13 +22,13 @@ import { useProjectList } from "../workspace/use-project-directory";
 export function ManagementHome() {
   const copy = useCopy();
   const machine = useActiveMachine();
-  const selectedProjectId = useMachines((state) => state.selectedProjectId);
+  const { projectId: selectedProjectId, setProjectId } = useLocalProjectScope();
   const projects = useProjectList();
   const [search, setSearch] = useState("");
   const projectId = projects.directoryReady && projects.data?.some((project) => project.id === selectedProjectId)
     ? selectedProjectId : null;
   return (
-    <Screen title={copy("Araçlar", "Tools")} context={machine ? <Scope allowAll /> : undefined} scroll={!!machine}>
+    <Screen title={copy("Araçlar", "Tools")} context={machine ? <Scope allowAll projectId={selectedProjectId} onChange={setProjectId} /> : undefined} scroll={!!machine}>
       {!machine ? (
         <View style={{ flex: 1 }}>
         <Empty

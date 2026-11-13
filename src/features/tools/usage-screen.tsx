@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { View } from "react-native";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { useHostQuery } from "@/state/queries";
+import { hostKey } from "@/state/host-request";
 import type { HostProject } from "@/domain/types";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { Body, Button, Disclosure, IconButton, Notice, QueryState, ScreenList, SectionHeader, SegmentedControl, SelectField, StateView } from "@/ui/primitives";
@@ -26,7 +28,11 @@ import { UsageUnavailable, type UsageTab } from "./usage-summary";
 export function UsageScreen({ project }: { project: HostProject }) {
   const copy = useCopy();
   const machine = useActiveMachine();
+  const cache = useQueryClient();
   const [tab, setTab] = useState<UsageTab>("tokens");
+  const selectedKey = hostKey(machine?.id ?? null, [tab === "limits" ? "usage-limits" : tab === "cost" ? "usage-cost" : "session-usage"]);
+  const selectedFetching = useIsFetching({ queryKey: selectedKey }) > 0;
+  const selectedSupported = !!machine?.environmentId && !!machine.capabilities?.includes(tab === "limits" ? "usage.limits.read" : tab === "cost" ? "usage.cost.read" : "usage.sessions.read");
   const [days, setDays] = useState("1");
   const [untilMs, setUntilMs] = useState(Date.now);
   const [page, setPage] = useState<{ projectId: string; reviewed: ReviewedMachine | undefined; cursor?: string }>(() => ({ projectId: project.id, reviewed: reviewedMachine(machine) }));
@@ -80,21 +86,28 @@ export function UsageScreen({ project }: { project: HostProject }) {
     update(++flight.current);
   };
   const setCursor = (value?: string) => setPage({ projectId: project.id, reviewed: review, cursor: value });
-  const refresh = async () => navigate("refresh", (request) => {
-    const nextUntil = Date.now();
-    setCursor(undefined);
-    setUntilMs(nextUntil);
-    // A same-millisecond refresh still reads once and releases its flight.
-    if (!cursor && nextUntil === untilMs) void query.refetch().catch(() => {}).finally(() => {
-      if (request === flight.current) { pending.current = false; setAction(null); }
+  const refresh = async () => {
+    if (tab !== "tokens") {
+      if (!selectedSupported || selectedFetching || latestProject.current !== project.id || !isReviewedMachine(review, useMachines.getState())) return;
+      await cache.refetchQueries({ queryKey: selectedKey, type: "active" }, { cancelRefetch: false });
+      return;
+    }
+    navigate("refresh", (request) => {
+      const nextUntil = Date.now();
+      setCursor(undefined);
+      setUntilMs(nextUntil);
+      // A same-millisecond refresh still reads once and releases its flight.
+      if (!cursor && nextUntil === untilMs) void query.refetch().catch(() => {}).finally(() => {
+        if (request === flight.current) { pending.current = false; setAction(null); }
+      });
     });
-  });
+  };
   const { colors } = useMobileTheme();
   const refreshControl = (
     <IconButton
       label={copy("Yenile", "Refresh")}
-      busy={action === "refresh"}
-      disabled={!supported || query.isFetching}
+      busy={tab === "tokens" ? action === "refresh" : selectedFetching}
+      disabled={!selectedSupported || (tab === "tokens" ? query.isFetching : selectedFetching)}
       onPress={() => { void refresh(); }}
     >
       <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
@@ -105,7 +118,7 @@ export function UsageScreen({ project }: { project: HostProject }) {
       title={copy("Oturum kullanımı", "Session usage")}
       subtitle={`${machine?.name ?? ""} · ${project.name}`}
       actions={refreshControl}
-      refreshState={supported ? { refreshing: action === "refresh", onRefresh: refresh } : undefined}
+      refreshState={selectedSupported ? { refreshing: tab === "tokens" ? action === "refresh" : selectedFetching, onRefresh: refresh } : undefined}
       data={tab === "tokens" ? report?.rows ?? [] : []}
       keyExtractor={(row) => row.sessionId}
       header={

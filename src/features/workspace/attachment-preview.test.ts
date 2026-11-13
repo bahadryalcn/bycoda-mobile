@@ -12,11 +12,12 @@ const state = vi.hoisted(() => {
   const transport = vi.fn(async () => "allowed");
   return { machine, client: { machine, request: transport }, transport, active: true, allowed: true, available: true, epoch: 0,
     actions: new Map<string, () => void>(), reload: undefined as undefined | (() => void), previewCheck: undefined as undefined | (() => boolean), previewContext: undefined as undefined | MessageContext,
+    imageFail: undefined as undefined | (() => void),
     kind: "success", confirm: vi.fn(), load: vi.fn(async () => ({ uri: "file:///synthetic/report.txt", name: "Report.txt", mimeType: "text/plain" })) };
 });
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
 vi.mock("lucide-react-native/icons/file", () => ({ default: () => null }));
-vi.mock("expo-image", () => ({ Image: () => null }));
+vi.mock("expo-image", () => ({ Image: ({ contentFit, accessibilityLabel, onError }: any) => { state.imageFail = onError; return h("span", { "data-image-fit": contentFit }, accessibilityLabel); } }));
 vi.mock("lucide-react-native/icons/file-text", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/film", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/maximize-2", () => ({ default: () => null }));
@@ -65,6 +66,32 @@ async function render(id = "file", props: Record<string, unknown> = {}) { vi.stu
 /** The explicit two-step flow: Download the file, then Open the reader. */
 async function open() { await press("Download"); await press("Open"); }
 async function press(name: string) { await act(async () => state.actions.get(name)!()); await flush(); }
+
+it("opens a downloaded PDF in the document reader", async () => {
+  state.load.mockResolvedValueOnce({ uri: "file:///report.pdf", name: "Report.pdf", mimeType: "application/pdf" });
+  await render("pdf", { name: "Report.pdf", mimeType: "application/pdf" });
+  await open();
+  expect(container.querySelector("[data-document]")?.textContent).toBe("file:///report.pdf");
+});
+
+it("shows the whole sent image instead of cropping screenshots to the thumbnail square", async () => {
+  await render("photo", { name: "Screenshot.png", image: true, mimeType: "image/png", thumbnail: true });
+  expect(container.querySelector("[data-image-fit]")?.getAttribute("data-image-fit")).toBe("contain");
+});
+
+it("offers a guarded retry when a downloaded image cannot be decoded", async () => {
+  await render("photo", { name: "Screenshot.png", image: true, mimeType: "image/png", thumbnail: true });
+  expect(state.imageFail).toBeTypeOf("function");
+  await act(async () => state.imageFail!());
+  expect(container.textContent).toContain("Preview could not be opened.");
+  await press("Retry");
+  expect(state.load).toHaveBeenCalledTimes(2);
+  await act(async () => state.imageFail!());
+  const retry = state.actions.get("Retry")!;
+  state.allowed = false;
+  await act(async () => retry());
+  expect(state.load).toHaveBeenCalledTimes(2);
+});
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; cache?.clear(); state.actions.clear(); state.load.mockClear(); state.confirm.mockClear(); state.transport.mockClear(); state.kind = "success"; state.active = state.allowed = state.available = true; state.epoch = 0; state.reload = state.previewCheck = state.previewContext = undefined; vi.unstubAllGlobals(); });
 
 it("rejects captured reload after closing and reopening the same attachment", async () => {
@@ -163,4 +190,10 @@ it.each(["background", "private", "client"])("does not auto-load an inline image
   if (kind === "client") state.available = false;
   await render("pic", { name: "pic.png", image: true, mimeType: "image/png", size: 1024 }); expect(state.load).not.toHaveBeenCalled();
   state.active = state.allowed = state.available = true; await render("pic", { name: "pic.png", image: true, mimeType: "image/png", size: 1024 }); expect(state.load).toHaveBeenCalledOnce();
+});
+
+it("passes the filename-derived MIME to the reader when MIME is missing", async () => {
+  state.active = state.allowed = state.available = true;
+  await render("missing-mime", { name: "portrait.png", image: true, mimeType: undefined, size: 1024 });
+  expect(state.load).toHaveBeenCalledWith(expect.anything(), "missing-mime", "portrait.png", "image/png", expect.anything());
 });

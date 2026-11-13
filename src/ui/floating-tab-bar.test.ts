@@ -3,6 +3,38 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { FloatingTabBar } from "./floating-tab-bar";
+vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("./dialogs", () => ({
+  Sheet: ({ visible, children }: PropsWithChildren<{ visible: boolean }>) =>
+    visible ? createElement("section", null, children) : null,
+}));
+vi.mock("./navigation-row", () => ({
+  NavigationRow: ({
+    label,
+    selected,
+    onPress,
+    accessibilityLabel,
+    trailing,
+  }: {
+    label: string;
+    selected?: boolean;
+    onPress(): void;
+    accessibilityLabel?: string;
+    trailing?: import("react").ReactNode;
+  }) =>
+    createElement(
+      "button",
+      {
+        "data-destination": label,
+        "aria-label": accessibilityLabel,
+        "aria-selected": selected,
+        onClick: onPress,
+      },
+      label,
+      trailing,
+    ),
+}));
+vi.mock("lucide-react-native/icons/more-horizontal", () => ({ default: () => null }));
 const state = vi.hoisted(() => ({
   keyboard: false,
   emit: vi.fn(() => ({ defaultPrevented: false })),
@@ -10,24 +42,42 @@ const state = vi.hoisted(() => ({
   haptic: vi.fn(),
   reduceTransparency: false,
   canBlur: true,
+  width: 320,
+  fontScale: 1,
 }));
-vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
+vi.mock("./theme", () => ({
+  useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }),
+}));
 vi.mock("expo-linear-gradient", () => ({ LinearGradient: () => null }));
 vi.mock("expo-blur", () => ({
-  BlurView: ({ children, tint, intensity, experimentalBlurMethod }: PropsWithChildren<{ tint: string; intensity: number; experimentalBlurMethod?: string }>) =>
-    createElement("div", { "data-blur": tint, "data-intensity": intensity, "data-method": experimentalBlurMethod }, children),
+  BlurView: ({
+    children,
+    tint,
+    intensity,
+    experimentalBlurMethod,
+  }: PropsWithChildren<{ tint: string; intensity: number; experimentalBlurMethod?: string }>) =>
+    createElement(
+      "div",
+      { "data-blur": tint, "data-intensity": intensity, "data-method": experimentalBlurMethod },
+      children,
+    ),
 }));
 vi.mock("panelui-native/primitives/scrim", () => ({
-  get canBlurHere() { return state.canBlur; },
+  get canBlurHere() {
+    return state.canBlur;
+  },
   androidBlurProps: () => ({}),
 }));
-vi.mock("lucide-react-native/icons/plus", () => ({ default: () => createElement("i", { "data-icon": "plus" }) }));
+vi.mock("lucide-react-native/icons/plus", () => ({
+  default: () => createElement("i", { "data-icon": "plus" }),
+}));
 vi.mock("./motion", () => ({ haptic: { select: state.haptic }, indicatorTiming: {} }));
 vi.mock("./use-reduced-motion", () => ({ useReducedMotionPreference: () => true }));
 vi.mock("react-native-reanimated", () => ({
   default: {
     View: ({ children }: PropsWithChildren) => createElement("div", null, children),
-    Text: ({ children }: PropsWithChildren) => createElement("span", { "data-label": "" }, children),
+    Text: ({ children }: PropsWithChildren) =>
+      createElement("span", { "data-label": "" }, children),
   },
   FadeIn: { duration: () => ({}) },
   LinearTransition: { duration: () => ({}) },
@@ -46,14 +96,46 @@ vi.mock("react-native", () => ({
     addEventListener: () => ({ remove: () => {} }),
   },
   StyleSheet: { hairlineWidth: 1 },
+  useWindowDimensions: () => ({ width: state.width, fontScale: state.fontScale }),
   View: ({
     children,
     accessibilityRole,
     onLayout,
-  }: PropsWithChildren<{ accessibilityRole?: string; onLayout?: (e: unknown) => void }>) =>
-    createElement("div", { role: accessibilityRole, "data-layout": onLayout ? "" : undefined, onFocus: onLayout ? () => onLayout({ nativeEvent: { layout: { height: 92 } } }) : undefined }, children),
-  Text: ({ children }: PropsWithChildren) =>
-    createElement("span", null, children),
+    style,
+  }: PropsWithChildren<{
+    accessibilityRole?: string;
+    style?: unknown;
+    onLayout?: (e: unknown) => void;
+  }>) =>
+    createElement(
+      "div",
+      {
+        role: accessibilityRole,
+        "data-style": JSON.stringify(style),
+        "data-layout": onLayout ? "" : undefined,
+        onFocus: onLayout ? () => onLayout({ nativeEvent: { layout: { height: 92 } } }) : undefined,
+      },
+      children,
+    ),
+  Text: ({
+    children,
+    numberOfLines,
+    maxFontSizeMultiplier,
+    adjustsFontSizeToFit,
+  }: PropsWithChildren<{
+    numberOfLines?: number;
+    maxFontSizeMultiplier?: number;
+    adjustsFontSizeToFit?: boolean;
+  }>) =>
+    createElement(
+      "span",
+      {
+        "data-lines": numberOfLines,
+        "data-scale-cap": maxFontSizeMultiplier,
+        "data-shrink": adjustsFontSizeToFit,
+      },
+      children,
+    ),
   Pressable: ({
     children,
     accessibilityLabel,
@@ -61,11 +143,13 @@ vi.mock("react-native", () => ({
     onPress,
     onLongPress,
     disabled,
+    style,
     "aria-selected": selected,
   }: PropsWithChildren<{
     accessibilityLabel: string;
     accessibilityRole: string;
     disabled?: boolean;
+    style?: unknown;
     onPress: () => void;
     onLongPress: () => void;
     "aria-selected": boolean;
@@ -77,6 +161,9 @@ vi.mock("react-native", () => ({
         "aria-label": accessibilityLabel,
         "aria-selected": selected,
         disabled,
+        "data-style": JSON.stringify(
+          typeof style === "function" ? style({ pressed: false }) : style,
+        ),
         onClick: onPress,
         onContextMenu: onLongPress,
       },
@@ -85,9 +172,11 @@ vi.mock("react-native", () => ({
 }));
 const container = document.createElement("div");
 let root: ReturnType<typeof createRoot>;
-const routes = ["projects", "sessions", "inbox", "tools", "settings"].map(
-  (name) => ({ name, key: name, params: { retained: name } }),
-);
+const routes = ["projects", "sessions", "inbox", "tools", "settings"].map((name) => ({
+  name,
+  key: name,
+  params: { retained: name },
+}));
 const props = {
   state: { index: 0, routes },
   descriptors: Object.fromEntries(
@@ -109,6 +198,8 @@ beforeEach(() => {
   state.keyboard = false;
   state.reduceTransparency = false;
   state.canBlur = true;
+  state.width = 320;
+  state.fontScale = 1;
   state.emit.mockReturnValue({ defaultPrevented: false });
   root = createRoot(container);
 });
@@ -120,47 +211,21 @@ afterEach(async () => {
 async function render(extra: Partial<Parameters<typeof FloatingTabBar>[0]> = {}) {
   await act(async () => root.render(createElement(FloatingTabBar, { ...props, ...extra })));
 }
-it("blurs the capsule behind the tabs unless reduce transparency is on", async () => {
-  await render();
-  const blur = container.querySelector("[data-blur]");
-  expect(blur?.getAttribute("data-blur")).toBe("dark");
-  expect(blur?.getAttribute("data-intensity")).toBe("50");
-  expect(container.querySelector("[role=tablist]")?.querySelectorAll("[role=tab]")).toHaveLength(5);
-  await act(async () => root.unmount());
-  root = createRoot(container);
-  state.reduceTransparency = true;
+it("uses an opaque navigation surface without a separate command", async () => {
   await render();
   expect(container.querySelector("[data-blur]")).toBeNull();
   expect(container.querySelectorAll("[role=tab]")).toHaveLength(5);
-  await act(async () => root.unmount());
-  root = createRoot(container);
-  state.reduceTransparency = false;
-  state.canBlur = false;
-  await render();
-  expect(container.querySelector("[data-blur]")).toBeNull();
 });
 it("labels every tab, keeps every accessible name and never changes the tab row for the action", async () => {
   await render();
   const tabs = [...container.querySelectorAll("[role=tab]")];
-  expect(tabs.map((tab) => tab.textContent)).toEqual(expect.arrayContaining([expect.stringContaining("projects")]));
+  expect(tabs.map((tab) => tab.textContent)).toEqual(
+    expect.arrayContaining([expect.stringContaining("projects")]),
+  );
   for (const tab of tabs) expect(tab.textContent).not.toBe("");
   expect(tabs[1]!.getAttribute("aria-label")).toBe("sessions, 99+");
-  await render({ action: { label: "New session", onPress: vi.fn() } });
-  expect(container.querySelectorAll("[role=tab]")).toHaveLength(tabs.length);
-});
-it("renders the round action only when provided and honors press and disabled", async () => {
   await render();
-  expect(container.querySelector("[aria-label='New session']")).toBeNull();
-  const onPress = vi.fn();
-  await render({ action: { label: "New session", onPress } });
-  const button = container.querySelector("[aria-label='New session']") as HTMLButtonElement;
-  expect(button.getAttribute("role")).toBe("button");
-  expect(button.querySelector("[data-icon=plus]")).not.toBeNull();
-  await act(async () => button.click());
-  expect(onPress).toHaveBeenCalledOnce();
-  expect(state.haptic).toHaveBeenCalledOnce();
-  await render({ action: { label: "New session", onPress, disabled: true } });
-  expect((container.querySelector("[aria-label='New session']") as HTMLButtonElement).disabled).toBe(true);
+  expect(container.querySelectorAll("[role=tab]")).toHaveLength(tabs.length);
 });
 it("publishes the measured dock height and clears it when the dock hides", async () => {
   const onInsetChange = vi.fn();
@@ -197,9 +262,7 @@ it("retains selected state, count meaning, route params, reselection events and 
   await act(async () => (tabs[1] as HTMLElement).click());
   expect(state.navigate).toHaveBeenCalledExactlyOnceWith("sessions");
   expect(state.haptic).toHaveBeenCalledOnce();
-  await act(async () =>
-    tabs[4].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })),
-  );
+  await act(async () => tabs[4].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })));
   expect(state.emit).toHaveBeenLastCalledWith({
     type: "tabLongPress",
     target: "settings",
@@ -208,9 +271,7 @@ it("retains selected state, count meaning, route params, reselection events and 
 it("honors prevented navigation and follows an already-open keyboard without changing the selected route", async () => {
   state.emit.mockReturnValue({ defaultPrevented: true });
   await render();
-  await act(async () =>
-    (container.querySelectorAll("[role=tab]")[2] as HTMLElement).click(),
-  );
+  await act(async () => (container.querySelectorAll("[role=tab]")[2] as HTMLElement).click());
   expect(state.navigate).not.toHaveBeenCalled();
   expect(state.haptic).not.toHaveBeenCalled();
   state.keyboard = true;
@@ -218,8 +279,90 @@ it("honors prevented navigation and follows an already-open keyboard without cha
   expect(container.querySelector("[role=tablist]")).toBeNull();
   state.keyboard = false;
   await render();
-  expect(container.querySelector('[aria-selected="true"]')?.textContent).toBe(
-    "projects",
-  );
+  expect(container.querySelector('[aria-selected="true"]')?.textContent).toBe("projects");
   expect(state.navigate).not.toHaveBeenCalled();
+});
+
+function tabStyle(tab: Element) {
+  return Object.assign({}, ...JSON.parse(tab.getAttribute("data-style") ?? "[]").filter(Boolean));
+}
+it("keeps long translated labels readable without font shrinking or scaling caps", async () => {
+  const descriptors = Object.fromEntries(
+    routes.map((route) => [
+      route.key,
+      {
+        ...props.descriptors[route.key]!,
+        options: {
+          ...props.descriptors[route.key]!.options,
+          title:
+            route.name === "settings"
+              ? "Benachrichtigungseinstellungen"
+              : "Çalışma alanı ve projeler 👩🏽‍💻",
+        },
+      },
+    ]),
+  );
+  await render({ descriptors });
+  const tabs = [...container.querySelectorAll("[role=tab]")];
+  for (const tab of tabs) {
+    const label = tab.querySelector("span")!;
+    expect(label.hasAttribute("data-lines")).toBe(false);
+    expect(label.hasAttribute("data-scale-cap")).toBe(false);
+    expect(label.hasAttribute("data-shrink")).toBe(false);
+    expect(tabStyle(tab).minHeight).toBeGreaterThanOrEqual(48);
+  }
+});
+it("keeps one row at large text and reaches overflow destinations through More", async () => {
+  state.fontScale = 2;
+  await render();
+  const tabs = [...container.querySelectorAll("[role=tab]")];
+  expect(tabs).toHaveLength(3);
+  expect(tabs.map((tab) => tabStyle(tab).width)).toEqual(Array(3).fill("33.333333333333336%"));
+  const listStyle = JSON.parse(
+    container.querySelector("[role=tablist]")!.getAttribute("data-style")!,
+  );
+  expect(listStyle.flexWrap).toBeUndefined();
+  await act(async () => (container.querySelector('[aria-label="More"]') as HTMLElement).click());
+  const destinations = [...container.querySelectorAll("[data-destination]")];
+  expect(destinations.map((row) => row.textContent)).toEqual(["inbox", "tools", "settings"]);
+  await act(async () => (destinations[2] as HTMLElement).click());
+  expect(state.navigate).toHaveBeenLastCalledWith("settings");
+  expect(container.querySelector("[data-destination]")).toBeNull();
+});
+it("uses explicit accessibility descriptions for running counts", async () => {
+  const descriptors = {
+    ...props.descriptors,
+    sessions: {
+      ...props.descriptors.sessions!,
+      options: {
+        ...props.descriptors.sessions!.options,
+        tabBarAccessibilityLabel: "Sessions, 99+ running sessions",
+      },
+    },
+  };
+  await render({ descriptors });
+  expect(container.querySelector('[aria-label="Sessions, 99+ running sessions"]')).not.toBeNull();
+});
+it("retains running counts when large text moves Sessions into overflow", async () => {
+  state.fontScale = 3;
+  const descriptors = {
+    ...props.descriptors,
+    sessions: {
+      ...props.descriptors.sessions!,
+      options: {
+        ...props.descriptors.sessions!.options,
+        tabBarAccessibilityLabel: "Sessions, 99+ running sessions",
+      },
+    },
+  };
+  await render({ descriptors });
+  const more = container.querySelector(
+    '[aria-label="More. Sessions, 99+ running sessions"]',
+  ) as HTMLElement;
+  expect(more).not.toBeNull();
+  expect(more.textContent).toContain("99+");
+  await act(async () => more.click());
+  const session = container.querySelector('[data-destination="sessions"]');
+  expect(session?.getAttribute("aria-label")).toBe("Sessions, 99+ running sessions");
+  expect(session?.textContent).toContain("99+");
 });

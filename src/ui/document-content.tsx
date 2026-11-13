@@ -1,5 +1,5 @@
 import { mediaQueryKey, visibleMediaData } from "./media-policy";
-import { useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { File } from "expo-file-system";
 import { useQuery } from "@tanstack/react-query";
@@ -9,10 +9,13 @@ import { documentDisplayName } from "./document-display-name";
 import { MessageContent } from "./message-content";
 import { MessageImage } from "./message-image";
 import { HtmlDocument } from "./html-document";
-import { mediaMime, type MessageContext, type OpenDocument } from "./media-policy";
+import { resolveMediaMime, type MessageContext, type OpenDocument } from "./media-policy";
+import { InlineVideo } from "./media-video";
 import { useCopy } from "./copy";
 import { useMediaSharing } from "./use-media-sharing";
 import { space } from "./tokens";
+
+const PdfDocument = lazy(() => import("./pdf-document").then(module => ({ default: module.PdfDocument })));
 
 type DocumentContentProps = {
   name: string;
@@ -26,16 +29,19 @@ type DocumentContentProps = {
 
 /** Reader-local view and callbacks belong to this file in this Host/project scope. */
 export function DocumentContent(props: DocumentContentProps) {
-  const identity = JSON.stringify(mediaQueryKey(props.context, ["document-reader", props.name, props.uri, props.mimeType ?? mediaMime(props.name)]));
-  return <DocumentContentBody key={identity} {...props} />;
+  const mimeType = resolveMediaMime(props.name, props.mimeType);
+  const identity = JSON.stringify(mediaQueryKey(props.context, ["document-reader", props.name, props.uri, mimeType]));
+  return <DocumentContentBody key={identity} {...props} mimeType={mimeType} />;
 }
 
-function DocumentContentBody({ name, text, uri, mimeType = mediaMime(name), context, onReload, onOpenFile }: DocumentContentProps) {
+function DocumentContentBody({ name, text, uri, mimeType = resolveMediaMime(name), context, onReload, onOpenFile }: DocumentContentProps) {
   const copy = useCopy();
   const [source, setSource] = useState(false);
   const sharing = useMediaSharing({ uri, name, mimeType });
   const mediaType = mimeType.split(";")[0]!.trim().toLowerCase();
-  const readable = /^(?:text\/|application\/json)/.test(mediaType);
+  const readable = /^(?:text\/|application\/(?:json|xml|javascript|[\w.+-]+\+(?:json|xml))$)/.test(mediaType);
+  const pdf = mediaType === "application/pdf";
+  const video = mediaType.startsWith("video/");
   const html = mediaType === "text/html";
   const markdown = mediaType === "text/markdown" || /\.(?:md|markdown)$/i.test(name.split(/[?#]/)[0]!);
   const canPreview = html || markdown;
@@ -67,15 +73,19 @@ function DocumentContentBody({ name, text, uri, mimeType = mediaMime(name), cont
           onPress={() => { if (live.current) setSource(value => !value); }} /> : null}
         {uri ? <Button tone="quiet" label={copy("Paylaş / kaydet", "Share / save")}
           busy={sharing.busy} onPress={sharing.share} /> : null}
+        {pdf && uri && onReload ? <Button tone="quiet" label={copy("Dosyayı yeniden yükle", "Reload file")} disabled={sharing.busy}
+          onPress={() => { if (sharing.reset()) onReload(); }} /> : null}
       </Row> : null}
       <ErrorText error={sharing.error} />
-      {(query.error || sharing.error) && onReload ? <Button tone="quiet"
+      {(query.error || sharing.error) && onReload && !pdf ? <Button tone="quiet"
         label={copy("Dosyayı yeniden yükle", "Reload file")} disabled={sharing.busy}
         onPress={() => { if (sharing.reset()) onReload(); }} /> : null}
       <ErrorText error={query.error} />
       {query.error && !onReload ? <Button tone="quiet" label={copy("Yeniden dene", "Retry")}
         busy={query.isFetching} onPress={() => { if (live.current) void query.refetch({ cancelRefetch: false }); }} /> : null}
-      {body !== undefined ? (
+      {pdf && uri ? <Suspense fallback={<Loading label={copy("PDF yükleniyor…", "Loading PDF…")} />}>
+        <PdfDocument uri={uri} name={name} context={context} />
+      </Suspense> : video && uri ? <InlineVideo uri={uri} name={name} /> : body !== undefined ? (
         !source && html ? <HtmlDocument html={body} name={name} context={context} />
           : !source && markdown ? <MessageContent onOpenFile={onOpenFile} text={body}
             context={context ? { ...context, basePath: name } : undefined} />

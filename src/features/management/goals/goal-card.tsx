@@ -36,7 +36,7 @@ export function GoalCard({
   const active = goal.status === "planning" || goal.status === "running";
   const cancelling = cancel.isPending && cancel.variables?.goalId === goal.id;
   const stop = () => confirmAction(
-    copy("Hedefi durdur", "Cancel goal"),
+    copy("Epici durdur", "Cancel epic"),
     copy(
       "Hedef ve devam eden görevleri durdurulacak; çalışma dosyaları korunacak.",
       "The goal and its active tasks will stop; work files will be retained.",
@@ -54,7 +54,7 @@ export function GoalCard({
   const menu = [
     canCancel && {
       key: "settings", icon: glyph(Settings2),
-      label: copy("Hedef ayarları", "Goal settings"),
+      label: copy("Epic ayarları", "Epic settings"),
       disabled: busy || editorOpen,
       onPress: () => onSettings(goal),
     },
@@ -66,7 +66,7 @@ export function GoalCard({
     },
     canCancel && !active && {
       key: "cancel", icon: glyph(Square, true),
-      label: copy("Hedefi durdur", "Cancel goal"),
+      label: copy("Epici durdur", "Cancel epic"),
       destructive: true,
       disabled: busy,
       onPress: stop,
@@ -78,7 +78,7 @@ export function GoalCard({
       disabled: busy,
       onPress: () =>
         confirmAction(
-          copy("Hedefi sil", "Delete goal"),
+          copy("Epici sil", "Delete epic"),
           copy(
             "Hedef kaydı silinecek; görevler korunacak.",
             "The goal record will be deleted; tasks will be retained.",
@@ -103,14 +103,14 @@ export function GoalCard({
         {goal.plannerSessionId ? <IconButton label={copy("Planlayıcı oturumu", "Planner session")} onPress={openPlanner}>
           <MessageSquare size={18} color={colors.accent} />
         </IconButton> : null}
-        <ActionMenu label={copy("Hedef işlemleri", "Goal actions")}
+        <ActionMenu label={copy("Epic işlemleri", "Epic actions")}
           busy={(!active && cancelling) || (remove.isPending && remove.variables?.goalId === goal.id)} actions={menu} />
       </RecordTrailing>}
       footer={active || goal.status === "awaiting-approval" ? (
         <Row>
           {active && (
             <Button
-              label={copy("Hedefi durdur", "Cancel goal")}
+              label={copy("Epici durdur", "Cancel epic")}
               tone="danger"
               busy={cancelling}
               disabled={busy}

@@ -8,6 +8,8 @@ describe("inline attachment policy", () => {
     expect(attachmentKind("a.gif", "image/gif")).toBe("image");
     expect(attachmentKind("x", "application/pdf")).toBe("pdf");
     expect(attachmentKind("README.md", "application/octet-stream")).toBe("markdown");
+    expect(attachmentKind("report.PDF", "Application/Octet-Stream; charset=binary")).toBe("pdf");
+    expect(attachmentKind("report", "Application/PDF; version=1.7")).toBe("pdf");
     expect(attachmentKind("clip.mp4")).toBe("video");
     expect(attachmentKind("pic.svg")).toBe("file");
     expect(attachmentKind("generated-image", undefined, true)).toBe("image");

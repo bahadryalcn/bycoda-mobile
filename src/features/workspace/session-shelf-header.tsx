@@ -5,7 +5,10 @@ import { useMobileTheme } from "@/ui/theme";
 import type { SessionShelfId, SessionShelfRow } from "./session-collection";
 
 /** Collapsible shelf title: "Needs you", "Running", "Recent" or "Archived". */
-export function SessionShelfHeader({ row, onToggle }: {
+export function SessionShelfHeader({
+  row,
+  onToggle,
+}: {
   row: Extract<SessionShelfRow, { kind: "header" }>;
   onToggle: (shelf: SessionShelfId) => void;
 }) {
@@ -16,7 +19,7 @@ export function SessionShelfHeader({ row, onToggle }: {
     needs: copy("Senin için", "Needs you"),
     running: copy("Çalışıyor", "Running"),
     recent: copy("Son", "Recent"),
-    settled: copy("Yerleşik", "Settled"),
+    settled: copy("Kenara alınanlar", "Set aside sessions"),
     archived: copy("Arşiv", "Archived"),
   }[row.shelf];
   return (

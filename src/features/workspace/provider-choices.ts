@@ -41,7 +41,7 @@ export function choiceKey(provider: RemoteProvider, accountId?: string): string 
 
 /**
  * Every provider the computer offers, expanded to one choice per account when the Host lists
- * several (Claude/Codex profiles). The Host's "default" profile maps to no account id.
+ * accounts (Claude/Codex profiles). The Host's "default" profile maps to no account id.
  */
 export function providerChoices(
   providers: readonly RemoteProvider[],
@@ -51,15 +51,12 @@ export function providerChoices(
   return providers.flatMap((provider): ProviderChoice[] => {
     const list = provider === "claude" || provider === "codex" ? (accounts?.[provider] ?? []) : [];
     const name = providerName(provider);
-    if (list.length <= 1) {
+    if (list.length === 0) {
       return [
         {
           key: choiceKey(provider),
           provider,
           label: name,
-          color: list[0]?.color,
-          kind: list[0]?.kind,
-          derivedKind: list[0]?.derivedKind,
         },
       ];
     }
@@ -69,7 +66,7 @@ export function providerChoices(
         key: choiceKey(provider, account.id),
         provider,
         ...(isDefault ? {} : { accountId: account.id }),
-        label: isDefault ? defaultAccountLabel : account.label,
+        label: isDefault && account.label === "Default account" ? defaultAccountLabel : account.label,
         detail: name,
         color: account.color,
         kind: account.kind,

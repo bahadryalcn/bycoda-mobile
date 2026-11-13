@@ -3,6 +3,9 @@ import type { ReactNode } from "react";
 import type { HostModelCatalog } from "@/domain/types";
 import type { CrewAgent, CrewCandidate } from "@/remote/contracts/crews";
 import { useFormDraft } from "@/state/form-draft";
+import { useHostQuery } from "@/state/queries";
+import { useActiveMachine } from "@/state/machines";
+import { ModelRoutingGetResultSchema, type ModelRoutingState } from "../../../../../src/shared/model/host-contracts/model-routing";
 import { useCopy } from "@/ui/copy";
 import { crewRoleOptions, crewCatalogState, type CrewCatalogRead } from "./presentation";
 import {
@@ -14,14 +17,14 @@ import {
   FormActions,
   Heading,
   MultiSelectField,
-  NumberField,
+  Notice,
   Section,
   SelectField,
   Stack,
 } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { MemberLookFields } from "./member-look-fields";
-import { candidateFromCatalog, crewNameError, crewValidationMessage, memberValidation, memberValidationFeedback } from "./model";
+import { candidateFromCatalog, crewNameError, crewValidationMessage, memberValidation, memberValidationFeedback, memberRoutingPatch } from "./model";
 
 export function useRoleOptions() {
   const copy = useCopy();
@@ -60,6 +63,18 @@ export function MemberEditor({
   const form = useFormDraft(() => structuredClone(initial));
   const draft = form.values;
   const locked = busy || disabled;
+  const machine = useActiveMachine();
+  const [openingMachineId] = useState(machine?.id);
+  const routingSupported = machine?.id === openingMachineId && machine?.capabilities?.includes("models.routing.v1") === true;
+  const routing = useHostQuery<ModelRoutingState>(["modelRouting"], "modelRouting.get", {}, { enabled: routingSupported,
+    queryFn: async (client, signal) => ModelRoutingGetResultSchema.parse(await client.request("modelRouting.get", {}, { signal })).state });
+  const routingState = machine?.id === openingMachineId ? routing.data : undefined;
+  const binding = draft.selection === "fixed" ? "fixed" : draft.modelChoice?.kind === "pool" ? `pool:${draft.modelChoice.poolId}` : draft.modelChoice?.kind === "default" ? "default" : draft.modelChoice?.kind === "order" ? "order" : "legacy";
+  const roleBinding = routingState?.roles["crew.member"] ?? { kind: "order" as const };
+  const effective = binding === "default" ? roleBinding : draft.modelChoice;
+  const activePool = effective?.kind === "pool" ? routingState?.pools.find(pool => pool.id === effective.poolId) : undefined;
+  const boundPoolId = draft.modelChoice?.kind === "pool" ? draft.modelChoice.poolId : undefined;
+  const poolMissing = boundPoolId !== undefined && !routingState?.pools.some(pool => pool.id === boundPoolId);
   const [groups, setGroups] = useState((initial.groups ?? []).join(", "));
   const [nameTouched, setNameTouched] = useState(false);
   const [modelsTouched, setModelsTouched] = useState(false);
@@ -154,15 +169,29 @@ export function MemberEditor({
       ) : null}
       <Section title={copy("Model", "Model")}>
       <SelectField
-        label={copy("Model seçimi", "Model selection")}
-        value={draft.selection}
-        disabled={locked}
+        label={copy("Model kaynağı", "Model source")}
+        value={binding}
+        disabled={locked || !routingSupported}
         options={[
           { value: "fixed", label: copy("Sabit model", "Fixed model") },
-          { value: "automatic", label: copy("Otomatik seçim", "Automatic selection") },
+          { value: "default", label: copy("Crew üyesi rolünü izle", "Follow crew member role") },
+          { value: "order", label: copy("Bilgisayar model sırası", "Host model order") },
+          ...(binding === "legacy" ? [{ value: "legacy", label: copy("Mevcut aday ayarı", "Existing candidate setting") }] : []),
+          ...(routingState?.pools ?? []).map(pool => ({ value: `pool:${pool.id}`, label: pool.name })),
+          ...(poolMissing && draft.modelChoice?.kind === "pool" ? [{ value: `pool:${draft.modelChoice.poolId}`, label: copy("Havuz henüz doğrulanmadı: {p0}", "Pool not yet verified: {p0}", { p0: draft.modelChoice.poolId }) }] : []),
         ]}
-        onChange={(selection) => { setModelsTouched(true); form.patch({ selection }); }}
+        onChange={value => {
+          if (value === "legacy") return;
+          setModelsTouched(true);
+          form.patch(memberRoutingPatch(value.startsWith("pool:") ? { kind: "pool", poolId: value.slice(5) } : { kind: value as "fixed" | "default" | "order" }));
+        }}
       />
+      {binding !== "fixed" && binding !== "legacy" ? <>
+        <Body muted>{copy("Otomatik seçim, bu üyenin aday listesinden bağımsız olarak bilgisayar sırası veya havuzundan uygun modeli seçebilir. Aşağıdaki adaylar bir izin filtresi değildir.", "Automatic routing can choose an eligible model from Host order or pool outside this member's candidate list. Candidates below are not an allowed-model filter.")}</Body>
+        {routingState ? <Body muted>{copy("Geçerli kaynak", "Current source")}: {effective?.kind === "pool" ? activePool?.name ?? (effective.poolId) : binding === "default" && roleBinding.kind === "fixed" ? `${roleBinding.target.harness} · ${roleBinding.target.model}` : copy("Bilgisayar model sırası", "Host model order")}
+          {effective?.kind === "pool" && activePool ? ` · ${activePool.entryIds.length}` : effective?.kind === "order" ? ` · ${routingState.entries.length}` : ""}</Body> : <Notice message={routing.isError ? copy("Model kaynağı okunamadı. Kayıtlı bağlantı korunur.", "Model source could not be read. Saved binding is preserved.") : copy("Model kaynağı henüz doğrulanmadı. Kayıtlı bağlantı korunur.", "Model source is not yet verified. Saved binding is preserved.")} />}
+        {routing.isError ? <Button label={copy("Model kaynağını yeniden oku", "Reload model source")} tone="quiet" onPress={() => { void routing.refetch().catch(() => {}); }} /> : null}
+      </> : null}
       {draft.selection === "fixed" ? (
         <SelectField
           searchable
@@ -177,17 +206,18 @@ export function MemberEditor({
             const next = candidate(id);
             if (next)
               form.patch({
-                candidates: [next, ...draft.candidates.filter((row) => row.id !== id)],
+                candidates: [next],
+                ...memberRoutingPatch({ kind: "fixed" }),
               });
           }}
         />
       ) : (
         <MultiSelectField
           searchable
-          label={copy("İzin verilen modeller", "Allowed models")}
+          label={copy("Kayıtlı yedek adaylar", "Saved fallback candidates")}
           values={draft.candidates.map((row) => row.id)}
           error={modelError}
-          hint={!draft.candidates.length ? copy("Bu üyeye izin verilen modelleri seçin.", "Choose the allowed models for this member.") : undefined}
+          hint={copy("İlk aday sabit/yedek modeldir. Bu liste bilgisayar sırasını veya havuzunu sınırlamaz.", "First candidate is the fixed/fallback model. This list does not restrict Host order or pool.")}
           options={[...options.values()]}
           max={20}
           disabled={locked}
@@ -236,7 +266,7 @@ export function MemberEditor({
         </>
       ) : null}
       </Section>
-      <Disclosure label={copy("Model ayarları ve tahminler", "Model settings and estimates")}>
+      <Disclosure label={draft.selection === "fixed" ? copy("Model ayarları", "Model settings") : copy("Yedek model ayarları", "Fallback model settings")}>
         {(draft.selection === "fixed" ? draft.candidates.slice(0, 1) : draft.candidates).map(
           (item) => (
             <Stack key={item.id}>
@@ -258,21 +288,9 @@ export function MemberEditor({
                   }
                 />
               ))}
-              <EstimateFields
-                key={item.id}
-                candidate={item}
-                busy={!!locked}
-                onChange={(patch) => changeCandidate(item.id, patch)}
-              />
             </Stack>
           ),
         )}
-        <Body muted>
-          {copy(
-            "Maliyet ve kalite değerleri sahibin tahminidir; gerçek fatura veya ölçüm değildir.",
-            "Cost and quality values are owner estimates, not billing or measured benchmarks.",
-          )}
-        </Body>
       </Disclosure>
       <ErrorText error={visibleError} />
       <FormActions
@@ -289,50 +307,5 @@ export function MemberEditor({
         cancelDisabled={busy}
       />
     </Stack>
-  );
-}
-
-function EstimateFields({
-  candidate,
-  busy,
-  onChange,
-}: {
-  candidate: CrewCandidate;
-  busy: boolean;
-  onChange: (patch: Partial<CrewCandidate>) => void;
-}) {
-  const copy = useCopy();
-  const [values, setValues] = useState({
-    cost: candidate.cost === undefined ? "" : String(candidate.cost),
-    quality: candidate.quality === undefined ? "" : String(candidate.quality),
-  });
-  const fields = [
-    ["cost", copy("Tahmini maliyet (isteğe bağlı)", "Estimated cost (optional)"), 1_000_000],
-    [
-      "quality",
-      copy("Tahmini kalite (0–100, isteğe bağlı)", "Estimated quality (0–100, optional)"),
-      100,
-    ],
-  ] as const;
-  return (
-    <>
-      {fields.map(([key, label, max]) => (
-        <NumberField
-          key={key}
-          label={label}
-          value={values[key]}
-          editable={!busy}
-          decimal
-          onChangeText={(text) => {
-            setValues((current) => ({ ...current, [key]: text }));
-            if (text === "") onChange({ [key]: undefined });
-            else
-              onChange({
-                [key]: /^\d+(\.\d*)?$/.test(text) && Number(text) <= max ? Number(text) : NaN,
-              });
-          }}
-        />
-      ))}
-    </>
   );
 }

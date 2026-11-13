@@ -13,14 +13,13 @@ import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
 import { loadSessionMedia } from "@/ui/media-loader";
 import { MediaViewer } from "@/ui/media-viewer";
-import { mediaQueryKey, type MessageContext } from "@/ui/media-policy";
+import { resolveMediaMime, mediaQueryKey, type MessageContext } from "@/ui/media-policy";
 import {
   attachmentPlan, downloadNeedsConfirmation, formatAttachmentSize, type AttachmentKind,
 } from "@/ui/media-inline-policy";
 import { useMobileTheme } from "@/ui/theme";
 import { radii, space } from "@/ui/tokens";
 import { InlineVideo } from "@/ui/media-video";
-import { useMediaSharing } from "@/ui/use-media-sharing";
 import { usePrivateMediaData } from "@/ui/use-private-media-data";
 import { useReaderContentAccess, useReaderRetry, useReaderScope } from "@/ui/use-reader-scope";
 import { appendToDraft } from "./draft-append";
@@ -39,7 +38,7 @@ export function useSessionFile(
     queryKey,
     queryFn: async ({ signal }) => {
       scope.assertCurrent();
-      const value = await loadSessionMedia(context, id, name, mimeType || "application/octet-stream", signal);
+      const value = await loadSessionMedia(context, id, name, resolveMediaMime(name, mimeType), signal);
       scope.assertCurrent();
       return value;
     },
@@ -59,13 +58,12 @@ export function AttachmentPreview({ id, name, size, mimeType, kind, context, onO
   const { colors } = useMobileTheme(), copy = useCopy();
   const plan = attachmentPlan(kind, size);
   const [requested, setRequested] = useState(false), [viewer, setViewer] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
   const scope = useReaderScope(context, id);
   const { query, data } = useSessionFile(scope, context, id, name, mimeType, plan === "inline" || requested);
   const content = useReaderContentAccess(scope, data ? JSON.stringify([data.uri, data.name]) : undefined, scope.available && !!data);
-  const { retryError } = useReaderRetry(scope, query);
+  const { retry, retryError } = useReaderRetry(scope, query);
   const Icon = icons[kind];
-  // A PDF opens in the system viewer through the same handoff as sharing.
-  const pdf = useMediaSharing({ uri: data?.uri, name, mimeType: "application/pdf", enabled: kind === "pdf" && !!data });
   const sizeLabel = size !== undefined ? formatAttachmentSize(size) : "";
   const download = () => {
     const start = () => setRequested(true);
@@ -77,6 +75,15 @@ export function AttachmentPreview({ id, name, size, mimeType, kind, context, onO
     );
   };
   if (data && content.access.allowed) {
+    if (kind === "image" && imageFailed) return <View style={{ gap: space.xs }}>
+      <Body numberOfLines={2}>{name}</Body>
+      <Body muted>{copy("Önizleme açılamadı.", "Preview could not be opened.")}</Body>
+      <Button tone="quiet" label={copy("Yeniden dene", "Retry")} busy={query.isFetching} onPress={() => {
+        if (!content.check() || query.isFetching) return;
+        setImageFailed(false);
+        retry();
+      }} />
+    </View>;
     const sessionId = context.sessionId;
     const useAsReference = sessionId ? (file: { uri: string; name: string }) =>
       appendToDraft({ machineId: context.machineId, sessionId }, { file: { ...file, mimeType: data.mimeType || mimeType } }) : undefined;
@@ -85,22 +92,18 @@ export function AttachmentPreview({ id, name, size, mimeType, kind, context, onO
       <View>
         <PressableCard role="imagebutton" label={copy("Tam ekran aç: {p0}", "Open full screen: {p0}", { p0: name })} onPress={() => setViewer(true)} onLongPress={() => setViewer(true)}
           style={{ width: THUMBNAIL, height: THUMBNAIL, padding: 0, minHeight: 0, overflow: "hidden", borderRadius: radii.control, backgroundColor: colors.raised }}>
-          <Image source={{ uri: data.uri }} accessibilityLabel={name} contentFit="cover" transition={0} style={{ width: THUMBNAIL, height: THUMBNAIL }} />
+          <Image source={{ uri: data.uri }} accessibilityLabel={name} contentFit="contain" transition={0} onError={() => { if (content.check()) setImageFailed(true); }} style={{ width: THUMBNAIL, height: THUMBNAIL }} />
         </PressableCard>
         {viewerNode}
       </View>
     );
     if (kind === "video") return <InlineVideo uri={data.uri} name={name} size={size} />;
-    if (kind === "pdf") return <View>
-      <ChatSummary label={name} detail={[sizeLabel, copy("Aç", "Open")].filter(Boolean).join(" · ")} icon={<Icon size={16} color={colors.muted} />} onPress={pdf.share} disabled={pdf.busy} />
-      <ErrorText error={pdf.error} />
-    </View>;
-    if (kind !== "image") return <ChatSummary label={name} detail={[sizeLabel, copy("Aç", "Open")].filter(Boolean).join(" · ")} icon={<Icon size={16} color={colors.muted} />} onPress={onOpenFile} />;
+    if (kind !== "image") return <ChatSummary label={name} detail={[sizeLabel, copy("Aç", "Open")].filter(Boolean).join(" · ")} icon={<Icon size={16} color={colors.muted} />} onPress={() => { if (content.check()) onOpenFile(); }} />;
     return (
       <View style={{ gap: space.xs }}>
         <PressableCard label={copy("Tam ekran aç: {p0}", "Open full screen: {p0}", { p0: name })} onPress={() => setViewer(true)} onLongPress={() => setViewer(true)}
           style={{ padding: 0, overflow: "hidden", borderRadius: radii.control, backgroundColor: colors.raised }}>
-          <Image source={{ uri: data.uri }} accessibilityLabel={name} contentFit="contain" transition={0} style={{ width: "100%", aspectRatio: 1.5, maxHeight: 320 }} />
+          <Image source={{ uri: data.uri }} accessibilityLabel={name} contentFit="contain" transition={0} onError={() => { if (content.check()) setImageFailed(true); }} style={{ width: "100%", aspectRatio: 1.5, maxHeight: 320 }} />
         </PressableCard>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
           <Body muted style={{ flex: 1 }} numberOfLines={1}>{[name, sizeLabel].filter(Boolean).join(" · ")}</Body>

@@ -39,7 +39,7 @@ export type SessionStatus = { label: string; color: string };
 
 /** Status is always spoken in the row detail too, so color is never the only signal. */
 export function sessionStatus(
-  session: Pick<HostSessionSummary, "needsInput" | "status" | "pinned">,
+  session: Pick<HostSessionSummary, "needsInput" | "status" | "pinned" | "issue">,
   copy: CopyFn,
   colors: MobileColors,
 ): SessionStatus {
@@ -49,6 +49,8 @@ export function sessionStatus(
     return { label: copy("Çalışıyor", "Running"), color: colors.live };
   if (session.status === "interrupted")
     return { label: copy("Durduruldu", "Interrupted"), color: colors.muted };
+  if (session.issue === "failed")
+    return { label: copy("Başarısız", "Failed"), color: colors.danger };
   if (session.pinned) return { label: copy("Sabit", "Pinned"), color: colors.muted };
   return { label: copy("Hazır", "Ready"), color: colors.muted };
 }
@@ -73,11 +75,12 @@ export function GroupedListRow({
   return (
     <View>
       {children}
-      {last ? null : <View accessible={false} style={[uiStyles.separator, { marginStart: inset }]} />}
+      {last ? null : (
+        <View accessible={false} style={[uiStyles.separator, { marginStart: inset }]} />
+      )}
     </View>
   );
 }
-
 
 export function useProjectRefresh(projectId: string) {
   const cache = useQueryClient();
@@ -104,7 +107,12 @@ export function useCommands(invalidate: readonly unknown[] = []) {
       return dispatchCommand(invocation.client, invocation.commandId, invocation.params);
     },
     onSuccess: (_receipt, invocation) => {
-      void invalidateCommandQueries(cache, invocation.machineId, invocation.invalidate);
+      void invalidateCommandQueries(
+        cache,
+        invocation.machineId,
+        invocation.invalidate,
+        invocation.params,
+      );
     },
   });
   const mutateAsync = useCallback(

@@ -3,12 +3,14 @@ import { useMemo, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import {
   Disclosure,
+  Body,
   Empty,
   NavigationGroup,
   NavigationRow,
   SearchField,
   SelectField,
   Sheet,
+  FormActions,
 } from "@/ui/primitives";
 import { ProviderAccountMark } from "@/ui/agent-avatar";
 import { useCopy } from "@/ui/copy";
@@ -44,6 +46,13 @@ export type ModelPickerProps = {
   /** New-session forms keep unset settings unset until the owner picks one. */
   sparseSettings?: boolean;
   disabled?: boolean;
+  /** Only session editors submit; form consumers retain their outer action. */
+  onSave?: () => void;
+  dirty?: boolean;
+  pending?: boolean;
+  saveDisabled?: boolean;
+  /** The saved account no longer appears in the Host catalog. Account repair stays available. */
+  unavailableAccount?: boolean;
   /** Status shown above the lists, e.g. why choices are locked. */
   notice?: ReactNode;
   /**
@@ -56,8 +65,7 @@ export type ModelPickerProps = {
 
 /**
  * Bottom-sheet model picker, the mobile form of the desktop provider/model/reasoning menu:
- * accounts on top, the models, then the selected model's reasoning and speed choices right under
- * the list as one-tap chips so a model and its effort are chosen in one place.
+ * accounts and selected model settings first, then searchable models and secondary options.
  */
 export const MODEL_SEARCH_THRESHOLD = 6;
 
@@ -72,6 +80,11 @@ export function ModelPicker({
   settings,
   sparseSettings,
   disabled,
+  onSave,
+  dirty = false,
+  pending = false,
+  saveDisabled,
+  unavailableAccount,
   notice,
   catalog,
   onChange,
@@ -124,14 +137,39 @@ export function ModelPicker({
         setting={setting}
         value={settings[setting.id] ?? ""}
         unsetAllowed={unsetAllowed}
-        disabled={disabled || (ownAgents && setting.id === "subagentPolicy" && noSubagents)}
+        disabled={
+          disabled ||
+          unavailableAccount ||
+          (ownAgents && setting.id === "subagentPolicy" && noSubagents)
+        }
         onChange={(value) => onChange(model, { ...settings, [setting.id]: value })}
       />
     );
   return (
-    <Sheet visible={visible} title={copy("Model", "Model")} size="form" onClose={close}>
+    <Sheet
+      visible={visible}
+      title={copy("Model", "Model")}
+      size="form"
+      onClose={close}
+      dirty={dirty}
+      dismissible={!pending}
+      footer={
+        onSave ? (
+          <FormActions
+            submitLabel={copy("Kaydet", "Save")}
+            onSubmit={onSave}
+            busy={pending}
+            dirty={dirty}
+            disabled={!dirty || disabled || unavailableAccount || saveDisabled}
+          />
+        ) : undefined
+      }
+    >
       <View style={{ gap: space.lg }}>
         {notice ? <View>{notice}</View> : null}
+        {providers.length === 1 && choice ? (
+          <Body muted>{providerName(choice.provider)}</Body>
+        ) : null}
         {providers.length > 1 ? (
           <SelectField
             label={copy("Ajan", "Agent")}
@@ -152,20 +190,25 @@ export function ModelPicker({
             }}
           />
         ) : null}
-        {accounts.length > 1 ? (
+        {accounts.length > 1 || unavailableAccount ? (
           <SelectField
             label={copy("Hesap", "Account")}
             value={choice?.key ?? accounts[0]!.key}
-            options={accounts.map((item) => ({
-              value: item.key,
-              label: item.label,
-              icon: (
-                <>
-                  <ProviderAccountMark provider={item.provider} color={item.color} size={18} />
-                  <ProviderAccountKind kind={item.kind} derivedKind={item.derivedKind} />
-                </>
-              ),
-            }))}
+            options={[
+              ...(unavailableAccount && choice
+                ? [{ value: choice.key, label: choice.label, disabled: true }]
+                : []),
+              ...accounts.map((item) => ({
+                value: item.key,
+                label: item.label,
+                icon: (
+                  <>
+                    <ProviderAccountMark provider={item.provider} color={item.color} size={18} />
+                    <ProviderAccountKind kind={item.kind} derivedKind={item.derivedKind} />
+                  </>
+                ),
+              })),
+            ]}
             disabled={disabled}
             onChange={(key) => {
               const next = accounts.find((item) => item.key === key);
@@ -176,6 +219,13 @@ export function ModelPicker({
             }}
           />
         ) : null}
+        {accounts.length === 1 && !unavailableAccount ? (
+          <Body muted>
+            {copy("Hesap", "Account")}: {accounts[0]!.label}
+          </Body>
+        ) : null}
+        <Body>{selected?.name ?? model}</Body>
+        {settingRows.map(field())}
         <View style={{ gap: space.xs }}>
           {searchable ? (
             <SearchField
@@ -192,17 +242,9 @@ export function ModelPicker({
                   label={item.label}
                   detail={item.detail}
                   selected={item.selected}
-                  disabled={disabled}
-                  icon={
-                    choice ? (
-                      <ProviderAccountMark
-                        provider={choice.provider}
-                        color={choice.color}
-                        size={18}
-                      />
-                    ) : undefined
-                  }
+                  disabled={disabled || unavailableAccount}
                   onPress={() => {
+                    if (item.selected) return;
                     const next = models.find((entry) => entry.id === item.value);
                     onChange(
                       item.value,
@@ -223,7 +265,6 @@ export function ModelPicker({
             />
           )}
         </View>
-        {settingRows.map(field())}
         {groups.map(({ group, items }) => (
           <Disclosure key={group} label={label(SETTING_GROUP_TITLE[group])}>
             <View style={{ gap: space.lg }}>{items.map(field())}</View>
@@ -239,7 +280,7 @@ export function ModelPicker({
                   candidates={candidates}
                   imageChoices={images}
                   settings={settings}
-                  disabled={disabled}
+                  disabled={disabled || unavailableAccount}
                   onChange={(next) => onChange(model, next)}
                 />
               ) : null}

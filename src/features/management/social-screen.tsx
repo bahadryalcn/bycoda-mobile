@@ -16,9 +16,10 @@ import {
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useHostMutation } from "@/state/queries";
-import { useMachines } from "@/state/machines";
+
 import { initialSocialFlow, socialFlowReducer, type SocialTab } from "./social-flow";
 import { Scope } from "./shared/scope";
+import { useLocalProjectScope } from "./shared/local-project-scope";
 import { socialRequest as request } from "./social/request";
 import { AccountsPanel } from "./social/accounts-panel";
 import { ThreadsPanel } from "./social/threads-panel";
@@ -36,7 +37,7 @@ import { socialActionTarget, SocialActionFeedback } from "./social/action-feedba
 
 export function SocialScreen() {
   const copy = useCopy();
-  const projectId = useMachines((state) => state.selectedProjectId);
+  const { projectId, setProjectId } = useLocalProjectScope();
   const projects = useProjectList();
   const action = useHostMutation("social.request", ["social"]);
   const [flow, dispatch] = useReducer(socialFlowReducer, initialSocialFlow);
@@ -103,7 +104,7 @@ export function SocialScreen() {
   };
   return (
     <Screen title={copy("Sosyal medya", "Social media")} query={query}
-      context={<ContextControls scope={<Scope allowAll />} view={
+      context={<ContextControls scope={<Scope allowAll projectId={projectId} onChange={setProjectId} />} view={
         <SelectField
           compact
           hideLabel

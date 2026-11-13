@@ -1,3 +1,4 @@
+import { useSessionDraftPresence } from "./use-session-draft-presence";
 import { memo } from "react";
 import { View, useWindowDimensions } from "react-native";
 import GitBranch from "lucide-react-native/icons/git-branch";
@@ -47,14 +48,22 @@ export const SessionListRow = memo(function SessionListRow({
 }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const hasDraft = useSessionDraftPresence(
+    machineId,
+    session.id,
+    canRead(projectId),
+    session.draft,
+  );
+  const draftLabel = copy("Taslak", "Draft");
   const { fontScale } = useWindowDimensions();
   const title = sessionDisplayTitle(session.title, copy("Yeni oturum", "New session"));
   const status = sessionStatus({ ...session, pinned: false }, copy, colors);
-  const attention = session.needsInput || session.status === "interrupted";
+  const failed = session.issue === "failed" && session.status === "idle" && !session.needsInput;
+  const attention = session.needsInput || session.status === "interrupted" || failed;
   const live = !attention && session.status === "running";
   const stamp =
     attention || live ? (
-      <StatusText label={status.label} tone={attention ? "warning" : "live"} />
+      <StatusText label={status.label} tone={failed ? "danger" : attention ? "warning" : "live"} />
     ) : (
       <Body selectable={false} muted style={uiStyles.caption}>
         {relativeTime(session.updatedAt, copy)}
@@ -67,6 +76,7 @@ export const SessionListRow = memo(function SessionListRow({
     title,
     projectName,
     status.label,
+    hasDraft ? draftLabel : undefined,
     session.pinned ? copy("Sabit", "Pinned") : undefined,
     ancestors?.join(" / "),
     session.harness,
@@ -98,12 +108,24 @@ export const SessionListRow = memo(function SessionListRow({
               paddingVertical: space.row,
             }}
           >
-            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.row }}>
-              <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                alignItems: "flex-start",
+                gap: space.row,
+              }}
+            >
+              <View style={{ flex: 1, minWidth: 120, gap: space.xxs }}>
                 {showProject ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2 }}>
                     <ProjectIcon appearance={projectAppearance} size={14} box={16} />
-                    <Body selectable={false} muted numberOfLines={fontScale > 1 ? undefined : 1} style={[uiStyles.caption, { flex: 1, minWidth: 0 }]}>
+                    <Body
+                      selectable={false}
+                      muted
+                      numberOfLines={fontScale > 1 ? undefined : 1}
+                      style={[uiStyles.caption, { flex: 1, minWidth: 0 }]}
+                    >
                       {projectName}
                     </Body>
                   </View>
@@ -120,7 +142,12 @@ export const SessionListRow = memo(function SessionListRow({
                     {session.branch ? (
                       <GitBranch {...decorativeSvgProps} size={12} color={colors.muted} />
                     ) : null}
-                    <Body selectable={false} muted numberOfLines={fontScale > 1 ? undefined : 1} style={[uiStyles.caption, { flex: 1, minWidth: 0 }]}>
+                    <Body
+                      selectable={false}
+                      muted
+                      numberOfLines={fontScale > 1 ? undefined : 1}
+                      style={[uiStyles.caption, { flex: 1, minWidth: 0 }]}
+                    >
                       {meta}
                     </Body>
                   </View>
@@ -128,6 +155,11 @@ export const SessionListRow = memo(function SessionListRow({
               </View>
               <View style={{ flexShrink: 0, alignItems: "flex-end", gap: space.xs }}>
                 {stamp}
+                {hasDraft ? (
+                  <Body selectable={false} muted style={uiStyles.caption}>
+                    {draftLabel}
+                  </Body>
+                ) : null}
                 <ProviderIcon provider={session.harness} size={18} />
               </View>
             </View>

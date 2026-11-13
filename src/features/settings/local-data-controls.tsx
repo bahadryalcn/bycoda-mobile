@@ -210,8 +210,8 @@ export function LocalDataControls() {
       <Disclosure label={copy("Bu telefondaki veriler", "Data on this phone")}>
         <Body muted>
           {copy(
-            "bycoda hesabı açılmaz. Bilgisayar bağlantılarını ve telefonda saklanan taslaklarını buradan yönetebilirsin. Bilgisayarındaki dosyalar, oturumlar, çalışan işler ve sağlayıcı hesapları ayrı yönetilir.",
-            "There is no bycoda account. Manage your saved computer connections and drafts on this phone here. Computer files, sessions, running work and provider accounts are managed separately.",
+            "Bilgisayar bağlantılarını ve telefonda saklanan taslaklarını buradan yönetebilirsin. Bilgisayarındaki dosyalar, oturumlar, çalışan işler ve sağlayıcı hesapları ayrı yönetilir.",
+            "Manage your saved computer connections and drafts on this phone here. Computer files, sessions, running work and provider accounts are managed separately.",
           )}
         </Body>
         <Body muted>

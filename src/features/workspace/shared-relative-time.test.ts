@@ -17,12 +17,35 @@ vi.mock("./commands", () => ({ dispatchCommand: () => undefined, UncertainComman
 vi.mock("./project-cache", () => ({ isProjectWorkspaceQuery: () => false }));
 vi.mock("./command-cache", () => ({ invalidateCommandQueries: () => undefined }));
 
-const { relativeTime } = await import("./shared");
+const { relativeTime, sessionStatus } = await import("./shared");
 const copy = ((_tr: string, en: string, values?: Record<string, unknown>) =>
   en.replace("{p0}", String(values?.p0 ?? ""))) as Parameters<typeof relativeTime>[1];
 const now = Date.UTC(2026, 10, 10, 12);
 const ago = (ms: number) => now - ms;
 const DAY = 86_400_000;
+
+it("keeps failed idle sessions distinct from Ready while current running/input state wins", () => {
+  const colors = {
+    danger: "danger",
+    muted: "muted",
+    live: "live",
+    warning: "warning",
+  } as Parameters<typeof sessionStatus>[2];
+  const failed = { needsInput: false, status: "idle", pinned: false, issue: "failed" } as const;
+  expect(sessionStatus(failed, copy, colors)).toEqual({ label: "Failed", color: "danger" });
+  expect(sessionStatus({ ...failed, issue: undefined }, copy, colors)).toEqual({
+    label: "Ready",
+    color: "muted",
+  });
+  expect(sessionStatus({ ...failed, status: "running" }, copy, colors)).toEqual({
+    label: "Running",
+    color: "live",
+  });
+  expect(sessionStatus({ ...failed, needsInput: true }, copy, colors)).toEqual({
+    label: "Needs reply",
+    color: "warning",
+  });
+});
 
 describe("relativeTime", () => {
   it("counts minutes, hours and days inside a week", () => {

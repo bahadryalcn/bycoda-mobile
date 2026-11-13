@@ -10,6 +10,12 @@ vi.mock("expo-file-system", () => ({ File: class { exists = true; get size() { r
 vi.mock("./attachment-files", () => ({ isScopedStagedFile: () => true }));
 import { uploadAttachment } from "./attachment-transfer";
 const file: StagedAttachment = { claimId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "data.txt", size: 6, mimeType: "text/plain", kind: "file", uri: "file:///staged/file" };
+it("rejects question files above the Host's 20 MiB limit before any claim or upload request", async () => {
+  const request = vi.fn();
+  await expect(uploadAttachment({ machine: { id: "m" }, request } as unknown as HostTransport,
+    { ...file, size: 20 * 1024 * 1024 + 1 }, "s", new AbortController().signal, () => {}, "question")).rejects.toThrow("20 MiB");
+  expect(request).not.toHaveBeenCalled();
+});
 beforeEach(() => { fixture.close.mockClear(); fixture.bytes = new Uint8Array([97, 98, 99, 100, 101, 102]); fixture.reads = []; fixture.onRead = undefined; });
 it("resumes only after the host prefix hash matches local bytes", async () => {
   const request = vi.fn().mockResolvedValueOnce({ offset: 3, hash: createHash("sha256").update("abc").digest("hex") }).mockResolvedValueOnce({ offset: 6 });

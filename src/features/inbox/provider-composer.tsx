@@ -67,7 +67,9 @@ export function ProviderInboxComposer({
       </Heading>
       {reply ? (
         <>
-          <Body muted>{reply.body.slice(0, 300)}</Body>
+          {reply.body.length > 300 ? <Disclosure label={copy("Ayrıntılar", "Details")}>
+            <Body muted selectable>{reply.body}</Body>
+          </Disclosure> : <Body muted selectable>{reply.body}</Body>}
           <Button
             label={copy("Yanıttan vazgeç", "Cancel reply")}
             disabled={busy || !!pending}
@@ -121,7 +123,7 @@ export function ProviderInboxComposer({
         <Body selectable>{pending.confirmed.params.body}</Body>
         {reviewedReply ? <Disclosure label={copy("Ayrıntılar", "Details")}>
           <Body muted selectable>{copy("Hedef", "Target")}: {pending.confirmed.params.inReplyTo}</Body>
-          <Body muted selectable>{reviewedReply.body.slice(0, 300)}{reviewedReply.body.length > 300 ? "…" : ""}</Body>
+          <Body muted selectable>{reviewedReply.body}</Body>
         </Disclosure> : null}
       </Stack>
     </ActionReviewSheet> : null}

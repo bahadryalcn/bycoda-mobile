@@ -54,6 +54,12 @@ function renderQuery(props: ComponentProps<typeof QueryState>) {
   renderToStaticMarkup(createElement(Probe));
   return result as Rendered;
 }
+function renderSkeleton(props: ComponentProps<typeof Skeleton>) {
+  let result: ReturnType<typeof Skeleton> = null;
+  function Probe() { result = Skeleton(props); return null; }
+  renderToStaticMarkup(createElement(Probe));
+  return result as ReturnType<typeof Skeleton>;
+}
 
 import { router } from "expo-router";
 
@@ -121,12 +127,12 @@ describe("shared feedback error rendering", () => {
 
   it("dissolves a shown skeleton as an inert overlay after loading and drops it once faded", () => {
     handoff.mounted = true;
-    const fading = Skeleton({ loading: false })!;
+    const fading = renderSkeleton({ loading: false })!;
     expect(fading.props.pointerEvents).toBe("none");
     expect(fading.props.accessibilityRole).toBeUndefined();
     handoff.mounted = false;
-    expect(Skeleton({ loading: false })).toBeNull();
-    expect(Skeleton({ loading: true })).not.toBeNull();
+    expect(renderSkeleton({ loading: false })).toBeNull();
+    expect(renderSkeleton({ loading: true })).not.toBeNull();
     handoff.mounted = true;
   });
 
@@ -135,7 +141,7 @@ describe("shared feedback error rendering", () => {
     const skeleton = renderQuery({ query, loadingLabel: "Verifying project…" });
     expect(skeleton?.type).toBe(Skeleton);
     expect(skeleton?.props.label).toBe("Verifying project…");
-    expect(Skeleton(skeleton!.props)!.props.accessibilityLabel).toBe("Verifying project…");
+    expect(renderSkeleton(skeleton!.props)!.props.accessibilityLabel).toBe("Verifying project…");
     const inline = renderQuery({ query, loading: "inline", loadingLabel: "Loading sessions…" });
     expect(inline?.type).toBe(Loading);
     expect(Loading(inline!.props).props.accessibilityLabel).toBe("Loading sessions…");

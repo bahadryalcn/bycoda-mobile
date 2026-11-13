@@ -23,7 +23,8 @@ Keep one primary action per active task and disclose secondary options.
 Desktop and mobile share compact chrome, progressive disclosure, preserved
 drafts and explicit operation state. Adapt density to touch: mobile controls
 keep 48dp hit areas even when the visible control is compact (32 icon buttons, 28 chips, 40
-buttons and inputs, grown with `hitSlop` or padding). Do not copy desktop
+buttons, grown with `hitSlop` or padding). Editable inputs and search fields reserve
+48dp in layout so their native focus target does not depend on overlapping hit areas. Do not copy desktop
 pixel sizes, CSS, Arc runtime or overlay infrastructure.
 
 Avoid nested decorative cards, repeated introductions, permanent help paragraphs
@@ -157,7 +158,7 @@ system scaling.
 | Spacing | `xxs` 2; `xs` 4; `sm` 6; `row` 10; `md` 12; `lg`/`screen` 16; `xl` 20; `xxl` 28; `gapIcon` 8 |
 | Type (size/line) | `micro` 11/14; `caption`/`badge` 12/16; `small` 13/17; `control` 14/19; `body` 15/21 (chat `lineHeight.message` 22); `input` 16/21; `title` 16/21; `heading` 18/24; `hero` 24/30; `display` 28/34. Use the paired `lineHeight` map |
 | Radius | `badge` 6; `control` 10; `card` 12; `preview` 14; `bubble` 18; `composer` 24; `sheet` 24; `pill` 999 |
-| Visible sizes | `controlHeight`/`buttonHeight`/`inputHeight`/`composerFieldMin` 40; `visualControl` 32 (icon buttons, send); `chipHeight` 28; `toolRowHeight` 28; `sectionHeaderHeight` 28; `rowHeightSession` 56; `rowHeightProject` 52; `headerHeight` 48; `tabBarHeight` 52 |
+| Visible sizes | `controlHeight`/`buttonHeight` 40; `inputHeight`/`composerFieldMin` 48; `visualControl` 32 (icon buttons, send); `chipHeight` 28; `toolRowHeight` 28; `sectionHeaderHeight` 28; `rowHeightSession` 56; `rowHeightProject` 52; `headerHeight` 48; `tabBarHeight` 52 |
 | Hit areas | `touchTarget`/`iconTarget` 48. Smaller visible controls add `hitSlop={hitSlopFor(visual)}`; the actual target never drops below 48 |
 | Other | Multiline input minimum 96 |
 | Width | Content 760; entry surfaces 520 |

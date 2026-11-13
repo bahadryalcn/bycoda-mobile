@@ -67,6 +67,7 @@ vi.mock("./attachment-ownership", () => ({ composerDraftKey: () => "key", suppor
   attachmentReleases: { stage: vi.fn(async () => undefined), flush: vi.fn(async () => undefined) } }));
 vi.mock("./use-session-queue", () => ({ useSessionQueue: () => ({ supported: true, enqueue: state.enqueue, pause: state.pause }) }));
 vi.mock("./session-queue", () => ({ SessionQueue: () => null }));
+vi.mock("./session-agents", () => ({ SessionAgents: ({ children }: { children: (controls: ReactNode) => ReactNode }) => children(null) }));
 vi.mock("@/features/management/templates/template-library", () => ({ TemplateLibrary: ({ onInsert }: { onInsert: (body: string) => void }) => {
   state.templateInsert = onInsert;
   return createElement("p", null, "Template panel");

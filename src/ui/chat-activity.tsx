@@ -12,7 +12,7 @@ import { Plan } from "panelui-native/components/plan";
 import { useHostReadActive } from "@/state/queries";
 import { useReducedMotionPreference } from "./use-reduced-motion";
 import { Body } from "./typography";
-import { fontSize, gapIcon, hitSlopFor, lineHeight, metrics, radii, space } from "./tokens";
+import { fontSize, gapIcon, lineHeight, metrics, radii, space } from "./tokens";
 import { useMobileTheme } from "./theme";
 import { useCopy } from "./copy";
 import { activityFileLabel } from "./activity-file-label";
@@ -100,7 +100,7 @@ export function ChatActivity({
             {visibleTitle}
           </Shimmer>
         ) : (
-          <Body numberOfLines={1} style={titleStyle}>
+          <Body numberOfLines={2} style={titleStyle}>
             {visibleTitle}
           </Body>
         )}
@@ -133,9 +133,9 @@ export function ChatActivity({
         accessibilityRole="button"
         accessibilityLabel={accessibleLabel}
         onPress={onInspect}
-        hitSlop={hitSlopFor(metrics.toolRowHeight)}
         style={({ pressed }) => ({
-          height: metrics.toolRowHeight,
+          minHeight: metrics.touchTarget,
+          paddingVertical: space.xs,
           flexDirection: "row",
           alignItems: "center",
           gap: gapIcon / 2,
@@ -155,7 +155,7 @@ export function ChatActivity({
         defaultOpen={false}
       >
         <Reasoning.Trigger
-          className="min-h-7 py-0"
+          className="min-h-12 py-1"
           accessibilityLabel={accessibleLabel}
           aria-expanded={open}
         >
@@ -170,7 +170,7 @@ export function ChatActivity({
       open={open}
       onOpenChange={onOpenChange}
     >
-      <Task.Trigger className="min-h-7 py-0" accessibilityLabel={accessibleLabel} aria-expanded={open}>
+      <Task.Trigger className="min-h-12 py-1" accessibilityLabel={accessibleLabel} aria-expanded={open}>
         {header}
       </Task.Trigger>
       {!onInspect ? (
@@ -223,7 +223,7 @@ export function ChatPlan({
           ) : null}
         </View>
         <Plan.Action>
-          <Plan.Trigger className="min-h-10 min-w-10" accessibilityLabel={title} />
+          <Plan.Trigger className="min-h-12 min-w-12" accessibilityLabel={title} />
         </Plan.Action>
       </Plan.Header>
       <Plan.Content>{children}</Plan.Content>

@@ -1,6 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { externalImageUrl, previewNavigationAllowed, resolveMediaPath, resolveProjectPath, sandboxPreviewHtml, mediaQueryKey, type MessageContext } from "./media-policy";
+import { externalImageUrl, previewNavigationAllowed, resolveMediaPath, resolveProjectPath, sandboxPreviewHtml, mediaQueryKey, mediaMime, resolveMediaMime, type MessageContext } from "./media-policy";
 describe("native media boundary", () => {
+  it.each([
+    ["report.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+    ["data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+    ["slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+    ["report.DOC:12:3", "application/msword"], ["archive.tar#L3", "application/x-tar"],
+    ["song.opus", "audio/ogg"], ["picture.HEIC", "image/heic"], ["table.csv", "text/csv"],
+    ["notes.md#L42", "text/markdown"], ["file.unknown", "application/octet-stream"],
+  ])("provides a useful file MIME for %s", (name, expected) => expect(mediaMime(name)).toBe(expected));
+  it("infers generic MIME metadata without replacing explicit content types", () => {
+    for (const generic of [undefined, "", " application/octet-stream ", "Application/Octet-Stream; charset=binary"])
+      expect(resolveMediaMime("report.pdf", generic)).toBe("application/pdf");
+    expect(resolveMediaMime("report.pdf", "text/plain; charset=utf-8")).toBe("text/plain; charset=utf-8");
+    expect(resolveMediaMime("cover.bin", "image/png")).toBe("image/png");
+    for (const name of ["file.constructor", "file.__proto__", "file.toString"])
+      expect(mediaMime(name)).toBe("application/octet-stream");
+  });
   it("resolves relative and line-qualified paths without leaving the selected root", () => {
     expect(resolveProjectPath("G:/project", "src/app.ts:42:8")).toBe("G:/project/src/app.ts");
     expect(resolveProjectPath("G:/project", "g:/PROJECT/src/app.ts#L42")).toBe("G:/project/src/app.ts");

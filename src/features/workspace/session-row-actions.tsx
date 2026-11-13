@@ -38,7 +38,7 @@ import {
   reviewSessionRow,
   sessionRowReviewMatches,
 } from "./session-row-action-model";
-import { relativeTime } from "./shared";
+import { relativeTime, sessionStatus } from "./shared";
 import { captureSessionAuthority } from "@/domain/session-authority";
 import { SessionActionList } from "./session-action-list";
 import { sessionDisplayTitle } from "./session-title";
@@ -59,7 +59,8 @@ export type SessionRowActionsProps = {
 
 export function SessionRowActions(props: SessionRowActionsProps) {
   const { colors, uiStyles } = useMobileTheme();
-  const { machineId, projectId, projectName, projectCwd, session, canRead, settled, children } = props;
+  const { machineId, projectId, projectName, projectCwd, session, canRead, settled, children } =
+    props;
   const copy = useCopy(),
     machine = useActiveMachine(),
     connection = useConnectionScope();
@@ -276,11 +277,12 @@ export function SessionRowActions(props: SessionRowActionsProps) {
   };
   const settle: RowAction = {
     key: "settle",
-    label: settled ? copy("Yerleşikten çıkar", "Unsettle") : copy("Yerleştir", "Settle"),
+    label: settled ? copy("Listeye geri al", "Bring back") : copy("Kenara al", "Set aside"),
     icon: settled ? <Undo2 /> : <CircleCheck />,
-    detail: !settled && session.status === "running"
-      ? copy("Oturum çalışırken kullanılamaz.", "Unavailable while the session is running.")
-      : undefined,
+    detail:
+      !settled && session.status === "running"
+        ? copy("Oturum çalışırken kullanılamaz.", "Unavailable while the session is running.")
+        : undefined,
     disabled: blocked || (!settled && session.status === "running"),
     onPress: () => void quick("settle"),
   };
@@ -297,9 +299,10 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     icon: <Trash />,
     destructive: true,
     opens: true,
-    detail: session.status === "running"
-      ? copy("Oturum çalışırken kullanılamaz.", "Unavailable while the session is running.")
-      : undefined,
+    detail:
+      session.status === "running"
+        ? copy("Oturum çalışırken kullanılamaz.", "Unavailable while the session is running.")
+        : undefined,
     disabled: blocked || session.status === "running",
     onPress: () => open("delete"),
   };
@@ -315,13 +318,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
   const sheetActions = [pin, settle, archiveAction, detailsAction, deleteAction];
   const valid = !!review && current(review);
   const fresh = !!review && current(review, true);
-  const status = session.needsInput
-    ? copy("Yanıt bekliyor", "Needs input")
-    : session.status === "running"
-      ? copy("Çalışıyor", "Running")
-      : session.status === "interrupted"
-        ? copy("Durduruldu", "Interrupted")
-        : copy("Hazır", "Ready");
+  const status = sessionStatus({ ...session, pinned: false }, copy, colors).label;
   const title = sessionDisplayTitle(session.title, copy("Yeni oturum", "New session"));
   const details = (
     <Stack>
@@ -350,11 +347,13 @@ export function SessionRowActions(props: SessionRowActionsProps) {
         <Badge
           label={status}
           tone={
-            session.status === "running"
-              ? "live"
-              : session.needsInput || session.status === "interrupted"
-                ? "warning"
-                : "default"
+            session.needsInput || session.status === "interrupted"
+              ? "warning"
+              : session.status === "running"
+                ? "live"
+                : session.issue === "failed" && session.status === "idle"
+                  ? "danger"
+                  : "default"
           }
         />
         <Body muted style={uiStyles.caption}>
@@ -362,23 +361,23 @@ export function SessionRowActions(props: SessionRowActionsProps) {
         </Body>
       </Row>
       <Stack>
-          <StatusRow label={copy("Bilgisayar", "Computer")}>
-            <Body>{machine?.name || machineId}</Body>
+        <StatusRow label={copy("Bilgisayar", "Computer")}>
+          <Body>{machine?.name || machineId}</Body>
+        </StatusRow>
+        <StatusRow label={copy("Oluşturuldu", "Created")}>
+          <Body>{stamp(session.createdAt)}</Body>
+        </StatusRow>
+        <StatusRow label={copy("Güncellendi", "Updated")}>
+          <Body>{stamp(session.updatedAt)}</Body>
+        </StatusRow>
+        {session.lastActivityAt !== undefined ? (
+          <StatusRow label={copy("Son etkinlik", "Last activity")}>
+            <Body>{stamp(session.lastActivityAt)}</Body>
           </StatusRow>
-          <StatusRow label={copy("Oluşturuldu", "Created")}>
-            <Body>{stamp(session.createdAt)}</Body>
-          </StatusRow>
-          <StatusRow label={copy("Güncellendi", "Updated")}>
-            <Body>{stamp(session.updatedAt)}</Body>
-          </StatusRow>
-          {session.lastActivityAt !== undefined ? (
-            <StatusRow label={copy("Son etkinlik", "Last activity")}>
-              <Body>{stamp(session.lastActivityAt)}</Body>
-            </StatusRow>
-          ) : null}
-          <StatusRow label={copy("Oturum kimliği", "Session ID")}>
-            <Body mono>{session.id}</Body>
-          </StatusRow>
+        ) : null}
+        <StatusRow label={copy("Oturum kimliği", "Session ID")}>
+          <Body mono>{session.id}</Body>
+        </StatusRow>
       </Stack>
     </Stack>
   );
@@ -403,7 +402,13 @@ export function SessionRowActions(props: SessionRowActionsProps) {
             onClose={close}
             dismissible={!busy}
           >
-            {panel === "details" ? details : <Body selectable numberOfLines={2}>{title}</Body>}
+            {panel === "details" ? (
+              details
+            ) : (
+              <Body selectable numberOfLines={2}>
+                {title}
+              </Body>
+            )}
             {panel === "delete" ? (
               <>
                 <Notice

@@ -18,7 +18,7 @@ vi.mock("@/ui/action-review-sheet",()=>({ActionReviewSheet:({children,onClose,on
 vi.mock("@/ui/primitives",()=>{
  const content=({children}:any)=>createElement("div",null,children);
  const button=({label,onPress,disabled}:any)=>{f.commands.set(label,onPress);return createElement("button",{disabled,onClick:onPress},label);};
- return{Body:content,Stack:content,Disclosure:content,Empty:({title}:any)=>createElement("p",null,title),Loading:()=>createElement("p",null,"Loading"),Notice:({message}:any)=>createElement("p",null,message), StateView: ({ title }:any) => createElement("p",null,title),ErrorText:({error,message}:any)=>error?createElement("p",null,message||error.message):null,Sheet:({visible,children}:any)=>visible?createElement("article",null,children):null,
+ return{Button:button,Body:content,Stack:content,Disclosure:content,Empty:({title}:any)=>createElement("p",null,title),Loading:()=>createElement("p",null,"Loading"),Notice:({message}:any)=>createElement("p",null,message), StateView: ({ title }:any) => createElement("p",null,title),ErrorText:({error,message}:any)=>error?createElement("p",null,message||error.message):null,Sheet:({visible,children}:any)=>visible?createElement("article",null,children):null,
  Input:({value,onChangeText,editable}:any)=>{f.change=onChangeText;return createElement("textarea",{value,readOnly:!editable,onInput:(event:any)=>onChangeText(event.currentTarget.value)});},ActionMenu:({actions}:any)=>createElement("nav",null,...actions.map((action:any)=>createElement("section",{key:action.key},button(action)))),
  FormActions:({submitLabel,onSubmit,disabled,onCancel,cancelLabel,feedback}:any)=>createElement("footer",null,feedback,button({label:submitLabel,onPress:onSubmit,disabled}),onCancel?button({label:cancelLabel,onPress:onCancel}):null)};
 });
@@ -46,3 +46,53 @@ it("shows an explicit empty state after a successful null draft read",async()=>{
 it("keeps private draft text concealed while allowing local close/persist",async()=>{await mount();f.allowed=false;await render();expect(container.textContent).not.toContain("Unsaved changed text");await press("Close");expect(editor.hide).toHaveBeenCalledOnce();expect(editor.discard).not.toHaveBeenCalled();});
 it("does not save behind a pending review or while writes are blocked",async()=>{await mount();const save=f.commands.get("Save changes")!;await review();await act(async()=>save());expect(editor.save).not.toHaveBeenCalled();await act(async()=>f.cancel!());await render({blocked:true});await press("Save changes");expect(editor.save).not.toHaveBeenCalled();});
 it("ignores retained review and input callbacks after unmount",async()=>{await mount();const change=f.change!,confirm=await review();await act(async()=>root.unmount());await act(async()=>{change("Retired");confirm();});expect(editor.setValue).not.toHaveBeenCalled();expect(editor.reload).not.toHaveBeenCalled();});
+
+it("offers explicit cancellation of a parked queue edit without overwriting composer draft", async () => {
+  editor.visible = false;
+  await mount();
+  const cancel = [...container.querySelectorAll("button")].find(button => button.textContent === "Cancel editing");
+  expect(cancel).toBeDefined();
+  await act(async () => cancel!.click());
+  expect(container.querySelector("aside")).not.toBeNull();
+  expect(editor.discard).not.toHaveBeenCalled();
+  await act(async () => f.confirm!());
+  expect(editor.discard).toHaveBeenCalledOnce();
+  expect(editor.save).not.toHaveBeenCalled();
+  expect(editor.setValue).not.toHaveBeenCalled();
+});
+it("retires inline cancel approval when edit identity changes", async () => {
+  editor.visible = false;
+  await mount();
+  await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "Cancel editing")!.click());
+  const confirm = f.confirm!;
+  editor.value = { ...editor.value, original: { ...original, id: "replacement" } };
+  editor.valueRef.current = editor.value;
+  await render();
+  await act(async () => confirm());
+  expect(editor.discard).not.toHaveBeenCalled();
+});
+it.each(["access", "epoch", "active", "working", "blocked", "unready"])("retires parked-edit cancellation after %s loss and return", async (kind) => {
+  editor.visible = false;
+  await mount();
+  await press("Cancel editing");
+  const confirm = f.confirm!;
+  if (kind === "access") f.allowed = false;
+  if (kind === "epoch") f.epoch = false;
+  if (kind === "active") f.activeId = "other";
+  if (kind === "working") editor.working = true;
+  if (kind === "unready") editor.ready = false;
+  await render(kind === "blocked" ? { blocked: true } : {});
+  f.allowed = true; f.epoch = true; f.activeId = "m";
+  editor.working = false; editor.ready = true;
+  await render();
+  await act(async () => confirm());
+  expect(editor.discard).not.toHaveBeenCalled();
+});
+it("keeps failed parked-edit cancellation visible and draft recoverable", async () => {
+  editor.visible = false;
+  editor.editError = new Error("Queue changed elsewhere");
+  await mount();
+  expect(container.textContent).toContain("Queue changed elsewhere");
+  expect(container.textContent).toContain("Editing queued message");
+  expect(editor.setValue).not.toHaveBeenCalled();
+});

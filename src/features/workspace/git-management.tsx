@@ -1,3 +1,5 @@
+import { useLocale } from "@/i18n";
+import { matchesSearch } from "@/ui/search-matching";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
@@ -31,6 +33,7 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
 }) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
+  const locale = useLocale();
   const labels = useGitManagementLabels();
   const machine = useActiveMachine();
   const connection = useConnectionScope();
@@ -84,7 +87,7 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
     ...(branches.data?.remotes ?? []).map((entry) => ({ kind: "branch" as const, name: entry.name, remote: entry.remote })),
   ];
   const rows = (tab === "branches" ? branchRows : tab === "tags" ? tags.data ?? [] : tab === "remotes" ? remotes.data ?? [] : [])
-    .filter((row) => `${row.remote ?? ""}/${row.name}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+    .filter((row) => matchesSearch(`${row.remote ?? ""}/${row.name}`, search, locale));
   const open = (action: GitManagementAction, row?: GitManagementRow) => {
     if (unavailable || editor || !snapshot.data || !current()) return;
     const value = managementDraft(action, row);
@@ -162,7 +165,7 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
         <IconButton label={copy("Geri", "Back")} disabled={busy} onPress={close}><ArrowLeft size={20} color={colors.muted} /></IconButton>
         <Body mono>{openingScope.root}</Body><Body>{machineName} · {index.data?.branch ?? "HEAD"}</Body>
         {!supported && <FeatureUnavailable message={copy("Gelişmiş Git işlemleri için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer for advanced Git actions.")} />}
-        <SegmentedControl label={copy("Git yönetimi", "Git management")} value={tab} onChange={setTab} options={[
+        <SegmentedControl hideLabel label={copy("Git yönetimi", "Git management")} value={tab} onChange={setTab} options={[
           { value: "branches", label: copy("Dallar", "Branches") }, { value: "tags", label: copy("Etiketler", "Tags") }, { value: "remotes", label: copy("Uzak depolar", "Remotes") },
           { value: "operations", label: copy("Geçmiş işlemleri", "History actions") }, { value: "pr", label: "PR" },
         ]} />

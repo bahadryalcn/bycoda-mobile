@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import { assistantProfileDefaults } from "../../../../host/assistant/profile-defaults";
 import {
   AssistantDispatchError,
   AssistantMobileClient,
@@ -7,6 +8,93 @@ import {
 
 // Mobile owner writes: Room messages, job control and owner questions.
 const hex = "a".repeat(64);
+it("reads only sanitized Telegram targets on the captured owner connection without retries", async () => {
+  const target = {
+    accountId: "a1",
+    accountLabel: "Work",
+    conversationId: "c1",
+    conversationLabel: "Alerts",
+  };
+  const f = mockPort(() => ({ notificationTargets: [target] }));
+  expect(await f.client.notificationTargets()).toEqual([target]);
+  expect(f.assistantCalls()).toEqual([{ op: "notifications.targets" }]);
+  expect(f.request.mock.calls.every(([, , options]) => options.retry === false)).toBe(true);
+  await expect(mockPort(() => ({})).client.notificationTargets()).rejects.toMatchObject({
+    code: "response",
+  });
+  await expect(
+    mockPort(() => ({
+      notificationTargets: [{ ...target, token: "private" }],
+    })).client.notificationTargets(),
+  ).rejects.toMatchObject({ code: "response" });
+  const unsupported = mockPort(() => ({}), []);
+  await expect(unsupported.client.notificationTargets()).rejects.toMatchObject({
+    code: "unsupported",
+  });
+  expect(unsupported.assistantCalls()).toEqual([]);
+});
+it("rejects late Telegram targets after source change rather than retargeting another Host", async () => {
+  const f = mockPort(() => {
+    f.setCurrent(false);
+    return { notificationTargets: [] };
+  });
+  await expect(f.client.notificationTargets()).rejects.toMatchObject({ code: "source" });
+  expect(f.assistantCalls()).toHaveLength(1);
+});
+it("saves all new profile policies through the existing CAS operation and preserves zero and null", async () => {
+  const patch = {
+    keepAwakeWhileAway: false,
+    urgentNotificationRepeats: 0,
+    urgentNotificationIntervalMinutes: 1440,
+    notificationTelegram: null,
+  };
+  const f = mockPort(() => ({ profile: { ...assistantProfileDefaults, ...patch, version: 8 } }));
+  expect(await f.client.updateProfile(7, patch)).toMatchObject(patch);
+  expect(f.assistantCalls()).toEqual([{ op: "profile.update", expectedVersion: 7, patch }]);
+  for (const invalid of [
+    { urgentNotificationRepeats: 11 },
+    { urgentNotificationRepeats: -1 },
+    { urgentNotificationIntervalMinutes: 0 },
+    { urgentNotificationIntervalMinutes: 1441 },
+  ]) {
+    await expect(f.client.updateProfile(8, invalid)).rejects.toThrow();
+  }
+  expect(f.assistantCalls()).toHaveLength(1);
+});
+it("pauses Room once through owner write and refuses missing acknowledgement", async () => {
+  const f = mockPort(() => ({ ok: true }));
+  await f.client.pauseAll();
+  expect(f.assistantCalls()).toEqual([{ op: "pauseAll" }]);
+  const unconfirmed = mockPort(() => ({}));
+  await expect(unconfirmed.client.pauseAll()).rejects.toMatchObject({ code: "response" });
+  expect(unconfirmed.assistantCalls()).toHaveLength(1);
+});
+it("keeps permission preferences separate from native grants and preserves conflict version", async () => {
+  const f = mockPort(() => ({}));
+  await expect(
+    f.client.updateProfile(7, {
+      permissionLevel: "projects",
+      permissionProjectIds: ["p1"],
+      criticalExclusions: ["computerUse", "spend"],
+    }),
+  ).rejects.toMatchObject({ code: "response" });
+  expect(f.assistantCalls()).toEqual([
+    {
+      op: "profile.update",
+      expectedVersion: 7,
+      patch: {
+        permissionLevel: "projects",
+        permissionProjectIds: ["p1"],
+        criticalExclusions: ["computerUse", "spend"],
+      },
+    },
+  ]);
+  expect(
+    f.request.mock.calls.every(
+      ([method]) => method === "environment.describe" || method === "assistant.request",
+    ),
+  ).toBe(true);
+});
 const question = (overrides: Record<string, unknown> = {}) => ({
   id: "q1",
   version: 3,
@@ -147,9 +235,7 @@ it("controls jobs with the expected version and only the three mobile actions", 
 });
 it("requests the snapshot without optional flags", async () => {
   const f = mockPort(() => ({}));
-  await f.client
-    .read({ op: "snapshot", limit: 100 })
-    .catch(() => {});
+  await f.client.read({ op: "snapshot", limit: 100 }).catch(() => {});
   expect(f.assistantCalls()[0]).toEqual({ op: "snapshot", limit: 100 });
 });
 

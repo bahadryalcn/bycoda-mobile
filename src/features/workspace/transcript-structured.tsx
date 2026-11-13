@@ -1,6 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
-import { Badge, Body, CodePanel, CodeText, Row } from "@/ui/primitives";
+import { Badge, Body, Row } from "@/ui/primitives";
+import { MessageCode } from "@/ui/message-code";
 import { MessageText } from "@/ui/message-text";
 import type { MessageContext } from "@/ui/media-policy";
 import { useCopy } from "@/ui/copy";
@@ -26,6 +27,7 @@ export function TranscriptStructured({
   const done = list?.items.filter((item) => item.status === "completed").length ?? 0;
   if (
     !list &&
+    !block.questionAnswers?.length &&
     !block.tool?.preview &&
     !block.plan &&
     !block.agentRun &&
@@ -37,6 +39,12 @@ export function TranscriptStructured({
     return null;
   return (
     <View style={{ gap: space.sm }}>
+      {block.questionAnswers?.map(({ prompt, answers }, index) => (
+        <View key={index} style={{ minWidth: 0, gap: space.xs }}>
+          <Body muted style={uiStyles.caption}>{prompt}</Body>
+          <MessageText text={answers.join("\n")} context={context} compactMedia />
+        </View>
+      ))}
       {list ? (
         <>
           <Body muted style={uiStyles.caption}>
@@ -194,9 +202,6 @@ export function TranscriptStructured({
       {block.shell ? (
         <>
           <Row>
-            <Body mono style={uiStyles.grow}>
-              {block.shell.command}
-            </Body>
             <Badge
               label={
                 block.shell.running
@@ -208,9 +213,18 @@ export function TranscriptStructured({
               tone={block.shell.timedOut || block.shell.exitCode ? "danger" : "default"}
             />
           </Row>
-          <CodePanel>
-            <CodeText>{block.shell.output}</CodeText>
-          </CodePanel>
+          <MessageCode code={block.shell.command} language="shell" compact
+            readerTitle={copy("Komut", "Command")} copyLabel={copy("Komutu kopyala", "Copy command")}
+            allowPreview={false} context={context} />
+          <MessageCode
+            code={block.shell.output}
+            output
+            compact
+            complete={!block.shell.running}
+            error={!!block.shell.timedOut || (block.shell.exitCode !== undefined && block.shell.exitCode !== 0)}
+            allowPreview={false}
+            context={context}
+          />
           {block.shell.truncated ? (
             <Body muted>{copy("Çıktı kısaltıldı.", "Output was truncated.")}</Body>
           ) : null}

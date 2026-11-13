@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { DevServerDetail } from "./dev-server-detail";
 const state = vi.hoisted(() => ({ id: "machine", endpoint: "https://synthetic.invalid", environmentId: "host", lanKey: "synthetic", requests: [] as { method: string; params: unknown }[],
-  detailError: null as Error | null, logsError: null as Error | null, logsAvailable: false, fetching: false, returnedId: "web", reviewCapability: true, submit: undefined as undefined | (() => void), uncertain: false, force: false, refetch: vi.fn(async () => ({ isError: false })) }));
+  detailError: null as Error | null, logsError: null as Error | null, logsAvailable: false, logOutput: "Synthetic output", fetching: false, returnedId: "web", reviewCapability: true, submit: undefined as undefined | (() => void), uncertain: false, force: false, refetch: vi.fn(async () => ({ isError: false })) }));
 const server = { id: "web", projectId: "project", managed: true, association: "managed" as const, name: "Web", state: "running" as const,
   endpoints: [{ address: "127.0.0.1", port: 3000, url: "http://127.0.0.1:3000" }], logsAvailable: false,
   process: { pid: 101, startedAt: "birth", name: "node" } };
@@ -15,7 +15,7 @@ vi.mock("@/state/machines", () => ({
 vi.mock("@/ui/layout", () => ({ ScreenChromeProvider: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("./browser-screen", () => ({ BrowserScreen: ({ initialUrl }: any) => createElement("div", { "data-browser-url": initialUrl }) }));
 vi.mock("@/state/queries", () => ({
-  useHostQuery: (_key: unknown, method: string) => method === "devServers.logs" ? { data: { available: state.logsAvailable, output: "Synthetic output" }, error: state.logsError, isSuccess: !state.logsError, refetch: state.refetch } : ({ data: { server: { ...server, id: state.returnedId, logsAvailable: true }, descendants: [{ pid: 102, startedAt: "child", name: "worker" }], affectedPorts: [3000], expectedImpact: "b".repeat(64) }, error: state.detailError, isFetching: state.fetching, isSuccess: !state.detailError, refetch: state.refetch }),
+  useHostQuery: (_key: unknown, method: string) => method === "devServers.logs" ? { data: { available: state.logsAvailable, output: state.logOutput }, error: state.logsError, isSuccess: !state.logsError, refetch: state.refetch } : ({ data: { server: { ...server, id: state.returnedId, logsAvailable: true }, descendants: [{ pid: 102, startedAt: "child", name: "worker" }], affectedPorts: [3000], expectedImpact: "b".repeat(64) }, error: state.detailError, isFetching: state.fetching, isSuccess: !state.detailError, refetch: state.refetch }),
   useHostMutation: (method: string) => ({ isPending: false, reset: () => {}, data: method === "devServers.stop" && state.force ? { requiresForce: true } : undefined,
     mutateAsync: async (params: unknown) => { state.requests.push({ method, params }); if (state.uncertain) throw { uncertain: true }; return { requiresForce: true }; } }),
 }));
@@ -42,7 +42,7 @@ async function click(label: string) {
   const button = [...container.querySelectorAll("button")].find((item) => item.textContent === label)!;
   await act(async () => button.click());
 }
-afterEach(async () => { await act(async () => root?.unmount()); root = undefined; state.requests = []; state.id = "machine"; state.endpoint = "https://synthetic.invalid"; state.environmentId = "host"; state.lanKey = "synthetic"; state.uncertain = false; state.force = false; state.detailError = null; state.logsError = null; state.logsAvailable = false; state.fetching = false; state.returnedId = "web"; state.reviewCapability = true; state.refetch.mockReset().mockResolvedValue({ isError: false }); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root?.unmount()); root = undefined; state.requests = []; state.id = "machine"; state.endpoint = "https://synthetic.invalid"; state.environmentId = "host"; state.lanKey = "synthetic"; state.uncertain = false; state.force = false; state.detailError = null; state.logsError = null; state.logsAvailable = false; state.logOutput = "Synthetic output"; state.fetching = false; state.returnedId = "web"; state.reviewCapability = true; state.refetch.mockReset().mockResolvedValue({ isError: false }); vi.unstubAllGlobals(); });
 it("shows exact process/port impact before force and sends the frozen review token only on confirmation", async () => {
   state.force = true; await render(); await click("Force stop");
   expect(state.requests).toEqual([]);
@@ -94,4 +94,14 @@ it("keeps private preview available without process-impact mutation capability",
 it("blocks review submission when details have lost read authority", async () => {
   await render(); await click("Stop"); state.detailError = new Error("Synthetic detail read failure"); await render(); await act(() => state.submit!());
   expect(state.requests).toEqual([]); expect(container.textContent).toContain("Synthetic detail read failure");
+});
+
+it("discloses bounded log output and does not split an emoji at the retained boundary", async () => {
+  state.logsAvailable = true;
+  // Put a multi-code-unit symbol at the exact old UTF-16 tail boundary.
+  state.logOutput = "Earlier build output\n" + "👩🏽‍💻" + "Compiled Android bundle successfully\n".repeat(1000).slice(0, 31_999);
+  await render(); await click("Logs");
+  expect(container.textContent?.includes("Only the most recent output is shown.")).toBe(true);
+  expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(container.textContent ?? "")).toBe(false);
+  expect(state.requests).toEqual([]);
 });

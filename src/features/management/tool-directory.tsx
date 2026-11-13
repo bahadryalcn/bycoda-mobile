@@ -1,3 +1,5 @@
+import { useLocale } from "@/i18n";
+import { matchesSearch } from "@/ui/search-matching";
 import { router, type Href } from "expo-router";
 import { useState } from "react";
 import { ProjectPicker } from "../workspace/project-picker";
@@ -66,6 +68,8 @@ const tools: readonly Tool[] = [
   { id: "access", label: ["Bilgisayar erişimi", "Host access"], icon: KeyRound },
 ];
 
+const hostCapabilities = { servers: "dev.servers", devices: "device.host", browser: "browser.shared", terminals: "terminals.v1", logs: "runtime.logs", diagnostics: "resources.diagnostics", usage: "usage.sessions.read" } as const;
+
 /** Task groups also supply search vocabulary; an empty group never leaves a heading. */
 const groups: readonly { title: CopyPair; ids: readonly string[] }[] = [
   { title: ["Proje", "Project"], ids: ["sessions", "files", "git", "notes"] },
@@ -90,19 +94,19 @@ export function ToolDirectory({
 }) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
+  const locale = useLocale();
   const machine = useActiveMachine();
   const connection = useConnectionScope();
   const [pending, setPendingTool] = useState<{ tool: Tool; connection: ConnectionScope } | null>(null);
   const pendingTool = pending?.connection === connection && connection.isCurrent() ? pending.tool : null;
-  const normalized = query.trim().toLocaleLowerCase();
   const visible = tools.filter((tool) => {
     const group = groups.find((group) => group.ids.includes(tool.id));
-    return [copy(...tool.label), group ? copy(...group.title) : ""]
-      .join(" ").toLocaleLowerCase().includes(normalized);
+    return matchesSearch([copy(...tool.label), group ? copy(...group.title) : ""].join(" "), query, locale);
   });
   const open = (tool: Tool, targetProjectId = projectId) => {
     if (!machine || !connection.isCurrent() || useMachines.getState().activeId !== machine.id) return;
-    if ((tool.hostTool || (tool.projectView && tool.id !== "sessions")) && !targetProjectId) {
+    const unsupported = tool.hostTool && machine.capabilities && !machine.capabilities.includes(hostCapabilities[tool.hostTool]);
+    if (!unsupported && (tool.hostTool || (tool.projectView && tool.id !== "sessions")) && !targetProjectId) {
       setPendingTool({ tool, connection });
       return;
     }
@@ -120,8 +124,8 @@ export function ToolDirectory({
           pathname: "/project/[id]",
           params: { id: targetProjectId, machineId: machine.id, view: tool.projectView },
         });
-      else if (tool.hostTool && targetProjectId)
-        router.push({ pathname: "/tools/[tool]", params: { tool: tool.hostTool, projectId: targetProjectId, machineId: machine.id } } as Href);
+      else if (tool.hostTool && (targetProjectId || unsupported))
+        router.push({ pathname: "/tools/[tool]", params: { tool: tool.hostTool, projectId: targetProjectId ?? "", machineId: machine.id } } as Href);
       else if (tool.managementSection) router.push(`/manage/${tool.managementSection}`);
       else if (tool.id === "assistant") router.push("/assistant" as Href);
       else if (tool.id === "sessions") router.push("/(tabs)/chats" as Href);
@@ -151,10 +155,14 @@ export function ToolDirectory({
           <NavigationGroup>
             {group.tools.map((tool) => {
               const Icon = tool.icon;
+              const capability = tool.hostTool ? hostCapabilities[tool.hostTool] : undefined;
+              const unsupported = capability && machine?.capabilities && !machine.capabilities.includes(capability);
+              const requiresProject = !projectId && (tool.hostTool || (tool.projectView && tool.id !== "sessions"));
               return (
                 <NavigationRow
                   key={tool.id}
                   label={copy(...tool.label)}
+                  detail={[unsupported ? copy("Güncelleme gerekiyor", "Update needed") : null, requiresProject ? copy("Proje gerekli", "Project required") : null].filter(Boolean).join(" · ") || undefined}
                   icon={
                     <Icon size={20} strokeWidth={1.8} color={colors.muted} />
                   }

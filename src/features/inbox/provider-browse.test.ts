@@ -6,7 +6,7 @@ import type { RemoteInboxItem } from "../../../../src/features/inbox/model/remot
 import { createInboxBrowseMemory } from "./inbox-browse-memory";
 import { RemoteHostError } from "@/remote/host-error";
 const fixture = vi.hoisted(() => ({
-  memory:null as ReturnType<typeof createInboxBrowseMemory>|null,
+  memory:null as ReturnType<typeof createInboxBrowseMemory>|null, locale: "en",
   active: "fixture-machine", project: "fixture-project", readError: null as Error | null,
   reads: [] as boolean[], presses: new Map<string,()=>void>(), searchChange: null as null | ((value:string)=>void),
   available: true, success: true, fetching: false, partial: false, empty: false,
@@ -20,7 +20,8 @@ vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: ()
 vi.mock("./inbox-browse-memory-provider",()=>({useInboxBrowseMemory:()=>fixture.memory}));
 vi.mock("expo-router", () => ({ router: { push: fixture.route } }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/i18n", () => ({ useLocale: () => fixture.locale }));
+vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, params?: Record<string, string | number>) => en.replace(/\{(\w+)\}/g, (key, name: string) => String(params?.[name] ?? key)) }));
 vi.mock("../management/shared/record-bits", () => ({ useRelativeTime: () => () => "" }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ capabilities: [] }), useMachines:{getState:()=>({activeId:fixture.active,selectedProjectId:fixture.project})} }));
 vi.mock("../management/common", () => ({ Scope: () => null }));
@@ -86,7 +87,7 @@ async function input(label: string, value: string) {
   await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(field, value); field.dispatchEvent(new Event("input", { bubbles: true })); });
 }
 beforeEach(() => {
-  fixture.memory=null;fixture.error = null; fixture.readError=null;fixture.active="fixture-machine";fixture.project="fixture-project";fixture.reads=[];fixture.presses.clear();fixture.searchChange=null;
+  fixture.memory=null;fixture.locale="en";fixture.error = null; fixture.readError=null;fixture.active="fixture-machine";fixture.project="fixture-project";fixture.reads=[];fixture.presses.clear();fixture.searchChange=null;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); vi.useFakeTimers();
   fixture.available = true; fixture.success = true; fixture.fetching = false; fixture.partial = false; fixture.empty = false;
   fixture.list = Array.from({ length: 85 }, (_, i) => ({ provider: "github", kind: "pr", number: i + 1, repo: "synthetic/repo", title: `Item ${i + 1}`,
@@ -101,6 +102,12 @@ it("passes bounded batches to the virtualized owner and commits search only afte
   await input("Search", " parser "); expect(fixture.request.search).toBe("");
   await act(async () => vi.advanceTimersByTime(350));
   expect(fixture.request.search).toBe("parser"); expect(container.querySelector("main")!.dataset.rowCount).toBe("40");
+});
+it.each([0, 1, 1284])("labels the %s returned records with an active-locale count", async (count) => {
+  fixture.locale = "tr";
+  fixture.list = Array.from({ length: count }, (_, index) => ({ ...fixture.list[0], number: index + 1, title: `Item ${index + 1}` }));
+  await render();
+  expect(container.querySelector("[data-applied-filters]")?.textContent).toContain(`Items: ${new Intl.NumberFormat("tr").format(count)}`);
 });
 it("clears an empty filter result without changing filters before Apply", async () => {
   fixture.empty = true; await render(); expect(fixture.request.assignedToMe).toBe(true);

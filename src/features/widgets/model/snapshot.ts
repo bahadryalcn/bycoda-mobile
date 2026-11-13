@@ -31,6 +31,7 @@ export interface WidgetLabels {
   running: string;
   needsInput: string;
   failed: string;
+  done?: string;
   empty: string;
   locked: string;
   setup: string;
@@ -118,7 +119,12 @@ export function widgetStatus(session: WidgetSessionInput): WidgetSessionStatus {
   return "done";
 }
 
-const rank: Record<WidgetSessionStatus, number> = { needs_input: 0, failed: 1, running: 2, done: 3 };
+const rank: Record<WidgetSessionStatus, number> = {
+  needs_input: 0,
+  failed: 1,
+  running: 2,
+  done: 3,
+};
 
 function emptySnapshot(input: BuildSnapshotInput, state: WidgetState): WidgetSnapshot {
   return {

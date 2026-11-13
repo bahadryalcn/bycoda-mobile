@@ -12,6 +12,8 @@ export const useFeedbackDraft = create<{
   attachTouched: boolean;
   patch(change: Partial<FeedbackDraft>): void;
   clear(): void;
+  /** A delivery may clear only the exact draft it submitted. */
+  clearIfCurrent(submitted: FeedbackDraft): boolean;
 }>((set) => ({
   draft: EMPTY_FEEDBACK_DRAFT,
   attachTouched: false,
@@ -21,4 +23,13 @@ export const useFeedbackDraft = create<{
       attachTouched: state.attachTouched || change.attachLogs !== undefined,
     })),
   clear: () => set({ draft: EMPTY_FEEDBACK_DRAFT, attachTouched: false }),
+  clearIfCurrent: (submitted) => {
+    let cleared = false;
+    set((state) => {
+      if (state.draft !== submitted) return state;
+      cleared = true;
+      return { draft: EMPTY_FEEDBACK_DRAFT, attachTouched: false };
+    });
+    return cleared;
+  },
 }));

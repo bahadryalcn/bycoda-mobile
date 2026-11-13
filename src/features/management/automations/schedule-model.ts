@@ -47,3 +47,7 @@ export function scheduleSentence(
     default: return item.scheduleKind;
   }
 }
+/** Trigger-specific validation never makes hidden scheduled fields block other triggers. */
+export function automationTriggerValid(kind: "scheduled" | "continuous" | "event", gap: string, scheduledValid: boolean): boolean {
+  return kind === "continuous" ? integerInRange(gap, 1, 10080) : kind === "event" || scheduledValid;
+}

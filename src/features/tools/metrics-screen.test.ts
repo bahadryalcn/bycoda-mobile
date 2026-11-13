@@ -2,10 +2,16 @@
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 const fixture = vi.hoisted(() => ({
   supported: true, fetching: false, hasData: true, error: null as Error | null,
   samples: [] as unknown[], params: {} as Record<string, unknown>, interval: undefined as number | undefined,
   enabled: undefined as boolean | undefined, refetch: vi.fn(), nativeOptions: [] as Record<string, unknown>[],
+}));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@tanstack/react-query")>(),
+  useQueryClient: () => ({ refetchQueries: fixture.refetch }),
+  useIsFetching: () => 0,
 }));
 vi.mock("./usage-charts", () => ({ UsageKpis: () => null, ProviderShare: () => null }));
 vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
@@ -18,6 +24,8 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/tokens", () => ({ space: {}, fontSize: {}, radii: {} }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/user-round", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/briefcase", () => ({ default: () => null }));
 vi.mock("panelui-native/components/meter", () => ({ Meter: () => null }));
 vi.mock("../management/shared/format", () => ({ stamp: () => "Sample time" }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));

@@ -73,11 +73,25 @@ vi.mock("@/ui/private-access", () => ({
   PrivateContentAccessProvider: ({ children }: PropsWithChildren) => children,
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: { muted: "muted" }, semanticColors: {}, uiStyles: { title: {}, caption: {} } }) }));
+vi.mock("@/ui/theme", () => ({
+  useMobileTheme: () => ({
+    mode: "dark",
+    colors: { muted: "muted" },
+    semanticColors: {},
+    uiStyles: { title: {}, caption: {} },
+  }),
+}));
 vi.mock("@/ui/styles", () => ({ uiStyles: { title: {}, caption: {} } }));
 vi.mock("@/ui/tokens", () => ({ colors: { muted: "muted" } }));
 vi.mock("@/ui/provider-identity", () => ({ ProviderIcon: () => null }));
-vi.mock("./shared", () => ({ relativeTime: () => "Now" }));
+// Status precedence is covered against the real helper in shared-relative-time.test.ts.
+vi.mock("./shared", () => ({
+  relativeTime: () => "Now",
+  sessionStatus: (value: { status: string; needsInput?: boolean }) => ({
+    label: value.needsInput ? "Needs reply" : value.status === "running" ? "Running" : "Ready",
+    color: "muted",
+  }),
+}));
 vi.mock("../management/shared/format", () => ({
   stamp: (value?: number) => (value === undefined ? "—" : `date-${value}`),
 }));
@@ -106,7 +120,8 @@ vi.mock("@/ui/primitives", () => {
     Row: wrapper,
     Disclosure: wrapper,
     Button: button,
-    Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    Badge: ({ label, tone }: { label: string; tone?: string }) =>
+      createElement("span", { "data-tone": tone }, label),
     Sheet: ({
       children,
       title,
@@ -117,7 +132,8 @@ vi.mock("@/ui/primitives", () => {
     },
     StatusRow: ({ children, label }: PropsWithChildren<{ label: string }>) =>
       createElement("section", null, label, children),
-    Notice: ({ message }: { message: string }) => createElement("p", null, message), StateView: ({ title }: { title: string }) => createElement("p", null, title),
+    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    StateView: ({ title }: { title: string }) => createElement("p", null, title),
     ErrorText: ({ error }: { error?: Error }) =>
       error ? createElement("p", null, error.message) : null,
     FormActions: ({
@@ -195,6 +211,19 @@ afterEach(() => {
   act(() => root.unmount());
   node.remove();
   vi.unstubAllGlobals();
+});
+
+it("gives a current reply request warning meaning even while the session is running", async () => {
+  session = { ...session, status: "running", needsInput: true };
+  await render();
+  await press("details");
+  const badge = [...node.querySelectorAll("[data-tone]")].find(
+    (entry) => entry.textContent === "Needs reply",
+  );
+  expect(badge).toBeDefined();
+  expect(badge?.getAttribute("data-tone")).toBe("warning");
+  expect(f.read).not.toHaveBeenCalled();
+  expect(f.update).not.toHaveBeenCalled();
 });
 it("opens full cached details without a Host read and keeps them visible during live revision changes", async () => {
   await press("details");

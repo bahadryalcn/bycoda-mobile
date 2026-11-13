@@ -1,10 +1,11 @@
+import { useInboxLocalScope } from "./inbox-local-scope";
 import { useEffect, useRef, useState } from "react";
 import { randomUUID } from "expo-crypto";
 import { useHostClient } from "@/state/queries";
 import { useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
 import { useLocalDraft } from "../workspace/use-local-draft";
-import { isInboxOriginCurrent } from "./provider-model";
+
 import { InboxJobError, runInboxJob } from "./provider-jobs";
 import { reviewedPrReceipt } from "./provider-review-draft";
 import { readJiraWriteOutcome, type JiraWriteOutcome } from "./jira-board-model";
@@ -40,6 +41,7 @@ export function useJiraBoardDelivery(
   /** Called once when a confirmed outcome is committed, where it settles. */
   onSettled?: (outcome: JiraWriteOutcome) => void,
 ) {
+  const inboxScope = useInboxLocalScope();
   const client = useHostClient(),
     draft = useLocalDraft(
       `bycoda.mobile.jira-pending.v1:${JSON.stringify([origin.machineId, origin.projectId, boardId])}`,
@@ -63,7 +65,7 @@ export function useJiraBoardDelivery(
   const current = () =>
     !!client &&
     client.machine.id === origin.machineId &&
-    isInboxOriginCurrent(origin, useMachines.getState()) &&
+    inboxScope.matches(origin) &&
     isReviewedMachine(opening.current, useMachines.getState());
   const settle = async (requestId: string, outcome?: JiraWriteOutcome) => {
     if (!mounted.current) return;

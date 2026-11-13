@@ -59,6 +59,32 @@ clearance. Keep growing text, variable errors and expanded content in the budget
 
 ## Interaction and state
 
+Agent configuration uses an explicit draft and Save action. Picking a provider,
+account, model, effort or permission does not submit a command. Closing an editor
+does not save it. Preserve settings drafts across unmount, retain failed writes,
+and recheck captured session authority before applying recovered values. A save
+acknowledges only its submitted snapshot. An uncertain result requires receipt
+reconciliation before another write.
+
+New-session project selection prepares a draft; a separate Start action creates
+the session after its model, account and permission summary is visible. Recent
+projects must also offer access to the full authorized project list.
+
+Management project filters belong to their screen. Creating a task or epic from
+an all-projects list chooses the project in the editor without changing another
+screen's scope. Tool directories explain known support and project requirements
+before asking for a project; destination screens retain their access checks.
+
+Terminal command drafts belong to their captured computer, project and terminal.
+Navigation does not submit or silently discard them. Keep compact command entry
+reachable beside the output and use expansion for longer commands. Restored
+drafts and uncertain writes never replay automatically.
+
+Bottom navigation contains destinations, with creation actions in the page
+header. Large text uses a named overflow destination sheet rather than a second
+row of tabs. Referenced messages use exact supported identities; if loading or
+positioning fails, offer an explicit full-conversation fallback.
+
 Every applicable surface handles initial load, empty content, cached refresh,
 offline/reconnect, denied access, unsupported capability, error/retry, pending
 write and completion. Keep the previous useful content on ordinary refresh

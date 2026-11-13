@@ -12,7 +12,7 @@ const state = vi.hoisted(() => ({
   remotes: [{ kind: "remote", name: "origin", url: "https://user:synthetic@example.invalid/repo?token=synthetic" }],
   activeId: "machine", confirmation: undefined as undefined | (() => void), text: "", error: null as Error | null,
   form: undefined as undefined | { value: GitManagementDraft; onChange: (draft: GitManagementDraft) => void; onSubmit: () => void },
-  branch: "feature", head: "a".repeat(40), write: vi.fn(async (_params: unknown) => undefined),
+  branches: ["feature"], branch: "feature", head: "a".repeat(40), write: vi.fn(async (_params: unknown) => undefined),
   refetch: vi.fn(async () => ({ data: { branch: "feature", head: "a".repeat(40) } })),
   snapshotRefetch: vi.fn(async () => ({ data: { token: "e".repeat(64), refs: {} } })),
 }));
@@ -24,13 +24,14 @@ vi.mock("@/ui/private-access", () => ({ usePrivateContentAccess: () => ({ allowe
 vi.mock("@/ui/action-review-sheet", () => ({ ActionReviewSheet: ({ children, onConfirm, onClose, tone }: PropsWithChildren<{ onConfirm: () => void; onClose: () => void; tone?: string }>) => {
   state.tone = tone; state.confirmation = onConfirm; state.dismiss = onClose; return createElement("aside", null, children);
 } }));
+vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/tokens", () => ({ space: { sm: 8 } }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: (_title: string, text: string, _label: string, callback: () => void) => { state.text = text; state.confirmation = callback; } }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "machine", name: "Reviewed PC", capabilities: ["workspace.run", "git.actions", "git.management.snapshot.v1"] }), useMachines: { getState: () => ({ activeId: state.activeId }) } }));
 vi.mock("./git-queries", () => ({
   useGitIndex: () => ({ isSuccess: true, data: { branch: state.branch, head: state.head }, refetch: state.refetch }),
-  useGitBranches: () => ({ isSuccess: true, data: { current: "feature", branches: ["feature"], remotes: [] }, refetch: vi.fn() }),
+  useGitBranches: () => ({ isSuccess: true, data: { current: "feature", branches: state.branches, remotes: [] }, refetch: vi.fn() }),
 }));
 vi.mock("@/state/queries", () => ({
   useHostQuery: (key: string[]) => ({ isSuccess: true, isEnabled: state.enabled, fetchStatus: state.paused ? "paused" : "idle",
@@ -50,7 +51,7 @@ vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
   return { Stack: wrapper, Body: wrapper, Button: button, IconButton: button, Badge: wrapper, NavigationRow: button, QueryState: () => null, MutationState: () => null, ActionMenu: () => null,
-    ErrorText: ({ error }: { error?: Error }) => createElement("span", null, error?.message), SearchField: () => null,
+    ErrorText: ({ error }: { error?: Error }) => createElement("span", null, error?.message), SearchField: ({ label, value, onChangeText }: { label: string; value: string; onChangeText: (value: string) => void }) => createElement("input", { "aria-label": label, value, onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChangeText(event.target.value) }),
     SegmentedControl: ({ options, onChange }: { options: Array<{ value: string; label: string }>; onChange: (v: string) => void }) => createElement("nav", null, ...options.map(o => createElement("button", { key: o.value, onClick: () => onChange(o.value) }, o.label))),
     Notice: ({ message }: { message: string }) => createElement("div", null, message), StateView: ({ title }: { title: string }) => createElement("div", null, title),
     Sheet: ({ children }: PropsWithChildren) => wrapper({ children }),
@@ -59,7 +60,7 @@ vi.mock("@/ui/primitives", () => {
 });
 const container = document.createElement("div");
 let root: ReturnType<typeof createRoot>;
-afterEach(async () => { await act(async () => root.unmount()); state.allowed = true; state.epoch = true; state.pending = false; state.enabled = true; state.paused = false; state.dismiss = undefined; state.activeId = "machine"; state.branch = "feature"; state.head = "a".repeat(40); state.error = null; state.form = undefined; state.confirmation = undefined; vi.clearAllMocks(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root.unmount()); state.allowed = true; state.epoch = true; state.pending = false; state.enabled = true; state.paused = false; state.dismiss = undefined; state.activeId = "machine"; state.branch = "feature"; state.branches = ["feature"]; state.head = "a".repeat(40); state.error = null; state.form = undefined; state.confirmation = undefined; vi.clearAllMocks(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 async function mount() {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   root = createRoot(container);
@@ -176,4 +177,17 @@ it("shows complete long PR content and sanitized remotes while sending the exact
   expect(container.querySelector("aside")!.textContent).not.toContain("synthetic");
   await act(async () => state.confirmation!());
   expect(state.write.mock.calls[0]![0]).toMatchObject({ command: "git_pr_create", args: { title: "Original title", body, base: "main", head: "feature", repository: "example.invalid/private/repo", expectedSnapshot: "f".repeat(64) } });
+});
+
+it("uses selected app locale for Git management branch filters without mutations", async () => {
+  const lower = String.prototype.toLocaleLowerCase;
+  vi.spyOn(String.prototype, "toLocaleLowerCase").mockImplementation(function (this: string, locale) { return lower.call(this, locale ?? "en"); });
+  state.branches = ["feature", "İSTANBUL", "IĞDIR"];
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); root = createRoot(container);
+  await rerender(); const input = container.querySelector("input")!;
+  for (const [query, expected] of [["istanbul", "İSTANBUL"], ["ığdır", "IĞDIR"]]) {
+    await act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, query); input.dispatchEvent(new Event("input", { bubbles: true })); });
+    expect(container.textContent).toContain(expected);
+  }
+  expect(state.write).not.toHaveBeenCalled(); expect(state.form).toBeUndefined();
 });

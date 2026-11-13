@@ -13,6 +13,7 @@ vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => crea
 vi.mock("expo-router", () => ({ useFocusEffect: () => undefined, router: { push: () => fixture.events.push("route") } }));
 vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => false }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
+vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/tokens", () => ({ space: {}, colors: {} }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
@@ -36,7 +37,7 @@ vi.mock("@/ui/primitives", async () => {
   const { QueryState } = await import("@/ui/query-state");
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: any) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);
-  const Input = ({ label, value, onChangeText }: any) => createElement("input", { "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) });
+  const Input = ({ label, value, onChangeText, ref }: any) => createElement("input", { "aria-label": label, value, ref, onChange: (e: any) => onChangeText(e.target.value) });
   return { QueryState, Body: Group, CodeText: Group, Badge: Group, IconButton: Button, Disclosure: Group, Button, NavigationRow: Button, SearchField: Input, IdentifierField: Input,
     Sheet: ({ children, footer }: any) => createElement("section", null, children, footer),
     ScreenList: ({ header, footer, data, renderItem }: any) => createElement("main", null, createElement("header", null, header),
@@ -64,10 +65,10 @@ beforeEach(() => {
   fixture.branches = ok({ current: "main", branches: ["feature", "main"], remotes: [{ remote: "origin", name: "main" }] });
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
-afterEach(() => { act(() => root.unmount()); container.remove(); });
+afterEach(() => { act(() => root.unmount()); container.remove(); vi.restoreAllMocks(); });
 it("clears a no-match commit filter without changing the loaded request or opening a commit", async () => {
   await history(); await search("Search loaded commits", "missing"); expect(container.textContent).toContain("No commits match your search.");
-  await click("Clear search"); expect(container.textContent).toContain("Reviewed change");
+  await click("Clear search"); expect(document.activeElement).toBe(container.querySelector("input")); expect(container.textContent).toContain("Reviewed change");
   expect(fixture.reads.every((r) => r.kind === "history" && r.limit === 100)).toBe(true); expect(fixture.events).toEqual([]);
 });
 it("gives cached list and commit-file errors precedence over empty success messages", async () => {
@@ -87,6 +88,7 @@ it("uses the same error-before-empty rule for blame while preserving the immutab
 });
 it("restores branch results without touching the new-branch draft or dispatching Git operations", async () => {
   await branches(); await search("Search", "missing"); expect(container.textContent).toContain("No branches match your search."); await click("Clear search");
+  expect(document.activeElement).toBe(container.querySelector('input[aria-label="Search"]'));
   expect(container.textContent).toContain("origin/main"); expect((container.querySelector('input[aria-label="New branch"]') as HTMLInputElement).value).toBe("retained draft");
   expect(fixture.name).not.toHaveBeenCalled(); expect(fixture.choose).not.toHaveBeenCalled(); expect(fixture.create).not.toHaveBeenCalled();
 });
@@ -96,4 +98,17 @@ it("keeps branch pending/error states distinct and closes before repair without 
   fixture.branches = { ...ok({ branches: [], remotes: [] }), error: new RemoteHostError("machine", "auth", "Pairing needs repair") }; await branches(); await click("Manage connections");
   expect(fixture.events).toEqual(["close", "route"]); expect(container.textContent).not.toContain("No branches found.");
   fixture.events = []; fixture.busy = true; await branches(); await click("Manage connections"); expect(fixture.events).toEqual([]);
+});
+
+it("matches Turkish branch and commit names without Git commands", async () => {
+  const lower = String.prototype.toLocaleLowerCase;
+  vi.spyOn(String.prototype, "toLocaleLowerCase").mockImplementation(function (this: string, locale) { return lower.call(this, locale ?? "en"); });
+  fixture.branches = ok({ current: "main", branches: ["main", "İSTANBUL", "IĞDIR"], remotes: [] });
+  await branches(); await search("Search", "istanbul"); expect(container.textContent).toContain("İSTANBUL");
+  await search("Search", "ığdır"); expect(container.textContent).toContain("IĞDIR");
+  await act(() => root.unmount()); root = createRoot(container);
+  fixture.history.history = ok({ commits: [{ ...commit, subject: "İSTANBUL düzenlemesi", author: "IĞDIR ekibi" }] });
+  await history(); await search("Search loaded commits", "istanbul"); expect(container.textContent).toContain("İSTANBUL düzenlemesi");
+  await search("Search loaded commits", "ığdır"); expect(container.textContent).toContain("İSTANBUL düzenlemesi");
+  expect(fixture.choose).not.toHaveBeenCalled(); expect(fixture.create).not.toHaveBeenCalled(); expect(fixture.events).toEqual([]);
 });

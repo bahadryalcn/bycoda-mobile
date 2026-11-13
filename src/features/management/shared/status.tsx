@@ -9,6 +9,7 @@ export function statusLabel(value: string, copy: (tr: string, en: string) => str
     finished: ["Tamamlandı", "Completed"],
     todo: ["Yapılacak", "To do"],
     queued: ["Sırada", "Queued"],
+    waiting: ["Bekliyor", "Waiting"],
     running: ["Çalışıyor", "Running"],
     verifying: ["Doğrulanıyor", "Verifying"],
     review: ["İncelemede", "In review"],

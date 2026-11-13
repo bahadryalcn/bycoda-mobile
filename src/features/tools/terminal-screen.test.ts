@@ -5,6 +5,12 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
 vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
+const disk = vi.hoisted(() => new Map<string, string>());
+vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
+  getItem: async (key: string) => disk.get(key) ?? null,
+  setItem: async (key: string, value: string) => { disk.set(key, value); },
+  removeItem: async (key: string) => { disk.delete(key); },
+} }));
 const fixture = vi.hoisted(() => ({
   machineId: "computer", endpoint: "https://synthetic.invalid", environmentId: "environment", lanKey: "synthetic", projectId: "project", rows: [] as any[],
   writable: true, paused: false, output: "Output\n".repeat(2000), client: {} as any, request: vi.fn(), listRead: vi.fn(), outputRead: vi.fn(),
@@ -63,28 +69,28 @@ vi.mock("@/ui/primitives", async () => {
 });
 import { TerminalScreen } from "./terminal-screen";
 let root: ReturnType<typeof createRoot>, node: HTMLDivElement;
-const render = () => act(() => root.render(createElement(TerminalScreen, { project: { id: fixture.projectId, name: "Project", cwd: "/project" } as any })));
+const render = () => act(async () => root.render(createElement(TerminalScreen, { project: { id: fixture.projectId, name: "Project", cwd: "/project" } as any })));
 const button = (label: string) => [...node.querySelectorAll("button")].find(b => b.textContent === label)!;
-const click = async (label: string) => { expect(button(label)).toBeTruthy(); await act(() => button(label).click()); };
+const click = async (label: string) => { expect(button(label)).toBeTruthy(); await act(async () => button(label).click()); };
 const select = async (id: string) => { const field = node.querySelector('select[aria-label="Terminal"]') as HTMLSelectElement; await act(() => { field.value = id; field.dispatchEvent(new Event("change", { bubbles: true })); }); };
 const input = async (value: string) => { const field = node.querySelector('input[aria-label="Command"]')!; await act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, value); field.dispatchEvent(new Event("input", { bubbles: true })); }); };
 beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); vi.clearAllMocks(); fixture.machineId = "computer"; fixture.endpoint = "https://synthetic.invalid"; fixture.environmentId = "environment"; fixture.lanKey = "synthetic"; fixture.projectId = "project"; fixture.writable = true; fixture.paused = false;
+  disk.clear(); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); vi.clearAllMocks(); fixture.machineId = "computer"; fixture.endpoint = "https://synthetic.invalid"; fixture.environmentId = "environment"; fixture.lanKey = "synthetic"; fixture.projectId = "project"; fixture.writable = true; fixture.paused = false;
   fixture.rows = ["one", "two"].map(id => ({ id, projectId: "project", name: id, cwd: "/project", state: "running" }));
   fixture.request.mockReset().mockResolvedValue({ accepted: true }); fixture.client = { machine: { id: fixture.machineId, endpoint: fixture.endpoint, environmentId: fixture.environmentId, lanKey: fixture.lanKey }, request: fixture.request };
   node = document.createElement("div"); document.body.append(node); root = createRoot(node);
 });
-afterEach(() => { act(() => root.unmount()); node.remove(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root.unmount()); node.remove(); vi.unstubAllGlobals(); });
 it("keeps the command action outside long output, preserves per-terminal drafts on close, and sends only explicitly", async () => {
-  await render(); await select("one"); expect(node.querySelector("pre")!.textContent).toBe(fixture.output); expect(node.querySelector("footer button")!.textContent).toBe("Command");
-  await click("Command"); await input("printf kept"); await click("Close Command"); expect(fixture.blockedLeave).toBe(true);
-  await select("two"); await click("Command"); expect((node.querySelector('input[aria-label="Command"]') as HTMLInputElement).value).toBe(""); await click("Close Command");
-  await select("one"); await click("Command"); expect((node.querySelector('input[aria-label="Command"]') as HTMLInputElement).value).toBe("printf kept"); expect(fixture.request).not.toHaveBeenCalled();
+  await render(); await select("one"); expect(node.querySelector("pre")!.textContent).toBe(fixture.output); expect(node.querySelector("footer button")!.textContent).toBe("Expand");
+  await click("Expand"); await input("printf kept"); await click("Close Command"); expect(fixture.blockedLeave).toBe(true);
+  await select("two"); await click("Expand"); expect((node.querySelector('input[aria-label="Command"]') as HTMLInputElement).value).toBe(""); await click("Close Command");
+  await select("one"); await click("Expand"); expect((node.querySelector('input[aria-label="Command"]') as HTMLInputElement).value).toBe("printf kept"); expect(fixture.request).not.toHaveBeenCalled();
   await click("Send command"); expect(fixture.request).toHaveBeenCalledWith("terminals.write", { projectId: "project", id: "one", data: "printf kept\n" }, { retry: false });
-  expect(node.querySelector("aside")).toBeNull(); await click("Command"); expect((node.querySelector('input[aria-label="Command"]') as HTMLInputElement).value).toBe("");
+  expect(node.querySelector("aside")).not.toBeNull(); expect((node.querySelector('input[aria-label="Command"]') as HTMLInputElement).value).toBe("");
 });
 it.each(["machine", "endpoint", "environment", "key", "project"])("rejects a stale command after a %s change and starts a separate target owner", async kind => {
-  await render(); await select("one"); await click("Command"); await input("printf previous");
+  await render(); await select("one"); await click("Expand"); await input("printf previous");
   const staleSubmit = fixture.submit;
   if (kind === "machine") fixture.machineId = "other";
   if (kind === "endpoint") fixture.endpoint = "https://repaired.invalid";
@@ -96,11 +102,11 @@ it.each(["machine", "endpoint", "environment", "key", "project"])("rejects a sta
   await render(); expect(node.querySelector("aside")).toBeNull(); expect(fixture.blockedLeave).toBe(false);
 });
 it("keeps a draft and editor through replacement of the same target's client", async () => {
-  await render(); await select("one"); await click("Command"); await input("printf retained"); fixture.client = { ...fixture.client }; await render();
+  await render(); await select("one"); await click("Expand"); await input("printf retained"); fixture.client = { ...fixture.client }; await render();
   expect((node.querySelector('input[aria-label="Command"]') as HTMLInputElement).value).toBe("printf retained"); expect(fixture.request).not.toHaveBeenCalled();
 });
 it("recovers a removed terminal's unsent draft as read-only without retargeting another terminal", async () => {
-  await render(); await select("one"); await click("Command"); await input("recover this draft"); await click("Close Command"); fixture.rows = fixture.rows.filter(row => row.id !== "one"); await render();
+  await render(); await select("one"); await click("Expand"); await input("recover this draft"); await click("Close Command"); fixture.rows = fixture.rows.filter(row => row.id !== "one"); await render();
   await select("two"); await click("one"); expect(node.querySelector("aside pre")!.textContent).toBe("recover this draft"); expect(button("Send command").disabled).toBe(true); expect(fixture.request).not.toHaveBeenCalled();
 });
 it("does not submit a stop review when its terminal disappears", async () => {
@@ -109,12 +115,46 @@ it("does not submit a stop review when its terminal disappears", async () => {
 });
 it("retains an uncertain command, owns its feedback once and never retries automatically", async () => {
   fixture.request.mockRejectedValueOnce(Object.assign(new Error("Synthetic uncertain write"), { uncertain: true }));
-  await render(); await select("one"); await click("Command"); await input("printf uncertain"); await click("Send command");
+  await render(); await select("one"); await click("Expand"); await input("printf uncertain"); await click("Send command");
   expect(node.querySelectorAll('[role="alert"]')).toHaveLength(1); expect(button("Send command").disabled).toBe(true);
   expect((node.querySelector('input[aria-label="Command"]') as HTMLInputElement).value).toBe("printf uncertain"); await click("Close Command");
   expect(node.querySelectorAll('[role="alert"]')).toHaveLength(1); await click("Refresh"); await click("I checked the result"); expect(fixture.request).toHaveBeenCalledOnce();
 });
 it("shares toolbar and pull reads while distinguishing a paused list from an empty success", async () => {
-  await render(); await fixture.refresh.onRefresh(); expect(fixture.listRead).toHaveBeenCalledOnce(); expect(fixture.outputRead).toHaveBeenCalledOnce();
+  await render(); await act(async () => fixture.refresh.onRefresh()); expect(fixture.listRead).toHaveBeenCalledOnce(); expect(fixture.outputRead).toHaveBeenCalledOnce();
   fixture.paused = true; await render(); expect(node.textContent).not.toContain("No terminals in this project.");
+});
+
+it("keeps inline input reachable and restores saved command after reopening without executing", async () => {
+  await render(); await select("one");
+  expect(node.querySelector('footer input[aria-label="Command"]')).toBeTruthy();
+  await input("printf persisted");
+  await act(async () => root.unmount()); root = createRoot(node);
+  await render(); await select("one");
+  expect((node.querySelector('footer input') as HTMLInputElement).value).toBe("printf persisted");
+  expect(fixture.request).not.toHaveBeenCalled();
+  await click("Send command");
+  expect(node.querySelector('footer input')).toBeTruthy();
+  expect((node.querySelector('footer input') as HTMLInputElement).value).toBe("");
+  await input("printf next"); await click("Send command");
+  expect(fixture.request).toHaveBeenCalledTimes(2);
+});
+
+it("restores uncertain delivery hold on reopen without replaying its retained command", async () => {
+  fixture.request.mockRejectedValueOnce(Object.assign(new Error("Synthetic uncertain write"), { uncertain: true }));
+  await render(); await select("one"); await input("printf uncertain"); await click("Send command");
+  await act(async () => root.unmount()); root = createRoot(node);
+  await render(); await select("one");
+  expect(button("Send command").disabled).toBe(true);
+  expect((node.querySelector('footer input') as HTMLInputElement).value).toBe("printf uncertain");
+  expect(fixture.request).toHaveBeenCalledOnce();
+});
+it("recovers a retired terminal draft after reopening without copying it into another terminal", async () => {
+  await render(); await select("one"); await input("retired command");
+  await act(async () => root.unmount()); root = createRoot(node);
+  fixture.rows = fixture.rows.filter(row => row.id !== "one");
+  await render(); await select("two");
+  expect((node.querySelector('footer input') as HTMLInputElement).value).toBe("");
+  await click("one"); expect(node.querySelector("aside pre")!.textContent).toBe("retired command");
+  expect(button("Send command").disabled).toBe(true); expect(fixture.request).not.toHaveBeenCalled();
 });

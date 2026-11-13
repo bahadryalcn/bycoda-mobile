@@ -44,6 +44,10 @@ export function AutomationHistory({ automationId, projectId, summary, automation
           renderItem={({ item: run }) => <Stack>
             <Row><Status value={run.status} /><Body muted style={uiStyles.caption}>{stamp(run.createdAt)}</Body></Row>
             <ErrorText error={run.id === summarized ? undefined : run.error} />
+            {run.taskId ? <Button label={copy("Görevi aç", "Open task")} tone="quiet" onPress={() => {
+              if (mounted.current && !retired.current && opening.connection.isCurrent() && current.current?.includes(run))
+                router.push({ pathname: "/manage/[section]", params: { section: "tasks", taskId: run.taskId!, machineId: opening.machineId!, projectId: opening.projectId } });
+            }} /> : null}
             {run.sessionId ? <Button label={copy("Oturumu aç", "Open session")} tone="quiet" onPress={() => {
               if (mounted.current && !retired.current && opening.connection.isCurrent() && current.current?.includes(run))
                 router.push({ pathname: "/session/[id]", params: { id: run.sessionId!, machineId: opening.machineId!, projectId: opening.projectId } });

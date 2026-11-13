@@ -8,12 +8,19 @@ export type SessionReference = { locator: SessionReferenceLocator; turnId?: stri
 
 const webPrefix = "https://link.bycoda.codes/session/v1/";
 const nativePrefix = "bycoda://session/v1/";
-const validId = (value: unknown): value is string => typeof value === "string" &&
-  value.length > 0 && value.length <= 256 && value.trim() === value &&
-  !/[\u0000-\u001f\u007f]/.test(value) && value !== "." && value !== "..";
-const encodeId = (value: string) => encodeURIComponent(value).replace(
-  /[!'()*.~]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
-);
+const validId = (value: unknown): value is string =>
+  typeof value === "string" &&
+  value.length > 0 &&
+  value.length <= 256 &&
+  value.trim() === value &&
+  !/[\u0000-\u001f\u007f]/.test(value) &&
+  value !== "." &&
+  value !== "..";
+const encodeId = (value: string) =>
+  encodeURIComponent(value).replace(
+    /[!'()*.~]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
 
 /** Keep the versioned wire address exact; URL normalization must not change owner identity. */
 export function parseSessionReference(value: string): SessionReference | null {
@@ -31,9 +38,15 @@ export function parseSessionReference(value: string): SessionReference | null {
     if (turnId !== undefined && !validId(turnId)) return null;
     const canonical = `${prefix}${kind}/${parts.map(encodeId).join("/")}${turnId === undefined ? "" : `?turn=${encodeId(turnId)}`}`;
     if (canonical !== value) return null;
-    const locator: SessionReferenceLocator = kind === "host"
-      ? { kind, environmentId: parts[0], sessionId: parts[1] }
-      : { kind: "native", sourceStoreId: parts[0], sourceProfileId: parts[1], sessionId: parts[2] };
+    const locator: SessionReferenceLocator =
+      kind === "host"
+        ? { kind, environmentId: parts[0], sessionId: parts[1] }
+        : {
+            kind: "native",
+            sourceStoreId: parts[0],
+            sourceProfileId: parts[1],
+            sessionId: parts[2],
+          };
     return { locator, ...(turnId === undefined ? {} : { turnId }) };
   } catch {
     return null;
@@ -42,25 +55,44 @@ export function parseSessionReference(value: string): SessionReference | null {
 
 /** Expo calls this for initial and subsequent native intents; widget routes remain unchanged. */
 export function rewriteSessionReferencePath(path: string): string {
-  const link = path.startsWith("/session/v1/")
-    ? `https://link.bycoda.codes${path}` : path;
+  const link = path.startsWith("/session/v1/") ? `https://link.bycoda.codes${path}` : path;
   if (parseSessionReference(link)) return `/session-reference?link=${encodeURIComponent(link)}`;
-  return link.startsWith(webPrefix) || link.startsWith(nativePrefix)
-    ? "/session-reference" : path;
+  return link.startsWith(webPrefix) || link.startsWith(nativePrefix) ? "/session-reference" : path;
 }
 
-export function referenceMachines<T extends { id: string; environmentId: string }>(reference: SessionReference, machines: T[]): T[] {
+export function referenceMachines<T extends { id: string; environmentId: string }>(
+  reference: SessionReference,
+  machines: T[],
+): T[] {
   const locator = reference.locator;
   return locator.kind === "host"
     ? machines.filter((machine) => machine.environmentId === locator.environmentId)
     : machines;
 }
 
-export function resolvedSessionRoute(result: unknown, machineId: string, expectedSessionId: string) {
+export function resolvedSessionRoute(
+  result: unknown,
+  machineId: string,
+  expectedSessionId: string,
+  turnId?: string,
+) {
   const value = result as { projectId?: unknown; session?: { id?: unknown } } | null;
-  if (!validId(machineId) || !value || !validId(value.projectId) || value.session?.id !== expectedSessionId)
+  if (
+    !validId(machineId) ||
+    !value ||
+    !validId(value.projectId) ||
+    value.session?.id !== expectedSessionId
+  )
     throw new Error("This conversation is unavailable or inaccessible.");
-  return { pathname: "/session/[id]" as const, params: { id: expectedSessionId, projectId: value.projectId, machineId } };
+  return {
+    pathname: "/session/[id]" as const,
+    params: {
+      id: expectedSessionId,
+      projectId: value.projectId,
+      machineId,
+      ...(turnId ? { targetTurnId: turnId } : {}),
+    },
+  };
 }
 
 /** Older Hosts may ignore unknown fields; require explicit support before sending the identity guard. */
@@ -73,12 +105,23 @@ export async function resolveSessionReference(
 ) {
   assertCurrent();
   if (!machine.capabilities?.includes("sessions.references.v1"))
-    throw new RemoteHostError(machine.id, "unsupported", "Update Bycoda on your computer to use this feature.");
+    throw new RemoteHostError(
+      machine.id,
+      "unsupported",
+      "Update Bycoda on your computer to use this feature.",
+    );
   if (!referenceMachines(reference, [machine]).length)
     throw new Error("This conversation is unavailable or inaccessible.");
-  const result = await request<unknown>("sessions.get", {
-    sessionId: reference.locator.sessionId, preview: true, summary: true, reference: reference.locator,
-  }, { signal, retry: false });
+  const result = await request<unknown>(
+    "sessions.get",
+    {
+      sessionId: reference.locator.sessionId,
+      preview: true,
+      summary: true,
+      reference: reference.locator,
+    },
+    { signal, retry: false },
+  );
   assertCurrent();
-  return resolvedSessionRoute(result, machine.id, reference.locator.sessionId);
+  return resolvedSessionRoute(result, machine.id, reference.locator.sessionId, reference.turnId);
 }

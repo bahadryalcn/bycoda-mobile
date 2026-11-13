@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Text, View } from "react-native";
+import { Text, View, useWindowDimensions } from "react-native";
 import CornerDownRight from "lucide-react-native/icons/corner-down-right";
 import FolderTree from "lucide-react-native/icons/folder-tree";
 import GitBranch from "lucide-react-native/icons/git-branch";
@@ -50,6 +50,7 @@ export const ProjectRow = memo(function ProjectRow({
   onOpenView: (id: string, view: ProjectRowView) => void;
 }) {
   const { colors, uiStyles } = useMobileTheme();
+  const { fontScale } = useWindowDimensions();
   const copy = useCopy();
   const runningLabel = copy("{p0} çalışıyor", "{p0} running", { p0: running });
   const openingLabel = copy("Açılıyor…", "Opening…");
@@ -76,7 +77,7 @@ export const ProjectRow = memo(function ProjectRow({
       onLongPress={() => onDetails(id)}
       optionsLabel={copy("Proje ayrıntıları", "Project details")}
       style={{
-        minHeight: metrics.rowHeightProject - space.sm,
+        minHeight: Math.max(metrics.touchTarget, metrics.rowHeightProject - space.sm),
         flexDirection: "row",
         alignItems: "center",
         gap: gapIcon,
@@ -86,10 +87,12 @@ export const ProjectRow = memo(function ProjectRow({
     >
       {depth > 0 ? <CornerDownRight size={13} color={colors.tertiary} /> : null}
       <ProjectIcon appearance={appearance} size={depth > 0 ? 18 : 22} box={depth > 0 ? 22 : 28} />
-      <Text numberOfLines={1} style={[uiStyles.label, { flex: 1, minWidth: 0 }]}>{name}</Text>
+      <View style={{ flex: 1, minWidth: 0, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }}>
+      <Text numberOfLines={1} style={[uiStyles.label, { flexGrow: 1, flexShrink: 1, flexBasis: 140 * Math.max(1, fontScale), minWidth: 0 }]}>{name}</Text>
       {opening ? <StatusText label={openingLabel} tone="info" />
         : running ? <StatusText label={runningLabel} tone="live" />
-        : since ? <Text numberOfLines={1} style={[uiStyles.caption, { flexShrink: 0, maxWidth: "40%", textAlign: "right" }]}>{since}</Text> : null}
+        : since ? <Text style={[uiStyles.caption, { flexShrink: 1 }]}>{since}</Text> : null}
+      </View>
     </PressableCard>
   );
   const swipeable = <SwipeActions actions={actions} disabled={disabled}>{row}</SwipeActions>;

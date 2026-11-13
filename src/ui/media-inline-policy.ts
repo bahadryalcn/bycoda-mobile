@@ -1,4 +1,4 @@
-import { MAX_MEDIA_BYTES, mediaMime } from "./media-policy";
+import { MAX_MEDIA_BYTES, resolveMediaMime } from "./media-policy";
 
 /** Images and GIFs up to this size load into the transcript without a tap. */
 export const INLINE_AUTO_BYTES = 4 * 1024 * 1024;
@@ -11,7 +11,7 @@ export type AttachmentKind = "image" | "pdf" | "markdown" | "video" | "file";
 export type AttachmentPlan = "inline" | "download" | "too-large";
 
 export function attachmentKind(name: string, mimeType?: string, image = false): AttachmentKind {
-  const mime = (mimeType && mimeType !== "application/octet-stream" ? mimeType : mediaMime(name)).toLowerCase();
+  const mime = resolveMediaMime(name, mimeType).split(";", 1)[0]!.trim().toLowerCase();
   if (mime.startsWith("image/") && mime !== "image/svg+xml") return "image";
   if (mime === "application/pdf") return "pdf";
   if (mime === "text/markdown") return "markdown";

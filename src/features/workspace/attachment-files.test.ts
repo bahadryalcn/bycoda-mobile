@@ -39,6 +39,13 @@ beforeEach(() => {
     { uri: "content://picker/document", name: "native-attachment.md", mimeType: "text/markdown" },
   ] });
 });
+it("keeps question-held files outside disposable composer staging cleanup", async () => {
+  const files = await pickAttachments("document", "machine:session", "question");
+  expect(files[0].uri).toBe("file:///private/question-drafts/machine%3Asession/file-1");
+  fixture.entries = [];
+  clearAttachmentDraftFiles([]);
+  expect(fixture.deleted).not.toHaveBeenCalledWith(files[0].uri);
+});
 
 it("awaits the granted Android content URI copy before publishing a staged attachment", async () => {
   let finish!: () => void;

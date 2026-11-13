@@ -20,9 +20,12 @@ import {
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import type { HostGoal } from "@/domain/types";
+import { useAgentProviders } from "./shared/agent";
 import { Scope } from "./shared/scope";
+import { useLocalProjectScope } from "./shared/local-project-scope";
+import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite";
 
 import { goalFlowReducer } from "./goals/flow";
 import { GoalEditor } from "./goals/goal-editor";
@@ -61,7 +64,8 @@ export function GoalsScreen() {
     { value: "finished", label: copy("Bitmiş", "Finished") },
   ];
   const machine = useActiveMachine();
-  const projectId = useMachines((state) => state.selectedProjectId);
+  const { projectId, setProjectId } = useLocalProjectScope();
+  const { providers, query: providerQuery } = useAgentProviders(projectId);
   const query = useHostQuery<HostGoal[]>(["goals"], "goals.list", {}, { interval: goalsPollInterval });
   const projects = useProjectList();
   const create = useHostMutation<HostGoal>("goals.create", ["goals"]);
@@ -81,16 +85,17 @@ export function GoalsScreen() {
   const visible = scoped?.filter((goal) => goalFilterMatches(goal.status, filter) && matchesSearch(goal.title + " " + goal.prompt, search, locale));
   const replanGoal =
     flow.kind === "replan" ? query.data?.find((goal) => goal.id === flow.goalId) : undefined;
-  const canCreate = !!projectId && !!machine?.providers?.length && flow.kind === "closed" && !busy;
-  const startNew = () => { create.reset(); if (projectId) dispatch({ type: "new", projectId }); };
+  const projectReady = projects.directoryReady && (!projectId || projects.isProjectVisible(projectId));
+  const canCreate = projectReady && !!providers.length && flow.kind === "closed" && !busy;
+  const startNew = () => { if (!canCreate) return; create.reset(); dispatch({ type: "new", projectId: projectId ?? "" }); };
   return (
-    <ScreenList<HostGoal> title={copy("Hedefler", "Goals")} query={query}
+    <ScreenList<HostGoal> title={copy("Epicler", "Epics")} query={query}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
-      context={<Scope allowAll />}
+      context={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
       actions={
         <IconButton
-          label={copy("Yeni hedef", "New goal")}
+          label={copy("Yeni epic", "New epic")}
           disabled={!canCreate}
           onPress={startNew}
         >
@@ -98,6 +103,8 @@ export function GoalsScreen() {
         </IconButton>
       }
       header={<>
+
+      {!providers.length && <>{providerQuery.isLoading || providerQuery.error ? <QueryState query={providerQuery} loading="inline" /> : <AgentProviderPrerequisite />}</>}
       <FilterSheet
         visible={filterDraft !== null}
         onClose={() => setFilterDraft(null)}
@@ -112,13 +119,13 @@ export function GoalsScreen() {
         />
       </FilterSheet>
       <SearchToolbar
-        search={<SearchField ref={searchInput} label={copy("Başlık veya hedefte ara", "Search goal titles and outcomes")} value={search} onChangeText={setSearch} />}
+        search={<SearchField ref={searchInput} label={copy("Başlık veya epicte ara", "Search epic titles and outcomes")} value={search} onChangeText={setSearch} />}
         actions={<FilterButton count={filter !== "all" ? 1 : 0} onPress={() => setFilterDraft(filter)} />}
       />
       <AppliedFilters filters={[filter !== "all" && `${copy("Durum", "Status")}: ${filterOptions.find((option) => option.value === filter)?.label}`]} />
       {flow.kind === "closed" && <MutationState
         mutation={create}
-        success={copy("Hedef planlaması istendi.", "Goal planning requested.")}
+        success={copy("Epic planlaması istendi.", "Epic planning requested.")}
       />}
       {!visible?.some(goal => goal.id === approve.variables?.goalId) && <MutationState mutation={approve} />}
       {!visible?.some(goal => goal.id === cancel.variables?.goalId) && <MutationState mutation={cancel} />}
@@ -128,7 +135,7 @@ export function GoalsScreen() {
         <Sheet
           visible
           size="form"
-          title={copy("Yeni hedef", "New goal")}
+          title={copy("Yeni epic", "New epic")}
           onClose={() => {
             if (!busy) close();
           }}
@@ -137,13 +144,14 @@ export function GoalsScreen() {
             key={flow.projectId}
             projectId={flow.projectId}
             projects={projects.data ?? []}
+            providers={providers}
             create={create}
             busy={busy}
             onClose={close}
           />
         </Sheet>
       )}
-      {flow.kind === "settings" && <Sheet visible size="form" title={copy("Hedef ayarları", "Goal settings")} onClose={close}>
+      {flow.kind === "settings" && <Sheet visible size="form" title={copy("Epic ayarları", "Epic settings")} onClose={close}>
         <GoalSettingsEditor key={flow.goal.id} initial={flow.goal} onClose={close} />
       </Sheet>}
       {replanGoal && (
@@ -168,7 +176,7 @@ export function GoalsScreen() {
       {flow.kind === "replan" && query.isSuccess && !replanGoal && (
         <Notice
           tone="warning"
-          message={copy("Hedef artık bulunamadı.", "The goal is no longer available.")}
+          message={copy("Epic artık bulunamadı.", "The epic is no longer available.")}
         >
           <Button label={copy("Kapat", "Close")} onPress={close} />
         </Notice>
@@ -176,15 +184,15 @@ export function GoalsScreen() {
       <QueryState
         query={query}
         empty={visible?.length === 0}
-        emptyTitle={(search.trim() || filter !== "all") && scoped?.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz hedef yok", "No goals yet")}
-        emptyDetail={scoped?.length ? undefined : copy("Hedef, bilgisayardaki ajanın projelerinizde görevlere böleceği bir sonuçtur.", "A goal is an outcome the agent on your computer breaks into tasks across your projects.")}
+        emptyTitle={(search.trim() || filter !== "all") && scoped?.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz epic yok", "No epics yet")}
+        emptyDetail={scoped?.length ? undefined : copy("Epic, bilgisayardaki ajanın projelerinizde görevlere böleceği bir sonuçtur.", "A epic is an outcome the agent on your computer breaks into tasks across your projects.")}
         emptyAction={
           scoped?.length && (search.trim() || filter !== "all")
             ? search.trim()
               ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
               : { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") }
             : canCreate
-              ? { label: copy("Yeni hedef", "New goal"), onPress: startNew }
+              ? { label: copy("Yeni epic", "New epic"), onPress: startNew }
               : undefined
         }
       />

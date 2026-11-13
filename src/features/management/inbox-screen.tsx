@@ -10,6 +10,7 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { getLocales } from "expo-localization";
 import { resolveLocale } from "@/localization";
 import { Scope } from "./shared/scope";
+import { useInboxLocalScope } from "../inbox/inbox-local-scope";
 import { AttentionRow } from "../inbox/attention-row";
 import { groupAttention, isUrgentAttention } from "../inbox/attention-groups";
 import { InboxBrowseMemoryProvider, useInboxBrowseMemory } from "../inbox/inbox-browse-memory-provider";
@@ -17,7 +18,7 @@ import { useInboxScrollMemory } from "../inbox/use-inbox-scroll-memory";
 import { ProviderInboxScreen } from "../inbox/provider-inbox-screen";
 import { View } from "react-native";
 import { inboxRelativeTime } from "./inbox-time";
-import { isInboxOriginCurrent, isInboxPrivateFailure } from "../inbox/provider-model";
+import { isInboxPrivateFailure } from "../inbox/provider-model";
 
 const attentionRoutes = { task: "tasks", goal: "goals", automation: "automations", social: "social", "pull-request": "tasks", session: "inbox" } as const;
 
@@ -52,7 +53,7 @@ export function InboxScreen() {
 function AttentionInboxScreen() {
   const copy = useCopy();
   const machine = useActiveMachine();
-  const projectId = useMachines((state) => state.selectedProjectId);
+  const { projectId, setProjectId, matches } = useInboxLocalScope();
   const selectProject = useMachines((state) => state.selectProject);
   const memory = useInboxBrowseMemory()?.attention ?? null;
   const origin = { machineId: machine?.id ?? "", projectId };
@@ -60,7 +61,7 @@ function AttentionInboxScreen() {
   const mounted = useRef(false);
   useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const ownsScope = () => !memory || memory.read(origin) !== undefined;
-  const scopeCurrent = !!machine && ownsScope() && isInboxOriginCurrent(origin, useMachines.getState());
+  const scopeCurrent = !!machine && ownsScope() && matches(origin);
   const query = useHostQuery<HostAttentionInbox>(
     ["inbox", projectId],
     "inbox.list",
@@ -78,7 +79,7 @@ function AttentionInboxScreen() {
   latest.current = { readable, data, enabled: query.isEnabled !== false, refetch: query.refetch };
   const scrollMemory = useInboxScrollMemory<MobileInboxItem>(memory, origin, initialView?.offset ?? 0,
     data !== undefined, rows.length, { suspended: !readable });
-  const current = () => mounted.current && ownsScope() && isInboxOriginCurrent(origin, useMachines.getState());
+  const current = () => mounted.current && ownsScope() && matches(origin);
   const refresh = () => {
     if (machine && current() && latest.current.enabled) return latest.current.refetch();
   };
@@ -110,7 +111,7 @@ function AttentionInboxScreen() {
       refresh={refresh}
       data={rows}
       keyExtractor={(item) => item.id}
-      context={<CollectionToolbar field={<Scope allowAll />} actions={readable ? (
+      context={<CollectionToolbar field={<Scope allowAll projectId={projectId} onChange={setProjectId} />} actions={readable ? (
         <ActionMenu label={copy("Diğer işlemler", "More actions")} busy={query.isFetching && data !== undefined}
           actions={[
             { key: "refresh", label: copy("Yenile", "Refresh"), disabled: query.isFetching,

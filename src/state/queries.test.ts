@@ -119,7 +119,7 @@ it("preserves explicit disabled queries and LAN reads while internet connectivit
 });
 
 
-it("polls progressive model discovery only while providers remain pending and preserves ready models", async () => {
+it("slows progressive model discovery to regular refreshes after providers finish and preserves ready models", async () => {
   const ready = { models: { codex: [{ id: "ready-model", name: "Ready" }] }, errors: {}, pending: ["claude"] };
   fixture.request.mockResolvedValueOnce(ready).mockResolvedValue({ ...ready, pending: [] });
   function ModelProbe() { visibleData = useModelCatalog("project").data; return null; }
@@ -132,8 +132,11 @@ it("polls progressive model discovery only while providers remain pending and pr
   expect(fixture.request).toHaveBeenCalledWith("models.list", { projectId: "project", progressive: true }, expect.anything());
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(fixture.request).toHaveBeenCalledTimes(2);
-  await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
   expect(fixture.request).toHaveBeenCalledTimes(2);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(fixture.request).toHaveBeenCalledTimes(3);
+  expect(visibleData).toEqual({ ...ready, pending: [] });
 });
 
 it("stops progressive catalog polling on failure instead of hammering a disconnected host", async () => {

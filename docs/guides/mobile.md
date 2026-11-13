@@ -27,6 +27,38 @@ Apple association needs the real signing Team ID and bundle ID; Android associat
 needs the installed app's signing certificate fingerprint. Store and installation
 destinations must refer to published, verified artifacts.
 
+## Crew settings
+
+Crew working limits control parallel tasks, assignment count and duration.
+Member model settings remain editable. Cost and quality estimates and the old
+allocation presets are no longer part of the Host contract. Editing a crew retains
+its saved model-routing choices, provider settings and revision checks.
+
+## Usage and limits
+
+Refresh and pull to refresh update the selected Cost, Tokens or Limits view.
+Refreshing Cost or Limits keeps the token page and its reviewed time window.
+Unavailable Host capabilities keep the relevant refresh action disabled.
+
+Limits shows when the Host sampled the report. Percentages and bars both show
+remaining quota. A known reset includes its date and time; an unknown reset stays
+unknown. Reset credits are labeled separately from the remaining percentage,
+including a known zero. Viewing or refreshing these values consumes no reset credit.
+
+## Model and account
+
+Open **Model and reasoning** from the conversation composer. The picker names the
+provider and account even when there is only one choice. A renamed default account
+keeps its name; the generic default label follows the app language.
+
+If the saved account is no longer available, its state remains explicit. Choose an
+available account before changing the model. Opening or closing the picker does
+not replace the saved account. A blocked conversation keeps model controls disabled.
+
+Recognized provider quota failures keep their original detail and point to this
+picker for another account or model. The app does not switch accounts automatically
+or infer when an unknown quota will reset.
+
 ## Run the application
 
 For development, read the [design system](../reference/design-system.md),
@@ -231,7 +263,9 @@ Crew approvals. A reused request number cannot redirect an old reply. Unsupporte
 Hosts or older requests without this identity show an error before a write; update
 the Host, refresh the conversation or update the execution client as indicated.
 An interrupted write keeps its original command identity and is checked by its
-receipt rather than sent again automatically.
+receipt rather than sent again automatically. A failed status refresh retains the
+unknown hold; local sending and recovery feedback belongs to the computer whose
+request was reviewed, even if the selected computer changes.
 Incoming text is content to display; it cannot change permissions or issue
 instructions to the application.
 
@@ -319,6 +353,23 @@ reach. Tools groups destinations by Project, Work, Communication, Development an
 Computer; search also finds a group name. Settings separates preferences, access
 and privacy, computer controls and support.
 
+Navigation labels grow with system text size and move into additional rows when
+needed. Content and notifications reserve the measured navigation height. Inputs,
+search and the message composer start at 48dp; icon actions retain their compact
+appearance with full touch targets. Current preference values and activity dates
+remain readable rather than being shortened like list previews.
+
+Local search follows the selected application language. Clearing a template,
+branch, commit or folder search returns focus to its field. Long crew identities
+and reply quotations remain available in full. Validation names the affected
+field, and counters use the selected language's number format.
+
+Widget privacy settings distinguish reading, saving and unsaved choices. A failed
+read keeps session titles hidden until recovery. Returning from phone settings
+refreshes notification permission without requesting it again. Feedback delivery
+clears only its submitted draft, preserving edits made while sending. Device
+rename protects unsaved changes and blocks conflicting actions while saving.
+
 Global **Sessions** and each project's **Sessions** use the same compact row:
 project and status above the title, branch below it, and provider icon at the
 end. A pin identifies pinned conversations. The full title remains available to
@@ -350,8 +401,99 @@ errors and recovery remain beside those actions. Closing an editor retains its
 existing draft or unsaved-change behavior. The offline tour remains sample data
 and does not connect to a computer or grant operation authority.
 
+Initial list and conversation placeholders follow the available content area.
+Brief reads delay their placeholders; cached content remains visible during a
+background refresh. The **Draft** marker in session lists reflects the Host's
+draft state or a successfully saved local composer draft, including attachments,
+a note card or a retained queue intent. Failed saves do not claim that a draft
+was retained. Locked or inaccessible rows do not expose draft presence.
+
+Images and files attached to generated messages remain visible in the transcript
+instead of being hidden inside activity details. Sent-image thumbnails show the
+whole image; tap to open the full-screen viewer. Missing or generic MIME types
+are resolved from the filename. If an image cannot be decoded, its filename and
+a retry action remain available. File reads and retries retain the current
+computer, session and private-content access checks.
+
+File links and downloaded attachments use the same reader. Images open in the
+image viewer; Markdown and HTML offer preview/source modes; text and code retain
+their full copyable source. PDFs render locally without a network viewer, with
+page navigation, zoom, selectable text and password entry. Expanding or closing
+the PDF sheet preserves its page and zoom. Corrupt files show an explanation;
+**Share / save** remains a separate system handoff. Videos use the existing
+native player. Office documents, archives, audio and unsupported binary formats
+use **Share / save** to open in a compatible installed app; they are not rendered
+as text. Unknown text extensions remain readable. The existing 20 MiB preview
+limit and Host/private-content permissions still apply.
+
+The offline PDF asset is generated from pinned PDF.js with `pnpm pdf:build`.
+`pnpm pdf:check` detects stale runtime, font and character-map assets. Developer
+route `/dev-files` uses synthetic local files, including encrypted and corrupt
+PDFs; it has no Host or draft-writing authority.
+
+The compact controls above the composer show working state, agents and the queue.
+Elapsed time appears only when the Host supplies a valid turn start. Open the
+working control for tool details or the agent control for agent details. Queued
+drafts do not reset the active turn. Queue states and delivery errors remain
+visible beside their controls.
+
+An edited queued message uses its existing persistent editor, separate from the
+main composer draft. **Editing queued message** reopens a parked edit;
+**Cancel editing** reviews discarding that edit while retaining the original
+queued message. Closing the editor parks the edit. Sending an uncertain message
+still requires the existing delivery review.
+
+Development builds expose **Workspace fixtures** from the offline tour. Demo,
+Worst, Empty, One and 1000 modes exercise the actual project and session rows,
+with a loading toggle. The Chat surface includes long code and failed command
+output, questions, uncertain answers and approval states. These fixtures cannot
+read drafts or execute Host actions.
+
+Code and command output use compact previews with full copy and a paginated
+reader. Failed commands and Host-truncated output remain marked. Questions keep
+their submitted delivery state visible until the Host supplies transcript history;
+an accepted command alone does not mean the provider consumed the answer. Approval
+decisions remain held while sending or awaiting confirmation, preventing a second
+decision for the same request. Known delivery failures retain an actionable error.
+
+Ordinary custom questions offer **Attach file** and **Photos** for each question.
+Files can answer a question without text. A reply carries up to 20 files in total,
+each at most 20 MiB. Typed schema questions do not offer attachments. Upload errors
+stay beside the file with retry and removal; files are uploaded through the paired
+computer before the original question reply is dispatched.
+
+Question text, files and delivery holds survive navigation and app restart. Only
+a known failure permits another reply; reconnect and an accepted command do not
+authorize a resend or prove provider consumption. Question attachment custody is
+kept separately from disposable composer files, including when ordinary saved
+drafts are cleared. Authoritative snapshots clean abandoned unsent question drafts;
+sending, queued and unknown replies keep their files until ownership is resolved.
+
 Task rows keep the session shortcut beside the task title; completion and
 retained-session start/retry commands stay in the task menu. Stop, pending
 operations and errors remain beside the affected task. Technical execution and
 review details expand on demand. Short computer preferences use content-sized
 sheets; longer editors keep their scrolling body and reserved action area.
+
+Single-project epics can select an Agent or saved Crew. Automations support
+scheduled, continuous and event triggers; projectless automations run in Room.
+Project scan templates retain their Steward definition, and automation history
+opens the canonical Task when one exists.
+
+Room offers confirmed Stop and owner permission preferences, including project
+scope and critical exclusions. Mobile saves the Host preference mirror only;
+standing authority for native computer effects must be granted on desktop.
+Room's **What I did** reads actual operation journal entries from the Host
+snapshot, showing tool, target, outcome and time. It includes only records whose
+project contributors are visible on this phone; message history remains separate.
+Unknown outcomes remain marked and do not imply success.
+
+Settings > Work edits the Host's canonical total and per-provider daily/monthly
+token and USD caps. Blank or zero means unlimited. Saving preserves model order,
+pools, role bindings and delegation, using the opening routing version to reject
+concurrent edits. Unconfirmed saves require loading current settings before retry.
+
+Crew member model source can follow the Host's crew-member role, Host model
+order, a named pool, or an explicit fixed model. Saved fallback candidates are
+not an allowed-model filter for automatic routing. Editing member instructions
+preserves the binding; selecting a fixed model explicitly replaces that binding.

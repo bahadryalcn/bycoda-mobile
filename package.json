@@ -27,7 +27,9 @@
     "preandroid": "pnpm theme:build",
     "preios": "pnpm theme:build",
     "preweb": "pnpm theme:build",
-    "preexport:web": "pnpm theme:build"
+    "preexport:web": "pnpm theme:build",
+    "pdf:build": "node scripts/build-pdf.mjs",
+    "pdf:check": "node scripts/build-pdf.mjs --check"
   },
   "dependencies": {
     "@clerk/expo": "4.14.5",
@@ -104,6 +106,7 @@
     "@types/react": "~19.3.0",
     "esbuild": "0.28.2",
     "mermaid": "11.16.1",
+    "pdfjs-dist": "6.4.299",
     "tailwindcss": "4.3.5",
     "tsc-rs": "0.8.0",
     "typescript": "~6.0.3",

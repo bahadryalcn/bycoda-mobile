@@ -1,22 +1,27 @@
 import type { SessionSettingsProps, SessionSettingsDraft } from "./session-settings-types";
 import { View } from "react-native";
 import { useEffect, useRef, useState } from "react";
-import { useFormDraft } from "@/state/form-draft";
+import { sameFormValue, useFormDraft } from "@/state/form-draft";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine } from "@/state/machines";
 import { useHostMutation } from "@/state/queries";
 import { useModelCatalog } from "@/state/model-catalog";
 import {
   Button,
+  FormActions,
   Field,
   MutationState,
   Notice,
   QueryState,
+  ErrorText,
   Row,
   Section,
   Sheet,
 } from "@/ui/primitives";
+import { useLocalDraft } from "./use-local-draft";
+import { decodeSessionSettingsDraft, encodeSessionSettingsDraft } from "./session-settings-draft";
 import { useCopy } from "@/ui/copy";
+import { useSheetGuard } from "@/ui/sheet-guard";
 import {
   catalogProviders,
   modelDefaults,
@@ -26,13 +31,10 @@ import {
 } from "./catalog";
 import { AgentModelFields } from "./agent-model-fields";
 import { PermissionField } from "./agent-option-icons";
-import { providerChoices, selectedChoice } from "./provider-choices";
+import { choiceKey, providerChoices, selectedChoice } from "./provider-choices";
 import type { HostSession } from "./wire";
 import { captureSessionAuthority } from "@/domain/session-authority";
 import { useMobileTheme } from "@/ui/theme";
-
-/** Agent settings save themselves once picking or typing settles. */
-const AUTOSAVE_MS = 500;
 
 /** Equal-width pair aligned to the field edges; wraps to full-width rows at large text. */
 const ACTION_BUTTON = { flexGrow: 1, flexBasis: 140, alignSelf: "stretch" } as const;
@@ -57,8 +59,30 @@ export function SessionSettings({
     modelSettings: value.session.modelSettings,
   }));
   const form = useFormDraft(initialDraft);
+  const [openingMachine] = useState(() => ({
+    id: machine?.id,
+    environmentId: machine?.environmentId,
+  }));
+  const targetChanged =
+    openingMachine.id !== machine?.id || openingMachine.environmentId !== machine?.environmentId;
+  const [draftKey] = useState(
+    () =>
+      `bycoda.mobile.session-settings.v1:${JSON.stringify([machine?.id, machine?.environmentId, projectId, value.session.id])}`,
+  );
+  const localDraft = useLocalDraft(
+    draftKey,
+    decodeSessionSettingsDraft,
+    encodeSessionSettingsDraft,
+  );
+  const [hydrated, setHydrated] = useState(false);
+  const savedBaseline = useRef(initialDraft);
+  const latestValues = useRef(form.values);
+  latestValues.current = form.values;
   const { title, provider, accountId, model, mode, modelSettings } = form.values;
-  const configure = useAsyncAction();
+  const configure = useAsyncAction<boolean>();
+  const saving = useRef(false);
+  const [savingPending, setSavingPending] = useState(false);
+  const [reviewed, setReviewed] = useState(value);
   const [configurationAction, setConfigurationAction] = useState<"configure" | "compact">(
     "configure",
   );
@@ -76,85 +100,309 @@ export function SessionSettings({
     catalog.data?.accounts,
     copy("Varsayılan hesap", "Default account"),
   );
-  const choice = selectedChoice(choices, provider, accountId);
+  const savedChoice = choices.find((entry) => entry.key === choiceKey(provider, accountId));
+  const unavailableAccount =
+    (provider === "claude" || provider === "codex") &&
+    Array.isArray(catalog.data?.accounts?.[provider]) &&
+    !savedChoice;
+  const choice = unavailableAccount
+    ? {
+        key: choiceKey(provider, accountId),
+        provider,
+        label: copy("Hesap kullanılamıyor", "Account unavailable"),
+      }
+    : (savedChoice ?? selectedChoice(choices, provider, accountId));
   const running = value.status === "running";
-  const pending = disabled || configure.isPending || update.isPending;
+  const pending =
+    disabled ||
+    targetChanged ||
+    !hydrated ||
+    !localDraft.ready ||
+    savingPending ||
+    configure.isPending ||
+    update.isPending;
+  const uncertain = !!(update.error as { uncertain?: boolean } | null)?.uncertain;
 
-  const agentKey = JSON.stringify([provider, accountId ?? null, model, mode, modelSettings]);
+  const keyOf = (draft: SessionSettingsDraft) =>
+    JSON.stringify([
+      draft.provider,
+      draft.accountId ?? null,
+      draft.model,
+      draft.mode,
+      draft.modelSettings,
+    ]);
+  const agentKey = keyOf(form.values);
   const [savedAgentKey, setSavedAgentKey] = useState(agentKey);
   const [savedTitle, setSavedTitle] = useState(value.session.title);
-  const failedKey = useRef<string | null>(null);
+  const titleFlight = useRef<{ text: string; promise: Promise<boolean> } | null>(null);
+
+  // Restore the scoped phone draft before enabling edits or Host writes.
+  useEffect(() => {
+    if (!localDraft.ready || hydrated) return;
+    const stored = localDraft.value;
+    if (stored) {
+      savedBaseline.current = stored.baseline;
+      form.reset(stored.baseline);
+      form.patch(stored.values);
+      setSavedAgentKey(keyOf(stored.baseline));
+      setSavedTitle(stored.baseline.title);
+      setReviewed({
+        ...value,
+        authorityGeneration: stored.authorityGeneration,
+        revision: stored.revision ?? value.revision,
+        session: {
+          ...value.session,
+          title: stored.baseline.title,
+          harness: stored.baseline.provider,
+          providerAccountId: stored.baseline.accountId,
+          model: stored.baseline.model,
+          runtimeMode: stored.baseline.mode,
+          modelSettings: stored.baseline.modelSettings,
+        },
+      });
+    }
+    setHydrated(true);
+  }, [localDraft.ready, hydrated]);
+  const patchForm = (patch: Partial<SessionSettingsDraft>) => {
+    if (pending) return;
+    const values = { ...latestValues.current, ...patch };
+    latestValues.current = values;
+    form.patch(patch);
+    localDraft.setValue({
+      baseline: savedBaseline.current,
+      values,
+      authorityGeneration: reviewed.authorityGeneration,
+      revision: reviewed.revision,
+    });
+  };
+  const acknowledge = (patch: Partial<SessionSettingsDraft>) => {
+    savedBaseline.current = { ...savedBaseline.current, ...patch };
+    localDraft.setValue({
+      baseline: savedBaseline.current,
+      values: latestValues.current,
+      authorityGeneration: reviewed.authorityGeneration,
+      revision: reviewed.revision,
+    });
+  };
+  const clearAndClose = async () => {
+    try {
+      localDraft.setValue(null);
+      await localDraft.persist();
+      onClose();
+    } catch {
+      /* Storage error remains visible and editor stays open. */
+    }
+  };
   const agentDirty = agentKey !== savedAgentKey;
-  const titleDirty = !!title.trim() && title.trim() !== savedTitle;
+  const titleDirty = title.trim() !== savedTitle;
+  const conflict =
+    value.authorityGeneration !== reviewed.authorityGeneration ||
+    (!sameFormValue(
+      [
+        value.session.harness,
+        value.session.providerAccountId,
+        value.session.model,
+        value.session.runtimeMode,
+        value.session.modelSettings,
+        value.session.title,
+      ],
+      [
+        reviewed.session.harness,
+        reviewed.session.providerAccountId,
+        reviewed.session.model,
+        reviewed.session.runtimeMode,
+        reviewed.session.modelSettings,
+        reviewed.session.title,
+      ],
+    ) &&
+      !sameFormValue(
+        [
+          value.session.harness,
+          value.session.providerAccountId,
+          value.session.model,
+          value.session.runtimeMode,
+          value.session.modelSettings,
+          value.session.title,
+        ],
+        [
+          savedBaseline.current.provider,
+          savedBaseline.current.accountId,
+          savedBaseline.current.model,
+          savedBaseline.current.mode,
+          savedBaseline.current.modelSettings,
+          savedBaseline.current.title,
+        ],
+      ));
+  const { requestClose: discardChanges } = useSheetGuard({
+    dirty: agentDirty || titleDirty,
+    pending,
+    onClose: () => {
+      void clearAndClose();
+    },
+  });
 
   const saveAgent = async () => {
+    if (unavailableAccount || disabled || running || conflict) return false;
     const submitted = agentKey;
     setConfigurationAction("configure");
     try {
-      await configure.run(async () =>
-        onCommand({
+      const saved = await configure.run(async () => {
+        await onCommand({
           type: "configure",
-          sessionId: value.session.id,
+          sessionId: reviewed.session.id,
+          ...captureSessionAuthority(reviewed),
+          ...(reviewed.revision !== undefined ? { expectedRevision: reviewed.revision } : {}),
           harness: provider,
           ...(provider === "claude" || provider === "codex"
             ? { providerAccountId: accountId ?? null }
             : {}),
           model,
-          modelSettings: selectedModel ? sessionSettings(selectedModel, modelSettings) : modelSettings,
+          modelSettings: selectedModel
+            ? sessionSettings(selectedModel, modelSettings)
+            : modelSettings,
           runtimeMode: mode,
-        }),
-      );
+        });
+        return true;
+      });
+      if (saved !== true) {
+        return false;
+      }
       setSavedAgentKey(submitted);
+      acknowledge({ provider, accountId, model, mode, modelSettings });
+      return true;
     } catch {
-      failedKey.current = submitted;
+      return false;
     }
   };
   const saveTitle = async () => {
-    if (!titleDirty || pending) return;
+    if (!title.trim()) return false;
+    if (!titleDirty) return true;
     const submitted = title.trim();
+    if (titleFlight.current)
+      return titleFlight.current.text === submitted ? titleFlight.current.promise : false;
+    if (disabled || configure.isPending || update.isPending) return false;
+    const promise = (async () => {
+      try {
+        await update.mutateAsync({
+          projectId,
+          sessionId: value.session.id,
+          title: submitted,
+          ...captureSessionAuthority(reviewed),
+        });
+        setSavedTitle(submitted);
+        acknowledge({ title: submitted });
+        onUpdated();
+        return true;
+      } catch {
+        /* The mutation state shows the failure. */
+        return false;
+      }
+    })();
+    titleFlight.current = { text: submitted, promise };
     try {
-      await update.mutateAsync({
-        projectId,
-        sessionId: value.session.id,
-        title: submitted,
-        ...captureSessionAuthority(value),
-      });
-      setSavedTitle(submitted);
-      onUpdated();
-    } catch {
-      /* The mutation state shows the failure. */
+      return await promise;
+    } finally {
+      if (titleFlight.current?.promise === promise) titleFlight.current = null;
     }
   };
-  const saveAgentRef = useRef(saveAgent);
-  saveAgentRef.current = saveAgent;
-  useEffect(() => {
-    if (!agentDirty || !model || running || disabled || configure.isPending) return;
-    if (failedKey.current === agentKey) return;
-    const timer = setTimeout(() => void saveAgentRef.current(), AUTOSAVE_MS);
-    return () => clearTimeout(timer);
-  }, [agentKey, agentDirty, model, running, disabled, configure.isPending]);
+  const save = async () => {
+    if (
+      saving.current ||
+      pending ||
+      uncertain ||
+      conflict ||
+      !title.trim() ||
+      (agentDirty && (!model || running || unavailableAccount))
+    )
+      return;
+    saving.current = true;
+    setSavingPending(true);
+    const submittedValues = form.values;
+    try {
+      await localDraft.persist();
+      // Title and configuration use separate RPCs; acknowledge each successful part.
+      if (agentDirty && !(await saveAgent())) return;
+      if (!(await saveTitle())) return;
+      if (sameFormValue(latestValues.current, submittedValues)) await clearAndClose();
+    } catch {
+      /* Draft storage errors stay visible; no implicit retry. */
+    } finally {
+      saving.current = false;
+      setSavingPending(false);
+    }
+  };
 
   return (
     <Sheet
       visible
       onClose={() => {
-        // Closing flushes whatever the delay has not saved yet.
-        void saveTitle();
-        if (agentDirty && model && !running && !disabled && failedKey.current !== agentKey) void saveAgent();
-        onClose();
+        if (!hydrated) onClose();
+        else void clearAndClose();
       }}
       title={copy("Oturum ayarları", "Session settings")}
       size="form"
-      dismissible={!configure.isPending && !update.isPending && !disabled}
+      dismissible={!pending || (!hydrated && !!localDraft.error)}
+      dirty={agentDirty || titleDirty}
+      footer={
+        <FormActions
+          submitLabel={copy("Kaydet", "Save")}
+          onSubmit={() => {
+            void save();
+          }}
+          busy={savingPending || configure.isPending || update.isPending}
+          dirty={agentDirty || titleDirty}
+          disabled={
+            pending ||
+            uncertain ||
+            conflict ||
+            !(agentDirty || titleDirty) ||
+            !title.trim() ||
+            (agentDirty && (!model || running || unavailableAccount))
+          }
+        />
+      }
     >
+      {localDraft.error ? (
+        <>
+          <ErrorText error={localDraft.error} />
+          {!hydrated ? (
+            <Button
+              label={copy("Yeniden dene", "Retry")}
+              onPress={() => {
+                void localDraft.load();
+              }}
+            />
+          ) : null}
+        </>
+      ) : null}
+      {uncertain ? (
+        <Notice
+          tone="warning"
+          message={copy(
+            "Sonuç belirsiz. Yeniden göndermeden önce bilgisayardaki oturumu kontrol edin.",
+            "The result is uncertain. Check the session on the computer before sending again.",
+          )}
+        />
+      ) : null}
+      {conflict ? (
+        <Notice
+          tone="warning"
+          message={copy(
+            "Oturum değişti. Ayarları kapatıp yeniden inceleyin.",
+            "Session changed. Close settings and review again.",
+          )}
+        />
+      ) : null}
       <Section title={copy("Oturum", "Session")}>
         <View style={uiStyles.stack}>
           <Field
             label={copy("Başlık", "Title")}
             value={title}
-            onChangeText={(text) => form.setField("title", text)}
-            onBlur={() => void saveTitle()}
-            onSubmitEditing={() => void saveTitle()}
+            error={
+              !title.trim() ? copy("Bu alan gereklidir.", "This field is required.") : undefined
+            }
+            editable={!pending}
+            onChangeText={(text) => patchForm({ title: text })}
             returnKeyType="done"
           />
           <MutationState mutation={update} success={copy("Kaydedildi.", "Saved.")} />
@@ -201,6 +449,15 @@ export function SessionSettings({
         </View>
       </Section>
       <Section title={copy("Agent ve model", "Agent and model")}>
+        {unavailableAccount ? (
+          <Notice
+            tone="warning"
+            message={copy(
+              "Kaydedilmiş hesap kullanılamıyor. Modeli değiştirmek için kullanılabilir bir hesap seçin.",
+              "The saved account is unavailable. Choose an available account to change the model.",
+            )}
+          />
+        ) : null}
         <QueryState query={catalog} />
         {catalog.data?.errors[provider] ? (
           <Notice tone="danger" message={catalog.data.errors[provider]} />
@@ -215,11 +472,11 @@ export function SessionSettings({
             value: choice,
             onChange: (next) => {
               if (next.provider === provider) {
-                form.patch({ accountId: next.accountId });
+                patchForm({ accountId: next.accountId });
                 return;
               }
               const first = sessionModel(availableCatalog, next.provider, "");
-              form.patch({
+              patchForm({
                 provider: next.provider,
                 accountId: next.accountId,
                 model: first?.id ?? "",
@@ -228,12 +485,13 @@ export function SessionSettings({
             },
           }}
           disabled={pending || running}
-          onChange={(next, settings) => form.patch({ model: next, modelSettings: settings })}
+          unavailableAccount={unavailableAccount}
+          onChange={(next, settings) => patchForm({ model: next, modelSettings: settings })}
         />
         <PermissionField
           value={mode}
-          disabled={disabled || running}
-          onChange={(next) => form.setField("mode", next)}
+          disabled={pending || running || unavailableAccount}
+          onChange={(next) => patchForm({ mode: next })}
         />
         <MutationState
           mutation={configure}
@@ -249,17 +507,32 @@ export function SessionSettings({
           )}
         />
       ) : null}
+      {(agentDirty || titleDirty) &&
+      (configure.isError ||
+        update.isError ||
+        unavailableAccount ||
+        !model ||
+        !title.trim() ||
+        running ||
+        conflict) ? (
+        <Button
+          label={copy("Değişiklikleri bırak", "Discard changes")}
+          tone="quiet"
+          disabled={pending}
+          onPress={discardChanges}
+        />
+      ) : null}
       <Button
         label={copy("Bağlamı sıkıştır", "Compact context")}
         tone="secondary"
-        disabled={pending || running || agentDirty}
+        disabled={pending || running || agentDirty || titleDirty || conflict || uncertain}
         busy={configure.isPending && configurationAction === "compact"}
         onPress={() => {
           setConfigurationAction("compact");
           void configure.run(async () => {
             const receipt = await onCommand({ type: "compact", sessionId: value.session.id });
             onClose();
-            return receipt;
+            return !!receipt;
           });
         }}
       />

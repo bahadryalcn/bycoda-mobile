@@ -39,32 +39,67 @@ export function visibleMediaData<T>(query: {
   return query.isError && mediaAccessRevoked(query.error) ? undefined : query.data;
 }
 
-export function mediaMime(name: string) {
-  const ext = name.split(/[?#]/)[0]!.split(".").pop()?.toLowerCase();
-  return (
-    (
-      {
-        png: "image/png",
-        jpg: "image/jpeg",
-        jpeg: "image/jpeg",
-        webp: "image/webp",
-        gif: "image/gif",
-        avif: "image/avif",
-        svg: "image/svg+xml",
-        html: "text/html",
-        htm: "text/html",
-        md: "text/markdown",
-        markdown: "text/markdown",
-        txt: "text/plain",
-        json: "application/json",
-        pdf: "application/pdf",
-        mp4: "video/mp4",
-        m4v: "video/mp4",
-        mov: "video/quicktime",
-        webm: "video/webm",
-      } as Record<string, string>
-    )[ext ?? ""] ?? "application/octet-stream"
-  );
+const binaryMimeTypes: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp",
+  gif: "image/gif", avif: "image/avif", heic: "image/heic", heif: "image/heif",
+  ico: "image/x-icon", bmp: "image/bmp", tif: "image/tiff", tiff: "image/tiff",
+  // SVG uses the media reader because its active source must never enter the editable text flow by default.
+  svg: "image/svg+xml", pdf: "application/pdf",
+  doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  odt: "application/vnd.oasis.opendocument.text", ods: "application/vnd.oasis.opendocument.spreadsheet",
+  odp: "application/vnd.oasis.opendocument.presentation", epub: "application/epub+zip",
+  mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", wav: "audio/wav",
+  ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg", flac: "audio/flac", aiff: "audio/aiff",
+  mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm",
+  mkv: "video/x-matroska", avi: "video/x-msvideo", mpg: "video/mpeg", mpeg: "video/mpeg",
+  zip: "application/zip", gz: "application/gzip", tgz: "application/gzip", tar: "application/x-tar",
+  "7z": "application/x-7z-compressed", rar: "application/vnd.rar", bz2: "application/x-bzip2",
+  xz: "application/x-xz", zst: "application/zstd", br: "application/x-brotli",
+  woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", otf: "font/otf", eot: "application/vnd.ms-fontobject",
+  sqlite: "application/vnd.sqlite3", sqlite3: "application/vnd.sqlite3", db: "application/vnd.sqlite3", db3: "application/vnd.sqlite3",
+  exe: "application/vnd.microsoft.portable-executable", dll: "application/vnd.microsoft.portable-executable",
+  wasm: "application/wasm", bin: "application/octet-stream", dat: "application/octet-stream",
+  ds_store: "application/octet-stream", psd: "image/vnd.adobe.photoshop", ai: "application/postscript",
+  sketch: "application/octet-stream", fig: "application/octet-stream", icns: "image/icns",
+};
+const textMimeTypes: Record<string, string> = {
+  html: "text/html", htm: "text/html", md: "text/markdown", markdown: "text/markdown",
+  json: "application/json", csv: "text/csv", tsv: "text/tab-separated-values", xml: "text/xml",
+  css: "text/css", js: "text/javascript", mjs: "text/javascript", cjs: "text/javascript",
+};
+const textExtensions = new Set([
+  "txt", "log", "ts", "tsx", "jsx", "mts", "cts", "jsonc", "jsonl", "yaml", "yml", "toml", "ini", "conf", "cfg",
+  "env", "properties", "lock", "sh", "bash", "zsh", "fish", "ps1", "psm1", "bat", "cmd", "py", "pyi", "rs", "go",
+  "java", "kt", "kts", "swift", "m", "mm", "c", "h", "cc", "cpp", "hpp", "cs", "fs", "fsx", "vb", "php", "rb",
+  "r", "lua", "pl", "sql", "graphql", "gql", "proto", "vue", "svelte", "scss", "sass", "less", "tex", "rst", "adoc",
+  "ipynb", "dockerfile", "makefile", "gitignore", "gitattributes", "editorconfig",
+]);
+
+function fileExtension(name: string) {
+  const path = name.split(/[?#]/)[0]!.replace(/:\d+(?::\d+)?$/, "");
+  const leaf = path.replaceAll("\\", "/").split("/").pop() ?? "";
+  return leaf.includes(".") ? leaf.split(".").pop()!.toLowerCase() : "";
+}
+
+/** One file dispatch owner for file inspection, editing, message links and sharing. */
+export function isBinaryDocument(name: string): boolean {
+  return Object.hasOwn(binaryMimeTypes, fileExtension(name));
+}
+
+export function mediaMime(name: string): string {
+  const extension = fileExtension(name);
+  if (Object.hasOwn(binaryMimeTypes, extension)) return binaryMimeTypes[extension]!;
+  if (Object.hasOwn(textMimeTypes, extension)) return textMimeTypes[extension]!;
+  return textExtensions.has(extension) ? "text/plain" : "application/octet-stream";
+}
+
+/** Explicit MIME stays authoritative; absent/generic metadata follows the file name. */
+export function resolveMediaMime(name: string, mimeType?: string): string {
+  const supplied = mimeType?.trim();
+  return !supplied || supplied.split(";")[0]!.trim().toLowerCase() === "application/octet-stream"
+    ? mediaMime(name) : supplied;
 }
 
 /** Resolve only within the selected project/worktree. Host validates symlinks too. */

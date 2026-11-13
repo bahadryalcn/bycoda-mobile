@@ -2,9 +2,7 @@ import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 import ListOrdered from "lucide-react-native/icons/list-ordered";
-import { ErrorText } from "@/ui/primitives";
-import { ComposerActionSlot, useComposerActionArea } from "@/ui/composer-actions";
-import { ChatToolbarAction } from "@/ui/chat-controls";
+import { Button, ErrorText } from "@/ui/primitives";
 import { useHostClient } from "@/state/queries";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
@@ -30,7 +28,6 @@ export function SessionQueue({
   onCommand: SessionCommand;
 }) {
   const { colors } = useMobileTheme();
-  const compact = useComposerActionArea();
   const copy = useCopy();
   const client = useHostClient();
   const [open, setOpen] = useState(false);
@@ -162,8 +159,8 @@ export function SessionQueue({
                 );
   return (
     <>
-      <ComposerActionSlot>
-      {rows.length || queue.error || error || editor.value || editor.error || editor.visible ? (
+      <View style={{ flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
+      {rows.length || queue.error || queue.changeError || error || editor.value || editor.error || editor.visible ? (
         <View
           style={{
             flexDirection: "row",
@@ -171,29 +168,35 @@ export function SessionQueue({
             alignItems: "center",
             justifyContent: "space-between",
             gap: space.xs,
+            minHeight: 48,
             flexShrink: 1,
             maxWidth: "100%",
           }}
         >
-          {rows.length || queue.error || error ? (
-            <ChatToolbarAction
-              label={compact && !queue.error && !error && !unconfirmed && !sending && !queue.changing && !queue.data?.claim
-                ? String(rows.length)
-                : queue.error ? `${copy("Sıra", "Queue")} · ${copy("Hata", "Error")}`
-                  : `${copy("{p0} sırada", "{p0} queued", { p0: rows.length })} · ${queueState}`}
+          {rows.length || queue.error || queue.changeError || error ? (
+            <Button
+              label={queue.error || error || queue.changeError
+                ? `${copy("Sıra", "Queue")} · ${copy("Hata", "Error")}`
+                : `${copy("{p0} sırada", "{p0} queued", { p0: rows.length })}${unconfirmed
+                  ? ` · ${copy("Kontrol gerekiyor", "Needs review")}`
+                  : sending || queue.changing || queue.data?.claim
+                    ? ` · ${queueState}`
+                  : queue.data?.status !== "active" || queue.data?.editingId
+                    ? ` · ${copy("Duraklatıldı", "Paused")}` : ""}`}
               accessibilityLabel={queue.error ? copy("Sıra yüklenemedi", "Queue unavailable")
                 : `${copy("{p0} sırada", "{p0} queued", { p0: rows.length })} · ${queueState}`}
-              tone={queue.error || error || unconfirmed ? "danger" : "muted"}
+              tone={queue.error || queue.changeError || error || unconfirmed ? "danger" : "quiet"}
+              style={{ minHeight: 48 }}
               onPress={() => setOpen(true)}
             >
               <ListOrdered size={14} color={queue.error || error ? colors.danger : colors.muted} />
-            </ChatToolbarAction>
+            </Button>
           ) : null}
           <SessionQueueEditor scope={scope} editor={editor} blocked={blocked || sending || queue.changing} />
         </View>
       ) : null}
       {!open ? <ErrorText error={error} message={composerDeliveryError(error, copy)} /> : null}
-      </ComposerActionSlot>
+      </View>
       <SessionQueueSheet scope={scope} visible={open && !editor.visible}
         state={{ rows, label: queue.leaseAware ? queueState : automatic
           ? copy("Bu ekran açıkken sırayla gönderilir", "Sends in order while this screen is open")

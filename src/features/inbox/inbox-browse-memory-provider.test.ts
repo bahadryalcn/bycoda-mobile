@@ -3,8 +3,9 @@ import { act, createElement, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 const fixture=vi.hoisted(()=>({state:{activeId:"computer",selectedProjectId:"project",machines:[{id:"computer",endpoint:"https://one.invalid",name:"Computer"}]} as any,listeners:new Set<()=>void>()}));
-vi.mock("@/state/machines",()=>({useMachines:{getState:()=>fixture.state,subscribe:(listener:()=>void)=>{fixture.listeners.add(listener);return()=>fixture.listeners.delete(listener);}}}));
+vi.mock("@/state/machines",()=>({useMachines:Object.assign((selector: (state: any) => unknown) => selector(fixture.state), {getState:()=>fixture.state,subscribe:(listener:()=>void)=>{fixture.listeners.add(listener);return()=>fixture.listeners.delete(listener);}})}));
 import { InboxBrowseMemoryProvider, useInboxBrowseMemory } from "./inbox-browse-memory-provider";
+import { useInboxLocalScope, type InboxLocalScope } from "./inbox-local-scope";
 import { initialInboxBrowseState } from "./provider-state";
 import type { InboxBrowseMemory } from "./inbox-browse-memory";
 const origin={machineId:"computer",projectId:"project"};
@@ -28,4 +29,18 @@ it("does not retire current preferences during StrictMode subscription replay",(
  const host=document.createElement("div");document.body.append(host);root=createRoot(host);
  act(()=>root!.render(createElement(StrictMode,null,createElement(InboxBrowseMemoryProvider,null,createElement(Probe)))));
  memory!.remember(origin,{...initialInboxBrowseState,search:"Retained"});expect(memory!.read(origin)!.preferences.search).toBe("Retained");expect(fixture.listeners.size).toBe(1);
+});
+
+
+it("changes the Inbox filter without changing the workspace and retires captured scope even after A/B/A", () => {
+ let local: InboxLocalScope;
+ function LocalProbe() { local = useInboxLocalScope(); return null; }
+ const host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+ act(() => root!.render(createElement(InboxBrowseMemoryProvider, null, createElement(LocalProbe))));
+ const captured = local!;
+ expect(captured.matches(origin)).toBe(true);
+ act(() => { captured.setProjectId("other"); captured.setProjectId("project"); });
+ expect(fixture.state.selectedProjectId).toBe("project");
+ expect(captured.matches(origin)).toBe(false);
+ expect(local!.matches(origin)).toBe(true);
 });

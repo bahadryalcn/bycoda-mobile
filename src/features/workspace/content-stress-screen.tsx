@@ -1,0 +1,31 @@
+import { View } from "react-native";
+import { Body } from "@/ui/primitives";
+import { MessageCode } from "@/ui/message-code";
+import { ScreenList } from "@/ui/screen-list";
+import { space } from "@/ui/tokens";
+import { ActivityApproval } from "./activity-inspector-approval";
+import { QuestionCard } from "./question-card";
+import { RunStatusCard } from "./run-status-card";
+import { TranscriptStructured } from "./transcript-structured";
+import { contentStressApprovals, contentStressCode, contentStressQuestions, contentStressShell } from "./content-stress-fixtures";
+import type { ReactNode } from "react";
+
+const refuseCommand = async () => { throw new Error("Developer fixture cannot send Host commands"); };
+const scope = { machineId: "fixture-machine", sessionId: "fixture-session" };
+const rows = ["working", "code", "shell", "questions", "approvals"] as const;
+
+/** Real content controls with synthetic data, no Host connection or command authority. */
+export function ContentStressScreen({ header }: { header: ReactNode }) {
+  return <ScreenList title="Chat fixtures" header={header} data={rows} keyExtractor={item => item}
+    renderItem={({ item }) => <View style={{ gap: space.sm, paddingVertical: space.sm }}>
+      {item === "working" ? <RunStatusCard live blocks={[contentStressShell]} /> : null}
+      {item === "code" ? <MessageCode code={contentStressCode} language="typescript" compact allowPreview={false} /> : null}
+      {item === "shell" ? <TranscriptStructured block={contentStressShell} /> : null}
+      {item === "questions" ? contentStressQuestions.map(question => <QuestionCard key={question.requestId}
+        question={question} disabled={false} onAnswer={refuseCommand} />) : null}
+      {item === "approvals" ? contentStressApprovals.map(block => <View key={block.id} style={{ gap: space.sm }}>
+        <Body>{block.text}</Body>
+        <ActivityApproval approval={block.approval!} scope={scope} runId="fixture-run" disabled onCommand={refuseCommand} />
+      </View>) : null}
+    </View>} />;
+}

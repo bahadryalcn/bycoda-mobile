@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Badge, Body, Button, ErrorNotice, Input, NavigationGroup, NavigationRow, Section, Sheet, Stack } from "@/ui/primitives";
+import { useRef, useState } from "react";
+import { Badge, Body, Button, ErrorNotice, FormActions, Field, NavigationGroup, NavigationRow, Section, Sheet, Stack } from "@/ui/primitives";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
+import { useSheetGuard } from "@/ui/sheet-guard";
 import type { Device } from "../contracts";
 import { useAccount } from "./account-context";
 
@@ -15,6 +16,9 @@ export function DevicesSection() {
   const queries = useQueryClient();
   const [renaming, setRenaming] = useState<Device | null>(null);
   const [name, setName] = useState("");
+  const occupied = useRef(false);
+  const renamingRef = useRef(renaming);
+  renamingRef.current = renaming;
   const list = useQuery({
     queryKey: KEY,
     queryFn: () => runtime!.client.listDevices(),
@@ -24,15 +28,19 @@ export function DevicesSection() {
   const rename = useMutation({
     mutationFn: (input: { id: string; name: string }) =>
       runtime!.client.renameDevice({ params: { id: input.id }, body: { name: input.name } }),
-    onSuccess: async () => {
-      setRenaming(null);
+    onSuccess: async (_saved, input) => {
+      if (renamingRef.current?.id === input.id) setRenaming(null);
       await refresh();
     },
+    onSettled: () => { occupied.current = false; },
   });
   const revoke = useMutation({
     mutationFn: (id: string) => runtime!.client.revokeDevice({ params: { id } }),
     onSuccess: refresh,
+    onSettled: () => { occupied.current = false; },
   });
+  const busy = rename.isPending || revoke.isPending;
+  const close = () => { if (!occupied.current && !busy) setRenaming(null); };
 
   const items = (list.data?.items ?? []).filter((item) => !item.revokedAt);
   const isSelf = (item: Device) => item.id === self?.id || item.current === true;
@@ -41,7 +49,11 @@ export function DevicesSection() {
       copy("{p0} oturumu kapatılsın mı?", "Sign out {p0}?", { p0: item.name }),
       copy("Bu cihaz hesabından çıkarılır. Cihazdaki yerel veriler silinmez.", "This device is removed from your account. Local data on it is kept."),
       copy("Oturumu kapat", "Sign out"),
-      () => revoke.mutate(item.id),
+      () => {
+        if (occupied.current) return;
+        occupied.current = true;
+        revoke.mutate(item.id);
+      },
       copy("Vazgeç", "Cancel"),
     );
   return (
@@ -57,7 +69,9 @@ export function DevicesSection() {
               label={item.name}
               detail={`${item.osVersion} · ${item.appVersion}`}
               trailing={isSelf(item) ? <Badge label={copy("Bu cihaz", "This device")} /> : undefined}
+              disabled={busy}
               onPress={() => {
+                if (occupied.current) return;
                 setRenaming(item);
                 setName(item.name);
                 rename.reset();
@@ -67,31 +81,38 @@ export function DevicesSection() {
         </NavigationGroup>
       </Stack>
       {renaming ? (
-        <Sheet visible size="compact" title={renaming.name} onClose={() => setRenaming(null)}>
+        <Sheet visible size="compact" title={renaming.name} dirty={name.trim() !== renaming.name} dismissible={!busy} onClose={close}>
           <Stack>
-            <Input label={copy("Cihaz adı", "Device name")} value={name} onChangeText={setName} maxLength={80} />
+            <Field label={copy("Cihaz adı", "Device name")} value={name} onChangeText={setName} editable={!busy} maxLength={80} />
             <ErrorNotice error={rename.error} message={copy("Ad kaydedilemedi.", "The name could not be saved.")} />
-            <Button
-              label={copy("Kaydet", "Save")}
-              tone="primary"
-              busy={rename.isPending}
-              disabled={!name.trim() || name.trim() === renaming.name || rename.isPending}
-              onPress={() => rename.mutate({ id: renaming.id, name: name.trim() })}
-            />
-            {!isSelf(renaming) ? (
-              <Button
-                label={copy("Bu cihazın oturumunu kapat", "Sign out this device")}
-                tone="danger"
-                onPress={() => {
-                  const target = renaming;
-                  setRenaming(null);
-                  askRevoke(target);
-                }}
-              />
-            ) : null}
+            <DeviceRenameActions dirty={name.trim() !== renaming.name} busy={busy}
+              disabled={!name.trim() || name.trim() === renaming.name}
+              onCancel={close}
+              onSubmit={() => {
+                if (occupied.current || !name.trim() || name.trim() === renaming.name) return;
+                occupied.current = true;
+                rename.mutate({ id: renaming.id, name: name.trim() });
+              }}
+              onRevoke={!isSelf(renaming) ? () => askRevoke(renaming) : undefined} />
           </Stack>
         </Sheet>
       ) : null}
     </Section>
   );
+}
+
+/** Rename, dismissal and remote sign-out share one pending/dirty guard. */
+function DeviceRenameActions({ dirty, busy, disabled, onSubmit, onCancel, onRevoke }: {
+  dirty: boolean; busy: boolean; disabled: boolean;
+  onSubmit(): void; onCancel(): void; onRevoke?: () => void;
+}) {
+  const copy = useCopy();
+  const guard = useSheetGuard({ dirty, pending: busy, onClose: onCancel });
+  return <>
+    <FormActions submitLabel={copy("Kaydet", "Save")} tone="primary"
+      dirty={dirty} busy={busy} disabled={disabled} cancelDisabled={busy}
+      cancelLabel={copy("Vazgeç", "Cancel")} onSubmit={onSubmit} onCancel={guard.requestClose} />
+    {onRevoke ? <Button label={copy("Bu cihazın oturumunu kapat", "Sign out this device")}
+      tone="danger" disabled={busy} onPress={() => guard.requestCloseThen(onRevoke)} /> : null}
+  </>;
 }

@@ -40,56 +40,154 @@ export function AttachmentFile({
   thumbnail?: boolean;
 }) {
   const active = useHostReadActive();
-  const access = usePrivateContentAccess(), mounted = useRef(false);
-  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const access = usePrivateContentAccess(),
+    mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const key = JSON.stringify(mediaQueryKey(context, ["attachment-preview", id, name, mimeType]));
   const identity = useMemo(() => ({}), [key, context.client]);
   const review = useMemo(() => reviewedMachine(context.client.machine), [identity]);
   const [selection, setSelection] = useState<object | null>(null);
   const intent = useMemo(() => ({}), [identity, selection, active, access.allowed]);
-  const available = active && access.allowed && access.check() && context.machineId === review?.id && isReviewedMachine(review, useMachines.getState());
   const live = useRef({ identity, selection, intent, active, access });
   live.current = { identity, selection, intent, active, access };
   const open = () => {
-    if (!mounted.current || live.current.identity !== identity || live.current.intent !== intent || live.current.selection === identity || context.machineId !== review?.id || !live.current.active ||
-      !live.current.access.allowed || !live.current.access.check() || !isReviewedMachine(review, useMachines.getState())) return;
-    live.current.selection = identity; setSelection(identity);
+    if (
+      !mounted.current ||
+      live.current.identity !== identity ||
+      live.current.intent !== intent ||
+      live.current.selection === identity ||
+      context.machineId !== review?.id ||
+      !live.current.active ||
+      !live.current.access.allowed ||
+      !live.current.access.check() ||
+      !isReviewedMachine(review, useMachines.getState())
+    )
+      return;
+    live.current.selection = identity;
+    setSelection(identity);
   };
-  const close = () => { if (mounted.current && live.current.identity === identity && live.current.selection === identity) { live.current.selection = null; setSelection(null); } };
+  const close = () => {
+    if (
+      mounted.current &&
+      live.current.identity === identity &&
+      live.current.selection === identity
+    ) {
+      live.current.selection = null;
+      setSelection(null);
+    }
+  };
   return (
     <>
-      <AttachmentPreview key={key} id={id} name={name} size={size} mimeType={mimeType} kind={attachmentKind(name, mimeType, image)} context={context} onOpenFile={open} thumbnail={thumbnail} />
-      {selection === identity ? <AttachmentReader id={id} name={name} mimeType={mimeType} context={context} onClose={close} /> : null}
+      <AttachmentPreview
+        key={key}
+        id={id}
+        name={name}
+        size={size}
+        mimeType={mimeType}
+        kind={attachmentKind(name, mimeType, image)}
+        context={context}
+        onOpenFile={open}
+        thumbnail={thumbnail}
+      />
+      {selection === identity ? (
+        <AttachmentReader
+          id={id}
+          name={name}
+          mimeType={mimeType}
+          context={context}
+          onClose={close}
+        />
+      ) : null}
     </>
   );
 }
 
 /** One explicit opening owns reads, callbacks, and all descendant previews. */
-function AttachmentReader({ id, name, mimeType, context, onClose }: {
-  id: string; name: string; mimeType?: string; context: MessageContext; onClose(): void;
+function AttachmentReader({
+  id,
+  name,
+  mimeType,
+  context,
+  onClose,
+}: {
+  id: string;
+  name: string;
+  mimeType?: string;
+  context: MessageContext;
+  onClose(): void;
 }) {
-  const copy = useCopy(), scope = useReaderScope(context, id);
+  const copy = useCopy(),
+    scope = useReaderScope(context, id);
   const { ready, available } = scope;
   const { query, data } = useSessionFile(scope, context, id, name, mimeType, true);
-  const content = useReaderContentAccess(scope, data ? JSON.stringify([data.uri, data.name, data.mimeType]) : undefined, available && !!data);
+  const content = useReaderContentAccess(
+    scope,
+    data ? JSON.stringify([data.uri, data.name, data.mimeType]) : undefined,
+    available && !!data,
+  );
   const { retry, retryError } = useReaderRetry(scope, query);
   const close = () => scope.close(onClose);
-  const reloadContent = () => { if (content.check()) retry(); };
-  return <Sheet visible title={name} size="full" onClose={close}
-    footer={available && query.error ? <FormActions submitLabel={copy("Dosyayı yeniden yükle", "Retry file")} onSubmit={retryError} busy={query.isFetching}
-      feedback={<ErrorText error={query.error} />}
-      cancelLabel={copy("Kapat", "Close")} onCancel={close} allowCancelWhileBusy /> : <FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />}>
-    {!ready || available && query.isFetching && !query.error ? <Loading /> : null}
-    {!available && ready ? <RecordAccessUnavailable /> : null}
-    {available ? <>{data ? <PrivateContentAccessProvider value={content.access}>
-      <ScopedAttachmentContent data={data} context={context} onReload={reloadContent} />
-    </PrivateContentAccessProvider> : null}</> : null}
-  </Sheet>;
+  const reloadContent = () => {
+    if (content.check()) retry();
+  };
+  return (
+    <Sheet
+      visible
+      title={name}
+      size="full"
+      onClose={close}
+      footer={
+        available && query.error ? (
+          <FormActions
+            submitLabel={copy("Dosyayı yeniden yükle", "Retry file")}
+            onSubmit={retryError}
+            busy={query.isFetching}
+            feedback={<ErrorText error={query.error} />}
+            cancelLabel={copy("Kapat", "Close")}
+            onCancel={close}
+            allowCancelWhileBusy
+          />
+        ) : (
+          <FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />
+        )
+      }
+    >
+      {!ready || (available && query.isFetching && !query.error) ? <Loading /> : null}
+      {!available && ready ? <RecordAccessUnavailable /> : null}
+      {available ? (
+        <>
+          {data ? (
+            <PrivateContentAccessProvider value={content.access}>
+              <ScopedAttachmentContent data={data} context={context} onReload={reloadContent} />
+            </PrivateContentAccessProvider>
+          ) : null}
+        </>
+      ) : null}
+    </Sheet>
+  );
 }
 
-function ScopedAttachmentContent({ data, context, onReload }: { data: LoadedMedia; context: MessageContext; onReload(): void }) {
+function ScopedAttachmentContent({
+  data,
+  context,
+  onReload,
+}: {
+  data: LoadedMedia;
+  context: MessageContext;
+  onReload(): void;
+}) {
   const client = useHostClient();
-  return client ? <><ReaderContext context={context} /><DocumentPreview {...data} context={{ ...context, client }} onReload={onReload} /></> : null;
+  return client ? (
+    <>
+      <ReaderContext context={context} />
+      <DocumentPreview {...data} context={{ ...context, client }} onReload={onReload} />
+    </>
+  ) : null;
 }
 export function TranscriptAttachments({
   block,
@@ -103,15 +201,37 @@ export function TranscriptAttachments({
   const sent = block.role === "user";
   const links = useMemo(() => (sent ? composerLinks(block.text ?? "") : []), [sent, block.text]);
   const files = [
-    ...(block.image ? [{ id: block.id, name: block.image.name, size: block.image.size, mimeType: block.image.mimeType, image: true }] : []),
-    ...(block.attachments ?? []).map((file) => ({ id: file.id, name: file.name, size: file.size, mimeType: file.mimeType, image: file.kind === "image" })),
+    ...(block.image
+      ? [
+          {
+            id: block.id,
+            name: block.image.name,
+            size: block.image.size,
+            mimeType: block.image.mimeType,
+            image: true,
+          },
+        ]
+      : []),
+    ...(block.attachments ?? []).map((file) => ({
+      id: file.id,
+      name: file.name,
+      size: file.size,
+      mimeType: file.mimeType,
+      image: file.kind === "image",
+    })),
   ];
   if (!context || (!files.length && !links.length)) return null;
-  const attach = (file: (typeof files)[number]) => <AttachmentFile key={file.id} {...file} context={context} thumbnail={sent} />;
+  const attach = (file: (typeof files)[number]) => (
+    <AttachmentFile key={file.id} {...file} context={context} thumbnail={sent} />
+  );
   const tiles = sent ? files.filter((file) => file.image) : [];
   return (
     <View style={{ gap: space.xs }}>
-      {tiles.length ? <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>{tiles.map(attach)}</View> : null}
+      {tiles.length ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+          {tiles.map(attach)}
+        </View>
+      ) : null}
       {files.filter((file) => !tiles.includes(file)).map(attach)}
       {links.length ? <ComposerLinks links={links} /> : null}
     </View>

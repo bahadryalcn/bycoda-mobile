@@ -18,10 +18,10 @@ import { GalleryLayout } from "./component-gallery-layout";
 import { MediaViewer } from "./media-viewer";
 import { MultiSelectField } from "./select-field";
 
-function GallerySheetActions({ onSubmit, onClose, error }: { onSubmit: () => void; onClose: () => void; error?: string }) {
+function GallerySheetActions({ onSubmit, onClose }: { onSubmit: () => void; onClose: () => void }) {
   const copy = useCopy();
   const { requestClose } = useSheetGuard({ onClose });
-  return <FormActions feedback={error ? <Notice tone="danger" message={error} /> : undefined}
+  return <FormActions
     submitLabel={copy("Örneği kaydet", "Save sample")} onSubmit={onSubmit} onCancel={requestClose} />;
 }
 
@@ -184,7 +184,6 @@ export function GalleryControls() {
         />
         <ToggleField label={copy("Bildirimler", "Notifications")} value={notifications} onChange={setNotifications} />
         <GallerySheetActions
-          error={required ? copy("Bu alan zorunlu.", "This field is required.") : undefined}
           onSubmit={() => {
             setSubmitted(true);
             if (title.trim()) { setSaved(true); setSheet(false); }

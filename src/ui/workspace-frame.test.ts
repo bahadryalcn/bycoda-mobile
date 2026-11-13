@@ -12,10 +12,10 @@ it("retains the same workspace child while header feedback and measured layout g
  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);const container=document.createElement("div");root=createRoot(container);
  function Draft(){const[value]=useState("Retained editor draft");return createElement("input",{value,readOnly:true});}
  const render=(feedback?:string)=>act(async()=>root!.render(createElement(WorkspaceFrame,{toolbar:"Navigation",feedback},createElement(Draft))));
- await render();const original=container.querySelector("input");await act(async()=>{f.frame!({nativeEvent:{layout:{height:230}}});});expect(f.maximum).toBe(126);f.insets={left:24,right:32};await render("Long feedback ".repeat(100));expect(f.padding).toEqual({start:24,end:32});expect(container.querySelector("input")).toBe(original);f.scale=2;await render("Still present");expect(f.maximum).toBeLessThanOrEqual(115);expect(original!.value).toBe("Retained editor draft");
+ await render();const original=container.querySelector("input");await act(async()=>{f.frame!({nativeEvent:{layout:{height:230}}});});expect(f.maximum).toBe(118);f.insets={left:24,right:32};await render("Long feedback ".repeat(100));expect(f.padding).toEqual({start:24,end:32});expect(container.querySelector("input")).toBe(original);f.scale=2;await render("Still present");expect(f.maximum).toBeLessThanOrEqual(115);expect(original!.value).toBe("Retained editor draft");
 });
 it("ignores transient zero layouts while a private region hides and returns",async()=>{
- vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);root=createRoot(document.createElement("div"));await act(async()=>root!.render(createElement(WorkspaceFrame,{toolbar:"Navigation"},"Body")));await act(async()=>{f.frame!({nativeEvent:{layout:{height:230}}});});for(const height of [0,-1,NaN])await act(async()=>f.frame!({nativeEvent:{layout:{height}}}));expect(f.maximum).toBe(126);
+ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);root=createRoot(document.createElement("div"));await act(async()=>root!.render(createElement(WorkspaceFrame,{toolbar:"Navigation"},"Body")));await act(async()=>{f.frame!({nativeEvent:{layout:{height:230}}});});for(const height of [0,-1,NaN])await act(async()=>f.frame!({nativeEvent:{layout:{height}}}));expect(f.maximum).toBe(118);
 });
 
 it("retains an embedded child while its existing gutter owner takes over",async()=>{

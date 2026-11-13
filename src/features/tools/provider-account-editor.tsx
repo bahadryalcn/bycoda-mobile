@@ -184,7 +184,7 @@ export function ProviderAccountEditor({
                       { value: "personal", label: copy("Kişisel", "Personal") },
                       { value: "work", label: copy("İş", "Work") },
                     ]}
-                    disabled={disabled || !canMetadata || !!review}
+                    disabled={disabled || !canKind || !!review}
                     onChange={(kind) =>
                       draft.setValue({
                         ...value,

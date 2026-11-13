@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren } fr
 import { router } from "expo-router";
 import type { CrewPendingInput, CrewRunDetail, CrewRunView } from "@/remote/contracts/crews";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useConnectionScope } from "@/state/connection-scope";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
@@ -22,15 +23,18 @@ import { identifier } from "../shared/format";
 import { canAcceptCrewTask, canFinishCrewRun, crewInputDefinitelyRejected } from "./runtime-model";
 import { CrewAssignmentEditor } from "./assignment-editor";
 import { CrewMemberInspection } from "./member-inspection";
+import { isApprovalOccurrenceId } from "../../../../../src/shared/model/approvalOccurrence";
 
 function PendingInput({
   input,
   run,
   disabled,
+  current,
 }: {
   input: CrewPendingInput;
   run: CrewRunView;
   disabled: boolean;
+  current(): boolean;
 }) {
   const copy = useCopy();
   const machine = useActiveMachine();
@@ -39,31 +43,49 @@ function PendingInput({
   const respond = useHostMutation("crews.respond", ["crews", run.projectId]);
   const [requestId] = useState(identifier);
   const sending = useRef(false);
-  const needsMemberSession = !input.targetRunId || !run.definition.policy.delegateApprovals;
+  const needsMemberSession =
+    !input.targetRunId ||
+    !run.definition.policy.delegateApprovals ||
+    (!!input.approval && !isApprovalOccurrenceId(input.approval.occurrenceId));
   // Retire retained navigation callbacks when their displayed owner or access changes.
-  const navigation = useMemo(() => ({ active: false }), [
-    disabled, machineId, run.id, run.projectId, input.sessionId, input.targetRunId, needsMemberSession,
-  ]);
+  const navigation = useMemo(
+    () => ({ active: false }),
+    [
+      disabled,
+      machineId,
+      run.id,
+      run.projectId,
+      input.sessionId,
+      input.targetRunId,
+      needsMemberSession,
+    ],
+  );
   useLayoutEffect(() => {
     navigation.active = true;
-    return () => { navigation.active = false; };
+    return () => {
+      navigation.active = false;
+    };
   }, [navigation]);
-  const recoveryAction = !disabled && machineId && input.sessionId ? {
-    label: copy("Oturumu aç", "Open session"),
-    onPress: () => {
-      if (!navigation.active || useMachines.getState().activeId !== machineId) return;
-      router.push({ pathname: "/session/[id]", params: {
-        id: input.sessionId, machineId, projectId: run.projectId,
-      } });
-    },
-  } : undefined;
+  const recoveryAction =
+    !disabled && machineId && input.sessionId
+      ? {
+          label: copy("Oturumu aç", "Open session"),
+          onPress: () => {
+            if (!navigation.active || !current() || useMachines.getState().activeId !== machineId)
+              return;
+            router.push({
+              pathname: "/session/[id]",
+              params: {
+                id: input.sessionId,
+                machineId,
+                projectId: run.projectId,
+              },
+            });
+          },
+        }
+      : undefined;
   const blocked =
-    disabled ||
-    sending.current ||
-    answer.isPending ||
-    respond.isPending ||
-    !input.targetRunId ||
-    !run.definition.policy.delegateApprovals;
+    disabled || sending.current || answer.isPending || respond.isPending || needsMemberSession;
   const params = {
     projectId: run.projectId,
     runId: run.id,
@@ -80,13 +102,19 @@ function PendingInput({
   return (
     <Stack>
       <Body muted>{run.tasks.find((task) => task.id === input.taskId)?.title ?? input.taskId}</Body>
-      {needsMemberSession && (run.definition.policy.delegateApprovals ? (
-        <Notice
-          tone="info"
-          message={copy("Bu isteği üye oturumundan yanıtlayın.", "Respond to this request in the member session.")}
-          action={recoveryAction}
-        />
-      ) : recoveryAction && <Button tone="quiet" {...recoveryAction} />)}
+      {needsMemberSession &&
+        (run.definition.policy.delegateApprovals ? (
+          <Notice
+            tone="info"
+            message={copy(
+              "Bu isteği üye oturumundan yanıtlayın.",
+              "Respond to this request in the member session.",
+            )}
+            action={recoveryAction}
+          />
+        ) : (
+          recoveryAction && <Button tone="quiet" {...recoveryAction} />
+        ))}
       {input.question && (
         <QuestionCard
           question={input.question}
@@ -94,7 +122,13 @@ function PendingInput({
           deliveryVersion={run.updatedAt}
           disabled={blocked}
           onAnswer={async (reply) => {
-            if (blocked || sending.current || useMachines.getState().activeId !== machineId) return;
+            if (
+              blocked ||
+              sending.current ||
+              !current() ||
+              useMachines.getState().activeId !== machineId
+            )
+              return;
             sending.current = true;
             // Keep the same receipt identity after an uncertain response; never replay automatically.
             try {
@@ -129,6 +163,7 @@ function PendingInput({
                       if (
                         blocked ||
                         sending.current ||
+                        !current() ||
                         useMachines.getState().activeId !== machineId
                       )
                         return;
@@ -160,42 +195,65 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
   const copy = useCopy();
   const machine = useActiveMachine();
   const [machineId] = useState(machine?.id);
+  const connection = useConnectionScope();
+  const [opening] = useState(connection);
   const [assigning, setAssigning] = useState(false);
   const supported =
-    machine?.id === machineId && machine?.capabilities?.includes("crews.v1") === true;
+    machine?.id === machineId &&
+    opening.isCurrent() &&
+    machine?.capabilities?.includes("crews.v1") === true;
   const query = useHostQuery<CrewRunDetail>(
     ["crews", run.projectId, run.id],
     "crews.get",
     { projectId: run.projectId, runId: run.id },
     { enabled: supported, interval: 5000 },
   );
-  const detail = query.data;
+  const detail = supported ? query.data : undefined;
   const accept = useHostMutation("crews.accept", ["crews", run.projectId]);
   const finish = useHostMutation("crews.finish", ["crews", run.projectId]);
   const resolve = useHostMutation("crews.resolve", ["crews", run.projectId]);
   const request = useHostMutation("crews.request", ["crews", run.projectId]);
   const [text, setText] = useState("");
   const [requestId, setRequestId] = useState(identifier);
+  const [requestHeld, setRequestHeld] = useState(false);
   const sending = useRef(false);
   const busy = accept.isPending || finish.isPending || resolve.isPending || request.isPending;
-  const available = () => supported && !busy && useMachines.getState().activeId === machineId;
+  const available = () =>
+    supported && opening.isCurrent() && !busy && useMachines.getState().activeId === machineId;
   return (
     <Stack>
       <QueryState query={query} />
       {!!detail?.pendingInputs?.length && !detail.definition.policy.delegateApprovals && (
-        <Notice tone="info" message={copy(
-          "Bu çalışma için devredilmiş onay izni yok. Üye oturumundan yanıtlayın.",
-          "Delegated approval is unavailable for this work. Respond in the member session.",
-        )} />
-      )}
-      {detail && (detail.pendingInputs ?? []).map((input) => (
-        <PendingInput
-          key={`${input.sessionId}:${input.targetRunId}:${input.question?.requestId ?? input.approval?.requestId}`}
-          input={input}
-          run={detail}
-          disabled={!available()}
+        <Notice
+          tone="info"
+          message={copy(
+            "Bu çalışma için devredilmiş onay izni yok. Üye oturumundan yanıtlayın.",
+            "Delegated approval is unavailable for this work. Respond in the member session.",
+          )}
         />
-      ))}
+      )}
+      {detail &&
+        (detail.pendingInputs ?? []).map((input) => (
+          <PendingInput
+            key={JSON.stringify([
+              opening.token,
+              detail.projectId,
+              detail.id,
+              input.sessionId,
+              input.targetRunId,
+              input.question
+                ? ["question", input.question.requestId, input.question.occurrenceId]
+                : null,
+              input.approval
+                ? ["approval", input.approval.requestId, input.approval.occurrenceId]
+                : null,
+            ])}
+            input={input}
+            run={detail}
+            disabled={!available()}
+            current={opening.isCurrent}
+          />
+        ))}
       {children}
       {detail && (
         <>
@@ -266,7 +324,9 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
                             runId: run.id,
                             taskId: task.id,
                           });
-                      }, undefined, "default",
+                      },
+                      undefined,
+                      "default",
                     )
                   }
                 />
@@ -317,18 +377,72 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
                 onPress={() => {
                   if (!available() || !text.trim() || sending.current) return;
                   sending.current = true;
+                  const submitted = text.trim();
                   request.mutate(
-                    { projectId: run.projectId, runId: run.id, requestId, text: text.trim() },
+                    { projectId: run.projectId, runId: run.id, requestId, text: submitted },
                     {
                       onSuccess: () => {
                         sending.current = false;
-                        setText("");
+                        setRequestHeld(false);
+                        setText((latest) => (latest.trim() === submitted ? "" : latest));
                         setRequestId(identifier());
                       },
+                      onError: () => setRequestHeld(true),
                     },
                   );
                 }}
               />
+              {requestHeld ? (
+                <>
+                  <Notice
+                    tone="warning"
+                    message={copy(
+                      "İstek sonucu bilinmiyor. Durumu kontrol etmek isteği yeniden göndermez.",
+                      "The request outcome is unknown. Checking status does not resend it.",
+                    )}
+                  />
+                  <Button
+                    label={copy("İsteği kontrol et", "Check request")}
+                    busy={query.isFetching}
+                    disabled={
+                      !opening.isCurrent() ||
+                      query.isFetching ||
+                      useMachines.getState().activeId !== machineId
+                    }
+                    onPress={() => {
+                      if (
+                        !opening.isCurrent() ||
+                        query.isFetching ||
+                        useMachines.getState().activeId !== machineId
+                      )
+                        return;
+                      const expected = text.trim();
+                      void query
+                        .refetch()
+                        .then((result) => {
+                          if (
+                            !opening.isCurrent() ||
+                            useMachines.getState().activeId !== machineId ||
+                            result.error ||
+                            !result.data?.messages.some(
+                              (message) =>
+                                message.id === requestId &&
+                                message.from === "owner" &&
+                                message.text === expected,
+                            )
+                          )
+                            return;
+                          sending.current = false;
+                          setRequestHeld(false);
+                          setText((latest) => (latest.trim() === expected ? "" : latest));
+                          setRequestId(identifier());
+                          request.reset();
+                        })
+                        .catch(() => {});
+                    }}
+                  />
+                </>
+              ) : null}
             </Disclosure>
           )}
           <Button
@@ -345,7 +459,9 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
                 copy("Tamamla", "Finish"),
                 () => {
                   if (available()) finish.mutate({ projectId: run.projectId, runId: run.id });
-                }, undefined, "default",
+                },
+                undefined,
+                "default",
               )
             }
           />

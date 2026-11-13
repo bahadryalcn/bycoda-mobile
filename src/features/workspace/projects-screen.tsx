@@ -42,7 +42,12 @@ import { useProjectActivity } from "./use-project-activity";
 import { runningProjectCounts } from "./activity-model";
 import { ProjectGroupHeader, ProjectRow, type ProjectRowView } from "./project-row";
 import { ProjectReorderSheet } from "./project-reorder-sheet";
-import { applyCustomOrder, moveInOrder, orderFromSections, type ProjectOrderMove } from "./project-order";
+import {
+  applyCustomOrder,
+  moveInOrder,
+  orderFromSections,
+  type ProjectOrderMove,
+} from "./project-order";
 import { ProjectDetailsSheet } from "./project-details-sheet";
 import { latestProjectActivity } from "./project-summaries";
 import {
@@ -69,44 +74,73 @@ export function ProjectsScreen() {
   } = useProjectDirectoryPreferences(machine?.id);
   const [openingId, setOpeningId] = useState<string>();
   const [detailsId, setDetailsId] = useState<string>();
-  const { query, projects, groups, directoryReady, privacyUnavailable, readiness, isProjectVisible } = useProjectDirectory();
+  const {
+    query,
+    projects,
+    groups,
+    directoryReady,
+    privacyUnavailable,
+    readiness,
+    isProjectVisible,
+  } = useProjectDirectory();
   const activity = useProjectActivity();
-  const running = useMemo(
-    () => runningProjectCounts(activity.directory),
-    [activity.directory],
-  );
+  const running = useMemo(() => runningProjectCounts(activity.directory), [activity.directory]);
   const activeAt = useMemo(() => latestProjectActivity(activity.directory), [activity.directory]);
   const open = useHostMutation<HostProject>("projects.open", ["projects"]);
   const showGroups = preferences.view === "grouped" && groups.length > 0;
   const custom = preferences.sort === "custom";
-  const buildSections = useCallback((query: string, collapsed: Readonly<Record<string, boolean>>) => {
-    const ordered = sortDirectoryProjects(projects, preferences, running);
-    const sections = directorySections(ordered, groups, query, collapsed, running, !custom);
-    if (showGroups) return custom ? applyCustomOrder(sections, preferences.order, true) : sections;
-    const matchingIds = new Set(
-      sections.flatMap((section) => section.data.map((project) => project.id)),
-    );
-    const data = ordered.filter((project) => matchingIds.has(project.id));
-    const flat = [{ key: "", count: data.length, total: data.length, running: 0, expanded: true, data }];
-    return custom ? applyCustomOrder(flat, preferences.order, false) : flat;
-  }, [projects, groups, preferences, showGroups, running, custom]);
-  const sections = useMemo(() => buildSections(
-    deferredSearch,
-    showGroups ? preferences.collapsed : Object.fromEntries(groups.map((group) => [group.id, false])),
-  ), [buildSections, deferredSearch, showGroups, preferences.collapsed, groups]);
+  const buildSections = useCallback(
+    (query: string, collapsed: Readonly<Record<string, boolean>>) => {
+      const ordered = sortDirectoryProjects(projects, preferences, running);
+      const sections = directorySections(ordered, groups, query, collapsed, running, !custom);
+      if (showGroups)
+        return custom ? applyCustomOrder(sections, preferences.order, true) : sections;
+      const matchingIds = new Set(
+        sections.flatMap((section) => section.data.map((project) => project.id)),
+      );
+      const data = ordered.filter((project) => matchingIds.has(project.id));
+      const flat = [
+        { key: "", count: data.length, total: data.length, running: 0, expanded: true, data },
+      ];
+      return custom ? applyCustomOrder(flat, preferences.order, false) : flat;
+    },
+    [projects, groups, preferences, showGroups, running, custom],
+  );
+  const sections = useMemo(
+    () =>
+      buildSections(
+        deferredSearch,
+        showGroups
+          ? preferences.collapsed
+          : Object.fromEntries(groups.map((group) => [group.id, false])),
+      ),
+    [buildSections, deferredSearch, showGroups, preferences.collapsed, groups],
+  );
   const [reordering, setReordering] = useState(false);
   const reorderSections = useMemo(
-    () => reordering ? buildSections("", Object.fromEntries(groups.map((group) => [group.id, false]))) : [],
+    () =>
+      reordering
+        ? buildSections("", Object.fromEntries(groups.map((group) => [group.id, false])))
+        : [],
     [reordering, buildSections, groups],
   );
   const moveOrder = useLatestCallback((move: ProjectOrderMove) => {
     const next = moveInOrder(orderFromSections(reorderSections, showGroups), move);
-    if (machine) void projectDirectoryPreferences.getState().update(machine.id, (current) => ({ sort: "custom", order: { ...current.order, ...next } }));
+    if (machine)
+      void projectDirectoryPreferences
+        .getState()
+        .update(machine.id, (current) => ({
+          sort: "custom",
+          order: { ...current.order, ...next },
+        }));
   });
   const rows = useMemo(() => directoryRows(sections, showGroups), [sections, showGroups]);
-  const updatePreferences = useCallback((patch: Partial<ProjectDirectoryPreferences>) => {
-    if (machine) void projectDirectoryPreferences.getState().update(machine.id, patch);
-  }, [machine]);
+  const updatePreferences = useCallback(
+    (patch: Partial<ProjectDirectoryPreferences>) => {
+      if (machine) void projectDirectoryPreferences.getState().update(machine.id, patch);
+    },
+    [machine],
+  );
   const matching = sections.reduce((count, section) => count + section.count, 0);
   const go = (project: HostProject, view?: ProjectRowView) => {
     if (!machine || useMachines.getState().activeId !== machine.id) return;
@@ -158,101 +192,141 @@ export function ProjectsScreen() {
     emptyIllustration: search.trim() ? ("search-empty" as const) : ("no-projects" as const),
     emptyAction: search.trim()
       ? { label: copy("Aramayı temizle", "Clear search"), onPress: () => setSearch("") }
-      : { label: copy("Proje ekle", "Add project"), onPress: () => { open.reset(); setAdding(true); } },
+      : {
+          label: copy("Proje ekle", "Add project"),
+          onPress: () => {
+            open.reset();
+            setAdding(true);
+          },
+        },
   };
-  const header = useMemo(() => (
-    <View style={{ gap: space.xs, paddingBottom: space.sm }}>
-      <ScreenHeading
-        title={copy("Projeler", "Projects")}
-        actions={
-          <IconButton
-            label={copy("Proje ekle", "Add project")}
-            disabled={open.isPending || !directoryReady}
-            onPress={() => {
-              open.reset();
-              setAdding(true);
-            }}
-          >
-            <Plus size={20} strokeWidth={2} color={colors.accent} />
-          </IconButton>
-        }
-      />
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <SearchField
-            label={copy("Projelerinde ara", "Search projects")}
-            value={search}
-            onChangeText={setSearch}
-            placeholder={copy("Proje veya grup ara", "Search project or group")}
-          />
-        </View>
-        <IconButton
-          label={copy("Sırala", "Reorder")}
-          disabled={!hydrated || !!search.trim() || !projects.length}
-          onPress={() => setReordering(true)}
-        >
-          <ArrowUpDown size={18} color={colors.muted} />
-        </IconButton>
-        <IconButton
-          label={copy("Proje görünümü", "Project view")}
-          expanded={optionsOpen}
-          onPress={() => setOptionsOpen(true)}
-        >
-          <SlidersHorizontal size={18} color={colors.muted} />
-        </IconButton>
-      </View>
-      {preferencesError ? (
-        <Notice
-          tone="warning"
-          message={copy(
-            "Liste tercihi kaydedilemedi. Yeniden seçerek dene.",
-            "The list preference could not be saved. Select it again to retry.",
-          )}
-        />
-      ) : null}
-      {!adding ? <MutationState mutation={open} /> : null}
-    </View>
-  ), [copy, colors, search, adding, optionsOpen, hydrated, projects.length, open.status, open.isPending, open.reset, open.error, directoryReady, preferencesError, matching]);
-  const keyExtractor = useCallback((row: DirectoryRow) => row.key, []);
-  const renderItem = useCallback<ListRenderItem<DirectoryRow>>(({ item, index }) => {
-    if (item.kind === "group") {
-      const section = item.section;
-      return (
-        <ProjectGroupHeader
-          name={section.group?.name ?? copy("Diğerleri", "Others")}
-          appearance={section.group?.appearance}
-          first={index === 0}
-          count={section.count}
-          running={section.running}
-          expanded={section.expanded}
-          collapsible={!search.trim()}
-          onToggle={() =>
-            updatePreferences({
-              collapsed: { ...preferences.collapsed, [section.key]: section.expanded },
-            })
+  const header = useMemo(
+    () => (
+      <View style={{ gap: space.xs, paddingBottom: space.sm }}>
+        <ScreenHeading
+          title={copy("Projeler", "Projects")}
+          actions={
+            <IconButton
+              label={copy("Proje ekle", "Add project")}
+              disabled={open.isPending || !directoryReady}
+              onPress={() => {
+                open.reset();
+                setAdding(true);
+              }}
+            >
+              <Plus size={20} strokeWidth={2} color={colors.accent} />
+            </IconButton>
           }
         />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <SearchField
+              label={copy("Projelerinde ara", "Search projects")}
+              value={search}
+              onChangeText={setSearch}
+              placeholder={copy("Proje veya grup ara", "Search project or group")}
+            />
+          </View>
+          <IconButton
+            label={copy("Sırala", "Reorder")}
+            disabled={!hydrated || !!search.trim() || !projects.length}
+            onPress={() => setReordering(true)}
+          >
+            <ArrowUpDown size={18} color={colors.muted} />
+          </IconButton>
+          <IconButton
+            label={copy("Proje görünümü", "Project view")}
+            expanded={optionsOpen}
+            onPress={() => setOptionsOpen(true)}
+          >
+            <SlidersHorizontal size={18} color={colors.muted} />
+          </IconButton>
+        </View>
+        {preferencesError ? (
+          <Notice
+            tone="warning"
+            message={copy(
+              "Liste tercihi kaydedilemedi. Yeniden seçerek dene.",
+              "The list preference could not be saved. Select it again to retry.",
+            )}
+          />
+        ) : null}
+        {!adding ? <MutationState mutation={open} /> : null}
+      </View>
+    ),
+    [
+      copy,
+      colors,
+      search,
+      adding,
+      optionsOpen,
+      hydrated,
+      projects.length,
+      open.status,
+      open.isPending,
+      open.reset,
+      open.error,
+      directoryReady,
+      preferencesError,
+      matching,
+    ],
+  );
+  const keyExtractor = useCallback((row: DirectoryRow) => row.key, []);
+  const renderItem = useCallback<ListRenderItem<DirectoryRow>>(
+    ({ item, index }) => {
+      if (item.kind === "group") {
+        const section = item.section;
+        return (
+          <ProjectGroupHeader
+            name={section.group?.name ?? copy("Diğerleri", "Others")}
+            appearance={section.group?.appearance}
+            first={index === 0}
+            count={section.count}
+            running={section.running}
+            expanded={section.expanded}
+            collapsible={!search.trim()}
+            onToggle={() =>
+              updatePreferences({
+                collapsed: { ...preferences.collapsed, [section.key]: section.expanded },
+              })
+            }
+          />
+        );
+      }
+      const project = item.project;
+      return (
+        <ProjectRow
+          id={project.id}
+          name={project.name}
+          appearance={project.appearance}
+          depth={item.depth}
+          grouped={showGroups}
+          registered={project.registered}
+          running={running[project.id] ?? 0}
+          activeAt={activeAt[project.id]}
+          opening={openingId === project.id}
+          disabled={open.isPending}
+          onPress={chooseById}
+          onDetails={showDetails}
+          onOpenView={openView}
+        />
       );
-    }
-    const project = item.project;
-    return (
-      <ProjectRow
-        id={project.id}
-        name={project.name}
-        appearance={project.appearance}
-        depth={item.depth}
-        grouped={showGroups}
-        registered={project.registered}
-        running={running[project.id] ?? 0}
-        activeAt={activeAt[project.id]}
-        opening={openingId === project.id}
-        disabled={open.isPending}
-        onPress={chooseById}
-        onDetails={showDetails}
-        onOpenView={openView}
-      />
-    );
-  }, [search, preferences, running, activeAt, openingId, open.isPending, showGroups, copy, updatePreferences, chooseById, showDetails, openView]);
+    },
+    [
+      search,
+      preferences,
+      running,
+      activeAt,
+      openingId,
+      open.isPending,
+      showGroups,
+      copy,
+      updatePreferences,
+      chooseById,
+      showDetails,
+      openView,
+    ],
+  );
   if (!machine) return <WelcomeScreen />;
   return (
     <Screen scroll={false}>
@@ -262,8 +336,8 @@ export function ProjectsScreen() {
         keyExtractor={keyExtractor}
         style={{ flex: 1, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
         contentContainerStyle={{
-          paddingStart: Math.max(space.screen, insets.left),
-          paddingEnd: Math.max(space.screen, insets.right),
+          paddingLeft: Math.max(space.screen, insets.left),
+          paddingRight: Math.max(space.screen, insets.right),
           paddingTop: space.xs,
           paddingBottom: space.lg,
           flexGrow: 1,
@@ -359,8 +433,14 @@ export function ProjectsScreen() {
           groupName={groups.find((group) => group.id === details.groupId)?.name}
           registered={details.registered}
           onClose={() => setDetailsId(undefined)}
-          onOpen={() => { setDetailsId(undefined); choose(details); }}
-          onOpenView={(view) => { setDetailsId(undefined); choose(details, view); }}
+          onOpen={() => {
+            setDetailsId(undefined);
+            choose(details);
+          }}
+          onOpenView={(view) => {
+            setDetailsId(undefined);
+            choose(details, view);
+          }}
         />
       ) : null}
       {adding ? (

@@ -1,6 +1,6 @@
 import { useCopy } from "@/ui/copy";
-import { useRef, useState, type ComponentRef } from "react";
-import { space } from "@/ui/tokens";
+import { useState } from "react";
+import { catalogProviders } from "@/features/workspace/catalog";
 import { ErrorText } from "@/ui/primitives";
 import { NumberField } from "@/ui/number-field";
 import { Body, Button, Disclosure, IdentifierField, QueryState, SelectField } from "@/ui/primitives";
@@ -16,29 +16,31 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
   const copy = useCopy();
   const machine = useActiveMachine();
   const [minutes, setMinutes] = useState(String(value.maxRunMinutes));
-  const modelInput = useRef<ComponentRef<typeof IdentifierField>>(null);
+
   const [choosingModel, setChoosingModel] = useState(false);
   const minutesValid = /^\d+$/.test(minutes) && Number(minutes) <= 10080;
   const models = useHostQuery<HostModelCatalog>(
     ["models", projectId],
     "models.list",
     projectId ? { projectId } : {},
-    { enabled: !!projectId },
+    {},
   );
   const available = models.data?.models[value.harness] ?? [];
+  const providers = catalogProviders(machine?.providers, models.data);
+  const selectedModel = available.find((model) => model.id === value.model);
   return (
     <>
       <SelectField
         label={copy("Ajan", "Agent")}
         value={value.harness}
-        options={(machine?.providers ?? []).map(providerSelectionOption)}
+        options={providers.map(providerSelectionOption)}
         disabled={disabled}
         onChange={(harness) => {
           if (harness !== value.harness)
             onChange(selectAgentProvider(value, harness, models.data));
         }}
       />
-      {!machine?.providers?.length && (
+      {!providers.length && (
         <Body muted>
           {copy(
             "Bu bilgisayardaki ajanlar henüz alınamadı. Bağlantıyı yenileyin.",
@@ -46,24 +48,23 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
           )}
         </Body>
       )}
-      <IdentifierField
-          ref={modelInput}
-          label={copy("Model", "Model")}
+      <Button
+        label={selectedModel?.name || value.model ? `${copy("Model", "Model")}: ${selectedModel?.name || value.model}` : copy("Model seç", "Choose model")}
+        disabled={disabled || !available.length}
+        onPress={() => setChoosingModel(true)}
+      />
+      <Disclosure label={copy("Özel model kimliği", "Custom model ID")}>
+        <IdentifierField
+
+          label={copy("Model kimliği", "Model ID")}
           value={value.model}
           onChangeText={(model) => onChange(selectAgentModel(value, model, models.data))}
           editable={!disabled}
           placeholder={copy("Bilgisayardaki model kimliği", "Model ID on the computer")}
-          hint={copy("Model kimliği girin veya katalogdan seçin. Özel model kimlikleri kullanılabilir.", "Enter a model ID or choose from the catalogue. Custom model IDs are supported.")}
         />
-      <Button
-        tone="quiet"
-        style={{ marginStart: -space.md }}
-        label={copy("Katalogdan seç", "Choose from catalogue")}
-        disabled={disabled || !available.length}
-        onPress={() => { setChoosingModel(true); }}
-      />
+      </Disclosure>
       {choosingModel ? <AgentModelPicker catalog={models.data} query={models} harness={value.harness}
-        selected={value.model} disabled={disabled} returnFocusRef={modelInput}
+        selected={value.model} disabled={disabled} returnFocusRef={undefined}
         onSelect={model => onChange(selectAgentModel(value, model, models.data))}
         onClose={() => setChoosingModel(false)} /> : null}
       <Disclosure label={copy("Ajan ayarları", "Agent settings")}

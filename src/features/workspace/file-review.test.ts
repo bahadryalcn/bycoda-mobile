@@ -83,6 +83,14 @@ it("keeps media behind the existing preview and makes bounded text explicit", as
   state.text = "x".repeat(3000); await render();
   expect(container.textContent).toContain("Preview limit reached.");
 });
+it("keeps a preserved text draft inspectable when its file extension now uses a binary reader", async () => {
+  root = createRoot(container); await render("report.docx");
+  expect(container.querySelector("[data-media]")).not.toBeNull();
+  await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "Preserved draft")!.click());
+  expect(container.textContent).toContain("preserved local work");
+  expect(container.querySelector("[data-media]")).toBeNull();
+  expect(container.querySelector("input,textarea")).toBeNull();
+});
 
 it("offers one selectable multiline source without numbers and keeps drafts read-only", async () => {
   root = createRoot(container);

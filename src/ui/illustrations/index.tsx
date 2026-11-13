@@ -46,8 +46,8 @@ const art = {
 
 /** Decorative art; the surrounding state title supplies the accessible meaning. */
 export function Illustration({ name, size = 120 }: { name: IllustrationName; size?: number }) {
-  // Art reads the palette without a hook; remounting per mode keeps compiled caches from going stale.
-  const { mode } = useMobileTheme();
+  // Art reads token accessors; invalidate its compiled cache for either appearance choice.
+  const { palette, mode } = useMobileTheme();
   const Art = art[name];
-  return <Art key={mode} size={size} />;
+  return <Art key={`${palette}:${mode}`} size={size} />;
 }

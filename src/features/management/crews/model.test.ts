@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CrewDefinition, SavedCrewAgent } from "@/remote/contracts/crews";
-import { candidateFromCatalog, copyLibraryMember, crewValidation, memberValidation, newDefinition, validateCrewDirectory } from "./model";
+import { candidateFromCatalog, copyLibraryMember, crewValidation, memberValidation, newDefinition, validateCrewDirectory, memberRoutingPatch } from "./model";
 
 export function validCrew(): CrewDefinition {
   const definition = newDefinition("crew", "project");
@@ -11,6 +11,18 @@ export function validCrew(): CrewDefinition {
 }
 
 describe("mobile crew contracts", () => {
+  it("changes routing binding explicitly without rewriting candidate settings or custom instructions", () => {
+    const member = { ...validCrew().agents[0], instructions: "Keep exact custom instructions", modelChoice: { kind: "pool" as const, poolId: "existing" }, selection: "automatic" as const };
+    const edited = { ...member, name: "Renamed" };
+    expect(edited.modelChoice).toEqual({ kind: "pool", poolId: "existing" });
+    for (const choice of [{ kind: "order" as const }, { kind: "default" as const }, { kind: "pool" as const, poolId: "other" }, { kind: "fixed" as const }]) {
+      const next = { ...member, ...memberRoutingPatch(choice) };
+      expect(next.modelChoice).toEqual(choice);
+      expect(next.selection).toBe(choice.kind === "fixed" ? "fixed" : "automatic");
+      expect(next.instructions).toBe(member.instructions);
+      expect(next.candidates).toBe(member.candidates);
+    }
+  });
   it("validates roster and limits with the host's canonical parser", () => {
     const definition = validCrew();
     expect(crewValidation(definition)).toBeUndefined();

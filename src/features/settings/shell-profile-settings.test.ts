@@ -3,10 +3,10 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { ShellProfileSettings } from "./shell-profile-settings";
-const state = vi.hoisted(() => ({ machine: "one", environmentId: "host-one", endpoint: "https://original.example", supported: true, conflict: false, reply: undefined as undefined | Promise<unknown>, refetch: vi.fn(), chosenId: null as string | null, uncertain: false, writes: [] as unknown[] }));
+const state = vi.hoisted(() => ({ machine: "one", environmentId: "host-one", endpoint: "https://original.example", supported: true, loaded: true, conflict: false, reply: undefined as undefined | Promise<unknown>, refetch: vi.fn(), chosenId: null as string | null, uncertain: false, writes: [] as unknown[] }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: state.machine, name: "Computer", environmentId: state.environmentId, endpoint: state.endpoint, capabilities: state.supported ? ["shell.profile.compare.v1"] : [] }), useMachines: { getState: () => ({ activeId: state.machine, machines: [{ id: state.machine, environmentId: state.environmentId, endpoint: state.endpoint, capabilities: state.supported ? ["shell.profile.compare.v1"] : [] }] }) } }));
 vi.mock("@/state/queries", () => ({
-  useHostQuery: () => ({ data: { profiles: [{ id: "sh", name: "Shell", path: "/bin/sh", kind: "sh" }], defaultId: "sh", chosenId: state.chosenId }, refetch: state.refetch }),
+  useHostQuery: () => ({ data: state.loaded ? { profiles: [{ id: "sh", name: "Shell", path: "/bin/sh", kind: "sh" }], defaultId: "sh", chosenId: state.chosenId } : undefined, refetch: state.refetch }),
   useHostMutation: () => ({ isPending: false, mutateAsync: async (input: unknown) => { state.writes.push(input); if (state.conflict) throw new Error("The command shell preference changed. Refresh and review again."); if (state.uncertain) throw { uncertain: true }; if (state.reply) return state.reply; return { profiles: [{ id: "sh", name: "Shell", path: "/bin/sh", kind: "sh" }], defaultId: "sh", chosenId: "sh" }; } }),
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -14,7 +14,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label);
   return { Stack: Wrapper, Body: Wrapper, Disclosure: Wrapper, Sheet: ({ children, onClose, dismissible }: PropsWithChildren<{ onClose: () => void; dismissible?: boolean }>) => createElement("div", null, children, createElement(Button, { label: "Close shell", disabled: dismissible === false, onPress: onClose })), QueryState: () => null, ErrorText: () => null, ErrorNotice: ({ error, message }: { error?: unknown; message?: string }) => (error ? createElement("p", null, message) : null), MutationState: () => null,
-    NavigationRow: Button,
+    NavigationRow: ({ detail, detailLines, ...props }: { detail?: string; detailLines?: number; label: string; onPress: () => void; disabled?: boolean }) => createElement("div", { "data-detail-lines": detailLines }, createElement(Button, props), detail),
     StateView: ({ title, description, action }: { title: string; description?: string; action?: { label: string; onPress: () => void } }) => createElement("div", null, createElement("p", null, title), description ? createElement("p", null, description) : null, action ? createElement("button", { onClick: action.onPress }, action.label) : null), Notice: ({ message }: { message: string }) => createElement("p", null, message), Button,
     SelectField: ({ value, onChange, disabled }: { value: string; onChange: (value: string) => void; disabled: boolean }) => createElement("select", { value, disabled, onChange: (event: import("react").ChangeEvent<HTMLSelectElement>) => onChange(event.target.value) }, createElement("option", { value: "" }, "Default"), createElement("option", { value: "sh" }, "Shell")),
     FormActions: ({ submitLabel, onSubmit, disabled }: { submitLabel: string; onSubmit: () => void; disabled: boolean }) => createElement(Button, { label: submitLabel, onPress: onSubmit, disabled }),
@@ -24,7 +24,15 @@ let root: ReturnType<typeof createRoot> | undefined; let node: HTMLDivElement;
 async function render() { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); if (!root) { node = document.createElement("div"); document.body.appendChild(node); root = createRoot(node); } await act(async () => root!.render(createElement(ShellProfileSettings))); }
 async function click(label: string) { await act(async () => [...node.querySelectorAll("button")].find((button) => button.textContent === label)!.click()); }
 async function choose() { await act(async () => { const select = node.querySelector("select")!; select.value = "sh"; select.dispatchEvent(new Event("change", { bubbles: true })); }); }
-afterEach(async () => { await act(async () => root?.unmount()); root = undefined; node?.remove(); state.machine = "one"; state.environmentId = "host-one"; state.endpoint = "https://original.example"; state.supported = true; state.conflict = false; state.reply = undefined; state.refetch.mockReset(); state.chosenId = null; state.uncertain = false; state.writes = []; vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root?.unmount()); root = undefined; node?.remove(); state.machine = "one"; state.environmentId = "host-one"; state.endpoint = "https://original.example"; state.supported = true; state.loaded = true; state.conflict = false; state.reply = undefined; state.refetch.mockReset(); state.chosenId = null; state.uncertain = false; state.writes = []; vi.unstubAllGlobals(); });
+it("does not describe an unread preference as the saved system default", async () => {
+  state.loaded = false; await render();
+  expect(node.textContent).not.toContain("System default");
+  expect([...node.querySelectorAll("button")].find(button => button.textContent === "Command shell")?.disabled).toBe(true);
+  state.loaded = true; await render();
+  expect(node.textContent).toContain("System default");
+  expect(node.querySelector('[data-detail-lines="0"]')).not.toBeNull();
+});
 it("sends only the explicitly selected shell with the frozen reviewed preference", async () => {
   await render(); await click("Command shell"); await choose(); expect(state.writes).toEqual([]);
   state.chosenId = "external"; await render(); await click("Save command shell");

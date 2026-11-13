@@ -104,7 +104,9 @@ export function AutomationCard({
       title={item.name}
       status={<Status value={item.enabled ? (item.lastRunStatus ?? "idle") : "paused"} />}
       metadata={joinMeta([
-        scheduleSentence(item, copy),
+        item.template?.kind === "project-scan" ? copy("Proje taraması", "Project scan") : undefined,
+        !item.projectId ? "Room" : undefined,
+        item.trigger?.kind === "continuous" ? copy("Sürekli · en az {p0} dk", "Continuous · minimum {p0} min", { p0: item.trigger.minimumGapMinutes }) : item.trigger?.kind === "event" ? item.trigger.event : scheduleSentence(item, copy),
         item.enabled && !!relative(item.nextRunAt) && copy("Sonraki {p0}", "Next {p0}", { p0: relative(item.nextRunAt) }),
         !!relative(item.lastRunAt) && copy("Son çalışma {p0}", "Last run {p0}", { p0: relative(item.lastRunAt) }),
       ])}
@@ -120,7 +122,7 @@ export function AutomationCard({
         <>
           <Body>{item.prompt}</Body>
           <Body mono>{item.harness} · {item.model}</Body>
-          <HoursOverview rows={WEEK_ORDER.map((day) => ({ key: String(day), label: dayNames[day], blocks: blocks[day] }))} />
+          {!item.trigger ? <HoursOverview rows={WEEK_ORDER.map((day) => ({ key: String(day), label: dayNames[day], blocks: blocks[day] }))} /> : null}
         </>
       }
     >

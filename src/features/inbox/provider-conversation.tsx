@@ -10,6 +10,7 @@ import { inboxReplyTarget } from "../../../../src/features/inbox/model/remoteInb
 import { Badge, Body, Button, QueryState, Row, Section, Stack } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
 import { useMobileTheme } from "@/ui/theme";
 
 export {
@@ -56,6 +57,7 @@ export function ProviderInboxComment({
 }: ProviderInboxCommentProps) {
   const { uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const locale = useLocale();
   const [expanded, setExpanded] = useState(false);
   return (
     <Stack style={{ paddingVertical: space.sm }}>
@@ -86,10 +88,7 @@ export function ProviderInboxComment({
         ))
       ) : comment.replies?.length ? (
         <Button
-          label={copy(
-            `${comment.replies.length} yanıtı göster`,
-            `Show ${comment.replies.length} replies`,
-          )}
+          label={copy("Yanıtları göster: {p0}", "Show replies: {p0}", { p0: new Intl.NumberFormat(locale).format(comment.replies.length) })}
           onPress={() => setExpanded(true)}
         />
       ) : null}

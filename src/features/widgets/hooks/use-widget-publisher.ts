@@ -33,7 +33,9 @@ export function useWidgetPublisher() {
   const unlocked = useSecurity((state) => state.status === "unlocked");
   const feed = useWidgetFeedStore((state) => state.feed);
   const showTitles = useWidgetPreferences((state) => state.showTitles);
-  const [appState, setAppState] = useState<AppStateStatus>(() => (AppState.currentState ?? "active") as AppStateStatus);
+  const [appState, setAppState] = useState<AppStateStatus>(
+    () => (AppState.currentState ?? "active") as AppStateStatus,
+  );
   const [beat, setBeat] = useState(0);
   const [activity, setActivity] = useState<LiveActivityProps | null>(null);
   const published = useRef({ identity: "", at: 0 });
@@ -42,6 +44,7 @@ export function useWidgetPublisher() {
     running: copy("Çalışıyor", "Running"),
     needsInput: copy("Yanıt bekliyor", "Needs input"),
     failed: copy("Başarısız", "Failed"),
+    done: copy("Tamamlandı", "Completed"),
     empty: copy("Aktif oturum yok", "No active sessions"),
     locked: copy("Devam etmek için bycoda'yı aç", "Open bycoda to continue"),
     setup: copy("Bağlanmak için bycoda'yı aç", "Open bycoda to connect"),
@@ -85,7 +88,9 @@ export function useWidgetPublisher() {
           published.current = { identity: "", at: 0 };
         });
         const next = liveActivityProps(snapshot);
-        setActivity((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
+        setActivity((previous) =>
+          JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
+        );
       },
       snapshot.state === "ready" ? DEBOUNCE_MS : 0,
     );

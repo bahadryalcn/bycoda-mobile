@@ -19,7 +19,7 @@ vi.mock("./primitives",()=>{
 });
 import { MessageCode } from "./message-code";
 let root:ReturnType<typeof createRoot>|undefined,container:HTMLDivElement;
-let props:{code:string;language:string;complete?:boolean;textSize?:"compact"|"standard"|"large";readerTitle?:string;copyLabel?:string;allowPreview?:boolean};
+let props:{code:string;language:string;complete?:boolean;textSize?:"compact"|"standard"|"large";readerTitle?:string;copyLabel?:string;allowPreview?:boolean;output?:boolean;error?:boolean};
 const render=()=>act(async()=>root!.render(createElement(MessageCode,props)));
 const open=()=>act(async()=>[...container.querySelectorAll("button")].find(button=>button.textContent?.startsWith("Show all code"))!.click());
 const click=(label:string)=>act(async()=>[...container.querySelector("section footer")!.querySelectorAll("button")].find(button=>button.textContent===label)!.click());
@@ -48,4 +48,26 @@ it("preserves a document's reader identity and contextual copy label",async()=>{
 it("lets a document owner provide its single preview action while retaining full source access",async()=>{
  props={code:"<p>"+"x".repeat(13000)+"</p>",language:"html",allowPreview:false};await render();expect([...container.querySelectorAll("button")].some(button=>button.textContent==="Preview")).toBe(false);
  await open();expect(container.querySelector("section footer")?.textContent).not.toContain("Preview");expect(source()).toHaveLength(12000);
+});
+
+it("bounds default chat code to eight lines while copying the entire source", async () => {
+ props={code:Array.from({length:20},(_,i)=>`const recoveryStep${i} = "保存";`).join("\n"),language:"typescript"};
+ await render();
+ expect(container.textContent).not.toContain("recoveryStep8");
+ await act(async()=>[...container.querySelectorAll("button")].find(button=>button.textContent==="Copy code")!.click());
+ expect(f.copied).toEqual([props.code]);
+ await open();expect(source()).toBe(props.code);
+});
+
+it("keeps failed streaming output visible, bounded and fully copyable without executable preview", async () => {
+ props={code:"<p>native provider output</p>\n".repeat(30)+"FAIL: owning computer changed",language:"html",output:true,error:true,complete:false};
+ await render();
+ expect(container.textContent).toContain("Failed");
+ expect(container.textContent).toContain("Output is still arriving");
+ expect(container.textContent).not.toContain("FAIL: owning computer changed");
+ expect([...container.querySelectorAll("button")].some(button=>button.textContent==="Preview")).toBe(false);
+ await act(async()=>[...container.querySelectorAll("button")].find(button=>button.textContent?.startsWith("Show all output"))!.click());
+ expect(source()).toBe(props.code);
+ expect(container.querySelector("section footer")?.textContent).toContain("Failed");
+ await click("Copy output");expect(f.copied).toEqual([props.code]);
 });

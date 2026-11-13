@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { View } from "react-native";
 import { Avatar } from "panelui-native/components/avatar";
 import { Body, Button, ErrorNotice, Heading, Loading, Screen, Section, Stack, StateView, Skeleton } from "@/ui/primitives";
@@ -7,6 +6,8 @@ import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
+import { useAsyncAction } from "@/state/actions";
+import { graphemes } from "../../../../../src/shared/lib/text/truncate";
 import { ActivitySection } from "./ActivitySection";
 import { DevicesSection } from "./DevicesSection";
 import { ManageAccountSection } from "./ManageAccountSection";
@@ -33,7 +34,7 @@ function Profile() {
           <Avatar
             size="lg"
             source={user.avatarUrl ? { uri: user.avatarUrl } : undefined}
-            fallback={(name.trim()[0] ?? "?").toUpperCase()}
+            fallback={(graphemes(name.trim())[0] ?? "?").toUpperCase()}
           />
           <View style={{ flex: 1, gap: space.xxs }}>
             <Heading style={uiStyles.title}>{name}</Heading>
@@ -51,7 +52,7 @@ function Profile() {
 export function AccountScreen() {
   const copy = useCopy();
   const account = useAccount();
-  const [signingOut, setSigningOut] = useState(false);
+  const signOut = useAsyncAction<void>();
   const title = copy("Hesap", "Account");
 
   if (account.status === "unavailable")
@@ -93,19 +94,19 @@ export function AccountScreen() {
         <ActivitySection />
         <PushSection />
         <ManageAccountSection />
+        <ErrorNotice error={signOut.error} message={copy("Çıkış yapılamadı.", "Could not sign out.")} />
         <Button
           label={copy("Çıkış yap", "Sign out")}
           tone="danger"
-          busy={signingOut}
-          disabled={signingOut}
+          busy={signOut.isPending}
+          disabled={signOut.isPending}
           onPress={() =>
             confirmAction(
               copy("Çıkış yapılsın mı?", "Sign out?"),
               copy("Bu telefon hesaptan çıkarılır. Yerel veriler ve bilgisayar eşlemeleri korunur.", "This phone is removed from your account. Local data and computer pairings are kept."),
               copy("Çıkış yap", "Sign out"),
               () => {
-                setSigningOut(true);
-                void account.signOut().finally(() => setSigningOut(false));
+                void signOut.run(() => account.signOut());
               },
               copy("Vazgeç", "Cancel"),
             )

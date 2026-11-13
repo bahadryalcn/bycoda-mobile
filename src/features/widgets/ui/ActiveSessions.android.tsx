@@ -16,6 +16,7 @@ export function ActiveSessions(props: WidgetSnapshot, environment: WidgetEnviron
     running: "Running",
     needsInput: "Needs you",
     failed: "Failed",
+    done: "Completed",
     empty: "No active sessions",
     locked: "Open bycoda to continue",
     setup: "Open bycoda to connect",
@@ -48,7 +49,13 @@ export function ActiveSessions(props: WidgetSnapshot, environment: WidgetEnviron
   const counts = props.counts ?? { running: 0, needsInput: 0, failed: 0 };
   const sessions = props.sessions ?? [];
   const message =
-    state === "locked" ? labels.locked : state === "setup" ? labels.setup : stale ? labels.stale : "";
+    state === "locked"
+      ? labels.locked
+      : state === "setup"
+        ? labels.setup
+        : stale
+          ? labels.stale
+          : "";
   const statusColor = (status: string) =>
     status === "needs_input"
       ? colors.warning
@@ -58,13 +65,22 @@ export function ActiveSessions(props: WidgetSnapshot, environment: WidgetEnviron
           ? colors.accent
           : colors.success;
   return (
-    <Button colors={{ containerColor: colors.surface }} modifiers={[fillMaxSize()]} onClick={() => {}}>
+    <Button
+      colors={{ containerColor: colors.surface }}
+      modifiers={[fillMaxSize()]}
+      onClick={() => {}}
+    >
       <Column modifiers={[fillMaxSize(), paddingAll(14)]}>
         <Text color={colors.muted} maxLines={1} style={{ fontSize: 12, fontWeight: "bold" }}>
           {labels.title}
         </Text>
         {message ? (
-          <Text color={colors.text} maxLines={3} style={{ fontSize: 14 }} modifiers={[padding(0, 6, 0, 0)]}>
+          <Text
+            color={colors.text}
+            maxLines={3}
+            style={{ fontSize: 14 }}
+            modifiers={[padding(0, 6, 0, 0)]}
+          >
             {message}
           </Text>
         ) : (
@@ -73,12 +89,23 @@ export function ActiveSessions(props: WidgetSnapshot, environment: WidgetEnviron
               <Text color={colors.text} style={{ fontSize: 30, fontWeight: "bold" }}>
                 {String(counts.running)}
               </Text>
-              <Text color={colors.muted} maxLines={1} style={{ fontSize: 13 }} modifiers={[padding(8, 14, 0, 0)]}>
-                {counts.running + counts.needsInput + counts.failed === 0 ? labels.empty : labels.running}
+              <Text
+                color={colors.muted}
+                maxLines={1}
+                style={{ fontSize: 13 }}
+                modifiers={[padding(8, 14, 0, 0)]}
+              >
+                {counts.running + counts.needsInput + counts.failed === 0
+                  ? labels.empty
+                  : labels.running}
               </Text>
             </Row>
             {counts.needsInput > 0 ? (
-              <Text color={colors.warning} maxLines={1} style={{ fontSize: 12, fontWeight: "bold" }}>
+              <Text
+                color={colors.warning}
+                maxLines={1}
+                style={{ fontSize: 12, fontWeight: "bold" }}
+              >
                 {`${counts.needsInput} ${labels.needsInput}`}
               </Text>
             ) : null}
@@ -95,7 +122,7 @@ export function ActiveSessions(props: WidgetSnapshot, environment: WidgetEnviron
                 style={{ fontSize: 12 }}
                 modifiers={[padding(0, 4, 0, 0)]}
               >
-                {row.title || row.project}
+                {`${row.status === "needs_input" ? labels.needsInput : row.status === "failed" ? labels.failed : row.status === "running" ? labels.running : (labels.done ?? "✓")} · ${row.title || row.project}`}
               </Text>
             ))}
           </Column>

@@ -1,0 +1,24 @@
+import runtime from "../../assets/pdf-runtime";
+import { checkedPdfBase64, type PdfPosition } from "./pdf-data";
+import type { MobileColors } from "./tokens";
+
+export type PdfLabels = { loading: string; error: string; password: string; passwordIncorrect: string; page: string; previous: string; next: string; zoomIn: string; zoomOut: string; fit: string; open: string; passwordLabel: string };
+const escape = (value: string) => value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
+
+/** Only base64 PDF bytes and escaped labels enter this trusted document shell. */
+export function pdfHtml({ base64, channel, position, colors, locale, labels, fontScale = 1 }: {
+  base64: string; channel: string; position: PdfPosition; colors: MobileColors; locale: string; labels: PdfLabels; fontScale?: number;
+}) {
+  checkedPdfBase64(base64);
+  const configuration = JSON.stringify({ base64, channel, ...position, locale, labels }).replace(/</g, "\\u003c");
+  const button = (id: string, label: string, content = label) => `<button id="${id}" type="button" aria-label="${escape(label)}">${escape(content)}</button>`;
+  const scale = Number.isFinite(fontScale) ? Math.max(1, Math.min(4, fontScale)) : 1;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; connect-src 'none'; worker-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<style>:root{--background:${colors.background};--panel:${colors.panel};--fill:${colors.fill};--text:${colors.text};--muted:${colors.muted};--border:${colors.border};--accent:${colors.accent};--selected:${colors.selected};--danger:${colors.danger};--font:system-ui,-apple-system,sans-serif;font-family:var(--font);font-size:${16 * scale}px;color:var(--text);background:var(--background)}*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}body{display:flex;flex-direction:column}button,input{font:inherit;color:inherit;background:var(--fill);border:1px solid var(--border);border-radius:8px;min-width:48px;min-height:48px;padding:8px}button{cursor:pointer;flex-shrink:0}button:disabled{color:var(--muted);cursor:default}button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}#toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:4px;background:var(--panel);border-bottom:1px solid var(--border)}#page-status{flex:1;min-width:90px;font-variant-numeric:tabular-nums;text-align:center}#viewport{flex:1;min-height:0;overflow:auto;padding:8px}#page{position:relative;margin:auto;width:max-content;background:var(--panel)}canvas{display:block}#status,#error,#password-form{padding:12px;margin:0}#status{color:var(--muted)}#error,#password-error{color:var(--danger)}#password-form label{display:block;margin-bottom:8px}#password-form input{max-width:100%;width:100%;margin-bottom:8px}#password-error{display:block} [hidden]{display:none!important}.textLayer{position:absolute;inset:0;line-height:1;transform-origin:0 0;--min-font-size:1;--text-scale-factor:calc(var(--total-scale-factor)*var(--min-font-size));--min-font-size-inv:calc(1/var(--min-font-size))}.textLayer :is(span,br){color:transparent;position:absolute;white-space:pre;transform-origin:0 0;user-select:text}.textLayer>:not(.markedContent){font-size:calc(var(--text-scale-factor)*var(--font-height));transform:rotate(var(--rotate,0deg)) scaleX(var(--scale-x,1)) scale(var(--min-font-size-inv))}.textLayer ::selection{background:var(--selected);color:var(--text)}</style></head><body>
+<nav id="toolbar" aria-label="PDF">${button("previous", labels.previous)}<span id="page-status" aria-live="polite"></span>${button("next", labels.next)}${button("zoom-out", labels.zoomOut, "−")}${button("zoom-in", labels.zoomIn, "+")}${button("fit", labels.fit)}</nav>
+<p id="status" role="status">${escape(labels.loading)}</p><p id="error" role="alert" hidden></p>
+<form id="password-form" hidden><label for="password">${escape(labels.password)}</label><input id="password" type="password" autocomplete="off" aria-label="${escape(labels.passwordLabel)}"><span id="password-error" role="alert"></span><button id="password-submit" type="submit">${escape(labels.open)}</button></form>
+<main id="viewport"><div id="page"><canvas id="canvas" aria-hidden="true"></canvas><div id="text-layer" class="textLayer" role="document"></div></div></main>
+<script>${runtime.replace(/<\/script/gi, "<\\/script")}</script><script>window.byCodaPdfStart(${configuration});</script></body></html>`;
+}

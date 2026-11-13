@@ -13,7 +13,7 @@ import { ActionMenu, Body, Button, ErrorNotice, IconButton, MutationState, Navig
 import { useMobileTheme } from "@/ui/theme";
 import { RecordCard } from "@/ui/record-card";
 import { Status, statusLabel } from "../shared/status";
-import { formatDuration } from "../shared/duration";
+import { stamp } from "../shared/format";
 import { joinMeta, RecordTrailing, useMenuGlyph } from "../shared/record-bits";
 import { MemberLines } from "./member-lines";
 import { CrewRuntimePanel } from "./runtime-panel";
@@ -64,11 +64,11 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
       router.push({ pathname: "/session/[id]", params: { id: sessionId, machineId, projectId: run.projectId } });
   };
   const done = run.tasks.filter((task) => task.status === "done").length;
-  const elapsed = formatDuration(run.status === "finished" ? run.updatedAt - run.createdAt : Date.now() - run.createdAt, copy);
+  const created = `${copy("Oluşturulma", "Created")}: ${stamp(run.createdAt)}`;
   const stopWork = () => confirmAction(copy("Çalışmayı durdur", "Stop work"), copy("Koordinatör ve çalışan ekip görevleri durdurulur. Dosyalar ve çalışma kaydı korunur.", "The coordinator and active crew tasks will stop. Files and the work record are kept."),
     copy("Durdur", "Stop"), () => { if (supported && useMachines.getState().activeId === machineId) stop.mutate({ projectId: run.projectId, runId: run.id }, { onError: refreshAfterFailure }); });
   return <RecordCard title={run.title || run.definition.name} status={<Status value={run.status} />}
-    metadata={joinMeta([run.definition.name, run.tasks.length ? copy("{p0}/{p1} görev", "{p0}/{p1} tasks", { p0: done, p1: run.tasks.length }) : "", elapsed])}
+    metadata={joinMeta([run.definition.name, run.tasks.length ? copy("{p0}/{p1} görev", "{p0}/{p1} tasks", { p0: done, p1: run.tasks.length }) : "", created])}
     preview={run.tasks.length ? <Progress value={done} maxValue={run.tasks.length} size="sm"
       color={run.status === "finished" ? "success" : "primary"}
       accessibilityLabel={copy("{p0}/{p1} görev tamamlandı", "{p0} of {p1} tasks done", { p0: done, p1: run.tasks.length })} /> : null}

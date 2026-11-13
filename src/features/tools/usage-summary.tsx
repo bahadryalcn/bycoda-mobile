@@ -9,10 +9,25 @@ export function UsageUnavailable({ tab }: { tab: Exclude<UsageTab, "tokens"> }) 
   return (
     <StateView
       illustration="permission"
-      title={tab === "cost" ? copy("Maliyet henüz telefona gelmiyor", "Cost is not available on mobile yet") : copy("Limitler henüz telefona gelmiyor", "Limits are not available on mobile yet")}
-      description={tab === "cost"
-        ? copy("Bilgisayardaki bycoda maliyeti hesaplıyor ancak ana makine bu değeri telefona henüz sunmuyor. Güncelleme gerekir.", "bycoda on the computer prices usage, but the Host does not serve cost to the phone yet. A Host update is needed.")
-        : copy("Hesap limitleri ve sıfırlanma süreleri bilgisayardaki bycoda’da görünür; ana makine bunları telefona henüz sunmuyor. Güncelleme gerekir.", "Account limits and reset times are shown in bycoda on the computer; the Host does not serve them to the phone yet. A Host update is needed.")}
+      title={
+        tab === "cost"
+          ? copy("Bu bilgisayarda maliyet kullanılamıyor", "Cost is unavailable on this computer")
+          : copy(
+              "Bu bilgisayarda limitler kullanılamıyor",
+              "Limits are unavailable on this computer",
+            )
+      }
+      description={
+        tab === "cost"
+          ? copy(
+              "Bilgisayardaki bycoda maliyeti hesaplıyor ancak ana makine bu değeri telefona henüz sunmuyor. Güncelleme gerekir.",
+              "bycoda on the computer prices usage, but the Host does not serve cost to the phone yet. A Host update is needed.",
+            )
+          : copy(
+              "Hesap limitleri ve sıfırlanma süreleri bilgisayardaki bycoda’da görünür; ana makine bunları telefona henüz sunmuyor. Güncelleme gerekir.",
+              "Account limits and reset times are shown in bycoda on the computer; the Host does not serve them to the phone yet. A Host update is needed.",
+            )
+      }
     />
   );
 }

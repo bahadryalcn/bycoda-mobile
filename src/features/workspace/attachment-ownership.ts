@@ -2,7 +2,7 @@ import { randomUUID } from "expo-crypto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { HostTransport } from "@/remote/transport";
 import type { RemoteRequestOptions } from "@/remote/types";
-import { decodeComposerDraft } from "./composer-draft";
+import { retainedAttachmentFiles } from "./attachment-retention";
 
 export const ATTACHMENT_OWNERSHIP_CAPABILITY = "attachments.ownership.v1";
 const outboxKey = "bycoda.mobile.attachment-releases.v1";
@@ -83,10 +83,8 @@ export class AttachmentReleaseOutbox {
       for (const entry of [...releases]) {
         if (entry.machineId !== client.machine.id || entry.environmentId !== client.machine.environmentId) continue;
         // Read/decode failures fail closed: an unread draft never authorizes release.
-        const raw = await this.storage.getItem(composerDraftKey(entry.machineId, entry.sessionId));
-        if (raw !== null && !raw.startsWith("bycoda-composer-v2:\n"))
-          throw new Error("Saved attachment draft ownership is unknown.");
-        const retained = new Set(raw === null ? [] : decodeComposerDraft(raw).attachments.filter((file) => !file.claimId || file.claimId === entry.claimId).map((file) => file.id));
+        const files = await retainedAttachmentFiles(this.storage, entry.machineId, entry.sessionId, entry.environmentId);
+        const retained = new Set(files.filter(file => !file.claimId || file.claimId === entry.claimId).map(file => file.id));
         const ready = entry.ids.filter((id) => !retained.has(id));
         for (let at = 0; at < ready.length; at += 20) {
           const ids = ready.slice(at, at + 20);

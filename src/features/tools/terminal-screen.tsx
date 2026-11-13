@@ -22,6 +22,10 @@ import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useMobileTheme } from "@/ui/theme";
 import { haptic } from "@/ui/motion";
 import { projectTerminals, terminalCommandInput, terminalDisplayOutput, TERMINAL_COMMAND_LIMIT } from "./terminal-model";
+import { useLocalDraft } from "../workspace/use-local-draft";
+import { registerWorkspaceDraft } from "../workspace/draft-guard";
+import { decodeTerminalDraft, emptyTerminalDraft, encodeTerminalDraft, terminalDraftKey } from "./terminal-draft";
+import { ErrorNotice } from "@/ui/feedback";
 import { useTerminalOutput } from "./use-terminal-output";
 
 let nextTerminalScope = 1;
@@ -42,7 +46,10 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
   const terminals = projectTerminals(list.data?.terminals ?? [], project.id);
   const [selectedId, setSelectedId] = useState("");
   const selected = terminals.find((entry) => entry.id === selectedId);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const draftKey = terminalDraftKey([machine?.id, machine?.endpoint, machine?.environmentId, machine?.lanKey, project.id]);
+  const draft = useLocalDraft(draftKey, decodeTerminalDraft, encodeTerminalDraft);
+  const drafts = draft.value?.commands ?? {};
+  const setDrafts = (update: (previous: Record<string, string>) => Record<string, string>) => draft.setValue(previous => ({ ...(previous ?? emptyTerminalDraft()), commands: update(previous?.commands ?? {}) }));
   const [creating, setCreating] = useState(false);
   const [confirm, setConfirm] = useState<{ operation: "stop" | "close"; id: string; name: string }>();
   const confirmedTerminal = terminals.find(entry => entry.id === confirm?.id);
@@ -59,17 +66,23 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const current = () => mounted.current && isReviewedMachine(reviewedMachine(client?.machine), useMachines.getState());
-  const [uncertain, setUncertain] = useState(false);
+  const uncertain = draft.value?.uncertain ?? false;
+  const setUncertain = (value: boolean) => draft.setValue(previous => ({ ...(previous ?? emptyTerminalDraft()), uncertain: value }));
   const [leaving, setLeaving] = useState<NavigationAction>();
   const navigation = useNavigation();
   const form = useFormDraft({ name: "", profileId: "" });
-  const writable = !!client && list.data?.writable === true && !list.isError && !output.error;
+  const writable = draft.ready && !!client && list.data?.writable === true && !list.isError && !output.error;
   const command = drafts[selectedId] ?? "";
   const orphanedDrafts = Object.entries(drafts).filter(([id, value]) => value.trim() && !terminals.some(entry => entry.id === id));
   const busy = action.isPending;
   const hasDrafts = Object.values(drafts).some((draft) => !!draft.trim());
-  usePreventRemove(busy || hasDrafts || uncertain, ({ data }) => {
-    if (!pending.current && !busy) setLeaving(data.action);
+  // Computer switches must flush this exact identity before connection ownership changes.
+  useEffect(() => registerWorkspaceDraft(draftKey, () => draft.persist()), [draftKey, draft.persist]);
+  usePreventRemove(busy || hasDrafts || uncertain || !!draft.error, ({ data }) => {
+    if (!pending.current && !busy) {
+      if (uncertain) setLeaving(data.action);
+      else void draft.persist().then(() => navigation.dispatch(data.action)).catch(() => {});
+    }
   });
   const run = (execute: (target: NonNullable<typeof api>) => Promise<void>) => {
     if (!api || !client || pending.current || !writable || uncertain || !current()) return;
@@ -106,7 +119,6 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
       await target.terminalWrite(project.id, id, input);
       if (!current()) return;
       setDrafts((previous) => previous[id] === command ? { ...previous, [id]: "" } : previous);
-      setEditingCommand(false);
     });
   };
   const control = () => {
@@ -129,7 +141,15 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
       title={copy("Terminaller", "Terminals")}
       subtitle={[machine?.name, project.name].filter(Boolean).join(" · ")}
       refreshState={refresh}
-      footer={selected || command.trim() ? <Row><Button label={copy("Komut", "Command")} style={uiStyles.grow} disabled={busy} onPress={() => setEditingCommand(true)} />{command.trim() ? <Badge label={copy("Taslak", "Draft")} /> : null}</Row> : undefined}
+      footer={!editingCommand && selected ? <>
+        <Field label={copy("Komut", "Command")} value={command} mono autoCapitalize="none" autoCorrect={false}
+          maxLength={TERMINAL_COMMAND_LIMIT} editable={draft.ready && !busy && writable && terminal?.state === "running" && !uncertain}
+          error={command.trim() && !terminalCommandInput(command) ? copy("En fazla 16384 UTF-8 baytı kullan ve terminal kontrol karakterlerini kaldır.", "Use at most 16384 UTF-8 bytes and remove terminal control characters.") : undefined}
+          onChangeText={value => setDrafts(previous => ({ ...previous, [selected.id]: value }))} />
+        <Row><Button label={copy("Genişlet", "Expand")} tone="quiet" disabled={busy} onPress={() => setEditingCommand(true)} />
+          <Button label={copy("Komutu gönder", "Send command")} style={uiStyles.grow} busy={busy}
+            disabled={!writable || uncertain || terminal?.state !== "running" || !terminalCommandInput(command)} onPress={send} /></Row>
+      </> : undefined}
       actions={
         <>
           <IconButton busy={refresh.refreshing} label={copy("Yenile", "Refresh")} disabled={list.isFetching || output.isFetching} onPress={() => { void refresh.onRefresh(); }}><RefreshCw size={22} strokeWidth={2} color={colors.accent} /></IconButton>
@@ -137,6 +157,7 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
         </>
       }
     >
+      <ErrorNotice error={draft.error} onRetry={() => { void (draft.ready ? draft.persist() : draft.load()).catch(() => {}); }} />
       <Stack.Screen options={{ title: copy("Terminaller", "Terminals") }} />
       <QueryState query={list} loading={selected ? "none" : "list"} empty={!terminals.length} emptyIllustration="no-sessions" emptyTitle={copy("Bu projede terminal yok.", "No terminals in this project.")} onManageConnections={manageConnections} />
       {list.data?.writable === false ? <Notice message={copy("Bu bağlantıda terminaller salt okunur.", "Terminals are read-only on this connection.")} /> : null}
@@ -186,10 +207,10 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
           feedback={<MutationState mutation={action} />} />
       </Sheet>
       <Sheet visible={!!leaving} size="compact" title={copy("Araçtan ayrıl", "Leave tool")} onClose={() => setLeaving(undefined)}>
-        <Notice tone="warning" message={copy("Gönderilmemiş komut taslakları silinecek. Bilgisayardaki terminaller açık kalır.", "Unsent command drafts will be discarded. Terminals on the computer stay open.")} />
+        <Notice tone="warning" message={copy("Komut taslakları bu bilgisayar ve proje için saklanır. Terminaller açık kalır.", "Command drafts are saved for this computer and project. Terminals stay open.")} />
         <FormActions submitLabel={copy("Ayrıl", "Leave")} tone="danger"
           onCancel={() => setLeaving(undefined)}
-          onSubmit={() => { if (leaving) navigation.dispatch(leaving); }} />
+          onSubmit={() => { if (leaving) void draft.persist().then(() => navigation.dispatch(leaving)).catch(() => {}); }} />
       </Sheet>
       <Sheet visible={!!confirm} size="compact" title={confirm?.operation === "stop" ? copy("Terminali durdur", "Stop terminal") : copy("Terminali kapat", "Close terminal")} dismissible={!busy} onClose={() => setConfirm(undefined)}>
         <Body mono>{confirm?.name}</Body>

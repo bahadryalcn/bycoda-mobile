@@ -1,14 +1,14 @@
 import { memo, useState } from "react";
-import { captureApprovalCommand } from "@/domain/approval-command";
 import { StyleSheet, View } from "react-native";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import Terminal from "lucide-react-native/icons/terminal";
 import ListChecks from "lucide-react-native/icons/list-checks";
-import { Badge, Body, Button, CodePanel, CodeText, QueryState, Row, Sheet } from "@/ui/primitives";
+import { Badge, Body, Button, QueryState, Row, Sheet } from "@/ui/primitives";
 import { ChatAction, ChatSummary } from "@/ui/chat-controls";
 import { ChatMessage, chatUserBubbleStyle } from "@/ui/chat";
 import { ChatActivity, ChatPlan, ChatStreaming } from "@/ui/chat-activity";
 import { MessageText } from "@/ui/message-text";
+import { MessageCode } from "@/ui/message-code";
 import { useChatTextStyles } from "@/ui/chat-styles";
 import { useChatAppearance } from "@/state/chat-appearance";
 import { radii, space } from "@/ui/tokens";
@@ -31,6 +31,7 @@ import { useMobileTheme } from "@/ui/theme";
 import { PlanReview } from "@/features/management/plans/plan-review";
 import { SubagentCard } from "./subagent-card";
 import { OrchestrationDetails } from "./orchestration-details";
+import { ActivityApproval } from "./activity-inspector-approval";
 
 export const TranscriptBlock = memo(function TranscriptBlock({
   block,
@@ -76,6 +77,8 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   const foldable =
     !activityDetail &&
     !conversational &&
+    !value.image &&
+    !value.attachments?.length &&
     (!semantic || canCollapseToolFailure(value)) &&
     !value.approval &&
     !value.interjection;
@@ -97,7 +100,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                   : value.role === "handoff"
                     ? copy("Agent devri", "Agent handoff")
                     : value.role;
-  const rawText = value.text || value.tool?.detail || value.tool?.output || "";
+  const rawText = value.questionAnswers?.length ? "" : value.text || value.tool?.detail || value.tool?.output || "";
   const text =
     value.role === "system" && isError ? friendlyProviderFailure(rawText, copy) : rawText;
   const toolResults = toolResultTexts(value);
@@ -139,12 +142,6 @@ export const TranscriptBlock = memo(function TranscriptBlock({
       value.taskList.explanation
     : text.replace(/\s+/g, " ").trim();
 
-  const approve = (decision: "allow" | "deny") => {
-    if (!runId) return;
-    void onCommand(captureApprovalCommand(scope.sessionId, runId, value.approval!, decision)).catch(
-      () => {},
-    );
-  };
   const planAction =
     value.plan?.status === "ready" ? (
       <Button
@@ -191,9 +188,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
         />
       ) : null}
       {text && value.role === "tool" && !value.agentRun ? (
-        <CodePanel>
-          <CodeText style={[typography.code, isError && { color: colors.danger }]}>{text}</CodeText>
-        </CodePanel>
+        <MessageCode code={text} output compact error={isError} allowPreview={false} context={context} />
       ) : text ? (
         <MessageText
           text={text}
@@ -212,11 +207,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             {copy("Çıktı", "Output")}
           </Body>
           {toolResults.map((output, index) => (
-            <CodePanel key={index}>
-              <CodeText style={[typography.code, isError && { color: colors.danger }]}>
-                {output}
-              </CodeText>
-            </CodePanel>
+            <MessageCode key={index} code={output} output compact error={isError} allowPreview={false} context={context} />
           ))}
         </View>
       ) : null}
@@ -274,49 +265,8 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           onPress={() => setRequested(true)}
         />
       ) : null}
-      {value.approval && !value.approval.decided ? (
-        <View style={uiStyles.stack}>
-          <Body>{copy("Bu işlem için onayın gerekiyor.", "This action needs your approval.")}</Body>
-          {runId ? (
-            <Row>
-              <Button
-                label={copy("İzin ver", "Allow")}
-                density="compact"
-                tone="success"
-                disabled={disabled}
-                onPress={() => approve("allow")}
-              />
-              <Button
-                label={copy("Reddet", "Deny")}
-                density="compact"
-                tone="danger"
-                disabled={disabled}
-                onPress={() => approve("deny")}
-              />
-            </Row>
-          ) : (
-            <Body muted>
-              {copy("Onay için oturumun güncel durumunu yükle.", "Refresh the session to approve.")}
-            </Body>
-          )}
-        </View>
-      ) : value.approval?.decided ? (
-        <Badge
-          tone={
-            value.approval.decided === "allow"
-              ? "success"
-              : value.approval.decided === "deny"
-                ? "danger"
-                : "warning"
-          }
-          label={
-            value.approval.decided === "allow"
-              ? copy("İzin verildi", "Allowed")
-              : value.approval.decided === "cancelled"
-                ? copy("İptal edildi", "Cancelled")
-                : copy("Reddedildi", "Denied")
-          }
-        />
+      {value.approval ? (
+        <ActivityApproval approval={value.approval} scope={scope} runId={runId} disabled={disabled} onCommand={onCommand} />
       ) : null}
       {value.draft ? (
         <View style={uiStyles.stack}>

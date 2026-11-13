@@ -34,14 +34,23 @@ export function ProjectDetailsSheet({
   const copy = useCopy();
   const clipboard = useClipboardFeedback(project.cwd, visible);
   return (
-    <Sheet visible={visible} size="compact" title={copy("Proje ayrıntıları", "Project details")} onClose={onClose}>
+    <Sheet
+      visible={visible}
+      size="compact"
+      title={copy("Proje ayrıntıları", "Project details")}
+      onClose={onClose}
+    >
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.row }}>
         <ProjectIcon appearance={project.appearance} size={26} box={36} />
-        <Body numberOfLines={2} style={[uiStyles.title, { flex: 1, fontWeight: "700" }]}>{project.name}</Body>
+        <Body selectable style={[uiStyles.title, { flex: 1, fontWeight: "700" }]}>
+          {project.name}
+        </Body>
       </View>
       <View style={{ gap: space.sm }}>
         <StatusRow label={copy("Klasör", "Folder")} />
-        <Body mono selectable style={uiStyles.caption}>{project.cwd}</Body>
+        <Body mono selectable style={uiStyles.caption}>
+          {project.cwd}
+        </Body>
         {machineName ? (
           <StatusRow label={copy("Bilgisayar", "Computer")}>
             <Body muted>{machineName}</Body>
@@ -54,18 +63,32 @@ export function ProjectDetailsSheet({
         ) : null}
       </View>
       {onOpen ? (
-        <Button label={registered ? copy("Aç", "Open") : copy("Projeyi aç", "Open project")} tone="primary" onPress={onOpen} />
+        <Button
+          label={registered ? copy("Aç", "Open") : copy("Projeyi aç", "Open project")}
+          tone="primary"
+          onPress={onOpen}
+        />
       ) : null}
       <NavigationGroup>
         {registered && onOpenView ? (
           <>
-            <NavigationRow label={copy("Dosyalar", "Files")} icon={<FolderTree size={18} color={colors.muted} />} onPress={() => onOpenView("files")} />
-            <NavigationRow label={copy("Değişiklikler", "Changes")} icon={<GitBranch size={18} color={colors.muted} />} onPress={() => onOpenView("git")} />
+            <NavigationRow
+              label={copy("Dosyalar", "Files")}
+              icon={<FolderTree size={18} color={colors.muted} />}
+              onPress={() => onOpenView("files")}
+            />
+            <NavigationRow
+              label={copy("Değişiklikler", "Changes")}
+              icon={<GitBranch size={18} color={colors.muted} />}
+              onPress={() => onOpenView("git")}
+            />
           </>
         ) : null}
         <NavigationRow
           intent="command"
-          label={clipboard.copied ? copy("Kopyalandı", "Copied") : copy("Yolu kopyala", "Copy path")}
+          label={
+            clipboard.copied ? copy("Kopyalandı", "Copied") : copy("Yolu kopyala", "Copy path")
+          }
           icon={<Copy size={18} color={colors.muted} />}
           busy={clipboard.busy}
           onPress={clipboard.copy}

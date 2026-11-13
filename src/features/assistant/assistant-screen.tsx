@@ -24,6 +24,9 @@ import { AssistantMobileClient, type OwnerPresence } from "./assistant-client";
 import { SessionKeyboardFrame } from "../workspace/session-keyboard-frame";
 import { usePendingApprovalCount } from "../approvals/use-approvals";
 import { AssistantComposer } from "./assistant-composer";
+import { AssistantPermissions } from "./assistant-permissions";
+import { AssistantActivitySection } from "./assistant-activity-section";
+import { confirmAction } from "@/ui/confirm";
 import { AssistantJobsSection } from "./assistant-jobs-section";
 import { AssistantMessageRow } from "./assistant-message-row";
 import { AssistantQuestionsSection } from "./assistant-questions-section";
@@ -128,7 +131,7 @@ function AssistantWorkspace({
   const [projectId, setProjectId] = useState(""),
     [thread, setThread] = useState<AssistantThread | null>(null),
     [busyKind, setBusyKind] = useState<
-      "open" | "inspect" | "older" | `presence-${OwnerPresence}` | null
+      "open" | "inspect" | "older" | "stop" | `presence-${OwnerPresence}` | null
     >(null),
     [issue, setIssue] = useState(false),
     [presenceUnknown, setPresenceUnknown] = useState(false);
@@ -304,6 +307,14 @@ function AssistantWorkspace({
     <>
       <Body muted>{machineName}</Body>
       <QueryState query={snapshot} />
+      <AssistantActivitySection activity={state?.activity} access={access} loading={snapshot.isPending} />
+      {state ? <>
+        <Button label={copy("Room'u durdur", "Stop Room")} disabled={!writable || busy} busy={busyKind === "stop"}
+          onPress={() => confirmAction(copy("Room'u durdur", "Stop Room"), copy("Room çalışmaları duraklatılacak. Devam etmek için masaüstünden tekrar başlatın.", "Room work will pause. Resume it from desktop when ready."), copy("Durdur", "Stop"),
+            () => { void perform("stop", async () => { await client.pauseAll(); await refreshAll(); }); })} />
+        <AssistantPermissions key={sourceKey} profile={state.profile} client={client}
+          projects={projects.directoryReady ? projects.data ?? [] : []} enabled={writable && !busy} current={current} onChanged={refreshAll} />
+      </> : null}
       {pendingApprovals ? (
         <Button
           label={copy("Onaylar ({p0} bekliyor)", "Approvals ({p0} waiting)", { p0: pendingApprovals })}
@@ -411,10 +422,10 @@ function AssistantWorkspace({
             disabled={busy}
             options={threads.map((row) => ({
               value: row.id,
-              label: row.projectId
+              label: `${row.projectId
                 ? ((projects.data ?? []).find((p) => p.id === row.projectId)?.name ??
                   copy("Proje", "Project"))
-                : copy("Genel", "Global"),
+                : copy("Genel", "Global")} · ${row.purpose === "job-planning" ? copy("Planlama", "Planning") : copy("Konuşma", "Conversation")}`,
             }))}
             onChange={(id) => {
               const selected = threads.find((row) => row.id === id);

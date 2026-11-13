@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HostTask } from "@/domain/types";
-import { taskActions, taskMatchesFilter } from "./task-actions";
+import { taskActions, taskMatchesFilter, taskRunLimitForSave } from "./task-actions";
 
 const task = (patch: Partial<HostTask>): HostTask => ({
   id: "task",
@@ -79,4 +79,18 @@ describe("mobile task actions follow the host", () => {
       complete: false,
     });
   });
+});
+
+
+it("offers finish with findings only for capable hosts and canonical failures", () => {
+  const failed = task({ status: "blocked", sessionId: "worker", error: "Review failed: Defect", verification: { review: { verdict: "fail", note: "Defect", sessionId: "reviewer" } } });
+  expect(taskActions(failed).finishWithFindings).toBe(false);
+  expect(taskActions(failed, ["tasks.finish-with-findings"]).finishWithFindings).toBe(true);
+  expect(taskActions({ ...failed, error: "Permission denied" }, ["tasks.finish-with-findings"]).finishWithFindings).toBe(false);
+});
+
+it("preserves inherited versus explicit unlimited run limits", () => {
+  expect(taskRunLimitForSave({ maxRunMinutes: 0, inheritMaxRunMinutes: true })).toBeUndefined();
+  expect(taskRunLimitForSave({ maxRunMinutes: 0 })).toBe(0);
+  expect(taskRunLimitForSave({ maxRunMinutes: 25 })).toBe(25);
 });

@@ -26,7 +26,7 @@ export function SegmentedControl<T extends string>({
   compact?: boolean;
   hideLabel?: boolean;
 }) {
-  const { colors } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const reducedMotion = useReducedMotionPreference();
   const { width: windowWidth, fontScale } = useWindowDimensions();
   const [width, setWidth] = useState<number>();
@@ -43,10 +43,11 @@ export function SegmentedControl<T extends string>({
     const option = options.find((item) => item.value === next);
     if (!disabled && option && !option.disabled) onChange(option.value);
   };
-  return <View style={{ minWidth: 0, alignSelf: "stretch" }} onLayout={(event) => {
+  return <View style={{ minWidth: 0, alignSelf: "stretch", gap: space.xs }} onLayout={(event) => {
     const next = event.nativeEvent.layout.width;
     if (next > 0) setWidth((current) => current === next ? current : next);
   }}>
+    {!showSelector && !hideLabel ? <Body style={uiStyles.fieldLabel}>{label}</Body> : null}
     {showSelector ? (
       <SelectField
         label={label}

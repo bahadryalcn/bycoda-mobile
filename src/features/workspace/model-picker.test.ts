@@ -13,6 +13,7 @@ type Pressable = {
   style?: unknown;
 };
 const pressables: Pressable[] = [];
+const renderOrder: string[] = [];
 type SelectProps = {
   label: string;
   value: string;
@@ -46,6 +47,7 @@ vi.mock("@/ui/level-slider", () => ({
     onChange: (value: string) => void;
   }) => {
     sliders.push(props);
+    renderOrder.push("settings");
     return null;
   },
 }));
@@ -55,6 +57,7 @@ const toggles: { label: string; value: boolean; onChange: (value: boolean) => vo
 const disclosures: string[] = [];
 vi.mock("@/ui/primitives", () => {
   const record = (kind: string) => (props: Pressable & { children?: ReactNode }) => {
+    renderOrder.push(kind);
     pressables.push({
       kind,
       label: props.label,
@@ -69,6 +72,7 @@ vi.mock("@/ui/primitives", () => {
   return {
     Empty: () => null,
     NavigationGroup: pass,
+    Body: pass,
     Sheet: pass,
     Disclosure: ({ label, children }: { label: string; children?: ReactNode }) => {
       disclosures.push(label);
@@ -108,12 +112,13 @@ const models = (count: number) =>
     model(`m${i}`, i === 0 ? ({ settings: reasoning } as never) : {}),
   );
 const choice = (key: string): ProviderChoice => ({ key, provider: "claude", label: key });
+let html = "";
 
 function render(over: Partial<Parameters<typeof ModelPicker>[0]> = {}) {
   const onChange = vi.fn();
   const list = over.models ?? models(3);
   const choices = over.choices ?? [choice("claude:")];
-  renderToStaticMarkup(
+  html = renderToStaticMarkup(
     createElement(ModelPicker, {
       visible: true,
       onClose: vi.fn(),
@@ -132,6 +137,7 @@ function render(over: Partial<Parameters<typeof ModelPicker>[0]> = {}) {
 
 beforeEach(() => {
   pressables.length = 0;
+  renderOrder.length = 0;
   selects.length = 0;
   sliders.length = 0;
   toggles.length = 0;
@@ -143,6 +149,52 @@ describe("model picker view", () => {
   it("hides the account group with a single choice", () => {
     render();
     expect(pressables.filter((p) => p.kind === "account")).toHaveLength(0);
+  });
+  it("names a single provider/account without adding a redundant selector", () => {
+    render({
+      choices: [
+        {
+          key: "claude:research",
+          provider: "claude",
+          accountId: "research",
+          label: "İstanbul research 🧪",
+        },
+      ],
+    });
+    expect(html).toContain("Claude");
+    expect(html).toContain("İstanbul research 🧪");
+    expect(selects).toHaveLength(0);
+  });
+  it("keeps a removed saved account explicit and offers an owner-selected repair", () => {
+    const onChooseProvider = vi.fn();
+    const available = {
+      key: "claude:research",
+      provider: "claude" as const,
+      accountId: "research",
+      label: "Research",
+    };
+    render({
+      choices: [available],
+      choice: { key: "claude:gone", provider: "claude", label: "Account unavailable" },
+      unavailableAccount: true,
+      onChooseProvider,
+    });
+    const account = selects.find((select) => select.label === "Account")!;
+    expect(account.value).toBe("claude:gone");
+    expect(account.options).toContainEqual(
+      expect.objectContaining({
+        value: "claude:gone",
+        label: "Account unavailable",
+        disabled: true,
+      }),
+    );
+    expect(account.disabled).toBeFalsy();
+    expect(pressables.filter((item) => item.kind === "row").every((item) => item.disabled)).toBe(
+      true,
+    );
+    expect(onChooseProvider).not.toHaveBeenCalled();
+    account.onChange("claude:research");
+    expect(onChooseProvider).toHaveBeenCalledWith(available);
   });
 
   it("picks the agent in one select and the account in a second one", () => {
@@ -233,5 +285,15 @@ describe("model picker view", () => {
     const onChange = render({ sparseSettings: true });
     pressables.find((p) => p.kind === "row" && p.label === "M1")!.onPress();
     expect(onChange).toHaveBeenCalledWith("m1", {});
+  });
+  it("leaves custom effort untouched when selected model is pressed", () => {
+    const onChange = render({ settings: { effort: "high" } });
+    pressables.find((item) => item.kind === "row" && item.selected)!.onPress();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("renders selected effort before long model catalog", () => {
+    render({ models: models(25) });
+    expect(renderOrder.indexOf("settings")).toBeLessThan(renderOrder.indexOf("row"));
   });
 });

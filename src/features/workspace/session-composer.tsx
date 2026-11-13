@@ -46,12 +46,18 @@ import { ComposerModelChip } from "./composer-model-chip";
 import { ComposerActionsProvider } from "@/ui/composer-actions";
 import { composerInputLimits, composerSuggestionLimits } from "@/ui/chat-composer-model";
 import { haptic } from "@/ui/motion";
-import { composerCommand, queuedComposerMessage, validateNoteDelivery, type ComposerDelivery } from "./composer-delivery";
+import {
+  composerCommand,
+  queuedComposerMessage,
+  validateNoteDelivery,
+  type ComposerDelivery,
+} from "./composer-delivery";
 import { ComposerSendButton } from "./composer-send-button";
 import { busyAlternateMode } from "./busy-send";
 import { useBusySend } from "@/state/busy-send";
 import { useSessionQueue } from "./use-session-queue";
 import { SessionQueue } from "./session-queue";
+import { SessionAgents } from "./session-agents";
 import { composerDeliveryError } from "./composer-delivery-copy";
 import {
   expandTemplateTrigger,
@@ -91,10 +97,18 @@ export function SessionComposer({
   const [localError, setLocalError] = useState<unknown>(null);
   const mounted = useMounted();
   const [prefixHeight, measurePrefix] = useComposerHeight();
+  const [operationsHeight, measureOperations] = useComposerHeight();
   const [footerHeight, measureFooter] = useComposerHeight();
   const [toolbarHeight, measureToolbar] = useComposerHeight();
   const [suggestionsHeight, measureSuggestions] = useComposerHeight();
-  const suggestionLimits = composerSuggestionLimits(windowHeight, availableHeight, fontScale, prefixHeight, footerHeight, toolbarHeight);
+  const suggestionLimits = composerSuggestionLimits(
+    windowHeight,
+    availableHeight,
+    fontScale,
+    prefixHeight + operationsHeight,
+    footerHeight,
+    toolbarHeight,
+  );
   const draftKey = composerDraftKey(scope.machineId, scope.sessionId);
   const draft = useLocalDraft(draftKey, decodeComposerDraft, encodeComposerDraft);
   const { ready, isStored, persist, load, setValue, valueRef, error } = draft;
@@ -103,7 +117,12 @@ export function SessionComposer({
   const prompt = value.text;
   const links = useMemo(() => composerLinks(prompt), [prompt]);
   const busyPreferred = useBusySend((state) => state.mode);
-  const delivery = useComposerDelivery({ session, client, queueSupported: queue.supported, busyPreferred });
+  const delivery = useComposerDelivery({
+    session,
+    client,
+    queueSupported: queue.supported,
+    busyPreferred,
+  });
   const { mode, running, supportsSteer, desktopOwned, canSteer } = delivery;
   const noteContextSupported =
     client?.machine.id === scope.machineId &&
@@ -127,8 +146,14 @@ export function SessionComposer({
   });
   const { token } = suggestions;
   const suggestionPrefix = token ? suggestionsHeight + (prefixHeight > 0 ? space.xs : 0) : 0;
-  const inputLimits = composerInputLimits(windowHeight, availableHeight, fontScale, prefixHeight + suggestionPrefix, footerHeight, toolbarHeight);
-  const minimumInputHeight = inputLimits.minimum;
+  const inputLimits = composerInputLimits(
+    windowHeight,
+    availableHeight,
+    fontScale,
+    prefixHeight + operationsHeight + suggestionPrefix,
+    footerHeight,
+    toolbarHeight,
+  );
   const maximumInputHeight = inputLimits.maximum;
   const compactSuggestions = !!token && suggestionLimits.compact;
   const uploads = useComposerAttachments({
@@ -140,10 +165,19 @@ export function SessionComposer({
     setLocalError,
   });
   const { uploading, picking, transfers, transfer, claimedFiles } = uploads;
-  useDraftAppend({ draftKey, scopeKey: `${scope.machineId}:${scope.sessionId}`, ready, draft, mounted, setLocalError, locked: () => submission.current || !!transfer.current });
+  useDraftAppend({
+    draftKey,
+    scopeKey: `${scope.machineId}:${scope.sessionId}`,
+    ready,
+    draft,
+    mounted,
+    setLocalError,
+    locked: () => submission.current || !!transfer.current,
+  });
   const submit = async (override?: ComposerDelivery) => {
     // Draft mode saves the message on the Host, whatever the delivery mode is.
-    const sendMode = activeComposerMode(valueRef.current?.text ?? "") === "draft" ? "send" : (override ?? mode);
+    const sendMode =
+      activeComposerMode(valueRef.current?.text ?? "") === "draft" ? "send" : (override ?? mode);
     if (!ready || blocked || busy || uploading || submission.current || !client || !session) return;
     if (sendMode === "queue" && (!queue.supported || !!queue.error || queue.changing)) return;
     const submitted = valueRef.current;
@@ -230,7 +264,13 @@ export function SessionComposer({
         );
       } else
         await onCommand(
-          composerCommand(intendedSession, sendMode, submitted.text, attachments, submitted.noteCard),
+          composerCommand(
+            intendedSession,
+            sendMode,
+            submitted.text,
+            attachments,
+            submitted.noteCard,
+          ),
         );
       if (!mounted.current) return;
       if (sameComposerContent(valueRef.current, submitted)) {
@@ -356,10 +396,12 @@ export function SessionComposer({
       templateDestination.current?.machineId !== scope.machineId ||
       templateDestination.current?.sessionId !== scope.sessionId
     )
-      throw new Error(copy(
-        "Bu konuşmaya şu anda ekleme yapılamıyor. Taslağınız değişmedi.",
-        "This conversation is not available for insertion. Your draft is unchanged.",
-      ));
+      throw new Error(
+        copy(
+          "Bu konuşmaya şu anda ekleme yapılamıyor. Taslağınız değişmedi.",
+          "This conversation is not available for insertion. Your draft is unchanged.",
+        ),
+      );
     const current = valueRef.current ?? emptyComposerDraft();
     const result = insertTemplate(current.text, selection, body);
     if (result.text.length > 256_000) {
@@ -373,7 +415,11 @@ export function SessionComposer({
   const canStop = running && !!session?.runId;
   const stop = () => {
     if (!session || !session.runId || stopping) return;
-    const intent = sessionIntent(session, { type: "cancel", sessionId: scope.sessionId, runId: session.runId });
+    const intent = sessionIntent(session, {
+      type: "cancel",
+      sessionId: scope.sessionId,
+      runId: session.runId,
+    });
     // Pause durable follow-ups before stopping the exact active run.
     // A pause failure must not hide the session's primary Stop action.
     void (async () => {
@@ -399,7 +445,12 @@ export function SessionComposer({
     ...(value.noteCard
       ? { draft: copy("Not bağlamıyla kullanılamaz", "Not available with note context") }
       : running
-        ? { draft: copy("Agent çalışırken kullanılamaz", "Not available while the agent is running") }
+        ? {
+            draft: copy(
+              "Agent çalışırken kullanılamaz",
+              "Not available while the agent is running",
+            ),
+          }
         : hostDraftExists
           ? { draft: copy("Zaten kayıtlı bir taslak var", "A draft is already saved") }
           : {}),
@@ -431,7 +482,28 @@ export function SessionComposer({
             />
           </View>
         ) : null}
-        <SessionQueue scope={scope} queue={queue} blocked={blocked || unavailable} running={running} onCommand={onCommand} />
+        <SessionAgents session={session} scope={scope} disabled={blocked} onCommand={onCommand}>
+          {(controls) => (
+            <View
+              onLayout={measureOperations}
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: space.sm,
+              }}
+            >
+              {controls}
+              <SessionQueue
+                scope={scope}
+                queue={queue}
+                blocked={blocked || unavailable}
+                running={running}
+                onCommand={onCommand}
+              />
+            </View>
+          )}
+        </SessionAgents>
         <ChatComposer
           onToolbarLayout={measureToolbar}
           value={prompt}
@@ -451,18 +523,33 @@ export function SessionComposer({
           disabled={!ready}
           top={
             value.noteCard || value.attachments.length || links.length || activeMode ? (
-              <View onLayout={measurePrefix} style={{ gap: space.xs, paddingHorizontal: space.md, paddingTop: space.sm }}>
+              <View
+                onLayout={measurePrefix}
+                style={{ gap: space.xs, paddingHorizontal: space.md, paddingTop: space.sm }}
+              >
                 {value.noteCard ? (
                   <ComposerNoteCard
                     card={value.noteCard}
-                    error={noteError ? composerDeliveryError(noteError, copy) ?? noteError.message : undefined}
+                    error={
+                      noteError
+                        ? (composerDeliveryError(noteError, copy) ?? noteError.message)
+                        : undefined
+                    }
                     disabled={unavailable}
-                    onRemove={() => setValue((current) => (current ? { ...current, noteCard: undefined } : current))}
+                    onRemove={() =>
+                      setValue((current) =>
+                        current ? { ...current, noteCard: undefined } : current,
+                      )
+                    }
                   />
                 ) : null}
                 {activeMode ? (
                   <View style={{ flexDirection: "row" }}>
-                    <ComposerModeChip mode={activeMode} disabled={unavailable} onRemove={() => chooseMode(activeMode)} />
+                    <ComposerModeChip
+                      mode={activeMode}
+                      disabled={unavailable}
+                      onRemove={() => chooseMode(activeMode)}
+                    />
                   </View>
                 ) : null}
                 {links.length ? <ComposerLinks links={links} /> : null}
@@ -498,16 +585,24 @@ export function SessionComposer({
             </>
           }
           model={
-            session ? <ComposerModelChip session={session} blocked={blocked} onCommand={onCommand} /> : undefined
+            session ? (
+              <ComposerModelChip session={session} blocked={blocked} onCommand={onCommand} />
+            ) : undefined
           }
           leading={
             <ChatCircleAction
-              label={compactSuggestions ? copy("Kapat", "Close") : copy("Mesaja ekle", "Add to message")}
+              label={
+                compactSuggestions ? copy("Kapat", "Close") : copy("Mesaja ekle", "Add to message")
+              }
               disabled={compactSuggestions ? false : unavailable}
               busy={compactSuggestions ? false : picking}
               onPress={compactSuggestions ? suggestions.close : () => setPicker(true)}
             >
-              {compactSuggestions ? <X size={19} strokeWidth={2.4} color={colors.text} /> : <Plus size={19} strokeWidth={2.4} color={colors.text} />}
+              {compactSuggestions ? (
+                <X size={19} strokeWidth={2.4} color={colors.text} />
+              ) : (
+                <Plus size={19} strokeWidth={2.4} color={colors.text} />
+              )}
             </ChatCircleAction>
           }
           field={{
@@ -524,8 +619,19 @@ export function SessionComposer({
           submit={
             <>
               {canStop ? (
-                <ChatCircleAction label={copy("Durdur", "Stop")} danger busy={stopping} disabled={blocked} onPress={stop}>
-                  <Square size={13} strokeWidth={0} fill={colors.primaryText} color={colors.primaryText} />
+                <ChatCircleAction
+                  label={copy("Durdur", "Stop")}
+                  danger
+                  busy={stopping}
+                  disabled={blocked}
+                  onPress={stop}
+                >
+                  <Square
+                    size={13}
+                    strokeWidth={0}
+                    fill={colors.primaryText}
+                    color={colors.primaryText}
+                  />
                 </ChatCircleAction>
               ) : null}
               {canStop && !hasContent ? null : (
@@ -543,32 +649,34 @@ export function SessionComposer({
           }
         />
         <View onLayout={measureFooter} style={{ gap: space.xs }}>
-        <ComposerNotices
-          error={error || localError}
-          mode={mode}
-          running={running}
-          queueSupported={queue.supported}
-          desktopOwned={desktopOwned}
-          missingRun={!session?.runId}
-          cancellable={uploading && Object.values(transfers).some((state) => state.status === "uploading")}
-          onCancelUpload={uploads.cancel}
-          draftError={!!error}
-          ready={ready}
-          retrying={retryingDraft}
-          onRetrySend={() => {
-            void submit();
-          }}
-          sending={busy || uploading}
-          onRetryDraft={() => {
-            if (retryingDraft) return;
-            setRetryingDraft(true);
-            void (ready ? persist() : load())
-              .catch(() => {})
-              .finally(() => {
-                if (mounted.current) setRetryingDraft(false);
-              });
-          }}
-        />
+          <ComposerNotices
+            error={error || localError}
+            mode={mode}
+            running={running}
+            queueSupported={queue.supported}
+            desktopOwned={desktopOwned}
+            missingRun={!session?.runId}
+            cancellable={
+              uploading && Object.values(transfers).some((state) => state.status === "uploading")
+            }
+            onCancelUpload={uploads.cancel}
+            draftError={!!error}
+            ready={ready}
+            retrying={retryingDraft}
+            onRetrySend={() => {
+              void submit();
+            }}
+            sending={busy || uploading}
+            onRetryDraft={() => {
+              if (retryingDraft) return;
+              setRetryingDraft(true);
+              void (ready ? persist() : load())
+                .catch(() => {})
+                .finally(() => {
+                  if (mounted.current) setRetryingDraft(false);
+                });
+            }}
+          />
         </View>
       </View>
       <ComposerSheets
@@ -599,10 +707,11 @@ export function SessionComposer({
 }
 
 function useComposerHeight() {
-  const [height,setHeight]=useState(0);
-  const onLayout=useCallback((event:LayoutChangeEvent)=>{
-    const next=event.nativeEvent.layout.height;
-    if(Number.isFinite(next)&&next>=0)setHeight(previous=>previous===Math.ceil(next)?previous:Math.ceil(next));
-  },[]);
-  return [height,onLayout] as const;
+  const [height, setHeight] = useState(0);
+  const onLayout = useCallback((event: LayoutChangeEvent) => {
+    const next = event.nativeEvent.layout.height;
+    if (Number.isFinite(next) && next >= 0)
+      setHeight((previous) => (previous === Math.ceil(next) ? previous : Math.ceil(next)));
+  }, []);
+  return [height, onLayout] as const;
 }

@@ -9,7 +9,7 @@ import { useMobileTheme } from "@/ui/theme";
 
 type NoteComposerCard = NonNullable<ComposerDraft["noteCard"]>;
 
-/** Attached note context: one compact line inside the capsule with a remove control. */
+/** Attached note context retains its full title beside the remove control. */
 export function ComposerNoteCard({
   card,
   error,
@@ -24,17 +24,26 @@ export function ComposerNoteCard({
   const { colors } = useMobileTheme();
   const copy = useCopy();
   return (
-    <View style={{ backgroundColor: colors.fill, borderRadius: radii.control, paddingLeft: space.md, paddingVertical: space.xs }}>
+    <View
+      style={{
+        backgroundColor: colors.fill,
+        borderRadius: radii.control,
+        paddingLeft: space.md,
+        paddingVertical: space.xs,
+      }}
+    >
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Body numberOfLines={1} style={{ fontWeight: "500" }}>
-            {card.title || copy("Başlıksız", "Untitled")}
-          </Body>
+          <Body style={{ fontWeight: "500" }}>{card.title || copy("Başlıksız", "Untitled")}</Body>
           <Body muted numberOfLines={1}>
             {copy("Not bağlamı · incelenen kopya", "Note context · reviewed copy")}
           </Body>
         </View>
-        <ChatAction label={copy("Not bağlamını kaldır", "Remove note context")} disabled={disabled} onPress={onRemove}>
+        <ChatAction
+          label={copy("Not bağlamını kaldır", "Remove note context")}
+          disabled={disabled}
+          onPress={onRemove}
+        >
           <X size={16} color={colors.muted} />
         </ChatAction>
       </View>

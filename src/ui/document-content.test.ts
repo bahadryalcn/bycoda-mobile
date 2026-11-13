@@ -15,6 +15,8 @@ vi.mock("./message-content", () => ({ MessageContent: () => createElement("p",nu
 vi.mock("./message-code", () => ({ MessageCode: (props:{code:string;language?:string}) => {sharing.sources.push(props);return createElement("p",null,"Bounded source preview");} }));
 vi.mock("./message-image", () => ({ MessageImage: () => null }));
 vi.mock("./html-document", () => ({ HtmlDocument: () => createElement("p",null,"Rendered HTML") }));
+vi.mock("./pdf-document", () => ({ PdfDocument: ({ name }: { name: string }) => createElement("p", null, `PDF reader: ${name}`) }));
+vi.mock("./media-video", () => ({ InlineVideo: ({ name }: { name: string }) => createElement("p", null, `Video player: ${name}`) }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./tokens", () => ({ space: { sm: 8 } }));
 vi.mock("./primitives", () => {
@@ -53,6 +55,17 @@ it("rejects retained Reload callbacks after a reader changes file",async()=>{
 });
 
 const press = (label: string) => act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === label)!.click());
+it.each([["report.PDF", "PDF reader: report.PDF"], ["clip.mp4", "Video player: clip.mp4"]])("opens %s in its reader instead of treating bytes as text", async (name, expected) => {
+ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); root=createRoot(container);
+ await act(async()=>root.render(createElement(QueryClientProvider,{client:cache},createElement(DocumentContent,{name,mimeType:"Application/Octet-Stream; charset=binary",uri:"file:///download"}))));
+ await act(async()=>{await new Promise(done=>setTimeout(done,10));});
+ expect(container.textContent).toContain(expected);expect(container.textContent).toContain("Share / save");expect(sharing.read).not.toHaveBeenCalled();
+});
+it.each(["budget.xlsx", "slides.pptx", "archive.zip", "recording.mp3"])("keeps %s available through explicit system handoff",async name=>{
+ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);root=createRoot(container);
+ await act(async()=>root.render(createElement(QueryClientProvider,{client:cache},createElement(DocumentContent,{name,uri:"file:///download"}))));
+ expect(container.textContent).toContain("Open this file in another app.");expect(container.textContent).toContain("Share / save");expect(sharing.read).not.toHaveBeenCalled();expect(sharing.share).not.toHaveBeenCalled();
+});
 it("offers source mode for markdown recognized by its filename", async () => {
  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); root=createRoot(container);
  await act(async()=>root.render(createElement(QueryClientProvider,{client:cache},createElement(DocumentContent,{name:"README.MD",mimeType:"application/octet-stream",text:"# Original"}))));

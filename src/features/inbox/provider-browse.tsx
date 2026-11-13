@@ -1,18 +1,20 @@
+import { useInboxLocalScope } from "./inbox-local-scope";
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import { ProviderJiraBoards } from "./jira-board-screen";
 import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import { SearchField, SearchToolbar } from "@/ui/search-field";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ActionMenu, Button, Notice, QueryState, Sheet, StateView, ToggleField, NavigationGroup } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { Scope } from "../management/common";
 import { ProviderInboxDetail } from "./provider-detail";
 import { ScreenList } from "@/ui/screen-list";
 import { ProviderConnections, ProviderInboxFeedback, ProviderInboxRow } from "./provider-list";
-import { inboxItemKey, isInboxOriginCurrent, isInboxPrivateFailure, providerInboxView } from "./provider-model";
+import { inboxItemKey, isInboxPrivateFailure, providerInboxView } from "./provider-model";
 import type { ProviderInboxBrowseProps } from "./provider-component-types";
 import { useInboxRead, useProviderInboxAvailability } from "./provider-queries";
 import { inboxBrowseReducer, initialInboxBrowseState, type InboxBrowseAction } from "./provider-state";
@@ -23,8 +25,10 @@ export { type ProviderInboxBrowseProps } from "./provider-component-types";
 type Filters = { assigned: boolean; all: boolean };
 
 export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxBrowseProps) {
+  const inboxScope = useInboxLocalScope();
   useMobileTheme();
   const copy = useCopy(), machine = useActiveMachine();
+  const locale = useLocale();
   const [jiraBoards, setJiraBoards] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [filterDraft, setFilterDraft] = useState<Filters | null>(null);
@@ -38,7 +42,7 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
   const { assigned, all, search, committedSearch, selected, limit, notice } = browse;
   const availability = useProviderInboxAvailability();
   const view = providerInboxView(selected, availability);
-  const scopeCurrent = isInboxOriginCurrent(origin, useMachines.getState());
+  const scopeCurrent = inboxScope.matches(origin);
   const readAllowed = scopeCurrent && view.canRead;
   const providers = useInboxRead<"providers">({ action: "providers", input: {} }, readAllowed);
   const items = useInboxRead<"list">({ action: "list", input: {
@@ -54,7 +58,7 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
   const viewKey = JSON.stringify([assigned, all, committedSearch, limit]);
   const latest = useRef({ available, readAllowed, items, providers, availability, viewKey });
   latest.current = { available, readAllowed, items, providers, availability, viewKey };
-  const current = useCallback(() => mounted.current && (!memory || memory.read(origin) !== undefined) && isInboxOriginCurrent(origin, useMachines.getState()), [memory, origin.machineId, origin.projectId]);
+  const current = useCallback(() => mounted.current && (!memory || memory.read(origin) !== undefined) && inboxScope.matches(origin), [memory, origin.machineId, origin.projectId, inboxScope.matches]);
   const canBrowse = useCallback(() => lease.active && current() && latest.current.available, [lease, current]);
   function refresh() {
     if (!current()) return;
@@ -120,7 +124,7 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
     </Sheet> : null}
     {jiraBoards ? <ProviderJiraBoards origin={origin} canRead={available} canWrite={available} onClose={() => setJiraBoards(false)} /> : null}
     <ScreenList {...scrollMemory.listProps} title={embedded ? undefined : copy("Servis gelen kutusu", "Provider inbox")}
-      query={available ? items : scopedAvailability} refresh={refresh} context={<Scope allowAll />}
+      query={available ? items : scopedAvailability} refresh={refresh} context={<Scope allowAll projectId={origin.projectId} onChange={inboxScope.setProjectId} />}
       data={rows} keyExtractor={inboxItemKey} renderItem={({item}) => <ProviderInboxRow item={item} onOpen={item => {
         if (canBrowse() && latest.current.viewKey === viewKey) dispatch({type:"select",item});
       }} />}
@@ -141,7 +145,7 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
                 {key:"refresh",label:copy("Yenile","Refresh"),disabled:items.isFetching,onPress:()=>{void retryItems();}},
               ]} />
             </>} />
-          <AppliedFilters result={items.data ? `${items.data.items.length} ${copy("kayıt","items")}` : undefined}
+          <AppliedFilters result={items.data ? copy("Kayıtlar: {p0}", "Items: {p0}", { p0: new Intl.NumberFormat(locale).format(items.data.items.length) }) : undefined}
             filters={[assigned&&copy("Yalnız bana atananlar","Assigned to me only"),all&&copy("Kapalı kayıtları da göster","Include closed items")]} />
           <QueryState query={{...items,refetch:retryItems}} empty={empty} searching={!!(search.trim()||assigned||all)} emptyIllustration="inbox-empty" emptyTitle={copy("Bu filtrede kayıt yok","No items match these filters")}
             emptyAction={search.trim()||assigned||all?{label:copy("Filtreleri temizle","Clear filters"),onPress:()=>dispatch({type:"clear-filters"})}:undefined} />
