@@ -37,11 +37,11 @@ function render(node: Parameters<ReturnType<typeof createRoot>["render"]>[0]) {
 }
 afterEach(() => { act(() => root?.unmount()); root = undefined; fixture.writes.mockReset(); vi.unstubAllGlobals(); });
 it("places invalid goal limits beside each field without changing the draft or sending", () => {
-  const initial = { id: "goal", title: "İstanbul review", status: "running", maxRunningTasks: 9, maxRunMinutes: -1, isolate: true } as HostGoal;
+  const initial = { id: "goal", title: "İstanbul review", status: "running", maxRunningTasks: -1, maxRunMinutes: -1, isolate: true } as HostGoal;
   render(h(GoalSettingsEditor, { initial, onClose: vi.fn() }));
-  expect(container.querySelector('[data-field="Concurrent task limit"] [role="alert"]')?.textContent).toBe("Enter a task limit from 0 to 8.");
+  expect(container.querySelector('[data-field="Concurrent task limit"] [role="alert"]')?.textContent).toBe("Enter zero or a positive safe integer.");
   expect(container.querySelector('[data-field="Run time limit"] [role="alert"]')?.textContent).toBe("Enter minutes from 0 to 10080.");
-  expect(initial.maxRunningTasks).toBe(9); expect(initial.maxRunMinutes).toBe(-1); expect(fixture.writes).not.toHaveBeenCalled();
+  expect(initial.maxRunningTasks).toBe(-1); expect(initial.maxRunMinutes).toBe(-1); expect(fixture.writes).not.toHaveBeenCalled();
 });
 it("formats social page boundaries using the active app locale", () => {
   const page = { page: { offset: 1000, limit: 20, total: 1284 }, loading: false, busy: false, onOffset: vi.fn() } as unknown as SocialCollectionPage;

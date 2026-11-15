@@ -12,6 +12,7 @@ import type { MessageContext } from "@/ui/media-policy";
 import { useCopy } from "@/ui/copy";
 import { OrchestrationReader, type CoordinationReader } from "./orchestration-readers";
 import { RecordAccessUnavailable } from "./unavailable-state";
+import { providerName } from "./provider-choices";
 
 /** Read-only proposal projection. No controller or command port is exposed. */
 export function OrchestrationDetails({block,scope,context,onClose}:{block:Block;scope:SessionScope;context?:MessageContext;onClose?:()=>void}){
@@ -50,7 +51,7 @@ export function OrchestrationDetails({block,scope,context,onClose}:{block:Block;
       <NavigationRow label={copy("İstek", "Request")} onPress={()=>open({kind:"request"})}/>
       {proposal.summary?<NavigationRow label={copy("Özet", "Summary")} onPress={()=>open({kind:"summary"})}/>:null}
     </>:<RecordAccessUnavailable />}
-  </Stack>} renderItem={({item:task})=><NavigationRow label={task.title} detail={`${task.harness} · ${task.model}`} onPress={()=>open({kind:"task",task})}/>}/>
+  </Stack>} renderItem={({item:task})=><NavigationRow label={task.title} detail={`${providerName(task.harness)} · ${task.model}`} onPress={()=>open({kind:"task",task})}/>}/>
   {onClose?<FormActions submitLabel={copy("Kapat", "Close")} onSubmit={close}/>:null}
   <PrivateContentAccessProvider value={{allowed:readable,check:current}}>
     {selection&&selection.lease===lease&&readable?<OrchestrationReader value={selection.value} proposal={selection.proposal} context={selection.context} onClose={closeReader}

@@ -71,7 +71,7 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
             label={copy("Bilgisayarlarını otomatik bulmak için giriş yap", "Sign in to find your computers automatically")}
             intent="navigate"
             icon={<IconTile color={colors.muted}><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
-            onPress={() => router.push("/account")}
+            onPress={() => router.navigate("/account")}
           />
         </NavigationGroup>
         {others}

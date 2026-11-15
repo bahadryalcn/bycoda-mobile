@@ -3,7 +3,7 @@ import { StyleSheet, View, useWindowDimensions, type ViewStyle } from "react-nat
 import { Accordion } from "panelui-native/components/accordion";
 import { Card } from "./layout";
 import { Body } from "./typography";
-import { metrics, opacity, radii, space } from "./tokens";
+import { metrics, opacity, space } from "./tokens";
 import { useMobileTheme } from "./theme";
 import { Hint } from "./hint";
 
@@ -35,8 +35,8 @@ export function RecordCard({
     if (defaultExpanded) { setExpanded(true); setVisited(true); }
   }
   return (
-    <Card variant="surface" style={{ gap: 0, padding: space.md, marginVertical: space.xs, backgroundColor: colors.panel,
-      borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: radii.card }}>
+    <Card style={{ gap: 0, paddingVertical: space.md, paddingHorizontal: 0,
+      borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border }}>
       <Accordion
         variant="ghost"
         hideSeparator

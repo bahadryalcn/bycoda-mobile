@@ -162,7 +162,12 @@ it("refuses a wrong-project response before cache commit", async () => {
   state.read.mockResolvedValue(value("hidden"));
   await render();
   await vi.waitFor(() => expect(snapshot.isError).toBe(true));
-  expect(snapshot.error).toMatchObject({ kind: "identity" });
+  expect(snapshot.error).toMatchObject({
+    sessionId: "session",
+    expectedProjectId: "visible",
+    actualProjectId: "hidden",
+  });
+  expect(snapshot.error).not.toHaveProperty("kind", "identity");
   expect(snapshot.data).toBeUndefined();
   expect(cache.getQueryData(key)).toBeUndefined();
 });

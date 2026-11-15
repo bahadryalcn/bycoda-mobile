@@ -4,6 +4,7 @@ import {
   Badge,
   Body,
   Row,
+  Stack,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { IssueSummary } from "@/ui/issue-summary";
@@ -21,18 +22,20 @@ export function ProviderConnections({ providers, onRetry, retrying }: ProviderCo
   const copy = useCopy();
   return (
     <>
-      <Row>
+      <Stack>
         {providers.map((provider) => (
+          <Row key={provider.provider}>
+          <Body style={{ flex: 1, minWidth: 0, fontWeight: "600" }}>{providerName(provider.provider)}</Body>
           <Badge
-            key={provider.provider}
-            label={`${providerName(provider.provider)} · ${copy(
+            label={copy(
               provider.connected ? "bağlı" : "bağlı değil",
               provider.connected ? "connected" : "disconnected",
-            )}`}
+            )}
             tone={provider.connected ? "success" : "default"}
           />
+          </Row>
         ))}
-      </Row>
+      </Stack>
       <IssueSummary issues={providers.filter((provider) => provider.error).map((provider) => `${providerName(provider.provider)}: ${provider.error}`)}
         onRetry={onRetry} retrying={retrying} />
       {!providers.some((provider) => provider.connected) ? (

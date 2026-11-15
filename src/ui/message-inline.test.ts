@@ -83,4 +83,15 @@ describe("native transcript link safety", () => {
       target: { kind: "web", href: "https://example.com/docs_(mobile)" },
     });
   });
+
+  it("does not pull preceding bracketed prose into a link label", () => {
+    expect(messageInlineParts("[x] [app](src/app.ts)")).toEqual([
+      { kind: "text", text: "[x] " },
+      { kind: "link", text: "app", target: { kind: "file", context: "src/app.ts" } },
+    ]);
+    expect(messageInlineParts("[a [nested] label](src/app.ts)")[0]).toMatchObject({
+      kind: "link",
+      text: "a [nested] label",
+    });
+  });
 });

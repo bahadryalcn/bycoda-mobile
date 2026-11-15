@@ -1,4 +1,5 @@
 import type { SessionSettingsProps, SessionSettingsDraft } from "./session-settings-types";
+import { carryCrossDelegation } from "../../../../src/shared/model/host-contracts/delegation";
 import { View } from "react-native";
 import { useEffect, useRef, useState } from "react";
 import { sameFormValue, useFormDraft } from "@/state/form-draft";
@@ -480,7 +481,7 @@ export function SessionSettings({
                 provider: next.provider,
                 accountId: next.accountId,
                 model: first?.id ?? "",
-                modelSettings: modelDefaults(first),
+                modelSettings: carryCrossDelegation(modelSettings, modelDefaults(first)),
               });
             },
           }}

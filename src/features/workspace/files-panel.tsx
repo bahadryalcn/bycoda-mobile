@@ -276,18 +276,6 @@ export function ProjectFiles({
                       },
                     },
                     {
-                      key: "search-names",
-                      label: copy("Dosya adlarında ara", "Search file names"),
-                      selected: !searchContent,
-                      onPress: () => dispatch({ type: "search-mode", mode: "names" }),
-                    },
-                    {
-                      key: "search-content",
-                      label: copy("Dosya içeriğinde ara", "Search file contents"),
-                      selected: searchContent,
-                      onPress: () => dispatch({ type: "search-mode", mode: "content" }),
-                    },
-                    {
                       key: "hidden",
                       label: copy("Gizli dosyaları göster", "Show hidden files"),
                       selected: options.showHidden,
@@ -341,6 +329,12 @@ export function ProjectFiles({
                 />
               }
             />
+            <SegmentedControl hideLabel label={copy("Arama türü", "Search type")} value={state.searchMode}
+              options={[
+                { value: "names", label: copy("Ad", "Name") },
+                { value: "content", label: copy("İçerik", "Content") },
+              ]}
+              onChange={(mode) => dispatch({ type: "search-mode", mode })} />
             {!creating ? (
               <MutationState
                 mutation={create}

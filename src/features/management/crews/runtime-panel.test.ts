@@ -19,7 +19,7 @@ const state = vi.hoisted(() => ({
   refetch: vi.fn(),
   reset: vi.fn(),
 }));
-vi.mock("expo-router", () => ({ router: { push: (target: unknown) => state.navigate(target) } }));
+vi.mock("expo-router", () => ({ router: { navigate: (target: unknown) => state.navigate(target) } }));
 vi.mock("@/state/machines", () => ({
   useActiveMachine: () => ({
     id: "pc",

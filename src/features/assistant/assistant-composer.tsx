@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { randomUUID } from "expo-crypto";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import { useCopy } from "@/ui/copy";
+import { useAssistantCall } from "./assistant-call-state";
 import { Button, ErrorNotice, Notice, Row } from "@/ui/primitives";
 import { ChatComposer } from "@/ui/chat-composer";
 import { ChatCircleAction } from "@/ui/chat-controls";
@@ -11,6 +12,9 @@ import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import { useLocalDraft } from "../workspace/use-local-draft";
 import type { AssistantMobileClient } from "./assistant-client";
+import { AssistantMicrophone, AssistantVoiceFeedback } from "./assistant-voice-controls";
+import { consumeAssistantSpeech, useAssistantCompanion } from "./assistant-companion-state";
+import { decodeAssistantDraft, encodeAssistantDraft, mergePendingSpeech } from "./assistant-speech-draft";
 import {
   assistantSendKey,
   checkRoomMessage,
@@ -20,8 +24,6 @@ import {
   type StoredSend,
 } from "./assistant-send";
 
-const decode = (raw: string) => raw;
-const encode = (value: string | null) => (value ? value : null);
 export const assistantDraftKey = (machineId: string, environmentId: string, threadId: string) =>
   `bycoda.mobile.draft.v1:${JSON.stringify(["assistant", machineId, environmentId, threadId])}`;
 
@@ -36,6 +38,7 @@ export function AssistantComposer({
   environmentId,
   threadId,
   current,
+  voiceCurrent,
   enabled,
   onSettled,
 }: {
@@ -44,12 +47,15 @@ export function AssistantComposer({
   environmentId: string;
   threadId: string;
   current(): boolean;
+  /** Project proof reads current stores and remains valid independently of the route subscription. */
+  voiceCurrent(): boolean;
   enabled: boolean;
   onSettled(): Promise<unknown>;
 }) {
   const copy = useCopy();
   const { colors } = useMobileTheme();
-  const draft = useLocalDraft(assistantDraftKey(machineId, environmentId, threadId), decode, encode);
+  const callActive = useAssistantCall(state => state.phase !== "idle");
+  const draft = useLocalDraft(assistantDraftKey(machineId, environmentId, threadId), decodeAssistantDraft, encodeAssistantDraft);
   const storageKey = assistantSendKey(machineId, environmentId, threadId);
   const pending = useRef(false);
   const [recorded, setRecorded] = useState<StoredSend | null>(null);
@@ -68,11 +74,30 @@ export function AssistantComposer({
       live = false;
     };
   }, [storageKey]);
-  const text = draft.value ?? "";
+  const text = draft.value?.text ?? "";
+  const transcript = useAssistantCompanion(state => state.transcript);
+  const importingSpeech = useRef(false);
+  const matchingSpeech = transcript && transcript.target.machineId === machineId && transcript.target.environmentId === environmentId && transcript.target.threadId === threadId;
+  const importSpeech = async () => {
+    if (!transcript || !matchingSpeech || importingSpeech.current || !draft.ready || !enabled || !current()) return;
+    importingSpeech.current = true;
+    try {
+      const next = mergePendingSpeech(draft.valueRef.current, transcript);
+      draft.setValue(next);
+      await draft.persist(next);
+      await consumeAssistantSpeech(transcript);
+      setError(null);
+    } catch (cause) { setError(cause); }
+    finally { importingSpeech.current = false; }
+  };
+  // A minimized recording returns only to its captured Room draft; recognition never sends.
+  useEffect(() => {
+    void importSpeech();
+  }, [transcript, draft.ready, enabled, machineId, environmentId, threadId]);
   const settle = useCallback(
     async (sent: string) => {
       // Only the text that was delivered is cleared; anything typed meanwhile stays.
-      if ((draft.valueRef.current ?? "").trim() === sent) {
+      if ((draft.valueRef.current?.text ?? "").trim() === sent) {
         draft.setValue(null);
         await draft.persist(null).catch(() => {});
       }
@@ -95,7 +120,7 @@ export function AssistantComposer({
     }
   };
   const run = async (kind: "send" | "check", action: () => Promise<{ outcome: SendOutcome; sent: string }>) => {
-    if (pending.current || !current() || !enabled) return;
+    if (pending.current || !current() || !enabled || (kind === "send" && useAssistantCall.getState().phase !== "idle")) return;
     pending.current = true;
     setBusy(kind);
     setError(null);
@@ -116,6 +141,7 @@ export function AssistantComposer({
     void run("send", async () => {
       const sent = text.trim();
       await draft.persist().catch(() => {});
+      if (useAssistantCall.getState().phase !== "idle") throw new Error(copy("Önce sesli görüşmeyi bitir.", "End the voice call first."));
       const outcome = await sendRoomMessage({
         client,
         storage: AsyncStorage,
@@ -137,7 +163,7 @@ export function AssistantComposer({
     setNotice(null);
   };
   const unconfirmed = recorded !== null;
-  const canSend = enabled && draft.ready && recordReady && !unconfirmed && busy === null && !!text.trim();
+  const canSend = !callActive && enabled && draft.ready && recordReady && !unconfirmed && !matchingSpeech && busy === null && !!text.trim();
   return (
     <View style={{ gap: space.xs, paddingHorizontal: space.screen }}>
       {unconfirmed ? (
@@ -185,16 +211,18 @@ export function AssistantComposer({
         />
       ) : null}
       {error ? <ErrorNotice error={error} /> : null}
+      {matchingSpeech && error ? <Button label={copy("Kaydet", "Save")} onPress={() => { void importSpeech(); }} /> : null}
+      <AssistantVoiceFeedback />
       <ChatComposer
         value={text}
-        onValueChange={(value) => draft.setValue(value)}
+        onValueChange={(value) => draft.setValue({ text: value, speechIds: draft.valueRef.current?.speechIds ?? [] })}
         disabled={!draft.ready || unconfirmed || busy === "send"}
         field={{
           placeholder: copy("Asistana yaz", "Message the assistant"),
           accessibilityLabel: copy("Asistana mesaj", "Message to the assistant"),
           maxLength: 16000,
         }}
-        leading={null}
+        leading={<AssistantMicrophone target={{ machineId, environmentId, threadId }} enabled={enabled && draft.ready && !unconfirmed && !busy} current={voiceCurrent} />}
         submit={
           <ChatCircleAction
             label={copy("Gönder", "Send")}

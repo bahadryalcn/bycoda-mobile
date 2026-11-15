@@ -4,8 +4,6 @@ import Animated from "react-native-reanimated";
 import QrCode from "lucide-react-native/icons/qr-code";
 import ClipboardPaste from "lucide-react-native/icons/clipboard-paste";
 import PencilLine from "lucide-react-native/icons/pencil-line";
-import Wifi from "lucide-react-native/icons/wifi";
-import Network from "lucide-react-native/icons/network";
 import { Body, Button, Heading, NavigationGroup, NavigationRow, Row, StateView } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
@@ -35,26 +33,35 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
     return (
       <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
         <StateView
+          compact
           illustration="connect-computer"
           title={copy("Bilgisayarına bağlan", "Connect your computer")}
-          description={copy("Bilgisayarına nasıl ulaşacağını seç.", "Choose how to reach your computer.")}
+          description={copy(
+            "Bilgisayarındaki Bycoda’da telefon bağlantısını aç ve QR kodunu tara.",
+            "Open phone pairing in Bycoda on your computer and scan its QR code.",
+          )}
         />
+        <Button
+          label={copy("QR kodu tara", "Scan QR code")}
+          tone="primary"
+          fullWidth
+          disabled={disabled || busy}
+          onPress={() => controller.begin("scan")}
+        ><QrCode size={20} color={colors.primaryText} /></Button>
         <NavigationGroup>
           <NavigationRow
-            label={copy("Yerel ağ", "Local network")}
-            detail={copy("Aynı Wi-Fi veya yerel ağ", "Same Wi-Fi or local network")}
-            detailLines={0}
-            icon={tile(Wifi, colors.accent)}
+            label={copy("Kodu yapıştır", "Paste pairing code")}
+            icon={tile(ClipboardPaste, colors.muted)}
             disabled={disabled || busy}
-            onPress={() => controller.begin("methods", "lan")}
+            onPress={() => controller.begin("paste")}
           />
           <NavigationRow
-            label="Tailscale"
+            label={copy("Manuel bağlan", "Connect manually")}
             detail={copy("Farklı ağlardan özel bağlantı", "Private access across networks")}
             detailLines={0}
-            icon={tile(Network, colors.muted)}
+            icon={tile(PencilLine, colors.muted)}
             disabled={disabled || busy}
-            onPress={() => controller.begin("methods", "tailscale")}
+            onPress={() => controller.begin("manual", "tailscale")}
           />
         </NavigationGroup>
       </Animated.View>

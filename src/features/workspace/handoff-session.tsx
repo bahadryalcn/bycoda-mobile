@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { providerName } from "./provider-choices";
 import { router } from "expo-router";
 import { truncateGraphemes } from "../../../../src/shared/lib/text/truncate";
 import type {
@@ -229,7 +230,7 @@ export function HandoffSession({
       <SelectField
         label={copy("Hedef agent", "Target agent")}
         value={form.values.harness}
-        options={providers.map((value) => ({ value, label: value }))}
+        options={providers.map((value) => ({ value, label: providerName(value) }))}
         disabled={locked}
         onChange={(harness) => form.patch({ harness, model: "", modelSettings: {} })}
       />
@@ -287,7 +288,7 @@ export function HandoffSession({
             />
           ) : null}
           <Body>
-            {preview.data.sourceProvider} → {preview.data.harness} · {preview.data.model}
+            {providerName(preview.data.sourceProvider)} → {providerName(preview.data.harness)} · {preview.data.model}
           </Body>
           <Body mono>{preview.data.cwd}</Body>
           <Body muted>

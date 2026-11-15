@@ -1,4 +1,3 @@
-import { ProviderAccountKind } from "@/ui/provider-account-kind";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { Body, PressableCard } from "@/ui/primitives";
@@ -45,10 +44,7 @@ export function ModelPickerField(props: Omit<ModelPickerProps, "visible" | "onCl
         ]}
       >
         {choice ? (
-          <>
-            <ProviderAccountKind kind={choice.kind} derivedKind={choice.derivedKind} />
-            <ProviderAccountMark provider={choice.provider} color={choice.color} size={22} />
-          </>
+          <ProviderAccountMark provider={choice.provider} color={choice.color} size={22} />
         ) : null}
         <View style={uiStyles.grow}>
           <Body numberOfLines={1} selectable={false}>

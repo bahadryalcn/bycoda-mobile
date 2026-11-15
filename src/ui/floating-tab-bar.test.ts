@@ -216,6 +216,26 @@ it("uses an opaque navigation surface without a separate command", async () => {
   expect(container.querySelector("[data-blur]")).toBeNull();
   expect(container.querySelectorAll("[role=tab]")).toHaveLength(5);
 });
+it("starts a session on tap and opens quick actions on hold without selecting a tab", async () => {
+  const onPress = vi.fn(), onLongPress = vi.fn();
+  await render({ quickAction: { label: "New session", optionsLabel: "Quick actions", onPress, onLongPress } });
+  const command = container.querySelector('[aria-label="New session"]') as HTMLElement;
+  expect(command.getAttribute("role")).toBe("button");
+  expect(JSON.parse(command.getAttribute("data-style")!).minHeight).toBeGreaterThanOrEqual(48);
+  await act(async () => command.click());
+  expect(onPress).toHaveBeenCalledTimes(1);
+  await act(async () => command.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })));
+  expect(onLongPress).toHaveBeenCalledTimes(1);
+  expect(state.navigate).not.toHaveBeenCalled();
+});
+it("keeps large-text destinations reachable while the quick action owns a slot", async () => {
+  state.fontScale = 2;
+  await render({ quickAction: { label: "New session", optionsLabel: "Quick actions", onPress: vi.fn(), onLongPress: vi.fn() } });
+  expect(container.querySelector('[aria-label="New session"]')).not.toBeNull();
+  const more = [...container.querySelectorAll('[role="tab"]')].find(tab => tab.textContent?.includes("More")) as HTMLElement;
+  await act(async () => more.click());
+  expect(container.querySelector('[data-destination="settings"]')).not.toBeNull();
+});
 it("labels every tab, keeps every accessible name and never changes the tab row for the action", async () => {
   await render();
   const tabs = [...container.querySelectorAll("[role=tab]")];
@@ -365,4 +385,31 @@ it("retains running counts when large text moves Sessions into overflow", async 
   const session = container.querySelector('[data-destination="sessions"]');
   expect(session?.getAttribute("aria-label")).toBe("Sessions, 99+ running sessions");
   expect(session?.textContent).toContain("99+");
+});
+
+it("separates create from all five navigation destinations at phone width", async () => {
+  await render({ quickAction: { label: "New session", optionsLabel: "Quick actions", onPress: vi.fn(), onLongPress: vi.fn() } });
+  const command = container.querySelector('[aria-label="New session"]')!;
+  const rail = container.querySelector('[role="tablist"]')!;
+  expect(rail.contains(command)).toBe(false);
+  expect(rail.querySelectorAll('[role="tab"]')).toHaveLength(5);
+  expect(JSON.parse(command.getAttribute("data-style")!).width).toBe(48);
+  expect([...rail.querySelectorAll('[role="tab"]')].map(tab => tabStyle(tab).width)).toEqual(Array(5).fill("20%"));
+});
+
+it("keeps narrow large-type navigation and create independently reachable", async () => {
+  state.width = 280; state.fontScale = 3;
+  await render({ state: { ...props.state, index: 4 }, quickAction: { label: "Yeni oturum oluştur", optionsLabel: "Diğer hızlı işlemler", onPress: vi.fn(), onLongPress: vi.fn() } });
+  const command = container.querySelector('[aria-label="Yeni oturum oluştur"]')!;
+  const rail = container.querySelector('[role="tablist"]')!;
+  expect(rail.contains(command)).toBe(false);
+  expect(rail.querySelectorAll('[role="tab"]')).toHaveLength(2);
+  const selected = rail.querySelector('[aria-selected="true"]') as HTMLElement;
+  expect(selected.textContent).toContain("More");
+  expect(tabStyle(selected).minHeight).toBeGreaterThanOrEqual(48);
+  await act(async () => selected.click());
+  const destinations = [...container.querySelectorAll('[data-destination]')];
+  expect(destinations.map(row => row.getAttribute("data-destination"))).toEqual(["sessions", "inbox", "tools", "settings"]);
+  expect(container.querySelector('[data-destination="settings"]')?.getAttribute("aria-selected")).toBe("true");
+  expect(container.querySelector('[aria-label="Yeni oturum oluştur"]')).toBe(command);
 });

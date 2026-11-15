@@ -40,7 +40,7 @@ export function ManageAccountSection() {
         <NavigationGroup>
           <NavigationRow
             label={copy("Bildirim ayarları", "Notification settings")}
-            onPress={() => router.push("/account-notifications" as Href)}
+            onPress={() => router.navigate("/account-notifications" as Href)}
           />
         </NavigationGroup>
         <ErrorNotice error={portal.error} message={copy("Sayfa açılamadı.", "The page could not be opened.")} />

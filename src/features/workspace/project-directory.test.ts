@@ -4,7 +4,9 @@ import {
   distinctDirectoryProjects,
   directoryRows,
   nestDirectoryProjects,
+  projectNameContexts,
   projectPathLabel,
+  PINNED_SECTION_KEY,
   sortDirectoryProjects,
   type DirectoryProject,
 } from "./project-directory";
@@ -18,14 +20,26 @@ describe("complete project directory", () => {
     ...(index < 40 ? { groupId: "work" } : {}),
   }));
   const groups = [{ id: "work", name: "Work", collapsed: false }];
-  it("promotes active projects and groups while retaining counts inside collapsed groups", () => {
+  it("keeps desktop order when projects run while retaining counts inside collapsed groups", () => {
     const counts = { p60: 2 };
-    for (const sort of ["desktop", "name", "recent"] as const) {
-      expect(sortDirectoryProjects(projects, { sort, recent: { p0: 100 } }, counts)[0]?.id).toBe("p60");
-    }
+    expect(sortDirectoryProjects(projects, { sort: "desktop", recent: {} })[0]?.id).toBe("p0");
     const sections = directorySections(projects, groups, "", { "": true }, counts);
-    expect(sections[0]).toMatchObject({ key: "", running: 2, expanded: false, data: [] });
+    expect(sections.map((section) => section.key)).toEqual(["work", ""]);
+    expect(sections[1]).toMatchObject({ key: "", running: 2, expanded: false, data: [] });
     expect(directorySections(projects, groups, "Project 0", {}, counts).every((section) => section.running === 0)).toBe(true);
+  });
+  it("shows desktop pins first, as the rail's Pinned section, without moving grouped projects", () => {
+    const pinned = projects.map((project) =>
+      project.id === "p70" || project.id === "p5" ? { ...project, pinned: true } : project);
+    for (const sort of ["desktop", "name", "recent"] as const)
+      expect(sortDirectoryProjects(pinned, { sort, recent: { p0: 100 } }).slice(0, 2).map((row) => row.id))
+        .toEqual(["p5", "p70"]);
+    expect(sortDirectoryProjects(pinned, { sort: "custom", recent: {} })[0]?.id).toBe("p0");
+    const sections = directorySections(pinned, groups, "", {});
+    expect(sections.map((section) => section.key)).toEqual([PINNED_SECTION_KEY, "work", ""]);
+    expect(sections[0]).toMatchObject({ pinned: true, total: 1, data: [{ id: "p70" }] });
+    expect(sections[1]?.total).toBe(40);
+    expect(directorySections(pinned, groups, "Project 1", {}).map((section) => section.key)).not.toContain(PINNED_SECTION_KEY);
   });
   it("keeps every distinct host ID, including aliases and projects beyond32", () => {
     expect(distinctDirectoryProjects([...projects, projects[0]!])).toHaveLength(80);
@@ -67,6 +81,18 @@ describe("complete project directory", () => {
 });
 
 describe("nested project folders", () => {
+  it("keeps case-sensitive POSIX paths distinct when finding parent folders", () => {
+    const projects = [{ id: "upper", cwd: "/home/owner/Repo" }, { id: "lower-child", cwd: "/home/owner/repo/mobile" }];
+    expect(nestDirectoryProjects(projects)).toEqual(projects.map(project => ({ project, depth: 0 })));
+  });
+  it("keeps independently registered nested repositories at the same level and in computer order", () => {
+    const projects = [
+      { id: "mobile", cwd: "G:/Repo/mobile", registered: true },
+      { id: "repo", cwd: "G:/Repo", registered: true },
+      { id: "other", cwd: "G:/Other", registered: true },
+    ];
+    expect(nestDirectoryProjects(projects)).toEqual(projects.map(project => ({ project, depth: 0 })));
+  });
   it("places a project folder under its closest parent project", () => {
     const rows = nestDirectoryProjects([
       { id: "c", cwd: "G:\\Repo\\pkg\\core" },
@@ -76,5 +102,25 @@ describe("nested project folders", () => {
       { id: "same", cwd: "g:/repo/" },
     ]);
     expect(rows.map((row) => `${row.project.id}:${row.depth}`)).toEqual(["a:0", "b:1", "c:2", "x:0", "same:0"]);
+  });
+});
+
+describe("same-name projects", () => {
+  it("adds the parent folder only to names another folder shares, case-insensitively", () => {
+    expect(projectNameContexts([
+      { id: "a", name: "app", cwd: "C:\\code\\work\\app" },
+      { id: "b", name: "App ", cwd: "/home/me/side/app" },
+      { id: "c", name: "api", cwd: "/home/me/side/api" },
+    ])).toEqual({ a: "work", b: "side" });
+  });
+  it("treats spellings of one folder as one project and skips drive roots", () => {
+    expect(projectNameContexts([
+      { id: "a", name: "app", cwd: "C:\\code\\app" },
+      { id: "b", name: "app", cwd: "c:/code/app/" },
+    ])).toEqual({});
+    expect(projectNameContexts([
+      { id: "a", name: "data", cwd: "D:\\data" },
+      { id: "b", name: "data", cwd: "E:/backup/data" },
+    ])).toEqual({ b: "backup" });
   });
 });

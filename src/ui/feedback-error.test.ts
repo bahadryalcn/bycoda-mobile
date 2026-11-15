@@ -16,7 +16,7 @@ vi.mock("react-native", () => ({
 const handoff = vi.hoisted(() => ({ mounted: true }));
 vi.mock("react-native-reanimated", () => ({ default: { View: "AnimatedView" }, useAnimatedStyle: () => ({}) }));
 vi.mock("panelui-native/hooks/use-skeleton-handoff", () => ({ useSkeletonHandoff: () => ({ mounted: handoff.mounted, opacity: { value: 1 } }) }));
-vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
+vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("./motion", () => ({ reveal: undefined }));
 vi.mock("./typography", () => ({ Body: "Body" }));
 vi.mock("./state-view", () => ({ StateView: "StateView" }));
@@ -110,7 +110,7 @@ describe("shared feedback error rendering", () => {
     expect(query?.props.action.label).toBe("Bağlantıları yönet");
     expect(query?.props.illustration).toBe("locked");
     query?.props.action.onPress();
-    expect(router.push).toHaveBeenCalledWith("/machines");
+    expect(router.navigate).toHaveBeenCalledWith("/machines");
   });
 
   it("does not turn a local validation kind into a connection-repair action", () => {

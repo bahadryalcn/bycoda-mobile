@@ -8,6 +8,7 @@ import GitCommitHorizontal from "lucide-react-native/icons/git-commit-horizontal
 import { Body, Button, Disclosure, Field, Row } from "@/ui/primitives";
 import { space, fontSize, lineHeight } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
 import { GitFileRow } from "./git-file-row";
 import type { GitChangesPanelProps, GitCommitPanelProps } from "./git-types";
 
@@ -96,6 +97,7 @@ export function GitCommitPanel({
 }: GitCommitPanelProps) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const numbers = new Intl.NumberFormat(useLocale());
   const stagedCount = index.files.filter((file) => file.staged).length;
   const commitDisabled =
     !message.trim() || !stagedCount || !!index.conflicts?.length || !!index.operation;
@@ -169,7 +171,7 @@ export function GitCommitPanel({
               numberOfLines={1}
               selectable={false}
               style={[uiStyles.caption, uiStyles.grow]}
-            >{`${index.ahead} ↑  ${index.behind} ↓`}</Body>
+            >{`${numbers.format(index.ahead)} ↑  ${numbers.format(index.behind)} ↓`}</Body>
           </Row>
         </>
       ) : null}

@@ -34,10 +34,15 @@ export function setToastClearance(height: number) {
 }
 const subscribeClearance = (listener: () => void) => { clearanceListeners.add(listener); return () => { clearanceListeners.delete(listener); }; };
 
+/** Measured tab chrome above the safe area, shared by floating overlays. */
+export function useBottomChromeClearance() {
+  return useSyncExternalStore(subscribeClearance, () => toastClearance, () => 0);
+}
+
 /** PanelUI pins toasts to the safe-area bottom edge, so a dedicated portal host feeds it an inset that includes our chrome. */
 function ToastLayer() {
   const insets = useSafeAreaInsets();
-  const clearance = useSyncExternalStore(subscribeClearance, () => toastClearance, () => 0);
+  const clearance = useBottomChromeClearance();
   return (
     <PortalProvider>
       <SafeAreaInsetsContext.Provider value={{ ...insets, bottom: insets.bottom + clearance }}>

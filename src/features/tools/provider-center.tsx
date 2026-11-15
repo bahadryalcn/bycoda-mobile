@@ -119,7 +119,7 @@ export function ProviderCenter() {
   if (!machine || !supported) return <Screen title={copy("Sağlayıcı merkezi", "Provider center")} scroll={false}>
     <View style={{ flex: 1 }}>
       {!machine ? <Empty compact={false} illustration="connect-computer" title={copy("Önce bir bilgisayar bağla", "Connect a computer first")}
-        action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.push("/machines") }} />
+        action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.navigate("/machines") }} />
         : <Empty compact={false} illustration="permission" title={copy("Güncelleme gerekiyor", "Update needed")}
           detail={copy("Sağlayıcı merkezini açmak için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to open the provider center.")} />}
     </View>

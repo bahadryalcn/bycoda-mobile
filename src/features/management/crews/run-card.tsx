@@ -61,7 +61,7 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
   const supported = machine?.id === machineId && machine?.capabilities?.includes("crews.v1") === true;
   const openSession = (sessionId: string) => {
     if (supported && machineId && useMachines.getState().activeId === machineId)
-      router.push({ pathname: "/session/[id]", params: { id: sessionId, machineId, projectId: run.projectId } });
+      router.navigate({ pathname: "/session/[id]", params: { id: sessionId, machineId, projectId: run.projectId } });
   };
   const done = run.tasks.filter((task) => task.status === "done").length;
   const created = `${copy("Oluşturulma", "Created")}: ${stamp(run.createdAt)}`;

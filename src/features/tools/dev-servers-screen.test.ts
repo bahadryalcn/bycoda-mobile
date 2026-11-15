@@ -29,7 +29,7 @@ vi.mock("./dev-server-detail", () => ({ DevServerDetail: Detail }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: any) => createElement("button", { onClick: onPress, disabled }, label);
-  return { Body: Group, Row: Group, Badge: () => null, MutationState: () => null, QueryState: () => null, Notice: () => null, IconButton: Button, NavigationRow: Button,
+  return { Body: Group, Row: Group, Disclosure: Group, StatusText: () => null, MutationState: () => null, QueryState: () => null, Notice: () => null, IconButton: Button, NavigationRow: Button,
     ErrorText: ({ error }: any) => error ? createElement("p", null, error.message) : null,
     SearchField: () => null,
     Field: ({ label, value, onChangeText }: any) => createElement("input", { "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) }),

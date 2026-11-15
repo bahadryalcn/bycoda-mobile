@@ -40,7 +40,7 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
-  return { Body: Wrapper, Screen: ({ children, actions }: PropsWithChildren<{ actions?: import("react").ReactNode }>) => createElement("div", null, actions, children), Row: Wrapper, Disclosure: Wrapper,
+  return { Body: Wrapper, Screen: ({ children, actions, footer }: PropsWithChildren<{ actions?: import("react").ReactNode; footer?: import("react").ReactNode }>) => createElement("div", null, actions, children, createElement("footer", null, footer)), Row: Wrapper, Disclosure: Wrapper,
     Field: ({ label, value, onChangeText }: any) => createElement("input", { "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) }), ErrorText: () => null, MutationState: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message), Button, IconButton: Button,
     ConfirmationCard: ({ message, tone, disabled, onConfirm, onCancel }: { message?: string; tone?: string; disabled?: boolean; onConfirm: () => void; onCancel: () => void }) => createElement("div", { "data-confirmation-tone": tone }, createElement("p", null, message), createElement(Button, { label: "Confirm", disabled, onPress: onConfirm }), createElement(Button, { label: "Cancel", onPress: onCancel })) };
@@ -59,7 +59,8 @@ it("reads on open, and setup downloads require separate reviewed confirmation", 
 it("close preserves the reviewed lease and project and requires impact confirmation", async () => {
   state.open = true; state.installed = true; await render(); await click("Close browser"); expect(state.requests).toHaveLength(1); expect(container.textContent?.match(/affecting other viewers/g)).toHaveLength(1); expect(container.querySelector("[data-confirmation-tone]")?.getAttribute("data-confirmation-tone")).toBe("danger");
   expect(container.textContent).not.toContain("Close browser");
-  expect(container.textContent!.indexOf("Release control")).toBeLessThan(container.textContent!.indexOf("affecting other viewers"));
+  expect(container.querySelector("footer")?.textContent).toContain("Release control");
+  expect(container.querySelector("footer")?.textContent).not.toContain("affecting other viewers");
   await click("Confirm"); expect(state.requests[1]).toEqual({ method: "browser.close", params: { projectId: "project", leaseId: "lease" } });
 });
 it("refuses a stale computer confirmation", async () => {

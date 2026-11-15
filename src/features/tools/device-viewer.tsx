@@ -164,6 +164,15 @@ export function DeviceViewer({
       <MutationState mutation={boot} />
       {device.booted ? (
         <>
+          <QueryState query={frame} />
+          {current() && frame.data ? (
+            <RemoteFrame
+              uri={`data:${frame.data.mime};base64,${frame.data.base64}`}
+              label={copy("Cihaz ekranı", "Device screen")}
+              disabled={!enabled}
+              onPress={device.platform === "android" ? (point) => send({ type: "press", ...point }) : undefined}
+            />
+          ) : null}
           <Row style={{ justifyContent: "flex-end" }}>
             <IconButton
               label={copy("Ana ekran", "Home")}
@@ -202,19 +211,6 @@ export function DeviceViewer({
                 "Cihaz kontrolünü önce bilgisayardaki bycoda’dan etkinleştir.",
                 "Enable device control in bycoda on your computer first.",
               )}
-            />
-          ) : null}
-          <QueryState query={frame} />
-          {current() && frame.data ? (
-            <RemoteFrame
-              uri={`data:${frame.data.mime};base64,${frame.data.base64}`}
-              label={copy("Cihaz ekranı", "Device screen")}
-              disabled={!enabled}
-              onPress={
-                device.platform === "android"
-                  ? (point) => send({ type: "press", ...point })
-                  : undefined
-              }
             />
           ) : null}
           <MutationState mutation={action} />

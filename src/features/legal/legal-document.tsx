@@ -11,6 +11,7 @@ import {
   privacyPolicyUrl,
   repositoryUrl,
   supportEmail,
+  websiteUrl,
   type LegalDocumentId,
 } from "./legal-content";
 import { useMobileTheme } from "@/ui/theme";
@@ -127,6 +128,10 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
             },
           ]
         : [
+            {
+              label: copy("bycoda web sitesi", "bycoda website"),
+              url: websiteUrl,
+            },
             {
               label: copy("GitHub projesi ve açık konular", "GitHub project & public issues"),
               url: repositoryUrl,

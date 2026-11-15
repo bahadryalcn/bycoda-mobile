@@ -1,5 +1,11 @@
 import { expect, it } from "vitest";
-import { readMobilePtyLease, readMobilePtyList, readMobilePtyOutput } from "./mobile-pty-model";
+import { readMobilePtyClosed, readMobilePtyLease, readMobilePtyList, readMobilePtyOutput } from "./mobile-pty-model";
+
+it("accepts only the native physical-exit close confirmation", () => {
+  expect(() => readMobilePtyClosed({ closed: true })).not.toThrow();
+  for (const result of [{ state: "unknown" }, { closed: false }, { closed: "true" }, { closed: true, state: "unknown" }, {}, null, true])
+    expect(() => readMobilePtyClosed(result)).toThrow("Mobile PTY close is not confirmed.");
+});
 const terminal = {
   terminalId: "sealed-id",
   epoch: "sealed-epoch",

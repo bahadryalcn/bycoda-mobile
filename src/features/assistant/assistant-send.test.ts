@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { AssistantDispatchError, AssistantMobileError } from "./assistant-client";
-import { assistantSendKey, checkRoomMessage, sendRoomMessage } from "./assistant-send";
+import { assistantSendKey, checkRoomMessage, sendRoomMessage, isAssistantSendPending } from "./assistant-send";
 
 const key = assistantSendKey("machine", "env", "thread");
 function memory() {
@@ -33,6 +33,19 @@ const base = (storage: ReturnType<typeof memory>, c: ReturnType<typeof client>) 
   createId: () => "id-1",
 });
 const identity = { threadId: "thread", text: "Hello", key: "id-1", hostInstance: "host-1" };
+it("serializes voice and text before an asynchronous receipt read can race", async () => {
+  const storage = memory(), c = client();
+  let release!: () => void;
+  const wait = new Promise<void>(resolve => { release = resolve; });
+  storage.getItem = async name => { await wait; return storage.rows.get(name) ?? null; };
+  const first = sendRoomMessage(base(storage, c));
+  expect(isAssistantSendPending(key)).toBe(true);
+  await expect(sendRoomMessage({ ...base(storage, c), text: "Another utterance" })).rejects.toThrow("already being sent");
+  expect(c.send).not.toHaveBeenCalled();
+  release(); await first;
+  expect(c.send).toHaveBeenCalledOnce();
+  expect(isAssistantSendPending(key)).toBe(false);
+});
 
 it("records the send identity before dispatch and clears it once the reply is confirmed", async () => {
   const storage = memory();

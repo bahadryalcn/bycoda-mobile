@@ -17,9 +17,9 @@ export function SessionShelfHeader({
   const title = {
     pinned: copy("Sabit", "Pinned"),
     needs: copy("Senin için", "Needs you"),
-    running: copy("Çalışıyor", "Running"),
+    running: copy("Çalışıyor", "Working"),
     recent: copy("Son", "Recent"),
-    settled: copy("Kenara alınanlar", "Set aside sessions"),
+    settled: copy("Rafta", "Settled"),
     archived: copy("Arşiv", "Archived"),
   }[row.shelf];
   return (

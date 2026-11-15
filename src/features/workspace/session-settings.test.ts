@@ -11,6 +11,7 @@ const fixture = vi.hoisted(() => ({
   update: vi.fn(async (_input: unknown): Promise<unknown> => undefined),
   discard: undefined as undefined | (() => void),
   machineId: "machine-a",
+  switchAllowed: false,
   close: undefined as undefined | (() => void),
   model: undefined as undefined | ComponentProps<typeof AgentModelFields>,
   title: undefined as
@@ -37,8 +38,8 @@ vi.mock("@/state/machines", () => ({
   useActiveMachine: () => ({
     id: fixture.machineId,
     environmentId: "environment",
-    providers: ["claude"],
-    capabilities: [],
+    providers: ["claude", "codex"],
+    capabilities: fixture.switchAllowed ? ["sessions.harnessSwitch"] : [],
   }),
 }));
 vi.mock("@/state/queries", () => ({
@@ -53,13 +54,14 @@ vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
 vi.mock("./catalog", () => ({
-  catalogProviders: () => ["claude"],
+  catalogProviders: () => ["claude", "codex"],
   sessionCatalog: () => ({
     models: {
       claude: [
         { id: "original", name: "Original" },
         { id: "new", name: "New" },
       ],
+      codex: [{ id: "codex:new", name: "Codex new" }],
     },
   }),
   sessionModel: () => ({ id: "original" }),
@@ -130,6 +132,7 @@ beforeEach(() => {
   fixture.update.mockReset().mockResolvedValue(undefined);
   fixture.storage.clear();
   fixture.machineId = "machine-a";
+  fixture.switchAllowed = false;
   fixture.accountId = undefined;
   fixture.model = undefined;
   fixture.title = undefined;
@@ -147,7 +150,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 async function render(
-  overrides: { generation?: number; model?: string; status?: string; disabled?: boolean } = {},
+  overrides: { generation?: number; model?: string; status?: string; disabled?: boolean; settings?: Record<string, string> } = {},
 ) {
   const value = {
     projectId: "project",
@@ -159,7 +162,7 @@ async function render(
       harness: "claude",
       providerAccountId: fixture.accountId,
       model: overrides.model ?? "original",
-      modelSettings: {},
+      modelSettings: overrides.settings ?? {},
       runtimeMode: "supervised",
     },
   } as unknown as HostSession;
@@ -180,6 +183,15 @@ async function render(
     ),
   );
 }
+
+it("keeps independent delegation and tool restrictions when changing provider in session settings", async () => {
+  fixture.switchAllowed = true;
+  const settings = { crossSubagents: "auto", crossAdvisor: "null", crossSubagentMaxEffort: "high", crewTools: "[]" };
+  await render({ settings });
+  await act(() => fixture.model!.provider!.onChange(fixture.model!.provider!.choices.find(choice => choice.provider === "codex")!));
+  expect(fixture.model!.settings).toMatchObject(settings);
+  expect(fixture.command).not.toHaveBeenCalled();
+});
 const flush = () =>
   act(async () => {
     await vi.advanceTimersByTimeAsync(600);

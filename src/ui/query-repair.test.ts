@@ -2,7 +2,7 @@ import { createElement, type ComponentProps, type ContextType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 import { SheetGuardContext } from "./sheet-guard-context";
-vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
+vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./feedback", () => ({ Empty: "Empty", ErrorNotice: "ErrorNotice", Loading: "Loading", Notice: "Notice", Skeleton: "Skeleton" }));
 vi.mock("./typography", () => ({ Body: "Body" }));
@@ -54,7 +54,7 @@ it("uses caller-owned connection recovery for authentication and identity while 
     expect(embedded!.props.action.label).toBe("Manage connections"); expect(embedded!.props.illustration).toBe("locked");
     renderQuery({ query })!.props.action.onPress();
   }
-  expect(recover).toHaveBeenCalledTimes(2); expect(router.push).toHaveBeenCalledWith("/machines");
+  expect(recover).toHaveBeenCalledTimes(2); expect(router.navigate).toHaveBeenCalledWith("/machines");
 });
 it("defers default repair to the nearest Sheet approval and does not navigate before it completes", () => {
   const requestCloseThen = vi.fn(), requestClose = vi.fn();
@@ -62,23 +62,23 @@ it("defers default repair to the nearest Sheet approval and does not navigate be
   for (const kind of ["auth", "identity"] as const) {
     const view = renderQuery({ query: { error: new RemoteHostError("machine", kind, "Pairing") } }, scope);
     view!.props.action.onPress();
-    expect(router.push).not.toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
   }
   expect(requestCloseThen).toHaveBeenCalledTimes(2); expect(requestClose).not.toHaveBeenCalled();
-  requestCloseThen.mock.calls[1][0](); expect(router.push).toHaveBeenCalledExactlyOnceWith("/machines");
+  requestCloseThen.mock.calls[1][0](); expect(router.navigate).toHaveBeenCalledExactlyOnceWith("/machines");
 });
 it("preserves an explicit recovery owner inside a Sheet", () => {
   const requestCloseThen = vi.fn(), recover = vi.fn();
   const view = renderQuery({ query: { error: new RemoteHostError("machine", "auth", "Pairing") }, onManageConnections: recover },
     { register: vi.fn(), requestClose: vi.fn(), requestCloseThen });
-  view!.props.action.onPress(); expect(recover).toHaveBeenCalledOnce(); expect(requestCloseThen).not.toHaveBeenCalled(); expect(router.push).not.toHaveBeenCalled();
+  view!.props.action.onPress(); expect(recover).toHaveBeenCalledOnce(); expect(requestCloseThen).not.toHaveBeenCalled(); expect(router.navigate).not.toHaveBeenCalled();
 });
 it("prefers the Sheet stack continuation when nested readers need to leave several overlays", () => {
   const requestCloseThen = vi.fn(), requestCloseStackThen = vi.fn();
   const view = renderQuery({ query: { error: new RemoteHostError("machine", "identity", "Identity changed") } },
     { register: vi.fn(), requestClose: vi.fn(), requestCloseThen, requestCloseStackThen });
-  view!.props.action.onPress(); expect(requestCloseStackThen).toHaveBeenCalledOnce(); expect(requestCloseThen).not.toHaveBeenCalled(); expect(router.push).not.toHaveBeenCalled();
-  requestCloseStackThen.mock.calls[0][0](); expect(router.push).toHaveBeenCalledExactlyOnceWith("/machines");
+  view!.props.action.onPress(); expect(requestCloseStackThen).toHaveBeenCalledOnce(); expect(requestCloseThen).not.toHaveBeenCalled(); expect(router.navigate).not.toHaveBeenCalled();
+  requestCloseStackThen.mock.calls[0][0](); expect(router.navigate).toHaveBeenCalledExactlyOnceWith("/machines");
 });
 it("keeps a network retry within its reader instead of starting Sheet dismissal", () => {
   const requestCloseThen = vi.fn(), refetch = vi.fn();
@@ -113,7 +113,7 @@ it("still sends cached auth and identity failures to repair through the Sheet st
     view!.props.action.onPress();
   }
   expect(requestCloseStackThen).toHaveBeenCalledTimes(2);
-  expect(router.push).not.toHaveBeenCalled(); expect(refetch).not.toHaveBeenCalled();
+  expect(router.navigate).not.toHaveBeenCalled(); expect(refetch).not.toHaveBeenCalled();
 });
 it("renders nothing over cached data while the query waits for a connection", () => {
   expect(renderQuery({ query: { data: [1], fetchStatus: "paused" } })).toBeNull();

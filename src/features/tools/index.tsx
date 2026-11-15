@@ -49,7 +49,7 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
         <ProjectDirectoryFeedback query={projects} readiness={projects.readiness}
           privacyUnavailable={projects.privacyUnavailable}
           loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
-        {machine?.capabilities && !supported ? <Empty compact={false} illustration="permission"
+        {projects.directoryReady && machine?.capabilities && !supported ? <Empty compact={false} illustration="permission"
           title={copy("Güncelleme gerekiyor", "Update needed")}
           detail={copy("Bu araç için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on your computer to use this tool.")}
           action={{ label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} /> : null}

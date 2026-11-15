@@ -12,6 +12,7 @@ import {
   Button,
   HeaderBackButton,
   CodeText,
+  Disclosure,
   ErrorText,
   Notice,
   QueryState,
@@ -104,6 +105,8 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
           <Body mono numberOfLines={1} ellipsizeMode="middle" style={[uiStyles.grow, { fontWeight: "600" }]}>
             {path}
           </Body>
+        </Row>
+        <Row>
           <Badge
             label={
               source === "draft"
@@ -112,9 +115,10 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
             }
           />
         </Row>
-        <Body mono muted selectable>
-          {cwd || root || projectId}
-        </Body>
+        <Disclosure label={copy("Konum", "Location")}>
+          <Body mono muted selectable>{path}</Body>
+          <Body mono muted selectable>{cwd || root || projectId}</Body>
+        </Disclosure>
         {hasDraft ? (
           <>
             <Notice

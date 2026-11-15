@@ -195,7 +195,7 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
           width={280}
           className="rounded-card bg-popover border-0 p-ui-xs shadow-lg"
         >
-          {storageError ? <Menu.Item key="storage-recovery" onPress={() => { closeMenu(); router.push("/machines"); }} className="gap-ui-sm">
+          {storageError ? <Menu.Item key="storage-recovery" onPress={() => { closeMenu(); router.navigate("/machines"); }} className="gap-ui-sm">
             <View style={{ flex: 1, gap: space.xs }}>
               <Body>{storageError}</Body>
               <Body>{copy("Depolamayı kurtar", "Recover saved connections")}</Body>
@@ -208,7 +208,7 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
               .join(". ")}
             onPress={() => {
               closeMenu();
-              router.push("/machines");
+              router.navigate("/machines");
             }}
             className="gap-ui-sm"
             trailing={<ChevronRight size={16} color={colors.muted} />}
@@ -267,7 +267,7 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
                   label={copy("Depolamayı kurtar", "Recover saved connections")}
                   detail={storageError}
                   detailLines={0}
-                  onPress={() => { closeMenu(); router.push("/machines"); }}
+                  onPress={() => { closeMenu(); router.navigate("/machines"); }}
                 />
               ) : null}
               <NavigationRow
@@ -278,7 +278,7 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
                 detailSelectable={false}
                 accessibilityLabel={[machine?.name, status, copy("Bilgisayar seç", "Choose computer")].filter(Boolean).join(". ")}
                 separator={!!(machine && health.error)}
-                onPress={() => { closeMenu(); router.push("/machines"); }}
+                onPress={() => { closeMenu(); router.navigate("/machines"); }}
               />
               {machine && health.error ? (
                 <NavigationRow

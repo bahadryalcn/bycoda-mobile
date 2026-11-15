@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { choiceKey, providerChoices, selectedChoice } from "./provider-choices";
+import { choiceKey, providerChoices, providerName, selectedChoice } from "./provider-choices";
 
 const accounts = {
   claude: [
@@ -9,6 +9,13 @@ const accounts = {
   ],
   codex: [{ id: "default", label: "Host default", color: "hsl(4 4% 4%)" }],
 };
+
+it("uses brand spelling for provider labels and preserves unknown provider identities", () => {
+  expect(["codex", "claude", "opencode", "antigravity"].map(providerName)).toEqual(["Codex", "Claude", "OpenCode", "Antigravity"]);
+  expect(providerName("custom-acp-agent")).toBe("custom-acp-agent");
+  expect(providerName("constructor")).toBe("constructor");
+  expect(providerName("__proto__")).toBe("__proto__");
+});
 
 it("expands multi-account providers and keeps single-login providers as one choice", () => {
   const choices = providerChoices(["claude", "codex", "grok"], accounts, "Default account");
@@ -25,6 +32,17 @@ it("expands multi-account providers and keeps single-login providers as one choi
 it("retains the actual identity of a single named account", () => {
   const choices = providerChoices(["claude"], { claude: [accounts.claude[1]!] }, "Default account");
   expect(choices[0]).toMatchObject({ key: "claude:account-a", accountId: "account-a", label: "Claude account 1" });
+});
+it("hides unavailable accounts and does not invent a default for an empty catalog", () => {
+  expect(providerChoices(["claude"], { claude: [] }, "Default")).toEqual([]);
+  expect(providerChoices(["claude"], { claude: [
+    { id: "default", label: "Default", status: "signed-out" },
+    { id: "work", label: "Work", status: "ready" },
+    { id: "other", label: "Other", status: "unknown" },
+  ] }, "Default").map((choice) => choice.key)).toEqual(["claude:work"]);
+  expect(providerChoices(["claude"], { claude: [
+    { id: "default", label: "Default", status: "unknown" },
+  ] }, "Default").map((choice) => choice.key)).toEqual(["claude:"]);
 });
 it("localizes only the generic default label and preserves a renamed default", () => {
   const generic = providerChoices(["codex"], { codex: [{ ...accounts.codex[0]!, label: "Default account" }] }, "Varsayılan hesap");

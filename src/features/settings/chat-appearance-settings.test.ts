@@ -56,7 +56,7 @@ it("names the pending preference read while preserving the shared preview",()=>{
     expect(html).toContain('data-shared-reader="assistant"');
   } finally {state.hydrated=true;}
 });
-it("delegates both preview roles to actual chat owners and includes source-faithful code and an underlined-link candidate without host context", () => {
+it("delegates both preview roles to actual chat owners and includes source-faithful code without an unrelated help link without host context", () => {
   const html = renderToStaticMarkup(createElement(ChatAppearanceSettings));
   expect(html).toContain('data-shared-reader="user"');
   expect(html).toContain('data-shared-reader="assistant"');
@@ -65,6 +65,6 @@ it("delegates both preview roles to actual chat owners and includes source-faith
   const messages = state.shared.mock.calls.map(([message]) => message);
   expect(messages.map((m) => m.role)).toEqual(["user", "assistant"]);
   expect(messages[1].parts[0].text).toContain("```typescript\nconst status = 'ready';\n```");
-  expect(messages[1].parts[0].text).toContain("[Markdown](https://commonmark.org/help/)");
+  expect(messages[1].parts[0].text).not.toContain("commonmark.org");
   expect(messages.every((m) => Object.keys(m).sort().join(",") === "id,parts,role")).toBe(true);
 });

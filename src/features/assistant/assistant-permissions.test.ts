@@ -2,6 +2,7 @@
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { assistantProfileDefaults } from "../../../../host/assistant/profile-defaults";
 import type { AssistantProfile } from "../../../../src/shared/model/host-contracts/assistant";
 import type { AssistantMobileClient } from "./assistant-client";
 
@@ -94,6 +95,7 @@ const target = {
   conversationLabel: "Team alerts",
 };
 const opening = {
+  ...assistantProfileDefaults,
   version: 7,
   permissionProjectIds: [],
   criticalExclusions: [],
@@ -101,7 +103,7 @@ const opening = {
   urgentNotificationRepeats: 2,
   urgentNotificationIntervalMinutes: 30,
   notificationTelegram: null,
-} as AssistantProfile;
+} satisfies AssistantProfile;
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
@@ -113,7 +115,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   vi.unstubAllGlobals();
 });
-async function fixture(profile = opening) {
+async function fixture(profile: AssistantProfile = opening) {
   let current = true;
   const updateProfile = vi.fn(async (_version: number, patch: object) => ({
     ...profile,

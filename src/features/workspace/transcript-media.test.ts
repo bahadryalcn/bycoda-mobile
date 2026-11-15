@@ -10,6 +10,8 @@ vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("d
 vi.mock("lucide-react-native/icons/ellipsis", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/terminal", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/list-checks", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
+vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("@/ui/primitives", () => {
   const Container = ({ children }: PropsWithChildren) => h("div", null, children);
   return { Badge: () => null, Body: Container, Button: () => null, CodePanel: Container, CodeText: Container, QueryState: () => null, Row: Container,
@@ -27,6 +29,7 @@ vi.mock("@/ui/tokens", () => ({ radii: {}, space: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/error-message", () => ({ friendlyProviderFailure: (text: string) => text }));
+vi.mock("./user-turn-notice", () => ({ UserTurnNotice: () => null }));
 vi.mock("./session-queries", () => ({ useSessionBlock: () => ({}) }));
 vi.mock("./transcript-attachments", () => ({ TranscriptAttachments: ({ block }: { block: Block }) => h("div", { "data-attachments": true }, block.image?.name, ...block.attachments?.map(file => file.name) ?? []) }));
 vi.mock("./transcript-structured", () => ({ TranscriptStructured: () => null }));

@@ -1,3 +1,4 @@
+import { agentPresentation } from "../shared/agent-presentation";
 import type { LucideIcon } from "lucide-react-native";
 import { RecordCard } from "@/ui/record-card";
 import { useMobileTheme } from "@/ui/theme";
@@ -92,7 +93,7 @@ export function TaskCard({
   const canStart = supported && ["todo", "queued", "blocked"].includes(task.status);
   const openSession = () => {
     if (machine && task.sessionId)
-      router.push({
+      router.navigate({
         pathname: "/session/[id]",
         params: {
           id: task.sessionId,
@@ -275,12 +276,12 @@ export function TaskCard({
   return (
     <RecordCard
       title={task.title}
-      hint={[statusLabel(presentedStatus, copy), admissionWait?.reason, task.harness, task.model]
+      hint={[statusLabel(presentedStatus, copy), admissionWait?.reason, agentPresentation(task.harness, task.model)]
         .filter(Boolean)
         .join(" · ")}
       status={<Status value={presentedStatus} />}
       metadata={
-        [admissionWait?.reason, task.harness, task.model].filter(Boolean).join(" · ") || undefined
+        [admissionWait?.reason, agentPresentation(task.harness, task.model)].filter(Boolean).join(" · ") || undefined
       }
       menu={
         <Row style={{ gap: 0, flexWrap: "nowrap", alignItems: "flex-start" }}>

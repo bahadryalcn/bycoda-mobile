@@ -135,9 +135,9 @@ export function PressableCard({
       disabled={disabled}
       onPress={onPress}
       onLongPress={onLongPress}
-      accessibilityActions={onLongPress && optionsLabel ? [{ name: "longpress", label: optionsLabel }] : undefined}
+      accessibilityActions={!disabled && onLongPress && optionsLabel ? [{ name: "longpress", label: optionsLabel }] : undefined}
       onAccessibilityAction={(event) => {
-        if (event.nativeEvent.actionName === "longpress") onLongPress?.();
+        if (!disabled && event.nativeEvent.actionName === "longpress") onLongPress?.();
       }}
       style={({ pressed }) => [
         StyleSheet.flatten([

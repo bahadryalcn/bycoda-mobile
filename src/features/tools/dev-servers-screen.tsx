@@ -7,7 +7,7 @@ import Server from "lucide-react-native/icons/server";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useFormDraft } from "@/state/form-draft";
 import type { HostProject } from "@/domain/types";
-import { Badge, Body, ErrorText, Field, FormActions, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, ScreenList, SearchField, Sheet } from "@/ui/primitives";
+import { Body, Disclosure, ErrorText, Field, FormActions, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, ScreenList, SearchField, Sheet, StatusText } from "@/ui/primitives";
 import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
@@ -125,12 +125,14 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
           return (
           <NavigationRow
             label={server.name}
+            labelLines={2}
             detail={server.command}
+            detailLines={2}
             metadata={ports || undefined}
             metadataLines={0}
             accessibilityLabel={[server.name, stateLabel, server.command, ports].filter(Boolean).join(". ")}
             icon={<Server size={20} color={server.state === "running" ? colors.live : colors.muted} />}
-            supporting={<Row><Badge label={stateLabel} tone={server.state === "error" ? "danger" : server.state === "running" ? "active" : "default"} /></Row>}
+            supporting={<StatusText label={stateLabel} tone={server.state === "error" ? "danger" : server.state === "running" ? "active" : "default"} />}
             onPress={() => setSelected(server)}
           />
           );
@@ -138,9 +140,10 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
       />
       <Sheet visible={creating} title={copy("Sunucu başlat", "Start server")} dirty={form.dirty} dismissible={!start.isPending} onClose={() => setCreating(false)}>
         <Body muted>{project.name}</Body>
+        <Field label={copy("Komut", "Command")} value={form.values.command} editable={!start.isPending} autoCapitalize="none" autoCorrect={false} multiline mono onChangeText={(command) => form.setField("command", command)} />
+        <Disclosure label={copy("Ayrıntılar", "Details")}>
         <Body mono muted>{project.cwd}</Body>
         <Field label={copy("Ad", "Name")} value={form.values.name} editable={!start.isPending} onChangeText={(name) => form.setField("name", name)} />
-        <Field label={copy("Komut", "Command")} value={form.values.command} editable={!start.isPending} autoCapitalize="none" autoCorrect={false} multiline mono onChangeText={(command) => form.setField("command", command)} />
         <Field
           label={copy("Port (isteğe bağlı)", "Port (optional)")}
           value={form.values.port}
@@ -152,6 +155,7 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
             setValidationError("");
           }}
         />
+        </Disclosure>
 
         <FormActions
           submitLabel={copy("Sunucu başlat", "Start server")}

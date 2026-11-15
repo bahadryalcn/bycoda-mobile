@@ -2,6 +2,7 @@ import { useEffect, useRef, type RefObject } from "react";
 import { AccessibilityInfo, findNodeHandle, type TextInput, type View, type HostInstance, type TextInputInstance } from "react-native";
 import { useSecurity } from "@/state/security";
 import { usePrivateContentAccess } from "./private-content";
+import { useRouteFocus } from "./use-route-focus";
 
 /** Native screen-reader focus for the existing Sheet heading and trigger. */
 export function useNativeSheetFocus(
@@ -10,13 +11,16 @@ export function useNativeSheetFocus(
   returnFocusRef?: RefObject<HostInstance | TextInputInstance | null>,
 ) {
   const access = usePrivateContentAccess();
+  const routeFocused = useRouteFocus();
+  const routeCurrent = useRef(routeFocused);
+  routeCurrent.current = routeFocused;
   const epoch = useRef(0);
   useEffect(() => {
-    if (!visible || process.env.EXPO_OS === "web") return;
+    if (!visible || !routeFocused || process.env.EXPO_OS === "web") return;
     const generation = ++epoch.current;
     let active = true;
     let readerEnabled = false;
-    const mayFocus = () => epoch.current === generation && access.check()
+    const mayFocus = () => epoch.current === generation && routeCurrent.current && access.check()
       && useSecurity.getState().status === "unlocked";
     void AccessibilityInfo.isScreenReaderEnabled().then((enabled) => {
       if (!enabled || !active) return;
@@ -36,5 +40,5 @@ export function useNativeSheetFocus(
         if (tag) AccessibilityInfo.setAccessibilityFocus(tag);
       });
     };
-  }, [visible, heading, returnFocusRef, access]);
+  }, [visible, heading, returnFocusRef, access, routeFocused]);
 }

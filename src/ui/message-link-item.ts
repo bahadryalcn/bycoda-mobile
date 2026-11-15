@@ -1,4 +1,5 @@
 import { markdownTarget } from "./message-inline";
+import { messageSessionLink } from "./message-session-link";
 import { messageNodeText, type MessageNode } from "./message-model";
 
 export type LinkOnlyItem = { href: string; title: string; host: string };
@@ -19,7 +20,10 @@ export function linkOnlyItem(item: MessageNode): LinkOnlyItem | null {
   );
   if (parts.length !== 1 || parts[0]!.type !== "link") return null;
   const link = parts[0]!;
-  const target = markdownTarget(link.attrs.href || "");
+  const href = link.attrs.href || "";
+  // Session references open in the app, not as an external source card.
+  if (messageSessionLink(href)) return null;
+  const target = markdownTarget(href);
   if (target.kind !== "web") return null;
   const host = new URL(target.href).hostname.replace(/^www\./, "");
   const title = messageNodeText(link).trim() || host;

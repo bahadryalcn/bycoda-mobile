@@ -45,7 +45,7 @@ vi.mock("./device-runtime", () => ({ DeviceRuntime: () => createElement(Panel, {
 vi.mock("@/ui/primitives", async () => {
   const { QueryState } = await import("@/ui/query-state");
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { QueryState, Body: Group, Disclosure: ({ label, children }: any) => createElement("details", null, createElement("summary", null, label), children), Badge: () => null,
+  return { QueryState, Body: Group, Disclosure: ({ label, children }: any) => createElement("details", null, createElement("summary", null, label), children), StatusText: () => null,
     Row: Group,
     IconButton: ({label,onPress,disabled}:any) => createElement("button",{onClick:onPress,disabled},label),
     ActionMenu: ({actions}:any) => createElement("div",null,actions.map((action:any)=>createElement("button",{key:action.key,onClick:action.onPress},action.label))),

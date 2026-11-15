@@ -25,4 +25,16 @@ describe("busy send preference", () => {
     await pending;
     expect(store.getState().mode).toBe("steer");
   });
+  it("keeps the current choice and reports a failed save until a retry succeeds", async () => {
+    let fail = true;
+    const store = createBusySendStore({ getItem: async () => null, setItem: async () => {
+      if (fail) throw new Error("Storage unavailable");
+    } });
+    await store.getState().setMode("queue");
+    expect(store.getState().mode).toBe("queue");
+    expect(store.getState().storageError).toBeInstanceOf(Error);
+    fail = false;
+    await store.getState().setMode("queue");
+    expect(store.getState().storageError).toBeNull();
+  });
 });

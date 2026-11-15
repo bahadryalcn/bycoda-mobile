@@ -1,0 +1,122 @@
+import type { AssistantVoiceTarget } from "./assistant-voice";
+
+export type AssistantCallPhase = "idle" | "listening" | "sending" | "speaking" | "muted";
+export type AssistantCallDependencies = {
+  capture(target: Readonly<AssistantVoiceTarget>, current: () => boolean): Promise<string>;
+  /** Resolve only after durable admission and an authoritative reply; unknown delivery rejects. */
+  send(text: string, target: Readonly<AssistantVoiceTarget>, current: () => boolean): Promise<string>;
+  speak(text: string, target: Readonly<AssistantVoiceTarget>, current: () => boolean): Promise<void>;
+  cancelAudio(): void;
+  current(target: Readonly<AssistantVoiceTarget>): boolean;
+  state(phase: AssistantCallPhase, target?: Readonly<AssistantVoiceTarget>): void;
+  error(error: unknown): void;
+};
+
+/** One conversation across expanded, movable and authorized background views. Muting never retries a sent utterance. */
+export class AssistantCallLoop {
+  private active = false;
+  private muted = false;
+  private epoch = 0;
+  private pending?: Promise<void>;
+  private selected?: Readonly<AssistantVoiceTarget>;
+  private wake?: () => void;
+  private lastUtteranceAt = 0;
+  constructor(private readonly dependencies: AssistantCallDependencies) {}
+  get target() { return this.selected; }
+  current(): boolean {
+    if (!this.active || !this.selected) return false;
+    if (!this.dependencies.current(this.selected)) { this.stop(); return false; }
+    return true;
+  }
+  start(target: AssistantVoiceTarget): boolean {
+    if (this.active || this.pending || !this.dependencies.current(target)) return false;
+    this.selected = Object.freeze({ ...target });
+    this.active = true; this.muted = false; this.epoch++;
+    this.lastUtteranceAt = Date.now();
+    this.launch();
+    return true;
+  }
+  stop(): void {
+    if (!this.active) return;
+    this.active = false; this.epoch++;
+    this.wake?.(); this.wake = undefined;
+    this.dependencies.cancelAudio();
+    this.dependencies.state("idle", this.selected);
+  }
+  setMuted(value: boolean): void {
+    if (!this.current() || this.muted === value) return;
+    this.muted = value; this.epoch++;
+    this.wake?.(); this.wake = undefined;
+    if (value) { this.dependencies.cancelAudio(); this.dependencies.state("muted", this.selected); }
+    else if (!this.pending) this.launch();
+  }
+  private valid(epoch: number) { return this.epoch === epoch && !this.muted && this.current(); }
+  private launch() {
+    if (this.pending || !this.current() || this.muted) return;
+    const epoch = this.epoch;
+    this.pending = this.run(epoch).finally(() => {
+      this.pending = undefined;
+      // A canceled capture/send must settle before an unmute can own a new listener.
+      if (this.current() && !this.muted) this.launch();
+    });
+  }
+  private pause() {
+    return new Promise<void>(resolve => {
+      const timer = setTimeout(() => { this.wake = undefined; resolve(); }, 500);
+      this.wake = () => { clearTimeout(timer); resolve(); };
+    });
+  }
+  private async run(epoch: number) {
+    const target = this.selected!;
+    const current = () => this.valid(epoch);
+    let sending = false;
+    try {
+      while (current()) {
+        this.dependencies.state("listening", target);
+        const text = (await this.dependencies.capture(target, current)).trim();
+        if (!current()) return;
+        if (!text) {
+          // Match the native idle safety: empty captures do not count as owner speech or reset its wall-clock deadline.
+          if (Date.now() - this.lastUtteranceAt >= 180000) throw new Error("No speech was detected. Start the call again when ready.");
+          await this.pause();
+          continue;
+        }
+        this.lastUtteranceAt = Date.now();
+        this.dependencies.state("sending", target);
+        sending = true;
+        const reply = await this.dependencies.send(text, target, current);
+        sending = false;
+        if (!current()) return;
+        if (reply.trim()) {
+          this.dependencies.state("speaking", target);
+          await this.dependencies.speak(reply, target, current);
+        }
+      }
+    } catch (error) {
+      if ((sending && this.active && this.selected === target) || current()) { this.stop(); this.dependencies.error(error); }
+    }
+  }
+}
+
+/** RMS gate over 16kHz PCM, with an adaptive quiet floor and a bounded no-speech wait. */
+export class AssistantUtteranceVad {
+  private noise = 100;
+  private elapsed = 0;
+  private speech = 0;
+  private silence = 0;
+  get hasSpeech() { return this.speech >= 240; }
+  push(pcm: Int16Array): boolean {
+    if (!pcm.length) return false;
+    let squares = 0;
+    for (const value of pcm) squares += value * value;
+    const rms = Math.sqrt(squares / pcm.length), duration = pcm.length / 16;
+    this.elapsed += duration;
+    if (rms >= Math.max(300, this.noise * 3)) { this.speech += duration; this.silence = 0; }
+    else {
+      this.noise = this.noise * 0.9 + rms * 0.1;
+      this.silence += duration;
+      if (!this.hasSpeech) this.speech = 0;
+    }
+    return this.hasSpeech ? this.silence >= 900 : this.elapsed >= 8000;
+  }
+}

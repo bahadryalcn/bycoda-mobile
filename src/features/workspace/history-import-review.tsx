@@ -1,4 +1,5 @@
 import { ActionReviewSheet } from "@/ui/action-review-sheet";
+import { providerName } from "./provider-choices";
 import { Body, Disclosure, Notice, ScreenList, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
@@ -17,8 +18,8 @@ export function HistoryImportReview({ targetLabel, projectId, sessionId, candida
       <Body>{copy("Seçilen konuşmalar: {p0}", "Selected conversations: {p0}", { p0: candidates.length })}</Body>
       <Disclosure label={copy("Ayrıntılar", "Details")}><Body mono selectable>{projectId}</Body><Body mono selectable>{sessionId}</Body></Disclosure>
     </Stack>} renderItem={({ item }) => <Stack>
-      <Body selectable>{item.prompt || item.provider}</Body>
-      <Body muted>{item.provider} · {item.kind} · {formatAttachmentSize(item.sizeBytes, locale)}{!item.resumable ? ` · ${copy("Salt okunur", "Read-only")}` : ""}</Body>
+      <Body selectable>{item.prompt || providerName(item.provider)}</Body>
+      <Body muted>{providerName(item.provider)} · {item.kind} · {formatAttachmentSize(item.sizeBytes, locale)}{!item.resumable ? ` · ${copy("Salt okunur", "Read-only")}` : ""}</Body>
       <Body muted>{new Date(item.startedAt).toLocaleString(locale)} → {new Date(item.lastAt).toLocaleString(locale)}</Body>
     </Stack>} />
   </ActionReviewSheet>;

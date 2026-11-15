@@ -2,6 +2,7 @@
 import { act, createElement, useState, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.mock("@/ui/message-code", () => ({ MessageCode: ({ code }: { code: string }) => createElement("pre", null, code) }));
 const fixture = vi.hoisted(() => ({
   entries: [] as any[], sources: [] as any[], sourceError: null as Error | null, hideHeader: false,
   projectId: "project", endpoint: "https://synthetic.invalid", params: {} as any,
@@ -46,7 +47,7 @@ vi.mock("@/ui/primitives", async () => {
   const button = ({ label, onPress, disabled }: any) => createElement("button", { disabled, onClick: onPress }, label);
   return { QueryState, Body: Group, Row: Group, CodePanel: Group, CodeText: Group, NavigationGroup: Group,
     ActionMenu: ({actions}:any) => createElement("div",null,actions.map((action:any)=>createElement("button",{key:action.key,onClick:action.onPress},action.label))),
-    Badge: () => null, Notice: () => null, Empty: () => null, ErrorText: () => null,
+    Badge: () => null, StatusText: () => null, Notice: () => null, Empty: () => null, ErrorText: () => null,
     IconButton: button, NavigationRow: button,
     Sheet: ({ visible, children }: any) => visible ? createElement("aside", { "data-log-detail": true }, children) : null,
     SearchToolbar: ({ search, actions }: any) => createElement("div", null, search, actions),

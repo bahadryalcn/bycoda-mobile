@@ -123,9 +123,9 @@ it("does not let an old refresh completion clear the current scope's refresh ind
 it("shows token breakdown by default and a Host-update state for Cost and Limits without session rows", async () => {
   await render();
   expect(node.textContent).toContain("Total tokens"); expect(node.textContent).toContain("By provider");
-  await click("Cost"); expect(node.textContent).toContain("Cost is not available on mobile yet");
+  await click("Cost"); expect(node.textContent).toContain("Cost is unavailable on this computer");
   expect(node.textContent).not.toContain("Provider"); expect(node.textContent).not.toContain("Next page");
-  await click("Limits"); expect(node.textContent).toContain("Limits are not available on mobile yet");
+  await click("Limits"); expect(node.textContent).toContain("Limits are unavailable on this computer");
   await click("Tokens"); expect(node.textContent).toContain("Next page");
 });
 it("refreshes the visible Limits or Cost report without changing the token page", async () => {

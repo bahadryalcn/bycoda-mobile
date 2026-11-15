@@ -53,7 +53,7 @@ describe("loaded transcript find", () => {
     ]);
     expect(findTranscript(rows, "  ")).toEqual([]);
   });
-  it("searches loaded tool results and attachment names but excludes hidden/internal blocks", () => {
+  it("searches loaded tool results, folded work and attachment names but excludes internal blocks", () => {
     const blocks = [
       block("internal", "user", "secret", { internal: true }),
       block("tool", "tool", "command", { tool: { output: "found needle" } }),
@@ -68,7 +68,7 @@ describe("loaded transcript find", () => {
       "answer",
     ]);
     expect(findTranscript(entries(blocks, "messages"), "needle").map((hit) => hit.blockId)).toEqual(
-      ["answer"],
+      ["tool", "answer"],
     );
     expect(findTranscript(entries(blocks), "secret")).toEqual([]);
   });

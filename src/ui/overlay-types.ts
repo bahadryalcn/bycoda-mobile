@@ -7,6 +7,8 @@ export type OverlayEntry = {
   priority: number;
   label?: string;
   privateAccess?: PrivateContentAccess;
+  /** Inactive route content stays mounted but cannot cover the current screen. */
+  routeFocused?: boolean;
 };
 
 export type OverlayRegistry = {
@@ -14,7 +16,7 @@ export type OverlayRegistry = {
   remove(id: string): void;
 };
 
-export type ScreenOverlayProps = Omit<OverlayEntry, "priority"> & {
+export type ScreenOverlayProps = Omit<OverlayEntry, "priority" | "routeFocused"> & {
   visible: boolean;
   priority?: number;
 };

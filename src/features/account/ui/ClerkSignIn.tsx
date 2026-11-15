@@ -1,10 +1,12 @@
 import { isClerkAPIResponseError, useSSO } from "@clerk/expo";
 import { useSignInWithApple } from "@clerk/expo/apple";
 import { useSignIn, useSignUp } from "@clerk/expo/legacy";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Body, Button, Input, Notice, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { CodeField } from "@/ui/code-field";
+import { useMobileTheme } from "@/ui/theme";
+import { SignInProviderMark } from "./SignInProviderMark";
 
 /** Clerk e-mail verification codes are six digits. */
 const CODE_LENGTH = 6;
@@ -22,6 +24,8 @@ const STRATEGY = {
 /** Sign-in choices backed by Clerk: Google, Facebook, Apple, GitHub and an e-mail code. No passwords. */
 export default function ClerkSignIn() {
   const copy = useCopy();
+  const { colors } = useMobileTheme();
+  const working = useRef(false);
   const { startSSOFlow } = useSSO();
   const { startAppleAuthenticationFlow } = useSignInWithApple();
   const { signIn, setActive: activateSignIn, isLoaded: signInLoaded } = useSignIn();
@@ -39,7 +43,8 @@ export default function ClerkSignIn() {
     setError(message ?? copy("Giriş tamamlanamadı. Yeniden dene.", "Sign-in did not complete. Try again."));
   };
   const run = async (key: string, task: () => Promise<void>) => {
-    if (busy) return;
+    if (working.current) return;
+    working.current = true;
     setBusy(key);
     setError(null);
     try {
@@ -47,6 +52,7 @@ export default function ClerkSignIn() {
     } catch (cause) {
       fail(cause);
     } finally {
+      working.current = false;
       setBusy(null);
     }
   };
@@ -112,6 +118,7 @@ export default function ClerkSignIn() {
         <Button
           label={copy("Geri", "Back")}
           tone="quiet"
+          disabled={!!busy}
           onPress={() => {
             setStep({ name: "choose" });
             setCode("");
@@ -133,15 +140,16 @@ export default function ClerkSignIn() {
         <Button
           key={provider}
           label={label}
-          tone="secondary"
+          tone="default"
           fullWidth
           busy={busy === provider}
           disabled={!!busy}
           onPress={() => void withProvider(provider)}
-        />
+        ><SignInProviderMark provider={provider} color={colors.text} /></Button>
       ))}
       <Input
         label={copy("E-posta", "Email")}
+        placeholder={copy("E-posta", "Email")}
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -149,6 +157,7 @@ export default function ClerkSignIn() {
         textContentType="emailAddress"
         autoCapitalize="none"
         autoCorrect={false}
+        editable={!busy}
       />
       {error ? <Notice tone="danger" message={error} /> : null}
       <Button
@@ -156,7 +165,7 @@ export default function ClerkSignIn() {
         tone="primary"
         fullWidth
         busy={busy === "email"}
-        disabled={!email.includes("@") || !!busy}
+        disabled={!signInLoaded || !signUpLoaded || !email.includes("@") || !!busy}
         onPress={() => void sendCode()}
       />
     </Stack>

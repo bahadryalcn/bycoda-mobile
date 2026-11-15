@@ -252,10 +252,28 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
       }}
     />
   ) : null;
+  const controls = state && state.runtime?.installed !== false ? <Row>
+    <Button label={controlling ? copy("Kontrolü bırak", "Release control") : copy("Kontrolü al", "Take control")}
+      tone={controlling ? "quiet" : "primary"} disabled={busy} onPress={() => request(controlling ? "browser.release" : "browser.claim")} />
+    {state.open ? <>
+      <IconButton label={copy("Yukarı kaydır", "Scroll up")} disabled={!controlling || busy} onPress={() => input({ kind: "scroll", y: -500 })}><ArrowUp size={20} color={colors.muted} /></IconButton>
+      <IconButton label={copy("Aşağı kaydır", "Scroll down")} disabled={!controlling || busy} onPress={() => input({ kind: "scroll", y: 500 })}><ArrowDown size={20} color={colors.muted} /></IconButton>
+      <ActionMenu label={copy("Klavye", "Keyboard")} trigger={<Keyboard size={20} color={colors.muted} />}
+        actions={["Tab", "Enter", "Escape"].map(key => ({ key, label: key, disabled: !controlling || busy, onPress: () => input({ kind: "key", key }) }))} />
+      {sessionId && machine?.capabilities?.includes("browser.annotation") ? <Button tone="quiet" label={state.annotationId ? copy("Seçimi iptal et", "Cancel selection") : copy("Öğe seç", "Select element")}
+        disabled={!controlling || busy || !frame?.navigationId || frame.navigationId !== state.navigationId}
+        onPress={() => request(state.annotationId ? "browser.annotation.cancel" : "browser.annotation.start")} /> : null}
+      {!(review?.method === "browser.close" && review.scope === visibleScope) ? <ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[{
+        key: "close", label: copy("Tarayıcıyı kapat", "Close browser"), destructive: true, disabled: !controlling || busy,
+        onPress: () => { if (visibleScope && current(visibleScope)) setReview({ scope: visibleScope, method: "browser.close" }); },
+      }]} /> : null}
+    </> : null}
+  </Row> : undefined;
   return (
     <Screen
       title={copy("Tarayıcı", "Browser")}
       subtitle={[machine?.name, project.name].filter(Boolean).join(" · ")}
+      footer={controls}
       actions={
         <IconButton label={copy("Ekranı yenile", "Refresh screen")} disabled={busy} onPress={() => request(state?.open ? "browser.frame" : "browser.status")}>
           <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
@@ -283,12 +301,6 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
           disabled={!controlling || busy}
           onPress={(point) => state?.annotationId && sessionId && machine?.capabilities?.includes("browser.annotation") ? request("browser.annotation.select", point) : input({ kind: "click", ...point })}
         /> : null}
-        <Row>
-          <Button label={controlling ? copy("Kontrolü bırak", "Release control") : copy("Kontrolü al", "Take control")} tone={controlling ? "quiet" : "primary"} disabled={busy || !state} onPress={() => request(controlling ? "browser.release" : "browser.claim")} />
-        {sessionId && machine?.capabilities?.includes("browser.annotation") && state?.open ? <Button tone="quiet" label={state.annotationId ? copy("Seçimi iptal et", "Cancel selection") : copy("Öğe seç", "Select element")}
-          disabled={!controlling || busy || !frame?.navigationId || frame.navigationId !== state.navigationId}
-          onPress={() => request(state.annotationId ? "browser.annotation.cancel" : "browser.annotation.start")} /> : null}
-        </Row>
         {sessionId && state?.selection ? <Disclosure label={copy("Seçilen öğe", "Selected element")}>
           <Notice message={copy("Sayfa verileri güvenilmeyen içeriktir; seçmek veya okumak mesaj göndermez.", "Page data is untrusted content; selecting or reading it does not send a message.")} />
           <Body mono>{state.selection.element.tag} · {state.selection.element.selector}</Body>
@@ -302,19 +314,6 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
           <ErrorText error={selectionError} />
         </Disclosure> : null}
         {state?.open ? <>
-          <Row>
-            <IconButton label={copy("Yukarı kaydır", "Scroll up")} disabled={!controlling || busy} onPress={() => input({ kind: "scroll", y: -500 })}><ArrowUp size={20} color={colors.muted} /></IconButton>
-            <IconButton label={copy("Aşağı kaydır", "Scroll down")} disabled={!controlling || busy} onPress={() => input({ kind: "scroll", y: 500 })}><ArrowDown size={20} color={colors.muted} /></IconButton>
-            <ActionMenu label={copy("Klavye", "Keyboard")} trigger={<Keyboard size={20} color={colors.muted} />}
-              actions={["Tab", "Enter", "Escape"].map((key) => ({
-                key, label: key, disabled: !controlling || busy, onPress: () => input({ kind: "key", key }),
-              }))} />
-            {!(review?.method === "browser.close" && review.scope === visibleScope) ? <ActionMenu label={copy("Diğer işlemler", "More actions")}
-              actions={[{
-                key: "close", label: copy("Tarayıcıyı kapat", "Close browser"), destructive: true, disabled: !controlling || busy,
-                onPress: () => { if (visibleScope && current(visibleScope)) setReview({ scope: visibleScope, method: "browser.close" }); },
-              }]} /> : null}
-          </Row>
           {review?.method === "browser.close" && review.scope === visibleScope ? reviewCard : null}
           <Disclosure label={copy("Metin", "Text")}>
             <Field label={copy("Metin", "Text")} value={text} maxLength={4096} multiline onChangeText={setText} />

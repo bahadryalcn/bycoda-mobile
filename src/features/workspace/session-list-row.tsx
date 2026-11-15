@@ -1,7 +1,11 @@
 import { useSessionDraftPresence } from "./use-session-draft-presence";
-import { memo } from "react";
+import { memo, useEffect } from "react";
 import { View, useWindowDimensions } from "react-native";
 import GitBranch from "lucide-react-native/icons/git-branch";
+import FolderTree from "lucide-react-native/icons/folder-tree";
+import GitPullRequest from "lucide-react-native/icons/git-pull-request";
+import CircleDot from "lucide-react-native/icons/circle-dot";
+import Bot from "lucide-react-native/icons/bot";
 import { Body, PressableCard, StatusText } from "@/ui/primitives";
 import { ProjectIcon } from "@/ui/project-icon";
 import { ProviderIcon } from "@/ui/provider-identity";
@@ -13,7 +17,23 @@ import type { HostProject } from "@/domain/types";
 import type { HostSessionSummary } from "./wire";
 import { relativeTime, sessionStatus } from "./shared";
 import { SessionRowActions } from "./session-row-actions";
+import { sessionActivityAt } from "./session-collection";
 import { sessionDisplayTitle } from "./session-title";
+import { providerName } from "./provider-choices";
+import { sessionModelLabel } from "./catalog";
+import { observeSessionRuns, openSessionSeen, useUnseenDone } from "./session-done-store";
+import { sessionRowKind } from "./session-row-state";
+
+const statusTone = {
+  failed: "danger",
+  retrying: "warning",
+  interrupted: "warning",
+  input: "warning",
+  working: "live",
+  waiting: "default",
+  done: "success",
+  idle: "default",
+} as const;
 
 /** One compact conversation identity; secondary actions live in swipe and long-press. */
 export const SessionListRow = memo(function SessionListRow({
@@ -57,31 +77,51 @@ export const SessionListRow = memo(function SessionListRow({
   const draftLabel = copy("Taslak", "Draft");
   const { fontScale } = useWindowDimensions();
   const title = sessionDisplayTitle(session.title, copy("Yeni oturum", "New session"));
-  const status = sessionStatus({ ...session, pinned: false }, copy, colors);
-  const failed = session.issue === "failed" && session.status === "idle" && !session.needsInput;
-  const attention = session.needsInput || session.status === "interrupted" || failed;
-  const live = !attention && session.status === "running";
+  const running = session.status === "running";
+  // Run transitions are observed where the row sees them; a finish while away turns Done.
+  useEffect(() => {
+    observeSessionRuns(machineId, [{ id: session.id, status: running ? "running" : "idle" }]);
+  }, [machineId, session.id, running]);
+  const done = useUnseenDone(machineId, session.id);
+  const kind = sessionRowKind(session, done);
+  const status = sessionStatus({ ...session, pinned: false }, copy, colors, done);
   const stamp =
-    attention || live ? (
-      <StatusText label={status.label} tone={failed ? "danger" : attention ? "warning" : "live"} />
+    kind !== "idle" ? (
+      <StatusText label={status.label} tone={statusTone[kind]} />
     ) : (
       <Body selectable={false} muted style={uiStyles.caption}>
-        {relativeTime(session.updatedAt, copy)}
+        {relativeTime(sessionActivityAt(session), copy)}
       </Body>
     );
   const optionsLabel = copy("Oturum seçenekleri", "Session options");
   const folder = compressed ? ancestors?.at(-1) : undefined;
   const meta = [showProject ? undefined : folder, session.branch].filter(Boolean).join(" · ");
+  const worktree = !!session.branch && !!session.worktreeCwd;
+  const BranchIcon = worktree ? FolderTree : GitBranch;
+  const workItem = session.linkedWorkItem;
+  const workItemLabel = workItem
+    ? `${workItem.kind === "pr" ? copy("Pull request", "Pull request") : copy("Issue", "Issue")} #${workItem.number}`
+    : undefined;
+  const management = session.managedBy;
+  const managedLabel =
+    management?.assistant && management.detachedAt === undefined
+      ? "supervisionId" in management
+        ? copy("Denetim kaydedildi", "Supervision recorded")
+        : copy("Yönetilen oturum", "Managed session")
+      : undefined;
   const label = [
     title,
+    managedLabel,
     projectName,
     status.label,
     hasDraft ? draftLabel : undefined,
     session.pinned ? copy("Sabit", "Pinned") : undefined,
     ancestors?.join(" / "),
-    session.harness,
-    session.branch,
-    session.model,
+    session.model ? sessionModelLabel({ harness: session.harness, model: session.model }) : providerName(session.harness),
+    session.branch
+      ? `${worktree ? copy("Ayrı çalışma klasörü", "Worktree") : copy("Dal", "Branch")}: ${session.branch}`
+      : undefined,
+    workItemLabel,
   ]
     .filter(Boolean)
     .join(". ");
@@ -100,7 +140,10 @@ export const SessionListRow = memo(function SessionListRow({
           <PressableCard
             label={label}
             optionsLabel={optionsLabel}
-            onPress={() => onPress(session.id, projectId)}
+            onPress={() => {
+              openSessionSeen(machineId, session.id);
+              onPress(session.id, projectId);
+            }}
             onLongPress={openActions}
             style={{
               minHeight: metrics.rowHeightSession,
@@ -116,7 +159,24 @@ export const SessionListRow = memo(function SessionListRow({
                 gap: space.row,
               }}
             >
+              <View style={{ paddingTop: space.xxs, flexShrink: 0 }}>
+                <ProviderIcon provider={session.harness} size={20} />
+              </View>
               <View style={{ flex: 1, minWidth: 120, gap: space.xxs }}>
+                <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.xs }}>
+                  <Body
+                    selectable={false}
+                    numberOfLines={fontScale > 1 ? undefined : 2}
+                    style={[uiStyles.label, { fontWeight: "600", flexShrink: 1 }]}
+                  >
+                    {title}
+                  </Body>
+                  {managedLabel ? (
+                    <View style={{ paddingTop: space.xxs }}>
+                      <Bot {...decorativeSvgProps} size={14} color={colors.info} />
+                    </View>
+                  ) : null}
+                </View>
                 {showProject ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2 }}>
                     <ProjectIcon appearance={projectAppearance} size={14} box={16} />
@@ -130,17 +190,10 @@ export const SessionListRow = memo(function SessionListRow({
                     </Body>
                   </View>
                 ) : null}
-                <Body
-                  selectable={false}
-                  numberOfLines={fontScale > 1 ? undefined : 2}
-                  style={[uiStyles.label, { fontWeight: "700" }]}
-                >
-                  {title}
-                </Body>
-                {session.branch || folder ? (
+                {meta || workItem ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2 }}>
                     {session.branch ? (
-                      <GitBranch {...decorativeSvgProps} size={12} color={colors.muted} />
+                      <BranchIcon {...decorativeSvgProps} size={12} color={colors.muted} />
                     ) : null}
                     <Body
                       selectable={false}
@@ -150,6 +203,20 @@ export const SessionListRow = memo(function SessionListRow({
                     >
                       {meta}
                     </Body>
+                    {workItem ? (
+                      <View
+                        style={{ flexDirection: "row", alignItems: "center", gap: space.xxs, flexShrink: 0 }}
+                      >
+                        {workItem.kind === "pr" ? (
+                          <GitPullRequest {...decorativeSvgProps} size={12} color={colors.muted} />
+                        ) : (
+                          <CircleDot {...decorativeSvgProps} size={12} color={colors.muted} />
+                        )}
+                        <Body selectable={false} muted style={uiStyles.caption}>
+                          {`#${workItem.number}`}
+                        </Body>
+                      </View>
+                    ) : null}
                   </View>
                 ) : null}
               </View>
@@ -160,7 +227,6 @@ export const SessionListRow = memo(function SessionListRow({
                     {draftLabel}
                   </Body>
                 ) : null}
-                <ProviderIcon provider={session.harness} size={18} />
               </View>
             </View>
           </PressableCard>

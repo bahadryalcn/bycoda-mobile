@@ -4,7 +4,7 @@ import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { Meter } from "panelui-native/components/meter";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
-import { Body, Disclosure, IconButton, NavigationGroup, QueryState, Row, Screen, Section, Stack, ToggleField } from "@/ui/primitives";
+import { ActionMenu, Body, Disclosure, IconButton, QueryState, Row, Screen, Section, Stack } from "@/ui/primitives";
 import { MetricRow } from "@/ui/metric-row";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
@@ -33,12 +33,13 @@ export function DiagnosticsScreen({ project }: { project: HostProject }) {
   return <Screen title={copy("Tanılama", "Diagnostics")} subtitle={`${machine?.name ?? ""} · ${project.name}`}
     query={query}
     refreshState={refresh}
-    actions={<IconButton busy={refresh.refreshing} label={copy("Yenile", "Refresh")} disabled={query.isFetching} onPress={() => { void refresh.onRefresh(); }}>
+    actions={<><IconButton busy={refresh.refreshing} label={copy("Yenile", "Refresh")} disabled={query.isFetching} onPress={() => { void refresh.onRefresh(); }}>
       <RefreshCw size={REFRESH_ICON_SIZE} strokeWidth={2} color={colors.accent} />
-    </IconButton>}>
+    </IconButton><ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[{
+      key: "auto-refresh", label: copy("Otomatik yenile", "Auto refresh"), selected: autoRefresh, onPress: () => setAutoRefresh(value => !value),
+    }]} /></>}>
     <RouterStack.Screen options={{ title: copy("Tanılama", "Diagnostics") }} />
     <QueryState query={query} empty={query.data?.samples.length === 0} emptyIllustration="inbox-empty" emptyTitle={copy("Henüz örnek yok.", "No samples yet.")} />
-    <NavigationGroup><ToggleField label={copy("Otomatik yenile", "Auto refresh")} value={autoRefresh} onChange={setAutoRefresh} /></NavigationGroup>
     {sample ? <DiagnosticsDetails sample={sample} /> : <Disclosure label={copy("Ayrıntılar", "Details")}><DiagnosticsScope /></Disclosure>}
   </Screen>;
 }

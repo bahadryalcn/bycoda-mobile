@@ -1,9 +1,11 @@
 import * as Linking from "expo-linking";
+import { RecordCard } from "@/ui/record-card";
+import { SOCIAL_PLATFORM_NAMES } from "../../../../../src/features/social/model/social";
 import {
   ActionMenu,
   Body,
   Button,
-  Card,
+  Badge,
   ChoiceChip,
   MutationState,
   Row,
@@ -36,10 +38,12 @@ export function AccountCard({ account, state, projectId }: AccountCardProps) {
   const connection = useAsyncAction();
   const busy = connection.isPending || action.isPending || select.isPending;
   return (
-    <Card>
-      <Row>
-        <Body style={[uiStyles.title, uiStyles.grow]}>{account.name}</Body>
-        <ActionMenu
+    <RecordCard
+      title={account.name}
+      metadata={SOCIAL_PLATFORM_NAMES[account.platform] ?? account.platform}
+      status={<Row><Badge label={account.connected ? copy("Bağlı", "Connected") : copy("Bağlı değil", "Disconnected")} tone={account.connected ? "success" : "warning"} />
+        {account.paused ? <Badge label={copy("Duraklatıldı", "Paused")} tone="warning" /> : null}</Row>}
+      menu={<ActionMenu
           label={copy("Hesap işlemleri", "Account actions")}
           busy={action.isPending}
           actions={[
@@ -69,13 +73,8 @@ export function AccountCard({ account, state, projectId }: AccountCardProps) {
                 ),
             },
           ]}
-        />
-      </Row>
-        <Body muted style={uiStyles.caption}>
-          {account.platform} ·{" "}
-          {account.connected ? copy("Bağlı", "Connected") : copy("Bağlı değil", "Disconnected")} ·{" "}
-          {account.paused ? copy("Duraklatıldı", "Paused") : copy("Etkin", "Active")}
-        </Body>
+        />}
+    >
       {!account.connected && account.connection !== "browser" && (
         <Row>
           <Button
@@ -159,6 +158,6 @@ export function AccountCard({ account, state, projectId }: AccountCardProps) {
       <MutationState mutation={select} />
       {!account.connected && <QueryState query={oauth} loading="inline" />}
       <ErrorNotice error={oauth.data?.error} />
-    </Card>
+    </RecordCard>
   );
 }

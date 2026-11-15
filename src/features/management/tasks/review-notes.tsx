@@ -85,7 +85,7 @@ export function ReviewNote({ task, note }: ReviewNoteProps) {
             label={copy("İnceleme oturumu", "Review session")}
             onPress={() => {
               if (machine)
-                router.push({
+                router.navigate({
                   pathname: "/session/[id]",
                   params: { id: sessionId, machineId: machine.id, projectId: task.projectId },
                 });

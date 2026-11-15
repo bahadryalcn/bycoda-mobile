@@ -78,7 +78,7 @@ function NewSessionOpening({ onClose }: { onClose: () => void }) {
     if (!machineId || useMachines.getState().activeId !== machineId) return;
     useMachines.getState().selectProject(project.id);
     void rememberOpenedProject(machineId, project.id).catch(() => {});
-    router.push({
+    router.navigate({
       pathname: "/session/[id]",
       params: { id: sessionId, projectId: project.id, machineId },
     });

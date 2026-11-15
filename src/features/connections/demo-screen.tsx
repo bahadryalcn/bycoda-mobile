@@ -39,7 +39,7 @@ export function DemoScreen() {
     <Screen title={copy("Uygulamayı keşfet", "Explore the app")}>
       <Stack.Screen options={{ title: copy("Uygulamayı keşfet", "Explore the app") }} />
       <Badge label={copy("Çevrimdışı örnek", "Offline example")} />
-      {__DEV__ ? <Button label="Workspace fixtures" tone="quiet" onPress={() => router.push("./dev-workspace")} /> : null}
+      {__DEV__ ? <Button label="Workspace fixtures" tone="quiet" onPress={() => router.navigate("./dev-workspace")} /> : null}
       <Disclosure label={copy("Yardım", "Help")}>
         <Body muted>
           {copy(
@@ -126,7 +126,7 @@ export function DemoScreen() {
           <NavigationGroup>
             <NavigationRow
               label={copy("Gizlilik politikasını oku", "Read the privacy policy")}
-              onPress={() => router.push("/legal/privacy")}
+              onPress={() => router.navigate("/legal/privacy")}
             />
           </NavigationGroup>
         </>

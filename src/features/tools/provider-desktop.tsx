@@ -1,4 +1,5 @@
 import { ProviderAccountKind } from "@/ui/provider-account-kind";
+import { providerName } from "../workspace/provider-choices";
 import { useLayoutEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -214,7 +215,7 @@ export function ProviderDesktop({
           "account" in item ? (
             <RecordCard
               title={item.account.label}
-              metadata={`${item.account.provider}${item.account.isDefault ? ` · ${copy("Varsayılan", "Default")}` : ""}`}
+              metadata={`${providerName(item.account.provider)}${item.account.isDefault ? ` · ${copy("Varsayılan", "Default")}` : ""}`}
               details={
                 <>
                   <ProviderAccountKind
@@ -244,7 +245,7 @@ export function ProviderDesktop({
             <View style={{ gap: space.xs }}>
               <Body>{item.server.name} · MCP</Body>
               <Body muted>
-                {item.server.provider} · {item.server.scope} · {item.server.transport} ·{" "}
+                {providerName(item.server.provider)} · {item.server.scope} · {item.server.transport} ·{" "}
                 {item.server.enabled ? copy("Etkin", "Enabled") : copy("Devre dışı", "Disabled")}
               </Body>
             </View>

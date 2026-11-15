@@ -1,6 +1,7 @@
 import { REMOTE_PROVIDERS } from "../../../../src/features/connections/model/protocol";
 import { productProviderDefaults } from "../../../../src/shared/model/productProviderDefaults";
 import type { HostModelCatalog, RemoteProvider } from "./wire";
+import { providerName } from "./provider-choices";
 import { BUNDLED_CLAUDE_MODELS, CODEX_MODEL_CATALOG } from "./bundled-models";
 
 /** Local choices remain usable during discovery; Host options always win. */
@@ -21,6 +22,15 @@ export function sessionCatalog(catalog: HostModelCatalog | undefined, providers:
     if (provider === "claude") models.claude = BUNDLED_CLAUDE_MODELS;
   }
   return { ...catalog, models, errors: catalog?.errors ?? {} };
+}
+
+/** Human-readable queue identity; original model targets remain untouched. */
+export function sessionModelLabel(target?: { harness: RemoteProvider; model: string }): string {
+  if (!target) return "";
+  const model = sessionModel(sessionCatalog(undefined, [target.harness]), target.harness, target.model);
+  const prefix = `${target.harness}:`;
+  const name = model?.name ?? (target.model.startsWith(prefix) ? target.model.slice(prefix.length) : target.model);
+  return [providerName(target.harness), name].filter(Boolean).join(" · ");
 }
 
 /** Custom IDs must never inherit another model's settings. */

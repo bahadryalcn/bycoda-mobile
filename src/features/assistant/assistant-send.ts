@@ -11,6 +11,8 @@ type SendStorage = {
   removeItem(key: string): Promise<void>;
 };
 type SendClient = Pick<AssistantMobileClient, "sendIdentity" | "send" | "sendStatus">;
+const pendingSends = new Set<string>();
+export const isAssistantSendPending = (key: string) => pendingSends.has(key);
 /** A recorded send. "sending" survives an app kill and is read back as unconfirmed. */
 export type StoredSend = AssistantSendIntent & { status: "sending" | "unknown" };
 export type SendOutcome =
@@ -56,6 +58,9 @@ export async function sendRoomMessage(input: {
   sessionId?: string;
   createId: () => string;
 }): Promise<SendOutcome> {
+  if (pendingSends.has(input.storageKey)) throw new Error("An assistant message is already being sent.");
+  pendingSends.add(input.storageKey);
+  try {
   if (await input.storage.getItem(input.storageKey))
     throw new Error("The previous message is unconfirmed. Check it before sending again.");
   const hostInstance = await input.client.sendIdentity();
@@ -82,6 +87,7 @@ export async function sendRoomMessage(input: {
     await input.storage.removeItem(input.storageKey).catch(() => {});
     throw error;
   }
+  } finally { pendingSends.delete(input.storageKey); }
 }
 
 /** Reads the Host receipt of the recorded send; only a definite result clears the record. */

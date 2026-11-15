@@ -77,7 +77,7 @@ export function DraftsPanel({
                     );
                   }}
                 />
-                <Button
+                {draft.approvedAt ? <Button
                   label={copy("Gönder", "Send")}
                   busy={action.isPending && action.variables?.action === `${draft.kind === "reply" ? "replies" : draft.kind === "message" ? "messages" : "comments"}.send` && (action.variables?.input as { id?: string } | undefined)?.id === draft.id}
                   tone={draft.approvedAt ? "primary" : "quiet"}
@@ -96,7 +96,7 @@ export function DraftsPanel({
                         ), undefined, "default",
                     )
                   }
-                />
+                /> : null}
               </Row>
             }
             details={<MessageText text={draft.text} role="assistant" />}

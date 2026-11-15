@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { providerName } from "../workspace/provider-choices";
 import { useActiveMachine } from "@/state/machines";
 import {
   Body,
@@ -94,7 +95,7 @@ export function ProviderAccountEditor({
       <Stack>
         <Body>
           {machine?.name ? `${machine.name} · ` : ""}
-          {account.provider} · {account.label}
+          {providerName(account.provider)} · {account.label}
         </Body>
         {!current ? <Notice tone="warning" message={unavailableMessage} /> : null}
         {!showFields && value ? (

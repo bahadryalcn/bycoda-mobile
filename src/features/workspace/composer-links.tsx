@@ -15,6 +15,8 @@ export function ComposerLinks({ links }: { links: readonly ComposerLink[] }) {
   return (
     <>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
+        // A horizontal scroller inside a message must not grow into the virtual cell's estimate.
+        style={{ flexGrow: 0, flexShrink: 0 }}
         contentContainerStyle={{ gap: space.sm, paddingVertical: space.xs }}>
         {links.map((link) => (
           <PressableCard

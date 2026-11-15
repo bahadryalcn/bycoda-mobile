@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { carryCrossDelegation } from "../../../../src/shared/model/host-contracts/delegation";
 import { useFormDraft, sameFormValue } from "@/state/form-draft";
 import { captureSessionAuthority } from "@/domain/session-authority";
 import { useAsyncAction } from "@/state/actions";
@@ -166,7 +167,7 @@ export function ComposerModelChip({
             provider: next.provider,
             accountId: next.accountId,
             model: first?.id ?? "",
-            settings: modelDefaults(first),
+            settings: carryCrossDelegation(modelSettings, modelDefaults(first)),
           });
         }}
         models={models}

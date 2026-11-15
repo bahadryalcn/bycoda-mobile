@@ -12,7 +12,7 @@ vi.mock("@/state/machines", async () => {
   const { create } = await import("zustand"); return { useActiveMachine: () => state.machine, useMachines: create(() => ({ machines: [state.machine], activeId: "machine", hydrated: true, storageError: null, connectionPending: false })) };
 });
 vi.mock("@/state/security", async () => {
-  const { create } = await import("zustand"); return { useSecurity: create(() => ({ status: "unlocked", appState: "active", windowFocused: true })), isAppAccessAllowed: () => state.allowed };
+  const { create } = await import("zustand"); return { useSecurity: create(() => ({ status: "unlocked", appState: "active", windowFocused: true })), isAppContentVisible: () => state.allowed };
 });
 vi.mock("../privacy/consent-access", () => ({ hasProviderPermission: () => state.allowed }));
 vi.mock("@/state/queries", async () => {
@@ -168,4 +168,15 @@ it.each([true, false])("distinguishes a real background fetch error from explici
     await act(async () => { await invalidateProjectPrivacy(cache, "machine"); });
     expect(result.data).toBeUndefined(); expect(result.directoryReady).toBe(false); expect(result.isProjectVisible("visible")).toBe(false);
   } finally { state.machine.capabilities = capabilities; }
+});
+
+it("retains proven directory data across an active window blur", async () => {
+  const { useSecurity } = await import("@/state/security");
+  cache = new QueryClient(); cache.setQueryData(key, visible()); await render();
+  await act(async () => { useSecurity.setState({ windowFocused: false }); });
+  expect(result.data?.[0]?.id).toBe("visible");
+  expect(result.directoryReady).toBe(true);
+  expect(cache.getQueryState(key)?.isInvalidated).toBe(false);
+  await act(async () => { useSecurity.setState({ windowFocused: true }); });
+  expect(result.data?.[0]?.id).toBe("visible");
 });

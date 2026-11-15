@@ -7,7 +7,6 @@ import { taskBulkReason } from "./bulk-feedback";
 const task = { id: "one", projectId: "project", machineId: "machine", title: "Task", prompt: "Instructions", status: "todo" } as BoardTask;
 const reasons = [
   taskBulkUnavailable({ ...task, stale: true }, "start"),
-  taskBulkUnavailable({ ...task, crewRunId: "crew" }, "start"),
   taskBulkUnavailable({ ...task, status: "running" }, "delete"),
   taskBulkUnavailable({ ...task, branch: "unmerged", merged: false }, "delete"),
   taskBulkUnavailable(task, "stop"),
@@ -17,7 +16,7 @@ const reasons = [
 ];
 
 it.each(Object.keys(catalogs) as Locale[])("renders all local eligibility reasons in %s while retaining raw results", locale => {
-  expect(new Set(reasons).size).toBe(8);
+  expect(new Set(reasons).size).toBe(7);
   for (const reason of reasons) {
     expect(reason).toBeTypeOf("string");
     const result = Object.freeze({ status: "skipped" as const, reason });
@@ -26,6 +25,14 @@ it.each(Object.keys(catalogs) as Locale[])("renders all local eligibility reason
     if (locale !== "en") expect(visible).not.toBe(reason);
     expect(result.reason).toBe(reason);
   }
+});
+
+it.each([
+  ["start", "todo"],
+  ["stop", "running"],
+  ["retry", "blocked"],
+] as const)("retains shared crew %s eligibility instead of inventing a mobile-only reason", (action, status) => {
+  expect(taskBulkUnavailable({ ...task, status, crewRunId: "crew" }, action)).toBeUndefined();
 });
 
 it.each([

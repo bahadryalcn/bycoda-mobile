@@ -3,6 +3,7 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { DevServerDetail } from "./dev-server-detail";
+vi.mock("@/ui/message-code", () => ({ MessageCode: ({ code }: { code: string }) => createElement("pre", null, code) }));
 const state = vi.hoisted(() => ({ id: "machine", endpoint: "https://synthetic.invalid", environmentId: "host", lanKey: "synthetic", requests: [] as { method: string; params: unknown }[],
   detailError: null as Error | null, logsError: null as Error | null, logsAvailable: false, logOutput: "Synthetic output", fetching: false, returnedId: "web", reviewCapability: true, submit: undefined as undefined | (() => void), uncertain: false, force: false, refetch: vi.fn(async () => ({ isError: false })) }));
 const server = { id: "web", projectId: "project", managed: true, association: "managed" as const, name: "Web", state: "running" as const,

@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { providerName } from "./provider-choices";
 import type { Block } from "@/domain/types";
 import { Body, FormActions, NavigationRow, Notice, Sheet, Stack } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
@@ -24,9 +25,9 @@ export function OrchestrationReader({value,proposal,context,onClose,onDependency
       <ScreenList data={proposal.settings.choices} keyExtractor={(choice,index)=>`${index}:${choice.harness}:${choice.model}`} header={<Stack>
         <Body muted>{copy("Ana oturum", "Parent session")}</Body><Body mono selectable>{proposal.leadId}</Body>
         <Body mono selectable>{proposal.cwd}</Body>{proposal.checkoutCwd&&proposal.checkoutCwd!==proposal.cwd?<Body mono selectable>{proposal.checkoutCwd}</Body>:null}
-        <Body selectable>{proposal.author.harness} · {proposal.author.model}</Body>
+        <Body selectable>{providerName(proposal.author.harness)} · {proposal.author.model}</Body>
         <Body>{copy("Eşzamanlı çalışan sınırı: {p0}", "Concurrent worker limit: {p0}", {p0:proposal.settings.maxWorkers})}</Body>
-      </Stack>} renderItem={({item})=><Stack><Body selectable>{item.name}</Body><Body mono selectable>{item.harness} · {item.model}</Body></Stack>}/>}
+      </Stack>} renderItem={({item})=><Stack><Body selectable>{item.name}</Body><Body mono selectable>{providerName(item.harness)} · {item.model}</Body></Stack>}/>}
     <FormActions submitLabel={copy("Kapat", "Close")} onSubmit={onClose}/>
   </Sheet>;
 }
@@ -46,7 +47,7 @@ function TaskReader({task,proposal,context,onClose,onDependency}:{task:Coordinat
     ...(Object.keys(task.modelSettings??{}).length?[{kind:"heading" as const,key:"settings",label:copy("Model ayarları", "Model settings")},...Object.entries(task.modelSettings!).map(([key,value])=>({kind:"setting" as const,key:`setting:${key}`,value:`${key}: ${value}`}))]:[]),
   ];
   return <><Sheet visible title={copy("Görev ayrıntıları", "Task details")} size="form" scroll={false} onClose={onClose}>
-    <ScreenList data={rows} keyExtractor={item=>item.key} header={<Stack><Body selectable>{task.title}</Body><Body mono selectable>{task.id}</Body><Body muted>{task.harness} · {task.model}</Body>
+    <ScreenList data={rows} keyExtractor={item=>item.key} header={<Stack><Body selectable>{task.title}</Body><Body mono selectable>{task.id}</Body><Body muted>{providerName(task.harness)} · {task.model}</Body>
       <NavigationRow label={copy("Görev", "Assignment")} onPress={()=>{if(current()&&promptLease.active)setPrompt(true);}}/>
     </Stack>} renderItem={({item})=>item.kind==="heading"?<Body muted>{item.label}</Body>:item.kind==="dependency"&&titles.has(item.value)?
       <NavigationRow label={titles.get(item.value)!} detail={item.value} onPress={()=>{if(current())onDependency(item.value);}}/>:

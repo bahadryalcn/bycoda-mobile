@@ -7,6 +7,8 @@ import { useMachines } from "./state/machines";
 import { SecurityGate } from "./features/security/app-lock";
 import { AppLifecycle } from "./app-lifecycle";
 import { AccountProvider } from "./features/account/ui/AccountProvider";
+import { AccountGate } from "./features/account/ui/AccountGate";
+import { AssistantCompanion } from "./features/assistant/assistant-companion";
 import { logDiagnostic } from "./features/diagnostics/diagnostic-log";
 import { transportKind } from "./features/diagnostics/diagnostic-events";
 import { DiagnosticsCoordinator } from "./features/diagnostics/DiagnosticsCoordinator";
@@ -78,14 +80,14 @@ export function AppProviders({ children }: PropsWithChildren) {
           <AppLifecycle cache={cache}>
             <KeyboardProvider>
               <SecurityGate>
-                <BycodaUIProvider>
-                  <OverlayProvider>
-                    <AccountProvider>
-                      <ProviderConsentGate>{children}</ProviderConsentGate>
+                <AccountProvider>
+                  <BycodaUIProvider>
+                    <OverlayProvider>
+                      <AccountGate><ProviderConsentGate><AssistantCompanion>{children}</AssistantCompanion></ProviderConsentGate></AccountGate>
                       <DiagnosticsCoordinator />
-                    </AccountProvider>
-                  </OverlayProvider>
-                </BycodaUIProvider>
+                    </OverlayProvider>
+                  </BycodaUIProvider>
+                </AccountProvider>
               </SecurityGate>
             </KeyboardProvider>
           </AppLifecycle>

@@ -19,6 +19,7 @@ import {
 import { applySessionSync } from "../../../src/features/connections/model/protocol";
 import type { MobileStreamSubscription } from "./host-transport";
 import { retainSessionAuthority } from "@/domain/session-authority";
+import { SessionProjectMismatch } from "./session-project";
 
 const MAX_TRANSFER_UNITS = 32 * 1024 * 1024;
 
@@ -26,6 +27,8 @@ function requireSessionRead(value: unknown, sessionId: string, projectId: string
   const parsed = SessionViewSchema.parse(value);
   const session = parsed.session;
   const settings = session.modelSettings;
+  if (session.id === sessionId && parsed.projectId !== projectId)
+    throw new SessionProjectMismatch(sessionId, projectId, parsed.projectId);
   // Field names only: the reason is logged for diagnosis and never carries content.
   const failed =
     parsed.projectId !== projectId

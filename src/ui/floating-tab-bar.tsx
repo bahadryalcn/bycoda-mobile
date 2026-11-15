@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import type { ComponentProps, ReactNode } from "react";
+import { type ComponentProps, type ReactNode } from "react";
 import { Pressable, Text, View, useWindowDimensions } from "react-native";
 import type { Tabs } from "expo-router";
 import MoreHorizontal from "lucide-react-native/icons/more-horizontal";
+import Plus from "lucide-react-native/icons/plus";
 import { useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Sheet } from "./dialogs";
@@ -16,6 +17,8 @@ type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>
 export type FloatingTabBarProps = TabBarProps & {
   /** Measured navigation height including safe area; zero while keyboard hides it. */
   onInsetChange?: (height: number) => void;
+  /** Session creation is a command, not another navigation destination. */
+  quickAction?: { label: string; optionsLabel: string; onPress(): void; onLongPress(): void };
 };
 
 function TabItem({
@@ -56,26 +59,31 @@ function TabItem({
           gap: space.xs,
           paddingHorizontal: space.xxs,
           paddingVertical: space.sm,
+          borderRadius: radii.control,
+          backgroundColor: focused ? colors.fill : "transparent",
           opacity: pressed ? opacity.pressed : 1,
         },
       ]}
     >
       <View
         style={{
-          flexDirection: "row",
+          width: metrics.touchTarget - space.sm,
+          minHeight: 24,
           alignItems: "center",
-          gap: space.xxs,
-          paddingHorizontal: space.sm,
-          paddingVertical: space.xxs,
-          borderRadius: radii.control,
-          backgroundColor: focused ? colors.fill : "transparent",
+          justifyContent: "center",
         }}
       >
         {icon}
         {badge ? (
           <Text
             style={{
-              color: colors.text,
+              position: "absolute",
+              top: -space.sm,
+              end: -space.xs,
+              paddingHorizontal: space.xxs,
+              borderRadius: radii.badge,
+              backgroundColor: colors.panel,
+              color: colors.accent,
               fontSize: fontSize.caption,
               fontVariant: ["tabular-nums"],
             }}
@@ -90,7 +98,7 @@ function TabItem({
           textAlign: "center",
           fontSize: fontSize.caption,
           fontWeight: focused ? "700" : "500",
-          color: focused ? colors.text : colors.muted,
+          color: focused ? colors.accent : colors.muted,
         }}
       >
         {label}
@@ -106,6 +114,7 @@ export function FloatingTabBar({
   emitter,
   navigateToTab,
   onInsetChange,
+  quickAction,
 }: FloatingTabBarProps) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
@@ -117,7 +126,8 @@ export function FloatingTabBar({
     metrics.contentWidth,
     width - Math.max(insets.left, space.xs) - Math.max(insets.right, space.xs),
   );
-  const slots = Math.max(2, Math.floor(available / (metrics.touchTarget * Math.max(1, fontScale))));
+  const commandWidth = quickAction ? metrics.touchTarget + space.sm : 0;
+  const slots = Math.max(2, Math.floor((available - commandWidth) / (metrics.touchTarget * Math.max(1, fontScale))));
   const overflow = slots < state.routes.length;
   const shown = overflow ? state.routes.slice(0, slots - 1) : state.routes;
   const hidden = overflow ? state.routes.slice(slots - 1) : [];
@@ -165,20 +175,21 @@ export function FloatingTabBar({
           start: 0,
           end: 0,
           bottom: 0,
-          backgroundColor: colors.panel,
           paddingStart: Math.max(insets.left, space.xs),
           paddingEnd: Math.max(insets.right, space.xs),
           paddingTop: space.xs,
           paddingBottom: Math.max(insets.bottom, space.xs),
         }}
       >
+        <View style={{ width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: space.sm }}>
         <View
           accessibilityRole="tablist"
           style={{
-            width: "100%",
-            maxWidth: metrics.contentWidth,
-            alignSelf: "center",
+            flex: 1,
             flexDirection: "row",
+            backgroundColor: colors.panel,
+            borderRadius: radii.bubble,
+            paddingVertical: space.xxs,
           }}
         >
           {shown.map((route) => {
@@ -194,7 +205,7 @@ export function FloatingTabBar({
                 badge={options.tabBarBadge as string | number | undefined}
                 icon={options.tabBarIcon?.({
                   focused,
-                  color: focused ? colors.text : colors.muted,
+                  color: focused ? colors.accent : colors.muted,
                   size: 22,
                 })}
                 onPress={() => navigate(route)}
@@ -213,6 +224,23 @@ export function FloatingTabBar({
               onPress={() => setMore(true)}
             />
           ) : null}
+        </View>
+        {quickAction ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={quickAction.label}
+                  accessibilityHint={quickAction.optionsLabel}
+                  accessibilityActions={[{ name: "longpress", label: quickAction.optionsLabel }]}
+                  onAccessibilityAction={({ nativeEvent }) => { if (nativeEvent.actionName === "longpress") quickAction.onLongPress(); }}
+                  onPress={quickAction.onPress}
+                  onLongPress={quickAction.onLongPress}
+                  style={({ pressed }) => ({ width: metrics.touchTarget, minWidth: metrics.touchTarget, minHeight: metrics.touchTarget, alignItems: "center", justifyContent: "center", opacity: pressed ? opacity.pressed : 1 })}
+                >
+                  <View style={{ width: metrics.touchTarget, height: metrics.touchTarget, borderRadius: radii.preview, backgroundColor: colors.accentSolid, alignItems: "center", justifyContent: "center" }}>
+                    <Plus size={24} strokeWidth={2} color={colors.primaryText} />
+                  </View>
+                </Pressable>
+        ) : null}
         </View>
       </View>
       {more ? (

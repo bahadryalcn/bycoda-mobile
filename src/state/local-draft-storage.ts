@@ -1,7 +1,7 @@
 type Job = Promise<unknown>;
 type State = { barrier: Job; pending: Map<string, Job>; epoch: number; versions: Map<string, number>; listeners: Map<string, Set<() => void>>; cleanups: number };
 const states = new WeakMap<object, State>();
-const prefixes = ["bycoda.mobile.draft.v1:", "bycoda.mobile.file-draft.v1:", "bycoda.mobile.note-draft.", "bycoda.mobile.git-draft.v1:", "bycoda.mobile.queue-edit.v1:"];
+const prefixes = ["bycoda.mobile.draft.v1:", "bycoda.mobile.file-draft.v1:", "bycoda.mobile.note-draft.", "bycoda.mobile.git-draft.v1:", "bycoda.mobile.queue-edit.v1:", "bycoda.mobile.assistant-voice.v1:"];
 export const isUserDraftKey = (key: string) => prefixes.some(prefix => key.startsWith(prefix));
 function stateFor(storage: object): State {
   let state = states.get(storage);

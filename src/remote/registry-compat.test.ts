@@ -66,6 +66,7 @@ describe("mobile compatibility with the generated Host registry", () => {
       ["tasks.snapshotWithCursor", {}],
       ["tasks.events", { after: 0, limit: 128 }],
       ["tasks.start", { taskId: "task" }],
+      ["tasks.finishWithFindings", { taskId: "task", expectedUpdatedAt: 1 }],
       ["tasks.reorder", { taskIds: ["task"] }],
       [
         "tasks.retarget",
@@ -124,7 +125,7 @@ describe("mobile compatibility with the generated Host registry", () => {
       goalId: "goal",
       expectedUpdatedAt: 1,
     });
-    expect(calls).toHaveLength(22);
+    expect(calls).toHaveLength(23);
     expect(new Set(calls)).toEqual(
       new Set(
         Object.keys(generated.methods).filter(
@@ -139,6 +140,8 @@ describe("mobile compatibility with the generated Host registry", () => {
     expect(() => parseHostRpcParams("tasks.save", { task: extended })).toThrow();
     expect(() => getHostRpcMethod("tasks.save")!.resultSchema.parse(extended)).toThrow();
     const result = getHostRpcMethod("tasks.save")!.resultSchema;
+    expect(() => parseHostRpcParams("tasks.finishWithFindings", { taskId: "task" })).toThrow();
+    expect(getHostRpcMethod("tasks.finishWithFindings")!.resultSchema.parse(persistedTask)).toStrictEqual(persistedTask);
     expect(() => result.parse(task)).toThrow(); // An editable input is not a persisted Task result.
     expect(result.parse(persistedTask)).toStrictEqual(persistedTask);
     for (const status of [

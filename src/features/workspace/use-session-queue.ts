@@ -7,7 +7,13 @@ import type { SharedQueue } from "../../../../src/features/connections/model/sha
 import type { QueuedMessage } from "../../../../src/features/sessions/model/session";
 import type { SessionScope } from "./session-types";
 import { queuedDeliveryUnknown } from "./composer-delivery";
-import { appendMobileQueue, freshMobileQueue, mobileDrainsQueue } from "./queue-delivery";
+import {
+  appendMobileQueue,
+  freshMobileQueue,
+  mobileDrainsQueue,
+  resolveQueuedDelivery,
+  type QueueDeliveryReview,
+} from "./queue-delivery";
 
 // One consumer identity per app process. Restarting never resumes an unattended queue.
 const mobileQueueClient = `mobile:${randomUUID()}`;
@@ -158,6 +164,15 @@ export function useSessionQueue(scope: SessionScope) {
     },
     pause: () =>
       mutate((queue) => ({ ...queue, status: queue.messages.length ? "paused" : undefined })),
+    /**
+     * The owner's decision for an unconfirmed row. Send again drains through the same ownership
+     * rule as Start queue; another computer's earlier decision leaves the queue unchanged.
+     */
+    resolveDelivery: (id: string, outcome: QueueDeliveryReview) =>
+      mutate(
+        (queue) => resolveQueuedDelivery(queue, id, outcome),
+        outcome === "retry" && !leaseAware,
+      ),
     activate: () =>
       mutate((queue) => {
         if (queue.messages.some((row) => row.deliveryUnknown))

@@ -1,20 +1,14 @@
 import { memo } from "react";
 import { View } from "react-native";
-import { metrics, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import { ActivityGroup } from "./activity-group";
 import { TranscriptBlock } from "./transcript-block";
 import { isSystemFailure, type TranscriptEntry } from "./transcript-model";
 import { SystemFailureCard } from "./system-failure-card";
+import { ModelSwitchDivider, ModelSwitchRow, TurnFooter } from "./turn-chrome";
 import type { SessionCommand, SessionScope } from "./session-types";
 import type { HostSession } from "./wire";
 import { useMobileTheme } from "@/ui/theme";
-
-/** Collapsed activity rows are a fixed single line, so the list never measures them. */
-export const ACTIVITY_ROW_HEIGHT = metrics.toolRowHeight + space.xxs;
-
-export function transcriptItemSize(item: TranscriptEntry) {
-  return item.kind === "activity" ? ACTIVITY_ROW_HEIGHT : undefined;
-}
 
 export type TranscriptRowProps = {
   item: TranscriptEntry;
@@ -31,6 +25,9 @@ export type TranscriptRowProps = {
   disabled: boolean;
   onCommand: SessionCommand;
   onInspect: (item: Extract<TranscriptEntry, { kind: "activity" }>, selectedId?: string) => void;
+  /** This row's user message can start Edit from here; the transcript owns the review. */
+  canRewind?: boolean;
+  onRewind?: (blockId: string) => void;
 };
 
 /**
@@ -50,14 +47,15 @@ export const TranscriptRow = memo(function TranscriptRow({
   disabled,
   onCommand,
   onInspect,
+  canRewind = false,
+  onRewind,
 }: TranscriptRowProps) {
   const { colors } = useMobileTheme();
   if (item.kind === "activity")
     return (
       <View
         style={{
-          height: ACTIVITY_ROW_HEIGHT,
-          paddingBottom: space.xxs,
+          paddingBottom: item.footer ? space.row : space.xxs,
           backgroundColor: highlighted ? colors.selected : undefined,
         }}
       >
@@ -66,6 +64,7 @@ export const TranscriptRow = memo(function TranscriptRow({
           blocks={item.blocks}
           onInspect={(selectedId) => onInspect(item, selectedId)}
         />
+        {item.footer ? <TurnFooter turn={item.footer} /> : null}
       </View>
     );
   return (
@@ -75,7 +74,13 @@ export const TranscriptRow = memo(function TranscriptRow({
         backgroundColor: highlighted ? colors.selected : undefined,
       }}
     >
-      {isSystemFailure(item.block) && item.block.text ? <SystemFailureCard text={item.block.text} repeat={item.repeat} /> : <TranscriptBlock
+      {item.modelChange ? <ModelSwitchDivider
+          from={{ harness: item.modelChange.from.harness, model: item.modelChange.from.name }}
+          to={{ harness: item.modelChange.to.harness, model: item.modelChange.to.name }}
+        /> : null}
+      {item.block.modelSwitch ? <ModelSwitchRow meta={item.block.modelSwitch} /> : isSystemFailure(item.block) && item.block.text ? <SystemFailureCard text={item.block.text} repeat={item.repeat} /> : <TranscriptBlock
+        modelName={item.modelName}
+        onRewind={canRewind && onRewind ? () => onRewind(item.block.id) : undefined}
         parentProvider={parentProvider}
         context={context}
         responseText={responseText}
@@ -87,6 +92,7 @@ export const TranscriptRow = memo(function TranscriptRow({
         disabled={disabled}
         onCommand={onCommand}
       />}
+      {item.footer ? <TurnFooter turn={item.footer} /> : null}
     </View>
   );
 });

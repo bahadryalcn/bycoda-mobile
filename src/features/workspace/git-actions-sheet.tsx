@@ -10,7 +10,8 @@ import GitPullRequest from "lucide-react-native/icons/git-pull-request";
 import History from "lucide-react-native/icons/history";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import Settings2 from "lucide-react-native/icons/settings-2";
-import { NavigationGroup, NavigationRow, Sheet } from "@/ui/primitives";
+import { Body, NavigationGroup, NavigationRow, Sheet, Stack } from "@/ui/primitives";
+import { useLocale } from "@/i18n";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import type { GitDiffIndex } from "./wire";
@@ -53,15 +54,20 @@ export function GitActionsSheet({
   const copy = useCopy();
   const { colors } = useMobileTheme();
   const glyphs = icons(colors.text);
-  const additions = index.additions ? ` · +${index.additions}` : "";
-  const deletions = index.deletions ? ` · −${index.deletions}` : "";
+  const numbers = new Intl.NumberFormat(useLocale());
+  const additions = index.additions ? ` · +${numbers.format(index.additions)}` : "";
+  const deletions = index.deletions ? ` · −${numbers.format(index.deletions)}` : "";
   return (
     <Sheet
       visible={visible}
       size="compact"
       onClose={onClose}
-      title={`${index.branch || "Git"} · ${copy("{p0} dosya", "{p0} files", { p0: index.files.length })}${additions}${deletions}`}
+      title={copy("Git işlemleri", "Git actions")}
     >
+      <Stack>
+        <Body selectable style={{ fontWeight: "600" }}>{index.branch || "Git"}</Body>
+        <Body muted>{copy("{p0} dosya", "{p0} files", { p0: numbers.format(index.files.length) })}{additions}{deletions}</Body>
+      </Stack>
       <NavigationGroup>
         {gitSheetActions(index, { busy, canRunWorkspace, linkPr }, copy).map((action) => (
           <NavigationRow

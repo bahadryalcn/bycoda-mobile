@@ -1,0 +1,5 @@
+<resources>
+  <color name="bycoda_voice_canvas">#F8F8FA</color>
+  <color name="bycoda_voice_foreground">#1C1C1E</color>
+  <color name="bycoda_voice_secondary">#636366</color>
+</resources>

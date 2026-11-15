@@ -19,6 +19,7 @@ import type { SessionScope } from "../workspace/session-types";
 import { PtyReadScheduler } from "./pty-read-scheduler";
 import {
   readMobilePtyLease,
+  readMobilePtyClosed,
   readMobilePtyList,
   readMobilePtyOutput,
   type MobilePtyLease,
@@ -72,6 +73,8 @@ export function useMobilePtySession({
     },
   );
   const [lease, setLease] = useState<MobilePtyLease | null>(null);
+  const [closePending, setClosePending] = useState(false);
+  const closeAttempt = useRef<{ terminalId: string; epoch: string; requestId: string } | null>(null);
   const [paused, setPaused] = useState(true);
   const [synced, setSynced] = useState(false);
   const freshProtocol = useRef(false);
@@ -131,7 +134,7 @@ export function useMobilePtySession({
   const { loaded: attempt, setLoaded: setAttempt, error, setError, busy, pendingAction, run } = op;
   const hydrated = !op.loading;
   const allowed = useRef(false);
-  allowed.current = available && !list.isError && !paused && !gap && !lost && synced;
+  allowed.current = available && !list.isError && !paused && !gap && !lost && synced && !closePending;
   useEffect(
     () => () => {
       generation.current++;
@@ -186,7 +189,7 @@ export function useMobilePtySession({
   const create = () => {
     void run(async () => {
       if (
-        !hydrated ||
+        !hydrated || closeAttempt.current ||
         attempt ||
         !targetMatches ||
         !current() ||
@@ -219,6 +222,7 @@ export function useMobilePtySession({
     });
   };
   const attach = (terminal: MobilePtyTerminal, actionKey = `attach:${terminal.terminalId}`) => {
+    if (closeAttempt.current) return;
     void run(async () => {
       const retained = lease?.terminal.terminalId === terminal.terminalId && !lost && ready;
       const after = retained ? cursor.current : 0;
@@ -421,6 +425,7 @@ export function useMobilePtySession({
     listFailed: list.isError,
     error: error ?? list.error,
     lease,
+    closePending,
     paused,
     gap,
     lost,
@@ -444,6 +449,7 @@ export function useMobilePtySession({
     sendKey: input,
     /** Back to the terminal list without closing the terminal. */
     detach: () => {
+      if (closeAttempt.current || op.occupied.current) return;
       generation.current++;
       setPaused(true);
       setLease(null);
@@ -461,12 +467,20 @@ export function useMobilePtySession({
     closeTerminal: () => {
       if (!lease) return;
       void run(async () => {
-        await request("terminals.pty.desktop.close", {
-          terminalId: lease.terminal.terminalId,
-          epoch: lease.terminal.epoch,
-          requestId: randomUUID(),
-        });
+        const prior = closeAttempt.current;
+        if (prior && (prior.terminalId !== lease.terminal.terminalId || prior.epoch !== lease.terminal.epoch))
+          throw new Error("Mobile PTY source changed; never replay input");
+        const closing = prior ?? { terminalId: lease.terminal.terminalId, epoch: lease.terminal.epoch, requestId: randomUUID() };
+        closeAttempt.current = closing;
+        setClosePending(true);
+        allowed.current = false;
         generation.current++;
+        setPaused(true);
+        const result = await request(prior ? "terminals.pty.desktop.status" : "terminals.pty.desktop.close",
+          prior ? { requestId: closing.requestId } : closing);
+        readMobilePtyClosed(result);
+        closeAttempt.current = null;
+        setClosePending(false);
         setLease(null);
         setPaused(true);
         fresh();

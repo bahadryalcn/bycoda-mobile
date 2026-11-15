@@ -3,18 +3,17 @@ import { Body, PressableCard, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import type { ViewStyle } from "react-native";
 import { useMobileTheme } from "@/ui/theme";
-import { PALETTES, radii, resolveMobilePalette, space, type PaletteId } from "@/ui/tokens";
+import { PALETTES, metrics, radii, resolveMobilePalette, space, type PaletteId } from "@/ui/tokens";
 
 const RING = 2;
 const STRIP_HEIGHT = 20;
 const layout = {
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
   card: {
-    // Three equal columns; a short last row keeps the card size instead of stretching.
-    flexGrow: 0,
-    flexBasis: "30%",
-    minWidth: 96,
-    minHeight: 0,
+    // Each row owns exactly three equal columns, including narrow sheets.
+    flex: 1,
+    minWidth: 0,
+    minHeight: metrics.touchTarget,
     marginHorizontal: 0,
     paddingHorizontal: space.sm,
     paddingVertical: space.sm,
@@ -33,7 +32,7 @@ type Props = {
   onChange(value: PaletteId): void;
 };
 
-/** Seven palette cards with a canvas, surface, line and accent strip of that palette in the current mode. */
+/** Nine palette cards with three equal-width choices per row. */
 export function PalettePicker({ value, disabled, onChange }: Props) {
   const copy = useCopy();
   const { mode, colors } = useMobileTheme();
@@ -41,7 +40,8 @@ export function PalettePicker({ value, disabled, onChange }: Props) {
     <Stack>
     <Body style={{ marginTop: space.md }}>{copy("Renk paleti", "Color palette")}</Body>
     <View accessibilityRole="radiogroup" accessibilityLabel={copy("Renk paleti", "Color palette")} style={layout.grid}>
-      {PALETTES.map((palette) => {
+      {[0, 3, 6].map((start) => <View key={start} style={{ flexDirection: "row", gap: space.md, width: "100%" }}>
+      {PALETTES.slice(start, start + 3).map((palette) => {
         const tones = resolveMobilePalette(palette.id, mode).colors;
         const selected = palette.id === value;
         const name = copy(palette.nameTr, palette.name);
@@ -64,6 +64,7 @@ export function PalettePicker({ value, disabled, onChange }: Props) {
           </PressableCard>
         );
       })}
+      </View>)}
     </View>
     </Stack>
   );

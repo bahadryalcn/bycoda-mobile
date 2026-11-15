@@ -32,12 +32,14 @@ vi.mock("expo-secure-store", () => ({
   setItemAsync: fixture.write,
 }));
 import { assertAppAccess, useSecurity } from "./security";
+import { useAccountAccess } from "../features/account/model/account-access";
 import {
   encodeSecurityPreferences,
   securityPreferenceKey,
 } from "./security-preferences";
 
 beforeEach(() => {
+  useAccountAccess.setState({ status: "signedIn" });
   fixture.foreground = "active";
   fixture.preference = null;
   fixture.config = null;
@@ -67,6 +69,14 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("native secure access", () => {
+  it("fences computer requests after sign-out even while the application is unlocked", () => {
+    useSecurity.setState({ status: "unlocked", enabled: false });
+    expect(() => assertAppAccess()).not.toThrow();
+    useAccountAccess.setState({ status: "signedOut" });
+    expect(() => assertAppAccess()).toThrow("Sign in to Bycoda");
+    useAccountAccess.setState({ status: "signedIn" });
+    expect(() => assertAppAccess()).not.toThrow();
+  });
   it("defaults to locked on secured devices and gates requests before authentication", async () => {
     expect(() => assertAppAccess()).toThrow("Unlock");
     await useSecurity.getState().initialize();
@@ -237,13 +247,9 @@ describe("native secure access", () => {
       busy: false,
     });
   });
-  it("keeps quick settings and a backgrounded preference write locked after focus returns", async () => {
+  it("keeps a backgrounded preference write locked after focus returns", async () => {
     await useSecurity.getState().initialize();
     await useSecurity.getState().unlock("Unlock");
-    useSecurity.getState().handleWindowFocus(false);
-    useSecurity.getState().handleWindowFocus(true);
-    expect(() => assertAppAccess()).toThrow();
-    await useSecurity.getState().unlock("Unlock again");
     let finishWrite!: () => void;
     fixture.write.mockImplementationOnce(
       () =>
@@ -335,6 +341,16 @@ describe("configurable background app lock", () => {
     fixture.foreground = "background";
     expect(useSecurity.getState().status).toBe("unlocked");
     expect(() => assertAppAccess()).toThrow();
+  });
+
+  it("retains the unlocked view during active window blur while blocking host access", async () => {
+    await openWithGrace();
+    useSecurity.getState().handleWindowFocus(false);
+    expect(useSecurity.getState().status).toBe("unlocked");
+    expect(() => assertAppAccess()).toThrow();
+    useSecurity.getState().handleWindowFocus(true);
+    expect(useSecurity.getState().status).toBe("unlocked");
+    expect(() => assertAppAccess()).not.toThrow();
   });
 
   it("requires fresh authentication at the exact timeout boundary", async () => {

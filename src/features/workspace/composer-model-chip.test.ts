@@ -6,6 +6,7 @@ import type { ModelPickerProps } from "./model-picker";
 import type { HostSession } from "./wire";
 
 const fixture = vi.hoisted(() => ({
+  switchAllowed: false,
   accounts: [{ id: "default", label: "Default account", color: "fixture" }],
   command: vi.fn(async () => ({ commandId: "fixture-command", sessionId: "session", revision: 1 })),
   run: vi.fn(async (action: () => Promise<unknown>) => action()),
@@ -15,7 +16,7 @@ vi.mock("@/state/actions", () => ({
   useAsyncAction: () => ({ run: fixture.run, reset: () => {}, isPending: false }),
 }));
 vi.mock("@/state/machines", () => ({
-  useActiveMachine: () => ({ providers: ["claude"], capabilities: [] }),
+  useActiveMachine: () => ({ providers: ["claude", "codex"], capabilities: fixture.switchAllowed ? ["sessions.harnessSwitch"] : [] }),
 }));
 vi.mock("@/state/model-catalog", () => ({
   useModelCatalog: () => ({ data: { accounts: { claude: fixture.accounts } } }),
@@ -39,8 +40,8 @@ vi.mock("./model-picker", () => ({
 vi.mock("./model-picker-model", () => ({ settingsSummary: () => "" }));
 vi.mock("./setting-labels", () => ({ settingLabels: () => ({}) }));
 vi.mock("./catalog", () => ({
-  catalogProviders: () => ["claude"],
-  sessionCatalog: () => ({ models: { claude: [{ id: "model", name: "Research model" }] } }),
+  catalogProviders: () => fixture.switchAllowed ? ["claude", "codex"] : ["claude"],
+  sessionCatalog: () => ({ models: { claude: [{ id: "model", name: "Research model" }], codex: [{ id: "codex:new", name: "New model" }] } }),
   sessionModel: () => ({ id: "model" }),
   sessionSettings: (_model: unknown, settings: unknown) => settings,
   modelDefaults: () => ({}),
@@ -64,11 +65,12 @@ const current = () => {
   if (!picker) throw new Error("Picker did not render");
   return picker;
 };
-const render = (blocked = false) =>
+const render = (blocked = false, value = session) =>
   act(() =>
-    root.render(createElement(ComposerModelChip, { session, blocked, onCommand: fixture.command })),
+    root.render(createElement(ComposerModelChip, { session: value, blocked, onCommand: fixture.command })),
   );
 beforeEach(() => {
+  fixture.switchAllowed = false;
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   fixture.command.mockClear();
   fixture.run.mockClear();
@@ -76,6 +78,16 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+});
+
+it("keeps advisor, subagent and tool restrictions when changing provider", async () => {
+  fixture.switchAllowed = true;
+  const settings = { crossSubagents: "auto", crossAdvisor: "null", crossSubagentMaxEffort: "high", crewTools: "[]" };
+  await render(false, { ...session, session: { ...session.session, modelSettings: settings } });
+  await act(() => container.querySelector("button")!.click());
+  await act(() => current().onChooseProvider(current().choices.find(choice => choice.provider === "codex")!));
+  expect(current().settings).toMatchObject(settings);
+  expect(fixture.command).not.toHaveBeenCalled();
 });
 afterEach(() => {
   act(() => root.unmount());

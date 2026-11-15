@@ -13,6 +13,7 @@ android {
   sourceSets { test { resources.srcDirs += '../fixtures' } }
 }
 dependencies {
+  implementation project(':bycoda-voice-companion')
   implementation project(':expo-secure-store')
   implementation 'com.squareup.okhttp3:okhttp:4.12.0'
   testImplementation 'junit:junit:4.13.2'

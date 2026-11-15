@@ -1,8 +1,44 @@
 # Bycoda mobile
 
+When an older project ID points to the same folder as a session's current project, the app verifies both visible project records through read-only responses from the original Host, then opens the same session using its current project ID. A project mismatch is not reported as a changed computer. If folder equivalence cannot be proved, the session stays hidden and offers an explicit **Open in the session’s project** action only while both projects remain visible. No folder is registered and no message is sent during this recovery.
+
 The Expo application in `mobile/` controls existing Bycoda Hosts on Windows,
 macOS and Linux. Agent processes, files, Git repositories and scheduled work stay
 on the computer. The phone has no local agent runtime or local project checkout.
+
+## Read and control your workspace
+
+Terminal output has its own scrolling reader, literal line search, full-output copy
+and a follow-latest control. Scrolling back pauses following. Commands stay in the
+compact input dock; expand the editor for multiline commands. Leaving a tool keeps
+its terminal and unsent command draft. Stop and Close still require confirmation.
+If the computer cannot confirm that a terminal closed, its viewport remains and
+input is paused. Use **Check status** to read the original close receipt; this
+does not send another Close command. The view is released only after closure is
+confirmed. This receipt is retained for the current terminal view's lifetime.
+
+Files exposes Name and Content search directly. File review keeps its full location
+under Details. Git places branch identity before totals and formats counts using the
+app language. Inbox descriptions and comments precede optional labels and assignees.
+
+Management records use flat rows with expandable details. Model choices show readable
+provider/model names. Existing pages reopen without stacking another copy. Sending
+social drafts and campaigns still requires the applicable approval.
+
+Host access keeps the current phone first and offers device search for long paired
+device lists. Filtering does not revoke devices or change connection authority.
+
+## Sign in on mobile
+
+Mobile use requires a Bycoda account. Sign in with Apple, Google, Facebook,
+GitHub or an email verification code before opening computers, projects or
+conversations. A build without account configuration keeps the workspace
+unavailable. Privacy, terms and help remain readable from the sign-in screen.
+Desktop use remains available without an account.
+
+Signing out immediately closes phone access to the Host, including its live
+socket. Saved computer pairings and drafts stay on the phone for the next
+sign-in. Sign-in does not replace computer pairing or provider consent.
 
 ## Open a conversation link
 
@@ -11,7 +47,7 @@ through Android App Links or iOS Universal Links once the signed app and domain
 association are installed. The existing `bycoda://session/v1/` addresses are also
 accepted. A browser can show the installation page when the app is absent.
 
-Unlock the app and choose the paired computer that owns the conversation. A Host
+Sign in, unlock the app and choose the paired computer that owns the conversation. A Host
 reference only offers computers with its exact environment identity. Native
 references keep their original store and profile identity and are resolved by the
 selected computer; an unrelated conversation with the same ID is never substituted.
@@ -87,8 +123,10 @@ it preserves existing Serve handlers and chooses a separate HTTPS port when one
 is occupied. The phone must join the same private Tailscale network. HTTPS approval,
 sign-in, installation and OS permission requirements are shown in the dialog.
 
-Generate a QR code, then choose **Scan QR code** in mobile **Manage computers**.
-Review the computer's name and connect. The QR holds an issuer-bound, one-time
+After signing in, open mobile **Computers** and choose **Scan QR code** directly.
+The validated code selects the local-network or Tailscale route automatically;
+there is no separate connection-type selection. Use **Paste pairing code** when
+scanning is unavailable. Generate the code on desktop, then review the computer's name and connect. The QR holds an issuer-bound, one-time
 ticket that expires after two minutes; it never contains the phone's permanent
 credential. Closing the desktop dialog cancels a pending ticket. A repeated request
 from the same phone can recover a lost response without issuing another credential.
@@ -132,11 +170,15 @@ Search always matches full paths and group names. Grouped view offers expand and
 collapse controls, and searching temporarily opens matching groups. These choices
 are saved on the phone separately for each computer and do not reorder the desktop.
 The project picker shares sorting and path display preferences. Projects with
-different host IDs remain distinct even when names or folders match.
+different host IDs remain distinct even when names or folders match. Projects
+pinned on the desktop rail stay on top (their own **Pinned** section in grouped
+view); running sessions never reorder projects. As on the desktop, session lists
+leave out internal orchestration workers, and a project's session list leaves
+conversations owned by a crew run to **Crews**.
 
 ## Phone permissions
 
-Open **Settings → Phone permissions** to inspect camera and notification access.
+Open **Settings → Phone permissions** to inspect camera, microphone and notification access.
 Opening **Scan QR code** requests camera access the first time. A denied request
 can be retried; a permanent denial offers phone settings. Returning from phone
 settings refreshes permission state without restarting the app. Photo and document
@@ -147,6 +189,11 @@ notification** to verify a local notification. Android creates its notification
 channel before requesting permission. Camera, microphone and storage access are
 not requested together on startup; microphone recording is not used by the QR
 scanner.
+
+The **Microphone** row shows the permission used by dictation and assistant calls.
+Opening the permissions screen only reads its status. Tap the row to request
+access or recover a permanent denial in phone settings; this does not start a
+recording or a call. Granted access can also be reviewed in phone settings.
 
 ### Computer notifications
 
@@ -353,6 +400,66 @@ reach. Tools groups destinations by Project, Work, Communication, Development an
 Computer; search also finds a group name. Settings separates preferences, access
 and privacy, computer controls and support.
 
+With a connected computer, tap the center **New session** action to choose a
+project, or hold it for quick actions. The separate project action adds a project.
+Opening the same project or conversation again reuses its destination. Registered
+projects remain independent even when one repository is stored inside another.
+
+**Settings > Appearance** offers nine palettes in three equal columns and equal
+System, Light and Dark theme choices. Theme changes preserve the current draft.
+**Settings > Send while agent is running** defaults to **Steer**. Hold Send to use
+the alternate **Queue** action. Hosts without Steer support retain their supported
+queue action. The composer does not expose another delivery-mode selector.
+
+## Assistant and voice
+
+Open **Assistant** from quick actions or Tools. Minimize it to continue navigating,
+then return to the same Room conversation from the floating assistant window.
+Drag its handle to reposition it, or expand it to return to the full conversation.
+Closing the floating window ends its phone audio and active voice call. Work
+already accepted by the computer may continue.
+
+**Dictate message** records up to 30 seconds through the phone microphone and
+uses the connected computer's local speech setup. Finish recording, review the
+recognized text and send it explicitly. **Read reply aloud** uses local speech
+synthesis separately. These controls require a native build containing expo-audio
+and an available local voice setup on the Host; they do not bypass cloud voice's
+computer-only restriction.
+
+Manual dictation and standalone read-aloud are foreground operations: they stop
+when the app backgrounds, locks or loses access. Minimizing inside the app keeps
+the captured computer and Room identity. Recognized dictation is saved for its
+original conversation, including while minimized. Pending recovery prevents another
+recording from replacing it. A saved speech ID prevents duplicate insertion after
+an interrupted save or application restart.
+
+On Android, **Voice call** explicitly starts a hands-free conversation in the open
+Room thread. It listens, sends recognized speech after a pause, reads the reply
+aloud, then listens again. A call sends speech automatically; the separate
+**Dictate message** control still requires reviewing and sending the draft yourself.
+Starting a call requires the app to be visible and unlocked, microphone permission,
+a native build with the voice companion module, and local recognition and speech
+synthesis configured on the paired computer. A pending message result must be
+reviewed before starting another call. An uncertain result stops the call loop
+without automatically sending that utterance again.
+
+The Android foreground service shows an ongoing voice notification with microphone
+mute/unmute and stop controls. The floating window also exposes call controls;
+supported devices can optionally open Android picture in picture. With application
+lock disabled, an already-started call can continue outside the app while the phone
+remains unlocked. Its separate connection is limited to local voice operations,
+access verification and the captured assistant thread; it grants no background
+workspace browsing, arbitrary commands or new approval authority.
+
+**End voice call**, notification stop, closing the floating window, device/app lock,
+sign-out or revoked access ends the call and releases phone audio. When application
+lock is enabled, leaving the app stops the call even if the authentication delay
+has not expired. A call does not start itself from the background. Android service
+or audio interruptions may also end it. iOS background calling is not supported by
+this Android flow; manual foreground dictation/read-aloud retain their own limits.
+
+## Editing and conversation lists
+
 Navigation labels grow with system text size and move into additional rows when
 needed. Content and notifications reserve the measured navigation height. Inputs,
 search and the message composer start at 48dp; icon actions retain their compact
@@ -370,10 +477,12 @@ refreshes notification permission without requesting it again. Feedback delivery
 clears only its submitted draft, preserving edits made while sending. Device
 rename protects unsaved changes and blocks conflicting actions while saving.
 
-Global **Sessions** and each project's **Sessions** use the same compact row:
-project and status above the title, branch below it, and provider icon at the
-end. A pin identifies pinned conversations. The full title remains available to
-screen readers and in the conversation; the list preview stays on one line.
+Global **Sessions** follows desktop **Last sessions**, ordered by recent activity
+across projects. Each project's **Sessions** retains its folder organization.
+Both use the same compact row: provider icon before the title, project and branch
+below it, with time or active status at the end. Pin state remains available in
+conversation details and its accessible label. The full title remains available
+to screen readers and in the conversation; the list preview uses up to two lines.
 **Ready** means the session is idle, not that its work was completed successfully.
 
 Swipe a conversation left to reveal **Archive** (or **Unarchive**), **Delete**

@@ -1,4 +1,3 @@
-import { ProviderAccountKind } from "@/ui/provider-account-kind";
 import { useMemo, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import {
@@ -9,6 +8,7 @@ import {
   NavigationRow,
   SearchField,
   SelectField,
+  IdentifierField,
   Sheet,
   FormActions,
 } from "@/ui/primitives";
@@ -202,10 +202,7 @@ export function ModelPicker({
                 value: item.key,
                 label: item.label,
                 icon: (
-                  <>
-                    <ProviderAccountMark provider={item.provider} color={item.color} size={18} />
-                    <ProviderAccountKind kind={item.kind} derivedKind={item.derivedKind} />
-                  </>
+                  <ProviderAccountMark provider={item.provider} color={item.color} size={18} />
                 ),
               })),
             ]}
@@ -265,6 +262,14 @@ export function ModelPicker({
             />
           )}
         </View>
+        <Disclosure label={copy("Özel model kimliği", "Custom model ID")}>
+          <IdentifierField label={copy("Model kimliği", "Model ID")} value={model}
+            editable={!disabled && !unavailableAccount}
+            onChangeText={(id) => {
+              const target = models.find(entry => entry.id === id || entry.nativeId === id);
+              onChange(id, carryCrossDelegation(settings, sparseSettings ? {} : modelDefaults(target)));
+            }} />
+        </Disclosure>
         {groups.map(({ group, items }) => (
           <Disclosure key={group} label={label(SETTING_GROUP_TITLE[group])}>
             <View style={{ gap: space.lg }}>{items.map(field())}</View>

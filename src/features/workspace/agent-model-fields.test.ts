@@ -19,14 +19,16 @@ vi.mock("@/ui/primitives", () => ({
 }));
 const container = document.createElement("div");
 let root: ReturnType<typeof createRoot>;
+let changedSettings: Record<string, string> | undefined;
 afterEach(async () => { await act(async () => root.unmount()); vi.unstubAllGlobals(); });
-async function render(provider: "claude" | "codex", disabled = false) {
+async function render(provider: "claude" | "codex", disabled = false, options: { settings?: Record<string, string>; sparseSettings?: boolean; unavailableAccount?: boolean } = {}) {
+  changedSettings = undefined;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const models = sessionCatalog(undefined, [provider]).models[provider]!;
   function Form() {
     const [model, setModel] = useState(models[0].id);
-    const [settings, setSettings] = useState<Record<string, string>>({});
-    return createElement(AgentModelFields, { models, model, settings, disabled, onChange: (next, values) => { setModel(next); setSettings(values); } });
+    const [settings, setSettings] = useState<Record<string, string>>(options.settings ?? {});
+    return createElement(AgentModelFields, { models, model, settings, disabled, sparseSettings: options.sparseSettings, unavailableAccount: options.unavailableAccount, onChange: (next, values) => { changedSettings = values; setModel(next); setSettings(values); } });
   }
   root = createRoot(container);
   await act(async () => root.render(createElement(Form)));
@@ -39,6 +41,30 @@ it("shows a named Codex model and reasoning immediately, and keeps effort change
   await act(async () => { reasoning.value = "high"; reasoning.dispatchEvent(new Event("change", { bubbles: true })); });
   expect(reasoning.value).toBe("high");
   expect(container.querySelector('select[aria-label="Service Tier"]')).not.toBeNull();
+});
+
+const reserved = { crossSubagents: "auto", crossAdvisor: "null", crossSubagentMaxEffort: "high", crewTools: "[]" };
+it.each([false, true])("keeps independent delegation and tool restrictions when a custom model ID changes (sparse %s)", async sparseSettings => {
+  await render("codex", false, { settings: reserved, sparseSettings });
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Model ID"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "openrouter/anthropic:claude-sonnet-custom");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(input.value).toBe("openrouter/anthropic:claude-sonnet-custom");
+  expect(changedSettings).toMatchObject(reserved);
+});
+
+it("keeps independent delegation and tool restrictions when a catalog model changes", async () => {
+  await render("claude", false, { settings: reserved });
+  const select = container.querySelector<HTMLSelectElement>('select[aria-label="Model"]')!;
+  await act(async () => { select.value = "claude:haiku-4.5"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(changedSettings).toMatchObject(reserved);
+});
+
+it("locks every model control when its saved account is unavailable", async () => {
+  await render("codex", false, { unavailableAccount: true });
+  expect([...container.querySelectorAll<HTMLSelectElement | HTMLInputElement>("select,input")].every(element => element.disabled)).toBe(true);
 });
 it("updates Claude capabilities when switching from Fable to Haiku", async () => {
   await render("claude");

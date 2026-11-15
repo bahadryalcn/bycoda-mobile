@@ -25,7 +25,7 @@ vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null
 vi.mock("@/ui/week-hours", () => ({ HoursOverview: () => null }));
 vi.mock("../shared/record-bits", () => ({ RecordTrailing: ({ children }: PropsWithChildren) => createElement("div", null, children), useMenuGlyph: () => () => null, useRelativeTime: () => () => "soon", joinMeta: (parts: unknown[]) => parts.filter(Boolean).join(" · ") }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
-vi.mock("expo-router", () => ({ router: { push: navigation.push } }));
+vi.mock("expo-router", () => ({ router: { navigate: navigation.push } }));
 vi.mock("@/ui/record-card", () => ({ RecordCard: ({ title, children }: PropsWithChildren<{ title: string }>) => createElement("section", null, title, children) }));
 vi.mock("../shared/format", () => ({ stamp: (value: number) => String(value) }));
 vi.mock("../shared/status", () => ({ Status: ({ value }: { value: string }) => createElement("span", null, value) }));

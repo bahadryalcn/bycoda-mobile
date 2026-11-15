@@ -1,6 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useLayoutEffect, useRef, useState } from "react";
 import Constants from "expo-constants";
+import * as Application from "expo-application";
 import { findNodeHandle, Linking, Share, View, type HostInstance } from "react-native";
 import Animated from "react-native-reanimated";
 import Star from "lucide-react-native/icons/star";
@@ -16,6 +17,8 @@ import { space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
 import { appIdentity, engagementLinks } from "./engagement-model";
 import { openPublicLink, sharePublicApp } from "./engagement-actions";
+import { websiteUrl } from "../legal/legal-content";
+import { BrandLogo } from "@/ui/brand";
 
 function tile(Glyph: typeof Star, color: string) {
   return (
@@ -31,14 +34,14 @@ export function EngagementSettings() {
   const copy = useCopy();
   const platform = process.env.EXPO_OS ?? "unknown";
   const links = engagementLinks(Constants.expoConfig, platform);
-  const identity = appIdentity(Constants, platform);
+  const identity = appIdentity(Constants, platform, Application);
   const shareAnchor = useRef<HostInstance>(null);
   const pending = useRef(false);
   const active = useRef(true);
   useLayoutEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
-  const [feedbackFor, setFeedbackFor] = useState<"review" | "share" | "public" | null>(null);
+  const [feedbackFor, setFeedbackFor] = useState<"review" | "share" | "public" | "website" | null>(null);
   const [busy, setBusy] = useState<
-    "review" | "share" | "public" | null
+    "review" | "share" | "public" | "website" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -81,7 +84,7 @@ export function EngagementSettings() {
           );
         }
       } else {
-        const url = action === "review" ? links.reviewUrl : links.shareUrl;
+        const url = action === "review" ? links.reviewUrl : action === "website" ? websiteUrl : links.shareUrl;
         const result = await openPublicLink(url, (target) =>
           Linking.openURL(target),
         );
@@ -108,6 +111,7 @@ export function EngagementSettings() {
 
   return (
     <Stack style={{ gap: space.lg }}>
+      <BrandLogo compact />
       <Stack>
         <Body>bycoda · {copy("Sürüm: ", "Version: ")}{identity.version ?? copy("Bilinmiyor", "Unknown")}</Body>
         <Body muted>{identity.preview
@@ -116,6 +120,15 @@ export function EngagementSettings() {
       </Stack>
       <Animated.View entering={enterItem(0)}>
         <NavigationGroup>
+          <NavigationRow
+            label={copy("bycoda web sitesi", "bycoda website")}
+            detail="bycoda.codes"
+            disabled={!!busy}
+            icon={tile(Globe, colors.muted)}
+            busy={busy === "website"}
+            onPress={() => { void perform("website"); }}
+          />
+          {feedback("website")}
           <NavigationRow
             label={copy("Uygulamayı değerlendir", "Rate the app")}
             disabled={!!busy || !links.reviewUrl}

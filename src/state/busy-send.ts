@@ -15,6 +15,7 @@ type PreferenceStorage = Pick<typeof AsyncStorage, "getItem" | "setItem">;
 export type BusySendState = {
   mode: BusySendMode;
   hydrated: boolean;
+  storageError: Error | null;
   hydrate: () => Promise<void>;
   setMode: (mode: BusySendMode) => Promise<void>;
 };
@@ -23,24 +24,32 @@ export type BusySendState = {
 export function createBusySendStore(storage: PreferenceStorage) {
   let chosen = false;
   let hydration: Promise<void> | undefined;
+  let persistence = Promise.resolve();
+  let version = 0;
   return create<BusySendState>((set, get) => ({
     mode: DEFAULT_BUSY_SEND_MODE,
     hydrated: false,
+    storageError: null,
     hydrate: () => {
       if (get().hydrated) return Promise.resolve();
       hydration ??= Promise.resolve()
         .then(() => storage.getItem(BUSY_SEND_STORAGE_KEY))
         // A choice made during hydration wins over the stored value.
         .then((raw) => { if (!chosen) set({ mode: decodeBusySendMode(raw) }); })
-        .catch(() => {})
+        .catch(() => { if (!chosen) set({ storageError: new Error("Send preference could not be loaded.") }); })
         .finally(() => { set({ hydrated: true }); });
       return hydration;
     },
     setMode: async (mode) => {
       chosen = true;
-      set({ mode });
-      // A failed save keeps the choice for this launch; the next change retries.
-      await Promise.resolve().then(() => storage.setItem(BUSY_SEND_STORAGE_KEY, mode)).catch(() => {});
+      const selected = ++version;
+      set({ mode, storageError: null });
+      // Serialize rapid choices so an older write cannot replace the current preference.
+      const write = persistence.catch(() => undefined).then(() => storage.setItem(BUSY_SEND_STORAGE_KEY, mode));
+      persistence = write;
+      await write.catch(() => {
+        if (selected === version) set({ storageError: new Error("Send preference could not be saved.") });
+      });
     },
   }));
 }

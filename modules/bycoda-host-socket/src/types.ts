@@ -40,15 +40,18 @@ export type NativeBulkDescriptor = {
   expiresAt: number;
 };
 export interface HostSocketNative {
-  /** Native lock/epoch gate; backgrounding always revokes access independently. */
+  /** Native lock/epoch gate. Only separately admitted native voice peers may survive background. */
   setAccess(active: boolean, accessEpoch: number): Promise<void>;
   /** Reads existing SecureStore natively; bearer is never returned to JavaScript. */
   acquireCredential(binding: CredentialBinding): Promise<NativeCredentialHandle>;
+  /** Foreground-only admission, fenced to an active native service and exact Room/project. */
+  acquireVoiceCredential?(binding: CredentialBinding, sessionId: string, threadId: string, projectId: string | null): Promise<NativeCredentialHandle>;
   /** Input is owner-pairing material; this API has no secret getter. */
   storeCredential(binding: CredentialBinding, token: string): Promise<NativeCredentialHandle>;
   deleteCredential(machineId: string): Promise<void>;
   invalidateCredentials(machineId?: string): Promise<void>;
   open(handle: string, connectionId: string, generation: number): Promise<void>;
+  openVoice?(handle: string, connectionId: string, generation: number, sessionId: string): Promise<void>;
   send(connectionId: string, generation: number, text: string): Promise<void>;
   acknowledge(connectionId: string, generation: number, sequence: number): Promise<void>;
   close(connectionId: string, generation: number): Promise<void>;

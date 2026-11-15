@@ -11,7 +11,7 @@ vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: { queryKey: readonly unknown[] }) => { fixture.queries.push(options); return options.queryKey[1] === "me" ? { data: { user: { deletion: { purgeAfter: "2026-12-01T12:00:00Z" } } } } : { data: undefined, isError: false }; },
   useMutation: () => ({ mutate: vi.fn(), isPending: false, error: null }), useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
-vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
+vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("expo-web-browser", () => ({ openBrowserAsync: vi.fn() }));
 vi.mock("./account-context", () => ({ useAccount: () => ({ runtime: { client: {} }, device: {} }) }));
 vi.mock("@/i18n", () => ({ useLocale: () => fixture.locale }));

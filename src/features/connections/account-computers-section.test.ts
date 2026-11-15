@@ -5,7 +5,7 @@ import { expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ start: vi.fn(), refetch: vi.fn() }));
 const computer = { deviceId: "computer-a", environmentId: "env-a", name: "Work computer", platform: "windows", lastSeenAt: "2020-01-01T00:00:00Z", routes: [] };
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
-vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
+vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => false }));
 vi.mock("lucide-react-native/icons/laptop", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/network", () => ({ default: () => null }));

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { providerName } from "../workspace/provider-choices";
 import { View } from "react-native";
 import { useActiveMachine } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
@@ -10,8 +11,6 @@ import { DailyBars } from "@/ui/usage-meters";
 import { compactTokens } from "./usage-breakdown";
 import { UsageKpis } from "./usage-charts";
 import { compactMoney, readCostReport, type CostReport } from "./usage-limits-model";
-
-const PROVIDER_NAMES: Record<string, string> = { claude: "Claude", codex: "Codex" };
 
 /** Estimated API-equivalent cost of the provider logs on the Host: totals, breakdowns and a daily trend. */
 export function UsageCost() {
@@ -57,7 +56,7 @@ export function UsageCost() {
               data={report.daily.map((day) => ({ day: day.date.slice(5), value: day.costUsd }))}
             />
           </Card>
-          <Breakdown title={copy("Sağlayıcıya göre", "By provider")} rows={report.providers.map((row) => ({ key: row.provider, label: PROVIDER_NAMES[row.provider] ?? row.provider, ...row }))} />
+          <Breakdown title={copy("Sağlayıcıya göre", "By provider")} rows={report.providers.map((row) => ({ key: row.provider, label: providerName(row.provider), ...row }))} />
           <Breakdown title={copy("Modele göre", "By model")} rows={report.models.map((row) => ({ key: `${row.provider}:${row.model}`, label: row.model, ...row }))} />
           <Breakdown title={copy("Projeye göre", "By project")} rows={report.projects.map((row) => ({ ...row, key: row.label, label: row.label || copy("Bilinmeyen klasör", "Unknown folder") }))} />
           {report.coverage.unpricedModels.length ? (

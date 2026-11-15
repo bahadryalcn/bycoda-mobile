@@ -6,7 +6,7 @@ import GitBranch from "lucide-react-native/icons/git-branch";
 import Info from "lucide-react-native/icons/info";
 import { DisclosureChevron } from "@/ui/disclosure-motion";
 import { ProjectIcon } from "@/ui/project-icon";
-import { PressableCard, StatusText } from "@/ui/primitives";
+import { Badge, PressableCard, StatusText } from "@/ui/primitives";
 import { SwipeActions, type SwipeRowAction } from "@/ui/swipe-actions";
 import { gapIcon, metrics, radii, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
@@ -16,10 +16,16 @@ import { relativeTime } from "./shared";
 
 export type ProjectRowView = "files" | "git";
 
-/** Compact project row: icon and name, one quiet status on the right. Paths live in the details sheet. */
+/**
+ * Compact project row: icon and name, one quiet status on the right. Paths live in the details sheet unless
+ * the person turns on full folder paths; a name another project shares gets its parent folder as a hint.
+ */
 export const ProjectRow = memo(function ProjectRow({
   id,
   name,
+  context,
+  path,
+  kind,
   appearance,
   depth,
   grouped,
@@ -34,6 +40,12 @@ export const ProjectRow = memo(function ProjectRow({
 }: {
   id: string;
   name: string;
+  /** Parent folder shown when another project has the same name. */
+  context?: string;
+  /** Full folder path, shown only when the "Full folder paths" view option is on. */
+  path?: string;
+  /** Personal/Work tag from the computer's model routing (own or inherited from its group). */
+  kind?: "personal" | "work";
   appearance?: HostProject["appearance"];
   /** Workspace nesting below another project. */
   depth: number;
@@ -55,6 +67,7 @@ export const ProjectRow = memo(function ProjectRow({
   const runningLabel = copy("{p0} çalışıyor", "{p0} running", { p0: running });
   const openingLabel = copy("Açılıyor…", "Opening…");
   const since = relativeTime(activeAt, copy);
+  const kindLabel = kind === "work" ? copy("İş", "Work") : kind === "personal" ? copy("Kişisel", "Personal") : "";
   const actions: SwipeRowAction[] = [
     {
       key: "details",
@@ -71,7 +84,7 @@ export const ProjectRow = memo(function ProjectRow({
   ];
   const row = (
     <PressableCard
-      label={[name, opening ? openingLabel : running ? runningLabel : "", since].filter(Boolean).join(". ")}
+      label={[context ? `${name} (${context})` : name, kindLabel, path, opening ? openingLabel : running ? runningLabel : "", since].filter(Boolean).join(". ")}
       disabled={disabled && !opening}
       onPress={() => onPress(id)}
       onLongPress={() => onDetails(id)}
@@ -88,10 +101,14 @@ export const ProjectRow = memo(function ProjectRow({
       {depth > 0 ? <CornerDownRight size={13} color={colors.tertiary} /> : null}
       <ProjectIcon appearance={appearance} size={depth > 0 ? 18 : 22} box={depth > 0 ? 22 : 28} />
       <View style={{ flex: 1, minWidth: 0, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }}>
-      <Text numberOfLines={1} style={[uiStyles.label, { flexGrow: 1, flexShrink: 1, flexBasis: 140 * Math.max(1, fontScale), minWidth: 0 }]}>{name}</Text>
+      <Text numberOfLines={1} style={[uiStyles.label, { flexGrow: 1, flexShrink: 1, flexBasis: 140 * Math.max(1, fontScale), minWidth: 0 }]}>
+        {name}{context ? <Text style={uiStyles.caption}>{`  ${context}`}</Text> : null}
+      </Text>
+      {kindLabel ? <Badge label={kindLabel} /> : null}
       {opening ? <StatusText label={openingLabel} tone="info" />
         : running ? <StatusText label={runningLabel} tone="live" />
         : since ? <Text style={[uiStyles.caption, { flexShrink: 1 }]}>{since}</Text> : null}
+      {path ? <Text selectable style={[uiStyles.caption, { flexBasis: "100%" }]}>{path}</Text> : null}
       </View>
     </PressableCard>
   );

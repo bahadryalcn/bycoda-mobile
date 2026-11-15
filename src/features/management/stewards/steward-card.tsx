@@ -1,3 +1,4 @@
+import { agentPresentation } from "../shared/agent-presentation";
 import { router } from "expo-router";
 import type { HostSteward } from "@/remote/types";
 import { useActiveMachine } from "@/state/machines";
@@ -85,9 +86,7 @@ export function StewardCard({
       details={
         <>
           {item.focus ? <Body>{item.focus}</Body> : null}
-          <Body mono>
-            {item.harness} · {item.model}
-          </Body>
+          <Body muted>{agentPresentation(item.harness, item.model)}</Body>
         </>
       }
       menu={
@@ -134,7 +133,7 @@ export function StewardCard({
                   icon: glyph(MessageSquare),
                   label: copy("Son oturum", "Last session"),
                   onPress: () =>
-                    router.push({
+                    router.navigate({
                       pathname: "/session/[id]",
                       params: {
                         id: item.lastSessionId!,

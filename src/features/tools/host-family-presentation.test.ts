@@ -46,6 +46,7 @@ vi.mock("@/ui/styles", () => ({ uiStyles: { caption: {} } }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, space: {}, fontSize: {}, radii: {} }));
 vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null,  FilterButton: () => null, FilterSheet: () => null }));
 vi.mock("./runtime-monitors", () => ({ RuntimeMonitors: () => null }));
+vi.mock("@/ui/message-code", () => ({ MessageCode: ({ code }: { code: string }) => createElement("pre", null, code) }));
 vi.mock("@/ui/issue-summary", () => ({
   IssueSummary: ({ issues }: { issues: string[] }) => createElement("div", null, issues.join("\n")),
 }));
@@ -113,6 +114,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children),
     Body: Wrapper,
+    StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Card: Wrapper,
     CodePanel: Wrapper,
     CodeText: Wrapper,

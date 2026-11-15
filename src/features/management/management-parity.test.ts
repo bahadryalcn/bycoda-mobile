@@ -28,7 +28,7 @@ vi.mock("lucide-react-native/icons/git-merge", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/undo-2", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
-vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
+vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/record-card", () => ({ RecordCard: ({ menu }: { menu: React.ReactNode }) => menu }));
@@ -115,11 +115,11 @@ it("rejects invalid preview payloads and gives an old host an update path", asyn
 it("declines only a steward to-do suggestion and never invokes ordinary task deletion", async () => {
   const decline = vi.fn();
   const remove = vi.fn();
-  const props = { task: { id: "proposal", title: "Proposal", prompt: "Inspect the project", source: "steward", status: "todo", dependsOn: [] },
+  const props = { task: { id: "proposal", title: "Proposal", harness: "codex", model: "codex:test", prompt: "Inspect the project", source: "steward", status: "todo", dependsOn: [] },
     busy: false, editorOpen: false, tasks: [], lifecycleReady: true,
     onEdit: vi.fn(), onDelivery: vi.fn(),
     move: { ...state.mutation, mutate: vi.fn() }, start: { ...state.mutation, mutate: vi.fn() },
-    recheck: { ...state.mutation, mutate: vi.fn() }, reorder: { ...state.mutation, mutate: vi.fn() },
+    finish: { ...state.mutation, mutate: vi.fn() }, recheck: { ...state.mutation, mutate: vi.fn() }, reorder: { ...state.mutation, mutate: vi.fn() },
     decline: { ...state.mutation, mutate: decline }, remove: { ...state.mutation, mutate: remove } } as unknown as Parameters<typeof TaskCard>[0];
   state.machine.capabilities.push("stewards");
   const render = () => root.render(createElement(TaskCard, props));

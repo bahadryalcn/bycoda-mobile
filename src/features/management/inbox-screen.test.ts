@@ -18,7 +18,7 @@ vi.mock("lucide-react-native/icons/eye", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/git-pull-request", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/shield-check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: () => null }));
-vi.mock("expo-router",()=>({router:{push:state.push}}));
+vi.mock("expo-router",()=>({router:{navigate:state.push}}));
 vi.mock("expo-localization",()=>({getLocales:()=>[{languageTag:"en-US"}]}));
 vi.mock("react-native",()=>({View:({children}:PropsWithChildren)=>createElement("div",null,children)}));
 vi.mock("@/ui/search-field",()=>({CollectionToolbar:({field,actions}:any)=>createElement("section",null,field,actions)}));

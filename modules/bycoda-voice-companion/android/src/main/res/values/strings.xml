@@ -1,0 +1,11 @@
+<resources>
+  <string name="bycoda_voice_channel">Bycoda voice</string>
+  <string name="bycoda_voice_title">Bycoda assistant</string>
+  <string name="bycoda_voice_muted">Microphone muted</string>
+  <string name="bycoda_voice_listening">Listening</string>
+  <string name="bycoda_voice_speaking">Speaking</string>
+  <string name="bycoda_voice_idle">Voice session active</string>
+  <string name="bycoda_voice_mute">Mute</string>
+  <string name="bycoda_voice_unmute">Unmute</string>
+  <string name="bycoda_voice_stop">Stop voice</string>
+</resources>

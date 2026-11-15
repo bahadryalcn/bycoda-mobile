@@ -6,7 +6,7 @@ const fixture = vi.hoisted(() => ({ activeId: "machine", epoch: 0, locale: "en",
 vi.mock("@/state/connection-scope", () => { const epochs = new Map<number, any>(); return { useConnectionScope: () => {
   const epoch = fixture.epoch; if (!epochs.has(epoch)) epochs.set(epoch, { token: String(epoch), isCurrent: () => fixture.epoch === epoch }); return epochs.get(epoch);
 } }; });
-vi.mock("expo-router", () => ({ router: { push: fixture.push } }));
+vi.mock("expo-router", () => ({ router: { navigate: fixture.push } }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/tokens", () => ({ colors: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (tr: string, en: string) => fixture.locale === "tr" ? tr : en }));

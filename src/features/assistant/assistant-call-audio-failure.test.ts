@@ -1,0 +1,25 @@
+import { afterEach, expect, it, vi } from "vitest";
+const f = vi.hoisted(() => ({ end: vi.fn(), release: vi.fn(), capture: vi.fn(async () => { throw new Error("Microphone is busy"); }) }));
+vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
+vi.mock("expo-crypto", () => ({ randomUUID: () => "id" }));
+vi.mock("expo-audio", () => ({ getRecordingPermissionsAsync: async () => ({ granted: true }), requestRecordingPermissionsAsync: vi.fn() }));
+vi.mock("../../../modules/bycoda-voice-companion", () => ({ nativeVoiceCompanion: () => ({ beginSession: async () => "session", endSession: f.end, getState: () => ({ active: true, sessionId: "session" }), addListener: () => ({ remove: vi.fn() }) }) }));
+vi.mock("@/state/host-runtime", () => ({ openAssistantVoiceRuntime: async () => ({ release: f.release, request: vi.fn() }) }));
+vi.mock("@/state/machines", () => ({ useMachines: { getState: () => ({ machines: [{ id: "host", environmentId: "env" }] }), subscribe: () => () => {} } }));
+vi.mock("@/state/security", () => ({ isAppAccessAllowed: () => true, useSecurity: { getState: () => ({ appState: "active" }), subscribe: () => () => {} } }));
+vi.mock("@/state/reviewed-machine", () => ({ reviewedMachine: (machine: unknown) => machine, isReviewedMachine: () => true }));
+vi.mock("../privacy/consent-access", () => ({ hasProviderPermission: () => true, useProviderPermission: { subscribe: () => () => {} } }));
+vi.mock("./assistant-send", () => ({ assistantSendKey: () => "send", readStoredSend: async () => null, isAssistantSendPending: () => false, sendRoomMessage: vi.fn() }));
+vi.mock("./assistant-client", () => ({ AssistantMobileClient: class {} }));
+vi.mock("./assistant-companion-state", () => ({ useAssistantCompanion: { getState: () => ({ thread: { id: "room" } }) }, retainAssistantSpeech: vi.fn() }));
+vi.mock("./assistant-voice-native", () => ({ nativeVoiceDependencies: (callbacks: object) => ({ ...callbacks, capture: f.capture, stopPlayback: vi.fn(), play: vi.fn() }) }));
+import { startAssistantCall, endAssistantCall } from "./assistant-call-session";
+import { useAssistantCall } from "./assistant-call-state";
+afterEach(() => { endAssistantCall(); vi.clearAllMocks(); });
+it("surfaces real voice-engine capture failure instead of retrying it as empty speech", async () => {
+  await startAssistantCall({ machineId: "host", environmentId: "env", threadId: "room" }, () => true);
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+  expect(useAssistantCall.getState().phase).toBe("idle");
+  expect((useAssistantCall.getState().error as Error).message).toBe("Microphone is busy");
+  expect(f.capture).toHaveBeenCalledOnce(); expect(f.end).toHaveBeenCalledWith("session");
+});

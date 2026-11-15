@@ -66,7 +66,7 @@ export function SessionToolbar({
   const closeContextual = () => setContextual(null);
   const openProject = () => {
     if (!projectId) return;
-    router.push({
+    router.navigate({
       pathname: "/project/[id]",
       params: {
         id: projectId,

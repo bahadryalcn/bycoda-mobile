@@ -181,7 +181,7 @@ export class MobileHostWsConnection {
   droppedFrames = 0;
   private acks = new Map<string, { inflight: boolean; latest?: StreamCursor }>();
   constructor(
-    private readonly native: HostSocketNative,
+    private readonly native: Pick<HostSocketNative, "open" | "send" | "close" | "addListener" | "acknowledge" | "readBulk">,
     readonly binding: CredentialBinding,
     private readonly credential: NativeCredentialHandle,
     readonly generation: number,

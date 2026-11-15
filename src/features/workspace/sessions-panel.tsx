@@ -5,6 +5,7 @@ import type { ProjectSessionsProps, SessionCreationDraft } from "./sessions-pane
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLatestCallback } from "./use-latest-callback";
 import { View } from "react-native";
+import { carryCrossDelegation } from "../../../../src/shared/model/host-contracts/delegation";
 import { space } from "@/ui/tokens";
 import { router } from "expo-router";
 import { useFormDraft } from "@/state/form-draft";
@@ -23,8 +24,9 @@ import { AgentModelFields } from "./agent-model-fields";
 import type { HostSessionSummary } from "./wire";
 import { filterSessionDirectory, toggleSessionDirectoryFolder } from "./session-directory";
 import { projectSessionRows, type ProjectSessionRow } from "./project-session-shelves";
+import { useUnseenDoneIds } from "./session-done-store";
 import { SessionShelfHeader } from "./session-shelf-header";
-import type { SessionShelfId } from "./session-collection";
+import { listedProjectSession, type SessionShelfId } from "./session-collection";
 import { SessionFolderRow } from "./session-folder-row";
 import { queryOwnsRegion } from "./query-region";
 import { sessionListPollInterval } from "./session-list-poll";
@@ -55,7 +57,7 @@ export function ProjectSessions({
   const openSession = useLatestCallback((sessionId: string) => {
     if (!mounted.current || !machine || useMachines.getState().activeId !== machine.id) return;
     setCreating(false);
-    router.push({
+    router.navigate({
       pathname: "/session/[id]",
       params: { id: sessionId, projectId, machineId: machine.id },
     });
@@ -115,10 +117,13 @@ export function ProjectSessions({
   );
   const { selectedProvider, selectedAccountId, models, selectedModel, bundled } = selection;
   const visible = filterSessionDirectory(
-    (sessions.data ?? []).filter((session) => Boolean(session.archived) === archived),
+    (sessions.data ?? []).filter(
+      (session) => Boolean(session.archived) === archived && listedProjectSession(session),
+    ),
     sessionLayout,
     search,
   );
+  const doneIds = useUnseenDoneIds(machine?.id ?? "");
   const rows = projectSessionRows(
     visible,
     sessionLayout,
@@ -127,6 +132,7 @@ export function ProjectSessions({
     !!search.trim(),
     settledIds,
     archived,
+    { doneIds, now: Date.now() },
   );
   const sharedConnectionFailure = sameSessionListConnectionFailure(
     directoryQuery?.error,
@@ -254,7 +260,7 @@ export function ProjectSessions({
                             ? { accountId: next.accountId }
                             : { provider: next.provider, accountId: next.accountId, model: "" },
                         );
-                        if (next.provider !== selectedProvider) setModelSettings({});
+                        if (next.provider !== selectedProvider) setModelSettings(previous => carryCrossDelegation(previous, {}));
                       },
                     }}
                     disabled={locked}

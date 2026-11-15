@@ -24,6 +24,7 @@ import { pullRequestStateLabel, pullRequestTone } from "./git-link-pr-model";
 import { enterItem } from "@/ui/motion";
 import { radii, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
 import type {
   GitActionFeedbackProps,
   GitConflictsPanelProps,
@@ -41,10 +42,17 @@ export function GitHeader({
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const name = index.branch || copy("Git", "Git");
+  const numbers = new Intl.NumberFormat(useLocale());
+  const summary = [name, index.remote,
+    copy("{p0} dosya", "{p0} files", { p0: numbers.format(index.files.length) }),
+    linkedPr ? `#${linkedPr.number} ${pullRequestStateLabel(linkedPr.state, copy)}` : undefined,
+    index.ahead ? `↑${numbers.format(index.ahead)}` : undefined,
+    index.behind ? `↓${numbers.format(index.behind)}` : undefined,
+  ].filter(Boolean).join(". ");
   return (
     <Animated.View entering={enterItem(0)}>
       <PressableCard
-        label={`${copy("Git işlemleri", "Git actions")}: ${[name, index.remote].filter(Boolean).join(" · ")}`}
+        label={`${copy("Git işlemleri", "Git actions")}: ${summary}`}
         disabled={busy}
         onPress={onOpenActions}
         style={{
@@ -56,10 +64,12 @@ export function GitHeader({
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text numberOfLines={1} ellipsizeMode="middle" style={[uiStyles.label, { fontWeight: "700" }]}>{name}</Text>
           <GitSyncSummary index={index} />
+          <Row style={{ gap: space.sm }}>
+            {linkedPr ? <Badge label={`#${linkedPr.number} · ${pullRequestStateLabel(linkedPr.state, copy)}`} tone={pullRequestTone(linkedPr.state)} /> : null}
+            {index.ahead ? <Text style={[uiStyles.caption, { color: colors.accent }]}>{`↑${numbers.format(index.ahead)}`}</Text> : null}
+            {index.behind ? <Text style={[uiStyles.caption, { color: colors.warning }]}>{`↓${numbers.format(index.behind)}`}</Text> : null}
+          </Row>
         </View>
-        {linkedPr ? <Badge label={`#${linkedPr.number} · ${pullRequestStateLabel(linkedPr.state, copy)}`} tone={pullRequestTone(linkedPr.state)} /> : null}
-        {index.ahead ? <Text style={[uiStyles.caption, { color: colors.accent }]}>{`↑${index.ahead}`}</Text> : null}
-        {index.behind ? <Text style={[uiStyles.caption, { color: colors.warning }]}>{`↓${index.behind}`}</Text> : null}
         <ChevronDown size={16} color={colors.muted} />
       </PressableCard>
     </Animated.View>
@@ -69,13 +79,14 @@ export function GitHeader({
 function GitSyncSummary({ index }: { index: GitHeaderProps["index"] }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const numbers = new Intl.NumberFormat(useLocale());
   if (!index.files.length) return null;
   return (
     <Row style={{ gap: space.xs }}>
       <Body muted style={uiStyles.caption}>
-        {copy("{p0} dosya", "{p0} files", { p0: index.files.length })}
-        {index.additions ? <Body style={[uiStyles.caption, { color: colors.success }]}>{` · +${index.additions}`}</Body> : null}
-        {index.deletions ? <Body style={[uiStyles.caption, { color: colors.danger }]}>{` · −${index.deletions}`}</Body> : null}
+        {copy("{p0} dosya", "{p0} files", { p0: numbers.format(index.files.length) })}
+        {index.additions ? <Body style={[uiStyles.caption, { color: colors.success }]}>{` · +${numbers.format(index.additions)}`}</Body> : null}
+        {index.deletions ? <Body style={[uiStyles.caption, { color: colors.danger }]}>{` · −${numbers.format(index.deletions)}`}</Body> : null}
       </Body>
     </Row>
   );
@@ -162,13 +173,14 @@ export function GitConflictsPanel({
 }: GitConflictsPanelProps) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const numbers = new Intl.NumberFormat(useLocale());
   const [expanded, setExpanded] = useState(false);
   const shown = expanded ? files : files.slice(0, CONFLICT_PREVIEW);
   return (
     <Card>
       <Row>
         <Heading>{copy("Çakışmalar", "Conflicts")}</Heading>
-        <Badge label={String(files.length)} tone="danger" />
+        <Badge label={numbers.format(files.length)} tone="danger" />
       </Row>
       <Body muted>
         {copy(
@@ -245,7 +257,7 @@ export function GitConflictsPanel({
           label={
             expanded
               ? copy("Daha az göster", "Show fewer")
-              : copy("{p0} çakışmanın tümünü göster", "Show all {p0} conflicts", { p0: files.length })
+              : copy("{p0} çakışmanın tümünü göster", "Show all {p0} conflicts", { p0: numbers.format(files.length) })
           }
           onPress={() => setExpanded((value) => !value)}
           style={{ alignSelf: "flex-start" }}

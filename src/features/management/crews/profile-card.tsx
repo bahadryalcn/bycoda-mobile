@@ -1,3 +1,4 @@
+import { agentPresentation } from "../shared/agent-presentation";
 import type { SavedCrewAgent } from "@/remote/contracts/crews";
 import { useMachines } from "@/state/machines";
 import type { useHostMutation } from "@/state/queries";
@@ -33,7 +34,7 @@ export function CrewProfileCard({ value, roleLabel, busy, editorOpen, machineId,
       status={<Badge label={roleLabel(value.role)} />}
       metadata={joinMeta([
         handleLabel(value.handle),
-        memberModelSource(value, copy) ?? (candidate && `${candidate.harness} · ${candidate.model}`),
+        memberModelSource(value, copy) ?? (candidate && agentPresentation(candidate.harness, candidate.model)),
         value.projectId ? copy("Bu proje", "This project") : copy("Bilgisayar geneli", "Host-wide"),
       ])}
       preview={<MemberAvatars agents={[value]} />}

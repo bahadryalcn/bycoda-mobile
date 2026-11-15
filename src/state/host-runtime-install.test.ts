@@ -3,6 +3,7 @@ import type { HostSocketNative } from "../../modules/bycoda-host-socket/src/type
 import { fakeNative, binding } from "../remote/ws-connection.test-fixture";
 import { getHostWsRuntimeProvider } from "../remote/ws-runtime-port";
 import publicCa from "../../modules/bycoda-host-socket/fixtures/public-ca-pin-vector.json";
+import { useAccountAccess } from "../features/account/model/account-access";
 
 const fixture = vi.hoisted(() => ({
   native: null as HostSocketNative | null,
@@ -78,6 +79,7 @@ const descriptor = {
   },
 };
 beforeEach(() => {
+  useAccountAccess.setState({ status: "signedIn" });
   fixture.unlocked = true;
   fixture.appState.currentState = "active";
   fixture.native = fakeNative().native;
@@ -86,6 +88,19 @@ afterEach(() => {
   for (const release of releases.splice(0).reverse()) release();
 });
 describe("mobile app lifecycle and authenticated trust composition", () => {
+  it("closes the live Host socket immediately on account sign-out without waiting for a lock event", async () => {
+    const installed = await installMobileHostRuntime();
+    releases.push(installed.dispose);
+    const provider = getHostWsRuntimeProvider()!;
+    const machine = { ...fixture.state.machines[0]!, name: "Host", capabilities: descriptor.capabilities };
+    const lease = await provider.acquire(machine, async () => descriptor, () => undefined);
+    releases.push(lease.release);
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    fixture.unlocked = false;
+    useAccountAccess.setState({ status: "signedOut" });
+    expect(lease.state()).toBe("suspended");
+    expect(fixture.native!.close).toHaveBeenCalled();
+  });
   it("shares installation across StrictMode effect replay and unregisters the final owner", async () => {
     const [first, second] = await Promise.all([
       installMobileHostRuntime(),

@@ -21,6 +21,7 @@ export function ProjectReorderSheet({
   sections,
   grouped,
   othersLabel,
+  pinnedLabel,
   onMove,
   onClose,
 }: {
@@ -29,6 +30,7 @@ export function ProjectReorderSheet({
   sections: readonly DirectorySection[];
   grouped: boolean;
   othersLabel: string;
+  pinnedLabel: string;
   onMove: (move: ProjectOrderMove) => void;
   onClose: () => void;
 }) {
@@ -39,7 +41,8 @@ export function ProjectReorderSheet({
   useEffect(() => { if (!visible) setGroupKey(null); }, [visible]);
   const open = grouped ? sections.find((section) => section.key === groupKey) : sections[0];
   const showGroups = grouped && !open;
-  const groupName = (section: DirectorySection) => section.group?.name ?? othersLabel;
+  const groupName = (section: DirectorySection) =>
+    section.pinned ? pinnedLabel : (section.group?.name ?? othersLabel);
   const rowStyle = {
     flexDirection: "row" as const,
     alignItems: "center" as const,

@@ -35,13 +35,18 @@ describe("mobile session organization", () => {
     ] };
     expect(filterSessionDirectory(sessions, cyclic, "release").map((value) => value.id)).toEqual(["one", "two"]);
   });
-  it("promotes running sessions out of collapsed folders without duplicates or changing saved layout", () => {
+  it("keeps running sessions inside their folders like desktop", () => {
     const before = JSON.stringify(layout);
     const values = [session("one", 1, { status: "running" }), session("three", 999, { pinned: true, needsInput: true })];
     const rows = sessionDirectoryRows(values, layout);
-    expect(rows.map((row) => row.key)).toEqual(["session:one", "session:three"]);
+    expect(rows.map((row) => row.key)).toEqual(["folder:parent", "session:three"]);
+    expect(rows[0]).toMatchObject({ count: 1, expanded: false });
     expect(JSON.stringify(layout)).toBe(before);
-    expect(sessionDirectoryRows([session("one", 1, { status: "idle" }), values[1]!], layout)[0]?.key).toBe("folder:parent");
+  });
+  it("orders sessions by last activity, not metadata saves", () => {
+    const items = [session("old", 90, { lastActivityAt: 5 }), session("new", 10, { lastActivityAt: 50 })];
+    expect(sessionDirectoryRows(items, layout).map((row) => row.key)).toEqual(["session:new", "session:old"]);
+    expect(sessionDirectoryRows(items).map((row) => row.key)).toEqual(["session:new", "session:old"]);
   });
   it("retains offscreen folder membership and applies new manual metadata without rewriting filtered order", () => {
     const many = Array.from({ length: 90 }, (_, index) => session(`s${index}`, index));

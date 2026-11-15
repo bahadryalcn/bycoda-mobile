@@ -1,3 +1,4 @@
+import { agentPresentation } from "../shared/agent-presentation";
 import { RecordCard } from "@/ui/record-card";
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
@@ -72,7 +73,7 @@ export function AutomationCard({
       label: copy("Son oturum", "Last session"),
       onPress: () => {
         if (machine && item.lastSessionId)
-          router.push({
+          router.navigate({
             pathname: "/session/[id]",
             params: {
               id: item.lastSessionId,
@@ -121,7 +122,7 @@ export function AutomationCard({
       details={
         <>
           <Body>{item.prompt}</Body>
-          <Body mono>{item.harness} · {item.model}</Body>
+          <Body muted>{agentPresentation(item.harness, item.model)}</Body>
           {!item.trigger ? <HoursOverview rows={WEEK_ORDER.map((day) => ({ key: String(day), label: dayNames[day], blocks: blocks[day] }))} /> : null}
         </>
       }

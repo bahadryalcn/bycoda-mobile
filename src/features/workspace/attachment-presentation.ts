@@ -1,4 +1,5 @@
 import { markdownTarget } from "@/ui/message-inline";
+import { messageSessionLink } from "@/ui/message-session-link";
 
 const UNITS = ["B", "KB", "MB", "GB"];
 
@@ -25,14 +26,15 @@ export type ComposerLink = { href: string; host: string; path: string };
 
 const URL_PATTERN = /https?:\/\/[^\s<>"'`]+/gi;
 
-/** Distinct web links typed or pasted into the draft, in order, for the chips above the field. */
+/** Distinct web links typed or pasted into the draft, in order, for the chips above the field.
+ * Bycoda session references open in the app, so they are not web links. */
 export function composerLinks(text: string, limit = 5): ComposerLink[] {
   const seen = new Set<string>();
   const links: ComposerLink[] = [];
   for (const match of text.matchAll(URL_PATTERN)) {
     const raw = match[0].replace(/[.,;:!?)\]}]+$/, "");
     const target = markdownTarget(raw);
-    if (target.kind !== "web" || seen.has(target.href)) continue;
+    if (target.kind !== "web" || seen.has(target.href) || messageSessionLink(target.href)) continue;
     let url: URL;
     try {
       url = new URL(target.href);

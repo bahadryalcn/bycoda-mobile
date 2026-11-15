@@ -7,7 +7,7 @@ import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import { useIsFocused } from "expo-router/react-navigation";
 import type { GitBlameLine, GitChangedFile, GitFileDiff, GitHistory, GitHistoryCommit } from "../../../../src/platform/tauri/fs";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
-import { Badge, Body, Button, CodeText, IconButton, NavigationRow, QueryState, ScreenList, SearchField, SegmentedControl } from "@/ui/primitives";
+import { Badge, Body, Button, CodeText, Disclosure, IconButton, NavigationRow, QueryState, Row, ScreenList, SearchField, SegmentedControl } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { gitFilePresentation } from "./git-file-presentation";
@@ -36,12 +36,17 @@ export function GitHistoryPanel({ scope, onClose }: { scope: GitScope; onClose: 
   const focused = useIsFocused();
   useBackHandler(focused, back);
   const header = <View style={{ gap: space.sm }}>
+    <Row>
     <IconButton label={copy("Geri", "Back")} onPress={back}><ArrowLeft size={20} color={colors.muted} /></IconButton>
-    <Body mono>{scope.root}</Body>
+    <Body style={{ flex: 1, minWidth: 0, fontWeight: "600" }}>{copy("Commit geçmişi", "Commit history")}</Body>
+    </Row>
     {view.kind !== "history" ? <>
       <Body>{view.commit.subject}</Body>
-      <Body mono muted>{view.commit.sha}</Body>
     </> : null}
+    <Disclosure label={copy("Ayrıntılar", "Details")}>
+      <Body mono selectable>{scope.root}</Body>
+      {view.kind !== "history" ? <Body mono muted selectable>{view.commit.sha}</Body> : null}
+    </Disclosure>
   </View>;
   if (view.kind === "history") return <CommitList scope={scope} header={header} onSelect={(commit) => setView({ kind: "commit", commit })} />;
   if (view.kind === "commit") return <CommitFiles scope={scope} commit={view.commit} header={header} onSelect={(path) => setView({ kind: "file", commit: view.commit, path, mode: "diff" })} />;
@@ -70,7 +75,7 @@ function CommitList({ scope, header, onSelect, path }: ListProps & { path?: stri
   const filtered = commits.filter((commit) => matchesSearch(`${commit.subject} ${commit.author} ${commit.sha}`, search, locale));
   return <ScreenList data={filtered} keyExtractor={(commit) => commit.sha} query={query}
     header={<View style={{ gap: space.sm }}>{header}
-      <Body>{path ? copy("Dosya geçmişi · mevcut dal", "File history · current branch") : copy("Commit geçmişi", "Commit history")}</Body>
+      {path ? <Body>{copy("Dosya geçmişi · mevcut dal", "File history · current branch")}</Body> : null}
       <SearchField ref={searchRef} label={copy("Yüklenen commitlerde ara", "Search loaded commits")} value={search} maxLength={200} onChangeText={setSearch} />
       <QueryState query={commits.length ? query : { ...query, data: undefined }} empty={!filtered.length}
         emptyTitle={search.trim() ? copy("Aramana uyan commit yok.", "No commits match your search.") : copy("Commit bulunamadı", "No commits found")}
@@ -101,14 +106,17 @@ function CommitFiles({ scope, commit, header, onSelect }: { scope: GitScope; com
 
 function CommitFileRow({ file, onSelect }: { file: GitChangedFile; onSelect: () => void }) {
   const copy = useCopy();
+  const numbers = new Intl.NumberFormat(useLocale());
   const status = gitFilePresentation(file.status);
   const label = status.kind === "added" ? copy("Eklendi", "Added") : status.kind === "deleted" ? copy("Silindi", "Deleted")
     : status.kind === "renamed" ? copy("Yeniden adlandırıldı", "Renamed") : copy("Değiştirildi", "Modified");
   const path = file.relative.replaceAll("\\", "/");
   const cut = path.lastIndexOf("/");
   return <NavigationRow label={path.slice(cut + 1)} labelLines={2}
-    detail={`${cut > 0 ? `${path.slice(0, cut)} · ` : ""}+${file.additions} −${file.deletions}`} detailEllipsizeMode="middle"
-    trailing={<Badge label={label} tone={status.tone} />} onPress={onSelect} />;
+    detail={cut > 0 ? path.slice(0, cut) : undefined} detailEllipsizeMode="middle"
+    accessibilityLabel={`${file.relative}. ${label}. +${numbers.format(file.additions)} −${numbers.format(file.deletions)}`}
+    supporting={<Row><Badge label={label} tone={status.tone} /><Body muted>{`+${numbers.format(file.additions)} −${numbers.format(file.deletions)}`}</Body></Row>}
+    onPress={onSelect} />;
 }
 
 function HistoricalFile({ scope, commit, path, mode, header, onSelect }: ListProps & { commit: GitHistoryCommit; path: string; mode: "diff" | "blame" | "fileHistory" }) {

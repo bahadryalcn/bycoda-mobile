@@ -1,0 +1,11 @@
+<resources>
+  <string name="bycoda_voice_channel">Bycoda ses</string>
+  <string name="bycoda_voice_title">Bycoda asistanı</string>
+  <string name="bycoda_voice_muted">Mikrofon kapalı</string>
+  <string name="bycoda_voice_listening">Dinleniyor</string>
+  <string name="bycoda_voice_speaking">Konuşuyor</string>
+  <string name="bycoda_voice_idle">Sesli görüşme açık</string>
+  <string name="bycoda_voice_mute">Mikrofonu kapat</string>
+  <string name="bycoda_voice_unmute">Mikrofonu aç</string>
+  <string name="bycoda_voice_stop">Sesi durdur</string>
+</resources>

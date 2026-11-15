@@ -50,6 +50,7 @@ export function MobilePty({
     busy,
     pendingAction,
     controlsDisabled,
+    closePending,
     paused,
     gap,
     lost,
@@ -129,11 +130,11 @@ export function MobilePty({
               busy={busy}
               actions={[
                 { key: "new", label: copy("Yeni etkileşimli terminal", "New interactive terminal"), icon: <Plus size={18} color={colors.muted} />,
-                  disabled: controlsDisabled || !!attempt, onPress: create },
+                  disabled: controlsDisabled || closePending || !!attempt, onPress: create },
                 terminalOpen && { key: "interrupt", label: "Ctrl-C", disabled: !canInterrupt || busy, onPress: interrupt },
-                terminalOpen && { key: "list", label: copy("Terminaller", "Terminals"), onPress: session.detach },
-                terminalOpen && { key: "close", label: copy("Terminali kapat", "Close terminal"), destructive: true,
-                  icon: <Trash2 size={18} color={colors.danger} />, disabled: controlsDisabled, onPress: closeTerminal },
+                terminalOpen && { key: "list", label: copy("Terminaller", "Terminals"), disabled: closePending || busy, onPress: session.detach },
+                terminalOpen && { key: "close", label: closePending ? copy("Durumu kontrol et", "Check status") : copy("Terminali kapat", "Close terminal"), destructive: !closePending,
+                  icon: closePending ? undefined : <Trash2 size={18} color={colors.danger} />, disabled: controlsDisabled, onPress: closeTerminal },
               ]}
             />
           </View>
@@ -155,7 +156,7 @@ export function MobilePty({
             paused={paused}
             busyResume={busy && pendingAction === "resume"}
             canType={canInterrupt}
-            disabled={controlsDisabled}
+            disabled={controlsDisabled || closePending}
             onResume={() => attach(lease.terminal, "resume")}
             onAttachOutput={() => attachTerminalOutput(scope, session.recentOutput)}
             onKey={sendKey}

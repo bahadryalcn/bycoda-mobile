@@ -1,4 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
+import { router } from "expo-router";
 import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
 import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import Square from "lucide-react-native/icons/square";
@@ -8,12 +9,7 @@ import { Body, ErrorText } from "./primitives";
 import { metrics, opacity, space } from "./tokens";
 import { useCopy } from "./copy";
 import { markdownTarget } from "./message-inline";
-import {
-  parseMessage,
-  messageNodeText,
-  MESSAGE_RENDER_LIMIT,
-  type MessageNode,
-} from "./message-model";
+import { parseMessage, MESSAGE_RENDER_LIMIT, type MessageNode } from "./message-model";
 import { MessageReader } from "./message-reader";
 import { MessageCode } from "./message-code";
 import { MessageImage } from "./message-image";
@@ -23,6 +19,8 @@ import type { ChatTextSize } from "@/state/chat-appearance-model";
 import type { MessageContext, OpenDocument } from "./media-policy";
 import { scopedMessageReferences } from "./message-citations";
 import { linkOnlyItem } from "./message-link-item";
+import { messageSessionLink, messageSessionRoute } from "./message-session-link";
+import { taskListItem } from "./message-task";
 
 /** Width reserved for a list marker ("•", "12.", task box) so item text aligns. */
 const LIST_MARKER_WIDTH = space.xxl;
@@ -91,6 +89,18 @@ export const MessageContent = memo(function MessageContent({
         return compactMedia ? null : <Text key={index}>{node.attrs.alt || node.text}</Text>;
       if (node.type === "softbreak" || node.type === "hardbreak") return "\n";
       if (node.type === "link") {
+        const session = messageSessionLink(node.attrs.href || "");
+        if (session)
+          return (
+            <Text
+              key={index}
+              accessibilityRole="link"
+              style={{ color: colors.accent, textDecorationLine: "underline" }}
+              onPress={() => router.push(messageSessionRoute(session))}
+            >
+              {child}
+            </Text>
+          );
         const target = markdownTarget(node.attrs.href || "");
         if (target.kind === "web")
           return (
@@ -230,31 +240,8 @@ export const MessageContent = memo(function MessageContent({
         return (
           <View key={key} style={{ gap: space.xs }}>
             {node.children.map((item, itemIndex) => {
-              const first = item.children
-                .find((entry) => entry.type === "paragraph")
-                ?.children.find((entry) => entry.type === "inline");
-              const task = first && /^\[([ xX])\]\s/.exec(messageNodeText(first));
-              const children = task
-                ? item.children.map((entry) =>
-                    entry.type === "paragraph"
-                      ? {
-                          ...entry,
-                          children: entry.children.map((line) =>
-                            line === first
-                              ? {
-                                  ...line,
-                                  children: line.children.map((part, partIndex) =>
-                                    partIndex === 0
-                                      ? { ...part, text: part.text.replace(/^\[[ xX]\]\s/, "") }
-                                      : part,
-                                  ),
-                                }
-                              : line,
-                          ),
-                        }
-                      : entry,
-                  )
-                : item.children;
+              const task = taskListItem(item);
+              const children = task ? task.children : item.children;
               const linkItem = task ? null : linkOnlyItem(item);
               if (linkItem)
                 return (
@@ -289,7 +276,7 @@ export const MessageContent = memo(function MessageContent({
                       accessible
                       accessibilityRole="text"
                       accessibilityLabel={
-                        task[1] === " "
+                        !task.checked
                           ? copy("Tamamlanmadı", "Incomplete")
                           : copy("Tamamlandı", "Completed")
                       }
@@ -301,7 +288,7 @@ export const MessageContent = memo(function MessageContent({
                         alignItems: "flex-start",
                       }}
                     >
-                      {task[1] === " " ? (
+                      {!task.checked ? (
                         <Square
                           {...decorativeSvgProps}
                           size={18}

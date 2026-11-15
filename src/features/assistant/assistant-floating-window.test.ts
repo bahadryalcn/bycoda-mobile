@@ -1,0 +1,57 @@
+// @vitest-environment happy-dom
+import { act, createElement as h, type PropsWithChildren } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, expect, it, vi } from "vitest";
+const f = vi.hoisted(() => { vi.stubGlobal("require", () => 1); return { saved: null as string | null, read: undefined as Promise<string | null> | undefined, write: vi.fn(async () => {}), width: 390, height: 844, keyboard: 0, pan: {} as Record<string, (event?: any) => void> }; });
+vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: () => f.read ?? Promise.resolve(f.saved), setItem: f.write } }));
+vi.mock("react-native", () => ({ StyleSheet: { hairlineWidth: 1 }, useWindowDimensions: () => ({ width: f.width, height: f.height, fontScale: 3 }), View: ({ children, accessibilityLabel, onAccessibilityAction, style }: PropsWithChildren<any>) => h("div", { "aria-label": accessibilityLabel, "data-style": JSON.stringify(style), onClick: accessibilityLabel ? () => onAccessibilityAction?.({ nativeEvent: { actionName: "moveLeft" } }) : undefined }, children) }));
+vi.mock("expo-image", () => ({ Image: () => null }));
+vi.mock("react-native-gesture-handler", () => ({ GestureDetector: ({ children }: PropsWithChildren) => children, Gesture: { Pan: () => { const handlers: typeof f.pan = {}; f.pan = handlers; const chain: any = { minDistance: () => chain }; for (const name of ["onBegin", "onStart", "onUpdate", "onFinalize"]) chain[name] = (handler: any) => { handlers[name] = handler; return chain; }; return chain; } } }));
+vi.mock("react-native-reanimated", async () => { const { useRef } = await import("react"); return { default: { View: ({ children, style }: PropsWithChildren<any>) => h("article", { "data-position": JSON.stringify(style) }, children) }, useSharedValue: (value: number) => useRef({ value }).current, useAnimatedStyle: (read: () => unknown) => read(), withTiming: (value: number) => value }; });
+vi.mock("react-native-worklets", () => ({ scheduleOnRN: (call: (...args: any[]) => void, ...args: any[]) => call(...args) }));
+vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 0 }) }));
+vi.mock("react-native-keyboard-controller", () => ({ useKeyboardState: (select: any) => select({ isVisible: f.keyboard > 0, height: f.keyboard }) }));
+vi.mock("@/ui/use-reduced-motion", () => ({ useReducedMotionPreference: () => true }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
+vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/primitives", () => ({ Body: ({ children }: PropsWithChildren) => h("p", null, children), IconButton: ({ children, label, onPress }: PropsWithChildren<any>) => h("button", { "aria-label": label, onClick: onPress }, children) }));
+vi.mock("lucide-react-native/icons/grip-horizontal", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/maximize-2", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/picture-in-picture-2", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/mic", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/mic-off", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/x", () => ({ default: () => null }));
+import { AssistantFloatingWindow } from "./assistant-floating-window";
+let root: ReturnType<typeof createRoot>;
+afterEach(async () => { await act(async () => root?.unmount()); f.write.mockClear(); f.saved = null; f.read = undefined; f.width = 390; f.height = 844; f.keyboard = 0; vi.unstubAllGlobals(); });
+it("grip drag and accessible movement persist clamped positions without firing commands", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); const container = document.createElement("div"); root = createRoot(container);
+  const expand = vi.fn(), close = vi.fn(), mute = vi.fn();
+  await act(async () => root.render(h(AssistantFloatingWindow, { title: "Assistant", status: "Listening", active: true, muted: false, onExpand: expand, onClose: close, onMute: mute })));
+  await act(async () => { f.pan.onBegin(); f.pan.onStart(); f.pan.onUpdate({ translationX: -900, translationY: -900 }); f.pan.onFinalize(); });
+  expect(f.write).toHaveBeenLastCalledWith("bycoda.assistantWindow.position.v1", JSON.stringify({ x: 0, y: 0 }));
+  expect(expand).not.toHaveBeenCalled(); expect(close).not.toHaveBeenCalled(); expect(mute).not.toHaveBeenCalled();
+  await act(async () => (container.querySelector('[aria-label="Move assistant window"]') as HTMLElement).click());
+  expect(f.write).toHaveBeenLastCalledWith("bycoda.assistantWindow.position.v1", JSON.stringify({ x: 0, y: 0 }));
+  await act(async () => (container.querySelector('[aria-label="Mute microphone"]') as HTMLElement).click()); expect(mute).toHaveBeenCalledOnce();
+});
+
+it("keeps commands distinct from the grip at narrow large type and exposes PiP only when supplied", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); f.width = 280; f.height = 380; f.keyboard = 240;
+  const container = document.createElement("div"); root = createRoot(container); const pip = vi.fn(), close = vi.fn();
+  await act(async () => root.render(h(AssistantFloatingWindow, { title: "Long translated assistant title", status: "Listening", active: true, muted: true, onExpand: vi.fn(), onClose: close, onMute: vi.fn(), onPip: pip })));
+  const grip = container.querySelector('[aria-label="Move assistant window"]')!;
+  expect(grip.querySelector("button")).toBeNull();
+  for (const button of container.querySelectorAll("button")) expect(JSON.parse(button.parentElement!.getAttribute("data-style")!)).toMatchObject({ width: 48, minHeight: 48 });
+  await act(async () => (container.querySelector('[aria-label="Picture in picture"]') as HTMLElement).click()); expect(pip).toHaveBeenCalledOnce();
+  await act(async () => (container.querySelector('[aria-label="Close assistant"]') as HTMLElement).click()); expect(close).toHaveBeenCalledOnce();
+});
+it("a late saved position cannot overwrite a drag already in progress", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); let restore!: (value: string) => void; f.read = new Promise(resolve => { restore = resolve; });
+  const container = document.createElement("div"); root = createRoot(container);
+  await act(async () => root.render(h(AssistantFloatingWindow, { title: "Assistant", status: "Speaking", active: true, muted: false, onExpand: vi.fn(), onClose: vi.fn() })));
+  await act(async () => { f.pan.onBegin(); f.pan.onStart(); f.pan.onUpdate({ translationX: -900, translationY: -900 }); restore('{"x":1,"y":1}'); });
+  await act(async () => f.pan.onFinalize());
+  expect(f.write).toHaveBeenLastCalledWith("bycoda.assistantWindow.position.v1", '{"x":0,"y":0}');
+  expect(container.querySelector('[aria-label="Picture in picture"]')).toBeNull();
+});

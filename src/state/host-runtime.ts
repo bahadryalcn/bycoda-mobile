@@ -3,6 +3,7 @@ import type {
   HostSocketNative,
   NativeCredentialHandle,
 } from "../../modules/bycoda-host-socket/src/types";
+import { openScopedVoiceConnection, type AssistantVoiceScope } from "./host-voice-runtime";
 import { requireCredentialBinding, selectMobileHostTransport } from "../remote/lan-ws";
 import { requireMobileTlsBootstrap } from "../remote/lan-ws";
 import { registerHostWsRuntimeProvider } from "../remote/ws-runtime-port";
@@ -67,6 +68,12 @@ export class MobileHostRuntimeRegistry {
   private accessEpoch = 0;
   private accessConfigured = false;
   private closed = false;
+  async openVoice(machine: MobileMachine, scope: AssistantVoiceScope, current: () => boolean) {
+    this.assertAccess();
+    const runtime = this.runtimes.get(machine.environmentId);
+    if (!this.native || !runtime || runtime.binding.machineId !== machine.id || runtime.state !== "ready") throw new HostWsError("unavailable");
+    return openScopedVoiceConnection(this.native, { ...runtime.binding, accessEpoch: this.accessEpoch }, scope, current);
+  }
   private invalidation: Promise<void> = Promise.resolve();
   constructor(
     private readonly native: HostSocketNative | null,
@@ -362,6 +369,10 @@ export class MobileHostRuntimeRegistry {
 
 let appRegistry: MobileHostRuntimeRegistry | undefined;
 let appAccessEpoch = Date.now();
+export function openAssistantVoiceRuntime(machine: MobileMachine, scope: AssistantVoiceScope, current: () => boolean) {
+  if (!appRegistry) throw new HostWsError("unavailable");
+  return appRegistry.openVoice(machine, scope, current);
+}
 type Installation = { registry: MobileHostRuntimeRegistry; dispose(): void };
 let installation: Promise<Installation> | undefined;
 let installationRefs = 0;
@@ -402,11 +413,13 @@ async function createMobileHostRuntime(options: {
     { AppState },
     { useSecurity, isAppAccessAllowed, assertAppAccess },
     { useMachines },
+    { useAccountAccess },
   ] = await Promise.all([
     import("../../modules/bycoda-host-socket"),
     import("react-native"),
     import("./security"),
     import("./machines"),
+    import("../features/account/model/account-access"),
   ]);
   if (appRegistry) throw new Error("The mobile Host runtime is already installed.");
   const native = nativeHostSocket();
@@ -622,6 +635,7 @@ async function createMobileHostRuntime(options: {
     backgroundTimer.unref?.();
   };
   const security = useSecurity.subscribe(access);
+  const account = useAccountAccess.subscribe(access);
   const lifecycle = AppState.addEventListener("change", access);
   let machines = new Map(
     useMachines
@@ -661,6 +675,7 @@ async function createMobileHostRuntime(options: {
       removeProvider();
       clearGrace();
       security();
+      account();
       lifecycle.remove();
       machineState();
       bootstrap.clear();

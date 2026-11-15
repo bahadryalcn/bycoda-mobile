@@ -1,6 +1,8 @@
 import { TranscriptSkeleton } from "./transcript-skeleton";
+import { SessionProjectMismatch } from "@/remote/session-project";
+import { SessionProjectRecovery } from "./session-project-recovery";
 import { ProjectDirectoryFeedback } from "./project-directory-feedback";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { router, useFocusEffect } from "expo-router";
 import { setViewingSession } from "../push/push-viewing";
@@ -14,6 +16,7 @@ import { metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { remoteErrorKind } from "@/ui/error-message";
 import { SessionComposer } from "./session-composer";
+import { openSessionSeen } from "./session-done-store";
 import { ComposerTransferProvider } from "./composer-transfer";
 import { SessionKeyboardFrame } from "./session-keyboard-frame";
 import { useSessionSnapshot } from "./session-queries";
@@ -81,12 +84,15 @@ function SessionWorkspace({
   const copy = useCopy();
   const insets = useSafeAreaInsets();
   const scope = useMemo<SessionScope>(() => ({ machineId, sessionId: id }), [machineId, id]);
+  // Opening a session from any route (list, notification, link) marks it seen for list ordering.
+  useEffect(() => openSessionSeen(machineId, id), [machineId, id]);
   const projects = useProjectList();
   const cache = useQueryClient();
   const key = hostKey(machineId, ["session", id]);
   const projectIdentity = useRef<{ projectId: string; session: { id: string } } | undefined>(
     undefined,
   );
+  const cachedSession = cache.getQueryData<HostSession>(key);
   const privacy = sessionPrivacy({
     readable: projects.readable,
     pending: projects.privacyPending,
@@ -95,7 +101,7 @@ function SessionWorkspace({
     routeProjectId,
     // Retain only the proven mapping after cache eviction. Current directory
     // visibility is still required on every read and command.
-    cached: cache.getQueryData<HostSession>(key) ?? projectIdentity.current,
+    cached: cachedSession ?? projectIdentity.current,
   });
   if (privacy.canRead && privacy.projectId)
     projectIdentity.current = { projectId: privacy.projectId, session: { id } };
@@ -112,6 +118,30 @@ function SessionWorkspace({
     canRead,
     restoreBefore,
   });
+  // A previously repaired session may be reopened from an old alias link. Recover
+  // its navigation identity without exposing the mismatched cached transcript.
+  const projectMismatch = useMemo(() => {
+    if (
+      snapshot.error instanceof SessionProjectMismatch &&
+      snapshot.error.expectedProjectId === routeProjectId
+    )
+      return snapshot.error;
+    if (
+      privacy.reason === "mismatch" &&
+      routeProjectId &&
+      cachedSession?.session.id === id &&
+      cachedSession.projectId !== routeProjectId
+    )
+      return new SessionProjectMismatch(id, routeProjectId, cachedSession.projectId);
+    return undefined;
+  }, [
+    snapshot.error,
+    privacy.reason,
+    routeProjectId,
+    cachedSession?.session.id,
+    cachedSession?.projectId,
+    id,
+  ]);
   const visible =
     privacy.visible &&
     !!snapshot.data &&
@@ -164,10 +194,31 @@ function SessionWorkspace({
   const refresh = () => {
     void snapshot.refetch();
   };
+  // The retry notice reports a failed re-read; a background refetch would only set query.error.
+  const refreshNow = async () => {
+    const result = await snapshot.refetch();
+    if (result.error) throw result.error;
+  };
   const receiptHandled = () => {
     command.reset();
     refresh();
   };
+
+  if (
+    projectMismatch &&
+    projects.isProjectVisible(projectMismatch.expectedProjectId) &&
+    projects.isProjectVisible(projectMismatch.actualProjectId)
+  )
+    return (
+      <Screen>
+        <SessionProjectRecovery
+          error={projectMismatch}
+          machineId={machineId}
+          visible={projects.isProjectVisible}
+          targetTurnId={targetTurnId}
+        />
+      </Screen>
+    );
 
   return (
     <ComposerTransferProvider scope={scope}>
@@ -300,6 +351,7 @@ function SessionWorkspace({
                   command={command}
                   onCommand={dispatch}
                   onReceiptHandled={receiptHandled}
+                  onRefresh={refreshNow}
                 />
               </View>
             )}

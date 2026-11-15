@@ -1,7 +1,8 @@
 import type { HostProjectDirectory } from "@/domain/types";
 import type { ActiveSession } from "./activity-model";
-import { shelfOf, type SessionShelfId, type SessionShelfRow } from "./session-collection";
+import { sessionActivityAt, shelfOf, type SessionShelfId, type SessionShelfRow } from "./session-collection";
 import { sessionDirectoryRows, type SessionDirectoryRow } from "./session-directory";
+import { orderSessionRuns, type SessionOrderSignals } from "./session-row-state";
 
 type ShelfEntry = { project: HostProjectDirectory["projects"][number]; session: ActiveSession["session"] };
 type Header = Extract<SessionShelfRow, { kind: "header" }>;
@@ -19,7 +20,8 @@ const organized: ReadonlySet<SessionShelfId> = new Set(["recent", "archived"]);
 
 /**
  * Cross-project shelves with the project screen's folder layout inside Recent and Archived.
- * Folder blocks come first (grouped per project), loose sessions keep the directory order.
+ * Folder blocks come first (grouped per project); each shelf, folder and loose list leads with
+ * the desktop status rank, ties keeping the directory order.
  */
 export function globalSessionRows(
   directory: readonly ShelfEntry[],
@@ -28,6 +30,7 @@ export function globalSessionRows(
   searching = false,
   archived = false,
   settledIds: ReadonlySet<string> = new Set(),
+  signals: SessionOrderSignals = { now: Date.now() },
 ): GlobalSessionRow[] {
   const shelves = new Map<SessionShelfId, ShelfEntry[]>();
   for (const entry of directory) {
@@ -40,7 +43,8 @@ export function globalSessionRows(
     const expanded = searching || !(shelfCollapse[shelf] ?? shelf === "settled");
     const header: Header = { kind: "header", key: `shelf:${shelf}`, shelf, count: members.length, expanded };
     if (!expanded) return [header];
-    return [header, ...(organized.has(shelf) ? organize(members, folderCollapse, searching) : flat(members))];
+    const rows = organized.has(shelf) ? organize(members, folderCollapse, searching) : flat(members);
+    return [header, ...orderSessionRuns(rows, signals)];
   });
 }
 
@@ -48,6 +52,22 @@ const flat = (members: readonly ShelfEntry[]): GlobalSessionRow[] =>
   members.map(({ project, session }) => ({
     kind: "session", key: `${project.id}:${session.id}`, project, session, depth: 0,
   }));
+
+/** Desktop Last sessions keeps a seven-day activity window. */
+export const GLOBAL_RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Global Sessions follows desktop Last sessions: newest turn activity first, across projects.
+ * Pass `now` to keep only the desktop window; archive and search views omit it to reach older sessions.
+ */
+export function recentGlobalSessionRows(directory: readonly ShelfEntry[], now?: number): GlobalSessionRow[] {
+  const cutoff = now === undefined ? -Infinity : now - GLOBAL_RECENT_WINDOW_MS;
+  return flat(
+    directory
+      .filter(({ session }) => sessionActivityAt(session) >= cutoff)
+      .sort((a, b) => sessionActivityAt(b.session) - sessionActivityAt(a.session)),
+  );
+}
 
 function organize(members: readonly ShelfEntry[], folderCollapse: FolderCollapse, searching: boolean): GlobalSessionRow[] {
   const byProject = new Map<string, ShelfEntry[]>();

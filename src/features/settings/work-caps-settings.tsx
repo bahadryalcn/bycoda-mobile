@@ -4,6 +4,7 @@ import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { Body, Button, Disclosure, FormActions, Notice, NumberField, QueryState, SelectField, Stack } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
+import { providerName } from "../workspace/provider-choices";
 import type { RemoteProvider } from "@/domain/types";
 import { ModelRoutingGetResultSchema, ModelRoutingSaveResultSchema, type ModelRoutingState } from "../../../../src/shared/model/host-contracts/model-routing";
 import { workCapFields as fields, parseWorkCapFields as parsedFields, type WorkCapFields as Fields } from "./work-caps-model";
@@ -70,7 +71,7 @@ function WorkCapsEditor({ initial, current, providers, onReload }: { initial: Mo
   return <Stack>
     <Body muted>{copy("Work için takvim sınırları. Boş veya 0 = sınırsız. Sağlayıcı ve toplam sınırları birlikte uygulanır.", "Calendar caps for Work. Empty or 0 = unlimited. Provider and total caps both apply.")}</Body>
     <SelectField label={copy("Kapsam", "Scope")} value={scope} disabled={busy || held}
-      options={[{ value: "total", label: copy("Toplam", "Total") }, ...[...new Set([...providers, ...Object.keys(caps?.providers ?? {})])].map(value => ({ value, label: value }))]} onChange={setScope} />
+      options={[{ value: "total", label: copy("Toplam", "Total") }, ...[...new Set([...providers, ...Object.keys(caps?.providers ?? {})])].map(value => ({ value, label: providerName(value) }))]} onChange={setScope} />
     {(Object.keys(labels) as (keyof Fields)[]).map(key => <NumberField key={key} label={labels[key]} value={value[key]} decimal={key.endsWith("Cost")} editable={!busy && !held}
       onChangeText={text => setEdits(previous => ({ ...previous, [scope]: { ...value, [key]: text } }))} />)}
     {!valid ? <Notice tone="warning" message={copy("Tokenlar güvenli tam sayı, maliyetler sıfır veya pozitif sayı olmalıdır.", "Tokens must be safe integers; costs must be zero or positive numbers.")} /> : null}

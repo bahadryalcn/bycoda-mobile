@@ -41,7 +41,6 @@ it("starts on Send and uses the preferred busy mode while a run is active", asyn
   expect(latest.mode).toBe("queue");
   await render({ session: session("running"), busyPreferred: "steer", queueSupported: false });
   expect(latest.mode).toBe("steer");
-  expect(latest.showModeChip).toBe(true);
 });
 
 it("follows the busy preference when a run starts, and returns to Send when it ends", async () => {
@@ -53,18 +52,16 @@ it("follows the busy preference when a run starts, and returns to Send when it e
   expect(latest.mode).toBe("send");
 });
 
-it("drops a stale Steer choice when the run finishes", async () => {
-  await render({ session: session("idle") });
+it("has no composer override for the Settings preference", async () => {
   await render({ session: session("running") });
-  await act(async () => latest.choose("steer"));
-  expect(latest.mode).toBe("steer");
-  await render({ session: session("idle") });
-  expect(latest.mode).toBe("send");
+  expect(latest).not.toHaveProperty("choose");
+  expect(latest).not.toHaveProperty("showModeChip");
+  expect(latest).not.toHaveProperty("options");
 });
 
-it("keeps an explicitly chosen Queue after the run finishes", async () => {
-  await render({ session: session("running") });
-  await act(async () => latest.choose("queue"));
-  await render({ session: session("idle") });
+it("returns to Send after a queued busy preference, without a sticky local mode", async () => {
+  await render({ session: session("running"), busyPreferred: "queue" });
   expect(latest.mode).toBe("queue");
+  await render({ session: session("idle") });
+  expect(latest.mode).toBe("send");
 });

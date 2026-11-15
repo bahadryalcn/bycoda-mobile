@@ -1,6 +1,7 @@
 package expo.modules.bycodahostsocket
 
 import android.util.Base64
+import expo.modules.bycodavoice.VoiceCompanionRuntime
 import org.json.JSONObject
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
@@ -85,7 +86,8 @@ internal object HostTls {
 }
 
 class BycodaHostSocketModule : Module() {
-  private data class Credential(val binding: HostBinding, val digest: ByteArray)
+  private data class VoiceScope(val sessionId: String, val threadId: String, val projectId: String?)
+  private data class Credential(val binding: HostBinding, val digest: ByteArray, val voice: VoiceScope? = null)
   private class Connection(val id: String, val generation: Double, val credential: Credential, val client: OkHttpClient, val opening: CompletableDeferred<Unit>) {
     var socket: WebSocket? = null
     var opened = false
@@ -93,6 +95,7 @@ class BycodaHostSocketModule : Module() {
     var sequence = 0L
     val deliveries = linkedMapOf<Long, Int>()
     var deliveryBytes = 0
+    val voiceRequests = mutableSetOf<String>()
   }
   private val lock = Any()
   private val credentials = linkedMapOf<String, Credential>()
@@ -118,7 +121,8 @@ class BycodaHostSocketModule : Module() {
     return value
   }
   private fun digest(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
-  private fun current(connection: Connection) = foreground && accessAllowed && connections[connection.id] === connection
+  private fun voiceCurrent(voice: VoiceScope?) = voice != null && VoiceCompanionRuntime.allowsSession(voice.sessionId)
+  private fun current(connection: Connection) = connections[connection.id] === connection && (if (connection.credential.voice != null) voiceCurrent(connection.credential.voice) else foreground && accessAllowed)
   private fun event(connection: Connection, type: String, fields: Map<String, Any> = emptyMap()) {
     sendEvent("onSocketEvent", mapOf("connectionId" to connection.id, "generation" to connection.generation, "environmentId" to connection.credential.binding.environmentId, "type" to type) + fields)
   }
@@ -131,62 +135,42 @@ class BycodaHostSocketModule : Module() {
       connection.client.connectionPool.evictAll()
       connection.client.dispatcher.executorService.shutdown()
       connection.deliveries.clear(); connection.deliveryBytes = 0
+      connection.voiceRequests.clear()
       if (!connection.settled) { connection.settled = true; connection.opening.completeExceptionally(error(code)) }
       event(connection, if (failed) "error" else "closed", mapOf("code" to code))
     }
   }
-  private fun invalidate(machineId: String? = null) {
+  private fun invalidate(machineId: String? = null, preserveVoice: Boolean = false) {
     synchronized(lock) {
       lifecycleEpoch++
-      credentials.entries.removeAll { machineId == null || it.value.binding.machineId == machineId }
-      connections.values.toList().filter { machineId == null || it.credential.binding.machineId == machineId }.forEach { finish(it, "credentials_invalidated", true) }
+      credentials.entries.removeAll { (machineId == null || it.value.binding.machineId == machineId) && !(preserveVoice && voiceCurrent(it.value.voice)) }
+      connections.values.toList().filter { (machineId == null || it.credential.binding.machineId == machineId) && !(preserveVoice && voiceCurrent(it.credential.voice)) }.forEach { finish(it, "credentials_invalidated", true) }
       bulkCalls.entries.toList().filter { machineId == null || it.value == machineId }.forEach { it.key.cancel() }
     }
   }
-  private suspend fun acquire(binding: HostBinding): Map<String, Any> {
+  private suspend fun acquire(binding: HostBinding, voice: VoiceScope? = null): Map<String, Any> {
     validate(binding)
+    if (voice != null && !voiceCurrent(voice)) throw error("voice_unavailable")
     val epoch = synchronized(lock) { if (!foreground || !accessAllowed || binding.accessEpoch != accessEpoch || credentials.size >= 64) throw error("unavailable"); lifecycleEpoch }
     val value = secret(binding)
     return synchronized(lock) {
-      if (!foreground || !accessAllowed || binding.accessEpoch != accessEpoch || lifecycleEpoch != epoch || credentials.size >= 64) throw error("access_changed")
+      if (!foreground || !accessAllowed || binding.accessEpoch != accessEpoch || lifecycleEpoch != epoch || credentials.size >= 64 || (voice != null && !voiceCurrent(voice))) throw error("access_changed")
       val handle = UUID.randomUUID().toString()
-      credentials[handle] = Credential(binding, digest(value))
+      credentials[handle] = Credential(binding, digest(value), voice)
       mapOf("handle" to handle, "machineId" to binding.machineId, "environmentId" to binding.environmentId, "credentialGeneration" to binding.credentialGeneration, "accessEpoch" to binding.accessEpoch)
     }
   }
-  override fun definition() = ModuleDefinition {
-    Name("BycodaHostSocket")
-    Events("onSocketEvent")
-    AsyncFunction("setAccess") { active: Boolean, epoch: Double ->
-      synchronized(lock) {
-        require(HostTls.safe(epoch) && epoch >= accessEpoch)
-        if (active && !accessAllowed) require(epoch > accessEpoch)
-        if (!active || epoch != accessEpoch) invalidate()
-        accessEpoch = epoch; accessAllowed = active && foreground
-      }
-    }
-    AsyncFunction("acquireCredential") Coroutine { binding: HostBinding -> acquire(binding) }
-    AsyncFunction("storeCredential") Coroutine { binding: HostBinding, token: String ->
-      synchronized(lock) { if (!foreground || !accessAllowed || binding.accessEpoch != accessEpoch) throw error("access_changed") }
-      validate(binding); require(Regex("[A-Za-z0-9_-]{43}").matches(token)); invalidate(binding.machineId)
-      secureStore().bycodaHostWriteNative("bycoda.remote.${binding.machineId}", token)
-      acquire(binding)
-    }
-    AsyncFunction("deleteCredential") { machineId: String ->
-      synchronized(lock) { if (!foreground || !accessAllowed) throw error("access_changed") }
-      require(Regex("[A-Za-z0-9-]{1,80}").matches(machineId)); invalidate(machineId)
-      secureStore().bycodaHostDeleteNative("bycoda.remote.$machineId")
-    }
-    AsyncFunction("invalidateCredentials") { machineId: String? -> invalidate(machineId) }
-    AsyncFunction("open") Coroutine { handle: String, id: String, generation: Double ->
+  private suspend fun openPeer(handle: String, id: String, generation: Double, sessionId: String? = null) {
       require(id.length in 1..200 && HostTls.safe(generation))
       val credential = synchronized(lock) { credentials[handle] ?: throw error("credential_handle_expired") }
+      if (credential.voice?.sessionId != sessionId) throw error("credential_scope")
+      if (sessionId != null && !voiceCurrent(credential.voice)) throw error("voice_unavailable")
       val value = secret(credential.binding)
       if (!MessageDigest.isEqual(credential.digest, digest(value))) { invalidate(credential.binding.machineId); throw error("credential_rotated") }
       val client = HostTls.client(credential.binding)
       val connection = Connection(id, generation, credential, client, CompletableDeferred())
       synchronized(lock) {
-        if (!foreground || !accessAllowed || credential.binding.accessEpoch != accessEpoch || credentials[handle] !== credential || socketJobs.size >= 4 || socketJobs.any { it.id == id }) throw error("connection_unavailable")
+        if ((if (credential.voice != null) !voiceCurrent(credential.voice) else !foreground || !accessAllowed || credential.binding.accessEpoch != accessEpoch) || credentials[handle] !== credential || socketJobs.size >= 4 || socketJobs.any { it.id == id }) throw error("connection_unavailable")
         connections[id] = connection
         socketJobs.add(connection)
       }
@@ -203,6 +187,10 @@ class BycodaHostSocketModule : Module() {
           val bytes = text.toByteArray(Charsets.UTF_8).size
           synchronized(lock) {
             if (!current(connection)) return
+            if (connection.credential.voice != null) {
+              val frame = runCatching { JSONObject(text) }.getOrNull() ?: return
+              if (frame.has("method") || !connection.voiceRequests.remove(frame.optString("id"))) return
+            }
             if (bytes > 1048576 || connection.deliveries.size >= 512 || connection.deliveryBytes + bytes > 16777216) { finish(connection, "overload", true); return }
             val sequence = ++connection.sequence
             connection.deliveries[sequence] = bytes; connection.deliveryBytes += bytes
@@ -219,12 +207,54 @@ class BycodaHostSocketModule : Module() {
       })
       connection.opening.await()
     }
+  private val voiceListener: (Map<String, Any?>) -> Unit = { synchronized(lock) {
+    credentials.entries.removeAll { it.value.voice != null && !voiceCurrent(it.value.voice) }
+    connections.values.toList().filter { it.credential.voice != null && !voiceCurrent(it.credential.voice) }.forEach { finish(it, "voice_revoked", true) }
+  } }
+  override fun definition() = ModuleDefinition {
+    Name("BycodaHostSocket")
+    Events("onSocketEvent")
+    OnCreate { VoiceCompanionRuntime.add(voiceListener) }
+    AsyncFunction("setAccess") { active: Boolean, epoch: Double ->
+      synchronized(lock) {
+        require(HostTls.safe(epoch) && epoch >= accessEpoch)
+        if (active && !accessAllowed) require(epoch > accessEpoch)
+        if (!active || epoch != accessEpoch) invalidate(preserveVoice = true)
+        accessEpoch = epoch; accessAllowed = active && foreground
+      }
+    }
+    AsyncFunction("acquireCredential") Coroutine { binding: HostBinding -> acquire(binding) }
+    AsyncFunction("acquireVoiceCredential") Coroutine { binding: HostBinding, sessionId: String, threadId: String, projectId: String? ->
+      require(threadId.length in 1..200 && (projectId == null || projectId.length in 1..200))
+      acquire(binding, VoiceScope(sessionId, threadId, projectId))
+    }
+    AsyncFunction("storeCredential") Coroutine { binding: HostBinding, token: String ->
+      synchronized(lock) { if (!foreground || !accessAllowed || binding.accessEpoch != accessEpoch) throw error("access_changed") }
+      validate(binding); require(Regex("[A-Za-z0-9_-]{43}").matches(token)); invalidate(binding.machineId)
+      secureStore().bycodaHostWriteNative("bycoda.remote.${binding.machineId}", token)
+      acquire(binding)
+    }
+    AsyncFunction("deleteCredential") { machineId: String ->
+      synchronized(lock) { if (!foreground || !accessAllowed) throw error("access_changed") }
+      require(Regex("[A-Za-z0-9-]{1,80}").matches(machineId)); invalidate(machineId)
+      secureStore().bycodaHostDeleteNative("bycoda.remote.$machineId")
+    }
+    AsyncFunction("invalidateCredentials") { machineId: String? -> invalidate(machineId) }
+    AsyncFunction("open") Coroutine { handle: String, id: String, generation: Double -> openPeer(handle, id, generation) }
+    AsyncFunction("openVoice") Coroutine { handle: String, id: String, generation: Double, sessionId: String -> openPeer(handle, id, generation, sessionId) }
     AsyncFunction("send") { id: String, generation: Double, text: String ->
       synchronized(lock) {
         val connection = connections[id] ?: throw error("closed")
         if (!current(connection) || connection.generation != generation || !connection.opened) throw error("stale_connection")
         if (text.toByteArray(Charsets.UTF_8).size > 1048576 || (connection.socket?.queueSize() ?: 0) + text.toByteArray(Charsets.UTF_8).size > 8388608) throw error("overload")
-        val method = runCatching { JSONObject(text).optString("method") }.getOrDefault("")
+        val frame = runCatching { JSONObject(text) }.getOrNull() ?: throw error("invalid_frame")
+        val method = frame.optString("method")
+        connection.credential.voice?.let { scope ->
+          val params = frame.optJSONObject("params")
+          if (!VoiceRpcPolicy.allowed(method, params?.optString("op"), params?.optString("threadId"), params?.optString("projectId"), scope.threadId, scope.projectId, params?.has("threadId") == true, params != null && params.length() == 0)) throw error("voice_scope_denied")
+          val requestId = frame.optString("id")
+          if (requestId.length !in 1..200 || connection.voiceRequests.size >= 64 || !connection.voiceRequests.add(requestId)) throw error("voice_request_invalid")
+        }
         if (method.startsWith("native.") || method.startsWith("devServers.bridge")) throw error("native_profile_required")
         if (connection.socket?.send(text) != true) throw error("send_failed")
       }
@@ -239,6 +269,7 @@ class BycodaHostSocketModule : Module() {
     AsyncFunction("close") { id: String, generation: Double -> synchronized(lock) { connections[id]?.takeIf { it.generation == generation }?.let { finish(it, "detached", false) } } }
     AsyncFunction("readBulk") Coroutine { handle: String, descriptor: BulkDescriptor, offset: Double ->
       val credential = synchronized(lock) { credentials[handle] ?: throw error("credential_handle_expired") }
+      if (credential.voice != null) throw error("voice_scope_denied")
       require(descriptor.kind == "bulk" && descriptor.environmentId == credential.binding.environmentId && Regex("[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}").matches(descriptor.transferId) && !descriptor.transferId.contains('/'))
       require(HostTls.safe(descriptor.totalBytes) && descriptor.totalBytes <= 33554432 && HostTls.safe(descriptor.chunkBytes) && descriptor.chunkBytes in 1.0..65536.0 && HostTls.safe(descriptor.expiresAt) && descriptor.expiresAt > System.currentTimeMillis())
       require(Regex("[a-f0-9]{64}").matches(descriptor.sha256) && HostTls.safe(offset) && offset < descriptor.totalBytes)
@@ -268,8 +299,8 @@ class BycodaHostSocketModule : Module() {
         client.dispatcher.cancelAll(); client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown()
       }
     }
-    OnActivityEntersBackground { synchronized(lock) { foreground = false; accessAllowed = false; invalidate() } }
+    OnActivityEntersBackground { synchronized(lock) { foreground = false; accessAllowed = false; invalidate(preserveVoice = true) } }
     OnActivityEntersForeground { foreground = true }
-    OnDestroy { synchronized(lock) { foreground = false; accessAllowed = false; invalidate() } }
+    OnDestroy { VoiceCompanionRuntime.remove(voiceListener); synchronized(lock) { foreground = false; accessAllowed = false; invalidate() } }
   }
 }

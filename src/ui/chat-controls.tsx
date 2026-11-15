@@ -10,6 +10,7 @@ import Animated from "react-native-reanimated";
 import { BusyIndicator as Spinner } from "./busy-indicator";
 import { usePressMotion } from "./motion";
 import { useReducedMotionPreference } from "./use-reduced-motion";
+import { messageSummary } from "./message-summary";
 
 /** Quiet chat chrome: a small label/icon inside a full, non-overlapping touch target. */
 export function ChatToolbarAction({
@@ -214,7 +215,7 @@ export function ChatCircleAction({
   );
 }
 
-/** A quiet, borderless row; essential file identity and status can wrap at large text sizes. */
+/** One-line timeline summary; the full, plain-text description stays in its accessible name. */
 export function ChatSummary({
   label,
   detail,
@@ -233,10 +234,11 @@ export function ChatSummary({
   disabled?: boolean;
 }) {
   const { colors } = useMobileTheme();
+  const summary = detail ? messageSummary(detail) : undefined;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={[label, detail, status].filter(Boolean).join(". ")}
+      accessibilityLabel={[label, summary, status].filter(Boolean).join(". ")}
       accessibilityState={{ disabled }}
       aria-disabled={disabled}
       disabled={disabled}
@@ -256,16 +258,14 @@ export function ChatSummary({
       <View accessible={false} style={{ width: 20, alignItems: "center" }}>
         {icon}
       </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Body style={{ fontSize: fontSize.small, lineHeight: 18, fontWeight: "500" }}>{label}</Body>
-        {detail ? (
-          <Body muted numberOfLines={1} style={{ fontSize: fontSize.caption, lineHeight: 16 }}>
-            {detail}
-          </Body>
-        ) : null}
-      </View>
+      <Body numberOfLines={1} style={{ flexShrink: 1, fontSize: fontSize.small, lineHeight: lineHeight.small, fontWeight: "500" }}>{label}</Body>
+      {summary ? (
+        <Body muted numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: fontSize.caption, lineHeight: lineHeight.caption }}>
+          {summary}
+        </Body>
+      ) : <View style={{ flex: 1 }} />}
       {status ? (
-        <Body style={{ fontSize: fontSize.caption, lineHeight: 16, color: color ?? colors.muted, maxWidth: "35%" }}>
+        <Body numberOfLines={1} style={{ flexShrink: 1, fontSize: fontSize.caption, lineHeight: lineHeight.caption, color: color ?? colors.muted, maxWidth: "35%" }}>
           {status}
         </Body>
       ) : null}

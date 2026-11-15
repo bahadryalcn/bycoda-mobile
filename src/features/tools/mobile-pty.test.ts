@@ -11,6 +11,7 @@ const f = vi.hoisted(() => ({
   private: false,
   security: { status: "unlocked", appState: "active", windowFocused: true },
   result: "applied",
+  closeConfirmed: false,
   packet:null as null|((packet:Record<string,unknown>)=>void),
 }));
 vi.mock("react-native", () => ({
@@ -100,6 +101,7 @@ vi.mock("@/state/queries", () => ({
           expiresAt: Date.now() + 30000,
         };
       }
+      if (method === "terminals.pty.desktop.close" || method === "terminals.pty.desktop.status") return f.closeConfirmed ? { closed: true } : { state: "unknown" };
       return { state: "unknown" };
     },
   }),
@@ -144,7 +146,7 @@ vi.mock("@/ui/primitives", () => {
     Loading: ({ label }: { label: string }) => createElement("p", null, label),
     NavigationRow: button,
     StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: { message: string }) => createElement("p", null, message),
-    ErrorText: () => null,
+    ErrorText: ({ error, message }: { error: unknown; message?: string }) => error ? createElement("p", null, message ?? String(error)) : null,
     ScreenList: ({
       data,
       header,
@@ -191,6 +193,27 @@ afterEach(async () => {
   f.private = false;
   f.security = { status: "unlocked", appState: "active", windowFocused: true };
   f.result = "applied";
+  f.closeConfirmed = false;
+});
+
+it("retains its terminal after unknown close and checks the original receipt without replaying close", async () => {
+  await mount();
+  await click("New interactive terminal");
+  expect(container.querySelector("[data-viewport]")).not.toBeNull();
+  await click("Close terminal");
+  expect(container.querySelector("[data-viewport]")).not.toBeNull();
+  expect(container.textContent).toContain("Terminal closure is not confirmed");
+  const close = f.calls.find(call => call.method === "terminals.pty.desktop.close")!;
+  expect(close).toBeDefined();
+  await click("Check status");
+  expect(container.querySelector("[data-viewport]")).not.toBeNull();
+  f.closeConfirmed = true;
+  await click("Check status");
+  expect(f.calls.filter(call => call.method === "terminals.pty.desktop.close")).toHaveLength(1);
+  const status = f.calls.find(call => call.method === "terminals.pty.desktop.status")!;
+  expect(status.params.requestId).toBe(close.params.requestId);
+  expect(f.calls.filter(call => call.method === "terminals.pty.desktop.status").every(call => call.params.requestId === close.params.requestId)).toBe(true);
+  expect(container.querySelector("[data-viewport]")).toBeNull();
 });
 it("opening does not create or send input; explicit create claims a durable request first", async () => {
   await mount();

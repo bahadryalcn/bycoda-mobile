@@ -8,6 +8,7 @@ vi.mock("react-native",()=>({View:({children}:PropsWithChildren)=>createElement(
 vi.mock("react-native-reanimated",()=>({default:{View:({children}:PropsWithChildren)=>createElement("div",null,children)}}));
 vi.mock("expo-router",()=>({router:{push:vi.fn()}}));
 vi.mock("expo-constants",()=>({default:{expoConfig:{version:"1.0",android:{package:"com.bycoda.mobile"},extra:{engagement:{androidPlayStoreUrl:"https://play.google.com/store/apps/details?id=com.bycoda.mobile"}}}}}));
+vi.mock("expo-application", () => ({ nativeApplicationVersion: "1.0", nativeBuildVersion: "1", applicationId: "com.bycoda.mobile" }));
 vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
 vi.mock("@/ui/styles",()=>({uiStyles:{}}));vi.mock("@/ui/tokens",()=>({colors:{},space:{},lineHeight:{}}));vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));vi.mock("@/ui/icon-tile",()=>({IconTile:()=>null}));
 vi.mock("lucide-react-native/icons/star",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/share-2",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/globe",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/message-square",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/flag",()=>({default:()=>null}));
@@ -22,10 +23,21 @@ vi.mock("@/ui/primitives",()=>{
 import { LegalDocument } from "./legal-document";
 import { legalSections, mitLicense } from "./legal-content";
 import { EngagementSettings } from "../engagement/engagement-settings";
+vi.mock("@/ui/brand", () => ({ BrandLogo: () => null }));
 let root:ReturnType<typeof createRoot>|undefined,container:HTMLDivElement,client:QueryClient;
 const render=(document:"help"|"privacy"|"terms"|"engagement"="help")=>act(async()=>root!.render(createElement(QueryClientProvider,{client},document==="engagement"?createElement(EngagementSettings):createElement(LegalDocument,{document}))));
 const settle=()=>act(async()=>{await new Promise(resolve=>setTimeout(resolve,15));});
 const button=(name:string)=>[...container.querySelectorAll("button")].find(item=>item.textContent?.startsWith(name))!;
+it("opens the real product website from Help and About", async () => {
+ await render();
+ await act(async () => button("bycoda website").click());
+ await settle();
+ expect(fixture.open).toHaveBeenLastCalledWith("https://bycoda.codes");
+ await render("engagement");
+ await act(async () => button("bycoda website").click());
+ await settle();
+ expect(fixture.open).toHaveBeenLastCalledWith("https://bycoda.codes");
+});
 beforeEach(()=>{vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);vi.stubEnv("EXPO_OS","android");container=document.createElement("div");root=createRoot(container);client=new QueryClient();fixture.open.mockResolvedValue(undefined);fixture.share.mockResolvedValue({action:"dismissedAction"});});
 afterEach(async()=>{await act(async()=>root?.unmount());root=undefined;client.clear();fixture.handlers.clear();vi.resetAllMocks();vi.unstubAllGlobals();vi.unstubAllEnvs();});
 it("claims legal link opening synchronously and leaves failure under the originating row",async()=>{

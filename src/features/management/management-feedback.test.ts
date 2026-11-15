@@ -20,7 +20,7 @@ const state = vi.hoisted(() => ({
   >,
 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
-vi.mock("expo-router", () => ({ router: { push: state.navigate } }));
+vi.mock("expo-router", () => ({ router: { navigate: state.navigate }, useLocalSearchParams: () => ({}) }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 // Screen feedback consumes a workspace snapshot; transport/crypto have their own tests.
 vi.mock("./social/use-workspace-query", () => ({
@@ -82,11 +82,12 @@ vi.mock("@/state/queries", () => ({
 vi.mock("../workspace/use-project-directory", () => ({
   useProjectList: () => ({ data: [] }),
 }));
+vi.mock("./shared/local-project-scope", () => ({ useLocalProjectScope: () => ({ projectId: state.projectId, setProjectId: vi.fn(), current: { current: { machineId: "machine", projectId: state.projectId, revision: 0 } }, revision: 0 }) }));
 vi.mock("./shared/scope", () => ({ Scope: () => null }));
 vi.mock("./shared/use-editor-record", () => ({
   useEditorRecord: (_id: unknown, value: unknown) => value,
 }));
-vi.mock("./shared/agent", () => ({ initialAgent: () => ({}) }));
+vi.mock("./shared/agent", () => ({ initialAgent: () => ({}), useAgentProviders: () => ({ providers: state.providers, query: { isSuccess: true, isFetching: false, error: null } }) }));
 vi.mock("./shared/format", () => ({
   identifier: () => "new",
   stamp: () => "date",
@@ -335,12 +336,13 @@ it.each([AutomationsScreen, StewardsScreen, TasksScreen])(
   async (Screen) => {
     state.projectId = null;
     await render(Screen);
-    expect(container.textContent).toContain(
-      Screen === TasksScreen
-        ? "Select a project to add a task."
-        : "Choose a project to create",
-    );
-    expect(container.querySelector("button")!.disabled).toBe(true);
+    if (Screen === StewardsScreen) {
+      expect(container.textContent).toContain("Choose a project to create");
+      expect(container.querySelector("button")!.disabled).toBe(true);
+    } else {
+      // Tasks and automations permit projectless creation; steward scope remains required.
+      expect(container.querySelector("button")!.disabled).toBe(false);
+    }
     state.projectId = "project";
     state.providers = [];
     await render(Screen);

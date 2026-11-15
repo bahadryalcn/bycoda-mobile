@@ -21,6 +21,7 @@ vi.mock("./DevicesSection", () => ({ DevicesSection: () => null }));
 vi.mock("./ManageAccountSection", () => ({ ManageAccountSection: () => null }));
 vi.mock("./PushSection", () => ({ PushSection: () => null }));
 vi.mock("./SignInPanel", () => ({ SignInPanel: () => null }));
+vi.mock("./AccountWelcome", () => ({ AccountWelcome: () => null }));
 vi.mock("./account-context", () => ({ useAccount: () => ({ status: "signedIn", runtime: { client: { getMe: async () => state.me } }, device: {}, signOut: state.signOut }) }));
 let root: ReturnType<typeof createRoot> | undefined;
 afterEach(() => { act(() => root?.unmount()); root = undefined; state.signOut.mockReset(); vi.unstubAllGlobals(); });

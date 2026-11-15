@@ -144,17 +144,11 @@ export function useComputerConnection() {
     try {
       assertAccess();
       const code = parseMobilePairingCode(raw);
-      if (Boolean(code.lanKey) !== (connectionMode === "lan")) {
-        throw new Error(
-          copy(
-            "Kod seçtiğin bağlantı türüne ait değil. Bilgisayarda aynı bağlantı türünü seçip yeni bir kod oluştur.",
-            "This code uses a different connection method. Select the same method on your computer and create a new code.",
-          ),
-        );
-      }
       const claimId = pairingClaimId(await Crypto.getRandomBytesAsync(32));
       assertAccess();
       if (attempt !== generation.current) throw new PairingFailure("aborted");
+      // The validated QR payload owns route identity; no extra network-selection step is needed.
+      setConnectionMode(code.lanKey ? "lan" : "tailscale");
       setEntry({ kind: "preview", code, claimId });
     } catch (error) {
       throw new Error(

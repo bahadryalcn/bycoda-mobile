@@ -38,7 +38,7 @@ export function ManagementHome() {
           title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
           action={{
             label: copy("Bilgisayar bağla", "Connect a computer"),
-            onPress: () => router.push("/machines"),
+            onPress: () => router.navigate("/machines"),
           }}
         />
         </View>
@@ -71,7 +71,7 @@ export function ManagementScreen({ section }: ManagementScreenProps) {
           title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
           action={{
             label: copy("Bilgisayar bağla", "Connect a computer"),
-            onPress: () => router.push("/machines"),
+            onPress: () => router.navigate("/machines"),
           }}
         />
         </View>

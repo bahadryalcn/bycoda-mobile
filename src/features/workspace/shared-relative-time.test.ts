@@ -38,11 +38,11 @@ it("keeps failed idle sessions distinct from Ready while current running/input s
     color: "muted",
   });
   expect(sessionStatus({ ...failed, status: "running" }, copy, colors)).toEqual({
-    label: "Running",
+    label: "Working",
     color: "live",
   });
   expect(sessionStatus({ ...failed, needsInput: true }, copy, colors)).toEqual({
-    label: "Needs reply",
+    label: "Needs input",
     color: "warning",
   });
 });
@@ -53,6 +53,10 @@ describe("relativeTime", () => {
     expect(relativeTime(ago(5 * 60_000), copy, now)).toBe("5 min");
     expect(relativeTime(ago(3 * 3_600_000), copy, now)).toBe("3 h");
     expect(relativeTime(ago(6 * DAY), copy, now)).toBe("6 d");
+  });
+  it("counts whole elapsed units like desktop instead of rounding up", () => {
+    expect(relativeTime(ago(90 * 60_000), copy, now)).toBe("1 h");
+    expect(relativeTime(ago(36 * 3_600_000), copy, now)).toBe("1 d");
   });
   it("switches to a short date at seven days", () => {
     expect(relativeTime(ago(7 * DAY), copy, now)).toBe("short");

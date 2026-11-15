@@ -68,8 +68,8 @@ export function WelcomeScreen() {
             illustration="connect-computer"
             title={copy("Kaldığın yerden devam et.", "Pick up where you left off.")}
             description={copy("Başlamak için bilgisayarında bycoda’yı aç.", "Open bycoda on your computer to get started.")}
-            action={{ label: copy("Bilgisayarını bağla", "Connect your computer"), onPress: () => router.push("/machines") }}
-            secondaryAction={{ label: copy("Uygulamayı keşfet", "Explore the app"), onPress: () => router.push("/demo") }}
+            action={{ label: copy("Bilgisayarını bağla", "Connect your computer"), onPress: () => router.navigate("/machines") }}
+            secondaryAction={{ label: copy("Uygulamayı keşfet", "Explore the app"), onPress: () => router.navigate("/demo") }}
           />
           <View style={{ gap: space.md }} accessibilityRole="list">
             {benefits.map(({ key, icon: Icon, title, detail }) => (
@@ -85,7 +85,7 @@ export function WelcomeScreen() {
             ))}
           </View>
         </View>
-        <LegalLinks onOpen={(document) => router.push(`/legal/${document}`)} />
+        <LegalLinks onOpen={(document) => router.navigate(`/legal/${document}`)} />
       </ScrollView>
     </View>
   );

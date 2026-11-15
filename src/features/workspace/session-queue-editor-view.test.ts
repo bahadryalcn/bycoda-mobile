@@ -96,3 +96,17 @@ it("keeps failed parked-edit cancellation visible and draft recoverable", async 
   expect(container.textContent).toContain("Editing queued message");
   expect(editor.setValue).not.toHaveBeenCalled();
 });
+
+it("shows readable provider identity and keeps internal model settings out of the editor", async () => {
+  editor.value = { ...editor.value, original: { ...original, modelTarget: {
+    harness: "codex", model: "codex:gpt-6.1-terra", modelSettings: { reasoningEffort: "low", serviceTier: "default" },
+  } } };
+  editor.valueRef.current = editor.value;
+  await mount();
+  expect(container.textContent).toContain("Codex");
+  expect(container.textContent).not.toContain("codex:gpt-6.1-terra");
+  expect(container.textContent).not.toContain("reasoningEffort");
+  expect(container.textContent).not.toContain("serviceTier");
+  expect(container.querySelector("textarea")!.value).toBe("Unsaved changed text");
+  expect(editor.setValue).not.toHaveBeenCalled();
+});

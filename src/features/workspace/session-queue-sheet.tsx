@@ -1,3 +1,4 @@
+import { sessionModelLabel } from "./catalog";
 import { createElement, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import { View } from "react-native";
@@ -9,6 +10,8 @@ import Pencil from "lucide-react-native/icons/pencil";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import ArrowDown from "lucide-react-native/icons/arrow-down";
 import Trash2 from "lucide-react-native/icons/trash-2";
+import CheckCheck from "lucide-react-native/icons/check-check";
+import RotateCw from "lucide-react-native/icons/rotate-cw";
 import { useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { ActionMenu, Badge, Body, Empty, ErrorText, FormActions, NavigationRow, Notice, Row, Sheet, Stack } from "@/ui/primitives";
@@ -20,9 +23,16 @@ import { useCopy } from "@/ui/copy";
 import type { SessionScope } from "./session-types";
 import { useMobileTheme } from "@/ui/theme";
 import { RecordAccessUnavailable } from "./unavailable-state";
+import type { QueueDeliveryReview } from "./queue-delivery";
 
-export type QueueSheetState={rows:readonly QueuedMessage[];label:string;error:unknown;errorMessage?:string;warning?:string;disabled:boolean;sending:boolean;controlling:boolean;reloadBusy:boolean;queueError:boolean;active:boolean;canEdit:boolean;hasDraft:boolean;disableSend:boolean;disableControl:boolean;};
-export type QueueSheetActions={close():void;reload():void;resume():void;send():void;control():void;edit(row:QueuedMessage):void;move(id:string,delta:-1|1):void;remove(id:string):void;};
+export type QueueSheetState={rows:readonly QueuedMessage[];label:string;error:unknown;errorMessage?:string;warning?:string;disabled:boolean;sending:boolean;controlling:boolean;reloadBusy:boolean;queueError:boolean;active:boolean;canEdit:boolean;hasDraft:boolean;disableSend:boolean;disableControl:boolean;
+  /** The row the Host is sending now. */
+  sendingId?:string;
+  /** Why Send again cannot be chosen for an unconfirmed row (the provider may still answer). */
+  retryBlocked?:string;};
+export type QueueSheetActions={close():void;reload():void;resume():void;send():void;control():void;edit(row:QueuedMessage):void;move(id:string,delta:-1|1):void;remove(id:string):void;
+  /** The owner settles an unconfirmed row; nothing is resent without this choice. */
+  review(id:string,outcome:QueueDeliveryReview):void;};
 
 /** Presentation and local reading only; queue/editor owners retain every write. */
 export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionScope;visible:boolean;state:QueueSheetState;actions:QueueSheetActions}){
@@ -51,6 +61,7 @@ export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionSc
   const writable=(row:QueuedMessage)=>exists(row)&&!live.current.state.disabled;
   const inspect=(row:QueuedMessage)=>{if(!exists(row)||issued.current)return;const next={row,lease};issued.current=next;setSelection(next);};
   const closeReader=()=>{if(mounted.current&&selection&&issued.current===selection){issued.current=undefined;setSelection(undefined);}};
+  const review=(row:QueuedMessage,outcome:QueueDeliveryReview)=>{if(writable(row)&&row.deliveryUnknown&&!(outcome==="retry"&&live.current.state.retryBlocked))live.current.actions.review(row.id,outcome);};
   const edit=(row:QueuedMessage)=>{if(writable(row)&&live.current.state.canEdit&&!live.current.state.queueError){closeReader();live.current.actions.edit(row);}};
   const reload=()=>{if(origin()&&!live.current.state.reloadBusy)live.current.actions.reload();};
   const close=()=>{if(mounted.current&&lease.active)live.current.actions.close();};
@@ -67,8 +78,13 @@ export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionSc
       ]}/>}/>:privateFailure?<ErrorText error={state.error}/>:<RecordAccessUnavailable />}
       {readable&&!state.rows.length?<Empty compact title={copy("Sıra boş", "Queue is empty")} detail={copy("Tur sürerken yazdığın mesajlar burada sırayla bekler ve sırayla gönderilir.", "Messages you queue while a turn runs wait here and are sent in order.")}/>:null}
     </Stack>} renderItem={({item:row,index})=><Row style={{alignItems:"flex-start"}}>
-      <View style={{flex:1,minWidth:0}}><NavigationRow label={row.text||copy("Ekli mesaj", "Message with attachments")} labelLines={2} detail={`${index+1} · ${row.modelTarget?.model??""}`} metadata={row.attachments.map(file=>file.name).join(" · ")} supporting={row.deliveryUnknown?<Badge label={copy("Kontrol gerekiyor", "Needs review")}/>:undefined} onPress={()=>inspect(row)}/></View>
-      <ActionMenu label={copy("Mesaj işlemleri", "Message actions")} actions={[
+      <View style={{flex:1,minWidth:0}}><NavigationRow label={row.text||copy("Ekli mesaj", "Message with attachments")} labelLines={2} detail={`${index+1} · ${sessionModelLabel(row.modelTarget)}`} metadata={row.attachments.map(file=>file.name).join(" · ")} supporting={row.id===state.sendingId?<Badge tone="info" label={copy("Gönderiliyor…", "Sending…")}/>:row.deliveryUnknown?<Badge tone="warning" label={copy("Kontrol gerekiyor", "Needs review")}/>:undefined} onPress={()=>inspect(row)}/></View>
+      <ActionMenu label={copy("Mesaj işlemleri", "Message actions")} actions={row.deliveryUnknown?[
+        {key:"delivered",icon:glyph(CheckCheck),label:copy("Zaten iletildi", "Already delivered"),disabled:state.disabled,onPress:()=>review(row,"delivered")},
+        {key:"retry",icon:glyph(RotateCw),label:copy("Yeniden gönder", "Send again"),detail:state.retryBlocked,disabled:state.disabled||!!state.retryBlocked,onPress:()=>review(row,"retry")},
+        {key:"keep",icon:glyph(Pause),label:copy("Kuyrukta tut, duraklat", "Keep queued, pause"),disabled:state.disabled,onPress:()=>review(row,"keep")},
+        {key:"discard",icon:glyph(Trash2,true),label:copy("Vazgeç", "Discard"),destructive:true,disabled:state.disabled,onPress:()=>review(row,"discard")},
+      ]:[
         {key:"edit",icon:glyph(Pencil),label:copy("Sırayı duraklat ve düzenle", "Pause queue and edit"),disabled:state.disabled||!state.canEdit||state.queueError,onPress:()=>edit(row)},
         {key:"up",icon:glyph(ArrowUp),label:copy("Yukarı taşı", "Move up"),disabled:state.disabled||state.hasDraft||index===0,onPress:()=>{if(writable(row)&&!live.current.state.hasDraft&&live.current.state.rows.indexOf(row)>0)live.current.actions.move(row.id,-1);}},
         {key:"down",icon:glyph(ArrowDown),label:copy("Aşağı taşı", "Move down"),disabled:state.disabled||state.hasDraft||index===state.rows.length-1,onPress:()=>{if(writable(row)&&!live.current.state.hasDraft&&live.current.state.rows.indexOf(row)<live.current.state.rows.length-1)live.current.actions.move(row.id,1);}},
@@ -79,7 +95,7 @@ export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionSc
       onSubmit={readable?submit:reload} disabled={!available||(primary==="resume"&&state.disabled)||(primary==="send"&&state.disableSend)||(primary==="reload"&&state.reloadBusy)} busy={state.sending||state.controlling||primary==="reload"&&state.reloadBusy} feedback={readable?feedback:undefined} onCancel={(primary!=="close"||!readable)&&!state.sending&&!state.controlling?close:undefined} cancelLabel={copy("Kapat", "Close")}/>
   </Sheet><PrivateContentAccessProvider value={{allowed:readable,check:current}}>
     {visible&&readable&&selection&&selection.lease===lease&&selected?<Sheet visible title={copy("Mesaj", "Message")} size="form" scroll={false} onClose={closeReader}>
-      <ScreenList data={selected.attachments} keyExtractor={file=>file.id} header={<Stack><Body muted>{selected.modelTarget?.model}</Body><Body selectable>{selected.text}</Body>
+      <ScreenList data={selected.attachments} keyExtractor={file=>file.id} header={<Stack><Body muted>{sessionModelLabel(selected.modelTarget)}</Body><Body selectable>{selected.text}</Body>
         {selected.deliveryUnknown&&state.warning?<Notice tone="warning" message={state.warning}/>:null}
         {selected.attachments.length?<Body muted>{copy("Dosyalar mesaj gönderildikten sonra açılabilir.", "Files can be opened after the queued message is sent.")}</Body>:null}
       </Stack>} renderItem={({item:file})=><Body muted selectable>{file.name} · {Math.ceil(file.size/1024)} KB</Body>}/>

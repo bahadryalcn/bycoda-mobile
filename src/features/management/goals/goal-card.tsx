@@ -46,7 +46,7 @@ export function GoalCard({
   );
   const openPlanner = () => {
     if (machine && goal.plannerSessionId)
-      router.push({ pathname: "/session/[id]", params: {
+      router.navigate({ pathname: "/session/[id]", params: {
         id: goal.plannerSessionId, machineId: machine.id, projectId: goal.leadProjectId,
       } });
   };

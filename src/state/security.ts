@@ -2,6 +2,7 @@ import { AppState } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
+import { isAccountAccessAllowed } from "../features/account/model/account-access";
 import type { SecurityState } from "./security-types";
 import {
   encodeSecurityPreferences,
@@ -304,18 +305,27 @@ export const useSecurity = create<SecurityState>((set, get) => ({
   },
   handleWindowFocus(focused) {
     set({ windowFocused: focused });
-    if (!focused) suspendAccess();
-    else restoreAccess();
+    // An Android system overlay can blur an otherwise active app. Keep the
+    // unlocked view, while isForeground still fences privileged operations.
+    if (!focused && (get().appState !== "active" || get().busy)) suspendAccess();
+    else if (focused) restoreAccess();
   },
 }));
 
 export function isAppAccessAllowed() {
   const state = useSecurity.getState();
   return (
-    state.status === "unlocked" && (!native || !state.enabled || isForeground())
+    isAccountAccessAllowed() && state.status === "unlocked" && (!native || !state.enabled || isForeground())
   );
 }
+/** Cached content may remain visible during an active Android window blur. */
+export function isAppContentVisible() {
+  const state = useSecurity.getState();
+  return isAccountAccessAllowed() && state.status === "unlocked" &&
+    (!native || (AppState.currentState === "active" && state.appState === "active"));
+}
 export function assertAppAccess() {
+  if (!isAccountAccessAllowed()) throw new Error("Sign in to Bycoda to access your computer.");
   if (!isAppAccessAllowed())
     throw new Error("Unlock Bycoda to access your computer.");
 }

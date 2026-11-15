@@ -10,7 +10,7 @@ import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { HostProject } from "@/domain/types";
-import { ActionMenu, Badge, Body, Disclosure, IconButton, NavigationRow, QueryState, Row, ScreenList, SearchField } from "@/ui/primitives";
+import { ActionMenu, Body, Disclosure, IconButton, NavigationRow, QueryState, ScreenList, SearchField, StatusText } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { IssueSummary } from "@/ui/issue-summary";
@@ -97,13 +97,14 @@ export function DevicesScreen({ project }: { project: HostProject }) {
       }
       renderItem={({ item: device }) => <NavigationRow
         label={device.name}
+        labelLines={2}
         detail={`${[device.platform, device.version].filter(Boolean).join(" ")} · ${device.physical ? copy("Fiziksel cihaz", "Physical device") : copy("Simülatör", "Simulator")}`}
         detailLines={2}
         accessibilityLabel={[device.name, device.platform, device.version,
           device.physical ? copy("Fiziksel cihaz", "Physical device") : copy("Simülatör", "Simulator"),
           device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off")].filter(Boolean).join(". ")}
         icon={<Smartphone size={21} color={device.booted ? colors.live : colors.muted} />}
-        supporting={<Row><Badge label={device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off")} tone={device.booted ? "active" : "default"} /></Row>}
+        supporting={<StatusText label={device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off")} tone={device.booted ? "active" : "default"} />}
         onPress={() => setSelected({ ...currentScope, device })}
       />}
     />

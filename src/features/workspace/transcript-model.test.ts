@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   activityState,
   activitySummary,
+  awaitingFirstOutput,
   canCollapseToolFailure,
+  canContinueInterruptedTurn,
+  TranscriptPresentation,
   isBlockStreaming,
   transcriptEntries,
+  transcriptSenderName,
   toolResultTexts,
 } from "./transcript-model";
 import type { Block } from "./wire";
@@ -29,7 +33,7 @@ describe("readable transcript", () => {
     ).toEqual([]);
     expect(toolResultTexts(block("text", "assistant", { tool: { output: "hidden" } }))).toEqual([]);
   });
-  it("removes completed activity without deleting history and restores it in detailed view", () => {
+  it("folds a turn's completed activity into one work row and restores it in detailed view", () => {
     const source = [
       block("u", "user"),
       block("done", "tool", { tool: { status: "completed" } }),
@@ -40,13 +44,15 @@ describe("readable transcript", () => {
       transcriptEntries(source, "codex", { view: "messages", running: false }).map(
         (entry) => entry.id,
       ),
-    ).toEqual(["u", "a"]);
+    ).toEqual(["u", "work:done", "a"]);
+    const work = transcriptEntries(source, "codex", { view: "messages", running: false })[1];
+    expect(work?.kind === "activity" && work.blocks.map((item) => item.id)).toEqual(["done", "reason"]);
     expect(transcriptEntries(source, "codex", { view: "details", running: false })).toEqual(
       transcriptEntries(source, "codex"),
     );
     expect(source.map((item) => item.id)).toEqual(["u", "done", "reason", "a"]);
   });
-  it("shows only currently running actions and hides them on completion or session stop", () => {
+  it("shows running actions live and folds them into the turn's work row once they stop", () => {
     const source = [
       block("old", "tool", { streaming: true }),
       block("u", "user"),
@@ -54,18 +60,18 @@ describe("readable transcript", () => {
       block("draft", "user", { draft: true }),
     ];
     const active = transcriptEntries(source, undefined, { view: "messages", running: true });
-    expect(active.map((entry) => entry.id)).toEqual(["u", "activity:active", "draft"]);
+    expect(active.map((entry) => entry.id)).toEqual(["work:old", "u", "activity:active", "draft"]);
     expect(
       transcriptEntries(source, undefined, { view: "messages", running: false }).map(
         (entry) => entry.id,
       ),
-    ).toEqual(["u", "draft"]);
+    ).toEqual(["work:old", "u", "work:active", "draft"]);
     source[2] = { ...source[2]!, streaming: true, tool: { status: "completed" } };
     expect(
       transcriptEntries(source, undefined, { view: "messages", running: true }).map(
         (entry) => entry.id,
       ),
-    ).toEqual(["u", "draft"]);
+    ).toEqual(["work:old", "u", "work:active", "draft"]);
   });
   it("never calls a stopped action completed", () => {
     const stopped = block("stopped", "tool", { streaming: true, tool: { status: "stopped" } });
@@ -116,7 +122,7 @@ describe("readable transcript", () => {
       transcriptEntries(source, undefined, { view: "messages", running: false }).map(
         (entry) => entry.id,
       ),
-    ).toEqual(["u", "approval", "error", "interrupt", "shell", "plan", "file"]);
+    ).toEqual(["u", "approval", "error", "interrupt", "shell", "plan", "file", "failed"]);
     expect(
       transcriptEntries(source, undefined, { view: "details", running: false }).at(-1)?.id,
     ).toBe("failed");
@@ -256,5 +262,119 @@ describe("repeated system failures", () => {
     const entries = transcriptEntries([user("u1"), fail("f1"), user("u2"), fail("f2")]);
     expect(entries.map((entry) => entry.id)).toEqual(["u1", "u2", "f2"]);
     expect(entries.at(-1)).toMatchObject({ repeat: 2 });
+  });
+});
+
+it("presents canonical transcript sender names while retaining raw authorship", () => {
+  for (const [id, name] of [["claude", "Claude"], ["codex", "Codex"], ["opencode", "OpenCode"], ["Custom Agent", "Custom Agent"]]) {
+    const entries = transcriptEntries([block("answer", "assistant")], id);
+    expect(entries[0].author).toBe(id);
+    expect(transcriptSenderName(entries[0].author)).toBe(name);
+  }
+  expect(transcriptSenderName()).toBe("bycoda");
+  expect(transcriptSenderName("")).toBe("bycoda");
+});
+
+describe("messages view work rows", () => {
+  it("starts a new work row for each sent turn but not for queued drafts", () => {
+    const source = [
+      block("u1", "user"),
+      block("t1", "tool", { tool: { status: "completed" } }),
+      block("a1", "assistant"),
+      block("t2", "tool", { tool: { status: "completed" } }),
+      block("u2", "user"),
+      block("t3", "tool", { tool: { status: "completed" } }),
+      block("q", "user", { draft: true }),
+      block("t4", "tool", { tool: { status: "completed" } }),
+    ];
+    const entries = transcriptEntries(source, undefined, { view: "messages", running: false });
+    expect(entries.map((entry) => entry.id)).toEqual(["u1", "work:t1", "a1", "u2", "work:t3", "q"]);
+    expect(entries.map((entry) => (entry.kind === "activity" ? entry.blocks.length : 0))).toEqual([0, 2, 0, 0, 2, 0]);
+  });
+});
+
+describe("turn chrome", () => {
+  const opus = { harness: "claude" as const, id: "opus", name: "Opus" };
+  const gpt = { harness: "codex" as const, id: "gpt", name: "GPT" };
+  it("ends each settled turn with its receipt, but not the turn still running", () => {
+    const source = [
+      block("u1", "user", { durationMs: 1000, turnModel: opus }),
+      block("a1", "assistant"),
+      block("u2", "user", { turnModel: opus }),
+      block("a2", "assistant"),
+    ];
+    const entries = transcriptEntries(source, undefined, { view: "messages", running: true });
+    expect(entries.find((entry) => entry.id === "a1")?.footer?.id).toBe("u1");
+    expect(entries.find((entry) => entry.id === "a2")?.footer).toBeUndefined();
+    expect(entries.find((entry) => entry.id === "a1")?.modelName).toBe("Opus");
+    const settled = transcriptEntries(
+      source.map((item) => (item.id === "u2" ? { ...item, durationMs: 5 } : item)),
+      undefined,
+      { view: "messages", running: false },
+    );
+    expect(settled.at(-1)?.footer?.id).toBe("u2");
+  });
+  it("marks a model change between turns unless a switch row already said so", () => {
+    const changed = transcriptEntries([
+      block("u1", "user", { turnModel: opus }),
+      block("a1", "assistant"),
+      block("u2", "user", { turnModel: gpt }),
+    ]);
+    expect(changed.find((entry) => entry.id === "u2")?.modelChange).toEqual({ from: opus, to: gpt });
+    const recorded = transcriptEntries(
+      [
+        block("u1", "user", { turnModel: opus }),
+        block("switch", "system", {
+          modelSwitch: {
+            steps: [
+              { harness: "claude", model: "Opus", at: 1 },
+              { harness: "codex", model: "GPT", at: 2 },
+            ],
+          },
+        }),
+        block("u2", "user", { turnModel: gpt }),
+      ],
+      undefined,
+      { view: "messages", running: false },
+    );
+    expect(recorded.map((entry) => entry.id)).toEqual(["u1", "switch", "u2"]);
+    expect(recorded.find((entry) => entry.id === "u2")?.modelChange).toBeUndefined();
+  });
+  it("keeps the model change and earlier receipt when only the new turn is regrouped", () => {
+    const presentation = new TranscriptPresentation();
+    const first = [block("u1", "user", { turnModel: opus, durationMs: 1 }), block("a1", "assistant")];
+    presentation.update(first, undefined, { view: "messages", running: false });
+    const entries = presentation.update([...first, block("u2", "user", { turnModel: gpt })], undefined, {
+      view: "messages",
+      running: true,
+    });
+    expect(entries.find((entry) => entry.id === "u2")?.modelChange?.to).toEqual(gpt);
+    expect(entries.find((entry) => entry.id === "a1")?.footer?.id).toBe("u1");
+  });
+  it("waits for the first readable output of the running turn", () => {
+    expect(awaitingFirstOutput([block("u", "user")])).toBe(true);
+    expect(awaitingFirstOutput([block("u", "user"), block("r", "reasoning", { text: "" })])).toBe(true);
+    expect(awaitingFirstOutput([block("u", "user"), block("s", "system")])).toBe(true);
+    expect(awaitingFirstOutput([block("u", "user"), block("a", "assistant")])).toBe(false);
+    expect(awaitingFirstOutput([block("u", "user"), block("t", "tool", { text: "" })])).toBe(false);
+    expect(awaitingFirstOutput([])).toBe(false);
+  });
+  it("offers Continue only for a turn cut off without the owner stopping it", () => {
+    const session = (blocks: Block[], status: "idle" | "running" | "interrupted" = "idle") => ({
+      status,
+      session: { blocks },
+    });
+    const cut = block("n", "system", { notice: "interrupt", text: "Turn interrupted." });
+    expect(canContinueInterruptedTurn(session([block("u", "user"), cut]))).toBe(true);
+    expect(canContinueInterruptedTurn(session([block("u", "user"), cut], "running"))).toBe(false);
+    expect(
+      canContinueInterruptedTurn(session([block("u", "user"), block("a", "assistant")], "interrupted")),
+    ).toBe(true);
+    expect(
+      canContinueInterruptedTurn(
+        session([block("u", "user"), block("s", "system", { text: "Stopped by you." })], "interrupted"),
+      ),
+    ).toBe(false);
+    expect(canContinueInterruptedTurn(session([block("u", "user"), block("a", "assistant")]))).toBe(false);
   });
 });

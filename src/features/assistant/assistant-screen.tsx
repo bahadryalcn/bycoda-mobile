@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, Stack } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,6 +7,7 @@ import {
   Body,
   Button,
   Empty,
+  Disclosure,
   Notice,
   QueryState,
   Row,
@@ -15,6 +16,8 @@ import {
   Section,
   SelectField,
 } from "@/ui/primitives";
+import { useMobileTheme } from "@/ui/theme";
+import { space } from "@/ui/tokens";
 import { useHostClient, useHostReadActive, hostKey } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
@@ -24,6 +27,9 @@ import { AssistantMobileClient, type OwnerPresence } from "./assistant-client";
 import { SessionKeyboardFrame } from "../workspace/session-keyboard-frame";
 import { usePendingApprovalCount } from "../approvals/use-approvals";
 import { AssistantComposer } from "./assistant-composer";
+import { openAssistantCompanion, useAssistantCompanion } from "./assistant-companion-state";
+import { AssistantReadAloud } from "./assistant-voice-controls";
+import { AssistantCallButton } from "./assistant-call-controls";
 import { AssistantPermissions } from "./assistant-permissions";
 import { AssistantActivitySection } from "./assistant-activity-section";
 import { confirmAction } from "@/ui/confirm";
@@ -128,14 +134,25 @@ function AssistantWorkspace({
     active = useHostReadActive(),
     projects = useProjectList(),
     cache = useQueryClient();
-  const [projectId, setProjectId] = useState(""),
-    [thread, setThread] = useState<AssistantThread | null>(null),
+  const { uiStyles } = useMobileTheme();
+  const saved = useAssistantCompanion.getState();
+  const sameCompanion = saved.machineId === machineId && saved.environmentId === environmentId;
+  const [projectId, setProjectId] = useState(sameCompanion ? saved.projectId : ""),
+    [thread, setThread] = useState<AssistantThread | null>(sameCompanion ? saved.thread : null),
     [busyKind, setBusyKind] = useState<
       "open" | "inspect" | "older" | "stop" | `presence-${OwnerPresence}` | null
     >(null),
     [issue, setIssue] = useState(false),
     [presenceUnknown, setPresenceUnknown] = useState(false);
   const busy = busyKind !== null;
+  // Expanded and minimized views share one captured Room selection without keeping a route stack alive.
+  useEffect(() => {
+    openAssistantCompanion(machineId, environmentId);
+  }, [machineId, environmentId]);
+  // Only selected identity is retained; Host queries still validate visibility and message history.
+  useEffect(() => {
+    useAssistantCompanion.setState({ projectId, thread });
+  }, [projectId, thread]);
   const pending = useRef(false),
     selection = useRef(0);
   const access = { ready: projects.directoryReady, visible: projects.isProjectVisible };
@@ -303,10 +320,10 @@ function AssistantWorkspace({
       }));
       setMore((old) => ({ ...old, [selected]: (response.messages?.length ?? 0) === 100 }));
     });
-  const header = (
+  const controls = (
     <>
       <Body muted>{machineName}</Body>
-      <QueryState query={snapshot} />
+      <Disclosure label={copy("Asistan ayarları", "Assistant settings")}>
       <AssistantActivitySection activity={state?.activity} access={access} loading={snapshot.isPending} />
       {state ? <>
         <Button label={copy("Room'u durdur", "Stop Room")} disabled={!writable || busy} busy={busyKind === "stop"}
@@ -315,6 +332,7 @@ function AssistantWorkspace({
         <AssistantPermissions key={sourceKey} profile={state.profile} client={client}
           projects={projects.directoryReady ? projects.data ?? [] : []} enabled={writable && !busy} current={current} onChanged={refreshAll} />
       </> : null}
+      </Disclosure>
       {pendingApprovals ? (
         <Button
           label={copy("Onaylar ({p0} bekliyor)", "Approvals ({p0} waiting)", { p0: pendingApprovals })}
@@ -323,7 +341,7 @@ function AssistantWorkspace({
         />
       ) : null}
       {state ? (
-        <Section title={copy("Durumum", "My presence")}>
+        <Disclosure label={copy("Durumum", "My presence")}>
           <Row>
             {(["present", "away", "dnd"] as const).map((value) => (
               <Button
@@ -359,7 +377,7 @@ function AssistantWorkspace({
               />
             </>
           ) : null}
-        </Section>
+        </Disclosure>
       ) : null}
       {state ? (
         <AssistantJobsSection
@@ -438,15 +456,35 @@ function AssistantWorkspace({
           />
         ) : null}
       </Section>
+    </>
+  );
+  const header = (
+    <>
+      <Row>
+        <View style={uiStyles.grow}>
+          <Body muted numberOfLines={1} style={uiStyles.caption}>{machineName}</Body>
+          <Body numberOfLines={1} style={uiStyles.caption}>{(projects.data ?? []).find(project => project.id === projectId)?.name || copy("Genel", "Global")}</Body>
+        </View>
+        {visibleThread ? <AssistantCallButton target={{ machineId, environmentId, threadId: visibleThread.id }}
+          enabled={writable} current={() => current() && (!visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId))} /> : null}
+      </Row>
+      <Disclosure label={copy("Konuşmalar", "Conversations")}>{controls}</Disclosure>
+      <QueryState query={snapshot} loading="inline" />
+      {!visibleThread && state ? <View style={{ gap: space.md, paddingVertical: space.xl }}>
+        <Body style={uiStyles.heading}>{copy("Asistanla konuş", "Talk with your assistant")}</Body>
+        <Body muted>{copy("Bir konuşma aç veya son konuşmalarından devam et.", "Open a conversation or continue a recent one.")}</Body>
+        <Button label={copy("Konuşmayı aç", "Open conversation")} tone="primary" onPress={() => void open()}
+          busy={busyKind === "open"} disabled={busy || !state || (!!projectId && !projects.isProjectVisible(projectId))} />
+      </View> : null}
       {visibleThread ? (
         <>
-          <QueryState query={history} />
+          <QueryState query={history} loading="inline" />
           {canonicalThread &&
           assistantSummaryVisible(canonicalThread, access) &&
           canonicalThread.summary ? (
-            <Section title={copy("Konuşma özeti", "Conversation summary")}>
+            <Disclosure label={copy("Konuşma özeti", "Conversation summary")}>
               <Body>{canonicalThread.summary}</Body>
-            </Section>
+            </Disclosure>
           ) : null}
           {raw.length >= 100 && more[visibleThread.id] !== false ? (
             <Button
@@ -488,7 +526,8 @@ function AssistantWorkspace({
             machineId={machineId}
             environmentId={environmentId}
             threadId={visibleThread.id}
-            current={current}
+            current={() => current() && (!visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId))}
+            voiceCurrent={() => !visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId)}
             enabled={writable}
             onSettled={refreshAll}
           />
@@ -504,14 +543,11 @@ function AssistantWorkspace({
         <AssistantMessageRow message={item} voiceLabel={copy("Sesle", "By voice")} />
       )}
       refresh={refreshAll}
-      ListFooterComponent={
-        <Body muted>
-          {copy(
-            "Konuşma geçmişi bu bilgisayarda saklanır.",
-            "Conversation history stays on this computer.",
-          )}
-        </Body>
-      }
+      ListFooterComponent={<>
+        {visibleThread ? <AssistantReadAloud target={{ machineId, environmentId, threadId: visibleThread.id }}
+          text={messages.findLast(message => message.role === "assistant")?.text ?? ""}
+          enabled={writable} current={() => !visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId)} /> : null}
+      </>}
     />
     </SessionKeyboardFrame>
     </>

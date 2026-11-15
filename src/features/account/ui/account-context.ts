@@ -12,7 +12,7 @@ export interface AccountAuth {
 }
 
 export interface AccountState {
-  /** `unavailable`: this build has no sign-in configured. Everything else keeps working. */
+  /** `unavailable`: this build has no sign-in configured, so the mobile workspace stays blocked. */
   status: "unavailable" | "loading" | "signedOut" | "signedIn";
   config: AccountConfig;
   runtime: AccountRuntime | null;

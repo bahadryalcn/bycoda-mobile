@@ -13,6 +13,7 @@ import type { CommandReceipt, HostSessionSummary } from "./wire";
 import { dispatchCommand, UncertainCommand } from "./commands";
 import { isProjectWorkspaceQuery } from "./project-cache";
 import { invalidateCommandQueries } from "./command-cache";
+import { sessionRowKind } from "./session-row-state";
 import type { CommandInvocation, CommandErrorProps, CommandStatusCheck } from "./shared-types";
 export { UncertainCommand } from "./commands";
 export { SelectRow, ErrorText } from "@/ui/primitives";
@@ -22,15 +23,15 @@ export type CopyFn = ReturnType<typeof useCopy>;
 /** Leading inset of hairlines that sit after a 32pt IconTile row. */
 export const rowInset = 32 + space.row;
 
-/** Short relative stamps; anything older than a week becomes a short date without time. */
+/** Short relative stamps like desktop: whole elapsed units (floor), a short date after a week. */
 export function relativeTime(value: number | undefined, copy: CopyFn, now = Date.now()) {
   if (!value || !Number.isFinite(value)) return "";
-  const minutes = Math.round((now - value) / 60_000);
+  const minutes = Math.floor((now - value) / 60_000);
   if (minutes < 1) return copy("Şimdi", "Now");
   if (minutes < 60) return copy("{p0} dk", "{p0} min", { p0: minutes });
-  const hours = Math.round(minutes / 60);
+  const hours = Math.floor(minutes / 60);
   if (hours < 24) return copy("{p0} sa", "{p0} h", { p0: hours });
-  const days = Math.round(hours / 24);
+  const days = Math.floor(hours / 24);
   if (days < 7) return copy("{p0} g", "{p0} d", { p0: days });
   return shortDate(value, now);
 }
@@ -39,20 +40,31 @@ export type SessionStatus = { label: string; color: string };
 
 /** Status is always spoken in the row detail too, so color is never the only signal. */
 export function sessionStatus(
-  session: Pick<HostSessionSummary, "needsInput" | "status" | "pinned" | "issue">,
+  session: Pick<HostSessionSummary, "needsInput" | "status" | "pinned" | "issue" | "waiting">,
   copy: CopyFn,
   colors: MobileColors,
+  /** The session finished while the owner was elsewhere. */
+  done = false,
 ): SessionStatus {
-  if (session.needsInput)
-    return { label: copy("Yanıt bekliyor", "Needs reply"), color: colors.warning };
-  if (session.status === "running")
-    return { label: copy("Çalışıyor", "Running"), color: colors.live };
-  if (session.status === "interrupted")
-    return { label: copy("Durduruldu", "Interrupted"), color: colors.muted };
-  if (session.issue === "failed")
-    return { label: copy("Başarısız", "Failed"), color: colors.danger };
-  if (session.pinned) return { label: copy("Sabit", "Pinned"), color: colors.muted };
-  return { label: copy("Hazır", "Ready"), color: colors.muted };
+  switch (sessionRowKind(session, done)) {
+    case "failed":
+      return { label: copy("Başarısız", "Failed"), color: colors.danger };
+    case "retrying":
+      return { label: copy("Yeniden deneniyor", "Retrying"), color: colors.warning };
+    case "interrupted":
+      return { label: copy("Durduruldu", "Interrupted"), color: colors.muted };
+    case "input":
+      return { label: copy("Girdi gerekiyor", "Needs input"), color: colors.warning };
+    case "working":
+      return { label: copy("Çalışıyor", "Working"), color: colors.live };
+    case "waiting":
+      return { label: copy("Bekliyor", "Waiting"), color: colors.muted };
+    case "done":
+      return { label: copy("Tamam", "Done"), color: colors.success };
+    default:
+      if (session.pinned) return { label: copy("Sabit", "Pinned"), color: colors.muted };
+      return { label: copy("Hazır", "Ready"), color: colors.muted };
+  }
 }
 
 export function StatusDot({ color, size = 8 }: { color: string; size?: number }) {

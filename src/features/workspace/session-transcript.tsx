@@ -5,16 +5,27 @@ import { Keyboard, View } from "react-native";
 import type { ReactNode } from "react";
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
-import CircleCheck from "lucide-react-native/icons/circle-check";
-import { Body, Button, Empty, Loading, MutationState, Row } from "@/ui/primitives";
+import { Body, Button, Empty, ErrorText, Loading, MutationState } from "@/ui/primitives";
+import { ChatCommandReceipt } from "@/ui/chat-command-receipt";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useHostClient } from "@/state/queries";
+import { useActiveMachine } from "@/state/machines";
+import { CONTINUE_PROMPT } from "../../../../src/features/sessions/model/userPromptText";
+import { canRewindConversation } from "../../../../src/features/sessions/model/conversationRewind";
+import { composerCommand } from "./composer-delivery";
+import { appendToDraft } from "./draft-append";
+import { reviewRewind, rewindCommand, type RewindReview } from "./session-checkpoint-model";
+import { SessionCheckpointReview } from "./session-checkpoint-review";
+import { InterruptedTurnNotice, ProviderRetryNotice, ThinkingPlaceholder } from "./turn-status-notices";
+import { providerName } from "./provider-choices";
 import { CommandError } from "./shared";
 import { useEarlierSession } from "./session-queries";
 import { SessionQuestions } from "./session-questions";
 import { questionCardStates } from "./question-card-state";
 import {
+  awaitingFirstOutput,
+  canContinueInterruptedTurn,
   completeResponseText,
   TranscriptPresentation,
   type TranscriptEntry,
@@ -33,9 +44,9 @@ import {
 } from "./transcript-find-model";
 import { citedTurnEntry } from "./session-reference-target";
 import { TranscriptJumpPill } from "./transcript-jump-pill";
-import { TranscriptRow, transcriptItemSize, type TranscriptRowProps } from "./transcript-row";
+import { TranscriptRow, type TranscriptRowProps } from "./transcript-row";
 
-/** Row height guess for first layout; collapsed activity rows report an exact size instead. */
+/** Initial guess only; every row is measured, including activity touch targets and large text. */
 const ESTIMATED_ITEM_SIZE = 72;
 const KEEP_END = { animated: false } as const;
 const KEEP_POSITION = { size: true, data: true } as const;
@@ -55,9 +66,10 @@ export function SessionTranscript({
   command,
   onCommand,
   onReceiptHandled,
+  onRefresh,
   bottomInset = 0,
 }: SessionTranscriptProps & { header?: ReactNode }) {
-  const { colors, uiStyles } = useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const client = useHostClient();
   const listRef = useRef<LegendListRef>(null);
@@ -284,12 +296,6 @@ export function SessionTranscript({
     if (grew && pending && !scrollPosition.current.following)
       void listRef.current?.scrollToEnd({ animated: false });
   }, [bottomInset, pending]);
-  useEffect(() => {
-    if (!command.isSuccess) return;
-    const timer = setTimeout(onReceiptHandled, 3500);
-    return () => clearTimeout(timer);
-  }, [command.isSuccess, onReceiptHandled]);
-
   const jumpToLatest = () => {
     applyScroll({ type: "jump" }, 0);
     setUnseen(false);
@@ -310,10 +316,67 @@ export function SessionTranscript({
   const getRevision = useCallback(() => revisionRef.current, []);
   const runId = session?.runId;
   const harness = session?.session.harness;
+  const machine = useActiveMachine();
+  // Desktop's Edit from here uses the Host rewind behind its capability; the review sheet confirms.
+  const rewindAvailable = useMemo(() => {
+    if (!session || blocked || session.status === "running" || machine?.id !== scope.machineId) return false;
+    if (!machine.capabilities?.includes("sessions.rewind")) return false;
+    const user = session.session.blocks.findLast((block) => block.role === "user" && !block.draft && !block.internal);
+    return !!user && canRewindConversation(session.session, user.id);
+  }, [session, blocked, machine, scope.machineId]);
+  const [rewind, setRewind] = useState<RewindReview | null>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const onRewind = useCallback((blockId: string) => {
+    const current = sessionRef.current;
+    if (!current) return;
+    try {
+      setActionError(null);
+      setRewind(reviewRewind(current, blockId));
+    } catch (cause) {
+      setActionError(cause);
+    }
+  }, []);
+  const confirmRewind = () => {
+    const current = sessionRef.current;
+    const review = rewind;
+    setRewind(null);
+    if (!current || !review) return;
+    try {
+      // Like desktop, the rewound prompt returns to the composer; appending keeps any unsent text.
+      void onCommand(rewindCommand(current, review))
+        .then(() => appendToDraft(scope, { text: review.prompt }))
+        .catch(() => {});
+    } catch (cause) {
+      setActionError(cause);
+    }
+  };
+  const [stopping, setStopping] = useState(false);
+  // Same exact-run cancel as the composer's Stop; the notice never resends the turn.
+  const stopTurn = () => {
+    if (!session?.runId || stopping) return;
+    setStopping(true);
+    void onCommand({ type: "cancel", sessionId: scope.sessionId, runId: session.runId })
+      .catch((cause: unknown) => setActionError(cause))
+      .finally(() => setStopping(false));
+  };
+  const continueTurn = () => {
+    if (!session) return;
+    try {
+      void onCommand(composerCommand(session, "send", CONTINUE_PROMPT, [])).catch(() => {});
+    } catch (cause) {
+      setActionError(cause);
+    }
+  };
   const activeEntryId = targetState === "ready" ? targetEntry?.id : activeFind?.entryId;
   const renderItem = useCallback(
     ({ item }: { item: TranscriptEntry }) => (
       <TranscriptRow
+        canRewind={
+          rewindAvailable && item.kind === "message" && item.block.role === "user" && !item.block.draft
+        }
+        onRewind={onRewind}
         item={item}
         highlighted={item.id === activeEntryId}
         live={item.kind === "activity" && live}
@@ -340,9 +403,10 @@ export function SessionTranscript({
       blocked,
       rowCommand,
       onInspect,
+      rewindAvailable,
+      onRewind,
     ],
   );
-  const getFixedItemSize = useCallback((item: TranscriptEntry) => transcriptItemSize(item), []);
   const loadEarlier = () => {
     void earlier.mutateAsync().catch(() => {});
   };
@@ -416,7 +480,6 @@ export function SessionTranscript({
           renderItem={renderItem}
           keyExtractor={keyOf}
           getItemType={typeOf}
-          getFixedItemSize={getFixedItemSize}
           estimatedItemSize={ESTIMATED_ITEM_SIZE}
           alignItemsAtEnd
           initialScrollAtEnd={restoreOffset === undefined}
@@ -453,6 +516,22 @@ export function SessionTranscript({
           }
           ListFooterComponent={
             <View style={uiStyles.stack}>
+              {live && session?.session.retryMessage?.trim() ? (
+                <ProviderRetryNotice
+                  provider={providerName(session.session.harness)}
+                  message={session.session.retryMessage}
+                  disabled={blocked || !session.runId}
+                  stopping={stopping}
+                  onStop={stopTurn}
+                  onRefresh={onRefresh}
+                />
+              ) : live && !pending && awaitingFirstOutput(blocks ?? []) ? (
+                <ThinkingPlaceholder />
+              ) : null}
+              {session && canContinueInterruptedTurn(session) ? (
+                <InterruptedTurnNotice disabled={blocked} onContinue={continueTurn} />
+              ) : null}
+              {actionError ? <ErrorText error={actionError} /> : null}
               {session?.runId ? (
                 <SessionQuestions
                   client={client ?? undefined}
@@ -465,14 +544,7 @@ export function SessionTranscript({
                   onCommand={onCommand}
                 />
               ) : null}
-              {command.isSuccess ? (
-                <Row style={{ flexWrap: "nowrap", gap: space.xs, paddingVertical: space.xxs }}>
-                  <CircleCheck size={13} color={colors.success} />
-                  <Body style={[uiStyles.caption, { color: colors.success }]}>
-                    {copy("Komut bilgisayara ulaştı.", "The computer accepted the command.")}
-                  </Body>
-                </Row>
-              ) : null}
+              {command.isSuccess ? <ChatCommandReceipt onExpire={onReceiptHandled} /> : null}
               <CommandError
                 error={command.error}
                 onRecovered={onReceiptHandled}
@@ -481,6 +553,19 @@ export function SessionTranscript({
             </View>
           }
         />
+        {rewind && session ? (
+          <SessionCheckpointReview
+            value={{
+              kind: "rewind",
+              review: rewind,
+              blocks: session.session.blocks.filter((block) => rewind.affectedIds.includes(block.id)),
+            }}
+            machineName={machine?.name ?? scope.machineId}
+            cwd={rewind.cwd}
+            onClose={() => setRewind(null)}
+            onConfirm={confirmRewind}
+          />
+        ) : null}
         {inspection ? (
           <ActivityInspector
             blocks={inspectedBlocks}

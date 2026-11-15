@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <application>
+    <service android:name="expo.modules.bycodavoice.VoiceCompanionService" android:exported="false" android:foregroundServiceType="microphone|mediaPlayback" android:stopWithTask="true" />
+    <activity android:name="expo.modules.bycodavoice.VoiceCompanionActivity" android:exported="false" android:supportsPictureInPicture="true" android:resizeableActivity="true" android:excludeFromRecents="true" android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation" android:theme="@style/BycodaVoiceTheme" />
+  </application>
+</manifest>

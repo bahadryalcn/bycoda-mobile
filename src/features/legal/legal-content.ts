@@ -1,3 +1,5 @@
+import { PRODUCT_IDENTITY } from "../../../../src/shared/lib/productIdentity";
+
 export type LegalDocumentId = "privacy" | "terms" | "help";
 export type LegalCopy = (tr: string, en: string) => string;
 export type LegalText = readonly [tr: string, en: string];
@@ -6,11 +8,12 @@ export type LegalSection = {
   paragraphs: readonly LegalText[];
 };
 
-export const legalUpdatedDate: LegalText = ["9 Kasım 2026", "9 November 2026"];
+export const legalUpdatedDate: LegalText = ["14 Kasım 2026", "14 November 2026"];
 export const supportEmail = "info@bycoda.codes";
 export const privacyPolicyUrl =
   "https://github.com/bahadryalcn/bycoda/blob/main/docs/guides/privacy-policy.md";
 export const repositoryUrl = "https://github.com/bahadryalcn/bycoda";
+export const websiteUrl = PRODUCT_IDENTITY.websiteUrl;
 
 const titles: Record<LegalDocumentId, LegalText> = {
   privacy: ["Gizlilik politikası", "Privacy policy"],
@@ -49,8 +52,8 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
           "This does not mean no data is stored or that the network is never used. Data is processed on your phone, connected computer and chosen services.",
         ],
         [
-          "İsteğe bağlı ve ücretsiz bir bycoda hesabı oluşturabilirsin; hesap olmadan da uygulamanın tamamı çalışır. Giriş Google, GitHub veya e-posta kodu ile yapılır, parola yoktur. Giriş, veri işleyicimiz Clerk tarafından yürütülür. Hesap açarsan bycoda kullanıcı kimliğini, e-postanı, görünen adını, profil resmi adresini, bağlı giriş yöntemlerini, dilini ve saat dilimini, bildirim tercihlerini ve hesap oluşturma tarihini saklar. Oturum belirteçleri işletim sisteminin korumalı SecureStore alanında tutulur.",
-          "You can create an optional, free bycoda account; the whole app works without one. Sign-in uses Google, GitHub or an email code; there is no password. Sign-in is handled by our identity processor, Clerk. If you create an account, bycoda stores a user identifier, your email address, display name, profile picture address, linked sign-in methods, language and time zone, notification preferences and the account creation date. Sign-in tokens are kept in the operating system’s protected SecureStore.",
+          "Mobil kullanım için ücretsiz bir bycoda hesabı gereklidir. Masaüstü uygulaması hesapsız kullanılabilir. Giriş Apple, Google, Facebook, GitHub veya e-posta kodu ile yapılır, parola yoktur. Giriş, veri işleyicimiz Clerk tarafından yürütülür. Hesap açarsan bycoda kullanıcı kimliğini, e-postanı, görünen adını, profil resmi adresini, bağlı giriş yöntemlerini, dilini ve saat dilimini, bildirim tercihlerini ve hesap oluşturma tarihini saklar. Oturum belirteçleri işletim sisteminin korumalı SecureStore alanında tutulur.",
+          "Mobile use requires a free bycoda account. Desktop use remains available without an account. Sign-in uses Apple, Google, Facebook, GitHub or an email code; there is no password. Sign-in is handled by our identity processor, Clerk. If you create an account, bycoda stores a user identifier, your email address, display name, profile picture address, linked sign-in methods, language and time zone, notification preferences and the account creation date. Sign-in tokens are kept in the operating system’s protected SecureStore.",
         ],
         [
           "Google ve GitHub bycoda ile yalnızca adını, e-postanı, profil resmini ve hesap kimliğini paylaşır, parolanı asla paylaşmaz; bağlantıyı hesap portalındaki Güvenlik sayfasından kesebilirsin. Sunucularımız AB’dedir; ABD merkezli sağlayıcılara (Clerk, Cloudflare, Expo, Resend, Google, GitHub) aktarımlar sağlayıcıların standart sözleşme şartlarına dayanır. Dışa aktarma dosyaları 7 gün sonra silinir. Veri sorumlusunun tam adı ve posta adresi resmi başvurular için talep üzerine bildirilir. Hesaplar 16 yaşın altındakiler için değildir; 18 yaşın altındakiler için ebeveyn izni gerekir.",
@@ -94,6 +97,10 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
     {
       title: ["İzinler ve uygulama kilidi", "Permissions & app lock"],
       paragraphs: [
+        [
+          "Mikrofon yalnızca sesle yazmayı veya sesli görüşmeyi başlatmayı seçtiğinde açılır. Ses, yerel olarak yazıya çevrilmek üzere bağlı Host’una gönderilir. Sesle yazma metni taslağa ekler; sesli görüşme ise tanınan metni sabit Room konuşmasına ve sağlayıcısına otomatik gönderir, yanıtları seslendirir. Android’de başlatılmış bir görüşme uygulama kilidi kapalıyken arka planda sürebilir; bildirim ve resim içinde resim kontrolleri kullanılabilir. Durdurma, cihazın veya uygulamanın kilitlenmesi ya da erişimin geri çekilmesi görüşmeyi bitirir.",
+          "Microphone access starts only when you choose dictation or a voice call. Audio is sent to your connected Host for local transcription. Dictation adds text to a draft; a voice call automatically sends recognized text to its fixed Room conversation and provider and reads replies aloud. On Android, a started call can continue in the background with app lock off, with notification and picture-in-picture controls. Stop, device/app lock or revoked access ends the call.",
+        ],
         [
           "Kamera yalnızca bilgisayar eşleştirme QR kodunu taramayı seçtiğinde istenir. QR taraması görüntü veya video kaydetmez ya da geliştiriciye göndermez. Kamera iznini reddedebilir ve elle bağlantı bilgilerini girebilirsin; izni telefon ayarlarından geri alabilirsin.",
           "Camera access is requested only when you choose to scan a computer pairing QR code. QR scanning does not record images or video or send them to the maintainer. You can decline camera access and enter connection details manually, and revoke permission in phone settings.",
@@ -236,6 +243,10 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
     {
       title: ["Bilgisayarına bağlan", "Connect your computer"],
       paragraphs: [
+        [
+          "Telefonunda giriş yap, Bilgisayarlar’ı aç ve QR kodu tara’yı seç. Kod bağlantı türünü otomatik seçer. İstersen eşleştirme kodunu yapıştırabilirsin.",
+          "Sign in on your phone, open Computers and choose Scan QR code. The code selects the connection method automatically. You can paste the pairing code instead.",
+        ],
         [
           "Bilgisayarında bycoda ve bycoda Host açık olmalı. Masaüstünde Ayarlar → Bağlantılar alanından telefon eşleştirmeyi aç ve oluşan QR kodunu mobil uygulamada tara. Eşleştirme kodunu yalnızca kendi telefonunda kullan; ekran görüntüsünü paylaşma.",
           "bycoda and bycoda Host must be running on your computer. Open phone pairing from Settings → Connections on desktop, then scan the generated QR code in the mobile app. Use pairing codes only on your own phone; do not share screenshots.",

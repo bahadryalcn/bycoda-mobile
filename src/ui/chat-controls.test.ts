@@ -150,7 +150,7 @@ it.each([ChatCircleAction, ChatToolbarAction])(
     expect(state.action).toHaveBeenCalledTimes(1);
   },
 );
-it("busy actions never scale or dispatch and essential summary identity/status have no line cap", async () => {
+it("busy actions never dispatch and one-line summaries retain full accessible identity/status", async () => {
   await render(
     createElement(ChatToolbarAction, { label: "Busy", busy: true, onPress: state.action }),
   );
@@ -170,6 +170,18 @@ it("busy actions never scale or dispatch and essential summary identity/status h
   );
   const spans = container.querySelectorAll("span");
   expect(spans[0].textContent).toBe(label);
-  expect(spans[0].getAttribute("data-lines")).toBeNull();
-  expect(spans[2].getAttribute("data-lines")).toBeNull();
+  expect(spans[0].getAttribute("data-lines")).toBe("1");
+  expect(spans[2].getAttribute("data-lines")).toBe("1");
+  expect(container.querySelector("button")!.getAttribute("aria-label"))
+    .toBe(`${label}. Open change. Waiting for a very long provider operation`);
+});
+
+it("shows handoff summaries as prose while opening the original details", async () => {
+  await render(createElement(ChatSummary, {
+    label: "Agent handoff", detail: "## Session so far\n\n**User:** Fix [OAuth](https://example.com)",
+    icon: null, onPress: state.action,
+  }));
+  expect(container.textContent).toBe("Agent handoffSession so far User: Fix OAuth");
+  await act(async () => container.querySelector("button")!.click());
+  expect(state.action).toHaveBeenCalledOnce();
 });

@@ -12,6 +12,7 @@ import { retainSessionAuthority } from "@/domain/session-authority";
 import { watchSessionStream } from "@/remote/session-sync";
 import { isTransientConnectionError } from "@/state/query-retry";
 import type { MobileStreamSubscription } from "@/remote/host-transport";
+import { SessionProjectMismatch } from "@/remote/session-project";
 
 export function useSessionSnapshot(
   scope: SessionScope,
@@ -181,16 +182,14 @@ export function useSessionSnapshot(
           throw new RemoteHostError(scope.machineId, "identity", "Transcript identity changed.");
         throw error;
       }
-      if (
-        options.canRead?.() === false ||
-        value.projectId !== options.projectId ||
-        value.session.id !== scope.sessionId
-      )
+      if (options.canRead?.() === false || value.session.id !== scope.sessionId)
         throw new RemoteHostError(
           scope.machineId,
           "identity",
           "Transcript project identity changed.",
         );
+      if (value.projectId !== options.projectId)
+        throw new SessionProjectMismatch(scope.sessionId, options.projectId, value.projectId);
       schedule.observe(known, value, Date.now() - started, waitMs);
       const restoreBefore = options.restoreBefore?.();
       while (
@@ -207,16 +206,14 @@ export function useSessionSnapshot(
           throw new Error("Transcript restore cursor did not advance.");
         value = earlier;
       }
-      if (
-        options.canRead?.() === false ||
-        value.projectId !== options.projectId ||
-        value.session.id !== scope.sessionId
-      )
+      if (options.canRead?.() === false || value.session.id !== scope.sessionId)
         throw new RemoteHostError(
           scope.machineId,
           "identity",
           "Transcript project identity changed.",
         );
+      if (value.projectId !== options.projectId)
+        throw new SessionProjectMismatch(scope.sessionId, options.projectId, value.projectId);
       return value;
     },
     enabled,
@@ -225,6 +222,7 @@ export function useSessionSnapshot(
       if (streaming && !streamFailing.current) return false;
       if (!enabled || query.state.fetchStatus === "fetching") return false;
       const kind = (query.state.error as { kind?: string } | null)?.kind;
+      if (query.state.error instanceof SessionProjectMismatch) return false;
       if (kind === "auth" || kind === "identity" || kind === "unsupported") return false;
       return sessionReadSchedule(query, identity).delay(
         query.state.data?.status === "running",
@@ -243,9 +241,11 @@ export function useSessionSnapshot(
     !isTransientConnectionError(streamFailure.error)
       ? streamFailure.error
       : undefined;
-  const denied = ["auth", "identity"].includes(
-    ((streamError ?? query.error) as { kind?: string } | null)?.kind ?? "",
-  );
+  const denied =
+    (streamError ?? query.error) instanceof SessionProjectMismatch ||
+    ["auth", "identity"].includes(
+      ((streamError ?? query.error) as { kind?: string } | null)?.kind ?? "",
+    );
   return {
     ...query,
     error: streamError ?? query.error,
@@ -277,7 +277,13 @@ export function useEarlierSession(scope: SessionScope, session?: HostSession) {
 /** Block content stays valid until its own content digest changes, not whenever the session revision does. */
 const BLOCK_GC_MS = 2 * 60_000;
 
-export function useSessionBlock({ scope, blockId, getRevision, digest, enabled }: SessionBlockRequest) {
+export function useSessionBlock({
+  scope,
+  blockId,
+  getRevision,
+  digest,
+  enabled,
+}: SessionBlockRequest) {
   const client = useHostClient();
   const active = useHostReadActive();
   const cache = useQueryClient();
@@ -310,7 +316,10 @@ export function useSessionBlock({ scope, blockId, getRevision, digest, enabled }
       if (!block) throw new Error("Transcript block not found.");
       // Drop superseded versions of this block so the cache holds one entry per block.
       for (const stale of cache.getQueryCache().findAll({ queryKey: queryKey.slice(0, -1) }))
-        if (stale.queryKey.length === queryKey.length && stale.queryKey[queryKey.length - 1] !== identity)
+        if (
+          stale.queryKey.length === queryKey.length &&
+          stale.queryKey[queryKey.length - 1] !== identity
+        )
           cache.removeQueries({ queryKey: stale.queryKey, exact: true });
       return block;
     },

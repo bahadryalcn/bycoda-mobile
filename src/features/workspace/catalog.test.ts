@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogModel, catalogProvider, catalogProviders, creationModel, creationSettings, modelDefaults, sessionCatalog, sessionModel, sessionSettings } from "./catalog";
+import { sessionModelLabel, catalogModel, catalogProvider, catalogProviders, creationModel, creationSettings, modelDefaults, sessionCatalog, sessionModel, sessionSettings } from "./catalog";
 import type { HostModelCatalog } from "./wire";
 
 const catalog: HostModelCatalog = {
@@ -139,4 +139,14 @@ describe("reserved delegation keys", () => {
   it("lets an explicit choice win over the value derived for a new session", () => {
     expect(creationSettings(model, chosen, "codex")).toMatchObject({ crossSubagents: chosen.crossSubagents, imageModels: chosen.imageModels });
   });
+});
+
+it("formats queued model identities without changing routing targets", () => {
+  const target = { harness: "codex" as const, model: "codex:gpt-6.1-terra" };
+  const catalog = sessionCatalog(undefined, [target.harness]);
+  expect(sessionModelLabel(target)).toBe(`Codex · ${sessionModel(catalog, target.harness, target.model)?.name ?? "gpt-6.1-terra"}`);
+  expect(target).toEqual({ harness: "codex", model: "codex:gpt-6.1-terra" });
+  expect(sessionModelLabel({ harness: "claude", model: "claude:custom" })).toBe("Claude · custom");
+  expect(sessionModelLabel({ harness: "codex", model: "vendor:custom" })).toBe("Codex · vendor:custom");
+  expect(sessionModelLabel()).toBe("");
 });

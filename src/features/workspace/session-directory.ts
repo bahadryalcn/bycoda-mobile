@@ -1,5 +1,6 @@
 import type { HostProjectDirectory, HostSessionSummary } from "@/domain/types";
 import { isRunningSession } from "./activity-model";
+import { sessionActivityAt } from "./session-collection";
 
 export type SessionLayout = NonNullable<HostProjectDirectory["projects"][number]["sessionLayout"]>;
 export type SessionDirectoryRow =
@@ -59,7 +60,7 @@ function status(a: HostSessionSummary, b: HostSessionSummary) {
   return Number(isRunningSession(b)) - Number(isRunningSession(a)) || Number(!!b.needsInput) - Number(!!a.needsInput);
 }
 function recency(a: HostSessionSummary, b: HostSessionSummary) {
-  return Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
+  return Number(!!b.pinned) - Number(!!a.pinned) || sessionActivityAt(b) - sessionActivityAt(a) || a.id.localeCompare(b.id);
 }
 function ordered(items: HostSessionSummary[], ids?: readonly string[]) {
   const rank = new Map(ids?.map((id, index) => [id, index]));
@@ -73,12 +74,7 @@ export function sessionDirectoryRows(
   sessions: readonly HostSessionSummary[], layout?: SessionLayout,
   collapsed: Readonly<Record<string, boolean>> = {}, searching = false,
 ): SessionDirectoryRow[] {
-  // Active work stays visible above manual folders, including collapsed ones.
-  const running = sessions.filter(isRunningSession);
-  if (running.length && layout) return [
-    ...ordered(running).map((session): SessionDirectoryRow => ({ kind: "session", key: `session:${session.id}`, session, depth: 0 })),
-    ...sessionDirectoryRows(sessions.filter((session) => !isRunningSession(session)), layout, collapsed, searching),
-  ];
+  // Like desktop, running sessions stay in their folders; status only orders siblings.
   if (!layout) return [...sessions].sort(recency).sort(status).map((session) => ({ kind: "session", key: `session:${session.id}`, session, depth: 0 }));
   const byId = new Map(sessions.map((session) => [session.id, session]));
   const folders = new Map(layout.folders.map((folder) => [folder.id, folder]));

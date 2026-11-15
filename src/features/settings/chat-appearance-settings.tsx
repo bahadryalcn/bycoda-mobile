@@ -58,8 +58,6 @@ export function ChatAppearanceSettings() {
             "```typescript",
             "const status = 'ready';",
             "```",
-            "",
-            "[Markdown](https://commonmark.org/help/)",
           ].join("\n"),
         },
       ],

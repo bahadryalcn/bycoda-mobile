@@ -1,3 +1,4 @@
+import { RouteFocusContext, useRouteFocus } from "./use-route-focus";
 import { useMobileTheme } from "./theme";
 import {
   createContext,
@@ -71,7 +72,7 @@ function OverlayLayer({
     );
   }, [id, entry.visible, entry.generation, progress, onHidden]);
   const style = useAnimatedStyle(() => ({ opacity: progress.value }));
-  const permitted = entry.value.privateAccess?.check() ?? true;
+  const permitted = entry.value.routeFocused !== false && (entry.value.privateAccess?.check() ?? true);
   return (
     <Animated.View
       ref={(element: unknown) => onElement(id, element)}
@@ -82,9 +83,11 @@ function OverlayLayer({
       importantForAccessibility={active && permitted ? "auto" : "no-hide-descendants"}
       pointerEvents={active && permitted && entry.visible ? "auto" : "none"}
     >
+      <RouteFocusContext.Provider value={entry.value.routeFocused !== false}>
       <LayerPriority.Provider value={entry.value.priority}>
         <LayerProgress.Provider value={progress}>{entry.value.privateAccess ? <PrivateContentAccessProvider value={entry.value.privateAccess}>{entry.value.children}</PrivateContentAccessProvider> : entry.value.children}</LayerProgress.Provider>
       </LayerPriority.Provider>
+      </RouteFocusContext.Provider>
     </Animated.View>
   );
 }
@@ -127,7 +130,7 @@ export function OverlayProvider({ children }: PropsWithChildren) {
   const layers = unlocked
     ? [...entries.entries()].sort((a, b) => a[1].value.priority - b[1].value.priority)
     : [];
-  const accessibleLayers = layers.filter(([, entry]) => entry.value.privateAccess?.check() ?? true);
+  const accessibleLayers = layers.filter(([, entry]) => entry.value.routeFocused !== false && (entry.value.privateAccess?.check() ?? true));
   const active = accessibleLayers.at(-1)?.[1];
   useLayoutEffect(() => {
     if (process.env.EXPO_OS !== "web" || typeof document === "undefined") return;
@@ -188,13 +191,14 @@ export function ScreenOverlay({ visible, priority, label, onClose, children }: S
   const registry = useContext(Context);
   const parentPriority = useContext(LayerPriority);
   const privateAccess = usePrivateContentAccess();
+  const routeFocused = useRouteFocus();
   const layerPriority = priority ?? Math.max(20, parentPriority + 1);
   const id = useId();
   if (!registry) throw new Error("ScreenOverlay requires OverlayProvider.");
   useLayoutEffect(() => {
-    if (visible) registry.update(id, { children, onClose, label, priority: layerPriority, privateAccess });
+    if (visible) registry.update(id, { children, onClose, label, priority: layerPriority, privateAccess, routeFocused });
     else registry.remove(id);
-  }, [registry, id, visible, children, label, onClose, layerPriority, privateAccess]);
+  }, [registry, id, visible, children, label, onClose, layerPriority, privateAccess, routeFocused]);
   useLayoutEffect(() => () => registry.remove(id), [registry, id]);
   return null;
 }

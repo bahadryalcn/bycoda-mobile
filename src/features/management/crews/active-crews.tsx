@@ -26,7 +26,7 @@ export function ActiveCrews() {
   const sorted = sortActive(items);
   const open = (item: ActiveCrewMember) => {
     if (item.sessionId)
-      router.push({ pathname: "/session/[id]", params: { id: item.sessionId, machineId: machine.id, projectId: item.projectId } });
+      router.navigate({ pathname: "/session/[id]", params: { id: item.sessionId, machineId: machine.id, projectId: item.projectId } });
   };
   const attention = (item: ActiveCrewMember) =>
     item.attention === "decision" ? copy("Karar bekliyor", "Needs a decision")

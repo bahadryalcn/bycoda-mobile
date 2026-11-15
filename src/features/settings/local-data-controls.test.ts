@@ -20,7 +20,7 @@ vi.mock("@/features/workspace/draft-guard", () => ({ flushWorkspaceDrafts: state
 vi.mock("@/features/privacy/provider-consent", () => ({ revokeProviderConsent: state.revoke }));
 vi.mock("@/features/workspace/attachment-files", () => ({ clearAttachmentDraftFiles: state.files }));
 vi.mock("@/ui/media-loader", () => ({ clearMediaCache: state.media }));
-vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
+vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestCloseThen: (action: () => void) => action() }) }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: ({ children }: PropsWithChildren) => children }));

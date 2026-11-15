@@ -1,3 +1,4 @@
+import { agentPresentation } from "../shared/agent-presentation";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import type { HostModelCatalog } from "@/domain/types";
@@ -6,6 +7,7 @@ import { useFormDraft } from "@/state/form-draft";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { ModelRoutingGetResultSchema, type ModelRoutingState } from "../../../../../src/shared/model/host-contracts/model-routing";
+import { modelRoutingPoolEntryIds } from "../../../../../src/shared/model/modelRoutingPools";
 import { useCopy } from "@/ui/copy";
 import { crewRoleOptions, crewCatalogState, type CrewCatalogRead } from "./presentation";
 import {
@@ -90,7 +92,7 @@ export function MemberEditor({
   const options = new Map(
     models.map((model) => [
       `${model.harness}/${model.id}`,
-      { value: `${model.harness}/${model.id}`, label: model.name, detail: model.harness },
+      { value: `${model.harness}/${model.id}`, label: model.name, detail: agentPresentation(model.harness, "") },
     ]),
   );
   for (const candidate of draft.candidates)
@@ -188,8 +190,8 @@ export function MemberEditor({
       />
       {binding !== "fixed" && binding !== "legacy" ? <>
         <Body muted>{copy("Otomatik seçim, bu üyenin aday listesinden bağımsız olarak bilgisayar sırası veya havuzundan uygun modeli seçebilir. Aşağıdaki adaylar bir izin filtresi değildir.", "Automatic routing can choose an eligible model from Host order or pool outside this member's candidate list. Candidates below are not an allowed-model filter.")}</Body>
-        {routingState ? <Body muted>{copy("Geçerli kaynak", "Current source")}: {effective?.kind === "pool" ? activePool?.name ?? (effective.poolId) : binding === "default" && roleBinding.kind === "fixed" ? `${roleBinding.target.harness} · ${roleBinding.target.model}` : copy("Bilgisayar model sırası", "Host model order")}
-          {effective?.kind === "pool" && activePool ? ` · ${activePool.entryIds.length}` : effective?.kind === "order" ? ` · ${routingState.entries.length}` : ""}</Body> : <Notice message={routing.isError ? copy("Model kaynağı okunamadı. Kayıtlı bağlantı korunur.", "Model source could not be read. Saved binding is preserved.") : copy("Model kaynağı henüz doğrulanmadı. Kayıtlı bağlantı korunur.", "Model source is not yet verified. Saved binding is preserved.")} />}
+        {routingState ? <Body muted>{copy("Geçerli kaynak", "Current source")}: {effective?.kind === "pool" ? activePool?.name ?? (effective.poolId) : binding === "default" && roleBinding.kind === "fixed" ? agentPresentation(roleBinding.target.harness, roleBinding.target.model) : copy("Bilgisayar model sırası", "Host model order")}
+          {effective?.kind === "pool" && activePool ? ` · ${modelRoutingPoolEntryIds(routingState.pools, activePool.id).length}` : effective?.kind === "order" ? ` · ${routingState.entries.length}` : ""}</Body> : <Notice message={routing.isError ? copy("Model kaynağı okunamadı. Kayıtlı bağlantı korunur.", "Model source could not be read. Saved binding is preserved.") : copy("Model kaynağı henüz doğrulanmadı. Kayıtlı bağlantı korunur.", "Model source is not yet verified. Saved binding is preserved.")} />}
         {routing.isError ? <Button label={copy("Model kaynağını yeniden oku", "Reload model source")} tone="quiet" onPress={() => { void routing.refetch().catch(() => {}); }} /> : null}
       </> : null}
       {draft.selection === "fixed" ? (

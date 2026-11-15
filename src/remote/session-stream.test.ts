@@ -31,6 +31,19 @@ const event = (kind: "snapshot" | "delta", data: unknown): SubscriptionEvent => 
   },
 });
 describe("mobile session stream revision and identity fences", () => {
+  it("reports a project mismatch separately from a changed computer, retaining the exact session and both project IDs", () => {
+    try {
+      sessionStreamValue(event("snapshot", session(1)), undefined, "session-a", "legacy-alias");
+      throw new Error("Expected project mismatch");
+    } catch (error) {
+      expect(error).toMatchObject({
+        sessionId: "session-a",
+        expectedProjectId: "legacy-alias",
+        actualProjectId: "project-a",
+      });
+      expect(error).not.toHaveProperty("kind", "identity");
+    }
+  });
   it("projects a new authority floor at the same transcript revision while preserving old pending intents", () => {
     const known = { ...session(4), authorityGeneration: 2 };
     const next = { ...session(4), authorityGeneration: 3 };

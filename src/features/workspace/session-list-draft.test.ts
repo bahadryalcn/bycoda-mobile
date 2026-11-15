@@ -21,6 +21,10 @@ vi.mock("expo-crypto", () => ({ randomUUID: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaa
 vi.mock("@/state/security", () => ({ useSecurity: create(() => ({ status: "unlocked" })) }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children), useWindowDimensions: () => ({ width: 320, height: 700, fontScale: 1 }) }));
 vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/folder-tree", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-pull-request", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/circle-dot", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/bot", () => ({ default: () => null }));
 vi.mock("@/ui/primitives", () => ({ Body: ({ children }: PropsWithChildren) => h("span", null, children),
   PressableCard: ({ children, label }: PropsWithChildren<{ label: string }>) => h("button", { "aria-label": label }, children), StatusText: ({ label }: { label: string }) => h("span", null, label) }));
 vi.mock("@/ui/project-icon", () => ({ ProjectIcon: () => null }));
@@ -99,4 +103,28 @@ it("does not read denied or locked rows and removes cached presence on cleanup",
   await act(async () => useSecurity.setState({ status: "unlocked" })); expect(marked()).toBe(true);
   await act(async () => withDraftStorageCleanup(disk, async retire => { disk.values.clear(); retire(new Set()); }));
   expect(marked()).toBe(false);
+});
+
+it("uses canonical provider and model names for the accessible session identity", async () => {
+  const session = { ...props.session, harness: "claude" as const, model: "claude:custom" };
+  await render({ session });
+  expect(container.querySelector("button")?.getAttribute("aria-label")).toContain("Claude · custom");
+  expect(container.querySelector("button")?.getAttribute("aria-label")).not.toContain("claude:custom");
+  expect(session.harness).toBe("claude");
+  expect(session.model).toBe("claude:custom");
+});
+
+it("names managed, worktree and linked pull request identity like desktop rows", async () => {
+  const base = props.session;
+  await render({ session: { ...base, branch: "feat", worktreeCwd: "/wt",
+    managedBy: { assistant: true, managedAt: 1, jobId: "job" },
+    linkedWorkItem: { kind: "pr", repo: "o/r", number: 42, url: "https://example.test/42" } } });
+  const label = container.querySelector("button")?.getAttribute("aria-label") ?? "";
+  expect(label).toContain("Managed session");
+  expect(label).toContain("Worktree: feat");
+  expect(label).toContain("Pull request #42");
+  expect(container.textContent).toContain("#42");
+  await render({ session: { ...base, branch: "feat", managedBy: { assistant: true, managedAt: 1, jobId: "job", detachedAt: 2 } } });
+  expect(container.querySelector("button")?.getAttribute("aria-label")).toContain("Branch: feat");
+  expect(container.querySelector("button")?.getAttribute("aria-label")).not.toContain("Managed session");
 });

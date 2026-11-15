@@ -39,7 +39,7 @@ import {
   supportsAttachmentOwnership,
 } from "./attachment-ownership";
 import { ChatCircleAction } from "@/ui/chat-controls";
-import { ComposerModeChip, ComposerModeMenu, DeliveryModeButton } from "./composer-mode-controls";
+import { ComposerModeChip, ComposerModeMenu } from "./composer-mode-controls";
 import { activeComposerMode, setComposerMode, type ComposerMode } from "./composer-mode";
 import { ChatComposer } from "@/ui/chat-composer";
 import { ComposerModelChip } from "./composer-model-chip";
@@ -70,6 +70,10 @@ import { captureSessionAuthority, sessionIntent } from "@/domain/session-authori
 import { ComposerSheets } from "./composer-sheets";
 import { ComposerNotices } from "./composer-notices";
 import { ComposerNoteCard } from "./composer-note-card";
+import { ComposerContextMeter } from "./composer-context-meter";
+import { composerContextReading } from "./composer-context";
+import { ComposerAccessMenu } from "./composer-access";
+import { composerAccessAvailable } from "./composer-access-model";
 
 export function SessionComposer({
   scope,
@@ -91,7 +95,6 @@ export function SessionComposer({
   const [picker, setPicker] = useState(false);
   const [templatePicker, setTemplatePicker] = useState(false);
   const templateDestination = useRef<{ machineId: string; sessionId: string } | null>(null);
-  const [modePicker, setModePicker] = useState(false);
   const [retryingDraft, setRetryingDraft] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [localError, setLocalError] = useState<unknown>(null);
@@ -123,7 +126,7 @@ export function SessionComposer({
     queueSupported: queue.supported,
     busyPreferred,
   });
-  const { mode, running, supportsSteer, desktopOwned, canSteer } = delivery;
+  const { mode, running, desktopOwned, canSteer } = delivery;
   const noteContextSupported =
     client?.machine.id === scope.machineId &&
     !!client.machine.capabilities?.includes("sessions.noteContext.v1");
@@ -432,6 +435,21 @@ export function SessionComposer({
       }
     })().catch(() => {});
   };
+  const contextReading = composerContextReading(session);
+  const compact = () => {
+    if (!session || running || unavailable || submission.current) return;
+    setLocalError(null);
+    // Same Host `compact` command as typing /compact; failures stay beside the composer.
+    void (async () => {
+      await onCommand({
+        type: "compact",
+        sessionId: session.session.id,
+        ...captureSessionAuthority(session),
+      });
+    })().catch((cause: unknown) => {
+      if (mounted.current) setLocalError(cause);
+    });
+  };
   const activeMode = activeComposerMode(prompt);
   const hostDraftExists = !!session?.session.blocks.some((block) => block.draft);
   const modeBlockedReasons: Partial<Record<ComposerMode, string>> = {
@@ -569,19 +587,20 @@ export function SessionComposer({
           }
           mode={
             <>
-              {delivery.showModeChip ? (
-                <DeliveryModeButton
-                  mode={mode}
-                  modeLabel={delivery.modeLabel}
-                  disabled={unavailable}
-                  onPress={() => setModePicker(true)}
-                />
-              ) : null}
               <ComposerModeMenu
                 active={activeMode}
                 blockedReasons={modeBlockedReasons}
                 onSelect={chooseMode}
               />
+              {composerAccessAvailable(session) ? (
+                <ComposerAccessMenu
+                  session={session}
+                  disabled={blocked || unavailable}
+                  running={running}
+                  onCommand={onCommand}
+                  onError={setLocalError}
+                />
+              ) : null}
             </>
           }
           model={
@@ -618,6 +637,13 @@ export function SessionComposer({
           }}
           submit={
             <>
+              {contextReading ? (
+                <ComposerContextMeter
+                  reading={contextReading}
+                  compactDisabled={running || unavailable}
+                  onCompact={contextReading.empty ? undefined : compact}
+                />
+              ) : null}
               {canStop ? (
                 <ChatCircleAction
                   label={copy("Durdur", "Stop")}
@@ -682,11 +708,6 @@ export function SessionComposer({
       <ComposerSheets
         scope={scope}
         projectId={session?.projectId}
-        mode={mode}
-        options={delivery.options}
-        onChooseMode={delivery.choose}
-        modeOpen={modePicker}
-        onModeClose={() => setModePicker(false)}
         pickerOpen={picker}
         onPickerClose={() => setPicker(false)}
         templateOpen={templatePicker}

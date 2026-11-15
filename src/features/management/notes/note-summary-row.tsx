@@ -1,10 +1,10 @@
 import { truncateGraphemes } from "../../../../../src/shared/lib/text/truncate";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { useMobileTheme } from "@/ui/theme";
 import type { Note } from "@/domain/types";
 import { useCopy } from "@/ui/copy";
 import { Badge, Body, PressableCard } from "@/ui/primitives";
-import { radii, space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import { useRelativeTime } from "../shared/record-bits";
 
 const MAX_TAG_BADGES = 2;
@@ -38,19 +38,18 @@ export function NoteSummaryRow({
       disabled={disabled}
       onPress={onPress}
       style={{
-        gap: space.xs,
+        gap: space.sm,
         // PressableCard's row defaults set per-axis padding and a bleed margin; override each axis.
         paddingVertical: space.md,
-        paddingHorizontal: space.md,
+        paddingHorizontal: space.xs,
+        minHeight: metrics.touchTarget,
         marginHorizontal: 0,
-        marginVertical: space.xs,
-        backgroundColor: colors.panel,
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: colors.border,
-        borderRadius: radii.card,
+        marginVertical: 0,
+        borderBottomWidth: metrics.groupGuide,
+        borderBottomColor: colors.separator,
       }}
     >
-      <Body selectable={false} numberOfLines={labelLines ?? 1} style={uiStyles.title}>{title}</Body>
+      <Body selectable={false} numberOfLines={labelLines ?? 2} style={[uiStyles.title, { fontWeight: "600" }]}>{title}</Body>
       {excerpt ? <Body muted selectable={false} numberOfLines={2}>{excerpt}</Body> : null}
       {edited || tags.length || note.sourceSessionId ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }}>

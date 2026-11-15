@@ -1,5 +1,9 @@
 import { expect, it } from "vitest";
 import { ptyRecoveryMessage } from "./mobile-pty-error";
+it("gives explicit status recovery without replaying an unconfirmed terminal close", () => {
+  const message = ptyRecoveryMessage(new Error("Mobile PTY close is not confirmed."), (_tr, en) => en);
+  expect(message).toBe("Terminal closure is not confirmed. Keep this view open and check the close status.");
+});
 const english = (_tr: string, en: string) => en;
 
 it("explains the exact desktop conversation guard without suggesting a connection failure", () => {

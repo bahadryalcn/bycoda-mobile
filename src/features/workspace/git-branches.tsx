@@ -73,6 +73,7 @@ export function GitBranchesPanel({
       }}
       footer={
         <>
+          <Disclosure label={copy("Yeni dal", "New branch")} defaultExpanded={!!name}>
           <IdentifierField
             label={copy("Yeni dal", "New branch")}
             value={name}
@@ -86,6 +87,7 @@ export function GitBranchesPanel({
             busy={creating}
             onPress={onCreate}
           />
+          </Disclosure>
           {children}
         </>
       }

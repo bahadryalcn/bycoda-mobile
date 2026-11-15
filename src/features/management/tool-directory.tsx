@@ -120,19 +120,19 @@ export function ToolDirectory({
       if (!connection.isCurrent() || useMachines.getState().activeId !== machine.id) return;
       if (targetProjectId) useMachines.getState().selectProject(targetProjectId);
       if (tool.projectView && targetProjectId)
-        router.push({
+        router.navigate({
           pathname: "/project/[id]",
           params: { id: targetProjectId, machineId: machine.id, view: tool.projectView },
         });
       else if (tool.hostTool && (targetProjectId || unsupported))
-        router.push({ pathname: "/tools/[tool]", params: { tool: tool.hostTool, projectId: targetProjectId ?? "", machineId: machine.id } } as Href);
-      else if (tool.managementSection) router.push(`/manage/${tool.managementSection}`);
-      else if (tool.id === "assistant") router.push("/assistant" as Href);
-      else if (tool.id === "sessions") router.push("/(tabs)/chats" as Href);
-      else if (tool.id === "inbox") router.push("/inbox");
-      else if (tool.id === "computers") router.push("/machines");
-      else if (tool.id === "providers") router.push({ pathname: "/tools/[tool]", params: { tool: "providers", machineId: machine.id } } as Href);
-      else if (tool.id === "access") router.push({ pathname: "/tools/[tool]", params: { tool: "access", machineId: machine.id } } as Href);
+        router.navigate({ pathname: "/tools/[tool]", params: { tool: tool.hostTool, projectId: targetProjectId ?? "", machineId: machine.id } } as Href);
+      else if (tool.managementSection) router.navigate(`/manage/${tool.managementSection}`);
+      else if (tool.id === "assistant") router.navigate("/assistant" as Href);
+      else if (tool.id === "sessions") router.navigate("/(tabs)/chats" as Href);
+      else if (tool.id === "inbox") router.navigate("/inbox");
+      else if (tool.id === "computers") router.navigate("/machines");
+      else if (tool.id === "providers") router.navigate({ pathname: "/tools/[tool]", params: { tool: "providers", machineId: machine.id } } as Href);
+      else if (tool.id === "access") router.navigate({ pathname: "/tools/[tool]", params: { tool: "access", machineId: machine.id } } as Href);
     };
     if (onNavigate) onNavigate(navigate);
     else navigate();

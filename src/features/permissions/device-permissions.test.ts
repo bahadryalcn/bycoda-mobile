@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 const mocks = vi.hoisted(() => ({
-  settings: vi.fn(), cameraRead: vi.fn(), cameraRequest: vi.fn(),
+  settings: vi.fn(), cameraRead: vi.fn(), cameraRequest: vi.fn(), microphoneRead: vi.fn(), microphoneRequest: vi.fn(),
   channel: vi.fn(), notificationRead: vi.fn(), notificationRequest: vi.fn(), schedule: vi.fn(), handler: vi.fn(),
 }));
 vi.mock("react-native", () => ({ Linking: { openSettings: mocks.settings } }));
 vi.mock("expo-camera", () => ({ Camera: { getCameraPermissionsAsync: mocks.cameraRead, requestCameraPermissionsAsync: mocks.cameraRequest } }));
+vi.mock("expo-audio", () => ({ getRecordingPermissionsAsync: mocks.microphoneRead, requestRecordingPermissionsAsync: mocks.microphoneRequest }));
 vi.mock("expo-notifications", () => ({
   setNotificationChannelAsync: mocks.channel, getPermissionsAsync: mocks.notificationRead,
   requestPermissionsAsync: mocks.notificationRequest, scheduleNotificationAsync: mocks.schedule,
@@ -19,11 +20,26 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("EXPO_OS", "android");
   mocks.cameraRead.mockResolvedValue({ granted: false, canAskAgain: true, status: "undetermined" });
+  mocks.microphoneRead.mockResolvedValue({ granted: false, canAskAgain: true, status: "undetermined" });
+  mocks.microphoneRequest.mockResolvedValue({ granted: true, canAskAgain: true, status: "granted" });
   mocks.notificationRead.mockResolvedValue({ granted: false, canAskAgain: true, status: "undetermined" });
   mocks.cameraRequest.mockResolvedValue({ granted: true, canAskAgain: true, status: "granted" });
   mocks.notificationRequest.mockResolvedValue({ granted: true, canAskAgain: true, status: "granted" });
 });
 describe("native device permission integration", () => {
+  it("requests microphone permission through audio without starting recording or opening settings", async () => {
+    await allowDevicePermission("microphone");
+    expect(mocks.microphoneRead).toHaveBeenCalledOnce();
+    expect(mocks.microphoneRequest).toHaveBeenCalledOnce();
+    expect(mocks.notificationRequest).not.toHaveBeenCalled();
+    expect(mocks.settings).not.toHaveBeenCalled();
+  });
+  it("offers system settings after permanent microphone denial without asking again", async () => {
+    mocks.microphoneRead.mockResolvedValue({ granted: false, canAskAgain: false, status: "denied" });
+    await allowDevicePermission("microphone");
+    expect(mocks.settings).toHaveBeenCalledOnce();
+    expect(mocks.microphoneRequest).not.toHaveBeenCalled();
+  });
   it("keeps image picker from removing the scanner permission during native generation", () => {
     const { expo } = JSON.parse(readFileSync(new URL("../../../app.json", import.meta.url), "utf8"));
     const picker = expo.plugins.find((entry: unknown) => Array.isArray(entry) && entry[0] === "expo-image-picker");

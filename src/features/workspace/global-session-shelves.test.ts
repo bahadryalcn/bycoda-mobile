@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { globalSessionRows } from "./global-session-shelves";
+import { globalSessionRows, recentGlobalSessionRows } from "./global-session-shelves";
 
 const layout = (folders: object[]) => ({ folders, order: { pinned: [], loose: [] } });
 const folder = (id: string, sessionIds: string[], extra: object = {}) =>
@@ -10,6 +10,27 @@ const e = (project: never, id: string, extra: object = {}) =>
   ({ project, session: { id, title: id, status: "idle", updatedAt: 1, ...extra } }) as never;
 const keys = (rows: ReturnType<typeof globalSessionRows>) =>
   rows.map((row) => (row.kind === "header" ? `${row.shelf}:${row.count}` : row.key));
+
+it("shows global recents in activity order without pin or folder blocks hiding the newest session", () => {
+  const a = p("a", [folder("f", ["old"])]);
+  const b = p("b");
+  const directory = [e(a, "old", { pinned: true, updatedAt: 1 }), e(b, "new", { updatedAt: 3 }), e(a, "middle", { updatedAt: 2 })];
+  expect(keys(recentGlobalSessionRows(directory))).toEqual(["b:new", "a:middle", "a:old"]);
+  expect(directory[0]).toMatchObject({ session: { id: "old" } });
+});
+
+it("orders and windows global recents by turn activity like desktop Last sessions", () => {
+  const a = p("a");
+  const day = 86_400_000;
+  const now = 30 * day;
+  const directory = [
+    e(a, "renamed", { updatedAt: now, lastActivityAt: now - 3 * day }),
+    e(a, "active", { updatedAt: now - 5 * day, lastActivityAt: now - day }),
+    e(a, "stale", { updatedAt: now - 9 * day }),
+  ];
+  expect(keys(recentGlobalSessionRows(directory, now))).toEqual(["a:active", "a:renamed"]);
+  expect(keys(recentGlobalSessionRows(directory))).toEqual(["a:active", "a:renamed", "a:stale"]);
+});
 
 it("shows each project's folders in Recent and leaves loose sessions in directory order", () => {
   const a = p("a", [folder("f", ["a1"]), folder("g", ["a2"], { parentId: "f" })]);

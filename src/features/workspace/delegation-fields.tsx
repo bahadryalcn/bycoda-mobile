@@ -1,4 +1,3 @@
-import { ProviderAccountKind } from "@/ui/provider-account-kind";
 import { useMemo } from "react";
 import { View } from "react-native";
 import { MultiSelectField, SelectField } from "@/ui/primitives";
@@ -54,10 +53,7 @@ export function DelegationFields({
     label: item.label,
     detail: providerName(item.provider),
     icon: (
-      <>
-        <ProviderAccountMark provider={item.provider} color={item.color} size={18} />
-        <ProviderAccountKind kind={item.kind} derivedKind={item.derivedKind} />
-      </>
+      <ProviderAccountMark provider={item.provider} color={item.color} size={18} />
     ),
   }));
   const searchable = options.length > SEARCH_THRESHOLD;

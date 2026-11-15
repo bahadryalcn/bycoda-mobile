@@ -10,12 +10,12 @@ import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
 import LifeBuoy from "lucide-react-native/icons/life-buoy";
 import Info from "lucide-react-native/icons/info";
+import Palette from "lucide-react-native/icons/palette";
 import Type from "lucide-react-native/icons/type";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import Globe from "lucide-react-native/icons/globe";
 import Flag from "lucide-react-native/icons/flag";
 import UserRound from "lucide-react-native/icons/user-round";
-import { ThemeSelector } from "panelui-native/components/theme-selector";
 import { IconTile } from "../../ui/icon-tile";
 import { LANGUAGES } from "../../localization";
 import { useActiveMachine, useMachines } from "../../state/machines";
@@ -32,6 +32,8 @@ import {
   Screen,
   Section,
   SelectField,
+  SegmentedControl,
+  Body,
   Sheet,
   StateView,
 } from "../../ui/primitives";
@@ -63,6 +65,7 @@ export function SettingsScreen() {
   const appearanceError = useAppearance((s) => s.storageError);
   const busySend = useBusySend((s) => s.mode);
   const busySendHydrated = useBusySend((s) => s.hydrated);
+  const busySendError = useBusySend((s) => s.storageError);
   const chatTextSize = useChatAppearance((s) => s.textSize);
   const chatHydrated = useChatAppearance((s) => s.hydrated);
   const chatStorageError = useChatAppearance((s) => s.storageError);
@@ -98,6 +101,7 @@ export function SettingsScreen() {
         <NavigationGroup>
           <NavigationRow
             label={titles.visual}
+            icon={tile(Palette)}
             detail={[
               themeMode === "system"
                 ? copy("Sistem", "System")
@@ -140,23 +144,35 @@ export function SettingsScreen() {
             icon={tile(Type)}
             onPress={() => setPanel("appearance")}
           />
+          <SelectField
+            variant="row"
+            icon={tile(MessageSquare)}
+            label={copy("Ajan çalışırken gönder", "Send while agent is running")}
+            value={busySend}
+            disabled={!busySendHydrated}
+            options={[
+              { value: "steer", label: copy("Yönlendir", "Steer") },
+              { value: "queue", label: copy("Sıraya al", "Queue") },
+            ]}
+            onChange={(value) => { void busySendStore.getState().setMode(value); }}
+          />
+          {busySendError ? <Notice tone="warning" message={copy("Gönderim tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The send preference could not be read or saved. Select it again to retry.")} /> : null}
         </NavigationGroup>
         {panel === "visual" ? (
           <Sheet visible title={titles.visual} size="form" onClose={() => setPanel(null)}>
-            <ThemeSelector
+            <SegmentedControl
               label={copy("Tema", "Theme")}
-              size="sm"
               value={themeMode}
-              applyTheme={false}
               disabled={!appearanceHydrated}
-              onValueChange={(value) => {
+              options={[
+                { value: "system", label: copy("Sistem", "System") },
+                { value: "light", label: copy("Açık", "Light") },
+                { value: "dark", label: copy("Koyu", "Dark") },
+              ]}
+              onChange={(value) => {
                 void setThemeMode(value);
               }}
-            >
-              <ThemeSelector.Option value="system" label={copy("Sistem", "System")} />
-              <ThemeSelector.Option value="light" label={copy("Açık", "Light")} />
-              <ThemeSelector.Option value="dark" label={copy("Koyu", "Dark")} />
-            </ThemeSelector>
+            />
             <PalettePicker
               value={palette}
               disabled={!appearanceHydrated}
@@ -187,21 +203,22 @@ export function SettingsScreen() {
             description={storageError}
             action={{
               label: copy("Depolamayı kurtar", "Recover saved connections"),
-              onPress: () => router.push("/machines"),
+              onPress: () => router.navigate("/machines"),
             }}
           />
         ) : null}
       </Section>
+      <Body muted>{copy("Gönder düğmesine basılı tutarak diğer gönderim biçimini kullan.", "Hold the send button to use the other delivery action.")}</Body>
       <Section title={copy("Hesap", "Account")}>
         <NavigationGroup>
           <NavigationRow
             label={copy("bycoda hesabı", "bycoda account")}
             detail={copy(
-              "İsteğe bağlı giriş, cihazlar ve aktif süre",
-              "Optional sign-in, devices and active time",
+              "Hesap, cihazlar ve aktif süre",
+              "Account, devices and active time",
             )}
             icon={tile(UserRound)}
-            onPress={() => router.push("/account" as Href)}
+            onPress={() => router.navigate("/account" as Href)}
           />
         </NavigationGroup>
       </Section>
@@ -212,7 +229,7 @@ export function SettingsScreen() {
             detailLines={0}
             detail={machine?.name ?? copy("Bilgisayar bağla", "Connect a computer")}
             icon={tile(Laptop)}
-            onPress={() => router.push("/machines")}
+            onPress={() => router.navigate("/machines")}
           />
           {machine ? (
             <>
@@ -220,7 +237,7 @@ export function SettingsScreen() {
                 label={copy("Bilgisayar erişimi", "Host access")}
                 icon={tile(ShieldCheck)}
                 onPress={() =>
-                  router.push({
+                  router.navigate({
                     pathname: "/tools/[tool]",
                     params: { tool: "access", machineId: machine.id },
                   })
@@ -230,7 +247,7 @@ export function SettingsScreen() {
                 label={copy("Sağlayıcı merkezi", "Provider center")}
                 icon={tile(Server)}
                 onPress={() =>
-                  router.push({
+                  router.navigate({
                     pathname: "/tools/[tool]",
                     params: { tool: "providers", machineId: machine.id },
                   })
@@ -277,12 +294,12 @@ export function SettingsScreen() {
           <NavigationRow
             label={copy("Yardım ve destek", "Help & support")}
             icon={tile(LifeBuoy)}
-            onPress={() => router.push("/legal/help")}
+            onPress={() => router.navigate("/legal/help")}
           />
           <NavigationRow
             label={copy("AI içeriğini bildir", "Report AI content")}
             icon={tile(Flag)}
-            onPress={() => router.push("/report")}
+            onPress={() => router.navigate("/report")}
           />
           <NavigationRow label={titles.about} icon={tile(Info)} onPress={() => setPanel("about")} />
         </NavigationGroup>
@@ -322,14 +339,14 @@ export function SettingsScreen() {
                   label={copy("Gizlilik politikası", "Privacy policy")}
                   onPress={() => {
                     setPanel(null);
-                    router.push("/legal/privacy");
+                    router.navigate("/legal/privacy");
                   }}
                 />
                 <NavigationRow
                   label={copy("Kullanım koşulları ve lisans", "Terms of use & license")}
                   onPress={() => {
                     setPanel(null);
-                    router.push("/legal/terms");
+                    router.navigate("/legal/terms");
                   }}
                 />
               </NavigationGroup>

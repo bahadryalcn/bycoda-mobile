@@ -67,6 +67,8 @@ export type SessionTranscriptProps = {
   command: SessionCommandStatus;
   onCommand: SessionCommand;
   onReceiptHandled: () => void;
+  /** Re-reads the session now; rejects when the read fails. */
+  onRefresh: () => Promise<unknown>;
   /** Measured composer and keyboard space; list padding and the jump pill clear it. */
   bottomInset?: number;
 };

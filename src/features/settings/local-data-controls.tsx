@@ -163,7 +163,7 @@ export function LocalDataControls() {
                     ) : "";
   const storageIssue = !state.hydrated || (state.connectionPending && !busy)
     ? <Skeleton label={copy("Kaydedilmiş bağlantılar yükleniyor…", "Loading saved connections…")} />
-    : state.storageError ? <StateView compact tone="warning" illustration="error" title={copy("Kaydedilmiş bağlantılar kullanılamıyor", "Saved connections are unavailable")} description={copy("Yeniden yüklemek için Bilgisayarlar’ı açın.", "Open Computers to reload them.")} action={{ label: copy("Bilgisayarlar", "Computers"), busy, onPress: () => requestCloseThen(() => router.push("/machines")) }} /> : null;
+    : state.storageError ? <StateView compact tone="warning" illustration="error" title={copy("Kaydedilmiş bağlantılar kullanılamıyor", "Saved connections are unavailable")} description={copy("Yeniden yüklemek için Bilgisayarlar’ı açın.", "Open Computers to reload them.")} action={{ label: copy("Bilgisayarlar", "Computers"), busy, onPress: () => requestCloseThen(() => router.navigate("/machines")) }} /> : null;
   const longReview = confirmation?.kind === "connections" && confirmation.machines.length > 6;
   const remainingComputers = confirmation?.machines.filter(machine => state.machines.some(current => current.id === machine.id)) ?? [];
   const reviewIntro = <Stack>{storageIssue}<Body>{consequence}</Body>{stale ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden açın.", "Saved computers changed. Reopen this review to continue.")} /> : null}</Stack>;
@@ -241,7 +241,7 @@ export function LocalDataControls() {
             busy={busy} disabled={unavailable || stale} onCancel={closeReview} onSubmit={() => { void perform(); }}
             feedback={<MutationState mutation={action} />} />
         </Sheet>
-      ) : action.isSuccess && action.data?.retained ? <Stack><Notice tone="info" message={action.data.message} /><Button tone="quiet" label={copy("Bilgisayarlar", "Computers")} onPress={() => requestCloseThen(() => router.push("/machines"))} /></Stack> : <MutationState mutation={action} success={action.data?.message} />}
+      ) : action.isSuccess && action.data?.retained ? <Stack><Notice tone="info" message={action.data.message} /><Button tone="quiet" label={copy("Bilgisayarlar", "Computers")} onPress={() => requestCloseThen(() => router.navigate("/machines"))} /></Stack> : <MutationState mutation={action} success={action.data?.message} />}
 
     </Stack>
   );

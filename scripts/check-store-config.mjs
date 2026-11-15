@@ -121,7 +121,6 @@ requireValue(
   "QR scanning must explain camera access and disable microphone recording.",
 );
 for (const permission of [
-  "RECORD_AUDIO",
   "SYSTEM_ALERT_WINDOW",
   "READ_EXTERNAL_STORAGE",
   "WRITE_EXTERNAL_STORAGE",
@@ -132,8 +131,12 @@ for (const permission of [
   );
 }
 requireValue(
-  !app.ios?.infoPlist?.NSMicrophoneUsageDescription,
-  "QR-only builds must not request microphone access.",
+  typeof app.ios?.infoPlist?.NSMicrophoneUsageDescription === "string" &&
+    typeof plugins.get("expo-audio")?.microphonePermission === "string" &&
+    plugins.get("expo-audio")?.enableBackgroundRecording === false &&
+    plugins.get("expo-audio")?.enableBackgroundPlayback === false &&
+    !app.android?.blockedPermissions?.includes("android.permission.RECORD_AUDIO"),
+  "Explain microphone access and keep generic Expo audio foreground-only; explicit Android calls use the scoped native foreground service.",
 );
 requireValue(
   app.ios?.privacyManifests?.NSPrivacyTracking === false,

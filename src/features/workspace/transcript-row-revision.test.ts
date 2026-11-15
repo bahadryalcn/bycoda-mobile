@@ -16,6 +16,7 @@ vi.mock("./transcript-block", async () => {
 });
 vi.mock("./activity-group", () => ({ ActivityGroup: () => null }));
 vi.mock("./system-failure-card", () => ({ SystemFailureCard: () => null }));
+vi.mock("./turn-chrome", () => ({ ModelSwitchDivider: () => null, ModelSwitchRow: () => null, TurnFooter: () => null }));
 vi.mock("react-native", () => ({ View: (p: { children?: unknown }) => p.children ?? null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/tokens", () => ({ metrics: { toolRowHeight: 1 }, space: { xxs: 1, row: 1 } }));

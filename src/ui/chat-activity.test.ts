@@ -39,8 +39,8 @@ vi.mock("react-native", () => ({
     ),
 }));
 vi.mock("./typography", () => ({
-  Body: ({ children, style }: PropsWithChildren<{ style?: object }>) =>
-    createElement("span", { "data-text-style": JSON.stringify(style) }, children),
+  Body: ({ children, style, numberOfLines, mono }: PropsWithChildren<{ style?: object; numberOfLines?: number; mono?: boolean }>) =>
+    createElement("span", { "data-text-style": JSON.stringify(style), "data-lines": numberOfLines, "data-mono": mono }, children),
 }));
 vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
@@ -84,6 +84,18 @@ vi.mock("panelui-native/components/shimmer", () => ({
 import { ChatActivity, ChatStreaming } from "./chat-activity";
 
 describe("chat continuous animation lifecycle", () => {
+  it("keeps literal commands on one monospace line beside a short status and full inspector name", () => {
+    fixture.reduced = true;
+    const command = "echo **literal** && pnpm test --filter workspace";
+    const html = renderToStaticMarkup(createElement(ChatActivity, {
+      title: command, detail: "Full output", status: "running", onInspect: vi.fn(),
+    }));
+    expect(html).toContain('data-lines="1" data-mono="true"');
+    expect(html).toContain(">Working<");
+    expect(html).toContain("echo **literal** &amp;&amp; pnpm test --filter workspace");
+    expect(html).toContain("Full output");
+    expect(html).toContain("&quot;minHeight&quot;:48");
+  });
   it("reserves a real 48dp target and lets large text grow instead of clipping a fixed-height row", () => {
     const html = renderToStaticMarkup(createElement(ChatActivity, { title: "Read workspace recovery preferences", onInspect: vi.fn() }));
     expect(html).toContain("&quot;minHeight&quot;:48");
@@ -123,9 +135,9 @@ describe("chat continuous animation lifecycle", () => {
         onInspect: vi.fn(),
       }),
     );
-    expect(html).toContain('aria-label="Read source. Interrupted. src/chat.tsx"');
+    expect(html).toContain('aria-label="Read source. Stopped. src/chat.tsx"');
     expect(html).not.toContain("aria-expanded");
-    expect(html).toContain(">Interrupted<");
+    expect(html).toContain(">Stopped<");
     expect(html).not.toContain("Pending");
   });
 

@@ -1,3 +1,4 @@
+import { agentPresentation } from "../shared/agent-presentation";
 import type { CrewCandidate, CrewDefinition } from "@/remote/contracts/crews";
 import { useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
@@ -13,7 +14,7 @@ export function CrewMemberInspection({ definition, memberId, projectId }: { defi
   return <Stack>
     <QueryState query={query} />
     {query.data?.candidates?.map((candidate) => <Stack key={candidate.id}>
-      <Body>{candidate.harness} · {candidate.model}</Body>
+      <Body>{agentPresentation(candidate.harness, candidate.model)}</Body>
       {Object.entries(candidate.capabilities).map(([name, evidence]) => <Body key={name} muted>{name}: {evidence?.state ?? copy("Bilinmiyor", "Unknown")}</Body>)}
       {candidate.imageGeneration?.state && <Body muted>{copy("Görüntü oluşturma", "Image generation")}: {candidate.imageGeneration.state}</Body>}
     </Stack>)}

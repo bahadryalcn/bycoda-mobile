@@ -45,6 +45,7 @@ vi.mock("@/ui/primitives", async () => {
   const Button = ({ label, onPress, disabled, busy }: any) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);
   const IconButton = ({ label, onPress, disabled, busy }: any) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);
   return { Body: Wrap, Disclosure: Wrap, NavigationGroup: Wrap, Section: Wrap, Stack: Wrap, Button, IconButton, Row: Wrap,
+    ActionMenu: ({ actions }: { actions: { key: string; label: string; onPress: () => void }[] }) => createElement("nav", null, actions.map(action => createElement(Button, { key: action.key, label: action.label, onPress: action.onPress }))),
     ToggleField: ({ label, value, onChange }: any) => createElement("button", { onClick: () => onChange(!value) }, label),
     Screen: ({ children, actions }: any) => createElement("main", null, actions, children),
     ScreenList: ({ header, footer, actions, data, renderItem }: any) => createElement("main", null, actions, header, ...data.map((item: unknown, i: number) => createElement("div", { key: i }, renderItem({ item }))), footer),

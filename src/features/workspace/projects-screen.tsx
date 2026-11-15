@@ -6,10 +6,10 @@ import { useLatestCallback } from "./use-latest-callback";
 import { FlatList, View, type ListRenderItem } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, Stack } from "expo-router";
-import Plus from "lucide-react-native/icons/plus";
+import FolderPlus from "lucide-react-native/icons/folder-plus";
 import ArrowUpDown from "lucide-react-native/icons/arrow-up-down";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
-import { useHostMutation } from "@/state/queries";
+import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import {
   Button,
@@ -23,6 +23,7 @@ import {
   Sheet,
   SelectField,
   SegmentedControl,
+  ToggleField,
 } from "@/ui/primitives";
 import { metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
@@ -31,6 +32,8 @@ import type { HostProject } from "@/domain/types";
 import {
   directorySections,
   directoryRows,
+  projectNameContexts,
+  PINNED_SECTION_KEY,
   sortDirectoryProjects,
   type DirectoryProject,
   type DirectoryRow,
@@ -55,6 +58,11 @@ import {
   useProjectDirectoryPreferences,
   type ProjectDirectoryPreferences,
 } from "@/state/project-directory-preferences";
+import {
+  ModelRoutingGetResultSchema,
+  type ModelRoutingState,
+} from "../../../../src/shared/model/host-contracts/model-routing";
+import { modelRoutingProjectKey } from "../../../../src/shared/model/modelRoutingPools";
 
 export function ProjectsScreen() {
   const { colors } = useMobileTheme();
@@ -86,13 +94,23 @@ export function ProjectsScreen() {
   const activity = useProjectActivity();
   const running = useMemo(() => runningProjectCounts(activity.directory), [activity.directory]);
   const activeAt = useMemo(() => latestProjectActivity(activity.directory), [activity.directory]);
+  const contexts = useMemo(() => projectNameContexts(projects), [projects]);
+  // Personal/Work tags reach the Host through desktop model routing; read-only here.
+  const routing = useHostQuery<ModelRoutingState>(["modelRouting"], "modelRouting.get", {}, {
+    enabled: machine?.capabilities?.includes("models.routing.v1") === true,
+    queryFn: async (client, signal) =>
+      ModelRoutingGetResultSchema.parse(await client.request("modelRouting.get", {}, { signal })).state,
+  });
+  const projectKinds = routing.data?.projectKinds;
   const open = useHostMutation<HostProject>("projects.open", ["projects"]);
-  const showGroups = preferences.view === "grouped" && groups.length > 0;
+  const showGroups =
+    preferences.view === "grouped" &&
+    (groups.length > 0 || projects.some((project) => project.pinned));
   const custom = preferences.sort === "custom";
   const buildSections = useCallback(
     (query: string, collapsed: Readonly<Record<string, boolean>>) => {
-      const ordered = sortDirectoryProjects(projects, preferences, running);
-      const sections = directorySections(ordered, groups, query, collapsed, running, !custom);
+      const ordered = sortDirectoryProjects(projects, preferences);
+      const sections = directorySections(ordered, groups, query, collapsed, running);
       if (showGroups)
         return custom ? applyCustomOrder(sections, preferences.order, true) : sections;
       const matchingIds = new Set(
@@ -145,7 +163,7 @@ export function ProjectsScreen() {
   const go = (project: HostProject, view?: ProjectRowView) => {
     if (!machine || useMachines.getState().activeId !== machine.id) return;
     selectProject(project.id);
-    router.push({
+    router.navigate({
       pathname: "/project/[id]",
       params: { id: project.id, machineId: machine.id, ...(view ? { view } : {}) },
     });
@@ -214,7 +232,7 @@ export function ProjectsScreen() {
                 setAdding(true);
               }}
             >
-              <Plus size={20} strokeWidth={2} color={colors.accent} />
+              <FolderPlus size={20} strokeWidth={2} color={colors.accent} />
             </IconButton>
           }
         />
@@ -278,7 +296,11 @@ export function ProjectsScreen() {
         const section = item.section;
         return (
           <ProjectGroupHeader
-            name={section.group?.name ?? copy("Diğerleri", "Others")}
+            name={
+              section.pinned
+                ? copy("Sabitlenmiş", "Pinned")
+                : (section.group?.name ?? copy("Diğerleri", "Others"))
+            }
             appearance={section.group?.appearance}
             first={index === 0}
             count={section.count}
@@ -298,6 +320,9 @@ export function ProjectsScreen() {
         <ProjectRow
           id={project.id}
           name={project.name}
+          context={contexts[project.id]}
+          path={preferences.fullPaths ? project.cwd : undefined}
+          kind={projectKinds?.[modelRoutingProjectKey(project.cwd)]}
           appearance={project.appearance}
           depth={item.depth}
           grouped={showGroups}
@@ -317,6 +342,8 @@ export function ProjectsScreen() {
       preferences,
       running,
       activeAt,
+      contexts,
+      projectKinds,
       openingId,
       open.isPending,
       showGroups,
@@ -388,6 +415,12 @@ export function ProjectsScreen() {
           ]}
           onChange={(sort) => updatePreferences({ sort })}
         />
+        <ToggleField
+          label={copy("Tam klasör yolları", "Full folder paths")}
+          value={preferences.fullPaths}
+          disabled={!hydrated}
+          onChange={(fullPaths) => updatePreferences({ fullPaths })}
+        />
         {showGroups ? (
           <Row>
             <Button
@@ -397,6 +430,7 @@ export function ProjectsScreen() {
                 updatePreferences({
                   collapsed: Object.fromEntries([
                     ...groups.map((group) => [group.id, false]),
+                    [PINNED_SECTION_KEY, false],
                     ["", false],
                   ]),
                 })
@@ -409,6 +443,7 @@ export function ProjectsScreen() {
                 updatePreferences({
                   collapsed: Object.fromEntries([
                     ...groups.map((group) => [group.id, true]),
+                    [PINNED_SECTION_KEY, true],
                     ["", true],
                   ]),
                 })
@@ -422,6 +457,7 @@ export function ProjectsScreen() {
         sections={reorderSections}
         grouped={showGroups}
         othersLabel={copy("Diğerleri", "Others")}
+        pinnedLabel={copy("Sabitlenmiş", "Pinned")}
         onMove={moveOrder}
         onClose={() => setReordering(false)}
       />

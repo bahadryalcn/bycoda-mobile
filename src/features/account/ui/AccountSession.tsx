@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AccountApiError, type Device } from "../contracts";
 import { createAccountRuntime } from "../model/account-runtime";
@@ -8,6 +8,7 @@ import { readDeviceInfo } from "../model/device-info";
 import { secureDeviceIdStore, securePushMarkStore } from "../model/device-store";
 import { useAccountPushSync } from "../model/push-account";
 import { useAccountPushReads } from "../model/push-read";
+import { useAccountAccess } from "../model/account-access";
 import { AccountContext, type AccountAuth, type AccountState } from "./account-context";
 
 /**
@@ -26,6 +27,18 @@ export function AccountSession({
   const [device, setDevice] = useState<Device | null>(null);
   const [registerError, setRegisterError] = useState<Error | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const status = !auth.loaded ? "loading" : auth.signedIn ? "signedIn" : "signedOut";
+
+  // Authentication changes fence Host work before passive effects or new screen reads run.
+  useLayoutEffect(() => {
+    useAccountAccess.setState({ status });
+    // SDK revocation/sign-out can bypass our button; no later login may inherit this account's cache.
+    if (status !== "signedIn") {
+      void queries.cancelQueries({ queryKey: ["account"] }).catch(() => undefined);
+      queries.removeQueries({ queryKey: ["account"] });
+    }
+    return () => { useAccountAccess.setState({ status: "loading" }); };
+  }, [status, queries]);
 
   const runtime = useMemo(
     () =>
@@ -36,6 +49,7 @@ export function AccountSession({
         store: secureDeviceIdStore,
         // Local data, drafts and pairings stay; only the account session ends.
         onDeviceRevoked: async () => {
+          useAccountAccess.setState({ status: "signedOut" });
           setDevice(null);
           await securePushMarkStore.clear().catch(() => undefined);
           queries.removeQueries({ queryKey: ["account"] });
@@ -71,16 +85,22 @@ export function AccountSession({
   useAccountPushReads(auth.signedIn ? runtime : null, device);
 
   const signOut = useCallback(async () => {
-    await runtime.releaseDevice();
-    await securePushMarkStore.clear().catch(() => undefined);
-    setDevice(null);
-    queries.removeQueries({ queryKey: ["account"] });
-    await authRef.current.signOut();
+    useAccountAccess.setState({ status: "signedOut" });
+    try {
+      await runtime.releaseDevice();
+      await securePushMarkStore.clear().catch(() => undefined);
+      setDevice(null);
+      queries.removeQueries({ queryKey: ["account"] });
+      await authRef.current.signOut();
+    } catch (error) {
+      useAccountAccess.setState({ status: authRef.current.signedIn ? "signedIn" : "signedOut" });
+      throw error;
+    }
   }, [runtime, queries]);
 
   const value = useMemo<AccountState>(
     () => ({
-      status: !auth.loaded ? "loading" : auth.signedIn ? "signedIn" : "signedOut",
+      status,
       config: accountConfig,
       runtime,
       device,

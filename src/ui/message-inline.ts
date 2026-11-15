@@ -55,7 +55,14 @@ export function readLink(text: string, start: number) {
   const relativeEnd = text.slice(start + 1, start + 1025).indexOf("](");
   if (relativeEnd < 0) return;
   const labelEnd = start + 1 + relativeEnd;
-  if (text.slice(start + 1, labelEnd).includes("\n")) return;
+  const rawLabel = text.slice(start + 1, labelEnd);
+  if (rawLabel.includes("\n")) return;
+  // `[x] [file](a.ts)` must not swallow a task marker or other bracketed prose into the label.
+  let brackets = 0;
+  for (const character of rawLabel) {
+    if (character === "[") brackets++;
+    else if (character === "]" && --brackets < 0) return;
+  }
   let depth = 1;
   let angle = false;
   const targetStart = labelEnd + 2;

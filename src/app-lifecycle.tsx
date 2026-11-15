@@ -41,7 +41,6 @@ export function AppLifecycle({ children, cache }: LifecycleProps) {
             useSecurity.getState().handleWindowFocus(false);
             focusManager.setFocused(false);
             void cache.cancelQueries({ queryKey: ["machine"] });
-            void invalidateProjectPrivacy(cache);
           })
         : null;
     const focus =

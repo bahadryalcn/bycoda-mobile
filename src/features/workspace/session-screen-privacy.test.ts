@@ -45,7 +45,11 @@ vi.mock("@/state/machines", () => ({
 vi.mock("@/state/queries", () => ({
   hostKey: (machine: string, key: unknown[]) => ["machine", machine, ...key],
 }));
-vi.mock("@/ui/tokens", () => ({ colors: {}, metrics: { contentWidth: 800 }, space: { screen: 16, xs: 4 } }));
+vi.mock("@/ui/tokens", () => ({
+  colors: {},
+  metrics: { contentWidth: 800 },
+  space: { screen: 16, xs: 4 },
+}));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./use-project-directory", () => ({
   useProjectList: () => ({
@@ -105,6 +109,9 @@ vi.mock("./shared", () => ({
   UncertainCommand: class extends Error {},
   useCommands: () => ({ mutateAsync: state.command, reset() {}, isPending: false, error: null }),
 }));
+vi.mock("./session-project-recovery", () => ({
+  SessionProjectRecovery: () => createElement("div", null, "Recover project link"),
+}));
 vi.mock("./session-composer", () => ({
   SessionComposer: ({ onCommand }: { onCommand: typeof state.onCommand }) => {
     const [draft] = useState("Preserved owner draft");
@@ -123,24 +130,59 @@ vi.mock("./session-keyboard-frame", () => ({
     createElement("div", null, children, composer),
 }));
 vi.mock("./session-header", () => ({
-  SessionHeader: ({ title, context, actions }: { title: string; context?: string; actions?: import("react").ReactNode }) => {
+  SessionHeader: ({
+    title,
+    context,
+    actions,
+  }: {
+    title: string;
+    context?: string;
+    actions?: import("react").ReactNode;
+  }) => {
     state.title = title;
     return createElement("header", null, title, context, actions);
   },
 }));
 vi.mock("./session-toolbar", () => ({
   SessionToolbar: ({ contextLabel, onFind }: { contextLabel?: string; onFind: () => void }) =>
-    createElement("p", null, "Private toolbar", contextLabel, createElement("button", { onClick: onFind }, "Find in messages")),
+    createElement(
+      "p",
+      null,
+      "Private toolbar",
+      contextLabel,
+      createElement("button", { onClick: onFind }, "Find in messages"),
+    ),
 }));
 vi.mock("./session-transcript", () => ({
-  SessionTranscript: ({ session, findOpen, onFindOpenChange }: { session?: unknown; findOpen: boolean; onFindOpenChange: (open: boolean) => void }) =>
-    session ? createElement("div", { "data-find-open": findOpen }, "Secret transcript", findOpen ? createElement("button", { onClick: () => onFindOpenChange(false) }, "Close find") : null) : null,
+  SessionTranscript: ({
+    session,
+    findOpen,
+    onFindOpenChange,
+  }: {
+    session?: unknown;
+    findOpen: boolean;
+    onFindOpenChange: (open: boolean) => void;
+  }) =>
+    session
+      ? createElement(
+          "div",
+          { "data-find-open": findOpen },
+          "Secret transcript",
+          findOpen
+            ? createElement("button", { onClick: () => onFindOpenChange(false) }, "Close find")
+            : null,
+        )
+      : null,
 }));
 vi.mock("./session-parent-bar", () => ({ SessionParentBar: () => null }));
-vi.mock("./session-agents", () => ({ SessionAgents: ({ children }: { children: (chip: null) => import("react").ReactNode }) => children(null) }));
+vi.mock("./session-agents", () => ({
+  SessionAgents: ({ children }: { children: (chip: null) => import("react").ReactNode }) =>
+    children(null),
+}));
 vi.mock("./session-settings", () => ({ SessionSettings: () => null }));
 vi.mock("./transcript-skeleton", () => ({
-  TranscriptSkeleton: ({ label }: { label?: string }) => createElement("div", { "data-query": "loading" }, label ?? "Loading"),
+  TranscriptSkeleton: ({ label }: { label?: string }) =>
+    createElement("div", { "data-query": "loading" }, label ?? "Loading"),
 }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
@@ -263,7 +305,8 @@ it("opens find from the header without replacing the transcript or composer draf
   await render();
   const input = container.querySelector("input")!;
   const transcript = container.querySelector("[data-find-open]")!;
-  const button = (label: string) => [...container.querySelectorAll("button")].find(node => node.textContent === label)!;
+  const button = (label: string) =>
+    [...container.querySelectorAll("button")].find((node) => node.textContent === label)!;
   expect(transcript.getAttribute("data-find-open")).toBe("false");
   await act(async () => button("Find in messages").click());
   expect(transcript.getAttribute("data-find-open")).toBe("true");
@@ -286,6 +329,16 @@ it("wrong-project cached deep links never display a private title/transcript or 
   expect(state.options?.enabled).toBe(false);
   await expect(state.onCommand!({ type: "send" })).rejects.toThrow("no longer available");
   expect(state.command).not.toHaveBeenCalled();
+});
+it("rechecks a previously loaded canonical session when reopened through a visible legacy alias, without displaying its cached transcript", async () => {
+  state.visibleIds = ["visible", "canonical"];
+  cache = new QueryClient();
+  cache.setQueryData(["machine", "machine", "session", "session"], session("canonical"));
+  await render();
+  expect(container.textContent).toContain("Recover project link");
+  expect(container.textContent).not.toContain("Private title");
+  expect(container.textContent).not.toContain("Secret transcript");
+  expect(state.options?.enabled).toBe(false);
 });
 
 it("retains only project navigation identity and the same composer after inactive payload eviction", async () => {

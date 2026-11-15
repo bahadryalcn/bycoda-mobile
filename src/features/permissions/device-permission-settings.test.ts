@@ -80,6 +80,7 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { muted: "#777" } }) }));
 vi.mock("lucide-react-native/icons/bell", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/camera", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/mic", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/image", () => ({ default: () => null }));
 vi.mock("@/ui/icon-tile", () => ({
   IconTile: ({ children }: PropsWithChildren) => createElement("span", null, children),
@@ -181,6 +182,16 @@ it("distinguishes a retryable denial from a permission never requested", async (
   expect(mocks.allow).not.toHaveBeenCalled();
 });
 
+it("shows microphone denial and lets the owner recover it without an automatic permission prompt", async () => {
+  mocks.read.mockImplementation(async (kind: string) => kind === "microphone" ? { granted: false, canAskAgain: false, status: "denied" } : granted);
+  mocks.allow.mockResolvedValue(undefined);
+  await render();
+  expect(badgeOf("Microphone")).toBe("Denied");
+  expect(mocks.allow).not.toHaveBeenCalled();
+  await act(async () => find("Microphone").click());
+  expect(mocks.allow).toHaveBeenCalledExactlyOnceWith("microphone");
+});
+
 it("a failing notification read leaves the camera usable, exposes Retry, and never requests a permission on mount", async () => {
   mocks.read.mockImplementation(async (kind: string) => {
     if (kind === "notifications") throw new Error("unavailable");
@@ -254,6 +265,6 @@ it("keeps a camera operation failure beside Camera when a foreground refresh arr
   expect(
     error.compareDocumentPosition(find("Notifications")) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
-  expect(mocks.read).toHaveBeenCalledTimes(2);
+  expect(mocks.read).toHaveBeenCalledTimes(3);
   expect(mocks.allow).toHaveBeenCalledExactlyOnceWith("camera");
 });

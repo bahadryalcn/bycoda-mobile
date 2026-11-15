@@ -1,7 +1,7 @@
 import type { MobileColors, MobileThemeMode } from "./tokens.ts";
 
 /** Selectable colour palettes. `classic` is the original app look; the rest mirror the desktop presets. */
-export const PALETTE_IDS = ["classic", "bycoda", "olive", "tide", "kiln", "dusk", "ink"] as const;
+export const PALETTE_IDS = ["classic", "bycoda", "olive", "tide", "kiln", "dusk", "ink", "sand", "rose"] as const;
 export type PaletteId = (typeof PALETTE_IDS)[number];
 export const DEFAULT_PALETTE: PaletteId = "classic";
 
@@ -27,6 +27,8 @@ export const PALETTES: readonly PaletteDefinition[] = [
   { id: "kiln", name: "Kiln", nameTr: "Kiln", hue: 25, saturation: 24, lightness: 7, accent: "DBA276" },
   { id: "dusk", name: "Dusk", nameTr: "Dusk", hue: 275, saturation: 24, lightness: 7, accent: "B297D4" },
   { id: "ink", name: "Ink", nameTr: "Ink", hue: 216, saturation: 0, lightness: 5, accent: "B8B8B8" },
+  { id: "sand", name: "Sand", nameTr: "Sand", hue: 42, saturation: 22, lightness: 7, accent: "D3B879" },
+  { id: "rose", name: "Rose", nameTr: "Rose", hue: 345, saturation: 20, lightness: 7, accent: "D68FA5" },
 ];
 
 export function normalizePalette(value: unknown): PaletteId {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { hashKey, notifyManager, useQueryClient } from "@tanstack/react-query";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { hostKey, useHostClient, useHostQuery } from "@/state/queries";
-import { isAppAccessAllowed, useSecurity } from "@/state/security";
+import { isAppContentVisible, useSecurity } from "@/state/security";
 import { hasProviderPermission } from "../privacy/consent-access";
 import type { HostProject, HostProjectDirectory } from "@/domain/types";
 import { deduplicateProjects } from "./activity-model";
@@ -14,7 +14,7 @@ const DIRECTORY_QUERY_KEY = "directory";
 export function useProjectDirectory() {
   const machine = useActiveMachine();
   const client = useHostClient();
-  const access = useSecurity((state) => state.status === "unlocked" && state.appState === "active" && state.windowFocused);
+  const access = useSecurity((state) => state.status === "unlocked" && state.appState === "active");
   const cache = useQueryClient();
   const grouped = !!machine?.capabilities?.includes("projects.directory.v1");
   const visibilityKey = useMemo(() => projectPrivacyKey(machine?.id ?? "", grouped), [machine?.id, grouped]);
@@ -96,7 +96,7 @@ export function useProjectDirectory() {
   const isProjectVisible = useCallback((projectId: string, expectedCwd?: string) => {
     const state = useMachines.getState(); const security = useSecurity.getState(); const current = state.machines.find((row) => row.id === machine?.id);
     if (!machine || state.activeId !== machine.id || !state.hydrated || state.storageError || state.connectionPending || !current ||
-      current.environmentId !== machine.environmentId || security.status !== "unlocked" || security.appState !== "active" || !security.windowFocused || !isAppAccessAllowed() || !hasProviderPermission(current)) return false;
+      current.environmentId !== machine.environmentId || security.status !== "unlocked" || security.appState !== "active" || !isAppContentVisible() || !hasProviderPermission(current)) return false;
     const method = grouped ? "projects.directory" : "projects.list";
     const key = hostKey(machine.id, grouped ? ["projects", DIRECTORY_QUERY_KEY, { method, params: {} }] : ["projects", { method, params: {} }]);
     if (projectVisibilityExpired(cache, key) || projectVisibilityDenied(cache, key)) return false;

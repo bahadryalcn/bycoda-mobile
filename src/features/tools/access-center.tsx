@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import { Stack } from "expo-router";
+import { useLocale } from "@/i18n";
 import { View } from "react-native";
 import Network from "lucide-react-native/icons/network";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
@@ -20,6 +21,7 @@ import {
   Row,
   SectionHeader,
   ScreenList,
+  SearchField,
 } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { useCopy } from "@/ui/copy";
@@ -28,6 +30,7 @@ import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import {
   readAccessCenter,
+  visibleAccessDevices,
   type AccessTarget,
   type HostAccessReport,
   type PairedDevice,
@@ -67,6 +70,8 @@ type AccessRow =
   | { kind: "tunnel"; id: string; tunnel: AccessTunnel };
 export function AccessCenter() {
   const copy = useCopy();
+  const locale = useLocale();
+  const [search, setSearch] = useState("");
   const intro = useInfoHint(copy(
     "Bu bilgisayarı kontrol edebilen eşleşmiş cihazlar ve bu cihazların ulaşabildiği ağlar.",
     "Paired devices can control this computer. Networks show where they can reach it.",
@@ -103,8 +108,7 @@ export function AccessCenter() {
   const rows: AccessRow[] = report
     ? [
         { kind: "heading", id: "devices" },
-        ...[...report.devices]
-          .sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent))
+        ...visibleAccessDevices(report.devices, search, locale)
           .map((device): AccessRow => ({
           kind: "device",
           id: `device:${device.id}`,
@@ -187,6 +191,12 @@ export function AccessCenter() {
                   : copy("Dış erişim tünelleri", "External access tunnels")}
                 count={item.id === "devices" ? report?.devices.length : undefined}
               />
+              {item.id === "devices" && report && (report.devices.length > 6 || search) ? (
+                <>
+                  <SearchField label={copy("Cihaz ara", "Search devices")} value={search} onChangeText={setSearch} />
+                  {!visibleAccessDevices(report.devices, search, locale).length ? <Body muted>{copy("Eşleşen sonuç yok", "No matching results")}</Body> : null}
+                </>
+              ) : null}
               {item.id === "tunnels" && report?.tunnels ? (
                 <>
                   <Body muted>

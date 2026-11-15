@@ -5,7 +5,7 @@ import { expect, it, vi } from "vitest";
 import { WelcomeScreen } from "./welcome-screen";
 const layout = vi.hoisted(() => ({ inset: 140, content: {} as Record<string, number> }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children), ScrollView: ({ children, contentContainerStyle }: PropsWithChildren<{ contentContainerStyle: Record<string, number> }>) => { layout.content = contentContainerStyle; return h("main", null, children); } }));
-vi.mock("expo-router", () => ({ router: { push: vi.fn() }, Stack: { Screen: () => null } }));
+vi.mock("expo-router", () => ({ router: { navigate: vi.fn() }, Stack: { Screen: () => null } }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 44 }) }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));

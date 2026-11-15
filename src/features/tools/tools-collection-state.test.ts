@@ -120,6 +120,8 @@ vi.mock("@/ui/primitives", async () => {
     Body: ({ children }: PropsWithChildren) =>
       createElement("span", null, children),
     Row: ({ children }: PropsWithChildren) => createElement("div", null, children),
+    Disclosure: ({ children }: PropsWithChildren) => createElement("div", null, children),
+    StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Field: Input,
     SearchField: Input,
     Button,

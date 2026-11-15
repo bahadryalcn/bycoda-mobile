@@ -39,6 +39,23 @@ const workflowMethods = Object.keys(HOST_RPC_METHODS).filter(
   (method) => method.startsWith("sprints.") || method.startsWith("automations."),
 );
 const capabilities = ["transport.ws.sprints.v2", "transport.ws.automations.v2"];
+const proposalInput = {
+  operationId: "retained-proposal",
+  request: "Review the project daily at 09:15",
+  projectId: "project",
+  currentExecution: { harness: "codex", model: "model", modelSettings: { effort: "high" } },
+};
+const proposal = {
+  operationId: proposalInput.operationId,
+  projectId: proposalInput.projectId,
+  name: "Daily review",
+  instruction: "Review the project",
+  schedule: { scheduleKind: "daily", minute: 15, time: "09:15", dayOfWeek: 1 },
+  timeZone: "UTC",
+  outputTarget: "projectTask",
+  confirmationRequired: true,
+  preview: { timeZone: "UTC", nextRunAt: 5 },
+};
 
 async function connected(extraMethods: string[] = [], extraCapabilities: string[] = []) {
   const enabledCapabilities = [...capabilities, ...extraCapabilities];
@@ -69,6 +86,7 @@ async function connected(extraMethods: string[] = [], extraCapabilities: string[
     "sprints.goalContext": sprintContext,
     "automations.list": [automation],
     "automations.preview": { timeZone: "UTC", nextRunAt: 5 },
+    "automations.propose": proposal,
     "automations.save": automation,
     "automations.delete": { deleted: true },
     "automations.runs": [automationRun],
@@ -103,7 +121,7 @@ async function connected(extraMethods: string[] = [], extraCapabilities: string[
   return { ...f, client, acquire, credential, fetcher };
 }
 
-it("sends all 11 Sprint and six real Automation API methods through the negotiated subset without regenerating caller IDs", async () => {
+it("sends all 11 Sprint and seven Automation methods through the negotiated subset without regenerating caller IDs", async () => {
   const f = await connected();
   const sprintCalls: Array<[string, Record<string, unknown>]> = [
     ["sprints.list", {}],
@@ -216,9 +234,11 @@ it("sends all 11 Sprint and six real Automation API methods through the negotiat
   await api.automations.delete(automation.id);
   await api.automations.runs(automation.id);
   await api.automations.runNow(automation.id);
+  expect(await f.client.request("automations.propose", proposalInput)).toEqual(proposal);
   const calls = f.sent.filter((request) => request.method !== "connection.hello");
-  expect(calls).toHaveLength(17);
+  expect(calls).toHaveLength(18);
   expect(new Set(calls.map((request) => request.method))).toEqual(new Set(workflowMethods));
+  expect(calls.find((request) => request.method === "automations.propose")?.params).toEqual(proposalInput);
   const save = calls.find((request) => request.method === "automations.save")!;
   expect(save.params).toEqual({
     automation: { ...automation, enabled: false, expectedConfiguration: automation },

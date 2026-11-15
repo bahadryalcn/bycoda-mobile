@@ -5,6 +5,7 @@ import Plus from "lucide-react-native/icons/plus";
 import { Badge, Body, IconButton, PressableCard } from "@/ui/primitives";
 import { space, fontSize, lineHeight } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
 import { gitFilePresentation } from "./git-file-presentation";
 import type { GitChangedFile } from "./wire";
 
@@ -26,6 +27,7 @@ export function GitFileRow({
 }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const numbers = new Intl.NumberFormat(useLocale());
   const normalized = file.relative.replaceAll("\\", "/");
   const separator = normalized.lastIndexOf("/");
   const name = normalized.slice(separator + 1);
@@ -89,12 +91,12 @@ export function GitFileRow({
               <Body
                 selectable={false}
                 style={{ fontSize: fontSize.small, lineHeight: lineHeight.small, color: colors.success }}
-              >{`+${file.additions}`}</Body>
+              >{`+${numbers.format(file.additions)}`}</Body>
               {"  "}
               <Body
                 selectable={false}
                 style={{ fontSize: fontSize.small, lineHeight: lineHeight.small, color: colors.danger }}
-              >{`−${file.deletions}`}</Body>
+              >{`−${numbers.format(file.deletions)}`}</Body>
             </Body>
           </View>
         </View>

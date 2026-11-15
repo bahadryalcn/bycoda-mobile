@@ -2,7 +2,7 @@ import { Linking } from "react-native";
 import { requestDevicePermission, type DevicePermission } from "./permission-flow";
 import { isViewingSession } from "../push/push-viewing";
 
-export type DevicePermissionKind = "camera" | "notifications";
+export type DevicePermissionKind = "camera" | "microphone" | "notifications";
 let handlerReady = false;
 
 /** Loads expo-notifications with its foreground handler and Android channel in place. */
@@ -29,6 +29,10 @@ export async function notifications() {
 
 export async function readDevicePermission(kind: DevicePermissionKind): Promise<DevicePermission> {
   if (process.env.EXPO_OS === "web") return { granted: false, canAskAgain: false, status: "unavailable" };
+  if (kind === "microphone") {
+    const audio = await import("expo-audio");
+    return audio.getRecordingPermissionsAsync();
+  }
   if (kind === "camera") {
     const camera = await import("expo-camera");
     return camera.Camera.getCameraPermissionsAsync();
@@ -47,6 +51,10 @@ export async function allowDevicePermission(kind: DevicePermissionKind) {
   return requestDevicePermission(
     () => readDevicePermission(kind),
     async () => {
+      if (kind === "microphone") {
+        const audio = await import("expo-audio");
+        return audio.requestRecordingPermissionsAsync();
+      }
       if (kind === "camera") {
         const camera = await import("expo-camera");
         return camera.Camera.requestCameraPermissionsAsync();

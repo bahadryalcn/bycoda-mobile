@@ -12,6 +12,12 @@ const text = (value: unknown, max = 256): value is string =>
 const integer = (value: unknown) => Number.isSafeInteger(value) && Number(value) >= 0;
 const fields = (value: Record<string, unknown>, keys: string[]) =>
   Object.keys(value).every((key) => keys.includes(key));
+
+/** A pending native close is not proof that the exact process has physically exited. */
+export function readMobilePtyClosed(value: unknown): void {
+  if (!record(value) || !fields(value, ["closed"]) || value.closed !== true)
+    throw new Error("Mobile PTY close is not confirmed.");
+}
 export function readMobilePtyTerminal(value: unknown, source: string): MobilePtyTerminal {
   if (
     !record(value) ||

@@ -13,7 +13,7 @@ export function AgentProviderPrerequisite() {
         "This computer has not reported an available agent. Check providers.",
       )}
       retryLabel={copy("Sağlayıcı merkezi", "Provider center")}
-      onRetry={() => router.push("/tools/providers")}
+      onRetry={() => router.navigate("/tools/providers")}
     />
   );
 }

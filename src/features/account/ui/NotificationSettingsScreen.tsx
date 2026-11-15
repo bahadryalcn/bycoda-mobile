@@ -52,7 +52,7 @@ export function NotificationSettingsScreen() {
         <View style={{ flex: 1, justifyContent: "center" }}>
           <StateView
             title={copy("Bildirim ayarlarını yönetmek için giriş yap", "Sign in to manage notification settings")}
-            action={{ label: copy("Giriş yap", "Sign in"), onPress: () => router.push("/account") }}
+            action={{ label: copy("Giriş yap", "Sign in"), onPress: () => router.navigate("/account") }}
           />
         </View>
       </Screen>

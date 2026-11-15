@@ -6,7 +6,8 @@ import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { HostProject } from "@/domain/types";
-import { ActionMenu, Badge, Body, CodePanel, CodeText, Empty, ErrorText, IconButton, NavigationGroup, NavigationRow, Notice, QueryState, Row, ScreenList, SearchField, SearchToolbar, SelectField, Sheet, ToggleField } from "@/ui/primitives";
+import { ActionMenu, Badge, Body, CodePanel, CodeText, Empty, ErrorText, IconButton, NavigationGroup, NavigationRow, Notice, QueryState, Row, ScreenList, SearchField, SearchToolbar, SelectField, Sheet, StatusText, ToggleField } from "@/ui/primitives";
+import { MessageCode } from "@/ui/message-code";
 import { useCopy } from "@/ui/copy";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useMobileTheme } from "@/ui/theme";
@@ -168,17 +169,16 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
           return (
           <NavigationRow
             label={entry.message}
+            labelLines={2}
             detail={sourceLabel}
+            metadata={time}
             accessibilityLabel={[entry.message, levelLabel, time, sourceLabel].filter(Boolean).join(". ")}
-            supporting={<Row>
-              <Badge
+            supporting={<StatusText
                 label={levelLabel}
                 tone={
                   entry.level === "error" ? "danger" : entry.level === "warn" ? "warning" : "default"
                 }
-              />
-              <Body muted style={[uiStyles.caption, { flexShrink: 1, minWidth: 0 }]}>{time}</Body>
-            </Row>}
+              />}
             onPress={() => setSelected({ entry, reviewed: reviewedMachine(machine) })}
           />
           );
@@ -256,11 +256,7 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
             <CodePanel horizontal={false}>
               <CodeText>{selectedEntry.message}</CodeText>
             </CodePanel>
-            {selectedEntry.stack ? (
-              <CodePanel horizontal={false}>
-                <CodeText>{selectedEntry.stack}</CodeText>
-              </CodePanel>
-            ) : null}
+            {selectedEntry.stack ? <MessageCode code={selectedEntry.stack} output allowPreview={false} readerTitle={copy("Çağrı yığını", "Stack trace")} /> : null}
             {details ? (
               <CodePanel horizontal={false}>
                 <CodeText>{details.text}</CodeText>

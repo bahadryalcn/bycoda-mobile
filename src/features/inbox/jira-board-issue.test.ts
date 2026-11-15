@@ -25,7 +25,7 @@ vi.mock("@/ui/primitives", () => {
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => {
     state.presses.set(label, onPress); return createElement("button", { disabled, onClick: onPress }, label);
   };
-  return { Body: Wrap, Stack: Wrap, QueryState: () => null,
+  return { Body: Wrap, Heading: Wrap, Row: Wrap, Badge: ({ label }: { label: string }) => createElement("span", null, label), Stack: Wrap, QueryState: () => null,
     Sheet: ({ children, footer, title, onClose }: PropsWithChildren<{ footer?: ReactNode; title: string; onClose: () => void }>) =>
       createElement("div", { role: "dialog", "aria-label": title }, children, footer, createElement(Button, { label: `Close ${title}`, onPress: onClose })),
     Notice: ({ message }: { message: string }) => createElement("p", null, message), Button,

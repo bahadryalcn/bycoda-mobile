@@ -96,7 +96,7 @@ it("keeps cached content but stops hidden-route polling and invalidation refetch
   expect(fixture.request).toHaveBeenCalledTimes(3);
 });
 
-for (const state of [{ appState: "background" }, { appState: "inactive" }, { windowFocused: false }, { status: "locked" }] as const) {
+for (const state of [{ appState: "background" }, { appState: "inactive" }, { status: "locked" }] as const) {
   it(`suspends automatic host reads for ${JSON.stringify(state)} and recovers once active`, async () => {
     await act(async () => { useSecurity.setState(state); render(); await vi.advanceTimersByTimeAsync(10_000); });
     expect(fixture.request).not.toHaveBeenCalled();

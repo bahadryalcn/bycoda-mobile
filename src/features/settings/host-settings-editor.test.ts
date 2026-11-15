@@ -15,7 +15,7 @@ vi.mock("@/state/queries", () => ({
   useHostQuery: (_key: unknown, _method: string, _params: unknown, options: { enabled: boolean }) => { state.reads.push(options.enabled); return { data: (state.error as { kind?: string })?.kind === "auth" ? undefined : state.settings, error: state.error, isError: !!state.error, refetch: state.refetch }; },
   useHostMutation: () => ({ mutateAsync: state.write, isPending: false }),
 }));
-vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
+vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("react-native-reanimated", () => ({ default: { View: ({ children }: PropsWithChildren) => createElement("div", null, children) } }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { caption: {} } }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));

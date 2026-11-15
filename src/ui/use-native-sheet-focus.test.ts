@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
-  allowed: true, unlocked: true,
+  allowed: true, unlocked: true, routeFocused: true,
   query: vi.fn<() => Promise<boolean>>(), focus: vi.fn(),
   access: { allowed: true, check: (): boolean => state.allowed },
 }));
@@ -13,6 +13,7 @@ vi.mock("react-native", () => ({
   findNodeHandle: (node: { tag: number } | null) => node?.tag ?? null,
 }));
 vi.mock("@/state/security", () => ({ useSecurity: { getState: () => ({ status: state.unlocked ? "unlocked" : "locked" }) } }));
+vi.mock("./use-route-focus", () => ({ useRouteFocus: () => state.routeFocused }));
 vi.mock("./private-content", () => ({ usePrivateContentAccess: () => state.access }));
 import { useNativeSheetFocus } from "./use-native-sheet-focus";
 
@@ -29,7 +30,7 @@ function flush() { const pending = frames.splice(0); for (const callback of pend
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubEnv("EXPO_OS", "android");
-  state.allowed = true; state.unlocked = true; state.focus.mockReset(); state.query.mockReset().mockResolvedValue(true);
+  state.allowed = true; state.unlocked = true; state.routeFocused = true; state.focus.mockReset(); state.query.mockReset().mockResolvedValue(true);
   frames = []; vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { frames.push(callback); return frames.length; });
   root = createRoot(document.createElement("div"));
 });
@@ -72,4 +73,15 @@ it("leaves the existing web overlay focus controller in charge", async () => {
 it("keeps the editor usable if the native accessibility query rejects", async () => {
   state.query.mockRejectedValue(new Error("Service unavailable"));
   await render(true); await render(false); flush(); expect(state.focus).not.toHaveBeenCalled();
+});
+
+it("does not focus a hidden route heading after navigation while reader detection was pending", async () => {
+  let resolve!: (enabled: boolean) => void; state.query.mockReturnValue(new Promise(done => { resolve = done; }));
+  await render(true); state.routeFocused = false; await render(true);
+  await act(async () => resolve(true)); flush(); expect(state.focus).not.toHaveBeenCalled();
+});
+it("blur never restores the previous route trigger and refocus restores only the retained sheet heading", async () => {
+  await render(true); flush(); state.focus.mockClear();
+  state.routeFocused = false; await render(true); flush(); expect(state.focus).not.toHaveBeenCalled();
+  state.routeFocused = true; await render(true); flush(); expect(state.focus.mock.calls).toEqual([[11]]);
 });

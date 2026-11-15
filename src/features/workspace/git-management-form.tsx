@@ -46,7 +46,7 @@ export function GitManagementForm({ value, onChange, busy, disabled, error, bran
       <Field label={copy("Hedef dal (base)", "Base branch")} value={value.base} editable={!locked} onChangeText={(base) => patch({ base })} />
       <Field label={copy("Kaynak dal (head)", "Head branch")} value={value.head} editable={!locked} onChangeText={(head) => patch({ head })} />
     </>}
-    {error && <Body muted>{error}</Body>}
+    {error ? <Notice tone="warning" message={error} /> : null}
     <FormActions submitLabel={labels[action]} disabled={locked || !!error} busy={busy} onSubmit={onSubmit} onCancel={requestClose}
       cancelDisabled={busy} cancelLabel={copy("Vazgeç", "Cancel")} feedback={feedback} />
   </Stack>;

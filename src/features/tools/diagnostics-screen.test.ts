@@ -2,10 +2,10 @@
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-const fixture = vi.hoisted(() => ({ fetching: false, refresh: undefined as any, refetch: vi.fn(async () => ({})) }));
+const fixture = vi.hoisted(() => ({ fetching: false, interval: undefined as number | undefined, refresh: undefined as any, refetch: vi.fn(async () => ({})) }));
 vi.mock("./usage-charts", () => ({ UsageKpis: () => null, ProviderShare: () => null }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
-vi.mock("@/state/queries", () => ({ useHostQuery: () => ({ isFetching: fixture.fetching, refetch: fixture.refetch }) }));
+vi.mock("@/state/queries", () => ({ useHostQuery: (_key: unknown, _method: unknown, _params: unknown, options: { interval?: number }) => { fixture.interval = options.interval; return { isFetching: fixture.fetching, refetch: fixture.refetch }; } }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ name: "Computer" }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("../management/shared/format", () => ({ stamp: () => "Timestamp" }));
@@ -16,6 +16,7 @@ vi.mock("panelui-native/components/meter", () => ({ Meter: () => null }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Group, Section: Group, Stack: Group, NavigationGroup: Group, Disclosure: Group, QueryState: () => null, ToggleField: () => null,
+    ActionMenu: ({ actions }: { actions: { label: string; onPress: () => void }[] }) => createElement("nav", null, actions.map(action => createElement("button", { key: action.label, onClick: action.onPress }, action.label))),
     Screen: ({ actions, refreshState, children }: any) => { fixture.refresh = refreshState; return createElement("main", null, actions, children); },
     IconButton: ({ label, onPress, busy, disabled }: any) => createElement("button", { onClick: onPress, disabled, "data-busy": String(!!busy), "aria-label": label }),
     Row: Group,
@@ -29,6 +30,11 @@ it("keeps polling quiet and shares manual toolbar/pull refresh flight", async ()
   const node = document.createElement("div"); root = createRoot(node);
   const render = () => act(() => root!.render(createElement(DiagnosticsScreen, { project: { id: "project", name: "Project" } as any })));
   fixture.fetching = true; await render(); expect(node.querySelector("button")!.dataset.busy).toBe("false"); expect(fixture.refresh.refreshing).toBe(false);
+  expect(fixture.interval).toBeUndefined();
+  await act(() => [...node.querySelectorAll("button")].find(button => button.textContent === "Auto refresh")!.click());
+  expect(fixture.interval).toBe(10_000);
+  await act(() => [...node.querySelectorAll("button")].find(button => button.textContent === "Auto refresh")!.click());
+  expect(fixture.interval).toBeUndefined();
   fixture.fetching = false; await render(); let finish!: () => void;
   fixture.refetch.mockImplementationOnce(() => new Promise(resolve => { finish = () => resolve({}); }));
   let pending!: Promise<void>; await act(() => { pending = fixture.refresh.onRefresh(); });

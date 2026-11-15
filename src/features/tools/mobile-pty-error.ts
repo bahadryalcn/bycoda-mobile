@@ -3,6 +3,10 @@ type Copy = (tr: string, en: string) => string;
 /** Exact known guard errors only; other host validation reasons remain diagnostic evidence. */
 export function ptyRecoveryMessage(error: unknown, copy: Copy): string | undefined {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : undefined;
+  if (message === "Mobile PTY close is not confirmed.") return copy(
+    "Terminalin kapandığı doğrulanmadı. Bu görünümü açık tutup kapatma durumunu kontrol et.",
+    "Terminal closure is not confirmed. Keep this view open and check the close status.",
+  );
   if (message === "Terminal lifecycle requires the calling conversation active in its local project workspace.") return copy(
     "Bu konuşmayı bilgisayarda bycoda'nın ana penceresinde, kendi yerel projesinde açın ve seçili bırakın. Ardından telefonda terminali yeniden açın.",
     "Open this conversation in its local project in bycoda's main desktop window and keep it selected. Then reopen the terminal on your phone.",

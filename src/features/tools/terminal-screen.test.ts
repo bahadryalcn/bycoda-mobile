@@ -21,8 +21,11 @@ vi.mock("expo-router/react-navigation", () => ({ useNavigation: () => ({ dispatc
 vi.mock("expo-crypto", () => ({ randomUUID: () => "synthetic-request-id" }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/arrow-up", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/maximize-2", () => ({ default: () => null }));
+vi.mock("./terminal-output-view", () => ({ TerminalOutputView: ({ output }: { output: string }) => createElement("pre", { "data-output-viewport": true }, output) }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
-vi.mock("@/ui/tokens", () => ({ colors: {} }));
+vi.mock("@/ui/tokens", () => ({ colors: {}, space: { screen: 16, sm: 6 } }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/motion", () => ({ haptic: { success: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -64,7 +67,7 @@ vi.mock("@/ui/primitives", async () => {
     FormActions: ({ submitLabel, disabled, busy, onSubmit, feedback, onCancel }: any) => { fixture.submit = onSubmit; return createElement("div", null, feedback, createElement(Button, { label: submitLabel, disabled, busy, onPress: onSubmit }), onCancel ? createElement(Button, { label: "Cancel", onPress: onCancel }) : null); },
     SelectField: ({ label, value, options, disabled, onChange }: any) => createElement("select", { "aria-label": label, value, disabled, onChange: (e: any) => onChange(e.target.value) }, createElement("option", { value: "" }, "Choose"), options.map((o: any) => createElement("option", { value: o.value, key: o.value }, o.label))),
     Sheet: ({ visible, title, children, dismissible, onClose }: any) => visible ? createElement("aside", { "data-title": title }, children, createElement(Button, { label: `Close ${title}`, disabled: dismissible === false, onPress: onClose })) : null,
-    Screen: ({ children, actions, footer, refreshState }: any) => { fixture.refresh = refreshState; return createElement("main", null, createElement("section", { "data-page-scroll": true }, actions, children), createElement("footer", null, footer)); },
+    Screen: ({ children, actions, footer, refreshState, scroll }: any) => { fixture.refresh = refreshState; return createElement("main", { "data-page-scroll": scroll !== false }, createElement("section", null, actions, children), createElement("footer", null, footer)); },
   };
 });
 import { TerminalScreen } from "./terminal-screen";
@@ -83,6 +86,8 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); node.remove(); vi.unstubAllGlobals(); });
 it("keeps the command action outside long output, preserves per-terminal drafts on close, and sends only explicitly", async () => {
   await render(); await select("one"); expect(node.querySelector("pre")!.textContent).toBe(fixture.output); expect(node.querySelector("footer button")!.textContent).toBe("Expand");
+  expect(node.querySelector("main")!.getAttribute("data-page-scroll")).toBe("false");
+  expect(node.querySelector("[data-output-viewport]")).not.toBeNull();
   await click("Expand"); await input("printf kept"); await click("Close Command"); expect(fixture.blockedLeave).toBe(true);
   await select("two"); await click("Expand"); expect((node.querySelector('input[aria-label="Command"]') as HTMLInputElement).value).toBe(""); await click("Close Command");
   await select("one"); await click("Expand"); expect((node.querySelector('input[aria-label="Command"]') as HTMLInputElement).value).toBe("printf kept"); expect(fixture.request).not.toHaveBeenCalled();

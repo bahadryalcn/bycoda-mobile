@@ -14,7 +14,9 @@ const state = vi.hoisted(() => ({ activeId: "machine", supported: true, browserS
   register: (receiver: (request: ComposerTransfer) => void) => { state.receiver = receiver; return () => { state.receiver = null; }; },
 }));
 vi.mock("./composer-model-chip", () => ({ ComposerModelChip: () => null }));
-vi.mock("./composer-mode-controls", () => ({ ComposerModeMenu: () => null, DeliveryModeButton: () => null }));
+vi.mock("./composer-mode-controls", () => ({ ComposerModeMenu: () => null }));
+vi.mock("./composer-context-meter", () => ({ ComposerContextMeter: () => null }));
+vi.mock("./composer-access", () => ({ ComposerAccessMenu: () => null }));
 vi.mock("lucide-react-native/icons/send", () => ({ default: () => null }));
 vi.mock("expo-image",() => ({ Image: () => null }));
 vi.mock("./composer-links", () => ({ ComposerLinks: () => null }));

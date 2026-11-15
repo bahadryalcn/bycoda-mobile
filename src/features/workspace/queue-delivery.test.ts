@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { SharedQueue } from "../../../../src/features/connections/model/sharedQueue";
-import { appendMobileQueue, deliveryAfterRun, mobileDrainsQueue } from "./queue-delivery";
+import {
+  appendMobileQueue,
+  deliveryAfterRun,
+  mobileDrainsQueue,
+  queueDeliveryStage,
+  resolveQueuedDelivery,
+} from "./queue-delivery";
 
 const row = { id: "next", text: "Next instruction", attachments: [] };
 const empty = (): SharedQueue => ({ revision: 1, messages: [] });
@@ -79,5 +85,58 @@ describe("mobile follow-up delivery", () => {
     expect(deliveryAfterRun("queue", true, false, true)).toBe("queue");
     expect(deliveryAfterRun("steer", true, true)).toBe("steer");
     expect(deliveryAfterRun("steer", false, false)).toBe("steer");
+  });
+});
+
+describe("queued delivery states", () => {
+  const unknown = { ...row, id: "u", deliveryUnknown: true as const };
+  const held = (): SharedQueue => ({
+    ...empty(),
+    status: "paused",
+    editingId: "u",
+    messages: [unknown, row],
+  });
+
+  it("settles an unconfirmed row only by the owner's explicit choice", () => {
+    expect(resolveQueuedDelivery(held(), "u", "delivered")).toMatchObject({
+      revision: 1,
+      status: "paused",
+      editingId: undefined,
+      messages: [row],
+    });
+    expect(resolveQueuedDelivery({ ...held(), messages: [unknown] }, "u", "discard")).toMatchObject(
+      { messages: [], status: undefined },
+    );
+    const retry = resolveQueuedDelivery(held(), "u", "retry");
+    expect(retry.status).toBe("active");
+    expect(retry.messages[0]!.deliveryUnknown).toBeUndefined();
+    const keep = resolveQueuedDelivery({ ...held(), status: "restored" }, "u", "keep");
+    expect(keep.status).toBe("restored");
+    expect(keep.messages[0]!.deliveryUnknown).toBeUndefined();
+  });
+
+  it("leaves a queue another computer already settled unchanged", () => {
+    const queue = { ...empty(), messages: [row] };
+    expect(resolveQueuedDelivery(queue, "next", "retry")).toBe(queue);
+  });
+
+  it("reports sending, review, held and delivered states in desktop order", () => {
+    const claim = { id: "u", clientId: "c", token: "t" };
+    expect(queueDeliveryStage({ ...held(), claim })).toEqual({ stage: "sending", id: "u" });
+    expect(queueDeliveryStage(held())).toEqual({ stage: "unknown", id: "u" });
+    const paused = { ...empty(), status: "paused" as const, messages: [row] };
+    expect(queueDeliveryStage({ ...paused, holdReason: "stopped" })).toEqual({ stage: "stopped" });
+    expect(queueDeliveryStage({ ...paused, holdReason: "Rate limited" })).toEqual({
+      stage: "rejected",
+      detail: "Rate limited",
+    });
+    const settled = { token: "s", clientId: "c", accepted: true, id: "gone" };
+    expect(queueDeliveryStage({ ...empty(), settled })).toEqual({
+      stage: "accepted",
+      id: "gone",
+      token: "s",
+    });
+    expect(queueDeliveryStage({ ...empty(), messages: [row], status: "active" })).toBeNull();
+    expect(queueDeliveryStage(undefined)).toBeNull();
   });
 });

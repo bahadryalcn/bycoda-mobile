@@ -1,6 +1,7 @@
 import { memo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
+import Pencil from "lucide-react-native/icons/pencil";
 import Terminal from "lucide-react-native/icons/terminal";
 import ListChecks from "lucide-react-native/icons/list-checks";
 import { Badge, Body, Button, QueryState, Row, Sheet } from "@/ui/primitives";
@@ -23,6 +24,7 @@ import { SessionArtifacts } from "./session-artifacts";
 import { AgentAvatar } from "@/ui/agent-avatar";
 import {
   activityState,
+  transcriptSenderName,
   canCollapseToolFailure,
   isBlockStreaming,
   toolResultTexts,
@@ -32,6 +34,11 @@ import { PlanReview } from "@/features/management/plans/plan-review";
 import { SubagentCard } from "./subagent-card";
 import { OrchestrationDetails } from "./orchestration-details";
 import { ActivityApproval } from "./activity-inspector-approval";
+import { userPromptDisplay, userTurn, userTurnAuthorLabel } from "./user-turn";
+import { UserTurnNotice } from "./user-turn-notice";
+import { UserMessageText } from "./user-message-text";
+import { formatMessageTime } from "./transcript-format";
+import { useLocale } from "@/i18n";
 
 export const TranscriptBlock = memo(function TranscriptBlock({
   block,
@@ -45,8 +52,16 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   context,
   responseText,
   parentProvider,
-}: TranscriptBlockProps) {
+  modelName,
+  onRewind,
+}: TranscriptBlockProps & {
+  /** The turn's model, shown beside the provider in the assistant header. */
+  modelName?: string;
+  /** Desktop's Edit from here: rewind the conversation to this user message. */
+  onRewind?: () => void;
+}) {
   const copy = useCopy();
+  const locale = useLocale();
   const { colors, semanticColors, uiStyles } = useMobileTheme();
   const [reviewPlan, setReviewPlan] = useState(false);
   const [orchestrationOpen, setOrchestrationOpen] = useState(false);
@@ -100,7 +115,13 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                   : value.role === "handoff"
                     ? copy("Agent devri", "Agent handoff")
                     : value.role;
-  const rawText = value.questionAnswers?.length ? "" : value.text || value.tool?.detail || value.tool?.output || "";
+  const rawText = value.questionAnswers?.length
+    ? ""
+    : value.role === "user"
+      ? userPromptDisplay(value.text)
+      : value.text || value.tool?.detail || value.tool?.output || "";
+  const turn = userTurn(value);
+  const promptAuthor = userTurnAuthorLabel(value.author, copy);
   const text =
     value.role === "system" && isError ? friendlyProviderFailure(rawText, copy) : rawText;
   const toolResults = toolResultTexts(value);
@@ -189,6 +210,8 @@ export const TranscriptBlock = memo(function TranscriptBlock({
       ) : null}
       {text && value.role === "tool" && !value.agentRun ? (
         <MessageCode code={text} output compact error={isError} allowPreview={false} context={context} />
+      ) : text && value.role === "user" ? (
+        <UserMessageText text={text} />
       ) : text ? (
         <MessageText
           text={text}
@@ -196,9 +219,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           cacheId={value.id}
           error={isError}
           compactMedia
-          role={
-            value.role === "user" ? "user" : value.role === "assistant" ? "assistant" : "activity"
-          }
+          role={value.role === "assistant" ? "assistant" : "activity"}
         />
       ) : null}
       {toolResults.length ? (
@@ -318,6 +339,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
     </View>
   );
 
+  if (turn.kind !== "message") return <UserTurnNotice turn={turn} context={context} />;
   return (
     <>
       {foldable && (value.plan || value.taskList) ? (
@@ -389,6 +411,11 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             gap: space.xxs,
           }}
         >
+          {promptAuthor ? (
+            <Body muted style={[typography.metadata, { alignSelf: "flex-end" }]}>
+              {promptAuthor}
+            </Body>
+          ) : null}
           <ChatMessage
             role={
               value.role === "user" ? "user" : value.role === "assistant" ? "assistant" : "system"
@@ -423,14 +450,13 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                     { color: semantic?.text ?? colors.muted },
                   ]}
                 >
-                  {value.role === "assistant" ? author || "bycoda" : label}
+                  {value.role === "assistant"
+                    ? [transcriptSenderName(author), modelName].filter(Boolean).join(" · ")
+                    : label}
                 </Body>
                 {value.startedAt ? (
                   <Body muted style={typography.metadata}>
-                    {new Date(value.startedAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatMessageTime(value.startedAt, locale, copy)}
                   </Body>
                 ) : null}
                 {canAct ? (
@@ -446,6 +472,9 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             {isBlockStreaming(value) ? (
               <ChatStreaming label={copy("Yazıyor…", "Writing…")} />
             ) : null}
+            {value.role === "user" && value.turnOutcome === "stopped" ? (
+              <Badge label={copy("Sen durdurdun", "Stopped by you")} tone="default" />
+            ) : null}
             {isError ? <Badge label={copy("Başarısız", "Failed")} tone="danger" /> : null}
             {value.notice === "interrupt" ? (
               <Badge label={copy("Durduruldu", "Interrupted")} tone="warning" />
@@ -458,15 +487,17 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             {contents}
             {planAction}
           </ChatMessage>
-          {value.role === "user" && (value.startedAt || canAct) ? (
+          {value.role === "user" && (value.startedAt || canAct || onRewind) ? (
             <Row style={{ justifyContent: "flex-end", flexWrap: "nowrap", gap: space.xxs }}>
               {value.startedAt ? (
                 <Body muted style={typography.metadata}>
-                  {new Date(value.startedAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {formatMessageTime(value.startedAt, locale, copy)}
                 </Body>
+              ) : null}
+              {onRewind && !value.draft ? (
+                <ChatAction label={copy("Buradan düzenle", "Edit from here")} disabled={disabled} onPress={onRewind}>
+                  <Pencil size={15} color={colors.subtle} />
+                </ChatAction>
               ) : null}
               {canAct ? (
                 <ChatAction

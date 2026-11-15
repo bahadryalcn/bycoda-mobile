@@ -152,7 +152,13 @@ describe("mobile public app links", () => {
 });
 
 describe("mobile app identity and feedback", () => {
-  it("reports native runtime build values rather than guessing from app config", () => {
+  it.each(["android", "ios"])("reads %s identity from the installed Application metadata when legacy Constants omit it", platform => {
+    expect(appIdentity({ expoConfig: config }, platform, {
+      nativeApplicationVersion: "0.2.0",
+      nativeBuildVersion: "1",
+    })).toEqual({ version: "0.2.0", nativeBuild: "1", preview: false });
+  });
+  it("prefers installed binary metadata over configuration and deprecated Constants values", () => {
     expect(
       appIdentity(
         {
@@ -163,17 +169,19 @@ describe("mobile app identity and feedback", () => {
           },
         },
         "ios",
+        { nativeApplicationVersion: "0.2.0", nativeBuildVersion: "13" },
       ),
-    ).toEqual({ version: "0.1.0", nativeBuild: "12", preview: false });
+    ).toEqual({ version: "0.2.0", nativeBuild: "13", preview: false });
     expect(
       appIdentity(
         { expoConfig: config, platform: { android: { versionCode: 42 } } },
         "android",
+        { nativeApplicationVersion: "0.2.0", nativeBuildVersion: "43" },
       ).nativeBuild,
-    ).toBe("42");
+    ).toBe("43");
     expect(
-      appIdentity({ expoConfig: config }, "android").nativeBuild,
-    ).toBeNull();
+      appIdentity({ expoConfig: config, platform: { android: { versionCode: 42 } } }, "android"),
+    ).toEqual({ version: null, nativeBuild: null, preview: false });
   });
 
   it("labels Expo Go and web as previews without reporting their host's binary build", () => {
@@ -182,7 +190,7 @@ describe("mobile app identity and feedback", () => {
       executionEnvironment: "storeClient",
       platform: { ios: { buildNumber: "999" } },
     };
-    expect(appIdentity(constants, "ios")).toEqual({
+    expect(appIdentity(constants, "ios", { nativeApplicationVersion: "99.0", nativeBuildVersion: "999" })).toEqual({
       version: "0.1.0",
       nativeBuild: null,
       preview: true,

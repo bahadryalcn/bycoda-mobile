@@ -49,7 +49,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: any) => { if (label === "Home") f.home = onPress; return createElement("button", { onClick: onPress, disabled }, label); };
   return { StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children), Body: Wrap, Row: Wrap, Stack: Wrap, Sheet: ({children,onClose}:any)=>createElement("div",null,children,createElement(Button,{label:"Close",onPress:onClose})), Disclosure: Wrap, NavigationGroup: Wrap,
-    Badge: () => null, StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: () => null, MutationState: () => null, QueryState: () => null, ErrorText: () => null, Loading: () => null,
+    Badge: () => null, StatusText: () => null, StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: () => null, MutationState: () => null, QueryState: () => null, ErrorText: () => null, Loading: () => null,
     Button, IconButton: Button, NavigationRow: Button,
     FormActions: ({onSubmit,submitLabel}:any) => { f.confirm = onSubmit; return createElement(Button,{label:submitLabel,onPress:onSubmit}); },
     ToggleField: ({label,value,onChange}:any) => createElement(Button,{label,onPress:()=>onChange(!value)}),

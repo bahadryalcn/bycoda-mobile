@@ -52,7 +52,7 @@ export function CampaignsPanel({
             <Row>
               <Button
                 label={copy("İçeriği onayla", "Approve content")}
-                tone="secondary"
+                tone={state.approvedCampaignIds?.includes(campaign.id) ? "quiet" : "primary"}
                 disabled={action.isPending}
                 onPress={() => {
                   const reviewed = captureCampaignReview(campaign);
@@ -69,9 +69,10 @@ export function CampaignsPanel({
               />
               <Button
                 label={copy("Gönderimi sıraya al", "Queue publishing")}
-                tone="primary"
+                tone={state.approvedCampaignIds?.includes(campaign.id) ? "primary" : "secondary"}
                 disabled={
-                  action.isPending || !state.sendingEnabled || state.stopped || campaign.paused
+                  action.isPending || !state.sendingEnabled || state.stopped || campaign.paused ||
+                  (state.approvedCampaignIds !== undefined && !state.approvedCampaignIds.includes(campaign.id))
                 }
                 onPress={() =>
                   confirmAction(

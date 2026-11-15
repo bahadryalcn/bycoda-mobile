@@ -277,7 +277,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
   };
   const settle: RowAction = {
     key: "settle",
-    label: settled ? copy("Listeye geri al", "Bring back") : copy("Kenara al", "Set aside"),
+    label: settled ? copy("Raftan indir", "Un-settle") : copy("Rafa kaldır", "Settle"),
     icon: settled ? <Undo2 /> : <CircleCheck />,
     detail:
       !settled && session.status === "running"

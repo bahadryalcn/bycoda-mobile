@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HostProjectDirectory, HostSessionSummary } from "@/domain/types";
-import { filterProjectSessionDirectory, sessionShelfRows } from "./session-collection";
+import { filterProjectSessionDirectory, listedProjectSession, listedSession, sessionShelfRows } from "./session-collection";
 
 type Project = HostProjectDirectory["projects"][number];
 const projects: Project[] = ["one", "two"].map((id) => ({
@@ -40,5 +40,15 @@ describe("all-project session collection", () => {
       .toEqual(["two-idle", "two-running"]);
     expect(filterProjectSessionDirectory(projects, directory, "Folder two").map((row) => row.session.id))
       .toEqual(["two-idle"]);
+  });
+});
+
+describe("desktop list visibility", () => {
+  it("hides orchestration workers everywhere and crew-owned sessions from project lists", () => {
+    const plain = session("one", "plain");
+    const worker = { ...plain, orchestrationLeadId: "lead" };
+    const crew = { ...plain, crewRunId: "run" };
+    expect([plain, worker, crew].map(listedSession)).toEqual([true, false, true]);
+    expect([plain, worker, crew].map(listedProjectSession)).toEqual([true, false, false]);
   });
 });

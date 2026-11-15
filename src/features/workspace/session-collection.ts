@@ -4,6 +4,22 @@ import { isRunningSession } from "./activity-model";
 import { filterSessionDirectory } from "./session-directory";
 
 type DirectoryProject = HostProjectDirectory["projects"][number];
+/** Desktop orders and stamps sessions by their last turn activity, not by metadata saves. */
+export const sessionActivityAt = (session: Pick<ActiveSession["session"], "lastActivityAt" | "updatedAt">) =>
+  session.lastActivityAt ?? session.updatedAt;
+
+/**
+ * Desktop parity: internal orchestration workers never appear in a session list; they show
+ * in their lead's panel. Older Hosts omit the marker, so their workers stay listed.
+ */
+export const listedSession = (session: Pick<ActiveSession["session"], "orchestrationLeadId">) =>
+  !session.orchestrationLeadId;
+
+/** A project's own list also leaves conversations a crew run owns to Crews, as the desktop does. */
+export const listedProjectSession = (
+  session: Pick<ActiveSession["session"], "orchestrationLeadId" | "crewRunId">,
+) => listedSession(session) && !session.crewRunId;
+
 export type SessionShelfId = "pinned" | "needs" | "running" | "recent" | "settled" | "archived";
 export type SessionShelfRow =
   | { kind: "header"; key: string; shelf: SessionShelfId; count: number; expanded: boolean }

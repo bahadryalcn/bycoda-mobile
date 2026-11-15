@@ -65,9 +65,9 @@ export function ChatActivity({
     status === "error"
       ? copy("Başarısız", "Failed")
       : status === "stopped"
-        ? copy("Durduruldu", "Interrupted")
+        ? copy("Durduruldu", "Stopped")
         : status === "running"
-          ? copy("Çalışıyor", "Running")
+          ? copy("Çalışıyor", "Working")
           : status === "complete"
             ? copy("Tamamlandı", "Completed")
             : status === "record"
@@ -76,13 +76,7 @@ export function ChatActivity({
   const fileLabel = reasoning ? { title, directory: undefined } : activityFileLabel(title);
   const visibleTitle = fileLabel.title;
   const accessibleLabel = [...new Set([title, statusLabel, detail].filter(Boolean))].join(". ");
-  // Collapsed rows are one muted line; only states that need attention add a colored word.
-  const trailing =
-    status === "error" || status === "stopped"
-      ? statusLabel
-      : detail && detail !== visibleTitle && status !== "running"
-        ? detail
-        : undefined;
+  // A stable status leads one muted line; commands retain literal syntax in monospace.
   const titleStyle = {
     fontSize: fontSize.control,
     lineHeight: lineHeight.control,
@@ -94,31 +88,24 @@ export function ChatActivity({
       <View style={{ width: 20, alignItems: "center", justifyContent: "center" }}>
         <Icon size={14} color={statusColor} />
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        {status === "running" && !reduceMotion && visibleTitle.length < 60 ? (
+      <View style={{ flexShrink: 1, maxWidth: "40%" }}>
+        {status === "running" && !reduceMotion ? (
           <Shimmer enabled={active} textStyle={titleStyle}>
-            {visibleTitle}
+            {statusLabel}
           </Shimmer>
         ) : (
-          <Body numberOfLines={2} style={titleStyle}>
-            {visibleTitle}
+          <Body numberOfLines={1} style={titleStyle}>
+            {statusLabel}
           </Body>
         )}
       </View>
-      {trailing ? (
-        <Body
-          numberOfLines={1}
-          style={{
-            flexShrink: 1,
-            maxWidth: "40%",
-            fontSize: fontSize.caption,
-            lineHeight: lineHeight.caption,
-            color: status === "error" ? colors.danger : status === "stopped" ? colors.warning : colors.tertiary,
-          }}
-        >
-          {trailing}
-        </Body>
-      ) : null}
+      <Body
+        mono={!reasoning}
+        numberOfLines={1}
+        style={{ flex: 1, minWidth: 0, fontSize: fontSize.caption, lineHeight: lineHeight.caption, color: colors.muted }}
+      >
+        {visibleTitle}
+      </Body>
       <Chevron
         size={14}
         color={colors.tertiary}

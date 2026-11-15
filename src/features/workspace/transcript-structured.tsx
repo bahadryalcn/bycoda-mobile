@@ -1,4 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
+import { providerName } from "./provider-choices";
 import { View } from "react-native";
 import { Badge, Body, Row } from "@/ui/primitives";
 import { MessageCode } from "@/ui/message-code";
@@ -263,7 +264,7 @@ export function TranscriptStructured({
             <View key={task.id} style={{ gap: space.xs }}>
               <Body style={uiStyles.label}>{task.title}</Body>
               <Body muted style={uiStyles.caption}>
-                {task.harness} · {task.model}
+                {providerName(task.harness)} · {task.model}
               </Body>
               <MessageText text={task.prompt} context={context} compactMedia />
               {task.files.length ? <Body mono>{task.files.join("\n")}</Body> : null}

@@ -12,7 +12,7 @@ import { ActivitySection } from "./ActivitySection";
 import { DevicesSection } from "./DevicesSection";
 import { ManageAccountSection } from "./ManageAccountSection";
 import { PushSection } from "./PushSection";
-import { SignInPanel } from "./SignInPanel";
+import { AccountWelcome } from "./AccountWelcome";
 import { useAccount } from "./account-context";
 
 function Profile() {
@@ -48,7 +48,7 @@ function Profile() {
   );
 }
 
-/** Optional account: sign in, profile, devices, active time, notifications and sign out. */
+/** Mobile account entry, profile, devices, active time, notifications and sign out. */
 export function AccountScreen() {
   const copy = useCopy();
   const account = useAccount();
@@ -56,16 +56,7 @@ export function AccountScreen() {
   const title = copy("Hesap", "Account");
 
   if (account.status === "unavailable")
-    return (
-      <Screen title={title}>
-        <View style={{ flex: 1, justifyContent: "center" }}>
-          <StateView
-            title={copy("Hesap girişi kullanılamıyor", "Account sign-in is unavailable")}
-            description={copy("Bu sürümde hesap girişi ayarlanmamış. Bilgisayar eşleme ve diğer özellikler hesapsız çalışır.", "Account sign-in is not set up in this build. Pairing and every other feature work without an account.")}
-          />
-        </View>
-      </Screen>
-    );
+    return <AccountWelcome unavailable />;
   if (account.status === "loading")
     return (
       <Screen title={title}>
@@ -73,16 +64,7 @@ export function AccountScreen() {
       </Screen>
     );
   if (account.status === "signedOut")
-    return (
-      <Screen title={title}>
-        <View style={{ flex: 1, justifyContent: "center", gap: space.lg }}>
-          <StateView
-            title={copy("Hesabınla devam et", "Continue with your account")}
-          />
-          <SignInPanel />
-        </View>
-      </Screen>
-    );
+    return <AccountWelcome />;
   return (
     <Screen title={title}>
       <Stack>

@@ -19,7 +19,7 @@ const DOT = space.sm;
 
 /** One attention item: kind tile (the unread dot sits on the tile, so text keeps its edge), title, context, time and status. */
 export function AttentionRow({ item, time, onPress }: { item: MobileInboxItem; time: string; onPress: () => void }) {
-  const { colors, semanticColors } = useMobileTheme();
+  const { colors, semanticColors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const urgent = isUrgentAttention(item);
   const kind = attentionIcon(item);
@@ -29,6 +29,7 @@ export function AttentionRow({ item, time, onPress }: { item: MobileInboxItem; t
   return (
     <NavigationRow
       label={item.title}
+      labelLines={2}
       accessibilityLabel={[item.title, item.detail, time, item.status ? statusLabel(item.status, copy) : undefined,
         urgent ? copy("Okunmadı", "Unread") : undefined].filter(Boolean).join(". ")}
       detail={item.detail || undefined}
@@ -45,7 +46,7 @@ export function AttentionRow({ item, time, onPress }: { item: MobileInboxItem; t
       }
       supporting={
         <Row>
-          {time ? <Body muted style={{ flexShrink: 1 }}>{time}</Body> : null}
+          {time ? <Body muted style={[uiStyles.caption, { flexShrink: 1 }]}>{time}</Body> : null}
           {item.status ? <Status value={item.status} /> : null}
         </Row>
       }

@@ -17,3 +17,35 @@ it("expands settled on request or search and leaves archived flat", () => {
   expect(label(projectSessionRows([s("c")], undefined, {}, {}, true, new Set(["c"]), false))[0]).toBe("settled:1:true");
   expect(label(projectSessionRows([s("c", { pinned: true })], undefined, {}, {}, false, new Set(["c"]), true))).toEqual(["session:c"]);
 });
+it("orders folders, the pinned group with pinned folders, loose, then settled like desktop", () => {
+  const layout = {
+    folders: [
+      { id: "f", name: "f", sessionIds: ["inF", "pinInF"], collapsed: false },
+      { id: "pf", name: "pf", sessionIds: ["inPf"], collapsed: false, pinned: true },
+    ],
+    order: {},
+  } as never;
+  const rows = projectSessionRows(
+    [s("loose"), s("inF"), s("pinInF", { pinned: true }), s("inPf"), s("pin", { pinned: true }), s("old", { updatedAt: 0 })],
+    layout, {}, { settled: false }, false, new Set(["old", "inF"]), false,
+  );
+  expect(label(rows)).toEqual([
+    "folder:f", "session:pinInF", "session:inF",
+    "pinned:2:true", "folder:pf", "session:inPf", "session:pin",
+    "session:loose",
+    "settled:1:true", "session:old",
+  ]);
+});
+it("ranks each group by desktop status: input, failed, unseen done, working, waiting, draft", () => {
+  const now = 10;
+  const rows = projectSessionRows(
+    [
+      s("idle"), s("draft", { draft: true }), s("waiting", { waiting: { kind: "background" } }),
+      s("done"), s("failed", { issue: "failed" }), s("input", { needsInput: true }),
+    ],
+    undefined, {}, {}, false, new Set(), false, { doneIds: new Set(["done"]), now },
+  );
+  expect(label(rows)).toEqual([
+    "session:input", "session:failed", "session:done", "session:waiting", "session:draft", "session:idle",
+  ]);
+});

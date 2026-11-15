@@ -3,7 +3,9 @@ import { useState } from "react";
 import { catalogProviders } from "@/features/workspace/catalog";
 import { ErrorText } from "@/ui/primitives";
 import { NumberField } from "@/ui/number-field";
-import { Body, Button, Disclosure, IdentifierField, QueryState, SelectField } from "@/ui/primitives";
+import { Body, Disclosure, IdentifierField, NavigationRow, QueryState, SelectField } from "@/ui/primitives";
+import Cpu from "lucide-react-native/icons/cpu";
+import { useMobileTheme } from "@/ui/theme";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import type { HostModelCatalog } from "@/domain/types";
@@ -14,6 +16,7 @@ import { AgentModelPicker } from "./agent-model-picker";
 
 export function AgentFields({ value, onChange, projectId, disabled, onValidityChange, showRunLimit = true }: AgentFieldsProps) {
   const copy = useCopy();
+  const { colors } = useMobileTheme();
   const machine = useActiveMachine();
   const [minutes, setMinutes] = useState(String(value.maxRunMinutes));
 
@@ -48,8 +51,11 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
           )}
         </Body>
       )}
-      <Button
-        label={selectedModel?.name || value.model ? `${copy("Model", "Model")}: ${selectedModel?.name || value.model}` : copy("Model seç", "Choose model")}
+      <NavigationRow
+        label={copy("Model", "Model")}
+        detail={selectedModel?.name || value.model || copy("Model seç", "Choose model")}
+        detailLines={2}
+        icon={<Cpu size={20} color={colors.muted} />}
         disabled={disabled || !available.length}
         onPress={() => setChoosingModel(true)}
       />

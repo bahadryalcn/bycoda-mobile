@@ -26,7 +26,7 @@ vi.mock("./collection-rows", () => ({ CollectionRows: "collection-rows" }));
 
 beforeEach(() => vi.clearAllMocks());
 
-function approval(pending?: { action: string; input: { id: string } }) {
+function approval(pending?: { action: string; input: { id: string } }, approved = false) {
   const draft: SocialDraft = {
     id: "draft",
     accountId: "account",
@@ -35,6 +35,7 @@ function approval(pending?: { action: string; input: { id: string } }) {
     contactId: "recipient",
     text: "Full reviewed text\nwith a second line",
     createdAt: 1,
+    ...(approved ? { approvedAt: 2 } : {}),
     factIds: ["fact"],
     media: [{ kind: "image", url: "https://example.test/image", alt: "Reviewed image" }],
   };
@@ -55,7 +56,7 @@ function approval(pending?: { action: string; input: { id: string } }) {
   }>;
   const card = rows.props.renderItem(draft);
   const button = card.props.footer.props.children[0];
-  return { draft, run, press: button.props.onPress, buttons: card.props.footer.props.children };
+  return { draft, run, press: button.props.onPress, buttons: Children.toArray(card.props.footer.props.children).filter(isValidElement) as ReactElement<{ busy?: boolean; disabled?: boolean }>[] };
 }
 
 it("previews the full text, recipient and media before any approval request", () => {
@@ -89,9 +90,9 @@ it("submits the exact reviewed snapshot even if the current draft changes during
 
 it("shows pending on only the initiating draft and operation while preserving approval locks", () => {
   const approving = approval({ action: "drafts.approve", input: { id: "draft" } }).buttons;
-  expect(approving.map((button) => !!button.props.busy)).toEqual([true, false]);
+  expect(approving.map((button) => !!button.props.busy)).toEqual([true]);
   expect(approving.every((button) => button.props.disabled)).toBe(true);
-  const sending = approval({ action: "messages.send", input: { id: "draft" } }).buttons;
+  const sending = approval({ action: "messages.send", input: { id: "draft" } }, true).buttons;
   expect(sending.map((button) => !!button.props.busy)).toEqual([false, true]);
   const other = approval({ action: "messages.send", input: { id: "other-draft" } }).buttons;
   expect(other.every((button) => !button.props.busy)).toBe(true);

@@ -1,4 +1,4 @@
-import { Tabs, usePathname } from "expo-router";
+import { router, Tabs, usePathname } from "expo-router";
 import Folder from "lucide-react-native/icons/folder";
 import Inbox from "lucide-react-native/icons/inbox";
 import LayoutGrid from "lucide-react-native/icons/layout-grid";
@@ -11,9 +11,9 @@ import { setToastClearance } from "../../src/ui/provider";
 import { useCopy } from "../../src/ui/copy";
 import { useMachines } from "../../src/state/machines";
 import { ScreenChromeProvider, type HeaderIdentityProps } from "../../src/ui/layout";
-import { Button } from "../../src/ui/buttons";
+import { NavigationRow, Sheet } from "../../src/ui/primitives";
 import { NewSessionSheet } from "../../src/features/workspace/new-session-sheet";
-import { FloatingTabBar } from "../../src/ui/floating-tab-bar";
+import { FloatingTabBar, type FloatingTabBarProps } from "../../src/ui/floating-tab-bar";
 import { useMobileTheme } from "../../src/ui/theme";
 import {
   TabActivityBridge,
@@ -63,7 +63,7 @@ function DockProxy({
 }
 
 /** Only this small bar subscribes to the running count, not the navigator. */
-function BadgedDock({ ...props }: TabBarProps & { onInsetChange: (height: number) => void }) {
+function BadgedDock({ ...props }: FloatingTabBarProps) {
   const copy = useCopy();
   const running = useRunningSessionBadge((s) => s.count);
   const chats = props.state.routes.find((route) => route.name === "chats");
@@ -99,13 +99,12 @@ export default function TabsLayout() {
   const isWelcome = pathname === "/" && firstConnection;
   // The dock overlays the scene on the tab roots; content and toasts clear its measured height.
   const dockVisible = dockRoots.includes(pathname);
-  // Creation is a page action, separate from destination navigation.
-  const actionVisible = !!machineId && (pathname === "/" || pathname === "/chats");
   const latestBar = useRef<TabBarProps | null>(null);
   const [, setBarState] = useState("");
   const barProps = latestBar.current;
   const [dockHeight, setDockHeight] = useState(0);
   const [newSessionOpen, setNewSessionOpen] = useState(false);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const bottomInset = dockVisible ? dockHeight : 0;
   const renderTabBar = useCallback(
     (props: TabBarProps) => <DockProxy props={props} latest={latestBar} onState={setBarState} />,
@@ -120,15 +119,6 @@ export default function TabsLayout() {
     <ScreenChromeProvider
       bottomSafeArea={false}
       bottomInset={bottomInset}
-      headerAccessory={
-        actionVisible ? (
-          <Button
-            label={copy("Yeni oturum", "New session")}
-            tone="quiet"
-            onPress={() => setNewSessionOpen(true)}
-          />
-        ) : undefined
-      }
       headerIdentity={!isWelcome && machineId ? ComputerPageIdentity : undefined}
     >
       {machineId ? <MachineHealthMonitor /> : null}
@@ -169,11 +159,22 @@ export default function TabsLayout() {
           </Tabs>
         </View>
         {dockVisible && barProps ? (
-          <BadgedDock {...barProps} onInsetChange={setDockHeight} />
+          <BadgedDock {...barProps} onInsetChange={setDockHeight} quickAction={machineId ? {
+            label: copy("Yeni oturum", "New session"),
+            optionsLabel: copy("Hızlı işlemler", "Quick actions"),
+            onPress: () => setNewSessionOpen(true),
+            onLongPress: () => setQuickActionsOpen(true),
+          } : undefined} />
         ) : null}
         {machineId ? (
           <NewSessionSheet visible={newSessionOpen} onClose={() => setNewSessionOpen(false)} />
         ) : null}
+        <Sheet visible={quickActionsOpen} title={copy("Hızlı işlemler", "Quick actions")} size="compact" onClose={() => setQuickActionsOpen(false)}>
+          <NavigationRow label={copy("Yeni oturum", "New session")} intent="command" onPress={() => { setQuickActionsOpen(false); setNewSessionOpen(true); }} />
+          <NavigationRow label={copy("Asistan", "Assistant")} onPress={() => { setQuickActionsOpen(false); router.navigate("/assistant"); }} />
+          <NavigationRow label={copy("Aktif oturumlar", "Active sessions")} onPress={() => { setQuickActionsOpen(false); router.navigate("/sessions"); }} />
+          <NavigationRow label={copy("Bilgisayarlar", "Computers")} onPress={() => { setQuickActionsOpen(false); router.navigate("/machines"); }} />
+        </Sheet>
       </View>
     </ScreenChromeProvider>
   );

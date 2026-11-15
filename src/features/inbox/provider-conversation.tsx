@@ -60,12 +60,12 @@ export function ProviderInboxComment({
   const locale = useLocale();
   const [expanded, setExpanded] = useState(false);
   return (
-    <Stack style={{ paddingVertical: space.sm }}>
+    <Stack style={{ paddingVertical: space.sm, marginStart: depth > 0 && depth <= 2 ? space.md : 0 }}>
       <Row>
         <Body style={[uiStyles.label, uiStyles.grow]}>{comment.author}</Body>
-        <Body muted style={uiStyles.caption}>{stamp(comment.createdAt)}</Body>
         {comment.resolved ? <Badge label={copy("Çözüldü", "Resolved")} tone="success" /> : null}
       </Row>
+      <Body muted style={uiStyles.caption}>{stamp(comment.createdAt)}</Body>
       <MessageText text={comment.body} role="assistant" />
       {inboxReplyTarget(provider, comment) ? (
         <Button

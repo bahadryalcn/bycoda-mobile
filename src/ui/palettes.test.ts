@@ -21,6 +21,11 @@ describe("hslToHex", () => {
 });
 
 describe("palette resolution", () => {
+  it("offers nine unique persisted palette choices", () => {
+    expect(PALETTES).toHaveLength(9);
+    expect(new Set(PALETTE_IDS).size).toBe(9);
+    expect(PALETTES.map(palette => palette.id)).toEqual([...PALETTE_IDS]);
+  });
   it("keeps classic equal to the original colours", () => {
     expect(resolveMobilePalette("classic", "dark").colors).toBe(darkColors);
     expect(resolveMobilePalette("classic", "light").colors).toBe(lightColors);

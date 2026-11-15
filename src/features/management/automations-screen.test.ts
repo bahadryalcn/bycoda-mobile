@@ -3,7 +3,7 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ push: vi.fn(), mutate: vi.fn() }));
-vi.mock("expo-router", () => ({ router: { push: fixture.push } }));
+vi.mock("expo-router", () => ({ router: { navigate: fixture.push } }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));

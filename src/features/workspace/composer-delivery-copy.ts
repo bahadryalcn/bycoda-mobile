@@ -10,8 +10,8 @@ export function composerDeliveryError(error: unknown, copy: (tr: string, en: str
       "Update bycoda on this computer to send note context. Your draft is preserved.",
     ],
     "Note context requires Send without plan, compact or session commands. Change the delivery mode or remove the note.": [
-      "Not bağlamı için Gönder’i kullan; plan, sıkıştırma veya oturum komutlarını kaldır. Gönderme biçimini değiştir veya notu kaldır.",
-      "Note context requires Send without plan, compact or session commands. Change the delivery mode or remove the note.",
+      "Not bağlamını göndermek için turun bitmesini bekle ve plan, sıkıştırma veya oturum komutlarını kaldır. Ya da notu kaldır.",
+      "Wait for the turn to finish and remove plan, compact or session commands before sending note context. Or remove the note.",
     ],
     "Delivery is unconfirmed. Review this message on the sending computer before resuming the queue.": [
       "Teslimat doğrulanamadı. Sırayı sürdürmeden önce mesajı gönderen bilgisayarda kontrol et.",
@@ -51,8 +51,8 @@ export function composerDeliveryError(error: unknown, copy: (tr: string, en: str
       "Refresh the running turn before steering it.",
     ],
     "Wait for this turn, queue your message, or choose Steer.": [
-      "Turun bitmesini bekle, mesajı sıraya al veya Yönlendir’i seç.",
-      "Wait for this turn, queue your message, or choose Steer.",
+      "Turun bitmesini bekle, sonra yeniden gönder. Taslağın korunuyor.",
+      "Wait for this turn to finish, then send again. Your draft is kept.",
     ],
     "Remove attachments before compacting context.": [
       "Bağlamı sıkıştırmadan önce ekleri kaldır.",

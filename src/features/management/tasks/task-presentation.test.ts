@@ -22,7 +22,7 @@ vi.mock("../../workspace/use-project-directory", () => ({
 }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
 vi.mock("../shared/format", () => ({ stamp: () => "Created" }));
-vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
+vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("@/state/machines", () => ({
   useActiveMachine: () => ({ id: "pc", capabilities: ["tasks.workspaces"] }),
 }));

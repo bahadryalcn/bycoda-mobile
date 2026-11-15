@@ -67,7 +67,7 @@ vi.mock("@/ui/primitives", async () => {
   const { QueryState } = await import("@/ui/query-state");
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress }: any) => {fixture.presses.set(label,onPress);return createElement("button", { onClick: onPress }, label);};
-  return { Badge: ({ label }: any) => createElement("span", null, label), Body: Wrap, Row: Wrap, Disclosure: Wrap,
+  return { Badge: ({ label }: any) => createElement("span", null, label), Body: Wrap, Row: Wrap, Stack: Wrap, Disclosure: Wrap,
     NavigationGroup: Wrap, Button, StateView: ({ title, description }: any) => createElement("p", null, title, description), NavigationRow: Button, Notice: ({ message }: any) => createElement("p", null, message),
     Empty: ({ title }: any) => createElement("p", null, title),
     ActionMenu: ({ actions }: any) => createElement("div", null, ...actions.filter(Boolean).map((action: any) => createElement(Button, { key: action.key, ...action }))),

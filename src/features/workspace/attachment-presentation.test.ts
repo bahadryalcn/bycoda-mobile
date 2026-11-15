@@ -14,6 +14,10 @@ describe("attachment presentation", () => {
     expect(links[0]).toMatchObject({ host: "example.com", path: "/a?b=1" });
     expect(links.some((l) => l.href.startsWith("ftp"))).toBe(false);
   });
+  it("leaves Bycoda session references out of web links", () => {
+    const links = composerLinks("open https://link.bycoda.codes/session/v1/abc and https://example.com/x");
+    expect(links.map((l) => l.href)).toEqual(["https://example.com/x"]);
+  });
   it("collapses extra images behind a count", () => {
     const images = [1, 2, 3, 4, 5, 6];
     expect(thumbnailSplit(images, false)).toEqual({ shown: [1, 2, 3], hidden: 3 });

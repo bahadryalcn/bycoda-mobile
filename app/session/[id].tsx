@@ -13,7 +13,7 @@ export default function SessionRoute() {
   return (
     <WorkspaceRouteScope machineId={machineId}>
       <SessionScreen
-        key={`${active}:${id}:${targetTurnId ?? ""}`}
+        key={`${active}:${id}:${projectId ?? ""}:${targetTurnId ?? ""}`}
         id={id}
         projectId={projectId}
         targetTurnId={targetTurnId}

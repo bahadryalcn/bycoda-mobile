@@ -1,4 +1,5 @@
 import type { AgentModel } from "../../../../src/features/sessions/model/models";
+import { carryCrossDelegation } from "../../../../src/shared/model/host-contracts/delegation";
 import {
   groupedSettings,
   isPrimarySetting,
@@ -119,11 +120,11 @@ export function AgentModelFields({
             value={selected?.id ?? model}
             options={options}
             searchable
-            disabled={disabled || !options.length}
+            disabled={disabled || unavailableAccount || !options.length}
             onChange={(id) =>
               onChange(
                 id,
-                sparseSettings ? {} : modelDefaults(models.find((entry) => entry.id === id)),
+                carryCrossDelegation(settings, sparseSettings ? {} : modelDefaults(models.find((entry) => entry.id === id))),
               )
             }
           />
@@ -147,17 +148,17 @@ export function AgentModelFields({
           ) : null}
         </Disclosure>
       ) : null}
-      <Disclosure label={copy("Özel model kimliği", "Custom model ID")}>
+      {!provider ? <Disclosure label={copy("Özel model kimliği", "Custom model ID")}>
         <IdentifierField
           label={copy("Model kimliği", "Model ID")}
           value={model}
           editable={!disabled && !unavailableAccount}
           onChangeText={(id) => {
             const target = models.find((entry) => entry.id === id || entry.nativeId === id);
-            onChange(id, sparseSettings ? {} : modelDefaults(target));
+            onChange(id, carryCrossDelegation(settings, sparseSettings ? {} : modelDefaults(target)));
           }}
         />
-      </Disclosure>
+      </Disclosure> : null}
     </View>
   );
 }

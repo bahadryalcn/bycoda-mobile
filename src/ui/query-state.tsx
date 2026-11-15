@@ -77,7 +77,7 @@ function useQueryStatePresentation({
   const repairAction = repair ? {
     label: copy("Bağlantıları yönet", "Manage connections"),
     onPress: onManageConnections ?? (() => {
-      const navigate = () => router.push("/machines");
+      const navigate = () => router.navigate("/machines");
       if (sheet) (sheet.requestCloseStackThen ?? sheet.requestCloseThen)(navigate);
       else navigate();
     }),
@@ -129,7 +129,7 @@ function useQueryStatePresentation({
         action={{
           label: copy("Bağlantıları yönet", "Manage connections"),
           onPress: onManageConnections ?? (() => {
-            const navigate = () => router.push("/machines");
+            const navigate = () => router.navigate("/machines");
             if (sheet) (sheet.requestCloseStackThen ?? sheet.requestCloseThen)(navigate);
             else navigate();
           }),

@@ -1,11 +1,31 @@
-import type { Block } from "./wire";
+import {
+  isOwnerStoppedTurn,
+  isTurnInterruptionNotice,
+} from "../../../../src/features/sessions/model/turnInterruption";
+import type { Block, HostSession } from "./wire";
+import { providerName } from "./provider-choices";
 
+/** Display names never replace provider IDs retained in transcript authorship. */
+export function transcriptSenderName(author?: string): string {
+  return author ? providerName(author) : "bycoda";
+}
+
+type TurnModel = NonNullable<Block["turnModel"]>;
+/** Presentation a finished or switched turn adds around its entry. */
+type TurnChrome = {
+  /** The finished turn's user block; its receipt (duration, model, metrics) follows this entry. */
+  footer?: Block;
+  /** The turn ran on a different model than the previous one and no switch row said so. */
+  modelChange?: { from: TurnModel; to: TurnModel };
+  /** The turn's model, for the assistant header. */
+  modelName?: string;
+};
 export type TranscriptEntry =
-  | { id: string; kind: "message"; block: Block; author?: string; /** Identical failures folded into this card. */ repeat?: number }
-  | { id: string; kind: "activity"; blocks: Block[]; author?: string };
+  | ({ id: string; kind: "message"; block: Block; author?: string; /** Identical failures folded into this card. */ repeat?: number } & TurnChrome)
+  | ({ id: string; kind: "activity"; blocks: Block[]; author?: string } & TurnChrome);
 export type TranscriptView = "messages" | "details";
 
-/** Presentation only. User commands, results, notices and decisions never disappear. */
+/** Presentation only: folded into the turn's work row. User commands, results, notices and decisions stay separate. */
 export function isTransientActivity(block: Block) {
   return (
     ["tool", "reasoning", "system"].includes(block.role) &&
@@ -21,7 +41,8 @@ export function isTransientActivity(block: Block) {
     !block.orchestration &&
     !block.handoff &&
     !block.noteCard &&
-    !block.secondOpinion
+    !block.secondOpinion &&
+    !block.modelSwitch
   );
 }
 export function isQuietActivity(block: Block) {
@@ -40,7 +61,8 @@ export function isQuietActivity(block: Block) {
     !block.orchestration &&
     !block.handoff &&
     !block.noteCard &&
-    !block.secondOpinion
+    !block.secondOpinion &&
+    !block.modelSwitch
   );
 }
 
@@ -84,36 +106,83 @@ function foldFailure(entries: TranscriptEntry[], block: Block): number {
   return 1;
 }
 
+const sameModel = (a: TurnModel, b: TurnModel) => a.harness === b.harness && a.id === b.id;
+const isTurnStart = (block: Block) => block.role === "user" && !block.draft && !block.internal;
+
+/** What the turns before `end` leave for the next one: its model and whether a switch row followed. */
+export type TurnContext = { model?: TurnModel; switched: boolean };
+export function turnContextBefore(blocks: readonly Block[], end: number): TurnContext {
+  let switched = false;
+  for (let index = end - 1; index >= 0; index--) {
+    const block = blocks[index]!;
+    if (block.modelSwitch) switched = true;
+    if (isTurnStart(block)) return { model: block.turnModel, switched };
+  }
+  return { switched };
+}
+
 /** Preserve chronology and keep actionable/error content outside collapsed activity. */
 export function transcriptEntries(
   blocks: readonly Block[],
   fallbackAuthor?: string,
   presentation?: { view: TranscriptView; running: boolean },
+  context: TurnContext = { switched: false },
 ): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
   let author = fallbackAuthor;
+  let previousModel = context.model;
+  let switched = context.switched;
+  let turnUser: Block | undefined;
+  // Like desktop, a settled turn ends with its receipt; the running turn has none yet.
+  const closeTurn = (last: boolean) => {
+    const entry = entries.at(-1);
+    if (turnUser?.durationMs != null && entry && !(last && presentation?.running)) entry.footer = turnUser;
+    turnUser = undefined;
+  };
   // Queued drafts and internal steering do not start a new visible provider turn.
   const turnStart = blocks.findLastIndex(
     (block) => block.role === "user" && !block.draft && !block.internal,
   );
+  // Like desktop, the messages view folds a turn's finished work into one row; failures stay visible.
+  let turnWork: Extract<TranscriptEntry, { kind: "activity" }> | undefined;
   for (const [index, block] of blocks.entries()) {
     if (block.internal) continue;
+    if (block.modelSwitch) switched = true;
+    if (block.role === "user") closeTurn(false);
+    if (block.role === "user" && !block.draft) turnWork = undefined;
     if (block.role === "user" && block.turnModel) author = block.turnModel.harness;
+    let chrome: TurnChrome = {};
+    if (isTurnStart(block)) {
+      turnUser = block;
+      if (block.turnModel && previousModel && !switched && !sameModel(previousModel, block.turnModel))
+        chrome = { modelChange: { from: previousModel, to: block.turnModel } };
+      previousModel = block.turnModel ?? previousModel;
+      switched = false;
+    } else if (block.role === "assistant" && turnUser?.turnModel) chrome = { modelName: turnUser.turnModel.name };
     if (
       presentation?.view === "messages" &&
       isTransientActivity(block) &&
+      activityState(block) !== "failed" &&
       !(presentation.running && index > turnStart && activityState(block) === "running")
-    )
+    ) {
+      if (turnWork) turnWork.blocks.push(block);
+      else {
+        turnWork = { id: `work:${block.id}`, kind: "activity", blocks: [block], author };
+        entries.push(turnWork);
+      }
       continue;
+    }
     const previous = entries.at(-1);
+    // A footer belongs after the whole turn, so a grown activity row drops the closed one.
     if (isQuietActivity(block)) {
-      if (previous?.kind === "activity") previous.blocks.push(block);
+      if (previous?.kind === "activity" && !previous.footer) previous.blocks.push(block);
       else entries.push({ id: `activity:${block.id}`, kind: "activity", blocks: [block], author });
     } else if (isSystemFailure(block) && block.text) {
       const repeat = foldFailure(entries, block);
       entries.push({ id: block.id, kind: "message", block, author, ...(repeat > 1 ? { repeat } : {}) });
-    } else entries.push({ id: block.id, kind: "message", block, author });
+    } else entries.push({ id: block.id, kind: "message", block, author, ...chrome });
   }
+  closeTurn(true);
   return entries;
 }
 
@@ -141,7 +210,14 @@ export class TranscriptPresentation {
     const boundary = compatible && start > 0 ? this.entries.findIndex((entry) => entry.kind === "message" && entry.block === blocks[start]) : 0;
     if (boundary < 0) start = 0;
     const prefix = boundary > 0 ? this.entries.slice(0, boundary) : [];
-    this.entries = prefix.concat(transcriptEntries(blocks.slice(start), prefix.at(-1)?.author ?? author, presentation));
+    this.entries = prefix.concat(
+      transcriptEntries(
+        blocks.slice(start),
+        prefix.at(-1)?.author ?? author,
+        presentation,
+        prefix.length ? turnContextBefore(blocks, start) : undefined,
+      ),
+    );
     this.blocks = blocks;
     this.author = author;
     this.view = presentation?.view;
@@ -227,4 +303,31 @@ export function activitySummary(blocks: readonly Block[]) {
 /** A terminal provider record must not retain live Writing feedback from an old flag. */
 export function isBlockStreaming(block: Block) {
   return !!block.streaming && activityState(block) === "running";
+}
+
+/**
+ * Desktop's "Thinking…" stand-in: the running turn has produced nothing readable yet. A running
+ * reasoning row already says Thinking, so readable reasoning counts as output here.
+ */
+export function awaitingFirstOutput(blocks: readonly Block[]): boolean {
+  const start = blocks.findLastIndex(isTurnStart);
+  if (start < 0) return false;
+  for (let index = start + 1; index < blocks.length; index++) {
+    const block = blocks[index]!;
+    if (block.internal || block.role === "user" || block.role === "system") continue;
+    if (block.role === "tool" || block.role === "approval") return false;
+    if (block.text?.trim() || block.attachments?.length || block.image) return false;
+    if (block.plan || block.taskList || block.agentRun || block.orchestration) return false;
+  }
+  return true;
+}
+
+/** A turn cut off without the owner stopping it: desktop offers Continue with its continue prompt. */
+export function canContinueInterruptedTurn(
+  session: Pick<HostSession, "status"> & { session: Pick<HostSession["session"], "blocks" | "worktreeRemoved"> },
+): boolean {
+  if (session.status === "running" || session.session.worktreeRemoved) return false;
+  const blocks = session.session.blocks;
+  if (isOwnerStoppedTurn(blocks)) return false;
+  return session.status === "interrupted" || isTurnInterruptionNotice(blocks.at(-1));
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Linking, View } from "react-native";
 import Bell from "lucide-react-native/icons/bell";
 import Camera from "lucide-react-native/icons/camera";
+import Mic from "lucide-react-native/icons/mic";
 import ImageIcon from "lucide-react-native/icons/image";
 import { useAsyncAction } from "@/state/actions";
 import { Badge, Body, Button, FormActions, MutationState, NavigationGroup, NavigationRow, Row, SectionHeader, Stack, StateView } from "@/ui/primitives";
@@ -57,13 +58,15 @@ export function DevicePermissionSettings() {
         : <Badge label={copy("Kullanılamıyor", "Unavailable")} />;
   };
   const failed = failedPermissionKinds(reads);
-  const labels = { camera: copy("Kamera", "Camera"), notifications: copy("Bildirimler", "Notifications") };
+  const labels = { camera: copy("Kamera", "Camera"), microphone: copy("Mikrofon", "Microphone"), notifications: copy("Bildirimler", "Notifications") };
   const reasons = {
     camera: copy("Bilgisayarı eşleştirmek için QR kodunu taramak.", "Scan pairing QR codes to connect a computer."),
+    microphone: copy("Sesle yazmak ve asistanla konuşmak.", "Dictate messages and talk with the assistant."),
     notifications: copy("Bir ajan sana ihtiyaç duyduğunda veya işini bitirdiğinde uyarı almak.", "Alerts when an agent needs you or finishes."),
     photos: copy("Mesajlara fotoğraf ve dosya eklemek; yalnızca seçtiklerin paylaşılır.", "Attach photos and files to messages; only what you choose is shared."),
   };
   const permissionInfo = useInfoHint(`${labels.camera}: ${reasons.camera}
+${labels.microphone}: ${reasons.microphone}
 ${labels.notifications}: ${reasons.notifications}
 ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`);
   const testInfo = useInfoHint(copy("Bu telefonda dene yerel bir bildirim gösterir. Bilgisayardan dene ise bilgisayara bu telefona bildirim göndermesini söyler.", "Test on this phone shows a local notification here. Test from the computer asks the computer to send one to this phone."));
@@ -93,6 +96,7 @@ ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`);
         {permissionInfo.panel}
         <NavigationGroup>
           {row("camera", Camera)}
+          {row("microphone", Mic)}
           {row("notifications", Bell)}
           <Row>
             <IconTile color={colors.muted}><ImageIcon size={18} strokeWidth={2} color={colors.muted} /></IconTile>

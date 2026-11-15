@@ -2,10 +2,11 @@ import { graphemes } from "../../../../src/shared/lib/text/truncate";
 import { useEffect, useRef, useState } from "react";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import {
-  Body, Button, CodePanel, CodeText, FormActions, ErrorText, MutationState,
+  Body, Button, FormActions, ErrorText, MutationState,
   Disclosure, Notice, QueryState, StateView, Row, Sheet, ToggleField, NavigationGroup,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { MessageCode } from "@/ui/message-code";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
 import { getQueryPresentation } from "@/ui/query-presentation";
@@ -114,8 +115,10 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
               try { if (machineId && currentScope()) setPreview({ url: privatePreviewUrl(endpoint.url), machineId, projectId, serverId: server.id }); } catch (error) { setLocalError(error); }
             }} /> : null}</Row>)}
           {current.error ? <ErrorText error={current.error} /> : null}
+          <Disclosure label={copy("İşlem kapsamı", "Process scope")}>
           <NavigationGroup><ToggleField label={copy("Alt işlemleri de kapsa", "Include child processes")} value={includeChildren} disabled={busy} onChange={(value) => { setIntent(undefined); setIncludeChildren(value); }} /></NavigationGroup>
           <Body muted>{`${copy("Etkilenen portlar", "Affected ports")}: ${details.data?.affectedPorts.join(", ") || "—"}`}</Body>
+          </Disclosure>
           {!canReview ? <Notice message={copy("İşlem etkisini güvenle doğrulamak için bilgisayardaki bycoda'yı güncelle.", "Update bycoda on the computer to safely review process impact.")} /> : null}
           {uncertain ? <Notice tone="warning" message={copy("İşlemin sonucu bilinmiyor. Tekrar göndermeden önce güncel durumu kontrol et.", "The operation outcome is unknown. Check the current state before sending another action.")} /> : null}
           {!details.error ? <Button busy={reconciling} tone="quiet" label={copy("Durumu yenile", "Refresh state")} disabled={busy || details.isFetching || reconciling} onPress={() => { void reconcile(); }} /> : null}
@@ -143,7 +146,7 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
           {restart.data?.conflict ? <Notice tone="warning" message={copy("{p0} portu zaten kullanılıyor.", "Port {p0} is already in use.", { p0: restart.data.conflict.port })} /> : null}
           {showLogs ? <>
             <QueryState query={logs} />
-            {logs.data?.available ? <>{logParts.length > 32_000 ? <Notice message={copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")} /> : null}<CodePanel horizontal={false}><CodeText>{logTail}</CodeText></CodePanel></> : getQueryPresentation(logs) === "ready" ? <StateView compact title={copy("Bu sunucunun günlükleri kullanılamıyor.", "Logs are not available for this server.")} /> : null}
+            {logs.data?.available ? <>{logParts.length > 32_000 ? <Notice message={copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")} /> : null}<MessageCode code={logTail} output allowPreview={false} complete={current.state !== "running" && current.state !== "starting"} /></> : getQueryPresentation(logs) === "ready" ? <StateView compact title={copy("Bu sunucunun günlükleri kullanılamıyor.", "Logs are not available for this server.")} /> : null}
           </> : null}
         </>
       ) : null}

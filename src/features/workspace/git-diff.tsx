@@ -52,6 +52,7 @@ export function GitDiffPanel({
         <Row style={{ gap: space.sm }}>
           <Button
             label={copy("Dosyayı aç", "Open file")}
+            tone="quiet"
             disabled={busy}
             density="compact"
             onPress={() => onOpenFile(selection.path)}
@@ -64,6 +65,7 @@ export function GitDiffPanel({
             }
             density="compact"
             busy={busy}
+            tone="primary"
             onPress={() => onStage(selection)}
           />
         </Row>

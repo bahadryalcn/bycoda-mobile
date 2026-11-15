@@ -91,7 +91,7 @@ function AttentionInboxScreen() {
     if (item.projectId) selectProject(item.projectId);
     if (item.sessionId) {
       if (machine)
-        router.push({
+        router.navigate({
           pathname: "/session/[id]",
           params: {
             id: item.sessionId,
@@ -100,7 +100,7 @@ function AttentionInboxScreen() {
           },
         });
     } else
-      router.push(
+      router.navigate(
         `/manage/${attentionRoutes[item.kind]}`,
       );
   };

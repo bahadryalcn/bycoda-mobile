@@ -3,7 +3,7 @@ import { useWindowDimensions } from "react-native";
 import Pencil from "lucide-react-native/icons/pencil";
 import { useConnectionScope } from "@/state/connection-scope";
 import { useMachines } from "@/state/machines";
-import { ActionMenu, Button, Body, Disclosure, Empty, ErrorText, Input, Loading, FormActions, Notice, Sheet, Stack } from "@/ui/primitives";
+import { ActionMenu, Button, Body, Disclosure, Empty, ErrorText, Input, Loading, FormActions, Sheet, Stack } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
 import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider,usePrivateContentAccess } from "@/ui/private-access";
@@ -14,6 +14,8 @@ import type { SessionScope } from "./session-types";
 import type { useQueueEditor } from "./session-queue-editor";
 import { composerDeliveryError } from "./composer-delivery-copy";
 import { RecordAccessUnavailable } from "./unavailable-state";
+import { sessionCatalog, sessionModel } from "./catalog";
+import { providerName } from "./provider-choices";
 
 /** Presentation keeps no draft copy; the original persistent editor remains its owner. */
 export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typeof useQueueEditor>;blocked:boolean;scope:SessionScope}){
@@ -27,6 +29,9 @@ export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typ
   const live=useRef({editor,blocked,access,available});live.current={editor,blocked,access,available};
   const origin=()=>mounted.current&&live.current.available&&opening.connection.isCurrent()&&useMachines.getState().activeId===opening.scope.machineId&&live.current.access.allowed&&live.current.access.check();
   const edit=editor.value;
+  const target=edit?.original.modelTarget;
+  const model=target?sessionModel(sessionCatalog(undefined,[target.harness]),target.harness,target.model):undefined;
+  const modelName=model?.name??target?.model.replace(/^[^:]+:/, "");
   const window=useMemo(()=>({active:false}),[editor.visible,available,edit?.original]);
   useLayoutEffect(()=>{window.active=true;return()=>{window.active=false;};},[window]);
   const current=()=>origin()&&window.active&&live.current.editor.visible;
@@ -65,12 +70,11 @@ export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typ
           ]}/>:undefined}/>
           {!editor.ready&&!editor.error?<Loading/>:null}
           {edit?<>
-            {edit.original.modelTarget?<Body muted selectable>{edit.original.modelTarget.model}</Body>:null}
+            {target?<Stack><Body selectable>{modelName}</Body><Body muted>{providerName(target.harness)}</Body></Stack>:null}
             <Input label={copy("Mesaj", "Message")} value={edit.text} multiline style={{minHeight:Math.max(120,Math.min(240,height*.28))}} editable={!disabled&&!approval} onChangeText={change}/>
             <Disclosure label={copy("Ayrıntılar", "Details")}>
-              <Notice message={copy("Ekler ve özgün model ayarları korunur.", "Attachments and original model settings are preserved.")}/>
+              <Body muted>{copy("Ekler ve özgün model ayarları korunur.", "Attachments and original model settings are preserved.")}</Body>
               <Body mono selectable>{edit.original.id}</Body>
-              {edit.original.modelTarget?<><Body mono selectable>{edit.original.modelTarget.harness}</Body>{Object.entries(edit.original.modelTarget.modelSettings).map(([key,value])=><Body key={key} mono selectable>{key}: {String(value)}</Body>)}</>:null}
             </Disclosure>
           </>:editor.ready&&!editor.error?<Empty compact title={copy("Sıradaki mesaja ait taslak yok.", "No queued message draft.")}/>:null}
         </>:<RecordAccessUnavailable />}

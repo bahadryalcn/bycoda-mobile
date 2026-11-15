@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { providerName } from "./provider-choices";
 import { randomUUID } from "expo-crypto";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
@@ -573,9 +574,9 @@ export function HistoryImport({
           }
           renderItem={({ item }) => (
             <ToggleField
-              label={item.prompt || item.provider}
+              label={item.prompt || providerName(item.provider)}
               labelLines={2}
-              detail={`${item.provider} · ${item.kind} · ${formatAttachmentSize(item.sizeBytes, locale)}${item.imported ? ` · ${copy("Zaten içe aktarıldı", "Already imported")}` : !item.resumable ? ` · ${copy("Salt okunur", "Read-only")}` : ""}`}
+              detail={`${providerName(item.provider)} · ${item.kind} · ${formatAttachmentSize(item.sizeBytes, locale)}${item.imported ? ` · ${copy("Zaten içe aktarıldı", "Already imported")}` : !item.resumable ? ` · ${copy("Salt okunur", "Read-only")}` : ""}`}
               value={selected.has(item.id)}
               disabled={disabled || item.imported}
               onChange={(value) => {

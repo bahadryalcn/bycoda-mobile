@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement, useState, type PropsWithChildren } from "react";
+import { act, createContext, createElement, useEffect, useState, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { PrivateContentBoundary, usePrivateContentAccess } from "./private-content";
@@ -9,6 +9,18 @@ const state = vi.hoisted(() => ({
   keyboardVisible: false,
   back: null as (() => boolean) | null,
   dismissKeyboard: vi.fn(async () => {}),
+}));
+vi.mock("expo-router/react-navigation", () => ({ NavigationContext: createContext(null) }));
+vi.mock("panelui-native/hooks/use-back-handler", () => ({
+  useBackHandler(enabled: boolean, callback: () => void) {
+    // Model native registration lifetime without importing external React Native Flow code.
+    useEffect(() => {
+      if (!enabled) return;
+      const handler = () => { callback(); return true; };
+      state.back = handler;
+      return () => { if (state.back === handler) state.back = null; };
+    }, [enabled, callback]);
+  },
 }));
 vi.mock("react-native", () => {
   const View = ({ children, style, ref, accessibilityElementsHidden, importantForAccessibility: _important, accessibilityViewIsModal: _modal, pointerEvents, ...props }: PropsWithChildren<Record<string, unknown>>) => {

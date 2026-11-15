@@ -37,7 +37,7 @@ export function useHostReadActive() {
   const privateAccess = usePrivateContentAccess();
   const focused = useIsFocused();
   const available = useSecurity(
-    (state) => state.status === "unlocked" && state.appState === "active" && state.windowFocused,
+    (state) => state.status === "unlocked" && state.appState === "active",
   );
   return focused && available && privateAccess.allowed && privateAccess.check();
 }

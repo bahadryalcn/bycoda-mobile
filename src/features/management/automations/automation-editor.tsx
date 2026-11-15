@@ -73,7 +73,7 @@ export function AutomationEditor({ initial, save, busy, onClose }: AutomationEdi
         {draft.template?.kind === "project-scan" ? <>
           <Body muted>{copy("Proje taraması talimatları Steward tanımından gelir.", "Project scan instructions come from the Steward definition.")}</Body>
           <Button label={copy("Proje taramasını düzenle", "Edit project scan")} disabled={busy}
-            onPress={() => router.push("/manage/stewards")} />
+            onPress={() => router.navigate("/manage/stewards")} />
         </> : null}
       </Section>
       <Section title={copy("Ajan", "Agent")}>

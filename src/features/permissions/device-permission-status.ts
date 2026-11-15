@@ -8,8 +8,8 @@ export type PermissionRead =
   | { status: "error"; error: unknown };
 export type PermissionReads = Record<DevicePermissionKind, PermissionRead>;
 
-export const permissionKinds: readonly DevicePermissionKind[] = ["camera", "notifications"];
-export const pendingPermissionReads = (): PermissionReads => ({ camera: { status: "pending" }, notifications: { status: "pending" } });
+export const permissionKinds: readonly DevicePermissionKind[] = ["camera", "microphone", "notifications"];
+export const pendingPermissionReads = (): PermissionReads => ({ camera: { status: "pending" }, microphone: { status: "pending" }, notifications: { status: "pending" } });
 
 /** Reads status only (never requests). Resolves with an independent outcome for each requested kind;
  * onSettled reports each kind as soon as its own read settles, so a slow read never delays another row. */

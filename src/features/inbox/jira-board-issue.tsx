@@ -2,7 +2,7 @@ import { useInboxLocalScope } from "./inbox-local-scope";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useCopy } from "@/ui/copy";
 
-import { Body, Button, Notice, QueryState, SelectField, Sheet, Stack } from "@/ui/primitives";
+import { Badge, Body, Button, Heading, Notice, QueryState, Row, SelectField, Sheet, Stack } from "@/ui/primitives";
 import { ErrorText } from "../workspace/shared";
 import { useInboxRead } from "./provider-queries";
 
@@ -151,8 +151,8 @@ export function JiraBoardIssueActions({
       }
     >
       <Stack>
-        <Body>{issue.title}</Body>
-        <Body>{`${snapshot.board.name} · ${issue.state}`}</Body>
+        <Heading>{issue.title}</Heading>
+        <Row><Body muted>{snapshot.board.name}</Body><Badge label={issue.state} /></Row>
         <Body muted>
           {copy(
             "İşlem bilgisayarda tam hedefiyle yeniden onaylanır. Jira’daki eşzamanlı değişiklikler sunucu tarafında atomik olarak kilitlenemez.",

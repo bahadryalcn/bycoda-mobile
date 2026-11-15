@@ -4,7 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Block } from "./wire";
 
 vi.mock("@/ui/theme", () => ({ useMobileTheme: vi.fn() }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/copy", () => ({
+  useCopy: () => (_tr: string, en: string, values?: Record<string, string | number>) =>
+    en.replace(/\{(p\d+)\}/g, (_: string, key: string) => String(values?.[key])),
+}));
 vi.mock("@/ui/chat-activity", () => ({
   ChatActivity: ({ status, detail, title }: { status: string; detail: string; title: string }) =>
     createElement("button", { "data-status": status, "data-title": title }, detail),
@@ -48,6 +51,13 @@ describe("activity group state presentation", () => {
   it("does not conceal a failed command when a later command is still running", () => {
     const html = render([action("failed", "failed"), action("active", "running")], true);
     expect(html).toContain('data-status="error"');
-    expect(html).toContain("Running");
+    expect(html).toContain("Working");
+  });
+  it("summarizes the work like desktop instead of counting actions", () => {
+    const html = render([
+      { id: "r", role: "tool", text: "Read a.ts", tool: { kind: "read", status: "completed" } },
+      { id: "x", role: "tool", text: "pnpm test", tool: { kind: "execute", status: "completed" } },
+    ]);
+    expect(html).toContain('data-title="Read a.ts · Ran a command"');
   });
 });

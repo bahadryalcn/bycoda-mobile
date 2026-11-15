@@ -122,7 +122,7 @@ function displayValue(value: unknown): string | null {
   return text && text.length <= 80 && !/[\r\n\u0000]/.test(text) ? text : null;
 }
 
-/** Native build comes from the installed binary's Constants, never config guesses. */
+/** Native identity comes from the installed binary; preview version belongs to its Expo project. */
 export function appIdentity(
   constants: {
     expoConfig?: EngagementConfig | null;
@@ -133,20 +133,13 @@ export function appIdentity(
     };
   },
   platform: EngagementPlatform,
+  application: { nativeApplicationVersion?: unknown; nativeBuildVersion?: unknown } = {},
 ): AppIdentity {
   const preview =
     constants.executionEnvironment === "storeClient" || platform === "web";
   return {
-    version: displayValue(constants.expoConfig?.version),
-    nativeBuild: preview
-      ? null
-      : displayValue(
-          platform === "ios"
-            ? constants.platform?.ios?.buildNumber
-            : platform === "android"
-              ? constants.platform?.android?.versionCode
-              : null,
-        ),
+    version: displayValue(preview ? constants.expoConfig?.version : application.nativeApplicationVersion),
+    nativeBuild: preview ? null : displayValue(application.nativeBuildVersion),
     preview,
   };
 }

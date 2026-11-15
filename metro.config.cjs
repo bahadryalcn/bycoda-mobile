@@ -51,7 +51,7 @@ const themedConfig = withUniwindConfig(config, {
   cssEntryFile: "./src/global.css",
   dtsFile: "./src/uniwind-types.d.ts",
   // Keep in step with the non-default palettes in src/ui/palettes.ts (palettes.test.ts checks this).
-  extraThemes: ["bycoda", "bycoda-dark", "olive", "olive-dark", "tide", "tide-dark", "kiln", "kiln-dark", "dusk", "dusk-dark", "ink", "ink-dark"],
+  extraThemes: ["bycoda", "bycoda-dark", "olive", "olive-dark", "tide", "tide-dark", "kiln", "kiln-dark", "dusk", "dusk-dark", "ink", "ink-dark", "sand", "sand-dark", "rose", "rose-dark"],
 });
 // Preserve upstream CSS/native transformation while fixing Windows web theme registration.
 themedConfig.transformerPath = require.resolve("./scripts/uniwind-transformer.cjs");

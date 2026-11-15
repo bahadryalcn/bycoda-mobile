@@ -13,7 +13,7 @@ const state = vi.hoisted(() => ({
   invalidate: vi.fn(),
   push: vi.fn(),
 }));
-vi.mock("expo-router", () => ({ router: { push: state.push } }));
+vi.mock("expo-router", () => ({ router: { navigate: state.push } }));
 vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: state.invalidate }),

@@ -97,8 +97,8 @@ export function MachinesScreen() {
       "Bilgisayarında bycoda’yı aç. Telefon bağlantısı bölümünden bir kod oluştur ve telefonunla tara.",
       "Open bycoda on your computer. Create a code in phone pairing and scan it with your phone.",
     )}</Body>
-    <Button tone="quiet" label={copy("Yardım", "Help")} onPress={() => router.push("/legal/help")} />
-    <LegalLinks onOpen={(document) => router.push({ pathname: "/legal/[document]", params: { document } })} />
+    <Button tone="quiet" label={copy("Yardım", "Help")} onPress={() => router.navigate("/legal/help")} />
+    <LegalLinks onOpen={(document) => router.navigate({ pathname: "/legal/[document]", params: { document } })} />
   </Disclosure>;
   const addAction = !adding && !insideEntry && machines.length ? <IconButton label={copy("Bilgisayar ekle", "Add computer")} disabled={unavailable || busy} onPress={() => controller.begin("choices")}><Plus size={22} strokeWidth={2.2} color={colors.accent} /></IconButton> : undefined;
   return <Screen scroll={showPairing} title={showPairing ? copy("Bilgisayarlar", "Computers") : undefined}

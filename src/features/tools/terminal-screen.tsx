@@ -5,6 +5,8 @@ import { useNavigation, usePreventRemove, type NavigationAction } from "expo-rou
 import { randomUUID } from "expo-crypto";
 import Plus from "lucide-react-native/icons/plus";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
+import ArrowUp from "lucide-react-native/icons/arrow-up";
+import Maximize2 from "lucide-react-native/icons/maximize-2";
 import { useHostClient, useHostQuery } from "@/state/queries";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -21,12 +23,14 @@ import { useCopy } from "@/ui/copy";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useMobileTheme } from "@/ui/theme";
 import { haptic } from "@/ui/motion";
+import { space } from "@/ui/tokens";
 import { projectTerminals, terminalCommandInput, terminalDisplayOutput, TERMINAL_COMMAND_LIMIT } from "./terminal-model";
 import { useLocalDraft } from "../workspace/use-local-draft";
 import { registerWorkspaceDraft } from "../workspace/draft-guard";
 import { decodeTerminalDraft, emptyTerminalDraft, encodeTerminalDraft, terminalDraftKey } from "./terminal-draft";
 import { ErrorNotice } from "@/ui/feedback";
 import { useTerminalOutput } from "./use-terminal-output";
+import { TerminalOutputView } from "./terminal-output-view";
 
 let nextTerminalScope = 1;
 export function TerminalScreen({ project }: { project: HostProject }) {
@@ -138,18 +142,21 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
   </Notice> : null;
   return (
     <Screen
+      scroll={false}
       title={copy("Terminaller", "Terminals")}
       subtitle={[machine?.name, project.name].filter(Boolean).join(" · ")}
       refreshState={refresh}
-      footer={!editingCommand && selected ? <>
+      footer={!editingCommand && selected ? <Row style={{ alignItems: "flex-end" }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
         <Field label={copy("Komut", "Command")} value={command} mono autoCapitalize="none" autoCorrect={false}
           maxLength={TERMINAL_COMMAND_LIMIT} editable={draft.ready && !busy && writable && terminal?.state === "running" && !uncertain}
           error={command.trim() && !terminalCommandInput(command) ? copy("En fazla 16384 UTF-8 baytı kullan ve terminal kontrol karakterlerini kaldır.", "Use at most 16384 UTF-8 bytes and remove terminal control characters.") : undefined}
           onChangeText={value => setDrafts(previous => ({ ...previous, [selected.id]: value }))} />
-        <Row><Button label={copy("Genişlet", "Expand")} tone="quiet" disabled={busy} onPress={() => setEditingCommand(true)} />
-          <Button label={copy("Komutu gönder", "Send command")} style={uiStyles.grow} busy={busy}
-            disabled={!writable || uncertain || terminal?.state !== "running" || !terminalCommandInput(command)} onPress={send} /></Row>
-      </> : undefined}
+        </View>
+        <IconButton label={copy("Genişlet", "Expand")} disabled={busy} onPress={() => setEditingCommand(true)}><Maximize2 size={18} color={colors.muted} /></IconButton>
+        <IconButton label={copy("Komutu gönder", "Send command")} tone="primary" busy={busy}
+          disabled={!writable || uncertain || terminal?.state !== "running" || !terminalCommandInput(command)} onPress={send}><ArrowUp size={20} color={colors.primaryText} /></IconButton>
+      </Row> : undefined}
       actions={
         <>
           <IconButton busy={refresh.refreshing} label={copy("Yenile", "Refresh")} disabled={list.isFetching || output.isFetching} onPress={() => { void refresh.onRefresh(); }}><RefreshCw size={22} strokeWidth={2} color={colors.accent} /></IconButton>
@@ -157,6 +164,7 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
         </>
       }
     >
+      <View style={{ flex: 1, minHeight: 0, paddingHorizontal: space.screen, gap: space.sm }}>
       <ErrorNotice error={draft.error} onRetry={() => { void (draft.ready ? draft.persist() : draft.load()).catch(() => {}); }} />
       <Stack.Screen options={{ title: copy("Terminaller", "Terminals") }} />
       <QueryState query={list} loading={selected ? "none" : "list"} empty={!terminals.length} emptyIllustration="no-sessions" emptyTitle={copy("Bu projede terminal yok.", "No terminals in this project.")} onManageConnections={manageConnections} />
@@ -187,7 +195,7 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
         : null}
         <QueryState query={output} loading="inline" onManageConnections={manageConnections} />
         {output.data?.truncated ? <Notice message={copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")} /> : null}
-        {output.data ? <CodePanel horizontal={false}><CodeText>{terminalDisplayOutput(output.data.output) || copy("Henüz çıktı yok.", "No output yet.")}</CodeText></CodePanel> : null}
+        {output.data ? <TerminalOutputView key={selected.id} output={terminalDisplayOutput(output.data.output)} /> : null}
         {output.data?.hasMore ? <Button tone="quiet" label={copy("Daha fazla çıktı yükle", "Load more output")} busy={output.isFetching} onPress={() => { void output.refetch(); }} /> : null}
         {terminal?.exitCode != null ? <Body muted>{copy("Çıkış kodu: {p0}", "Exit code: {p0}", { p0: terminal.exitCode })}</Body> : null}
       </> : null}
@@ -222,6 +230,7 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
           cancelDisabled={busy} onCancel={() => setConfirm(undefined)}
           feedback={<MutationState mutation={action} />} onSubmit={control} />
       </Sheet>
+      </View>
     </Screen>
   );
 }

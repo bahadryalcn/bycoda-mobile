@@ -226,6 +226,7 @@ export function ProviderInboxDetail({
       {accessMessage || operationMessage ? <Notice tone={uncertain || desktopUnavailable ? "warning" : undefined}
         message={[accessMessage, operationMessage].filter(Boolean).join(" ")} /> : null}
       {contentAvailable ? <>
+      {(item.labels?.length || item.assignees?.length) ? <Disclosure label={copy("Etiketler ve atananlar", "Labels and assignees")}>
       <Row>
         {(item.labels ?? []).map((label) => (
           <Badge key={label.name} label={label.name} />
@@ -234,6 +235,7 @@ export function ProviderInboxDetail({
           <Badge key={assignee.login} label={`@${assignee.login}`} />
         ))}
       </Row>
+      </Disclosure> : null}
       <QueryState query={{...details, refetch: sharedReadFailure ? refreshConversation : refreshDetails}} onManageConnections={manageConnections} />
       {details.data ? <ProviderInboxDescription details={details.data} /> : null}
       <Button tone="primary" label={form.values.body.trim() ? copy("Yorum taslağına dön", "Continue comment draft") : copy("Yorum ekle", "Add a comment")} disabled={busy || !writeAllowed} onPress={() => { if (editableNow()) setComposing(true); }} />

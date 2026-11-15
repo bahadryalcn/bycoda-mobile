@@ -1,4 +1,5 @@
 import { View } from "react-native";
+import { providerName } from "../workspace/provider-choices";
 import { BarChart } from "panelui-native/components/bar-chart";
 import { Kpi } from "panelui-native/components/kpi";
 import { PieChart } from "panelui-native/components/pie-chart";
@@ -71,7 +72,7 @@ export function ProviderShare({ rows }: { rows: ProviderUsage[] }) {
         >
           <PieChart
             data={reported.map((row) => ({
-              label: row.provider,
+              label: providerName(row.provider),
               value: row.tokens ?? 0,
               color: colorOf(row.provider),
             }))}
@@ -87,7 +88,7 @@ export function ProviderShare({ rows }: { rows: ProviderUsage[] }) {
       ) : null}
       {reported.length > MAX_DONUT_PROVIDERS ? (
         <BarChart
-          data={reported.map((row) => ({ provider: row.provider, tokens: row.tokens ?? 0 }))}
+          data={reported.map((row) => ({ provider: providerName(row.provider), tokens: row.tokens ?? 0 }))}
           xDataKey="provider"
           aspectRatio={2}
           accessibilityLabel={label}
@@ -119,7 +120,7 @@ export function ProviderShare({ rows }: { rows: ProviderUsage[] }) {
               />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <MetricRow
-                  label={row.provider}
+                  label={providerName(row.provider)}
                   value={
                     row.tokens === null
                       ? "—"

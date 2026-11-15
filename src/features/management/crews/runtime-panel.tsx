@@ -73,7 +73,7 @@ function PendingInput({
           onPress: () => {
             if (!navigation.active || !current() || useMachines.getState().activeId !== machineId)
               return;
-            router.push({
+            router.navigate({
               pathname: "/session/[id]",
               params: {
                 id: input.sessionId,

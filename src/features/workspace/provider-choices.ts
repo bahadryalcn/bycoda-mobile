@@ -17,7 +17,7 @@ export type ProviderChoice = {
 };
 
 const DEFAULT_ACCOUNT_ID = "default";
-const NAMES: Partial<Record<RemoteProvider, string>> = {
+const NAMES: Readonly<Record<string, string>> = {
   codex: "Codex",
   claude: "Claude",
   cursor: "Cursor",
@@ -31,8 +31,9 @@ const NAMES: Partial<Record<RemoteProvider, string>> = {
   acp: "ACP",
 };
 
-export function providerName(provider: RemoteProvider): string {
-  return NAMES[provider] ?? provider;
+/** Display only: preserve unknown/custom IDs without changing their routing identity. */
+export function providerName(provider: string): string {
+  return Object.hasOwn(NAMES, provider) ? NAMES[provider]! : provider;
 }
 
 export function choiceKey(provider: RemoteProvider, accountId?: string): string {
@@ -49,9 +50,15 @@ export function providerChoices(
   defaultAccountLabel: string,
 ): ProviderChoice[] {
   return providers.flatMap((provider): ProviderChoice[] => {
-    const list = provider === "claude" || provider === "codex" ? (accounts?.[provider] ?? []) : [];
+    const offered = provider === "claude" || provider === "codex" ? accounts?.[provider] : undefined;
+    const list = offered?.filter((account) =>
+      account.status === undefined || account.status === "ready" ||
+      (account.status === "unknown" && (account.isDefault === true ||
+        (account.id === DEFAULT_ACCOUNT_ID && !offered.some((entry) => entry.isDefault))))
+    ) ?? [];
     const name = providerName(provider);
     if (list.length === 0) {
+      if (offered) return [];
       return [
         {
           key: choiceKey(provider),

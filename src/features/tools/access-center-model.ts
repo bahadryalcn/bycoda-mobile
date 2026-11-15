@@ -1,7 +1,13 @@
 import type { HostAccessReport } from "../../../../host/security/access/access-center";
+import { matchesSearch } from "@/ui/search-matching";
 export type { HostAccessReport };
 export type PairedDevice = HostAccessReport["devices"][number];
 export type AccessTarget = { machineId: string; environmentId: string };
+/** Keep this phone first without changing the report used for reviewed actions. */
+export function visibleAccessDevices(devices: readonly PairedDevice[], query: string, locale?: string) {
+  return devices.filter(device => matchesSearch(`${device.name} ${device.id}`, query, locale))
+    .sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent));
+}
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const allowed = (value: Record<string, unknown>, keys: string[]) => Object.keys(value).every((key) => keys.includes(key));
 const text = (value: unknown, max: number): value is string => typeof value === "string" && value.length > 0 && value.length <= max && !/[\r\n\0]/.test(value);

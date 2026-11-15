@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { providerName } from "../workspace/provider-choices";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { View } from "react-native";
@@ -285,7 +286,7 @@ function SessionRow({ row }: { row: SessionUsageReport["rows"][number] }) {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm, borderBottomWidth: 1, borderColor: colors.separator }}>
       <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
-        <Body style={{ fontWeight: "600" }}>{row.provider}</Body>
+        <Body style={{ fontWeight: "600" }}>{providerName(row.provider)}</Body>
         <Body muted mono>{`${copy("Oturum", "Session")} ${shortSessionId(row.sessionId)}`}</Body>
       </View>
       <View style={{ alignItems: "flex-end", minWidth: 0, gap: space.xs }}>
