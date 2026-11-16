@@ -28,6 +28,10 @@ vi.mock("react-native", () => ({
   },
   StyleSheet: { flatten: (style: unknown) => style },
 }));
+// Shared rows press through PanelUI; the native Pressable double above records their state.
+vi.mock("panelui-native/primitives/animated-pressable", async () => ({ AnimatedPressable: (await import("react-native")).Pressable }));
+vi.mock("panelui-native/components/chip", () => ({ Chip: ({ children }: PropsWithChildren) => createElement("button", null, children) }));
+vi.mock("panelui-native/components/separator", () => ({ Separator: () => createElement("hr") }));
 vi.mock("react-native-reanimated", () => ({ default: {
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
   createAnimatedComponent: (component: unknown) => component,
@@ -37,7 +41,7 @@ vi.mock("./motion", () => ({ haptic: { tap: vi.fn(), select: vi.fn() }, usePress
 vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
 vi.mock("./design-system", () => ({ controlClasses: () => "product-control" }));
-vi.mock("./tokens", () => ({ colors: {}, metrics: {}, fontSize: {}, opacity: {}, radii: {}, space: {}, hitSlopFor: () => undefined }));
+vi.mock("./tokens", () => ({ colors: {}, metrics: {}, fontSize: {}, lineHeight: {}, gapIcon: 8, opacity: {}, radii: {}, space: {}, hitSlopFor: () => undefined }));
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
 const loops = vi.hoisted(() => ({ started: 0, stopped: 0 }));

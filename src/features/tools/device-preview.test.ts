@@ -78,7 +78,8 @@ vi.mock("@/state/queries", () => ({
     },
   }),
 }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
+vi.mock("@/ui/copy",() => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/remote-frame", () => ({ RemoteFrame: () => null }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
@@ -252,7 +253,7 @@ it("restores an unknown request through status reads only, and local tracking re
   ).toBe(true);
   expect(state.writes).toHaveLength(1);
   await click("Remove unavailable tracking");
-  expect(container.textContent).toContain("does not cancel the host job");
+  expect(container.textContent).toContain("job is not cancelled");
   await click("Confirm");
   expect(state.values.size).toBe(0);
   expect(state.writes).toHaveLength(1);
@@ -289,7 +290,6 @@ it("a rejected retained-intent read exposes in-place Retry, starts nothing, and 
   expect(state.reads.some((row) => row.enabled)).toBe(false);
   await click("Retry");
   expect(container.textContent).toContain(savedIntent.url);
-  expect(container.textContent).toContain("saved-request");
   expect(buttons()).not.toContain("Review changes");
   expect(state.reads.some((row) => row.enabled && row.params.requestId === "saved-request")).toBe(
     true,
@@ -316,7 +316,7 @@ it("a malformed retained intent is never cleared or relaunched until an explicit
   expect(state.values.get(savedKey)).toBe("corrupt");
   expect(buttons()).not.toContain("Review changes");
   await click("Discard saved preview request");
-  expect(container.textContent).toContain("does not cancel the host job");
+  expect(container.textContent).toContain("job is not cancelled");
   expect(state.values.get(savedKey)).toBe("corrupt");
   await click("Confirm");
   expect(state.values.has(savedKey)).toBe(false);

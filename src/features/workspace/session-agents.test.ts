@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ options: [] as { enabled?: boolean }[], keys: [] as unknown[] }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
+vi.mock("panelui-native/components/chip", () => ({ Chip: ({ children, accessibilityLabel }: PropsWithChildren<{ accessibilityLabel: string }>) => createElement("button", { "aria-label": accessibilityLabel }, children) }));
 vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/users", () => ({ default: () => null }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));

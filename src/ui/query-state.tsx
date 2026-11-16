@@ -6,10 +6,11 @@ import { StateView } from "./state-view";
 import { errorIllustration, errorTitle } from "./state-model";
 import { showToast, useToastAvailable } from "./toast";
 import { useCopy } from "./copy";
-import { errorMessage, remoteErrorKind } from "./error-message";
+import { errorMessage, isConnectionLevelError, remoteErrorKind } from "./error-message";
 import { getQueryPresentation } from "./query-presentation";
 import type { QueryStateProps, MutationStateProps } from "./component-props";
 import { SheetGuardContext } from "./sheet-guard-context";
+import { useConnectionFeedbackOwner } from "./connection-feedback-scope";
 import { FormActionBusy } from "./form-action-context";
 import { isTransientConnectionError, reconnectRefetchDelay } from "../state/query-retry";
 
@@ -74,6 +75,13 @@ function useQueryStatePresentation({
   const deviceOffline = !useSyncExternalStore(onlineManager.subscribe.bind(onlineManager), () => onlineManager.isOnline(), () => onlineManager.isOnline());
   const kind = remoteErrorKind(query.error);
   const repair = kind === "auth" || kind === "identity";
+  // Revoked access, an unreachable or outdated computer and a missing network are one problem
+  // for the whole region; only one section of a sheet or screen says so.
+  const connectionLevel = query.data === undefined && presentation !== "empty" && !reconnecting && (
+    deviceOffline || presentation === "paused" ||
+    (presentation === "error" && isConnectionLevelError(query.error)));
+  const showsConnection = useConnectionFeedbackOwner(connectionLevel);
+  if (connectionLevel && !showsConnection) return { node: null, skeleton: false };
   const repairAction = repair ? {
     label: copy("Bağlantıları yönet", "Manage connections"),
     onPress: onManageConnections ?? (() => {

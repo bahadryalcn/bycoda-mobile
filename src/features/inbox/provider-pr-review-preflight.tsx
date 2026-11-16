@@ -1,6 +1,6 @@
 import type { RemoteInboxItem, RemoteInboxReview } from "../../../../src/features/inbox/model/remoteInbox";
 import { ActionReviewSheet } from "@/ui/action-review-sheet";
-import { Body, ScreenList, Stack } from "@/ui/primitives";
+import { Body, Disclosure, ScreenList, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { prReviewDecisionLabel } from "./provider-labels";
 
@@ -17,7 +17,9 @@ export function ProviderPrReviewPreflight({ item, review, onClose, onConfirm }: 
       header={<Stack>
         <Body selectable>{item.repo} #{item.number} · {item.title}</Body>
         <Body>{prReviewDecisionLabel(review.event, copy)}</Body>
-        <Body muted mono selectable>{copy("Commit", "Commit")}: {review.commitId}</Body>
+        <Disclosure label={copy("Commit", "Commit")}>
+          <Body muted mono selectable>{review.commitId}</Body>
+        </Disclosure>
         {review.body ? <Body selectable>{review.body}</Body> : null}
         <Body muted>{copy("{p0} satır yorumu", "{p0} inline comments", { p0: review.comments.length })}</Body>
       </Stack>}

@@ -15,8 +15,10 @@ vi.mock("@/ui/primitives", () => {
   const Item = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Item, Card: Item, StatusRow: ({ label, children }: PropsWithChildren<{ label: string }>) => createElement("div", null, label, children), QueryState: () => null, SectionHeader: ({ title }: { title: string }) => createElement("h2", null, title) };
 });
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("@/ui/provider-account-kind", () => ({ ProviderAccountKind: () => null }));
 vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null }));
+vi.mock("panelui-native/components/badge", () => ({ Badge: () => null }));
 
 import { UsageLimits } from "./usage-limits";
 

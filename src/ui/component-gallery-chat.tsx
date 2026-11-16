@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { View } from "react-native";
 import FileText from "lucide-react-native/icons/file-text";
+import { FileText as DuotoneFileText } from "./duotone-icon";
 import X from "lucide-react-native/icons/x";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Plus from "lucide-react-native/icons/plus";
@@ -41,6 +42,7 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
   const [queueOpen, setQueueOpen] = useState(false);
   const [result, setResult] = useState("");
   const [attached, setAttached] = useState(true);
+  const [tourAnswer, setTourAnswer] = useState<"yes" | "no" | null>(null);
   const [preview, setPreview] = useState(false);
   const [queue, setQueue] = useState<{ id: number; text: string; file: boolean }[]>([]);
   const sequence = useRef(0);
@@ -64,8 +66,12 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
   return (
     <Stack>
       <Card>
-        <Heading>{copy("Sohbet ve dosyalar", "Chat and files")}</Heading>
-        <Badge label={copy("Çevrimdışı örnek", "Offline example")} />
+        {tour ? null : (
+          <>
+            <Heading>{copy("Sohbet ve dosyalar", "Chat and files")}</Heading>
+            <Badge label={copy("Çevrimdışı örnek", "Offline example")} />
+          </>
+        )}
         <ChatMessage role="user" style={chatUserBubbleStyle(colors)}>
           <ChatMessageContent>
             <Body>{tour ? copy("Kişisel web sitem için bir plan hazırla.", "Plan a personal website for me.") : copy("Mobil konuşmayı sadeleştir.", "Simplify the mobile conversation.")}</Body>
@@ -82,16 +88,18 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
           accessibilityLabel={copy("Örnek dosyayı aç", "Open sample file")}
         >
           <Attachment.Media variant="icon">
-            <FileText size={20} color={colors.muted} />
+            <DuotoneFileText size={20} color={colors.muted} />
           </Attachment.Media>
           <Attachment.Content>
-            <Attachment.Title>mobile-plan.md</Attachment.Title>
+            <Attachment.Title>{tour ? "plan.md" : "mobile-plan.md"}</Attachment.Title>
             <Attachment.Description>
-              {copy("Örnek belge · açmak için dokun", "Sample document · tap to open")}
+              {tour
+                ? copy("Yeni dosya · açmak için dokun", "New file · tap to open")
+                : copy("Örnek belge · açmak için dokun", "Sample document · tap to open")}
             </Attachment.Description>
           </Attachment.Content>
         </Attachment>
-        <ChatActivity title={copy("Örnek gerekçe", "Sample rationale")} reasoning status="complete">
+        <ChatActivity title={tour ? copy("Gerekçe", "Why") : copy("Örnek gerekçe", "Sample rationale")} reasoning status="complete">
           <Body>
             {tour ? copy("Önce ziyaretçinin ihtiyaçlarını ve proje kapsamını netleştiriyoruz.", "We start by clarifying visitor needs and the project scope.") : copy(
               "Mesajlar, dosyalar ve kuyruk aynı ortak bileşenlerle gösterilir.",
@@ -100,8 +108,24 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
           </Body>
         </ChatActivity>
         <ChatActivity title={copy("Çalışma ayrıntıları", "Work details")} status="complete">
-          <MessageText text={tour ? copy("Örnek kapsam: tanıtım, çalışmalar ve iletişim. Henüz bir dosya değişikliği yok.", "Example scope: introduction, selected work and contact. No files have changed.") : "```tsx\nconst ready = true;\n```"} />
+          <MessageText text={tour ? copy("Kapsam: tanıtım, çalışmalar ve iletişim. plan.md oluşturuldu.", "Scope: introduction, selected work and contact. plan.md was created.") : "```tsx\nconst ready = true;\n```"} />
         </ChatActivity>
+        {tour ? (
+          tourAnswer ? (
+            <Notice
+              tone="success"
+              message={tourAnswer === "yes" ? copy("Onayladın. Agent devam ediyor.", "You approved. The agent is continuing.") : copy("Reddettin. Agent durdu.", "You declined. The agent stopped.")}
+            />
+          ) : (
+            <Stack>
+              <Body>{copy("Agent soruyor: Tasarım bölümünü başlatayım mı?", "The agent asks: Should I start on the design section?")}</Body>
+              <Row>
+                <Button label={copy("Onayla", "Approve")} tone="primary" onPress={() => setTourAnswer("yes")} />
+                <Button label={copy("Reddet", "Decline")} tone="quiet" onPress={() => setTourAnswer("no")} />
+              </Row>
+            </Stack>
+          )
+        ) : null}
         {queue.length ? (
           <View style={{ flexDirection: "row" }}>
             <ChatToolbarAction
@@ -112,7 +136,7 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
             </ChatToolbarAction>
           </View>
         ) : null}
-        {attached ? (
+        {tour ? null : attached ? (
           <Attachment size="sm" className="border-0 bg-fill rounded-[14px]">
             <Attachment.Media variant="icon">
               <FileText size={18} color={colors.muted} />
@@ -143,18 +167,22 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
           value={prompt}
           onValueChange={setPrompt}
           mode={
-            <ChatToolbarAction
-              label={modeLabel}
-              onPress={() => setModePicker(true)}
-            ><ChevronDown size={12} color={colors.muted} /></ChatToolbarAction>
+            tour ? undefined : (
+              <ChatToolbarAction
+                label={modeLabel}
+                onPress={() => setModePicker(true)}
+              ><ChevronDown size={12} color={colors.muted} /></ChatToolbarAction>
+            )
           }
           leading={
-            <ChatCircleAction
-              label={copy("Dosya ekle", "Attach file")}
-              onPress={() => setAttached(true)}
-            >
-              <Plus size={19} strokeWidth={2.4} color={colors.text} />
-            </ChatCircleAction>
+            tour ? null : (
+              <ChatCircleAction
+                label={copy("Dosya ekle", "Attach file")}
+                onPress={() => setAttached(true)}
+              >
+                <Plus size={19} strokeWidth={2.4} color={colors.text} />
+              </ChatCircleAction>
+            )
           }
           field={{
             accessibilityLabel: copy("Mesaj", "Message"),
@@ -182,7 +210,7 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
           />
         ) : null}
       </Card>
-      <ChatPlan title={copy("Örnek uygulama planı", "Sample implementation plan")} status="1 / 2">
+      <ChatPlan title={tour ? copy("Plan", "Plan") : copy("Örnek uygulama planı", "Sample implementation plan")} status="1 / 2">
         <PlanSteps
           steps={[
             {
@@ -250,20 +278,24 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
           </Stack>
         ))}
       </Sheet>
-      <Sheet visible={preview} title="mobile-plan.md" onClose={() => setPreview(false)}>
-        <Heading>{copy("Örnek belge", "Sample document")}</Heading>
+      <Sheet visible={preview} title={tour ? "plan.md" : "mobile-plan.md"} onClose={() => setPreview(false)}>
+        <Heading>{tour ? copy("Kişisel web sitesi planı", "Personal website plan") : copy("Örnek belge", "Sample document")}</Heading>
         <Body>
-          {copy(
-            "Konuşma, dosya önizleme, sıraya alma ve yönlendirme.",
-            "Conversation, file preview, queuing and steering.",
-          )}
+          {tour
+            ? copy("Tanıtım ve iletişim bağlantısı, seçili çalışmalar galerisi, telefonda okunabilir düzen.", "Introduction and contact link, gallery of selected work, a layout readable on phones.")
+            : copy(
+                "Konuşma, dosya önizleme, sıraya alma ve yönlendirme.",
+                "Conversation, file preview, queuing and steering.",
+              )}
         </Body>
-        <Body muted>
-          {copy(
-            "Bu belge tur içindeki örnek içeriktir.",
-            "This document is sample content within the tour.",
-          )}
-        </Body>
+        {tour ? null : (
+          <Body muted>
+            {copy(
+              "Bu belge tur içindeki örnek içeriktir.",
+              "This document is sample content within the tour.",
+            )}
+          </Body>
+        )}
         <Button label={copy("Kapat", "Close")} onPress={() => setPreview(false)} />
       </Sheet>
     </Stack>

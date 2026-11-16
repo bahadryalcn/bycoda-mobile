@@ -22,8 +22,9 @@ vi.mock("lucide-react-native/icons/briefcase", () => ({ default: () => null }));
 vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
 vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
-vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, router: { push: vi.fn() } }));
+vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, router: { push: vi.fn() }, useLocalSearchParams: () => ({}) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
 vi.mock("./usage-charts", () => ({ UsageKpis: ({ items }: any) => createElement("div", null, items.map((item: any) => createElement("span", { key: item.title }, item.title, item.value))), ProviderShare: () => null }));
 vi.mock("@/ui/tokens", () => ({ space: {}, fontSize: {}, radii: {} }));
@@ -52,7 +53,7 @@ vi.mock("@/ui/primitives", async () => {
   return { QueryState, Body: Group, Disclosure: Group, StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: any) => createElement("div", null, message),
     IconButton: ({ label, onPress, disabled, busy }: any) => createElement("button", { disabled: disabled || busy, onClick: onPress, "data-busy": String(!!busy) }, label),
     Button: ({ label, onPress, disabled, busy }: any) => { if (label === "Next page") fixture.oldNext = onPress; return createElement("button", { disabled: disabled || busy, onClick: onPress, "data-busy": String(!!busy) }, label); },
-    SegmentedControl: ({ value, onChange, options }: any) => createElement("div", null, options.map((o: any) => createElement("button", { key: o.value, "aria-pressed": value === o.value, onClick: () => onChange(o.value) }, o.label))),
+    SegmentedControl: ({ value, onChange, options, disabled, label }: any) => createElement("div", { "aria-label": label, "data-disabled": String(!!disabled) }, options.map((o: any) => createElement("button", { key: o.value, disabled, "aria-pressed": value === o.value, onClick: () => onChange(o.value) }, o.label))),
     Card: Group, SectionHeader: ({ title }: any) => createElement("h3", null, title),
     SelectField: ({ label, value, onChange, disabled }: any) => createElement("select", { "aria-label": label, disabled, value, onChange: (e: any) => onChange(e.target.value) }, ["1", "7"].map(v => createElement("option", { key: v, value: v }, v))),
     ScreenList: ({ header, actions, data, renderItem, footer, refreshState }: any) => { fixture.refresh = refreshState; return createElement("main", null, actions, header, data.map((item: any) => createElement("section", { key: item.sessionId }, renderItem({ item }))), footer); },
@@ -105,12 +106,12 @@ it("coalesces same-millisecond toolbar/pull refresh and releases it on failure w
 });
 it("resets page and advances the window for refresh, while range changes keep the reviewed window end", async () => {
   await render(); const end = fixture.params.untilMs; await click("Next page");
-  const field = node.querySelector("select")!; await act(() => { field.value = "7"; field.dispatchEvent(new Event("change", { bubbles: true })); });
+  await click("7 days");
   expect(fixture.params.cursor).toBeUndefined(); expect(fixture.params.untilMs).toBe(end); expect(end - fixture.params.sinceMs).toBe(7 * 86400000);
   vi.mocked(Date.now).mockReturnValue(end + 1000); await act(() => fixture.refresh.onRefresh()); expect(fixture.params.untilMs).toBe(end + 1000); expect(fixture.params.cursor).toBeUndefined();
 });
 it("does not offer refresh/paging or an editable range when unsupported", async () => {
-  fixture.supported = false; await render(); expect(fixture.refresh).toBeUndefined(); expect(button("Refresh").disabled).toBe(true); expect(node.querySelector("select")!.disabled).toBe(true); expect(button("Next page")).toBeUndefined();
+  fixture.supported = false; await render(); expect(fixture.refresh).toBeUndefined(); expect(button("Refresh").disabled).toBe(true); expect(button("7 days").disabled).toBe(true); expect(button("Next page")).toBeUndefined();
 });
 it("does not let an old refresh completion clear the current scope's refresh indicator", async () => {
   let first!: () => void, second!: () => void;

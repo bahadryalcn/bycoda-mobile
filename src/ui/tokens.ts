@@ -25,6 +25,8 @@ export const darkColors = {
   danger: "#FF6961",
   warning: "#FFD60A",
   brand: "#F5F5F7",
+  /** The guide's amber prayer beads: brand art and the unlock ring only, never text or status. */
+  beads: "#F0A92E",
   selected: "#16273B",
   userMessage: "#1A1A1E",
   scrim: "#00000099",
@@ -58,6 +60,7 @@ export const lightColors: MobileColors = {
   danger: "#C4141E",
   warning: "#8F5200",
   brand: "#17171A",
+  beads: "#C47F12",
   selected: "#E6EFFA",
   userMessage: "#EFEFF2",
   scrim: "#00000059",

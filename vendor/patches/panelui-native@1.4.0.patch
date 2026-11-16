@@ -252,3 +252,161 @@ index de12d8661187e604497b048875c703efc887ab44..ad5b3acb3a7c74949dd9ad9c65a280e7
        // The label may be closed to nothing, and a tab announced as an unlabelled
        // icon is a tab nobody can choose.
        accessibilityLabel={typeof children === 'string' ? children : undefined}
+diff --git a/lib/module/components/code-block/index.js b/lib/module/components/code-block/index.js
+index 25befc06b179a61d74f12541d99401839ec5b4a3..6d71a4f295c3a7be60a3535fe33184dfae02360f 100644
+--- a/lib/module/components/code-block/index.js
++++ b/lib/module/components/code-block/index.js
+@@ -123,6 +123,7 @@ function CodeBlockRoot({
+   code,
+   language,
+   showLineNumbers = false,
++  textStyle,
+   children,
+   ...props
+ }) {
+@@ -148,14 +149,15 @@ function CodeBlockRoot({
+             className: slots.line(),
+             children: [showLineNumbers ? /*#__PURE__*/_jsx(Text, {
+               className: slots.gutter(),
+-              style: {
++              style: [textStyle, {
+                 width: 16 + gutterWidth * 7
+-              },
++              }],
+               children: index + 1
+             }) : null, /*#__PURE__*/_jsx(CodeLine, {
+               tokens: tokens,
+               colors: colors,
+-              className: slots.code()
++              className: slots.code(),
++              textStyle: textStyle
+             })]
+           }, index))
+         })
+@@ -175,15 +177,17 @@ CodeBlockRoot.displayName = 'CodeBlock';
+ function CodeLine({
+   tokens,
+   colors,
+-  className
++  className,
++  textStyle
+ }) {
+   return /*#__PURE__*/_jsxs(Text, {
+     className: className,
++    style: textStyle,
+     children: [tokens.length === 0 ? ' ' : null, tokens.map((token, index) => /*#__PURE__*/_jsx(Text, {
+       className: className,
+-      style: {
++      style: [textStyle, {
+         color: colors[token.kind]
+-      },
++      }],
+       children: token.text
+     }, index))]
+   });
+diff --git a/lib/typescript/src/components/code-block/index.d.ts b/lib/typescript/src/components/code-block/index.d.ts
+index e50e9328893aa83a410696fe8ceb492410ebe0e7..8c10c19d9064f5f0bd1472020854ee7d127cc87e 100644
+--- a/lib/typescript/src/components/code-block/index.d.ts
++++ b/lib/typescript/src/components/code-block/index.d.ts
+@@ -32,7 +32,7 @@
+  * block in a text part, or the fields of a tool call that wrote a file.
+  */
+ import { type ReactNode } from 'react';
+-import { type TextProps, type ViewProps } from 'react-native';
++import { type StyleProp, type TextProps, type TextStyle, type ViewProps } from 'react-native';
+ export interface CodeBlockProps extends Omit<ViewProps, 'children'> {
+     className?: string;
+     /** The snippet. */
+@@ -45,10 +45,12 @@ export interface CodeBlockProps extends Omit<ViewProps, 'children'> {
+     language?: string;
+     /** Number the lines in a gutter down the leading edge. */
+     showLineNumbers?: boolean;
++    /** Type size and line height of the code and its gutter, e.g. a reader's text-size preference. */
++    textStyle?: StyleProp<TextStyle>;
+     /** A header, and anything else that goes above the code. */
+     children?: ReactNode;
+ }
+-declare function CodeBlockRoot({ className, code, language, showLineNumbers, children, ...props }: CodeBlockProps): import("react").JSX.Element;
++declare function CodeBlockRoot({ className, code, language, showLineNumbers, textStyle, children, ...props }: CodeBlockProps): import("react").JSX.Element;
+ declare namespace CodeBlockRoot {
+     var displayName: string;
+ }
+diff --git a/src/components/code-block/index.tsx b/src/components/code-block/index.tsx
+index 94864740b54b904558974319c655946c1db09a3b..59bdc70deb3632ceb9c25d5169843f780dcff9b5 100644
+--- a/src/components/code-block/index.tsx
++++ b/src/components/code-block/index.tsx
+@@ -32,7 +32,14 @@
+  * block in a text part, or the fields of a tool call that wrote a file.
+  */
+ import { createContext, useContext, useMemo, type ReactNode } from 'react';
+-import { ScrollView, View, type TextProps, type ViewProps } from 'react-native';
++import {
++  ScrollView,
++  View,
++  type StyleProp,
++  type TextProps,
++  type TextStyle,
++  type ViewProps,
++} from 'react-native';
+ import { tv } from 'tailwind-variants';
+ import { useCSSVariable } from 'uniwind';
+ import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+@@ -140,6 +147,8 @@ export interface CodeBlockProps extends Omit<ViewProps, 'children'> {
+   language?: string;
+   /** Number the lines in a gutter down the leading edge. */
+   showLineNumbers?: boolean;
++  /** Type size and line height of the code and its gutter, e.g. a reader's text-size preference. */
++  textStyle?: StyleProp<TextStyle>;
+   /** A header, and anything else that goes above the code. */
+   children?: ReactNode;
+ }
+@@ -149,6 +158,7 @@ function CodeBlockRoot({
+   code,
+   language,
+   showLineNumbers = false,
++  textStyle,
+   children,
+   ...props
+ }: CodeBlockProps) {
+@@ -180,12 +190,17 @@ function CodeBlockRoot({
+                 {showLineNumbers ? (
+                   <Text
+                     className={slots.gutter()}
+-                    style={{ width: 16 + gutterWidth * 7 }}
++                    style={[textStyle, { width: 16 + gutterWidth * 7 }]}
+                   >
+                     {index + 1}
+                   </Text>
+                 ) : null}
+-                <CodeLine tokens={tokens} colors={colors} className={slots.code()} />
++                <CodeLine
++                  tokens={tokens}
++                  colors={colors}
++                  className={slots.code()}
++                  textStyle={textStyle}
++                />
+               </View>
+             ))}
+           </View>
+@@ -207,17 +222,19 @@ function CodeLine({
+   tokens,
+   colors,
+   className,
++  textStyle,
+ }: {
+   tokens: Token[];
+   colors: Record<TokenKind, string | undefined>;
+   className: string;
++  textStyle?: StyleProp<TextStyle>;
+ }) {
+   return (
+-    <Text className={className}>
++    <Text className={className} style={textStyle}>
+       {/* An empty line still needs a glyph's worth of height. */}
+       {tokens.length === 0 ? ' ' : null}
+       {tokens.map((token, index) => (
+-        <Text key={index} className={className} style={{ color: colors[token.kind] }}>
++        <Text key={index} className={className} style={[textStyle, { color: colors[token.kind] }]}>
+           {token.text}
+         </Text>
+       ))}

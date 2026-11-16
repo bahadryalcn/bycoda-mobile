@@ -17,6 +17,7 @@ vi.mock("./account-context", () => ({ useAccount: () => ({ runtime: { client: {}
 vi.mock("@/i18n", () => ({ useLocale: () => fixture.locale }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: Record<string, string | number>) => en.replace(/\{(p\d+)\}/g, (_match, key: string) => String(values?.[key])) }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
+vi.mock("@/ui/info-hint", () => ({ HintSection: ({ children }: PropsWithChildren) => createElement("section", null, children) }));
 vi.mock("@/ui/metric-row", () => ({ MetricRow: () => null }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);

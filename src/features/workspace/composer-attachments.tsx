@@ -1,20 +1,21 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { Image } from "expo-image";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import X from "lucide-react-native/icons/x";
 import File from "lucide-react-native/icons/file";
-import ImageIcon from "lucide-react-native/icons/image";
-import { Body, Button, ErrorText, PressableCard, Sheet } from "@/ui/primitives";
-import { ChatAction } from "@/ui/chat-controls";
+import { Attachment } from "panelui-native/components/attachment";
+import { Chip } from "panelui-native/components/chip";
+import { Body, Button, ErrorText, Sheet } from "@/ui/primitives";
 import { MediaViewer } from "@/ui/media-viewer";
-import { radii, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
 import { formatAttachmentSize, thumbnailSplit } from "./attachment-presentation";
 import type { StagedAttachment, TransferState } from "./attachment-model";
 
-const THUMB = 64;
+const THUMB = 40;
+const rowStyle = { maxWidth: 240, minWidth: 150 } as const;
 
 export function ComposerAttachments({
   files,
@@ -29,179 +30,71 @@ export function ComposerAttachments({
   onRetry: (file: StagedAttachment) => void;
   disabled: boolean;
 }) {
-  const { colors, uiStyles } = useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<StagedAttachment | null>(null);
   const images = files.filter((file) => file.kind === "image" && !!file.uri);
-  const others = files.filter((file) => !images.includes(file));
   const thumbs = thumbnailSplit(images, expanded);
+  const rows = [...thumbs.shown, ...files.filter((file) => !images.includes(file))];
   return (
     <>
-      {images.length ? (
-        <View
-          style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, paddingTop: space.xs }}
-        >
-          {thumbs.shown.map((file) => (
-            <View key={file.id} style={{ width: THUMB, gap: space.xs }}>
-              <View style={{ width: THUMB, height: THUMB }}>
-                <PressableCard
-                  role="imagebutton"
-                  label={copy("Eki aç: {p0}", "Open attachment: {p0}", { p0: file.name })}
-                  onPress={() => setSelected(file)}
-                  style={{
-                    width: THUMB,
-                    height: THUMB,
-                    paddingVertical: 0,
-                    paddingHorizontal: 0,
-                    marginHorizontal: 0,
-                    minHeight: 0,
-                    borderRadius: radii.control,
-                    overflow: "hidden",
-                    backgroundColor: colors.raised,
-                  }}
-                >
-                  <Image
-                    source={{ uri: file.uri }}
-                    contentFit="cover"
-                    accessibilityIgnoresInvertColors
-                    style={{ width: THUMB, height: THUMB }}
-                  />
-                  {transfers[file.id]?.status === "uploading" ? (
-                    <View
-                      style={{
-                        position: "absolute",
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        padding: 2,
-                        backgroundColor: colors.scrim,
-                        alignItems: "center",
-                      }}
-                    >
-                      <Body style={uiStyles.caption}>
-                        {Math.round(transfers[file.id]!.progress * 100)}%
-                      </Body>
-                    </View>
-                  ) : null}
-                </PressableCard>
-                <View style={{ position: "absolute", top: -space.xs, right: -space.xs }}>
-                  <ChatAction
-                    label={copy("Eki kaldır: {p0}", "Remove attachment: {p0}", { p0: file.name })}
-                    disabled={disabled}
-                    onPress={() => {
-                      if (selected?.id === file.id) setSelected(null);
-                      onRemove(file);
-                    }}
-                  >
-                    <X size={15} color={colors.muted} />
-                  </ChatAction>
-                </View>
-              </View>
-              {transfers[file.id]?.status === "error" ? (
-                <>
-                  <ErrorText error={transfers[file.id]?.error} />
-                  <Button
-                    label={copy("Yeniden yükle", "Retry upload")}
-                    density="compact"
-                    disabled={disabled}
-                    onPress={() => onRetry(file)}
-                  />
-                </>
-              ) : null}
-            </View>
-          ))}
-          {thumbs.hidden ? (
-            <PressableCard
-              label={copy("{p0} görsel daha göster", "Show {p0} more images", {
-                p0: thumbs.hidden,
-              })}
-              onPress={() => setExpanded(true)}
-              style={{
-                width: THUMB,
-                height: THUMB,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: colors.raised,
-                borderWidth: 0,
-                borderRadius: radii.control,
-              }}
-            >
-              <Body>{`+${thumbs.hidden}`}</Body>
-            </PressableCard>
-          ) : null}
-        </View>
-      ) : null}
-      {others.length ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ gap: space.sm, paddingVertical: space.xs }}
-        >
-          {others.map((file) => {
+      {rows.length ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, paddingVertical: space.xs }}>
+          {rows.map((file) => {
             const transfer = transfers[file.id];
-            const size =
-              transfer?.status === "uploading"
-                ? `${Math.round(transfer.progress * 100)}%`
-                : formatAttachmentSize(file.size, locale);
+            const uploading = transfer?.status === "uploading";
+            const description = uploading
+              ? `${Math.round(transfer.progress * 100)}%`
+              : formatAttachmentSize(file.size, locale);
             return (
-              <View key={file.id} style={{ maxWidth: 240, minWidth: 150, gap: space.xs }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: colors.raised,
-                    borderRadius: radii.control,
-                    paddingEnd: space.xs,
-                  }}
+              <View key={file.id} style={[rowStyle, { gap: space.xs }]}>
+                <Attachment
+                  size="sm"
+                  className="min-h-12"
+                  state={uploading ? "uploading" : transfer?.status === "error" ? "error" : "done"}
+                  progress={uploading ? transfer.progress : undefined}
+                  accessibilityLabel={copy("Eki aç: {p0}", "Open attachment: {p0}", { p0: file.name })}
+                  onPress={() => setSelected(file)}
                 >
-                  <PressableCard
-                    label={copy("Eki aç: {p0}", "Open attachment: {p0}", { p0: file.name })}
-                    onPress={() => setSelected(file)}
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      minHeight: 48,
-                      padding: space.sm,
-                      backgroundColor: "transparent",
-                      borderWidth: 0,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: space.sm,
-                    }}
-                  >
-                    {file.kind === "image" ? (
-                      <ImageIcon size={16} color={colors.muted} />
+                  <Attachment.Media variant={images.includes(file) ? "image" : "icon"}>
+                    {images.includes(file) ? (
+                      <Image
+                        source={{ uri: file.uri }}
+                        contentFit="cover"
+                        accessibilityIgnoresInvertColors
+                        style={{ width: THUMB, height: THUMB }}
+                      />
                     ) : (
                       <File size={16} color={colors.muted} />
                     )}
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Body numberOfLines={2} ellipsizeMode="middle" style={uiStyles.caption}>
-                        {file.name}
-                      </Body>
-                      <Body muted style={uiStyles.caption}>
-                        {size}
-                      </Body>
-                    </View>
-                  </PressableCard>
-                  <ChatAction
-                    label={copy("Eki kaldır: {p0}", "Remove attachment: {p0}", { p0: file.name })}
-                    disabled={disabled}
-                    onPress={() => {
-                      if (selected?.id === file.id) setSelected(null);
-                      onRemove(file);
-                    }}
-                  >
-                    <X size={15} color={colors.muted} />
-                  </ChatAction>
-                </View>
+                  </Attachment.Media>
+                  <Attachment.Content>
+                    <Attachment.Title numberOfLines={2} ellipsizeMode="middle">
+                      {file.name}
+                    </Attachment.Title>
+                    <Attachment.Description>{description}</Attachment.Description>
+                  </Attachment.Content>
+                  <Attachment.Actions>
+                    <Attachment.Action
+                      accessibilityLabel={copy("Eki kaldır: {p0}", "Remove attachment: {p0}", { p0: file.name })}
+                      disabled={disabled}
+                      onPress={() => {
+                        if (selected?.id === file.id) setSelected(null);
+                        onRemove(file);
+                      }}
+                    >
+                      <X size={15} color={colors.muted} />
+                    </Attachment.Action>
+                  </Attachment.Actions>
+                </Attachment>
                 {transfer?.status === "error" ? (
                   <>
                     <ErrorText error={transfer.error} />
                     <Button
                       label={copy("Yeniden yükle", "Retry upload")}
+                      density="compact"
                       disabled={disabled}
                       onPress={() => onRetry(file)}
                     />
@@ -210,7 +103,16 @@ export function ComposerAttachments({
               </View>
             );
           })}
-        </ScrollView>
+          {thumbs.hidden ? (
+            <Chip
+              className="h-12"
+              accessibilityLabel={copy("{p0} görsel daha göster", "Show {p0} more images", {
+                p0: thumbs.hidden,
+              })}
+              onPress={() => setExpanded(true)}
+            >{`+${thumbs.hidden}`}</Chip>
+          ) : null}
+        </View>
       ) : null}
       {selected?.kind === "image" ? (
         <MediaViewer

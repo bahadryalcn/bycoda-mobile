@@ -76,7 +76,7 @@ export function pairingErrorMessage(error: unknown, copy: PairingCopy): string {
     case "aborted":
       return copy("Bağlantı iptal edildi.", "Connection cancelled.");
     case "access":
-      return copy("Bağlanmak için Bycoda’nın kilidini aç.", "Unlock Bycoda to connect.");
+      return copy("Bağlanmak için bycoda’nın kilidini aç.", "Unlock bycoda to connect.");
     case "auth":
       return copy(
         "Bağlantı yetkilendirilemedi. Bilgisayarında yeni bir kod oluştur.",
@@ -90,10 +90,10 @@ export function pairingErrorMessage(error: unknown, copy: PairingCopy): string {
       );
     case "unavailable":
       return copy(
-        "Bilgisayar bu eşleştirmeyi desteklemiyor. Bycoda’yı güncelle veya manuel bağlan.",
-        "This computer does not support pairing. Update Bycoda or connect manually.",
+        "Bilgisayar bu eşleştirmeyi desteklemiyor. bycoda’yı güncelle veya manuel bağlan.",
+        "This computer does not support pairing. Update bycoda or connect manually.",
       );
     default:
-      return copy("Geçerli bir Bycoda bağlantı kodu kullan.", "Use a valid Bycoda pairing code.");
+      return copy("Geçerli bir bycoda bağlantı kodu kullan.", "Use a valid bycoda pairing code.");
   }
 }

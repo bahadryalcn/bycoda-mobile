@@ -19,6 +19,7 @@ export function SessionShelfHeader({
     needs: copy("Senin için", "Needs you"),
     running: copy("Çalışıyor", "Working"),
     recent: copy("Son", "Recent"),
+    snoozed: copy("Ertelenmiş", "Snoozed"),
     settled: copy("Rafta", "Settled"),
     archived: copy("Arşiv", "Archived"),
   }[row.shelf];

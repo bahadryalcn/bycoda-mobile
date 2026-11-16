@@ -22,7 +22,7 @@ vi.mock("./motion", () => ({
   },
 }));
 vi.mock("./buttons", () => ({ IconButton: () => null }));
-vi.mock("./busy-indicator", () => ({ BusyIndicator: () => null }));
+vi.mock("./busy-indicator", () => ({ LifecycleButton: ({ children, startContent, loading, disabled, accessibilityLabel, onPress, style, pressScale }: any) => createElement("button", { "aria-label": accessibilityLabel, "data-width": style.width ?? style.minWidth, "data-height": style.height ?? style.minHeight, "data-press-scale": pressScale, disabled: disabled || loading, onClick: onPress }, loading ? null : startContent, children) }));
 vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
 vi.mock("react-native-reanimated", () => ({
   default: {
@@ -129,23 +129,13 @@ it.each([ChatCircleAction, ChatToolbarAction])(
   "subtle feedback keeps a compact visual with a 48dp hit slop and and stops spatial feedback on live reduced-motion changes",
   async (Component) => {
     await render(createElement(Component, { label: "Action", onPress: state.action }));
-    expect(state.motion).toHaveBeenCalledWith(0.97);
     const visual = Component === ChatCircleAction ? "32" : "28";
     expect(container.querySelector("button")!.dataset.height).toBe(visual);
     expect(container.querySelector("button")!.dataset.width).toBe(visual);
-    expect(container.querySelector("button")!.dataset.scale).toBeUndefined();
-    expect(
-      container.querySelector("[data-animated-scale]")?.getAttribute("data-animated-scale"),
-    ).toBe("0.97");
-    await press();
-    expect(state.pressIn).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("button")!.dataset.pressScale).toBe("0.97");
     state.reduced = true;
     await render(createElement(Component, { label: "Action", onPress: state.action }));
-    expect(container.querySelector("button")!.dataset.scale).toBeUndefined();
-    expect(container.querySelector("[data-animated-scale]")).toBeNull();
-    await press();
-    expect(state.pressIn).toHaveBeenCalledTimes(1);
-    expect(state.pressOut).toHaveBeenCalled();
+    expect(container.querySelector("button")!.dataset.pressScale).toBe("1");
     await act(async () => container.querySelector("button")!.click());
     expect(state.action).toHaveBeenCalledTimes(1);
   },

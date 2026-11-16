@@ -51,7 +51,8 @@ vi.mock("@/state/queries", () => ({
     },
   }),
 }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
+vi.mock("@/ui/copy",() => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/tokens", () => ({ colors: {} }));
 vi.mock("./device-runtime", () => ({ DeviceRuntime: () => null }));

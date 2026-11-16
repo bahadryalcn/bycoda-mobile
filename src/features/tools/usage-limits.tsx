@@ -1,10 +1,12 @@
 import { ProviderAccountKind } from "@/ui/provider-account-kind";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
+import { Badge } from "panelui-native/components/badge";
 import { useActiveMachine } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
 import { Body, Card, QueryState, SectionHeader, StatusRow } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { useInfoHint } from "@/ui/info-hint";
 import { useLocale } from "@/i18n";
 import { fontSize, radii, space } from "@/ui/tokens";
 import { AccountMeter, RemainingMeter } from "@/ui/usage-meters";
@@ -34,6 +36,10 @@ export function UsageLimits() {
   const locale = useLocale();
   const machine = useActiveMachine();
   const now = useMinuteNow();
+  const info = useInfoHint(copy(
+    "Yüzdeler hesaplar ve pencereler arasında toplanmaz.",
+    "Percentages are per account and window; they are not pooled.",
+  ));
   const supported =
     !!machine?.capabilities?.includes("usage.limits.read") && !!machine.environmentId;
   const query = useHostQuery<UsageLimitsReport>(
@@ -80,7 +86,13 @@ export function UsageLimits() {
   };
   return (
     <View style={{ gap: space.md }}>
-      {query.data ? <Body muted>{copy("Son güncelleme: ", "Last updated: ")}{new Date(query.data.sampledAt).toLocaleString(locale)}</Body> : null}
+      {query.data ? <View style={{ gap: space.xs }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+          <Body muted style={{ flexShrink: 1 }}>{copy("Son güncelleme: ", "Last updated: ")}{new Date(query.data.sampledAt).toLocaleString(locale)}</Body>
+          {info.button}
+        </View>
+        {info.panel}
+      </View> : null}
       <QueryState
         query={query}
         empty={
@@ -121,13 +133,20 @@ export function UsageLimits() {
                 timeLeft={card.best.timeLeftPercent}
                 label={`${title(card)} ${copy("kaldı", "left")}`}
               />
+              {card.accounts.length === 1 ? (
+                // One account repeats the headline reading above; show only whose it is.
+                <StatusRow label={card.accounts[0]!.label}>
+                  <ProviderAccountKind kind={card.accounts[0]!.kind} derivedKind={card.accounts[0]!.derivedKind} />
+                </StatusRow>
+              ) : (
               <View style={{ gap: space.sm, marginTop: space.xs }}>
                 {card.accounts.map((account) => {
                   const countdown = resetCountdown(account.reading.resetsAt, now);
                   return (
                     <View key={account.id} style={{ gap: space.xs }}>
                       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.sm }}>
-                        <View
+                        <Badge
+                          shape="dot"
                           accessible={false}
                           style={{
                             width: 10,
@@ -153,6 +172,7 @@ export function UsageLimits() {
                   );
                 })}
               </View>
+              )}
             </Card>
           ))}
           {provider.accounts
@@ -162,7 +182,8 @@ export function UsageLimits() {
                 key={account.id}
                 style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
               >
-                <View
+                <Badge
+                  shape="dot"
                   accessible={false}
                   style={{
                     width: 10,
@@ -180,12 +201,6 @@ export function UsageLimits() {
             ))}
         </View>
       ))}
-      <Body muted>
-        {copy(
-          "Yüzdeler hesaplar ve pencereler arasında toplanmaz.",
-          "Percentages are per account and window; they are not pooled.",
-        )}
-      </Body>
     </View>
   );
 }

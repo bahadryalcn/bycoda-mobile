@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
 import { useHostMutation } from "@/state/queries";
-import { Body, Button, Disclosure, FormActions, ErrorText, Field, MutationState, Notice, SelectField, Sheet } from "@/ui/primitives";
+import { Body, FormActions, ErrorText, Field, MutationState, Notice, SelectField, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { localTunnelUrl, type AccessTarget, type HostAccessReport } from "./access-center-model";
 import { claimTunnelIntent, clearTunnelIntent, reconcileTunnelIntent } from "./access-tunnel-intent";
@@ -56,21 +56,20 @@ export function AccessTunnels({ target, overview, tunnel, onClose, onUpdated }: 
       <SelectField label={copy("Tünel sağlayıcısı", "Tunnel provider")} value={provider} options={[{ value: "cloudflare", label: "Cloudflare" }, { value: "ngrok", label: "ngrok" }]} disabled={busy || !!review || uncertain} onChange={setProvider} />
       <SelectField label={copy("Hedef", "Target")} value={kind} options={[{ value: "host", label: copy("Bilgisayar erişimi", "Host access") }, { value: "dev-server", label: copy("Geliştirme sunucusu", "Dev server") }]} disabled={busy || !!review || uncertain} onChange={setKind} />
       {kind === "dev-server" ? <Field label={copy("Bilgisayardaki yerel adres", "Local address on the computer")} value={localUrl} onChangeText={setLocalUrl} autoCapitalize="none" autoCorrect={false} editable={!busy && !review && !uncertain} /> : null}
-      {!canStart ? <Notice message={copy("Sağlayıcı kurulumunu ve gerekiyorsa kimlik bilgisini bilgisayarda tamamlayın.", "Complete provider setup and any required credentials on the computer.")} /> : null}
+      {!canStart ? <Notice message={copy("Sağlayıcıyı ve kimlik bilgisini bilgisayarda kur.", "Set up the provider and its credential on the computer.")} /> : null}
     </>}
     {hostImpact ? <Notice tone="warning" message={opening.tunnel ? copy("Bu tünel üzerinden bağlıysan durdurmak bağlantını keser. Yeniden bağlanmak için başka bir erişim yolu gerekir.", "Stopping this tunnel disconnects you if you are connected through it. Another access route is required to reconnect.") : copy("Bu işlem bilgisayara dış erişim adresi oluşturur. Eşleştirilmiş cihaz kimlik doğrulaması yine gereklidir.", "This creates an external address for the computer. Paired-device authentication is still required.")} /> : null}
     <Body muted>{copy("Genel adresin erişilebilirliği doğrulanmadı.", "Public address reachability is unverified.")}</Body>
     {uncertain ? <Notice tone="warning" message={copy("Tünel işleminin sonucu bilinmiyor. Tekrar göndermeden bilgisayardaki durumu kontrol edin.", "The tunnel operation outcome is unknown. Check the computer state before sending again.")} /> : null}
 
-    {review ? <><Body>{opening.tunnel ? `${opening.tunnel.provider} · ${opening.tunnel.id}` : `${String(review.provider)} · ${review.target === "host" ? copy("Bilgisayar erişimi", "Host access") : copy("Geliştirme sunucusu", "Dev server")}`}</Body>
+    {review ? <>{opening.tunnel ? null : <Body>{`${String(review.provider)} · ${review.target === "host" ? copy("Bilgisayar erişimi", "Host access") : copy("Geliştirme sunucusu", "Dev server")}`}</Body>}
       {review.localUrl ? <Body mono>{String(review.localUrl)}</Body> : null}
-      <Body>{opening.tunnel ? copy("İncelenen tüneli durdur?", "Stop the reviewed tunnel?") : copy("İncelenen sağlayıcı ve hedefle tünel başlat?", "Start a tunnel with the reviewed provider and target?")}</Body>
+      <Body>{opening.tunnel ? copy("Bu tünel durdurulsun mu?", "Stop this tunnel?") : copy("Bu tünel başlatılsın mı?", "Start this tunnel?")}</Body>
       <FormActions feedback={<><ErrorText error={error === write.error ? undefined : error} /><MutationState mutation={write} /></>}
       submitLabel={opening.tunnel ? copy("Durdur", "Stop") : copy("Başlat", "Start")} tone={opening.tunnel ? "danger" : "primary"} cancelLabel={copy("Vazgeç", "Cancel")} busy={busy} disabled={!current() || !supported || uncertain} onSubmit={submit} onCancel={() => setReview(undefined)} /></> :
       <FormActions submitLabel={copy("Değişiklikleri incele", "Review changes")} disabled={!intentReady || !current() || !supported || busy || uncertain || (opening.tunnel ? !opening.tunnel.canStop : !canStart)} onSubmit={() => {
         try { setReview(opening.tunnel ? { id: opening.tunnel.id } : { provider, target: kind, ...(kind === "dev-server" ? { localUrl: localTunnelUrl(localUrl) } : {}) }); setError(undefined); }
         catch (cause) { setError(cause); }
       }} feedback={<><ErrorText error={error === write.error ? undefined : error} /><MutationState mutation={write} /></>} />}
-    <Disclosure label={copy("Ayrıntılar", "Details")}><Body mono>{opening.target.machineId}</Body></Disclosure>
   </Sheet>;
 }

@@ -2,7 +2,6 @@ import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { router, type Href } from "expo-router";
 import Laptop from "lucide-react-native/icons/laptop";
-import Server from "lucide-react-native/icons/server";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
 import Smartphone from "lucide-react-native/icons/smartphone";
 import LayoutDashboard from "lucide-react-native/icons/layout-dashboard";
@@ -11,7 +10,6 @@ import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
 import LifeBuoy from "lucide-react-native/icons/life-buoy";
 import Info from "lucide-react-native/icons/info";
 import Palette from "lucide-react-native/icons/palette";
-import Type from "lucide-react-native/icons/type";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import Globe from "lucide-react-native/icons/globe";
 import Flag from "lucide-react-native/icons/flag";
@@ -21,10 +19,7 @@ import { LANGUAGES } from "../../localization";
 import { useActiveMachine, useMachines } from "../../state/machines";
 import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { useAppearance } from "../../state/appearance";
-import { useChatAppearance } from "../../state/chat-appearance";
 import { busySendStore, useBusySend } from "../../state/busy-send";
-import { chatTextSizeOptions } from "./chat-appearance-options";
-import { chatAppearanceFeedback } from "./chat-appearance-feedback";
 import {
   NavigationGroup,
   NavigationRow,
@@ -32,8 +27,6 @@ import {
   Screen,
   Section,
   SelectField,
-  SegmentedControl,
-  Body,
   Sheet,
   StateView,
 } from "../../ui/primitives";
@@ -43,8 +36,8 @@ import { EngagementSettings } from "../engagement/engagement-settings";
 import { HostSettingsEditor } from "./host-settings-editor";
 import { LocalDataControls } from "./local-data-controls";
 import { DiagnosticsSettings } from "../diagnostics/DiagnosticsSettings";
-import { ChatAppearanceSettings } from "./chat-appearance-settings";
-import { PalettePicker } from "./palette-picker";
+import { AppearanceSettings } from "./appearance-settings";
+import { appearanceSummary, themeModeOptions } from "./appearance-settings-model";
 import { PALETTES } from "@/ui/tokens";
 import { WidgetSettings } from "../widgets";
 import { DevicePermissionSettings } from "../permissions/device-permission-settings";
@@ -58,23 +51,14 @@ export function SettingsScreen() {
   const storageError = useMachines((s) => s.storageError);
   const storageHydrated = useMachines((s) => s.hydrated);
   const themeMode = useAppearance((s) => s.themeMode);
-  const setThemeMode = useAppearance((s) => s.setThemeMode);
   const palette = useAppearance((s) => s.palette);
-  const setPalette = useAppearance((s) => s.setPalette);
-  const appearanceHydrated = useAppearance((s) => s.hydrated);
+  const textScale = useAppearance((s) => s.typography.scale);
   const appearanceError = useAppearance((s) => s.storageError);
   const busySend = useBusySend((s) => s.mode);
   const busySendHydrated = useBusySend((s) => s.hydrated);
   const busySendError = useBusySend((s) => s.storageError);
-  const chatTextSize = useChatAppearance((s) => s.textSize);
-  const chatHydrated = useChatAppearance((s) => s.hydrated);
-  const chatStorageError = useChatAppearance((s) => s.storageError);
-  const chatSizeLabel = chatTextSizeOptions(copy).find(
-    (option) => option.value === chatTextSize,
-  )?.label;
-  const chatFeedback = chatAppearanceFeedback(chatStorageError, copy);
   const [panel, setPanel] = useState<
-    "security" | "host" | "privacy" | "about" | "appearance" | "visual" | "permissions" | null
+    "security" | "host" | "privacy" | "about" | "visual" | "permissions" | null
   >(null);
   const [hostTarget, setHostTarget] = useState<{
     id: string;
@@ -84,10 +68,9 @@ export function SettingsScreen() {
   const titles = {
     permissions: copy("Telefon izinleri", "Phone permissions"),
     security: copy("Güvenli erişim", "Secure access"),
-    host: copy("Çalışma", "Work"),
+    host: copy("Bilgisayar ayarları", "Computer settings"),
     privacy: copy("Gizlilik ve veriler", "Privacy & data"),
     about: copy("bycoda hakkında", "About bycoda"),
-    appearance: copy("Sohbet görünümü", "Chat appearance"),
     visual: copy("Görünüm", "Appearance"),
   };
   const tile = (Glyph: typeof Laptop) => (
@@ -97,118 +80,6 @@ export function SettingsScreen() {
   );
   return (
     <Screen title={copy("Ayarlar", "Settings")}>
-      <Section title={copy("Tercihler", "Preferences")}>
-        <NavigationGroup>
-          <NavigationRow
-            label={titles.visual}
-            icon={tile(Palette)}
-            detail={[
-              themeMode === "system"
-                ? copy("Sistem", "System")
-                : themeMode === "light"
-                  ? copy("Açık", "Light")
-                  : copy("Koyu", "Dark"),
-              ...PALETTES.filter((item) => item.id === palette).map((item) =>
-                copy(item.nameTr, item.name),
-              ),
-            ].join(", ")}
-            onPress={() => setPanel("visual")}
-          />
-        </NavigationGroup>
-        {appearanceError ? (
-          <Notice
-            tone="warning"
-            message={copy(
-              "Tema tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.",
-              "The theme preference could not be read or saved. Select it again to retry.",
-            )}
-          />
-        ) : null}
-        <NavigationGroup>
-          <SelectField
-            variant="row"
-            icon={tile(Globe)}
-            label={copy("Dil", "Language")}
-            value={language}
-            disabled={!storageHydrated || !!storageError}
-            options={[{ value: "system" as const, label: copy("Sistem", "System") }, ...LANGUAGES]}
-            onChange={setLanguage}
-          />
-          <NavigationRow
-            label={copy("Mesaj yazı boyutu", "Message text size")}
-            detailLines={0}
-            detail={
-              chatFeedback?.summary ??
-              (!chatHydrated ? copy("Yükleniyor…", "Loading…") : chatSizeLabel)
-            }
-            icon={tile(Type)}
-            onPress={() => setPanel("appearance")}
-          />
-          <SelectField
-            variant="row"
-            icon={tile(MessageSquare)}
-            label={copy("Ajan çalışırken gönder", "Send while agent is running")}
-            value={busySend}
-            disabled={!busySendHydrated}
-            options={[
-              { value: "steer", label: copy("Yönlendir", "Steer") },
-              { value: "queue", label: copy("Sıraya al", "Queue") },
-            ]}
-            onChange={(value) => { void busySendStore.getState().setMode(value); }}
-          />
-          {busySendError ? <Notice tone="warning" message={copy("Gönderim tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The send preference could not be read or saved. Select it again to retry.")} /> : null}
-        </NavigationGroup>
-        {panel === "visual" ? (
-          <Sheet visible title={titles.visual} size="form" onClose={() => setPanel(null)}>
-            <SegmentedControl
-              label={copy("Tema", "Theme")}
-              value={themeMode}
-              disabled={!appearanceHydrated}
-              options={[
-                { value: "system", label: copy("Sistem", "System") },
-                { value: "light", label: copy("Açık", "Light") },
-                { value: "dark", label: copy("Koyu", "Dark") },
-              ]}
-              onChange={(value) => {
-                void setThemeMode(value);
-              }}
-            />
-            <PalettePicker
-              value={palette}
-              disabled={!appearanceHydrated}
-              onChange={(value) => {
-                void setPalette(value);
-              }}
-            />
-            {appearanceError ? (
-              <Notice
-                tone="warning"
-                message={copy(
-                  "Tema tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.",
-                  "The theme preference could not be read or saved. Select it again to retry.",
-                )}
-              />
-            ) : null}
-          </Sheet>
-        ) : null}
-        {storageError ? (
-          <StateView
-            compact
-            tone="warning"
-            illustration="error"
-            title={copy(
-              "Kaydedilmiş bağlantılar kullanılamıyor",
-              "Saved connections are unavailable",
-            )}
-            description={storageError}
-            action={{
-              label: copy("Depolamayı kurtar", "Recover saved connections"),
-              onPress: () => router.navigate("/machines"),
-            }}
-          />
-        ) : null}
-      </Section>
-      <Body muted>{copy("Gönder düğmesine basılı tutarak diğer gönderim biçimini kullan.", "Hold the send button to use the other delivery action.")}</Body>
       <Section title={copy("Hesap", "Account")}>
         <NavigationGroup>
           <NavigationRow
@@ -232,42 +103,97 @@ export function SettingsScreen() {
             onPress={() => router.navigate("/machines")}
           />
           {machine ? (
-            <>
-              <NavigationRow
-                label={copy("Bilgisayar erişimi", "Host access")}
-                icon={tile(ShieldCheck)}
-                onPress={() =>
-                  router.navigate({
-                    pathname: "/tools/[tool]",
-                    params: { tool: "access", machineId: machine.id },
-                  })
-                }
-              />
-              <NavigationRow
-                label={copy("Sağlayıcı merkezi", "Provider center")}
-                icon={tile(Server)}
-                onPress={() =>
-                  router.navigate({
-                    pathname: "/tools/[tool]",
-                    params: { tool: "providers", machineId: machine.id },
-                  })
-                }
-              />
-              <NavigationRow
-                label={titles.host}
-                icon={tile(SlidersHorizontal)}
-                onPress={() => {
-                  setHostTarget({
-                    id: machine.id,
-                    name: machine.name,
-                    target: reviewedMachine(machine),
-                  });
-                  setPanel("host");
-                }}
-              />
-            </>
+            <NavigationRow
+              label={titles.host}
+              icon={tile(SlidersHorizontal)}
+              onPress={() => {
+                setHostTarget({
+                  id: machine.id,
+                  name: machine.name,
+                  target: reviewedMachine(machine),
+                });
+                setPanel("host");
+              }}
+            />
           ) : null}
         </NavigationGroup>
+        {storageError ? (
+          <StateView
+            compact
+            tone="warning"
+            illustration="error"
+            title={copy(
+              "Kaydedilmiş bağlantılar kullanılamıyor",
+              "Saved connections are unavailable",
+            )}
+            description={storageError}
+            action={{
+              label: copy("Depolamayı kurtar", "Recover saved connections"),
+              onPress: () => router.navigate("/machines"),
+            }}
+          />
+        ) : null}
+      </Section>
+      <Section title={copy("Tercihler", "Preferences")}>
+        <NavigationGroup>
+          <NavigationRow
+            label={titles.visual}
+            icon={tile(Palette)}
+            detailLines={0}
+            detail={appearanceSummary({
+              theme: themeModeOptions(copy).find((option) => option.value === themeMode)?.label ?? "",
+              palette: PALETTES.filter((item) => item.id === palette)
+                .map((item) => copy(item.nameTr, item.name))
+                .join(""),
+              scale: textScale,
+            })}
+            onPress={() => setPanel("visual")}
+          />
+          <SelectField
+            variant="row"
+            icon={tile(Globe)}
+            label={copy("Dil", "Language")}
+            value={language}
+            disabled={!storageHydrated || !!storageError}
+            options={[{ value: "system" as const, label: copy("Sistem", "System") }, ...LANGUAGES]}
+            onChange={setLanguage}
+          />
+          <SelectField
+            variant="row"
+            icon={tile(MessageSquare)}
+            label={copy("Ajan çalışırken gönder", "Send while agent is running")}
+            value={busySend}
+            disabled={!busySendHydrated}
+            options={[
+              {
+                value: "steer" as const,
+                label: copy("Yönlendir", "Steer"),
+                detail: copy("Çalışan ajana hemen ilet.", "Send to the running agent now."),
+              },
+              {
+                value: "queue" as const,
+                label: copy("Sıraya al", "Queue"),
+                detail: copy("Ajan bitince gönder.", "Send after the agent finishes."),
+              },
+            ]}
+            onChange={(value) => { void busySendStore.getState().setMode(value); }}
+          />
+          {busySendError ? <Notice tone="warning" message={copy("Gönderim tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The send preference could not be read or saved. Select it again to retry.")} /> : null}
+        </NavigationGroup>
+        {appearanceError ? (
+          <Notice
+            tone="warning"
+            message={copy(
+              "Görünüm tercihi okunamadı veya kaydedilemedi. Yeniden dene veya bir seçim yap.",
+              "The appearance preference could not be read or saved. Retry or make a choice.",
+            )}
+          />
+        ) : null}
+        {panel === "visual" ? (
+          <Sheet visible title={titles.visual} size="full" onClose={() => setPanel(null)}>
+            <AppearanceSettings />
+          </Sheet>
+        ) : null}
       </Section>
       <Section title={copy("Erişim ve gizlilik", "Access & privacy")}>
         <NavigationGroup>
@@ -308,7 +234,6 @@ export function SettingsScreen() {
         <Sheet
           visible
           size={
-            panel === "appearance" ||
             panel === "privacy" ||
             panel === "about" ||
             panel === "host" ||
@@ -321,8 +246,6 @@ export function SettingsScreen() {
         >
           {panel === "permissions" ? (
             <DevicePermissionSettings />
-          ) : panel === "appearance" ? (
-            <ChatAppearanceSettings />
           ) : panel === "security" ? (
             <SecuritySettings />
           ) : panel === "host" && hostTarget ? (

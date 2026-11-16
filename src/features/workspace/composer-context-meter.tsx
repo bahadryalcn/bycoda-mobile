@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
+import { RingChart } from "panelui-native/components/ring-chart";
 import { ChatToolbarAction } from "@/ui/chat-controls";
 import { Body, FormActions, Notice, Sheet, Stack, StatusRow } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -98,34 +98,17 @@ export function ComposerContextMeter({
 
 function ContextRing({ ratio, tone }: { ratio: number; tone: ReturnType<typeof contextTone> }) {
   const { colors, semanticColors } = useMobileTheme();
-  const radius = (RING - STROKE) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const fill = Math.max(0, Math.min(1, ratio));
+  const color = tone === "normal" ? colors.muted : semanticColors[tone].text;
+  // Decorative: the toolbar action carries the accessible percent, and touches go to it.
   return (
-    <View accessible={false} importantForAccessibility="no-hide-descendants">
-      <Svg width={RING} height={RING} viewBox={`0 0 ${RING} ${RING}`}>
-        <Circle
-          cx={RING / 2}
-          cy={RING / 2}
-          r={radius}
-          stroke={colors.border}
-          strokeWidth={STROKE}
-          fill="none"
-        />
-        {fill > 0 ? (
-          <Circle
-            cx={RING / 2}
-            cy={RING / 2}
-            r={radius}
-            stroke={tone === "normal" ? colors.muted : semanticColors[tone].text}
-            strokeWidth={STROKE}
-            strokeLinecap="round"
-            fill="none"
-            strokeDasharray={`${circumference * fill} ${circumference}`}
-            transform={`rotate(-90 ${RING / 2} ${RING / 2})`}
-          />
-        ) : null}
-      </Svg>
+    <View accessible={false} importantForAccessibility="no-hide-descendants" pointerEvents="none">
+      <RingChart
+        size={RING}
+        strokeWidth={STROKE}
+        data={[{ label: "", value: Math.max(0, Math.min(1, ratio)), maxValue: 1, color }]}
+      >
+        <RingChart.Ring index={0} color={color} />
+      </RingChart>
     </View>
   );
 }

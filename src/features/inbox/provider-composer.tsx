@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import Info from "lucide-react-native/icons/info";
 import type { ConfirmedInboxComment, ProviderInboxComposerProps } from "./provider-component-types";
 import {
   Body,
@@ -7,15 +8,18 @@ import {
   Field,
   FormActions,
   Heading,
+  IconButton,
   MutationState,
   Notice,
   Stack,
+  Sheet,
 } from "@/ui/primitives";
 import { ActionReviewSheet } from "@/ui/action-review-sheet";
 import { useCopy } from "@/ui/copy";
 import { isInboxWriteUncertain } from "./provider-jobs";
 import { providerName } from "./provider-model";
 import { commentSubmission } from "./provider-state";
+import { useMobileTheme } from "@/ui/theme";
 
 export {
   type ConfirmedInboxComment,
@@ -32,6 +36,8 @@ export function ProviderInboxComposer({
   canSend,
 }: ProviderInboxComposerProps) {
   const copy = useCopy();
+  const { colors } = useMobileTheme();
+  const [helpOpen, setHelpOpen] = useState(false);
   const uncertain = isInboxWriteUncertain(submission.error);
   const busy = submission.isPending;
   const { body, reply } = draft;
@@ -72,6 +78,7 @@ export function ProviderInboxComposer({
           </Disclosure> : <Body muted selectable>{reply.body}</Body>}
           <Button
             label={copy("Yanıttan vazgeç", "Cancel reply")}
+            tone="quiet"
             disabled={busy || !!pending}
             onPress={() => onChange({ reply: null })}
           />
@@ -109,9 +116,12 @@ export function ProviderInboxComposer({
         busy={busy}
         onSubmit={send}
       />
-      <Disclosure label={copy("Yardım", "Help")}>
+      <IconButton label={copy("Yorum taslağı hakkında", "About comment drafts")} onPress={() => setHelpOpen(true)}>
+        <Info size={18} color={colors.muted} />
+      </IconButton>
+      <Sheet visible={helpOpen} size="compact" title={copy("Yorum taslağı", "Comment draft")} onClose={() => setHelpOpen(false)}>
         <Body muted>{copy("Taslak bu kayıt açık kaldığı sürece korunur.", "Your draft is retained while this item stays open.")}</Body>
-      </Disclosure>
+      </Sheet>
     </Stack>
     {pending && pending.lease === review && canSend && !busy && !uncertain ? <ActionReviewSheet
       title={copy("Yorumu gönder", "Send comment")} submitLabel={copy("Gönder", "Send")}

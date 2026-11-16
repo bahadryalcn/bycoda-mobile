@@ -37,6 +37,8 @@ export type InputProps = TextInputProps & {
   label: string;
   mono?: boolean;
   hint?: string;
+  /** Explanation revealed by an info icon beside the label, however short; never printed under the control. */
+  info?: string;
   error?: string;
   tone?: "default" | SemanticTone;
 };

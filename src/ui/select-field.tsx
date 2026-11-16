@@ -3,7 +3,7 @@ import { useMobileTheme } from "./theme";
 import { useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ChevronsUpDown from "lucide-react-native/icons/chevrons-up-down";
 import { FlatList, StyleSheet, Text, View, type HostInstance } from "react-native";
-import { Pressable } from "react-native";
+import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
 import Check from "lucide-react-native/icons/check";
 import { DisclosureChevron } from "./disclosure-motion";
 import Square from "lucide-react-native/icons/square";
@@ -19,6 +19,7 @@ import { usePrivateContentAccess, type PrivateContentAccess } from "./private-ac
 import { normalizeSearch } from "./search-matching";
 import { useFilteredListScrollMemory } from "./use-list-scroll-memory";
 import { useCopy } from "./copy";
+import { useReducedMotionPreference } from "./use-reduced-motion";
 import { HintLabel, UnitHint, isUnitHint } from "./info-hint";
 import { useInNavigationGroup } from "./navigation-row";
 import { metrics, opacity, radii, space, gapIcon } from "./tokens";
@@ -86,6 +87,7 @@ function SelectionField<T extends string>({
 }: MultiSelectProps<T> & { multiple?: boolean }) {
   const { colors, semanticColors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const reducedMotion = useReducedMotionPreference();
   const locale = useLocale(), access = usePrivateContentAccess();
   const trigger = useRef<HostInstance>(null);
   const mounted = useRef(false);
@@ -168,7 +170,11 @@ function SelectionField<T extends string>({
     const off = !available || !!item.disabled ||
       (!!multiple && !selected && max !== undefined && values.length >= max);
     return (
-      <Pressable
+      // Select/Combobox items require their own root and expose menuitem semantics.
+      // Keep the guarded Sheet, virtualized rows and checkbox/radio contract here.
+      <AnimatedPressable
+        pressScale={1}
+        pressOpacity={reducedMotion ? 1 : opacity.pressed}
         accessibilityRole={multiple ? "checkbox" : "radio"}
         accessibilityLabel={[item.label, item.detail].filter(Boolean).join(". ")}
         accessibilityState={{ checked: selected, disabled: off }}
@@ -176,7 +182,7 @@ function SelectionField<T extends string>({
         aria-disabled={off}
         disabled={off}
         onPress={() => choose(item.value)}
-        style={({ pressed }) => ({
+        style={{
           minHeight: metrics.touchTarget,
           flexDirection: "row",
           alignItems: "center",
@@ -184,9 +190,9 @@ function SelectionField<T extends string>({
           paddingHorizontal: space.md,
           paddingVertical: space.sm,
           borderRadius: radii.control,
-          backgroundColor: pressed ? colors.raised : "transparent",
-          opacity: off ? opacity.disabled : 1,
-        })}
+          backgroundColor: "transparent",
+          ...(off ? { opacity: opacity.disabled } : {}),
+        }}
       >
         <SelectionIcon>{item.icon}</SelectionIcon>
         <View style={[uiStyles.grow, { gap: 2 }]}>
@@ -198,7 +204,7 @@ function SelectionField<T extends string>({
         ) : selected ? (
           <Check color={colors.accent} strokeWidth={2.6} size={20} />
         ) : null}
-      </Pressable>
+      </AnimatedPressable>
     );
   };
   const shown = filtered.slice(0, INLINE_LIMIT);
@@ -206,7 +212,9 @@ function SelectionField<T extends string>({
     <View style={row ? undefined : [uiStyles.field, (error || isUnitHint(hint)) && { paddingBottom: space.xs }]}>
       {!hideLabel && !row ? <HintLabel label={label} help={hint} /> : null}
       {row ? (
-        <Pressable
+        <AnimatedPressable
+          pressScale={1}
+          pressOpacity={reducedMotion ? 1 : opacity.pressed}
           ref={trigger}
           accessibilityRole="combobox"
           accessibilityLabel={`${label}: ${labels.length ? labels.join(", ") : summary}`}
@@ -216,16 +224,16 @@ function SelectionField<T extends string>({
           aria-disabled={!available}
           disabled={!available}
           onPress={openPanel}
-          style={({ pressed }) => ({
+          style={{
             minHeight: metrics.rowHeightProject,
             flexDirection: "row",
             alignItems: "center",
             gap: gapIcon,
             paddingHorizontal: 0,
             paddingVertical: space.sm,
-            backgroundColor: pressed ? colors.raised : "transparent",
-            opacity: !available ? opacity.disabled : 1,
-          })}
+            backgroundColor: "transparent",
+            ...(!available ? { opacity: opacity.disabled } : {}),
+          }}
         >
           {icon}
           <View style={[uiStyles.grow, { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }]}>
@@ -238,12 +246,15 @@ function SelectionField<T extends string>({
             </View>
           </View>
           <ChevronsUpDown size={15} strokeWidth={2.2} color={colors.tertiary} />
-        </Pressable>
+        </AnimatedPressable>
       ) : null}
       {/* Settings rows share NavigationRow's inset separator inside a group. */}
       {row && grouped ? <View accessible={false} style={uiStyles.separator} /> : null}
       {!row ? (
-      <Pressable
+      <AnimatedPressable
+        pressScale={1}
+        pressOpacity={reducedMotion ? 1 : opacity.pressed}
+        className="min-h-12 rounded-lg border border-input bg-background"
         ref={trigger}
         accessibilityRole="combobox"
         accessibilityLabel={`${label}: ${labels.length ? labels.join(", ") : summary}`}
@@ -254,20 +265,20 @@ function SelectionField<T extends string>({
         disabled={!available}
         hitSlop={compact ? { top: 8, bottom: 8, left: 0, right: 0 } : undefined}
         onPress={openPanel}
-        style={({ pressed }) => [
+        style={[
           uiStyles.input,
           compact && {
-            minHeight: metrics.visualControl,
+            minHeight: metrics.touchTarget,
             paddingVertical: space.xxs,
             borderColor: colors.separator,
           },
           error && { borderColor: semanticColors.danger.border },
           open && { borderColor: colors.accent },
+          !available && { opacity: opacity.disabled },
           {
             flexDirection: "row",
             alignItems: "center",
             gap: space.sm,
-            opacity: !available ? opacity.disabled : pressed ? opacity.pressed : 1,
           },
         ]}
       >
@@ -282,7 +293,7 @@ function SelectionField<T extends string>({
           closedAngle={90}
           openAngle={270}
         />
-      </Pressable>
+      </AnimatedPressable>
       ) : null}
       {error ? (
         <Text selectable accessibilityRole="alert" style={uiStyles.error}>
@@ -332,7 +343,10 @@ function SelectionField<T extends string>({
             keyboardDismissMode={searchEnabled ? "none" : scrollKeyboardDismissMode("on-drag")}
             automaticallyAdjustKeyboardInsets={false}
             contentInsetAdjustmentBehavior="never"
-            contentContainerStyle={{ paddingHorizontal: space.screen, paddingBottom: space.lg }}
+            // Options share the header's centered column; a full-height sheet on a tablet
+            // must not stretch rows edge to edge under a centered title and search.
+            contentContainerStyle={{ paddingHorizontal: space.screen, paddingBottom: space.lg,
+              width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
             ItemSeparatorComponent={() => (
               <View style={[uiStyles.separator, { marginHorizontal: space.sm }]} />
             )}

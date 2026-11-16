@@ -190,7 +190,6 @@ export function AutomationsScreen() {
                 ? copy("Eşleşen sonuç yok", "No matching results")
                 : copy("Henüz otomasyon yok", "No automations yet")
             }
-            emptyDetail={scoped?.length ? undefined : copy("Otomasyon, ajanı belirlediğiniz zamanda otomatik çalıştırır.", "An automation runs an agent on a schedule you choose.")}
             emptyAction={
               scoped?.length && (search.trim() || filter !== "all")
                 ? search.trim()

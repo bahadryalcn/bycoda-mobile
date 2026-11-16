@@ -1,4 +1,6 @@
 import { ManagementScreen } from "../../src/features/management";
+import { useLocalSearchParams } from "expo-router";
 export default function InboxRoute() {
-  return <ManagementScreen section="inbox" />;
+  const { view } = useLocalSearchParams<{ view?: string }>();
+  return <ManagementScreen key={view ?? "attention"} section="inbox" />;
 }

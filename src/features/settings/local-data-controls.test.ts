@@ -24,6 +24,7 @@ vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestCloseThen: (action: () => void) => action() }) }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: ({ children }: PropsWithChildren) => children }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("lucide-react-native/icons/shield-off", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/user-x", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/trash", () => ({ default: () => null }));
@@ -33,7 +34,8 @@ vi.mock("@/ui/record-card", () => ({ RecordCard: ({ title, metadata }: { title: 
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean }) => createElement("button", { disabled: disabled || busy, onClick: onPress }, label);
-  return { Stack: Wrap, Body: Wrap, Button, Loading: ({ label }: { label: string }) => createElement("p", null, label), NavigationGroup: Wrap, NavigationRow: Button, Disclosure: Wrap,
+  return { Stack: Wrap, Body: Wrap, Button, Loading: ({ label }: { label: string }) => createElement("p", null, label), NavigationGroup: Wrap, NavigationRow: Button,
+    SectionHeader: ({ title, trailing }: { title: string; trailing?: import("react").ReactNode }) => createElement("h3", null, title, trailing),
     StateView: ({ title, description, action }: { title: string; description?: string; action?: { label: string; onPress: () => void } }) => createElement("div", null, createElement("p", null, title), description ? createElement("p", null, description) : null, action ? createElement("button", { onClick: action.onPress }, action.label) : null), Notice: ({ message }: { message: string }) => createElement("p", null, message),
     Sheet: ({ children, title }: PropsWithChildren<{ title: string }>) => createElement("section", { "data-review": true }, createElement("h2", null, title), children),
     FormActions: ({ submitLabel, cancelLabel, onSubmit, onCancel, disabled, busy, feedback }: import("@/ui/component-props").FormActionsProps) => createElement("footer", null, feedback, createElement(Button, { label: submitLabel, onPress: onSubmit, disabled, busy }), onCancel ? createElement(Button, { label: cancelLabel ?? "Cancel", onPress: onCancel, disabled: busy }) : null),

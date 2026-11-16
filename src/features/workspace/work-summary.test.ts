@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { workSummaryLine } from "./work-summary";
+import { workOrbState, workSteps, workSummaryLine } from "./work-summary";
 import type { Block } from "./wire";
 
 const copy = (_tr: string, en: string, values?: Record<string, string | number>) =>
@@ -49,5 +49,40 @@ describe("work summary", () => {
       "Searched the project",
     );
     expect(workSummaryLine([tool("b", { status: "completed" }, "Bash ls")], copy)).toBe("Ran a command");
+  });
+});
+describe("work steps", () => {
+  it("names each step with a verb and its target", () => {
+    const steps = workSteps(
+      [
+        { id: "r", role: "tool", text: "Read src/calendar/index.tsx", tool: { kind: "read", status: "completed", preview: { kind: "read", path: "src/calendar/index.tsx" } } },
+        { id: "s", role: "tool", text: "grep openStart", tool: { kind: "search", status: "completed", preview: { kind: "search", query: "openStart" } } },
+        { id: "x", role: "tool", text: "pnpm test", tool: { kind: "execute", status: "failed" } },
+        { id: "t", role: "reasoning", text: "Rewriting the band\nmore" },
+      ],
+      copy,
+    );
+    expect(steps).toEqual([
+      { id: "r", label: "Opened", file: "index.tsx", text: undefined, state: "done" },
+      { id: "s", label: "Searched", code: "openStart", state: "done" },
+      { id: "x", label: "Ran", code: "pnpm test", state: "failed" },
+      { id: "t", label: "Thought", text: "Rewriting the band", state: "done" },
+    ]);
+  });
+  it("keeps present tense only for a live running step", () => {
+    const block: Block = { id: "e", role: "tool", text: "Edit a.ts", tool: { kind: "edit", status: "running" } };
+    expect(workSteps([block], copy, true)[0]).toMatchObject({ label: "Editing", file: "a.ts", state: "running" });
+    expect(workSteps([block], copy, false)[0]).toMatchObject({ label: "Edited", state: "done" });
+  });
+});
+
+describe("work orb state", () => {
+  const block = (kind: string, status = "running"): Block => ({ id: kind, role: "tool", text: "", tool: { kind, status } });
+  it("names the kind of busy from the step in flight", () => {
+    expect(workOrbState([block("read")])).toBe("searching");
+    expect(workOrbState([block("read", "completed"), block("edit")])).toBe("shaping");
+    expect(workOrbState([block("execute")])).toBe("working");
+    expect(workOrbState([{ id: "t", role: "reasoning", text: "", streaming: true }])).toBe("solving");
+    expect(workOrbState([block("read", "completed")])).toBe("working");
   });
 });

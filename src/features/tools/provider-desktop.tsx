@@ -2,14 +2,17 @@ import { ProviderAccountKind } from "@/ui/provider-account-kind";
 import { providerName } from "../workspace/provider-choices";
 import { useLayoutEffect, useRef, useState } from "react";
 import { View } from "react-native";
+import { router, type Href } from "expo-router";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { reviewedMachine, isReviewedMachine } from "@/state/reviewed-machine";
 import { useHostQuery } from "@/state/queries";
 import {
+  Badge,
   Body,
   Button,
   Disclosure,
   Empty,
+  NavigationRow,
   Notice,
   QueryState,
   Row,
@@ -104,6 +107,20 @@ export function ProviderDesktop({
     supported ? () => (current() ? query.refetch() : undefined) : undefined,
   );
   const ready = getQueryPresentation(query) === "ready";
+  // Usage › Limits owns the full account limit view; this sheet links to it when the Host serves it
+  // and keeps the cached snapshot only as the fallback for Hosts without usage.limits.read.
+  const limitsLinked =
+    !!machine?.capabilities?.includes("usage.limits.read") &&
+    !!machine.capabilities.includes("usage.sessions.read");
+  const openLimits = () => {
+    // Same machine and project as this sheet's reviewed scope; a changed scope never navigates.
+    if (!current() || !limitsLinked) return;
+    onClose();
+    router.navigate({
+      pathname: "/tools/[tool]",
+      params: { tool: "usage", projectId: opening.projectId, machineId: opening.machineId, tab: "limits" },
+    } as Href);
+  };
   const entries: Entry[] = report
     ? [
         ...report.accounts.map((account) => ({
@@ -215,14 +232,23 @@ export function ProviderDesktop({
           "account" in item ? (
             <RecordCard
               title={item.account.label}
-              metadata={`${providerName(item.account.provider)}${item.account.isDefault ? ` · ${copy("Varsayılan", "Default")}` : ""}`}
+              status={item.account.isDefault ? <Badge label={copy("Varsayılan", "Default")} tone="active" /> : undefined}
+              metadata={providerName(item.account.provider)}
               details={
                 <>
                   <ProviderAccountKind
                     kind={item.account.kind}
                     derivedKind={item.account.derivedKind}
                   />
-                  <CachedQuota quota={item.account.quota} />
+                  {limitsLinked ? (
+                    <NavigationRow
+                      label={copy("Hesap limitleri", "Account limits")}
+                      detail={copy("Oturum kullanımı · Limitler", "Session usage · Limits")}
+                      onPress={openLimits}
+                    />
+                  ) : (
+                    <CachedQuota quota={item.account.quota} />
+                  )}
                 </>
               }
               footer={

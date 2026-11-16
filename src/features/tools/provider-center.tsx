@@ -9,7 +9,7 @@ import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/stat
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { Badge, Body, Disclosure, Empty, FormActions, ErrorText, Field, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, Screen, SectionHeader, StateView, StatusRow, ScreenList, SearchField, Sheet } from "@/ui/primitives";
+import { Badge, Body, Disclosure, Empty, FormActions, ErrorText, Field, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, Screen, SectionHeader, StateView, ScreenList, SearchField, Sheet } from "@/ui/primitives";
 import { ProviderAccountMark } from "@/ui/agent-avatar";
 import { useCopy } from "@/ui/copy";
 import { useInfoHint } from "@/ui/info-hint";
@@ -21,9 +21,6 @@ import { metadataPatch, readProviderCenter, type ProviderCenterAgent, type Provi
 
 type Provider = ProviderCenterReport["providers"][number];
 
-function launcherLabel(launcher: Provider["launcher"], copy: ReturnType<typeof useCopy>) {
-  return launcher === "resolved" ? copy("Başlatıcı bulundu", "Launcher found") : launcher === "unavailable" ? copy("Başlatıcı bulunamadı", "Launcher not found") : copy("Başlatıcı durumu bilinmiyor", "Launcher status unknown");
-}
 function availabilityLabel(launcher: Provider["launcher"], copy: ReturnType<typeof useCopy>) {
   return launcher === "resolved" ? copy("Kullanılabilir", "Available") : launcher === "unavailable" ? copy("Kullanılamıyor", "Unavailable") : copy("Bilinmiyor", "Unknown");
 }
@@ -38,11 +35,6 @@ function ProviderLaunchers({ providers }: { providers: Provider[] }) {
       <Body style={{ flex: 1, minWidth: 0 }}>{providerName(provider.id as RemoteProvider)}</Body>
       <Badge label={availabilityLabel(provider.launcher, copy)} tone={provider.launcher === "resolved" ? "success" : "default"} />
     </Row>)}
-    <Disclosure label={copy("Ayrıntılar", "Details")}>
-      {providers.map((provider) => <StatusRow key={provider.id} label={providerName(provider.id as RemoteProvider)}>
-        <Body muted>{launcherLabel(provider.launcher, copy)}</Body>
-      </StatusRow>)}
-    </Disclosure>
   </View>;
 }
 export function ProviderAgentRow({ agent, onPress }: { agent: ProviderCenterAgent; onPress: () => void }) {
@@ -142,8 +134,7 @@ export function ProviderCenter() {
         {getQueryPresentation(query) === "ready" && report && report.acp.agents.length > 0 && !agents.length ? <Empty compact title={copy("Eşleşen sonuç yok", "No matching results")}
           action={{ label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }} /> : null}
         {getQueryPresentation(query) === "ready" && report && !report.acp.agents.length ? <StateView compact illustration="inbox-empty"
-          title={copy("Yapılandırılmış ACP ajanı yok.", "No configured ACP agents.")}
-          description={copy("ACP ajanı, bycoda’nın Agent Client Protocol üzerinden bağlandığı özel bir yapay zeka ajanıdır. Bilgisayarda yapılandırın.", "An ACP agent is a custom AI agent bycoda connects to over the Agent Client Protocol. Configure it on the computer.")} /> : null}
+          title={copy("Yapılandırılmış ACP ajanı yok.", "No configured ACP agents.")} /> : null}
       </View>}
       renderItem={({ item }) => <ProviderAgentRow agent={item} onPress={() => { if (report && machine) setSelected({ agent: item, revision: report.acp.revision, machineId: machine.id, reviewed: reviewedMachine(machine) }); }} />} />
     {selected && !changedTarget ? <AgentMetadata key={`${selected.machineId}:${selected.agent.id}`} agent={selected.agent} revision={selected.revision} machineId={selected.machineId}

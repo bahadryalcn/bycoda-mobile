@@ -6,7 +6,28 @@ The Expo application in `mobile/` controls existing Bycoda Hosts on Windows,
 macOS and Linux. Agent processes, files, Git repositories and scheduled work stay
 on the computer. The phone has no local agent runtime or local project checkout.
 
+Bottom navigation uses a floating icon dock for Projects, Sessions, Inbox, Tools
+and Settings. A dot marks the current tab; Sessions shows its running count.
+The plus button opens New session; hold it for quick actions. On narrow screens
+or with large text, More opens the remaining destinations. Screen readers retain
+full destination names and running-count descriptions. The dock hides while the
+keyboard is open.
+
+### Tablets
+
+A tablet window at least 960 points wide (landscape) replaces the dock with a
+left rail and shows sessions side by side: the session list on the left,
+ordered by urgency (needs input or failed, then running, then the rest), and
+the selected conversation on the right. Selecting another session swaps the
+conversation in place. Without a selected session, Sessions shows running,
+attention and computer counters with the sessions that need attention. In
+portrait or a narrower multitasking window, tablets keep the dock and a
+conversation's header button opens the same urgency-ordered list. Phones are
+unchanged.
+
 ## Read and control your workspace
+
+Long-press a session in project lists, active sessions or search results for grouped actions: Rename, Pin, Copy link, Copy session ID, Copy conversation as text, Details, Settle, Archive and Delete. Stop appears for running sessions on supported Hosts and requires confirmation. Rename keeps its draft on failure. Conversation copy includes committed user and assistant text only, excludes tools and private internal blocks, and rejects incomplete text or exports over 256 Ki UTF-16 code units. Host permissions and session authority checks still apply.
 
 Terminal output has its own scrolling reader, literal line search, full-output copy
 and a follow-latest control. Scrolling back pauses following. Commands stay in the
@@ -145,8 +166,8 @@ It pins the environment identity so a changed server cannot silently become a
 different computer. Native credentials live in SecureStore; saved metadata and
 last selected projects contain no credentials.
 
-On a phone with a configured passcode or biometrics, application lock starts
-enabled. Unlock uses the device's strong biometric authentication or passcode.
+Application lock starts off on a new install; turn it on under **Settings → Secure
+access** (it needs a configured passcode or biometrics). Unlock uses the device's strong biometric authentication or passcode.
 Leaving the app immediately covers the workspace and open sheets and stops host
 access and polling. **Settings → Secure access** lets you require authentication
 immediately (the default), or after 30 seconds, 1, 5 or 15 minutes away. Returning
@@ -395,6 +416,8 @@ reporting and Apple architecture review.
 
 ## Navigation and editing
 
+Feature identity glyphs at 20dp and larger use a shared duotone vector style: one theme tint, an opaque foreground and a 35% back plane. Smaller glyphs, dense controls and inline feedback keep line icons. Project logos and saved symbols retain their identity.
+
 The bottom navigation keeps Projects, Sessions, Inbox, Tools and Settings within
 reach. Tools groups destinations by Project, Work, Communication, Development and
 Computer; search also finds a group name. Settings separates preferences, access
@@ -405,8 +428,22 @@ project, or hold it for quick actions. The separate project action adds a projec
 Opening the same project or conversation again reuses its destination. Registered
 projects remain independent even when one repository is stored inside another.
 
-**Settings > Appearance** offers nine palettes in three equal columns and equal
-System, Light and Dark theme choices. Theme changes preserve the current draft.
+The project list follows the computer live over its authenticated environment stream,
+including group changes and removed projects. Screens sharing the same connection share
+one stream. A reconnect resumes from the last applied cursor; missing history requests a
+fresh snapshot. Older Hosts and interrupted streams fall back to periodic refresh.
+Expired privacy proof requires a fresh authorized read before projects become visible.
+Drafts and uncertain sends are preserved; reconnect never resends them automatically.
+
+**Settings > Appearance** opens one full-screen sheet for System, Light and Dark,
+nine palettes, general typography and message text size. Text size (85–130%) and
+line spacing (100–150%) use sliders; release a slider to save and apply its value.
+Font family offers native System, Sans serif, Serif and Monospace choices, with
+Regular, Medium and Bold weights. Code retains its monospace role. System text
+scaling remains enabled. The shared-component and conversation preview reflects
+saved choices. **Reset typography** resets only general size, font, weight and
+spacing; theme, palette and message text size remain selected. Changes preserve
+drafts and navigation. A failed save retains the chosen value and shows recovery.
 **Settings > Send while agent is running** defaults to **Steer**. Hold Send to use
 the alternate **Queue** action. Hosts without Steer support retain their supported
 queue action. The composer does not expose another delivery-mode selector.
@@ -606,3 +643,35 @@ Crew member model source can follow the Host's crew-member role, Host model
 order, a named pool, or an explicit fixed model. Saved fallback candidates are
 not an allowed-model filter for automatic routing. Editing member instructions
 preserves the binding; selecting a fixed model explicitly replaces that binding.
+
+Sessions on supporting Hosts show an unread accent dot and a stronger title after new assistant output, a finished turn or a new input request. Mark as read/unread is shared across devices. Opening a visible foreground conversation marks observed activity read after a short debounce; a manual unread flag set while it is already open remains until the next opening. Metadata changes do not count as agent activity.
+
+Snooze offers one hour, the next local 18:00, tomorrow at 09:00 and seven calendar days later at 09:00. Project and active lists keep snoozed sessions in a folded Snoozed shelf; the global Sessions filter can show them separately. Rows show the local wake time. Deadlines return sessions automatically, new input requests wake them early, and Wake now clears the deadline. Unsupported Hosts hide the attention actions. Share beside Copy link opens the native share sheet with the title and canonical session link.
+
+
+### Home-screen widgets
+
+Active sessions shows running work, unanswered questions and recent failures, with questions first.
+Medium/large widgets list sessions; small Active sessions shows counts. Needs attention shows the
+first question or failure plus counts. Tap a row to open its session on its paired computer.
+Question-specific navigation is not supported; the conversation opens with its existing question card.
+
+Session titles remain opt-in. **Show question text on widgets** is a separate choice, off by default,
+and requires session titles to be enabled too. Otherwise questions say **Waiting for your answer**.
+Failures use safe categories from structured status, never raw error text. Unknown failures show
+**Turn failed**; usage limits show **Rate limited**; interrupted sessions show **Stopped**.
+Running rows show actual turn start time when available; missing timing is not inferred from edits.
+Recent completed rows require observed turn timing; idle alone does not mean completed.
+
+With notification permission and Host push enabled, updated apps receive silent widget metadata from
+the paired Host. No titles or question text pass through Expo, FCM or APNs. Cached opt-in text stays
+local. New sessions can use a locally known project; unknown or incomplete project directories show
+refresh feedback. A newly opened question uses generic wording until the app fetches its prompt.
+Changing computer, signing out or locking clears widget content. When app lock is enabled, headless
+updates remain locked until the app is unlocked. Turning notifications off stops background refresh.
+
+Background delivery depends on Android/iOS scheduling and power settings. iOS writes its shared
+app-group timeline and updates an existing Live Activity only when a background notification grants
+execution. Force-stopped Android apps and force-quit iOS apps cannot guarantee refresh. Expired
+snapshots ask you to open bycoda; there is no direct APNs Live Activity relay. Native widget sizing,
+direct Android links and background task support require a rebuilt app, alongside an updated Host.

@@ -4,19 +4,24 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { JiraBoardIssueActions } from "./jira-board-issue";
 const state = vi.hoisted(() => ({ project: "project", submit: vi.fn(), busy: false, ready: true,
+  readError: null as Error | null,
   draftError: null as unknown, pending: null as unknown, result: null as unknown,
   presses: new Map<string, () => void>(), changes: new Map<string, (value: string) => void>() }));
 vi.mock("@/state/machines", () => ({ useMachines: { getState: () => ({ activeId: "machine", selectedProjectId: state.project }) } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
+vi.mock("@/ui/message-text", () => ({ MessageText: ({text}:{text:string}) => createElement("p",null,text) }));
+vi.mock("react-native", () => ({ Linking: { openURL: vi.fn() } }));
+vi.mock("@/state/actions", () => ({ useAsyncAction: () => ({ isPending: false, run: async (action: () => Promise<void>) => action() }) }));
 vi.mock("../workspace/shared", () => ({ ErrorText: () => null }));
 vi.mock("./jira-board-delivery", () => ({ useJiraBoardDelivery: () => ({
   draft: { ready: state.ready, error: state.draftError, value: { pending: state.pending } },
   busy: state.busy, error: null, result: state.result, submit: state.submit, reconcile: vi.fn(),
 }) }));
-vi.mock("./provider-queries", () => ({ useInboxRead: () => ({ data: [
+vi.mock("./provider-queries", () => ({ useInboxRead: (request: { action: string }) => ({ data: request.action === "details" ? { body: "Readable description", author: "Reporter" } : [
   { id: "4", name: "Start work", statusId: "2", requiresFields: false },
   { id: "8", name: "Requires custom field", statusId: "3", requiresFields: true },
-], isFetching: false }) }));
+], isFetching: false, error: state.readError }) }));
 vi.mock("@/ui/dialogs", async () => {
   const ui = await import("@/ui/primitives"); return { Sheet: ui.Sheet, FormActions: ui.FormActions };
 });
@@ -25,14 +30,14 @@ vi.mock("@/ui/primitives", () => {
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => {
     state.presses.set(label, onPress); return createElement("button", { disabled, onClick: onPress }, label);
   };
-  return { Body: Wrap, Heading: Wrap, Row: Wrap, Badge: ({ label }: { label: string }) => createElement("span", null, label), Stack: Wrap, QueryState: () => null,
+  return { Body: Wrap, Heading: Wrap, Row: Wrap, Badge: ({ label }: { label: string }) => createElement("span", null, label), Stack: Wrap, QueryState: () => null, MutationState: () => null,
     Sheet: ({ children, footer, title, onClose }: PropsWithChildren<{ footer?: ReactNode; title: string; onClose: () => void }>) =>
       createElement("div", { role: "dialog", "aria-label": title }, children, footer, createElement(Button, { label: `Close ${title}`, onPress: onClose })),
     Notice: ({ message }: { message: string }) => createElement("p", null, message), Button,
     FormActions: ({ submitLabel, cancelLabel, onSubmit, onCancel }: { submitLabel: string; cancelLabel: string; onSubmit: () => void; onCancel: () => void }) =>
       createElement("div", null, createElement(Button, { label: cancelLabel, onPress: onCancel }), createElement(Button, { label: submitLabel, onPress: onSubmit })),
-    Disclosure: ({ label, children }: PropsWithChildren<{ label: string }>) => {
-      const [open, setOpen] = useState(false); return createElement("div", null,
+    Disclosure: ({ label, children, defaultExpanded = false }: PropsWithChildren<{ label: string; defaultExpanded?: boolean }>) => {
+      const [open, setOpen] = useState(defaultExpanded); return createElement("div", null,
         createElement(Button, { label, onPress: () => setOpen(!open) }), open ? children : null);
     },
     SelectField: ({ label, value, options, onChange, disabled }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void; disabled: boolean }) => {
@@ -42,7 +47,7 @@ vi.mock("@/ui/primitives", () => {
     },
   };
 });
-const issue = { identifier: "ENG-7", title: "Reviewed issue", state: "Open" };
+const issue = { identifier: "ENG-7", title: "Reviewed issue", state: "Open", provider: "jira", kind: "jira", number: 7, repo: "ENG", projectPath: "", priority: "High", labels: [{ name: "bug" }], assignees: [{ login: "Ada" }], updatedAt: "2026-01-01T00:00:00Z" };
 const snapshot = { snapshotId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", projectCwd: "G:/Projects/reviewed-project",
   board: { id: 7, name: "Engineering", kind: "kanban" }, configuration: { rankSnapshotAvailable: true,
     sprints: [{ id: 3, name: "Active sprint" }] }, page: { issues: [issue, { identifier: "ENG-8", title: "Anchor" }] } };
@@ -58,9 +63,27 @@ async function choose(label: string, value: string) { await act(async () => {
 async function click(label: string) { await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === label)!.click()); }
 const review = () => container.querySelector('[role="dialog"][aria-label="Review Jira action"]');
 async function openReview() { await choose("Jira transition", "4"); await click("Review action"); }
+it("shows issue details and metadata alongside actions", async () => {
+  await mount();
+  for (const value of ["Readable description", "Reporter", "High", "bug", "Ada", "Updated"]) expect(container.textContent).toContain(value);
+});
+
+it.each(["project","auth"])("conceals Jira identity and fields across %s loss, keeping choices on restoration",async kind=>{
+  await mount();await choose("Jira transition","4");await click("Review action");
+  const confirm=state.presses.get("Request approval on computer")!;
+  if(kind==="project")state.project="other";
+  else state.readError=Object.assign(Error("Access expired"),{kind:"auth"});
+  await render();
+  for(const value of ["ENG-7","Reviewed issue","Engineering","Readable description","Reporter","High","Ada","Start work"])
+    expect(container.textContent).not.toContain(value);
+  await act(async()=>confirm());expect(state.submit).not.toHaveBeenCalled();
+  state.project="project";state.readError=null;await render();
+  expect((container.querySelector('select[aria-label="Jira transition"]') as HTMLSelectElement).value).toBe("4");
+  await act(async()=>confirm());expect(state.submit).not.toHaveBeenCalled();
+});
 afterEach(async () => {
   await act(async () => root?.unmount()); root = undefined; container?.remove(); props = { ...defaults };
-  state.project = "project"; state.busy = false; state.ready = true; state.draftError = null; state.pending = null; state.result = null;
+  state.project = "project"; state.readError = null; state.busy = false; state.ready = true; state.draftError = null; state.pending = null; state.result = null;
   state.presses.clear(); state.changes.clear(); vi.clearAllMocks(); vi.unstubAllGlobals();
 });
 it.each([

@@ -12,9 +12,13 @@ vi.mock("@/state/machines", () => ({ useMachines: Object.assign((selector: (s: u
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: ({ onClose }: { onClose: () => void }) => ({ requestClose: onClose }) }));
 vi.mock("@/features/workspace/shared", () => ({ ErrorText: ({ error }: { error: unknown }) => createElement("p", null, error ? String(error) : "") }));
+vi.mock("@/ui/plan-steps", () => ({ PlanSteps: ({ steps }: { steps: { title: string }[] }) => createElement("ol", null, steps.map((step) => createElement("li", { key: step.title }, step.title))) }));
 vi.mock("@/ui/primitives", () => ({
   Stack: ({ children }: PropsWithChildren) => createElement("div", null, children),
   Body: ({ children }: PropsWithChildren) => createElement("p", null, children),
+  Row: ({ children }: PropsWithChildren) => createElement("div", null, children),
+  Badge: ({ label }: { label: string }) => createElement("span", null, label),
+  Disclosure: ({ children }: PropsWithChildren) => createElement("div", null, children),
   Notice: ({ message }: { message: string }) => createElement("p", null, message),
   Field: ({ value, onChangeText, editable }: { value: string; onChangeText: (text: string) => void; editable: boolean }) =>
     createElement("textarea", { value, disabled: !editable, onChange: (event) => onChangeText((event.currentTarget as HTMLTextAreaElement).value) }),
@@ -37,6 +41,11 @@ it("opening a plan never executes it and explicit build pins the base", async ()
   expect(state.command).not.toHaveBeenCalled();
   await act(async () => container.querySelector("button")!.click());
   expect(state.command).toHaveBeenCalledExactlyOnceWith({ type: "send", sessionId: "s", intent: "build", planBlockId: "p", text: block.text, expectedPlanText: block.text });
+});
+it("shows the plan's steps and one approval status", async () => {
+  await mount();
+  expect(container.querySelectorAll("li")).toHaveLength(1);
+  expect(container.textContent).toContain("Needs your approval");
 });
 it("does not replay after an uncertain build or retarget after a machine change", async () => {
   state.command.mockRejectedValueOnce(new Error("Connection lost"));

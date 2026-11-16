@@ -86,3 +86,30 @@ it("reprobes immediately when the app regains focus", async () => {
   await vi.advanceTimersByTimeAsync(0);
   expect(f.opens.length).toBe(2);
 });
+
+it("reports catching-up until an event is applied and again after a resync", async () => {
+  const f = setup(() => undefined);
+  const phases: string[] = [];
+  await f.client.observeStream(
+    { kind: "environment" },
+    async () => true,
+    () => undefined,
+    (phase) => phases.push(phase),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(phases).toEqual(["catching-up"]);
+  const params = { subscriptionId: "", streamId: "stream-1", cursor: { epoch: "e", sequence: 1 } };
+  const subscriptionId = f.opens[0]!;
+  await f.deliver({
+    jsonrpc: "2.0",
+    method: "subscription.event",
+    params: { ...params, subscriptionId, kind: "snapshot", data: {} },
+  });
+  expect(phases).toEqual(["catching-up", "live"]);
+  await f.deliver({
+    jsonrpc: "2.0",
+    method: "subscription.event",
+    params: { ...params, subscriptionId, kind: "resync-required" },
+  });
+  expect(phases.at(-1)).toBe("catching-up");
+});

@@ -9,7 +9,7 @@ import { useClipboardFeedback } from "@/ui/use-clipboard-feedback";
 import { usePrivateContentAccess } from "@/ui/private-access";
 import { useChatAppearance } from "@/state/chat-appearance";
 import { useCopy } from "@/ui/copy";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import type { HtmlArtifact, HtmlArtifactSummary } from "@/remote/types";
 import { RecordAccessUnavailable } from "./unavailable-state";
 
@@ -38,8 +38,8 @@ export function ArtifactReader({ artifact, summary, machineName, query, unavaila
       <Button tone="quiet" label={copy("Listeye dön", "Back to list")} onPress={back} />
     </ReaderActions> : <FormActions tone="quiet" submitLabel={mode === "preview" ? copy("Kaynağı göster", "Show source") : copy("Önizle", "Preview")} onSubmit={() => change(mode === "preview" ? "source" : "preview")}
       cancelLabel={copy("Listeye dön", "Back to list")} onCancel={back} /> : <FormActions submitLabel={copy("Listeye dön", "Back to list")} onSubmit={back} />}>
-    {mode === "details" ? <ScrollView contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.screen, paddingBottom: space.md }}><Body selectable>{machineName}</Body>{artifact ? <><Body selectable>{artifact.title}</Body><Body selectable>{artifact.id}</Body><Body selectable>{artifact.createdAt}</Body><Body selectable>{artifact.bytes} B</Body></> : null}{feedback}{missing}</ScrollView>
+    {mode === "details" ? <ScrollView contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.screen, paddingBottom: space.md, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}><Body selectable>{machineName}</Body>{artifact ? <><Body selectable>{artifact.title}</Body><Body selectable>{artifact.id}</Body><Body selectable>{artifact.createdAt}</Body><Body selectable>{artifact.bytes} B</Body></> : null}{feedback}{missing}</ScrollView>
       : artifact ? <View style={{ flex: 1, minHeight: 0 }}><Stack style={{ paddingHorizontal: space.screen }}><NavigationRow label={artifact.title} labelLines={2} detail={machineName} detailLines={1} onPress={() => change("details")} />{feedback}</Stack>{mode === "preview" ? <HtmlDocument html={artifact.html} name={artifact.title} fill interaction={{ enabled: interaction, toggle: () => { if (current()) setInteraction(value => !value); } }} /> : <ScrollView key={pagination.page} contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.screen, paddingBottom: space.md }}><CodeSource code={pagination.text} language="html" textSize={textSize} plain={pagination.pages > 1} /></ScrollView>}</View>
-      : <ScrollView contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.screen, paddingBottom: space.md }}>{feedback}{missing}</ScrollView>}
+      : <ScrollView contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.screen, paddingBottom: space.md, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}>{feedback}{missing}</ScrollView>}
   </Sheet>;
 }

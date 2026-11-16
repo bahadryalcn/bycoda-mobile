@@ -108,7 +108,6 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
             <Body mono muted>{[opening.reviewed?.id, opening.projectId].filter(Boolean).join(" / ")}</Body>
             {current.cwd ? <Body mono muted>{current.cwd}</Body> : null}
             {current.process ? <Body mono muted>{`PID ${current.process.pid}`}</Body> : null}
-            {project && machine?.capabilities?.includes("browser.shared") ? <Body muted>{copy("Önizleme seçili bilgisayarın tarayıcısında açılır. Kontrolü al, ardından adresi aç.", "Preview runs in the selected computer's browser. Take control, then open the address.")}</Body> : null}
           </Disclosure>
           {current.endpoints.map((endpoint) => <Row key={`${endpoint.address}:${endpoint.port}`}><Body mono>{endpoint.url}</Body>
             {project && machine?.capabilities?.includes("browser.shared") ? <Button tone="quiet" label={copy("Önizle", "Preview")} disabled={!validScope || busy || !!details.error || details.isFetching || reconciling || uncertain || !!intent} onPress={() => {
@@ -138,10 +137,12 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
             onCancel={() => setIntent(undefined)}
             onSubmit={act}
           /></> : null}
-          {!intent ? <>{localError ? <ErrorText error={localError} /> : null}</> : null}
-          {!intent ? <><MutationState mutation={stop} /></> : null}
-          {!intent ? <><MutationState mutation={restart} /></> : null}
-          {!intent ? <><MutationState mutation={kill} /></> : null}
+          {!intent ? <>
+            {localError ? <ErrorText error={localError} /> : null}
+            <MutationState mutation={stop} />
+            <MutationState mutation={restart} />
+            <MutationState mutation={kill} />
+          </> : null}
           {stop.data?.requiresForce ? <Notice tone="warning" message={stop.data.message ?? copy("İşlem hâlâ çalışıyor.", "The process is still running.")} /> : null}
           {restart.data?.conflict ? <Notice tone="warning" message={copy("{p0} portu zaten kullanılıyor.", "Port {p0} is already in use.", { p0: restart.data.conflict.port })} /> : null}
           {showLogs ? <>

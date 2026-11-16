@@ -199,12 +199,7 @@ export function AccessCenter() {
               ) : null}
               {item.id === "tunnels" && report?.tunnels ? (
                 <>
-                  <Body muted>
-                    {copy(
-                      "Genel adresin erişilebilirliği doğrulanmadı.",
-                      "Public address reachability is unverified.",
-                    )}
-                  </Body>
+                  <Body muted>{copy("Genel adres doğrulanmadı.", "Public address reachability is unverified.")}</Body>
                   <Button
                     label={copy("Tünel başlat", "Start tunnel")}
                     disabled={

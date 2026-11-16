@@ -2,6 +2,9 @@
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.mock("@/ui/duotone-icon", () => Object.fromEntries(
+  ["FolderOpen", "GitBranch", "MessagesSquare", "CheckSquare", "Target", "Users", "Clock", "NotebookPen", "Bot", "Megaphone", "Activity", "Layers", "Plug", "KeyRound", "Inbox", "Laptop", "ShieldCheck", "Server", "ScrollText", "Smartphone", "Globe", "Terminal", "ChartColumn"].map((name) => [name, () => null]),
+));
 const fixture = vi.hoisted(() => ({ activeId: "machine", epoch: 0, locale: "en", push: vi.fn(), selectProject: vi.fn(), clear: vi.fn(), capabilities: undefined as string[] | undefined }));
 vi.mock("@/state/connection-scope", () => { const epochs = new Map<number, any>(); return { useConnectionScope: () => {
   const epoch = fixture.epoch; if (!epochs.has(epoch)) epochs.set(epoch, { token: String(epoch), isCurrent: () => fixture.epoch === epoch }); return epochs.get(epoch);
@@ -12,30 +15,6 @@ vi.mock("@/ui/tokens", () => ({ colors: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (tr: string, en: string) => fixture.locale === "tr" ? tr : en }));
 vi.mock("@/i18n", () => ({ useLocale: () => fixture.locale }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "machine", capabilities: fixture.capabilities }), useMachines: { getState: () => ({ activeId: fixture.activeId, selectProject: fixture.selectProject }) } }));
-vi.mock("lucide-react-native/icons/folder-open", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/messages-square", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/bot", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/megaphone", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/activity", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/plug", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/key-round", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/square-check-big", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/target", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/users", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/clock", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/notebook-pen", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/message-circle", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/inbox", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/laptop", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/shield-check", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/server", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/scroll-text", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/smartphone", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/globe", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/terminal", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/chart-column", () => ({ default: () => null }));
 vi.mock("../workspace/project-picker", async () => {
   const { useState } = await import("react");
   return { ProjectPicker: ({ onSelect }: any) => {
@@ -92,9 +71,9 @@ it("does not reopen a pending project picker across connection replacement", asy
 it("matches Turkish tool and group labels using selected app language", async () => {
   const lower = String.prototype.toLocaleLowerCase;
   vi.spyOn(String.prototype, "toLocaleLowerCase").mockImplementation(function (this: string, locale) { return lower.call(this, locale ?? "en"); });
-  fixture.locale = "tr"; await render("BİLGİSAYARLAR");
-  expect(container.textContent).toContain("Bilgisayarlar");
-  await render("iletişim"); expect(container.textContent).toContain("Asistan");
+  fixture.locale = "tr"; await render("BİLGİSAYAR ERİŞİMİ");
+  expect(container.textContent).toContain("Bilgisayar erişimi");
+  await render("işler"); expect(container.textContent).toContain("Asistan");
   expect(fixture.push).not.toHaveBeenCalled();
 });
 
@@ -106,4 +85,16 @@ it("shows project and unsupported capability before opening tools", async () => 
   await click("Browser");
   expect(container.querySelector("aside")).toBeNull();
   expect(fixture.push).toHaveBeenCalledWith({ pathname: "/tools/[tool]", params: { tool: "browser", projectId: "", machineId: "machine" } });
+});
+
+it("lists no Social tool and no tool the dock or Settings already owns", async () => {
+  await render();
+  for (const label of ["Social media", "Inbox", "Computers", "Sessions"]) expect(container.textContent).not.toContain(label);
+  await render("", "project", { onProjectView: vi.fn() });
+  expect(container.textContent).toContain("Sessions");
+});
+
+it("opens Jira boards in the inbox, which owns their project scope", async () => {
+  await render(); await click("Jira");
+  expect(fixture.push).toHaveBeenCalledWith({ pathname: "/(tabs)/inbox", params: { view: "jira" } });
 });

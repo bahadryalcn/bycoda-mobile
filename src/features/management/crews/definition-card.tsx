@@ -3,13 +3,11 @@ import { useMachines } from "@/state/machines";
 import type { useHostMutation } from "@/state/queries";
 import Copy from "lucide-react-native/icons/copy";
 import Pencil from "lucide-react-native/icons/pencil";
-import Play from "lucide-react-native/icons/play";
 import Trash2 from "lucide-react-native/icons/trash-2";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
-import { ActionMenu, Badge, IconButton, MutationState } from "@/ui/primitives";
+import { ActionMenu, Badge, Button, MutationState } from "@/ui/primitives";
 import { RecordCard } from "@/ui/record-card";
-import { useMobileTheme } from "@/ui/theme";
 import { identifier } from "../shared/format";
 import { joinMeta, RecordTrailing, useMenuGlyph } from "../shared/record-bits";
 import { crewAccent } from "./identity-model";
@@ -34,21 +32,18 @@ export function CrewDefinitionCard({ value, roleLabel, busy, editorOpen, executi
   onEdit: (definition: CrewDefinition) => void;
 }) {
   const copy = useCopy();
-  const { colors } = useMobileTheme();
   const glyph = useMenuGlyph();
   return (
     <RecordCard
       title={value.name}
-      status={<Badge label={value.projectId ? copy("Bu proje", "This project") : copy("Bilgisayar geneli", "Host-wide")} />}
+      status={value.projectId ? undefined : <Badge label={copy("Bilgisayar geneli", "Host-wide")} />}
       metadata={joinMeta([copy("{p0} üye", "{p0} members", { p0: value.agents.length })])}
       preview={<MemberAvatars agents={value.agents} accent={crewAccent(value.appearance)} />}
       details={<MemberLines agents={value.agents} roleLabel={roleLabel} library={library} />}
+      footer={<Button tone="primary" label={copy("İş başlat", "Start work")} disabled={!executionSupported || busy || editorOpen}
+        onPress={() => onStart(value)} />}
       menu={
         <RecordTrailing>
-          <IconButton label={copy("İş başlat", "Start work")} disabled={!executionSupported || busy || editorOpen}
-            onPress={() => onStart(value)}>
-            <Play size={18} color={colors.accent} />
-          </IconButton>
           <ActionMenu
             label={copy("Ekip işlemleri", "Crew actions")}
             busy={remove.isPending && remove.variables?.definitionId === value.id}

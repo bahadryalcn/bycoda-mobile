@@ -409,7 +409,6 @@ PanelUI components evaluated and not adopted:
 - planner: goals have dependency steps, not dated milestones.
 - timeline: git history rows are tappable navigation in a virtualized list.
 - section-rail: a floating side overlay covers content on phones.
-- slider: text size is three named choices.
 - support: a help-desk landing, not the report form.
 - tour: anchors belong to other owners.
 - sortable: task order applies only within status groups of a virtualized mixed list; the Move up/down menu stays.
@@ -433,7 +432,9 @@ patch now only adds the TabsList scroll animation gate (see below) and the aria-
 state attributes that React Native Web 0.21 does not reflect on initial render:
 `aria-selected` on both tab trigger variants, `aria-checked`/`aria-disabled` on
 Checkbox, Switch and RadioGroup items, Progress `aria-busy` with its numeric
-range and value text, and the Slider thumb `aria-value*` attributes. Native state/value props remain present, with radio
+range and value text, and the Slider thumb `aria-value*` attributes. It also adds a
+CodeBlock `textStyle` prop, so `CodeSource` follows the chat text-size preference
+instead of the fixed `text-xs`. Native state/value props remain present, with radio
 selection represented by its correct `checked` state. Remove each patch part when
 upstream declares the corresponding web state. The upstream MIT license is
 retained alongside the patch.
@@ -656,8 +657,9 @@ bycoda Button that sends `skipped`.
 
 ## Record and collection controls
 
-Focused facades also cover expandable records (`record-card.tsx`, backed by
-PanelUI Accordion), connected plan steps (`plan-steps.tsx`), draft-and-apply
+Focused facades also cover expandable records (`record-card.tsx`: a pressable
+identity row with one chevron and a flat `details` body; never nest a Disclosure or
+another expandable inside `details`), connected plan steps (`plan-steps.tsx`), draft-and-apply
 collection filters (`filter-sheet.tsx`), host-local wall-time selection
 (`time-field.tsx`, with searchable hour/minute choices inside the product Sheet),
 and a field with its adjacent action (`action-field.tsx`). Record bodies mount
@@ -748,10 +750,17 @@ scroll away; the outer mode selector must not acquire another fixed scope row.
 
 Settings presents phone preferences before computer-scoped destinations. The
 computer row uses the readable computer name; connection endpoints remain in
-the computer list/detail owners. Chat appearance's current-value row and editor
-share `chatTextSizeOptions`, preserving compact/standard/large values. Show the
-summary only after successful hydration; a failed or pending read must not look
-like a confirmed saved value. Existing recovery remains in the preference editor.
+the computer list/detail owners. One Appearance row opens a full-screen shared
+Sheet for theme, palette, general typography, message size and the shared preview.
+`SliderField` adapts PanelUI Slider for general size and line spacing, keeping a
+local drag value and persisting once on commit. Font family uses `SelectField`;
+weight and the three named message sizes use `SegmentedControl`. Message sizes
+retain `chatTextSizeOptions` and compact/standard/large persistence. Appearance
+read retries re-read storage; save retries preserve the current editable choices.
+General typography shares normalization in `typography-preferences.ts`, runtime
+application in `typography-runtime.ts` and subscription-aware themed style caches.
+The subscribed snapshot must remain an input to style resolution so React Compiler
+observes size/font changes as well as palette changes without remounting readers.
 Its section heading owns the visible text-size label while the selector keeps
 the same accessible name, including when large text uses its selection sheet.
 
@@ -1530,3 +1539,7 @@ not as an expiry timestamp: long-running work still deserves a fresh success
 window on completion. Keep pending/error priority, persistent uncertain outcomes,
 caller-owned scope and existing caption placement; do not reset or retry a
 mutation to update presentation.
+
+## Identity icons
+
+`duotone-icon.tsx` owns the typed 24-grid identity glyph map. Use its named components at identity sites of 20dp or larger, passing the existing size and theme color. Back planes share the foreground tint at 35% opacity. Utility controls, dense metadata, inline feedback and all glyphs below 20dp stay Lucide. `ProjectIcon` owns folder/group fallbacks; `StateView` owns full-region tone glyphs. `IconTile` and `NavigationIcon` remain child containers. Custom project symbols/logos and provider brands retain their owners. Dock artwork belongs to `dock-icon.tsx`.

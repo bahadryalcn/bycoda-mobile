@@ -36,6 +36,7 @@ import { choiceKey, providerChoices, selectedChoice } from "./provider-choices";
 import type { HostSession } from "./wire";
 import { captureSessionAuthority } from "@/domain/session-authority";
 import { useMobileTheme } from "@/ui/theme";
+import { sessionTitleUpdate } from "./session-title-update";
 
 /** Equal-width pair aligned to the field edges; wraps to full-width rows at large text. */
 const ACTION_BUTTON = { flexGrow: 1, flexBasis: 140, alignSelf: "stretch" } as const;
@@ -284,12 +285,7 @@ export function SessionSettings({
     if (disabled || configure.isPending || update.isPending) return false;
     const promise = (async () => {
       try {
-        await update.mutateAsync({
-          projectId,
-          sessionId: value.session.id,
-          title: submitted,
-          ...captureSessionAuthority(reviewed),
-        });
+        await update.mutateAsync(sessionTitleUpdate(projectId, value.session.id, submitted, reviewed));
         setSavedTitle(submitted);
         acknowledge({ title: submitted });
         onUpdated();

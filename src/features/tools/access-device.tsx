@@ -4,7 +4,7 @@ import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
 import { useHostMutation } from "@/state/queries";
 import { assertAppAccess } from "@/state/security";
 import { flushWorkspaceDrafts } from "@/features/workspace/draft-guard";
-import { Body, Disclosure, FormActions, ErrorText, MutationState, Notice, Sheet } from "@/ui/primitives";
+import { Body, FormActions, ErrorText, MutationState, Notice, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { deviceRevokeIntent, type AccessTarget, type PairedDevice } from "./access-center-model";
 export function AccessDevice({ target, device, onClose, onUpdated }: { target: AccessTarget; device: PairedDevice; onClose: () => void; onUpdated: () => void }) {
@@ -44,10 +44,9 @@ export function AccessDevice({ target, device, onClose, onUpdated }: { target: A
   const feedback = <><ErrorText error={error === revoke.error ? undefined : error} /><MutationState mutation={revoke} /></>;
   return <Sheet visible title={opening.device.name} size="compact" dismissible={!busy} onClose={onClose}>
     <Body>{opening.device.isCurrent ? copy("Bu telefonun bilgisayara erişimi", "This phone's access to the computer") : copy("Başka bir eşleştirilmiş cihaz", "Another paired device")}</Body>
-    <Disclosure label={copy("Ayrıntılar", "Details")}><Body mono>{opening.target.machineId} / {opening.device.id}</Body></Disclosure>
     {uncertain ? <Notice tone="warning" message={copy("İptalin sonucu bilinmiyor. İşlemi tekrar göndermeden bilgisayarda kontrol edin.", "The revocation outcome is unknown. Check the computer before sending the action again.")} /> : null}
     {cleanup ? <FormActions submitLabel={copy("Telefondaki bağlantıyı kaldırmayı yeniden dene", "Retry removing the local connection")} busy={busy} feedback={feedback} onSubmit={() => { void localCleanup(); }} /> : confirming ? <>
-      <Body>{opening.device.isCurrent ? copy("Bu telefonun erişimini iptal et ve güvenli depodaki bağlantısını kaldır? Oturumlar bilgisayarda çalışmaya devam eder; yeniden eşleştirmen gerekir.", "Revoke this phone's access and remove its securely stored connection? Sessions keep running on the computer; pairing again will be required.") : copy("Bu cihazın bilgisayara erişimini iptal et? Bu telefonun bağlantısı korunur.", "Revoke this device's access to the computer? This phone's connection is preserved.")}</Body>
+      <Body>{opening.device.isCurrent ? copy("Bu telefonun erişimi iptal edilir ve kayıtlı bağlantısı silinir. Oturumlar bilgisayarda çalışmaya devam eder; yeniden eşleştirmen gerekir.", "This phone loses access and its saved connection is removed. Sessions keep running on the computer; you will need to pair again.") : copy("Bu cihaz bilgisayara erişemez hale gelir. Bu telefonun bağlantısı korunur.", "This device loses access to the computer. This phone's connection is kept.")}</Body>
       <FormActions submitLabel={copy("Erişimi iptal et", "Revoke access")} cancelLabel={copy("Vazgeç", "Cancel")} tone="danger" busy={busy} feedback={feedback} disabled={!current() || !supported || uncertain} onCancel={() => setConfirming(false)} onSubmit={run} /></> : <>
       <FormActions tone="danger" feedback={feedback} submitLabel={opening.device.isCurrent ? copy("Bu telefonun erişimini iptal et", "Revoke this phone's access") : copy("Cihaz erişimini iptal et", "Revoke device access")} disabled={!current() || !supported || uncertain || busy} onSubmit={() => setConfirming(true)} /></>}
   </Sheet>;

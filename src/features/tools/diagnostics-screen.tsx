@@ -80,7 +80,6 @@ export function DiagnosticsDetails({ sample }: { sample: ResourceSample }) {
           valueLabel={`${gibibyteLabel(usedMemory)} / ${gibibyteLabel(host.totalMemoryBytes)}`}
           thresholds={[...MEMORY_THRESHOLDS]}
         />}
-        <Body muted style={uiStyles.caption}>{`${copy("Boş", "Free")}: ${gibibyteLabel(host.freeMemoryBytes)}`}</Body>
         <Row>
           <Stat label={copy("Mantıksal işlemciler", "Logical CPUs")} value={String(host.logicalCpus)} />
         </Row>
@@ -98,7 +97,6 @@ export function DiagnosticsDetails({ sample }: { sample: ResourceSample }) {
           showValueLabel
           valueLabel={memoryLabel(process.heapUsedBytes)}
         />}
-        {heapShare === null ? null : <Body muted style={uiStyles.caption}>{copy("İşlem belleğine oranla", "Relative to process memory")}</Body>}
         <MetricRow label={copy("İşlem CPU", "Process CPU")} value={process.cpuPercent === null ? "—" : `${process.cpuPercent.toFixed(1)}%`} />
       </Stack></Section>
       <Disclosure label={copy("Ayrıntılar", "Details")}>

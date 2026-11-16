@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { View } from "react-native";
+import { Chip } from "panelui-native/components/chip";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Users from "lucide-react-native/icons/users";
 import { Body } from "@/ui/typography";
-import { PressableCard } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { fontSize, lineHeight, radii, space } from "@/ui/tokens";
@@ -51,15 +51,16 @@ export function SessionAgents({ session, children: operations, ...props }: Props
     ? copy("{p0}/{p1} ajan çalışıyor", "{p0}/{p1} agents running", { p0: counts.running, p1: counts.total })
     : copy("{p0} ajan", "{p0} agents", { p0: counts.total });
   const chip = counts.total ? (
-        <PressableCard
-          label={label}
+        <Chip
+          accessibilityLabel={label}
           onPress={() => setOpen(true)}
+          className="min-h-12 h-auto"
           style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: space.row, alignSelf: "flex-start", flexShrink: 1, maxWidth: "100%", marginHorizontal: 0, paddingVertical: 0, paddingHorizontal: space.lg, borderRadius: radii.pill, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.separator }}
         >
           <Users size={14} color={colors.tertiary} />
           <Body style={{ flexShrink: 1, fontSize: fontSize.control, lineHeight: lineHeight.control }}>{label}</Body>
           <ChevronRight size={16} color={colors.tertiary} />
-        </PressableCard>
+        </Chip>
   ) : null;
   return (
     <>

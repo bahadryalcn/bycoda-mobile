@@ -26,6 +26,7 @@ import { space } from "@/ui/tokens";
 import { RemoteFrame } from "@/ui/remote-frame";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useCopy } from "@/ui/copy";
+import { useInfoHint } from "@/ui/info-hint";
 import { useMobileTheme } from "@/ui/theme";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import {
@@ -61,6 +62,10 @@ export function DevicePreviewSheet({
   onClose: () => void;
 }) {
   const copy = useCopy();
+  const info = useInfoHint(copy(
+    "Önizleme cihazı başlatabilir ve uygulamayı açabilir. İşletim sistemi izinleri ayrıca onaylanmalıdır.",
+    "Preview may boot the device and open the app. Operating system permissions require separate approval.",
+  ));
   const { colors } = useMobileTheme();
   const machine = useActiveMachine();
   const connection = useConnectionScope();
@@ -252,7 +257,11 @@ export function DevicePreviewSheet({
       dismissible={!busy}
       onClose={onClose}
     >
-      <Body>{device.name}</Body>
+      <Row>
+        <Body style={{ flexShrink: 1 }}>{device.name}</Body>
+        {info.button}
+      </Row>
+      {info.panel}
       {!supported ? (
         <StateView
           illustration="permission"
@@ -263,12 +272,6 @@ export function DevicePreviewSheet({
           )}
         />
       ) : null}
-      <Notice
-        message={copy(
-          "Önizleme cihazı başlatabilir ve uygulamayı açabilir. İşletim sistemi izinleri ayrıca onaylanmalıdır.",
-          "Preview may boot the device and open the app. Operating system permissions require separate approval.",
-        )}
-      />
       {intent ? (
         <>
           <Body mono>{intent.url}</Body>
@@ -310,10 +313,7 @@ export function DevicePreviewSheet({
               </Stack>
             </>
           )}
-          <Row>
-            <Body muted style={{ flex: 1, minWidth: 0 }}>
-              {copy("Önizleme durumu", "Preview status")}
-            </Body>
+          <Row style={{ justifyContent: "flex-end" }}>
             <IconButton
               label={copy("Yenile", "Refresh")}
               busy={refresh.refreshing}
@@ -332,8 +332,8 @@ export function DevicePreviewSheet({
                   <Notice
                     tone="warning"
                     message={copy(
-                      "Bu işlem yalnızca telefondaki takibi kaldırır; bilgisayardaki işi iptal etmez. Önce cihazı ve bilgisayarı kontrol edin. Yeni önizleme ayrıca incelenip onaylanmalıdır.",
-                      "This only removes tracking from the phone; it does not cancel the host job. Inspect the device and computer first. A new preview requires separate review and confirmation.",
+                      "Yalnızca telefondaki takip kalkar; bilgisayardaki iş iptal edilmez. Önce cihazı kontrol et.",
+                      "Only this phone's tracking is removed; the computer's job is not cancelled. Check the device first.",
                     )}
                   />
                   <FormActions
@@ -459,8 +459,8 @@ export function DevicePreviewSheet({
                     <Notice
                       tone="warning"
                       message={copy(
-                        "Bu işlem yalnızca telefondaki takibi kaldırır; bilgisayardaki işi iptal etmez. Önce cihazı ve bilgisayarı kontrol edin. Yeni önizleme ayrıca incelenip onaylanmalıdır.",
-                        "This only removes tracking from the phone; it does not cancel the host job. Inspect the device and computer first. A new preview requires separate review and confirmation.",
+                        "Yalnızca telefondaki takip kalkar; bilgisayardaki iş iptal edilmez. Önce cihazı kontrol et.",
+                        "Only this phone's tracking is removed; the computer's job is not cancelled. Check the device first.",
                       )}
                     />
                     <FormActions
@@ -585,12 +585,6 @@ export function DevicePreviewSheet({
           <MutationState mutation={start} />
         </>
       ) : null}
-      <Disclosure label={copy("Ayrıntılar", "Details")}>
-        <Body mono>
-          {opening.machineId} / {opening.projectId} / {opening.deviceId}
-        </Body>
-        {intent ? <Body mono>{intent.requestId}</Body> : null}
-      </Disclosure>
     </Sheet>
   );
 }

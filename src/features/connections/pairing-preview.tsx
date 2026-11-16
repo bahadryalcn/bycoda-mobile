@@ -1,7 +1,7 @@
+import { Laptop } from "@/ui/duotone-icon";
 import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
-import Laptop from "lucide-react-native/icons/laptop";
 import { Body, FormActions, Heading, Row } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";

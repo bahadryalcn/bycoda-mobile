@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Asset, requestPermissionsAsync } from "expo-media-library";
 import { useCopy } from "./copy";
+import { duringSystemPrompt } from "../state/system-prompt";
 import { showToast } from "./toast";
 
 /** Writes one local image to the system photo library after asking for add-only permission. */
 export async function saveImageToPhotos(uri: string, messages: { denied: string }) {
-  const permission = await requestPermissionsAsync(true, ["photo"]);
+  const permission = await duringSystemPrompt(() => requestPermissionsAsync(true, ["photo"]));
   if (!permission.granted) throw new Error(messages.denied);
   await Asset.create(uri);
 }

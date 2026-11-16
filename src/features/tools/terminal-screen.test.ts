@@ -29,6 +29,7 @@ vi.mock("@/ui/tokens", () => ({ colors: {}, space: { screen: 16, sm: 6 } }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/motion", () => ({ haptic: { success: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("@/state/machines", () => {
   const machine = () => ({ id: fixture.machineId, endpoint: fixture.endpoint, environmentId: fixture.environmentId, lanKey: fixture.lanKey, name: "Computer" });
   return { useActiveMachine: machine, useMachines: { getState: () => ({ activeId: fixture.machineId, machines: [machine()] }) } };

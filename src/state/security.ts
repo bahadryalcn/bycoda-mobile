@@ -4,6 +4,7 @@ import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 import { isAccountAccessAllowed } from "../features/account/model/account-access";
 import type { SecurityState } from "./security-types";
+import { inactiveFromSystemPrompt } from "./system-prompt";
 import {
   encodeSecurityPreferences,
   isAutoLockTimeout,
@@ -228,7 +229,7 @@ export const useSecurity = create<SecurityState>((set, get) => ({
         const available = level >= LocalAuthentication.SecurityLevel.SECRET;
         const preferences =
           stored.value === null
-            ? migrateSecurityPreference(stored.legacy, available)
+            ? migrateSecurityPreference(stored.legacy)
             : parseSecurityPreferences(stored.value);
         if (
           stored.value === null &&
@@ -300,6 +301,7 @@ export const useSecurity = create<SecurityState>((set, get) => ({
   },
   handleAppState(state) {
     set({ appState: state });
+    if (inactiveFromSystemPrompt(state)) return;
     if (state !== "active") suspendAccess();
     else restoreAccess();
   },

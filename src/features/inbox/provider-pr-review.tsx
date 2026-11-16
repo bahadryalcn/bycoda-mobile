@@ -207,12 +207,13 @@ export function ProviderPrReview({
       onClose={onClose}
       dismissible={!busy}
       footer={
-        <Button
-          label={copy("İncelemeyi gönder", "Submit review")}
+        !value.pending && !value.completed ? <Button
+          tone="primary"
+          label={copy("Göndermeden incele", "Review before sending")}
           busy={busy}
           disabled={!!preflight || locked || stale || !valid || query.isFetching || !!query.error || !!rows.error}
           onPress={send}
-        />
+        /> : undefined
       }
     >
       <ScreenList<PrReviewLine & { commentable: boolean }>
@@ -310,8 +311,9 @@ export function ProviderPrReview({
                     }}
                   />
                   <Button
+                    tone="quiet"
                     label={copy("Güncel commit’i incele", "Review current head")}
-                    disabled={!!preflight || locked || query.isFetching || !!query.error}
+                    disabled={!!preflight || locked || query.isFetching || !!query.error || value.commitId === context.commitId}
                     onPress={bindHead}
                   />
                 </Row>

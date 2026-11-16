@@ -1,3 +1,4 @@
+import { sessionIsSnoozed } from "./session-attention-model";
 import type { HostSessionSummary } from "@/domain/types";
 import { isRunningSession } from "./activity-model";
 import type { SessionShelfId, SessionShelfRow } from "./session-collection";
@@ -42,9 +43,11 @@ export function projectSessionRows(
   const pinned: HostSessionSummary[] = [];
   const loose: HostSessionSummary[] = [];
   const settled: HostSessionSummary[] = [];
+  const snoozed: HostSessionSummary[] = [];
   for (const session of sessions) {
     const pinnedFolder = grouped.get(session.id);
-    if (pinnedFolder !== undefined) (pinnedFolder ? pinned : filed).push(session);
+    if (sessionIsSnoozed(session, signals.now)) snoozed.push(session);
+    else if (pinnedFolder !== undefined) (pinnedFolder ? pinned : filed).push(session);
     else if (session.pinned) pinned.push(session);
     else if (settledIds.has(session.id) && !isRunningSession(session) && !session.needsInput) settled.push(session);
     // Running loose work joins the folder block so it rises above the folders.
@@ -57,9 +60,9 @@ export function projectSessionRows(
           signals,
         )
       : [];
-  const shelf = (id: "pinned" | "settled", rows: ProjectSessionRow[], count: number): ProjectSessionRow[] => {
+  const shelf = (id: "pinned" | "settled" | "snoozed", rows: ProjectSessionRow[], count: number): ProjectSessionRow[] => {
     if (!count) return [];
-    const expanded = searching || !(shelfCollapsed[id] ?? id === "settled");
+    const expanded = searching || !(shelfCollapsed[id] ?? (id === "settled" || id === "snoozed"));
     return [{ kind: "header", key: `shelf:${id}`, shelf: id, count, expanded }, ...(expanded ? rows : [])];
   };
   // Each part is ranked on its own so pinned and loose rows never mix.
@@ -68,5 +71,6 @@ export function projectSessionRows(
     ...shelf("pinned", part(pinned, pinnedFolders), pinned.length),
     ...part(loose, []),
     ...shelf("settled", part(settled, []), settled.length),
+    ...shelf("snoozed", part(snoozed, []), snoozed.length),
   ];
 }

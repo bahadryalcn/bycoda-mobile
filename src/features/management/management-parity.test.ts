@@ -35,6 +35,7 @@ vi.mock("@/ui/record-card", () => ({ RecordCard: ({ menu }: { menu: React.ReactN
 vi.mock("./tasks/task-status-icon", () => ({ TaskStatusIcon: () => null }));
 vi.mock("@/ui/hint", () => ({ Hint: ({children}: PropsWithChildren) => children }));
 vi.mock("@/ui/provider-identity", () => ({ ProviderIcon: () => null }));
+vi.mock("./shared/record-bits", () => ({ joinMeta: (parts: unknown[]) => parts.filter(Boolean).join(" · "), useRelativeTime: () => () => "" }));
 vi.mock("./shared/status", () => ({ Status: () => null, statusLabel: (value: string) => value }));
 vi.mock("./tasks/review-notes", () => ({ ReviewNotes: () => null }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => state.machine }));

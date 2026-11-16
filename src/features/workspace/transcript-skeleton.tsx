@@ -1,5 +1,6 @@
 import { View } from "react-native";
 import { useState } from "react";
+import { Skeleton } from "panelui-native/components/skeleton";
 import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
 import { radii, space } from "@/ui/tokens";
@@ -54,7 +55,7 @@ export function TranscriptSkeleton({ label }: { label?: string }) {
           }}
         >
           {row.widths.map((width, line) => (
-            <View
+            <Skeleton
               key={line}
               style={{ height: 12, width, borderRadius: radii.badge, backgroundColor: row.mine ? colors.panel : colors.raised }}
             />

@@ -1,3 +1,4 @@
+import { sessionIsSnoozed } from "./session-attention-model";
 import type { HostProjectDirectory } from "@/domain/types";
 import type { ActiveSession } from "./activity-model";
 import { isRunningSession } from "./activity-model";
@@ -20,7 +21,7 @@ export const listedProjectSession = (
   session: Pick<ActiveSession["session"], "orchestrationLeadId" | "crewRunId">,
 ) => listedSession(session) && !session.crewRunId;
 
-export type SessionShelfId = "pinned" | "needs" | "running" | "recent" | "settled" | "archived";
+export type SessionShelfId = "pinned" | "needs" | "running" | "recent" | "settled" | "snoozed" | "archived";
 export type SessionShelfRow =
   | { kind: "header"; key: string; shelf: SessionShelfId; count: number; expanded: boolean }
   | { kind: "session"; key: string; project: ActiveSession["project"]; session: ActiveSession["session"] };
@@ -29,14 +30,16 @@ export const shelfOf = (
   session: ActiveSession["session"],
   archived: boolean,
   settled: ReadonlySet<string>,
+  now = Date.now(),
 ): SessionShelfId =>
   archived || session.archived ? "archived"
+    : sessionIsSnoozed(session, now) ? "snoozed"
     : settled.has(session.id) && !isRunningSession(session) && !session.needsInput ? "settled"
     : session.pinned ? "pinned"
     : session.needsInput ? "needs"
     : isRunningSession(session) ? "running"
     : "recent";
-const shelfOrder: readonly SessionShelfId[] = ["pinned", "needs", "running", "recent", "settled", "archived"];
+const shelfOrder: readonly SessionShelfId[] = ["pinned", "needs", "running", "recent", "settled", "snoozed", "archived"];
 
 /** Status shelves keep the directory's ordering; an empty shelf has no header. */
 export function sessionShelfRows(
@@ -55,7 +58,7 @@ export function sessionShelfRows(
     const members = shelves.get(shelf);
     if (!members?.length) return [];
     // Settled sessions stay folded until the owner opens the group.
-    const expanded = searching || !(collapsed[shelf] ?? shelf === "settled");
+    const expanded = searching || !(collapsed[shelf] ?? (shelf === "settled" || shelf === "snoozed"));
     return [
       { kind: "header", key: `shelf:${shelf}`, shelf, count: members.length, expanded },
       ...(expanded ? members.map(({ project, session }): SessionShelfRow =>

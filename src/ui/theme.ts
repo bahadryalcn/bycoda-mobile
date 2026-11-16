@@ -1,11 +1,10 @@
 import { useSyncExternalStore } from "react";
 import { uiStyles } from "./styles";
-import { resolveThemedStyles } from "./themed-styles";
+import { resolveThemedStyles, getMobileStyleKey, subscribeMobileStyles } from "./themed-styles";
+import { getTypographyKey } from "./typography-runtime";
 import {
-  getMobileThemeKey,
   resolveMobilePalette,
   splitThemeKey,
-  subscribeMobileTheme,
   type ThemeKey,
 } from "./tokens";
 
@@ -13,7 +12,8 @@ export { colors, semanticColors } from "./tokens";
 export { createThemedStyles, useThemedStyles } from "./themed-styles";
 
 const themes = new Map<ThemeKey, ReturnType<typeof createTheme>>();
-function createTheme(key: ThemeKey) {
+let typographyKey = getTypographyKey();
+function createTheme(key: ThemeKey, typographyKey: string) {
   const [palette, mode] = splitThemeKey(key);
   const { colors, semantic } = resolveMobilePalette(palette, mode);
   return {
@@ -21,7 +21,7 @@ function createTheme(key: ThemeKey) {
     palette,
     colors,
     semanticColors: semantic,
-    uiStyles: resolveThemedStyles(uiStyles, key),
+    uiStyles: resolveThemedStyles(uiStyles, key, typographyKey),
     /** Pressed row fill: panel in dark, raised in light. */
     pressedFill: mode === "dark" ? colors.panel : colors.raised,
   };
@@ -33,10 +33,16 @@ function createTheme(key: ThemeKey) {
  * (never the module-level accessors) so React Compiler re-runs their memoized JSX.
  */
 export function useMobileTheme() {
-  const key = useSyncExternalStore(subscribeMobileTheme, getMobileThemeKey, getMobileThemeKey);
+  const snapshot = useSyncExternalStore(subscribeMobileStyles, getMobileStyleKey, getMobileStyleKey);
+  const [themeKey, nextTypographyKey] = snapshot.split("|");
+  const key = themeKey as ThemeKey;
+  if (typographyKey !== nextTypographyKey) {
+    themes.clear();
+    typographyKey = nextTypographyKey!;
+  }
   let theme = themes.get(key);
   if (!theme) {
-    theme = createTheme(key);
+    theme = createTheme(key, typographyKey);
     themes.set(key, theme);
   }
   return theme;

@@ -179,11 +179,23 @@ export function ProviderInboxDetail({
       "The send result is uncertain. Check the provider conversation before sending again.")
     : busy ? copy("Çalışıyor…", "Working…") : undefined : undefined;
   const prActions = providerPrActions(item);
+  const reviewAvailable = item.kind === "pr" && item.provider === "github" && client?.machine.capabilities?.includes("inbox.review.v1");
   return (
     <Screen
+      scroll={false}
       query={readAllowed ? { ...thread, data: contentAvailable ? thread.data : undefined, refetch: refreshThread } : availability}
       refresh={refreshConversation}
     >
+      <ProviderInboxConversation
+        provider={item.provider}
+        visible={contentAvailable}
+        hideFeedback={sharedReadFailure}
+        thread={{...thread, data: contentAvailable ? thread.data : undefined, refetch: refreshThread}}
+        refresh={refreshConversation}
+        onManageConnections={manageConnections}
+        onReply={(comment) => { if (editableNow()) { form.setField("reply", comment); setComposing(true); } }}
+        disabled={busy || !writeAllowed}
+        header={<Stack>
       {contentAvailable ? <>
         <Heading>{item.title}</Heading>
         <Row>
@@ -202,6 +214,7 @@ export function ProviderInboxDetail({
         {contentAvailable && /^https:\/\//i.test(item.url) ? (
           <Button
             label={copy("Serviste aç", "Open in provider")}
+            tone="quiet"
             busy={openProvider.isPending}
             onPress={openProviderLink}
           />
@@ -238,21 +251,16 @@ export function ProviderInboxDetail({
       </Disclosure> : null}
       <QueryState query={{...details, refetch: sharedReadFailure ? refreshConversation : refreshDetails}} onManageConnections={manageConnections} />
       {details.data ? <ProviderInboxDescription details={details.data} /> : null}
-      <Button tone="primary" label={form.values.body.trim() ? copy("Yorum taslağına dön", "Continue comment draft") : copy("Yorum ekle", "Add a comment")} disabled={busy || !writeAllowed} onPress={() => { if (editableNow()) setComposing(true); }} />
-      {item.kind === "pr" && item.provider === "github" && client?.machine.capabilities?.includes("inbox.review.v1") ? <Button
+      <Row>
+      {reviewAvailable ? <Button tone="primary"
         label={copy("Pull request incelemesi", "Pull request review")} disabled={busy || uncertain || !readAllowed} onPress={() => { if (readableNow() && !latest.current.busy && !latest.current.uncertain) setReviewing(true); }} /> : null}
-      <ProviderInboxConversation
-        provider={item.provider}
-        hideFeedback={sharedReadFailure}
-        thread={{...thread, refetch: refreshThread}}
-        onManageConnections={manageConnections}
-        onReply={(comment) => { if (editableNow()) { form.setField("reply", comment); setComposing(true); } }}
-        disabled={busy || !writeAllowed}
-      />
+      <Button tone={reviewAvailable ? "quiet" : "primary"} label={form.values.body.trim() ? copy("Yorum taslağına dön", "Continue comment draft") : copy("Yorum ekle", "Add a comment")} disabled={busy || !writeAllowed} onPress={() => { if (editableNow()) setComposing(true); }} />
+      </Row>
       </> : readAllowed ? <>
         <QueryState query={{...details, data: undefined, refetch: sharedReadFailure ? refreshConversation : refreshDetails}} onManageConnections={manageConnections} />
         {!sharedReadFailure ? <QueryState query={{...thread, data: undefined, refetch: refreshThread}} onManageConnections={manageConnections} /> : null}
       </> : null}
+      </Stack>} />
       {reviewing ? <ProviderPrReview item={item} origin={origin} canRead={contentAvailable} canWrite={writeAllowed} onClose={() => setReviewing(false)} /> : null}
       <Sheet visible={composing && contentAvailable} size="form" title={copy("Yorum", "Comment")} dismissible={!busy} onClose={() => setComposing(false)}>
       <ProviderInboxComposer
@@ -269,7 +277,6 @@ export function ProviderInboxDetail({
 }
 
 function ProviderInboxDescription({ details }: ProviderInboxDescriptionProps) {
-  const inboxScope = useInboxLocalScope();
   const copy = useCopy();
   return (
     <Stack>

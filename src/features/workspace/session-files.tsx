@@ -30,7 +30,7 @@ import { useLocale } from "@/i18n";
 import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
 import { ScreenChromeProvider } from "@/ui/layout";
 import { normalizeSearch } from "../management/shared/search";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import { AttachmentFile } from "./transcript-attachments";
 import { useEarlierSession } from "./session-queries";
 import {
@@ -116,7 +116,7 @@ function SessionFilesScope({ scope, session, connection }: { scope: SessionScope
         onClose={close}
         footer={<FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />}
       >
-        {open && !readable ? <ScrollView contentContainerStyle={{ padding: space.screen, gap: space.sm, flexGrow: 1 }}>
+        {open && !readable ? <ScrollView contentContainerStyle={{ padding: space.screen, gap: space.sm, flexGrow: 1, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}>
           <StateView illustration="locked" title={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />
           {available && denied.current ? <><ErrorText error={earlier.error} /><Button label={copy("Önceki mesajları yükle", "Load earlier messages")} busy={earlier.isPending} onPress={loadEarlier} /></> : null}
         </ScrollView> : null}

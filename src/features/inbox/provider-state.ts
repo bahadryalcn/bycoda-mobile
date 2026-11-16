@@ -15,7 +15,7 @@ export type InboxBrowseState = {
   notice: string | null;
 };
 export const initialInboxBrowseState: InboxBrowseState = {
-  assigned: true,
+  assigned: false,
   all: false,
   search: "",
   committedSearch: "",

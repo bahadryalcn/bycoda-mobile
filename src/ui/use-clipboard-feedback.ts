@@ -4,8 +4,10 @@ import { useSingleFlight } from "@/state/actions";
 import { isAppAccessAllowed, useSecurity } from "@/state/security";
 import { usePrivateContentAccess } from "./private-access";
 
-/** Exact prepared source, one current reader opening and one in-flight native write. */
-export function useClipboardFeedback(payload: string, enabled = true, sharedFlight?: ReturnType<typeof useSingleFlight<void>>) {
+/** Exact source, one current reader opening and one in-flight native write.
+ * Optional preparation runs within that flight; access is rechecked before copying.
+ */
+export function useClipboardFeedback(payload: string, enabled = true, sharedFlight?: ReturnType<typeof useSingleFlight<void>>, prepare?: () => Promise<string>) {
   const localFlight = useSingleFlight<void>();
   const flight = sharedFlight ?? localFlight;
   const permission = usePrivateContentAccess();
@@ -38,7 +40,9 @@ export function useClipboardFeedback(payload: string, enabled = true, sharedFlig
       setPending(true);
       setOutcome(null);
       try {
-        await Clipboard.setStringAsync(payload);
+        const text = prepare ? await prepare() : payload;
+        if (!valid()) return;
+        await Clipboard.setStringAsync(text);
         if (valid()) setOutcome({ owner });
       } catch (cause) {
         if (valid()) setOutcome({ owner, error: cause instanceof Error ? cause : new Error(String(cause)) });
@@ -48,7 +52,7 @@ export function useClipboardFeedback(payload: string, enabled = true, sharedFlig
         if (mounted.current) setPending(false);
       }
     });
-  }, [flight, payload, owner, enabled, allowed]);
+  }, [flight, payload, owner, enabled, allowed, prepare]);
   const result = outcome?.owner === owner ? outcome : null;
   return { copy, inFlight: pending, busy: enabled && pending, copied: !!result && !result.error, error: result?.error ?? null };
 }

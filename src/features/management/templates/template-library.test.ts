@@ -11,7 +11,7 @@ vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "new-template" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/tokens", () => ({ space: {} }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { accent: "#000" } }) }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { accent: "#000" }, uiStyles: { content: {} } }) }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: fixture.confirm }));
 vi.mock("@/features/workspace/desktop-preferences", () => ({ DesktopPreferences: () => null }));
@@ -80,6 +80,7 @@ vi.mock("@/ui/primitives", () => {
     IconButton,
     Field,
     SearchField: Field,
+    SegmentedControl: () => null,
     Button,
     Loading: () => createElement("p", null, "Loading"),
     NavigationRow: ({ detail, ...props }: any) =>

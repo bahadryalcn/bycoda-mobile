@@ -1,9 +1,9 @@
+import { Server } from "@/ui/duotone-icon";
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "@/ui/search-matching";
 import { Stack } from "expo-router";
 import Plus from "lucide-react-native/icons/plus";
-import Server from "lucide-react-native/icons/server";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useFormDraft } from "@/state/form-draft";
 import type { HostProject } from "@/domain/types";
@@ -104,10 +104,6 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
                   ? copy("Eşleşen sonuç yok", "No matching results")
                   : copy("Bu projede sunucu yok.", "No servers in this project.")
               }
-              emptyDetail={search.trim() && projectRows.length ? undefined : copy(
-                "Bu projenin geliştirme sunucuları burada görünür. Bilgisayarda çalışan bir komutu buradan başlatabilirsin.",
-                "This project's dev servers appear here. Start a command to run it on the computer from your phone.",
-              )}
               emptyAction={search.trim() && projectRows.length ? {
                 label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
               } : { label: copy("Sunucu başlat", "Start server"), onPress: () => { start.reset(); setResultError(undefined); setCreating(true); } }}

@@ -179,11 +179,15 @@ and computer selector in one 48dp-or-larger target. Counts belong to its seconda
 context. Native-title screens suppress only the duplicate content title, preserving
 context and actions. Reserve explicit `LargeTitle`/hero treatment for intentional
 entry or overview content; body and form controls keep their readable scale.
-The bottom tab bar is 52 high with a hairline top border, in normal layout, with no tray or shadow.
-Primary destinations remain visible without horizontal scrolling. Equal columns
-share the available width; larger system text uses fewer columns and additional
-rows. Labels and activity counts can grow, and selection belongs to the actual
-tab target. The shared keyboard controller owns whether the bar is visible.
+The bottom navigation is a centered, content-width icon dock above the bottom safe
+area. Its panel surface has a 1dp border, 24dp corners, 6dp padding and soft shadow.
+Each destination has a 48dp icon-only target with an accessible label; selection
+uses text-colored artwork and a 4dp accent dot, without a filled tab background.
+The new-session command stays inside the dock after a divider. Narrow widths and
+large system text move destinations into the More sheet. Running counts remain
+visible and accessible there. The keyboard controller hides the dock; its measured
+footprint reserves content and toast clearance. Dock artwork is tintable PNG alpha
+from `assets/dock-icons/`, rendered by `src/ui/dock-icon.tsx`.
 Conversation chrome reserves useful identity width before placing its action
 group; the group can move as a unit at narrow widths. Running Stop remains
 direct. Keyboard visibility combines status and scope into one text flow without

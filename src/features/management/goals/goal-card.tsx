@@ -7,7 +7,9 @@ import Settings2 from "lucide-react-native/icons/settings-2";
 import Pencil from "lucide-react-native/icons/pencil";
 import Square from "lucide-react-native/icons/square";
 import Trash2 from "lucide-react-native/icons/trash-2";
-import { ActionMenu, Body, Button, Disclosure, ErrorNotice, IconButton, MutationState, Row } from "@/ui/primitives";
+import { View } from "react-native";
+import { space } from "@/ui/tokens";
+import { ActionMenu, Body, Button, ErrorNotice, IconButton, MutationState, Row } from "@/ui/primitives";
 import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
@@ -18,6 +20,8 @@ import type { GoalCardProps } from "./types";
 export function GoalCard({
   goal,
   projects,
+  progress,
+  tasks,
   busy,
   editorOpen,
   onReplan,
@@ -93,7 +97,10 @@ export function GoalCard({
       title={goal.title}
       status={<Status value={goal.status} />}
       metadata={joinMeta([
-        copy("{p0} görev", "{p0} tasks", { p0: goal.plan?.tasks.length ?? goal.taskIds.length }),
+        progress && progress.total > 0
+          ? copy("{p0}/{p1} görev bitti", "{p0}/{p1} tasks done", { p0: progress.done, p1: progress.total })
+          : copy("{p0} görev", "{p0} tasks", { p0: goal.plan?.tasks.length ?? goal.taskIds.length }),
+        goal.projectIds.length === 1 && projects.find((project) => project.id === goal.projectIds[0])?.name,
         goal.projectIds.length > 1 && copy("{p0} proje", "{p0} projects", { p0: goal.projectIds.length }),
         relative(goal.updatedAt) && copy("Güncellendi {p0}", "Updated {p0}", { p0: relative(goal.updatedAt) }),
       ])}
@@ -145,13 +152,22 @@ export function GoalCard({
             .map((id) => projects.find((project) => project.id === id)?.name ?? id)
             .join(" · ")}
         </Body>
-        {goal.plan?.tasks.length ? <Disclosure label={copy("Plan", "Plan")} detail={`${goal.plan.tasks.length} ${copy("görev", "tasks")}`}><PlanSteps steps={goal.plan.tasks.map((task) => ({
-          id: task.key,
-          title: task.title,
-          description: task.prompt,
-          metadata: [task.project, task.dependsOn.length
-            ? `${copy("Bağımlılıklar", "Depends on")}: ${task.dependsOn.join(", ")}` : ""].filter(Boolean).join(" · "),
-        }))} /></Disclosure> : null}
+        {tasks?.length ? <View style={{ gap: space.xs }}>
+          <Body muted style={uiStyles.caption}>{copy("Görevler", "Tasks")}</Body>
+          {tasks.map((task) => <Row key={task.id} style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
+            <Status value={task.status} />
+            <Body style={uiStyles.grow}>{task.title}</Body>
+          </Row>)}
+        </View> : goal.plan?.tasks.length ? <View style={{ gap: space.xs }}>
+          <Body muted style={uiStyles.caption}>{copy("Plan", "Plan")}</Body>
+          <PlanSteps steps={goal.plan.tasks.map((task) => ({
+            id: task.key,
+            title: task.title,
+            description: task.prompt,
+            metadata: [task.project, task.dependsOn.length
+              ? `${copy("Bağımlılıklar", "Depends on")}: ${task.dependsOn.join(", ")}` : ""].filter(Boolean).join(" · "),
+          }))} />
+        </View> : null}
       </>}
     >
       <ErrorNotice error={goal.error} />

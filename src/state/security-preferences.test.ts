@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isWithinLockGrace,
+  migrateSecurityPreference,
   parseSecurityPreferences,
 } from "./security-preferences";
 
@@ -41,5 +42,14 @@ describe("security preferences validation", () => {
     { version: 2, enabled: true, autoLockTimeoutMs: "30000" },
   ])("rejects malformed or unsupported configuration %o", (value) => {
     expect(() => parseSecurityPreferences(JSON.stringify(value))).toThrow();
+  });
+});
+
+describe("first launch lock preference", () => {
+  it("starts unlocked unless an earlier build turned the lock on", () => {
+    expect(migrateSecurityPreference(null).enabled).toBe(false);
+    expect(migrateSecurityPreference("off").enabled).toBe(false);
+    expect(migrateSecurityPreference("on").enabled).toBe(true);
+    expect(() => migrateSecurityPreference("maybe")).toThrow();
   });
 });

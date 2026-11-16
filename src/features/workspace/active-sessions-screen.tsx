@@ -1,3 +1,6 @@
+import { useElapsedNow } from "./use-elapsed-now";
+import { useHostReadActive } from "@/state/queries";
+import { sessionIsSnoozed } from "./session-attention-model";
 import { router, Stack } from "expo-router";
 import { useMemo, useState } from "react";
 import { useHostQuery } from "@/state/queries";
@@ -24,7 +27,7 @@ import { useProjectActivity } from "./use-project-activity";
 import { SessionListRow } from "./session-list-row";
 import { filterProjectSessionDirectory, listedSession, type SessionShelfId } from "./session-collection";
 import { useUnseenDoneIds } from "./session-done-store";
-import { globalSessionRows, recentGlobalSessionRows, type FolderCollapse, type GlobalSessionRow } from "./global-session-shelves";
+import { globalSessionRows, recentGlobalSessionRows, urgencyGlobalSessionRows, type FolderCollapse, type GlobalSessionRow } from "./global-session-shelves";
 import { toggleSessionDirectoryFolder } from "./session-directory";
 import { SessionShelfHeader } from "./session-shelf-header";
 import { SessionFolderRow } from "./session-folder-row";
@@ -43,15 +46,24 @@ import {
 } from "./session-filters";
 
 type StatusFilter = "all" | "running" | "reply";
-type FilterDraft = { status: StatusFilter; archived: boolean; project: string; list: SessionListFilters };
+type FilterDraft = { status: StatusFilter; archived: boolean; snoozed: boolean; project: string; list: SessionListFilters };
 
 export function ActiveSessionsScreen({
   overview = false,
   initialCreate = false,
+  urgency = false,
+  selectedSessionId,
+  onOpenSession,
 }: {
   overview?: boolean;
   /** Opens the new-session sheet once, e.g. from the "New session" quick action. */
   initialCreate?: boolean;
+  /** Tablet list column: sessions needing attention first, then running, then the rest. */
+  urgency?: boolean;
+  /** Highlights the session shown beside the list. */
+  selectedSessionId?: string;
+  /** Replaces the default push, e.g. to swap the detail pane in place. */
+  onOpenSession?: (sessionId: string, projectId: string, machineId: string) => void;
 }) {
   const copy = useCopy();
   const machine = useActiveMachine();
@@ -62,14 +74,16 @@ export function ActiveSessionsScreen({
   const machineId = machine?.id;
   const canReadProject = useLatestCallback((projectId: string) => activity.projects.isProjectVisible(projectId));
   const openSession = useLatestCallback((sessionId: string, projectId: string) => {
-    if (machineId && useMachines.getState().activeId === machineId)
-      router.navigate({ pathname: "/session/[id]", params: { id: sessionId, projectId, machineId } });
+    if (!machineId || useMachines.getState().activeId !== machineId) return;
+    if (onOpenSession) onOpenSession(sessionId, projectId, machineId);
+    else router.navigate({ pathname: "/session/[id]", params: { id: sessionId, projectId, machineId } });
   });
   const retry = useAsyncAction();
   const retryActivity = () => { void retry.run(() => activity.refetch()); };
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [archived, setArchived] = useState(false);
+  const [snoozed, setSnoozed] = useState(false);
   const [projectFilter, setProjectFilter] = useState("");
   const [listFilters, setListFilters] = useState<SessionListFilters>(defaultSessionListFilters);
   const [draft, setDraft] = useState<FilterDraft | null>(null);
@@ -93,11 +107,12 @@ export function ActiveSessionsScreen({
   );
   const directory = overview ? activity.directory : activity.sessions;
   const providers = sessionProviders(directory.map(({ session }) => session));
-  const now = Date.now();
+  const now = useElapsedNow(useHostReadActive() && directory.some(({ session }) => !!session.snoozedUntil));
   const doneIds = useUnseenDoneIds(machineId ?? "");
   const filtered = directory.filter(
     ({ project, session }) =>
       listedSession(session) &&
+      (!overview || archived || sessionIsSnoozed(session, now) === snoozed) &&
       (!overview || Boolean(session.archived) === archived) &&
       (!overview || matchesSessionListFilters(session, listFilters, now)) &&
       (!projectFilter || project.id === projectFilter) &&
@@ -107,12 +122,12 @@ export function ActiveSessionsScreen({
   );
   const visible = filterProjectSessionDirectory(activity.projects.data ?? [], filtered, search);
   // Desktop Last sessions shows the last seven days; archive, search and a Time filter reach older sessions.
-  const windowed = overview && !archived && !search.trim() && listFilters.time === "all";
+  const windowed = overview && !snoozed && !archived && !search.trim() && listFilters.time === "all";
   const rows: GlobalSessionRow[] = overview
-    ? recentGlobalSessionRows(visible, windowed ? now : undefined)
+    ? (urgency ? urgencyGlobalSessionRows : recentGlobalSessionRows)(visible, windowed ? now : undefined)
     : globalSessionRows(visible, folderCollapse, collapsed, !!search.trim(), false, settledIds, { doneIds, now });
   const listFilterCount = overview ? activeSessionFilterCount(listFilters) : 0;
-  const narrowed = !!search.trim() || !!projectFilter || (!archived && filter !== "all") || listFilterCount > 0;
+  const narrowed = snoozed || !!search.trim() || !!projectFilter || (!archived && filter !== "all") || listFilterCount > 0;
   const title = overview ? copy("Oturumlar", "Sessions") : copy("Aktif oturumlar", "Active sessions");
   const projectLabel = projectOptions.find((project) => project.value === projectFilter)?.label;
   const statusOptions = [
@@ -131,9 +146,10 @@ export function ActiveSessionsScreen({
   const providerOptions = providers.map((value) => ({ value, label: providerName(value) }));
   const shownProviders = providers.filter((provider) => !listFilters.hiddenProviders.includes(provider));
   const managedLabel = copy("Yönetilen oturumlar", "Managed sessions");
-  const filterCount = Number(archived) + Number(!!projectFilter) + Number(!archived && filter !== "all") + listFilterCount;
+  const filterCount = Number(snoozed) + Number(archived) + Number(!!projectFilter) + Number(!archived && filter !== "all") + listFilterCount;
   const appliedFilters = [
     !archived && filter !== "all" && `${copy("Durum", "Status")}: ${statusLabel}`,
+    snoozed && copy("Ertelenmiş", "Snoozed"),
     archived && copy("Arşivlenmiş", "Archived"),
     projectFilter && `${copy("Proje", "Project")}: ${projectLabel ?? projectFilter}`,
     listFilters.hiddenProviders.length > 0 &&
@@ -184,7 +200,7 @@ export function ActiveSessionsScreen({
   };
   const listLabel = copy("Oturumlar yükleniyor…", "Loading sessions…");
   const resetFilters = () => {
-    setSearch(""); setFilter("all"); setProjectFilter(""); setArchived(false); setListFilters(defaultSessionListFilters);
+    setSearch(""); setFilter("all"); setProjectFilter(""); setArchived(false); setSnoozed(false); setListFilters(defaultSessionListFilters);
   };
   const showEmpty = activity.directoryReady && !rows.length;
   const canCreate = overview && !!projectOptions.length && !activity.privacyPending;
@@ -233,7 +249,7 @@ export function ActiveSessionsScreen({
               <SearchToolbar
                 search={<SearchField label={copy("Oturum ara", "Search sessions")} value={search} onChangeText={setSearch} />}
                 actions={waitingForConnection ? null : (
-                  <FilterButton count={filterCount} onPress={() => setDraft({ status: filter, archived, project: projectFilter, list: listFilters })} />
+                  <FilterButton count={filterCount} onPress={() => setDraft({ status: filter, archived, snoozed, project: projectFilter, list: listFilters })} />
                 )}
               />
               {waitingForConnection ? null : (
@@ -242,13 +258,15 @@ export function ActiveSessionsScreen({
                 </>
               )}
               {draft ? <FilterSheet visible onClose={() => setDraft(null)}
-                onReset={() => setDraft({ status: "all", archived: false, project: "", list: defaultSessionListFilters })}
+                onReset={() => setDraft({ status: "all", archived: false, snoozed: false, project: "", list: defaultSessionListFilters })}
                 onApply={() => {
-                  setFilter(draft.status); setArchived(draft.archived); setProjectFilter(draft.project);
+                  setFilter(draft.status); setArchived(draft.archived); setSnoozed(draft.snoozed); setProjectFilter(draft.project);
                   setListFilters(draft.list); setDraft(null);
                 }}>
                 <SegmentedControl label={copy("Durum", "Status")} value={draft.status} options={statusOptions}
                   disabled={draft.archived} onChange={(status) => setDraft({ ...draft, status })} />
+                <ToggleField label={copy("Ertelenmiş oturumlar", "Snoozed sessions")} value={draft.snoozed} disabled={draft.archived}
+                  onChange={(value) => setDraft({ ...draft, snoozed: value })} />
                 <ToggleField label={copy("Arşivlenmiş oturumlar", "Archived sessions")} value={draft.archived}
                   onChange={(value) => setDraft({ ...draft, archived: value })} />
                 <SelectField label={copy("Proje", "Project")} searchable value={draft.project}
@@ -288,7 +306,9 @@ export function ActiveSessionsScreen({
             <SessionListRow machineId={machine.id} projectId={project.id} projectName={project.name}
               projectCwd={project.cwd} projectAppearance={project.appearance} showProject session={session}
               ancestors={item.ancestors} compressed={compressed}
+              selected={session.id === selectedSessionId}
               canRead={canReadProject}
+              snoozed={sessionIsSnoozed(session, now)}
               settled={settledIds.has(session.id)}
               onPress={openSession}
             />

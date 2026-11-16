@@ -30,6 +30,10 @@ for (const locale of locales) {
     else if (placeholders(key) !== placeholders(value))
       errors.push(`${locale}: placeholders changed in ${key}`);
   }
+  // `--unused` lists catalog entries no source copy references, so removed wording can be pruned.
+  if (process.argv.includes("--unused"))
+    for (const key of Object.keys(catalog))
+      if (!Object.hasOwn(source, key)) console.log(`${locale}: unused ${key}`);
 }
 if (errors.length) {
   console.error(errors.join("\n"));

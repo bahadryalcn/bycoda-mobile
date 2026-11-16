@@ -1,3 +1,4 @@
+import { Inbox as DuotoneInbox, Info as DuotoneInfo, CircleCheck as DuotoneCircleCheck, TriangleAlert as DuotoneTriangleAlert, CircleAlert as DuotoneCircleAlert } from "./duotone-icon";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
 import { EmptyState } from "panelui-native/components/empty-state";
@@ -17,6 +18,8 @@ import type { StateAction, StateTone, StateViewProps } from "./component-props";
 const AnimatedEmptyState = Animated.createAnimatedComponent(EmptyState);
 
 const toneIcons = { neutral: Inbox, info: Info, success: CircleCheck, warning: TriangleAlert, danger: CircleAlert };
+
+const regionIcons = { neutral: DuotoneInbox, info: DuotoneInfo, success: DuotoneCircleCheck, warning: DuotoneTriangleAlert, danger: DuotoneCircleAlert };
 
 function toneColors(tone: StateTone, { colors, semanticColors }: Pick<ReturnType<typeof useMobileTheme>, "colors" | "semanticColors">) {
   return tone === "neutral"
@@ -48,7 +51,7 @@ export function StateView({
   const theme = useMobileTheme();
   const { uiStyles } = theme;
   const inline = compact && !illustration;
-  const Icon = toneIcons[tone];
+  const Icon = (inline ? toneIcons : regionIcons)[tone];
   const palette = toneColors(tone, theme);
   const text = (
     <>
@@ -81,7 +84,7 @@ export function StateView({
     >
       <EmptyState.Header style={uiStyles.stateColumn}>
         {illustration ? (
-          <Illustration name={illustration} size={compact ? 96 : 120} />
+          <Illustration name={illustration} size={compact ? 112 : 168} />
         ) : (
           <View accessible={false} style={[uiStyles.stateIconTile, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <Icon size={24} strokeWidth={1.75} color={palette.text} />

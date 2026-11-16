@@ -32,6 +32,7 @@ vi.mock("expo-secure-store", () => ({
   setItemAsync: fixture.write,
 }));
 import { assertAppAccess, useSecurity } from "./security";
+import { duringSystemPrompt } from "./system-prompt";
 import { useAccountAccess } from "../features/account/model/account-access";
 import {
   encodeSecurityPreferences,
@@ -41,7 +42,8 @@ import {
 beforeEach(() => {
   useAccountAccess.setState({ status: "signedIn" });
   fixture.foreground = "active";
-  fixture.preference = null;
+  // Most cases run with the lock on, as an earlier build that enabled it left it.
+  fixture.preference = "on";
   fixture.config = null;
   fixture.level = 1;
   fixture.authenticate.mockReset().mockResolvedValue({ success: true });
@@ -77,7 +79,13 @@ describe("native secure access", () => {
     useAccountAccess.setState({ status: "signedIn" });
     expect(() => assertAppAccess()).not.toThrow();
   });
-  it("defaults to locked on secured devices and gates requests before authentication", async () => {
+  it("starts unlocked on a fresh install even when biometrics are enrolled", async () => {
+    fixture.preference = null;
+    await useSecurity.getState().initialize();
+    expect(useSecurity.getState()).toMatchObject({ enabled: false, status: "unlocked" });
+    expect(() => assertAppAccess()).not.toThrow();
+  });
+  it("keeps an enabled lock and gates requests before authentication", async () => {
     expect(() => assertAppAccess()).toThrow("Unlock");
     await useSecurity.getState().initialize();
     expect(useSecurity.getState()).toMatchObject({
@@ -113,6 +121,34 @@ describe("native secure access", () => {
       status: "locked",
       error: "cancelled",
     });
+  });
+  it("stays unlocked under an app-initiated system prompt but locks when leaving for the background", async () => {
+    await useSecurity.getState().initialize();
+    await useSecurity.getState().unlock("Unlock");
+    let answer!: (value: string) => void;
+    const prompt = duringSystemPrompt(() => new Promise<string>((resolve) => { answer = resolve; }));
+    useSecurity.getState().handleAppState("inactive");
+    expect(useSecurity.getState().status).toBe("unlocked");
+    useSecurity.getState().handleAppState("background");
+    expect(useSecurity.getState().status).not.toBe("unlocked");
+    answer("granted");
+    await expect(prompt).resolves.toBe("granted");
+  });
+  it("covers the inactive state iOS delivers after the prompt answered, once", async () => {
+    await useSecurity.getState().initialize();
+    await useSecurity.getState().unlock("Unlock");
+    await duringSystemPrompt(async () => "denied");
+    useSecurity.getState().handleAppState("inactive");
+    expect(useSecurity.getState().status).toBe("unlocked");
+    useSecurity.getState().handleAppState("active");
+    useSecurity.getState().handleAppState("inactive");
+    expect(useSecurity.getState().status).not.toBe("unlocked");
+  });
+  it("locks on inactive when no system prompt is open", async () => {
+    await useSecurity.getState().initialize();
+    await useSecurity.getState().unlock("Unlock");
+    useSecurity.getState().handleAppState("inactive");
+    expect(useSecurity.getState().status).not.toBe("unlocked");
   });
   it("rejects stale authentication when explicitly locked during the prompt", async () => {
     await useSecurity.getState().initialize();

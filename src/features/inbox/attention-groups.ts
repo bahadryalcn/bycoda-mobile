@@ -19,9 +19,12 @@ export function attentionIcon(item: Pick<MobileInboxItem, "status" | "kind">): A
   return item.kind === "pull-request" ? "pull-request" : "question";
 }
 
-/** Urgent items first; order inside each group is kept. */
+const attentionPriority = (status?: string) => status === "awaiting-approval" ? 0
+  : status === "failed" || status === "blocked" ? 1 : 2;
+
+/** Owner approvals, recovery, then reviews; preserve source order among peers. */
 export function groupAttention<T extends Pick<MobileInboxItem, "status">>(items: readonly T[]) {
-  const now = items.filter(isUrgentAttention);
+  const now = items.filter(isUrgentAttention).sort((left, right) => attentionPriority(left.status) - attentionPriority(right.status));
   const earlier = items.filter((item) => !isUrgentAttention(item));
   return { now, earlier, ordered: [...now, ...earlier] };
 }

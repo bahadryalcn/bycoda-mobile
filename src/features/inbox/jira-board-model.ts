@@ -108,6 +108,7 @@ export function readJiraBoardSnapshot(value: unknown): JiraBoardSnapshot {
       title: text(issue.title, 20_000, true),
       url: text(issue.url, 4000),
       state: text(issue.state, 1000),
+      ...(issue.priority == null ? {} : { priority: text(issue.priority, 1000) }),
       updatedAt: text(issue.updatedAt, 100),
       statusId: text(issue.statusId, 100),
       teamId: text(issue.teamId, 200),

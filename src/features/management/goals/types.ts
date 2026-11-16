@@ -1,5 +1,5 @@
 import type { useHostMutation } from "@/state/queries";
-import type { HostGoal, HostProject, RemoteProvider } from "@/domain/types";
+import type { HostGoal, HostProject, HostTask, RemoteProvider } from "@/domain/types";
 export type GoalFlow =
   | { kind: "closed" }
   | { kind: "new"; projectId: string }
@@ -27,6 +27,10 @@ export type ReplanEditorProps = {
 export type GoalCardProps = {
   goal: HostGoal;
   projects: HostProject[];
+  /** Finished/total tasks created from the plan; absent until the task list loads. */
+  progress?: { done: number; total: number };
+  /** Tasks created from this epic's plan, shown as its children when loaded. */
+  tasks?: readonly Pick<HostTask, "id" | "title" | "status">[];
   busy: boolean;
   editorOpen: boolean;
   onReplan: (goalId: string) => void;

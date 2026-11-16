@@ -3,6 +3,7 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 const fixture = vi.hoisted(() => ({
   supported: true, fetching: false, hasData: true, error: null as Error | null,
   samples: [] as unknown[], params: {} as Record<string, unknown>, interval: undefined as number | undefined,
@@ -15,7 +16,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 vi.mock("./usage-charts", () => ({ UsageKpis: () => null, ProviderShare: () => null }));
 vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
-vi.mock("expo-router", () => ({ Stack: { Screen: ({ options }: { options: Record<string, unknown> }) => { fixture.nativeOptions.push(options); return null; } } }));
+vi.mock("expo-router", () => ({ Stack: { Screen: ({ options }: { options: Record<string, unknown> }) => { fixture.nativeOptions.push(options); return null; } }, useLocalSearchParams: () => ({}) }));
 vi.mock("@/state/machines", () => {
   const machine = () => ({ id: "computer", endpoint: "https://synthetic.invalid", name: "Computer", environmentId: "env", capabilities: fixture.supported ? ["usage.sessions.read"] : [] });
   return { useActiveMachine: machine, useMachines: { getState: () => ({ activeId: "computer", machines: [machine()] }) } };
@@ -29,6 +30,7 @@ vi.mock("lucide-react-native/icons/briefcase", () => ({ default: () => null }));
 vi.mock("panelui-native/components/meter", () => ({ Meter: () => null }));
 vi.mock("../management/shared/format", () => ({ stamp: () => "Sample time" }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
+vi.mock("panelui-native/components/badge", () => ({ Badge: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/ui/metric-row", () => ({ MetricRow: ({ label, value }: any) => createElement("p", null, `${label}: ${value}`) }));
 vi.mock("@/ui/record-card", () => ({ RecordCard: ({ title, preview, details }: any) => createElement("article", null, title, preview, details) }));
 vi.mock("@/state/queries", () => ({ useHostQuery: (_key: unknown, method: string, params: Record<string, unknown>, options: any) => {
@@ -49,7 +51,7 @@ vi.mock("@/ui/primitives", async () => {
     ToggleField: ({ label, value, onChange }: any) => createElement("button", { onClick: () => onChange(!value) }, label),
     Screen: ({ children, actions }: any) => createElement("main", null, actions, children),
     ScreenList: ({ header, footer, actions, data, renderItem }: any) => createElement("main", null, actions, header, ...data.map((item: unknown, i: number) => createElement("div", { key: i }, renderItem({ item }))), footer),
-    SegmentedControl: () => null, Card: ({ children }: any) => children, SectionHeader: () => null,
+    SegmentedControl: ({ value, onChange, disabled, label, options }: any) => options.length === 2 ? createElement("button", { disabled, "aria-label": label, onClick: () => onChange(value === "1" ? "7" : "1") }, "Change range") : null, Card: ({ children }: any) => children, SectionHeader: () => null,
     SelectField: ({ value, onChange, disabled }: any) => createElement("button", { disabled, onClick: () => onChange(value === "1" ? "7" : "1") }, "Change range"),
     StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: any) => createElement("p", null, message),
     QueryState: ({ query, empty, emptyTitle }: any) => { const state = getQueryPresentation(query, empty); return state === "empty" ? createElement("p", null, emptyTitle) : state === "stale-error" ? createElement("p", null, "Showing cached data") : state === "loading" ? createElement("p", null, "Loading") : null; },

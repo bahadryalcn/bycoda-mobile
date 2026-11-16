@@ -10,6 +10,7 @@ const fixture = vi.hoisted(() => ({
 vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
 vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
+vi.mock("@/ui/duotone-icon", () => ({ Server: () => null, Smartphone: () => null }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, router: { push: vi.fn() } }));
 vi.mock("lucide-react-native/icons/smartphone", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));vi.mock("lucide-react-native/icons/wrench", () => ({ default: () => null }));
@@ -46,7 +47,7 @@ vi.mock("@/ui/primitives", async () => {
   const { QueryState } = await import("@/ui/query-state");
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { QueryState, Body: Group, Disclosure: ({ label, children }: any) => createElement("details", null, createElement("summary", null, label), children), StatusText: () => null,
-    Row: Group,
+    Row: Group, Badge: ({ label }: any) => createElement("span", null, label),
     IconButton: ({label,onPress,disabled}:any) => createElement("button",{onClick:onPress,disabled},label),
     ActionMenu: ({actions}:any) => createElement("div",null,actions.map((action:any)=>createElement("button",{key:action.key,onClick:action.onPress},action.label))),
     NavigationRow: ({ label, onPress }: any) => createElement("button", { onClick: onPress }, label),

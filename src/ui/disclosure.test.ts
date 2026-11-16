@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement as h, type PropsWithChildren } from "react";
+import { act, createContext, createElement as h, useContext, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Disclosure } from "./disclosure";
@@ -9,6 +9,16 @@ vi.mock("./motion", () => ({ resize: undefined }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children), Pressable: ({ children, onPress, "aria-expanded": expanded, accessibilityLabel }: PropsWithChildren<{ onPress: () => void; "aria-expanded": boolean; accessibilityLabel: string }>) => h("button", { onClick: onPress, "aria-expanded": expanded, "aria-label": accessibilityLabel }, children) }));
 vi.mock("react-native-reanimated", () => ({ default: { View: ({ children }: PropsWithChildren) => h("div", null, children) } }));
 vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => h("span", null, children) }));
+vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }));
+vi.mock("panelui-native/components/collapsible", () => {
+  const Context = createContext({ open: false, toggle: () => {} });
+  const Root = ({ children, open, onOpenChange }: PropsWithChildren<{ open: boolean; onOpenChange: (open: boolean) => void }>) => h(Context.Provider, { value: { open, toggle: () => onOpenChange(!open) } }, children);
+  return { Collapsible: Object.assign(Root, {
+    Trigger: ({ children, accessibilityLabel }: PropsWithChildren<{ accessibilityLabel: string }>) => { const { open, toggle } = useContext(Context); return h("button", { onClick: toggle, "aria-expanded": open, "aria-label": accessibilityLabel }, children); },
+    Content: ({ children }: PropsWithChildren) => { const { open } = useContext(Context); return h("div", { "aria-hidden": !open, "data-body": true }, children); },
+    Indicator: ({ children }: PropsWithChildren) => h("span", null, children),
+  }) };
+});
 vi.mock("./disclosure-motion", () => ({ DisclosureChevron: () => null, DisclosureBody: ({ expanded, children }: PropsWithChildren<{ expanded: boolean }>) => h("div", { "aria-hidden": !expanded, "data-body": true }, children) }));
 let root: ReturnType<typeof createRoot>, container: HTMLDivElement;
 const feedback = h("p", { role: "alert" }, "Correct the current value");

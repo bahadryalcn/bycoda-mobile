@@ -27,8 +27,8 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
                 "Update the local network address. The computer key verified by its QR code is retained.",
               )
             : copy(
-                "Bilgisayarındaki Bycoda Host için HTTPS adresini ve cihaz anahtarını gir.",
-                "Enter your Bycoda Host HTTPS address and device key.",
+                "Bilgisayarındaki bycoda Host için HTTPS adresini ve cihaz anahtarını gir.",
+                "Enter your bycoda Host HTTPS address and device key.",
               )}
         </Body>
       </View>

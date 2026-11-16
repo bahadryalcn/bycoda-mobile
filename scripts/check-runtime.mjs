@@ -12,6 +12,8 @@ const pureContracts = new Set([
   // Pure typed-array PCM/VAD math and base64 codecs; no DOM, audio device or desktop imports.
   "features/voice/model/voiceVad",
   "shared/lib/text/truncate",
+  // Dependency-free Intl formatter caches; widget timestamps use the selected mobile locale.
+  "shared/lib/intl",
   "shared/model/host-contracts",
   // Pool flattening is a pure function over the routing contract.
   "shared/model/modelRoutingPools",

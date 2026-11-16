@@ -8,6 +8,7 @@ import UserX from "lucide-react-native/icons/user-x";
 import Trash2 from "lucide-react-native/icons/trash";
 import type { ReactNode } from "react";
 import { IconTile } from "../../ui/icon-tile";
+import { useInfoHint } from "../../ui/info-hint";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
 import { useMachines, withDisconnectedComputers } from "../../state/machines";
@@ -20,7 +21,7 @@ import {
   FormActions,
   Notice,
   ScreenList,
-  Disclosure,
+  SectionHeader,
   MutationState,
   NavigationGroup,
   NavigationRow,
@@ -165,11 +166,19 @@ export function LocalDataControls() {
     ? <Skeleton label={copy("Kaydedilmiş bağlantılar yükleniyor…", "Loading saved connections…")} />
     : state.storageError ? <StateView compact tone="warning" illustration="error" title={copy("Kaydedilmiş bağlantılar kullanılamıyor", "Saved connections are unavailable")} description={copy("Yeniden yüklemek için Bilgisayarlar’ı açın.", "Open Computers to reload them.")} action={{ label: copy("Bilgisayarlar", "Computers"), busy, onPress: () => requestCloseThen(() => router.navigate("/machines")) }} /> : null;
   const longReview = confirmation?.kind === "connections" && confirmation.machines.length > 6;
+  const sectionHelp = copy(
+    "Kayıtlı bilgisayarlar ve taslaklar yalnız bu telefonda tutulur. Telefondan kaldırmak bilgisayardaki cihaz iznini iptal etmez; telefon kaybolursa onu bilgisayardan ayrıca iptal et.",
+    "Saved computers and drafts stay on this phone. Removing them here does not revoke the device on your computer; if this phone is lost, revoke it there.",
+  );
+  const sectionInfo = useInfoHint(sectionHelp);
   const remainingComputers = confirmation?.machines.filter(machine => state.machines.some(current => current.id === machine.id)) ?? [];
   const reviewIntro = <Stack>{storageIssue}<Body>{consequence}</Body>{stale ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden açın.", "Saved computers changed. Reopen this review to continue.")} /> : null}</Stack>;
-  const computerRow = (item: CleanupReview["machines"][number]) => <RecordCard key={item.id} title={item.name} metadata={item.endpoint} details={<Body mono>{item.id} · {item.environmentId}</Body>} />;
+  // Friendly identity only: internal computer and environment ids are never shown in this review.
+  const computerRow = (item: CleanupReview["machines"][number]) => <RecordCard key={item.id} title={item.name} metadata={item.endpoint} />;
   return (
     <Stack style={{ gap: space.lg }}>
+      <SectionHeader flush title={copy("Bu telefondaki veriler", "Data on this phone")} trailing={sectionInfo.button} />
+      {sectionInfo.panel}
       {!confirmation ? storageIssue : null}
       <Animated.View entering={enterItem(0)}>
         <NavigationGroup>
@@ -207,20 +216,6 @@ export function LocalDataControls() {
         </NavigationGroup>
         {draftDeletionReason ? <Body muted>{draftDeletionReason}</Body> : null}
       </Animated.View>
-      <Disclosure label={copy("Bu telefondaki veriler", "Data on this phone")}>
-        <Body muted>
-          {copy(
-            "Bilgisayar bağlantılarını ve telefonda saklanan taslaklarını buradan yönetebilirsin. Bilgisayarındaki dosyalar, oturumlar, çalışan işler ve sağlayıcı hesapları ayrı yönetilir.",
-            "Manage your saved computer connections and drafts on this phone here. Computer files, sessions, running work and provider accounts are managed separately.",
-          )}
-        </Body>
-        <Body muted>
-          {copy(
-            "Taslakları silmeden önce tüm bilgisayar bağlantılarını kaldır. Bir bağlantıyı telefondan kaldırmak host üzerindeki erişim iznini iptal etmez; kayıp telefon için bilgisayardaki cihaz yetkisini ayrıca iptal et.",
-            "Remove all saved computers before deleting drafts. Removing a phone connection does not revoke its host authorization; revoke the device on your computer separately if your phone is lost.",
-          )}
-        </Body>
-      </Disclosure>
       {confirmation ? (
         <Sheet visible size={longReview ? "form" : "compact"}
           scroll={!longReview} dismissible={!busy}

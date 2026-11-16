@@ -416,7 +416,7 @@ async function createMobileHostRuntime(options: {
     { useAccountAccess },
   ] = await Promise.all([
     import("../../modules/bycoda-host-socket"),
-    import("react-native"),
+    import("./app-state"),
     import("./security"),
     import("./machines"),
     import("../features/account/model/account-access"),

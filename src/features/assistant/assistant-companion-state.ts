@@ -7,6 +7,7 @@ import { useAssistantCall } from "./assistant-call-state";
 
 type CompanionState = {
   mode: "closed" | "full" | "minimized";
+  surface: "chat" | "voice";
   machineId: string;
   environmentId: string;
   thread: AssistantThread | null;
@@ -17,7 +18,7 @@ type CompanionState = {
   speechHydrated: boolean;
   error?: unknown;
 };
-const initial: CompanionState = { mode: "closed", machineId: "", environmentId: "", thread: null, projectId: "", voice: "idle", speechHydrated: false };
+const initial: CompanionState = { mode: "closed", surface: "chat", machineId: "", environmentId: "", thread: null, projectId: "", voice: "idle", speechHydrated: false };
 export const useAssistantCompanion = create<CompanionState>(() => initial);
 let engine: AssistantVoice | undefined;
 let loading: Promise<AssistantVoice> | undefined;

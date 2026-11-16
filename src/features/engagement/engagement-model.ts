@@ -10,6 +10,9 @@ export type EngagementConfig = {
 export type EngagementLinks = {
   storeUrl: string | null;
   reviewUrl: string | null;
+  /** The app's own page (store listing or configured public page); null when none is configured. */
+  appPageUrl: string | null;
+  /** What sharing sends: the app page, falling back to the repository. */
   shareUrl: string;
 };
 export type AppIdentity = {
@@ -109,10 +112,12 @@ export function engagementLinks(
     );
     reviewUrl = review.toString();
   }
+  const appPageUrl = storeUrl ?? publicAppUrl(settings.publicAppUrl);
   return {
     storeUrl,
     reviewUrl,
-    shareUrl: storeUrl ?? publicAppUrl(settings.publicAppUrl) ?? repositoryUrl,
+    appPageUrl,
+    shareUrl: appPageUrl ?? repositoryUrl,
   };
 }
 

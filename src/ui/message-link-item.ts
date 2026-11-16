@@ -29,3 +29,18 @@ export function linkOnlyItem(item: MessageNode): LinkOnlyItem | null {
   const title = messageNodeText(link).trim() || host;
   return { href: target.href, title, host };
 }
+
+/**
+ * A list made only of web links, two or more, is a source list. A single link stays an
+ * ordinary row: folding one link under "1 source" hides more than it tidies.
+ */
+export function sourceList(items: readonly MessageNode[]): LinkOnlyItem[] | null {
+  if (items.length < 2) return null;
+  const links: LinkOnlyItem[] = [];
+  for (const item of items) {
+    const link = linkOnlyItem(item);
+    if (!link) return null;
+    links.push(link);
+  }
+  return links;
+}

@@ -10,6 +10,13 @@ import type { HostGoal, Note } from "@/domain/types";
 import type { SocialCollectionPage } from "./social/types";
 const fixture = vi.hoisted(() => ({ writes: vi.fn() }));
 vi.mock("react-native", () => ({ StyleSheet: { hairlineWidth: 1 }, View: ({ children }: PropsWithChildren) => h("div", null, children) }));
+vi.mock("panelui-native/components/collapsible", () => ({
+  Collapsible: Object.assign(({ children }: PropsWithChildren) => h("div", null, children), {
+    Trigger: ({ children }: PropsWithChildren) => h("button", null, children),
+    Content: ({ children }: PropsWithChildren) => h("div", null, children),
+    Indicator: () => null,
+  }),
+}));
 vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values: Record<string, string | number> = {}) => en.replace(/\{(\w+)\}/g, (_all, key: string) => String(values[key] ?? "")) }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
@@ -64,4 +71,9 @@ it("keeps a note preview emoji intact without changing its saved body", () => {
   render(h(NoteSummaryRow, { note, disabled: false, onPress: vi.fn() }));
   expect(hasLoneSurrogate(container.textContent ?? "")).toBe(false);
   expect(note.body).toBe(body);
+});
+it("shows the project on a note row only when one is supplied", () => {
+  const note = { id: "note", title: "Planning", body: "Body", tags: [], updatedAt: 1 } as unknown as Note;
+  render(h(NoteSummaryRow, { note, disabled: false, onPress: vi.fn(), projectName: "Atlas" }));
+  expect(container.textContent).toContain("Atlas");
 });

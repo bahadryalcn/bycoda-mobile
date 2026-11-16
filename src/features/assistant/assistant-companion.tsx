@@ -16,6 +16,7 @@ import { bindAssistantVoicePort, cancelAssistantVoice, closeAssistantCompanion, 
 import { AssistantFloatingWindow } from "./assistant-floating-window";
 import { useAssistantCall } from "./assistant-call-state";
 import { assistantCallInBackground, endAssistantCall, muteAssistantCall, pictureInPictureAssistant } from "./assistant-call-session";
+import { assistantOrbState } from "./assistant-voice-presentation";
 
 export function AssistantMinimizeButton() {
   const copy = useCopy(), { colors } = useMobileTheme();
@@ -62,7 +63,7 @@ export function AssistantCompanion({ children }: PropsWithChildren) {
     : state.voice === "speaking" ? copy("Sesli yanıt", "Speaking")
     : state.voice === "preparing" ? copy("Ses hazırlanıyor", "Preparing voice") : copy("Asistan", "Assistant");
   const callActive = call.phase !== "idle";
-  const callStatus = call.phase === "listening" ? copy("Dinleniyor", "Listening")
+  const callStatus = call.error ? copy("Görüşme durdu", "Call stopped") : call.phase === "listening" ? copy("Dinleniyor", "Listening")
     : call.phase === "sending" ? copy("Yanıt bekleniyor", "Waiting for reply")
     : call.phase === "speaking" ? copy("Sesli yanıt", "Speaking")
     : call.phase === "muted" ? copy("Mikrofon kapalı", "Microphone muted")
@@ -71,7 +72,9 @@ export function AssistantCompanion({ children }: PropsWithChildren) {
     <View style={{ flex: 1 }}>{children}</View>
     {minimized ? <AssistantFloatingWindow title={copy("Asistan", "Assistant")}
       bottomInset={bottomClearance}
-      status={callActive ? callStatus : status} active={callActive || state.voice !== "idle"} muted={call.muted} caption={call.lastReply}
+      status={callActive || call.error ? callStatus : status} active={callActive || state.voice !== "idle"} muted={call.muted}
+      orbState={callActive || call.error ? assistantOrbState(call.phase, call.muted, call.error)
+        : state.error ? "error" : state.voice === "recording" ? "listening" : state.voice === "speaking" ? "speaking" : state.voice === "idle" ? "idle" : "thinking"} level={call.level}
       onExpand={() => {
         if (callActive && call.thread) useAssistantCompanion.setState({ thread: call.thread, projectId: call.thread.projectId ?? "" });
         openAssistantCompanion(state.machineId, state.environmentId); router.navigate("/assistant");

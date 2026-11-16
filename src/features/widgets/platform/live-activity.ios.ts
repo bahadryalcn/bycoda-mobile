@@ -5,11 +5,15 @@ import type { LiveActivityProps } from "../model/snapshot";
 const STALE_MS = 15 * 60_000;
 
 /**
- * Starts, updates or ends the local session Live Activity. `null` ends it. Local only: there
- * is no push relay, so the activity goes "out of date" if the app is suspended for long.
+ * Starts, updates or ends the local session Live Activity. `null` ends it. The
+ * background notification task updates existing instances when iOS grants execution.
+ * OS-delayed delivery still marks the activity out of date at its deadline.
  * Never throws (activities can be disabled by the user or unavailable on the device).
  */
-export async function syncSessionActivity(props: LiveActivityProps | null): Promise<void> {
+export async function syncSessionActivity(
+  props: LiveActivityProps | null,
+  existingOnly = false,
+): Promise<void> {
   if (!requireOptionalNativeModule("ExpoWidgets")) return;
   try {
     const { default: activity } = await import("../ui/SessionActivity");
@@ -22,7 +26,7 @@ export async function syncSessionActivity(props: LiveActivityProps | null): Prom
     const [current, ...extra] = instances;
     await Promise.all(extra.map((instance) => instance.end("immediate")));
     if (current) await current.update(props, stale);
-    else activity.start(props, props.url, stale);
+    else if (!existingOnly) activity.start(props, props.url, stale);
   } catch {
     // Activities are optional; the widgets keep working.
   }

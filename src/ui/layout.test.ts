@@ -27,13 +27,33 @@ vi.mock("react-native-keyboard-controller", () => ({
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => fixture.insets }));
 vi.mock("react-native-reanimated", () => ({ default: { View: "div" } }));
 vi.mock("panelui-native/components/card", () => ({ Card: "div" }));
+vi.mock("panelui-native/components/page-header", () => {
+  const part = (name: string) => ({ children, style }: any) => createElement("div", {
+    "data-page-header": name, "data-style": JSON.stringify(style),
+  }, children);
+  return { PageHeader: Object.assign(part("root"), {
+    Content: part("content"), Title: part("title"), Description: part("description"), Actions: part("actions"),
+  }) };
+});
 vi.mock("./design-system", () => ({ surfaceClasses: "" }));
 vi.mock("./header-back-button", () => ({ HeaderBackButton: () => null }));
 vi.mock("./motion", () => ({ reveal: undefined }));
 vi.mock("./use-pull-refresh", () => ({ usePullRefresh: vi.fn() }));
-import { Screen, ScreenChromeProvider, ScreenHeading, sectionTitleText, useScreenHeading } from "./layout";
+import { LargeTitle, Screen, ScreenChromeProvider, ScreenHeading, sectionTitleText, useScreenHeading } from "./layout";
 
 describe("page identity and action ownership", () => {
+  it("uses PanelUI header parts for ordinary and large identity without dropping actions", () => {
+    const props = { title: "Projects", subtitle: "Computer", actions: createElement("button", null, "Add") };
+    for (const heading of [createElement(ScreenHeading, props), createElement(LargeTitle, props)]) {
+      const html = renderToStaticMarkup(heading);
+      for (const part of ["root", "title", "description", "actions"]) {
+        expect(html).toContain(`data-page-header="${part}"`);
+      }
+      expect(html).toContain("Projects");
+      expect(html).toContain("Computer");
+      expect(html).toContain("Add");
+    }
+  });
   it("keeps page actions outside the single page scroller", () => {
     const html = renderToStaticMarkup(createElement(Screen, { footer: createElement("button", null, "Command") }, createElement("p", null, "Output")));
     expect(html.match(/data-page-scroll/g)).toHaveLength(1);

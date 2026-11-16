@@ -4,15 +4,21 @@ import type { WidgetPalette, WidgetSnapshot } from "./snapshot";
 
 function palette(mode: "light" | "dark"): WidgetPalette {
   const theme = themePalettes[mode];
+  const semantic = semanticPalettes[mode];
   return {
     background: theme.background,
+    surface: theme.raised,
     foreground: theme.text,
     secondary: theme.muted,
     track: theme.border,
     accent: theme.accent,
-    danger: semanticPalettes[mode].danger.text,
-    warning: semanticPalettes[mode].warning.text,
-    success: semanticPalettes[mode].success.text,
+    danger: semantic.danger.text,
+    warning: semantic.warning.text,
+    success: semantic.success.text,
+    accentSoft: semantic.info.surface,
+    dangerSoft: semantic.danger.surface,
+    warningSoft: semantic.warning.surface,
+    successSoft: semantic.success.surface,
   };
 }
 

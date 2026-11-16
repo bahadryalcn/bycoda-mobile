@@ -4,6 +4,7 @@ import { Stack } from "expo-router";
 import { AppState, Linking, StyleSheet, View } from "react-native";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { duringSystemPrompt } from "@/state/system-prompt";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useAsyncAction } from "@/state/actions";
 import { useSecurity } from "@/state/security";
@@ -64,7 +65,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
       if (!active.current || owner !== session.current) return;
       if (!requested.current && current.status === "undetermined" && current.canAskAgain) {
         requested.current = true;
-        await requestPermission();
+        await duringSystemPrompt(requestPermission);
       }
     });
   }, [refreshPermission, requestPermission, permissionAction.run]);
@@ -110,8 +111,8 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
       <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <Body muted onLayout={event => setIntroHeight(event.nativeEvent.layout.height)} style={{ textAlign: "center" }}>
         {copy(
-          "Bilgisayarındaki Bycoda bağlantı QR kodunu kameraya göster.",
-          "Point the camera at the pairing QR code in Bycoda on your computer.",
+          "Bilgisayarındaki bycoda bağlantı QR kodunu kameraya göster.",
+          "Point the camera at the pairing QR code in bycoda on your computer.",
         )}
       </Body>
       {!permission && !permissionAction.isError ? <Loading label={copy("Kamera hazırlanıyor…", "Preparing camera…")} /> : null}
@@ -132,7 +133,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
               const owner = session.current;
               void permissionAction.run(async () => {
                 if (!active.current || owner !== session.current) return;
-                if (permission.canAskAgain) { requested.current = true; await requestPermission(); }
+                if (permission.canAskAgain) { requested.current = true; await duringSystemPrompt(requestPermission); }
                 else await Linking.openSettings();
               });
             },

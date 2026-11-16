@@ -123,13 +123,11 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
                 editable={supported && !uncertain && !reading}
               />
               {!validMax ? (
-                <ErrorText error={copy("Pozitif bir güvenli tam sayı girin.", "Enter a positive safe integer.")} />
+                <ErrorText error={copy("Pozitif bir tam sayı girin.", "Enter a positive whole number.")} />
               ) : null}
               <NumberField
-                label={copy(
-                  "Günlük agent süresi (dakika, 0 sınırsız)",
-                  "Daily agent time (minutes, 0 unlimited)",
-                )}
+                label={copy("Günlük ajan süresi (dakika)", "Daily agent time (minutes)")}
+                hint={copy("0 sınırsız", "0 unlimited")}
                 value={fields.dailyMinutes}
                 onChangeText={(value) => update("dailyMinutes", value)}
                 editable={supported && !uncertain && !reading}

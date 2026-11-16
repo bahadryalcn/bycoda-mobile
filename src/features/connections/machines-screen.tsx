@@ -1,7 +1,7 @@
 import { ConnectionFeedback } from "./connection-feedback";
 import { useMobileTheme } from "@/ui/theme";
-import { useLayoutEffect, useRef, useState, type ComponentRef } from "react";
-import { router, Stack } from "expo-router";
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentRef } from "react";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import { View } from "react-native";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
@@ -45,6 +45,14 @@ export function MachinesScreen() {
   const state = { machines, hydrated, storageError, connectionPending };
   const controller = useComputerConnection();
   const { operation, busy, recover } = controller;
+  const { start } = useLocalSearchParams<{ start?: string }>();
+  const started = useRef(false);
+  // Welcome's primary action opens the scanner directly instead of repeating the choice screen.
+  useEffect(() => {
+    if (start !== "scan" || started.current) return;
+    started.current = true;
+    controller.begin("scan");
+  }, [start, controller]);
   const [managing, setManaging] = useState<string | null>(null);
   const selected = machines.find((machine) => machine.id === managing);
   const [removal, setRemoval] = useState<(ReviewedMachine & { name: string }) | null>(null);
@@ -94,10 +102,10 @@ export function MachinesScreen() {
   </>;
   const help = <Disclosure label={copy("Bağlantı kurulum yardımı", "Connection setup help")}>
     <Body muted>{copy(
-      "Bilgisayarında bycoda’yı aç. Telefon bağlantısı bölümünden bir kod oluştur ve telefonunla tara.",
-      "Open bycoda on your computer. Create a code in phone pairing and scan it with your phone.",
+      "Bilgisayarında bycoda’yı aç. “Telefon bağla”yı seçip bir kod oluştur ve telefonunla tara.",
+      "Open bycoda on your computer. Choose “Connect your phone” to create a code and scan it with your phone.",
     )}</Body>
-    <Button tone="quiet" label={copy("Yardım", "Help")} onPress={() => router.navigate("/legal/help")} />
+    <Button tone="quiet" label={copy("Yardım sayfasını aç", "Open help page")} onPress={() => router.navigate("/legal/help")} />
     <LegalLinks onOpen={(document) => router.navigate({ pathname: "/legal/[document]", params: { document } })} />
   </Disclosure>;
   const addAction = !adding && !insideEntry && machines.length ? <IconButton label={copy("Bilgisayar ekle", "Add computer")} disabled={unavailable || busy} onPress={() => controller.begin("choices")}><Plus size={22} strokeWidth={2.2} color={colors.accent} /></IconButton> : undefined;

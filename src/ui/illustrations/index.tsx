@@ -1,53 +1,16 @@
-import ConnectComputer from "./art/connect-computer";
-import NoProjects from "./art/no-projects";
-import NoSessions from "./art/no-sessions";
-import ChatEmpty from "./art/chat-empty";
-import InboxEmpty from "./art/inbox-empty";
-import SearchEmpty from "./art/search-empty";
-import Unreachable from "./art/unreachable";
-import Error from "./art/error";
-import Success from "./art/success";
-import Locked from "./art/locked";
-import Permission from "./art/permission";
-import Offline from "./art/offline";
-import { useMobileTheme } from "../theme";
+import { Image } from "expo-image";
+import { art } from "./art";
 
+export type IllustrationName = keyof typeof art;
 /** Every product state that has its own illustration. */
-export const illustrationNames = [
-  "connect-computer",
-  "no-projects",
-  "no-sessions",
-  "chat-empty",
-  "inbox-empty",
-  "search-empty",
-  "unreachable",
-  "error",
-  "success",
-  "locked",
-  "permission",
-  "offline"
-] as const;
-export type IllustrationName = (typeof illustrationNames)[number];
+export const illustrationNames = Object.keys(art) as IllustrationName[];
 
-const art = {
-  "connect-computer": ConnectComputer,
-  "no-projects": NoProjects,
-  "no-sessions": NoSessions,
-  "chat-empty": ChatEmpty,
-  "inbox-empty": InboxEmpty,
-  "search-empty": SearchEmpty,
-  "unreachable": Unreachable,
-  "error": Error,
-  "success": Success,
-  "locked": Locked,
-  "permission": Permission,
-  "offline": Offline,
-} satisfies Record<IllustrationName, typeof ConnectComputer>;
-
-/** Decorative art; the surrounding state title supplies the accessible meaning. */
-export function Illustration({ name, size = 120 }: { name: IllustrationName; size?: number }) {
-  // Art reads token accessors; invalidate its compiled cache for either appearance choice.
-  const { palette, mode } = useMobileTheme();
-  const Art = art[name];
-  return <Art key={`${palette}:${mode}`} size={size} />;
+/** Decorative art `size` points tall; the surrounding state title supplies the accessible meaning. */
+export function Illustration({ name, size = 160 }: { name: IllustrationName; size?: number }) {
+  const { source, aspect } = art[name];
+  return (
+    <Image source={source} contentFit="contain" accessible={false} accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants" testID={`illustration-${name}`}
+      style={{ height: size, width: Math.min(size * aspect, size * 1.4) }} />
+  );
 }

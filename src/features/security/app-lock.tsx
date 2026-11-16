@@ -1,14 +1,14 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useRef, useState, type PropsWithChildren } from "react";
-import { Modal, ScrollView, StyleSheet, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import Animated from "react-native-reanimated";
 import { enterItem } from "../../ui/motion";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import { useSecurity } from "../../state/security";
+import { Image } from "expo-image";
 import {
   Body,
-  Button,
   ErrorNotice,
   Heading,
   IconButton,
@@ -16,8 +16,11 @@ import {
   Row,
   Screen,
 } from "../../ui/primitives";
-import { Illustration } from "../../ui/illustrations";
-import { fontSize, metrics, space } from "../../ui/tokens";
+import { BeadButton } from "../../ui/bead-button";
+import { DotField } from "../../ui/dot-field";
+import { fontSize, lineHeight, metrics, space } from "../../ui/tokens";
+
+const lockHero = require("../../../assets/states/lock-hero.png");
 import { useCopy } from "../../ui/copy";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LegalLinks, type LegalLinkTarget } from "../../ui/brand";
@@ -57,6 +60,7 @@ export function SecurityGate({ children }: PropsWithChildren) {
   const copy = useCopy();
   const describeError = useSecurityError();
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const opened = useRef(false);
   const [document, setDocument] = useState<LegalLinkTarget | null>(null);
   useEffect(() => {
@@ -68,16 +72,18 @@ export function SecurityGate({ children }: PropsWithChildren) {
   // Locked screens consume back; unlocked ones pass it through (listener removed).
   useBackHandler(security.status !== "unlocked", () => {});
   if (security.status === "unlocked") opened.current = true;
+  const locked = security.status === "locked";
   const content = (
     <View style={uiStyles.screen}>
+      <DotField />
       <ScrollView
-        style={uiStyles.screen}
+        style={{ flex: 1 }}
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={{
           flexGrow: 1,
           justifyContent: "center",
           paddingTop: insets.top + space.lg,
-          paddingBottom: insets.bottom + space.lg,
+          paddingBottom: space.lg,
           paddingLeft: Math.max(insets.left, space.screen),
           paddingRight: Math.max(insets.right, space.screen),
         }}
@@ -89,46 +95,42 @@ export function SecurityGate({ children }: PropsWithChildren) {
             maxWidth: metrics.entryWidth,
             alignSelf: "center",
             alignItems: "center",
-            gap: space.lg,
+            gap: space.xl,
           }}
         >
           {security.status === "loading" ? (
             <Loading label={copy("Güvenlik kontrol ediliyor…", "Checking security…")} centered />
           ) : (
             <>
-              <Illustration name="locked" size={96} />
+              <Image source={lockHero} contentFit="contain" accessible={false}
+                style={{ width: "100%", height: Math.min(height * 0.36, 340) }} />
               <View style={{ alignItems: "center", gap: space.sm }}>
-                <Heading style={{ fontSize: fontSize.hero, lineHeight: 34, textAlign: "center" }}>
+                <Heading style={{ fontSize: fontSize.display, lineHeight: lineHeight.display, textAlign: "center" }}>
                   {security.status === "suspended"
                     ? copy("Çalışma alanın gizlendi", "Your workspace is hidden")
                     : copy("bycoda kilitli", "bycoda is locked")}
                 </Heading>
-                <Body muted style={{ textAlign: "center" }}>
-                  {security.status === "suspended"
-                    ? copy(
-                        "Uygulamaya döndüğünde güvenli erişimin kontrol edilir.",
-                        "Secure access will be checked when you return to the app.",
-                      )
-                    : copy(
-                        "Bilgisayarlarına erişmek için telefonunun ekran kilidini veya biyometrisini kullan.",
-                        "Use your phone’s screen lock or biometrics to access your computers.",
-                      )}
-                </Body>
+                {security.status === "suspended" ? (
+                  <Body muted style={{ textAlign: "center" }}>
+                    {copy(
+                      "Uygulamaya döndüğünde güvenli erişimin kontrol edilir.",
+                      "Secure access will be checked when you return to the app.",
+                    )}
+                  </Body>
+                ) : null}
               </View>
-              {security.status !== "suspended" ? (
-                <View style={{ width: "100%", gap: space.sm, alignItems: "center" }}>
+              {locked ? (
+                <View style={{ width: "100%", gap: space.lg, alignItems: "center" }}>
                   <ErrorNotice
                     error={security.error}
                     message={describeError(security.error) ?? undefined}
                   />
-                  <Button
+                  <BeadButton
                     label={
                       security.error === "storage"
                         ? copy("Yeniden dene", "Retry")
                         : copy("Kilidi aç", "Unlock")
                     }
-                    tone="primary"
-                    style={uiStyles.stateAction}
                     busy={security.busy}
                     onPress={() => {
                       if (security.error === "storage") void security.initialize();
@@ -137,13 +139,16 @@ export function SecurityGate({ children }: PropsWithChildren) {
                   />
                 </View>
               ) : null}
-              {security.status !== "suspended" ? (
-                <LegalLinks onOpen={setDocument} />
-              ) : null}
             </>
           )}
         </Animated.View>
       </ScrollView>
+      {/* Legal links stay pinned to the bottom edge, outside the centred content. */}
+      {locked ? (
+        <View style={{ paddingTop: space.sm, paddingBottom: Math.max(insets.bottom, space.md) }}>
+          <LegalLinks onOpen={setDocument} />
+        </View>
+      ) : null}
       <Modal
         visible={document !== null && security.status === "locked"}
         animationType="none"

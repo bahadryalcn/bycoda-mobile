@@ -29,14 +29,14 @@ export function endAssistantCall() {
   generation++;
   const cancelStarting = cancelStartingCall; cancelStartingCall = undefined;
   const call = active; active = undefined;
-  useAssistantCall.setState({ phase: "idle", muted: false, sessionId: undefined, lastReply: undefined, target: undefined, thread: undefined });
+  useAssistantCall.setState({ phase: "idle", muted: false, level: 0, sessionId: undefined, lastReply: undefined, utterance: undefined, target: undefined, thread: undefined });
   cancelStarting?.();
   if (!call) return;
   try { call.release(); } finally { call.native.endSession(call.id); }
 }
 export function muteAssistantCall(muted: boolean) {
   if (!active) return;
-  useAssistantCall.setState({ muted });
+  useAssistantCall.setState({ muted, level: 0 });
   active.native.setMuted(active.id, muted); active.loop.setMuted(muted);
 }
 export async function pictureInPictureAssistant() {
@@ -101,6 +101,10 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
     let audioError: unknown;
     let lastUtterance = "", needsRecovery = false;
     const engine = new AssistantVoice(nativeVoiceDependencies({
+      level: level => {
+        if (!retired && version === generation && useAssistantCall.getState().phase === "listening" && !useAssistantCall.getState().muted)
+          useAssistantCall.setState({ level });
+      },
       state: phase => {
         if (phase === "idle" && pending) {
           const done = pending;
@@ -120,6 +124,7 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
         void engine.record({ current: () => current() && valid(), request: port.request.bind(port) } as VoicePort, target, { endOnSilence: true }).catch(reject);
       }),
       send: async text => {
+        useAssistantCall.setState({ utterance: text });
         lastUtterance = text; needsRecovery = true;
         await access(projectId ? [projectId] : []);
         const result = await sendRoomMessage({ client, storage: AsyncStorage, storageKey: key, threadId: target.threadId, text, createId: randomUUID });
@@ -131,14 +136,14 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
         if (!replies.length || replies.some(message => !assistantMessageVisible(message, visibility))) throw new Error("The reply cannot be read with the current project access.");
         const reply = replies.map(message => message.text).join("\n\n");
         if (!current()) throw new Error("Call stopped.");
-        useAssistantCall.setState({ lastReply: reply });
+        useAssistantCall.setState(state => ({ lastReply: reply, replyVersion: state.replyVersion + 1 }));
         return reply;
       },
       speak: async (text, _target, valid) => { audioError = undefined; await engine.speak({ current: () => current() && valid(), request: port.request.bind(port) } as VoicePort, target, text); if (audioError) throw audioError; },
       cancelAudio: () => { const stopped = pending; pending = undefined; stopped?.reject(new Error("Call stopped.")); engine.cancel(); },
       state: phase => {
         if (retired || version !== generation) return;
-        useAssistantCall.setState({ phase });
+        useAssistantCall.setState({ phase, level: 0 });
         // Loop reports its error immediately after idle; preserve that feedback before teardown.
         if (phase === "idle") queueMicrotask(() => { if (active?.loop === loop) endAssistantCall(); });
       },

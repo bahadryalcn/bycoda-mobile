@@ -1,8 +1,8 @@
+import { Smartphone } from "@/ui/duotone-icon";
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "@/ui/search-matching";
 import { Stack } from "expo-router";
-import Smartphone from "lucide-react-native/icons/smartphone";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import Wrench from "lucide-react-native/icons/wrench";
 import { useHostQuery } from "@/state/queries";
@@ -10,7 +10,7 @@ import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { HostProject } from "@/domain/types";
-import { ActionMenu, Body, Disclosure, IconButton, NavigationRow, QueryState, ScreenList, SearchField, StatusText } from "@/ui/primitives";
+import { ActionMenu, Badge, Body, Disclosure, Row, IconButton, NavigationRow, QueryState, ScreenList, SearchField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { IssueSummary } from "@/ui/issue-summary";
@@ -84,7 +84,7 @@ export function DevicesScreen({ project }: { project: HostProject }) {
             }
             emptyAction={search.trim() && list.data?.devices.length ? {
               label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
-            } : undefined}
+            } : { label: copy("Cihaz servisi", "Device service"), onPress: () => setRuntime(currentScope) }}
           />
           {partialErrors.length ? <IssueSummary issues={availabilityIssues}
             details={availabilityIssues.length > 1 ? availabilityDetails : undefined}
@@ -95,18 +95,25 @@ export function DevicesScreen({ project }: { project: HostProject }) {
           </Disclosure> : null}
         </>
       }
-      renderItem={({ item: device }) => <NavigationRow
-        label={device.name}
-        labelLines={2}
-        detail={`${[device.platform, device.version].filter(Boolean).join(" ")} · ${device.physical ? copy("Fiziksel cihaz", "Physical device") : copy("Simülatör", "Simulator")}`}
-        detailLines={2}
-        accessibilityLabel={[device.name, device.platform, device.version,
-          device.physical ? copy("Fiziksel cihaz", "Physical device") : copy("Simülatör", "Simulator"),
-          device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off")].filter(Boolean).join(". ")}
-        icon={<Smartphone size={21} color={device.booted ? colors.live : colors.muted} />}
-        supporting={<StatusText label={device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off")} tone={device.booted ? "active" : "default"} />}
-        onPress={() => setSelected({ ...currentScope, device })}
-      />}
+      renderItem={({ item: device }) => {
+        const kind = device.physical ? copy("Fiziksel cihaz", "Physical device") : copy("Simülatör", "Simulator");
+        const state = device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off");
+        const system = [device.platform, device.version].filter(Boolean).join(" ");
+        // Identity on the first lines, state as a badge that wraps with the type so large text never clips.
+        return <NavigationRow
+          label={device.name}
+          labelLines={2}
+          detail={system || undefined}
+          detailLines={2}
+          supporting={<Row>
+            <Badge label={state} tone={device.booted ? "success" : "default"} />
+            <Body muted style={{ flexShrink: 1 }}>{kind}</Body>
+          </Row>}
+          accessibilityLabel={[device.name, system, kind, state].filter(Boolean).join(". ")}
+          icon={<Smartphone size={21} color={device.booted ? colors.live : colors.muted} />}
+          onPress={() => setSelected({ ...currentScope, device })}
+        />;
+      }}
     />
     <PrivateContentAccessProvider value={windowAccess}>
     {runtime && isCurrentScope(runtime) ? <DeviceRuntime key={`${runtime.machineId}:${runtime.projectId}`} projectId={runtime.projectId}

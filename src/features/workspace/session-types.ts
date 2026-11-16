@@ -8,6 +8,7 @@ import type {
 
 export type SessionScreenProps = {
   id: string;
+  layout?: "phone" | "tablet" | "split";
   projectId?: string;
   targetTurnId?: string;
 };

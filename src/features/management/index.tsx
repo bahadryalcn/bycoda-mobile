@@ -13,7 +13,6 @@ import { CrewsScreen } from "./crews-screen";
 import { AutomationsScreen } from "./automations-screen";
 import { NotesScreen } from "./notes-screen";
 import { InboxScreen } from "./inbox-screen";
-import { SocialScreen } from "./social-screen";
 import { StewardsScreen } from "./stewards-screen";
 import { ToolDirectory } from "./tool-directory";
 import { isManagementSection, managementSections, type ManagementSection } from "./sections";
@@ -77,14 +76,14 @@ export function ManagementScreen({ section }: ManagementScreenProps) {
         </View>
       </Screen>
     );
-  const screens: Record<ManagementSection, ComponentType> = {
+  // Social is off on mobile for now: its route falls through to "section not found".
+  const screens: Partial<Record<ManagementSection, ComponentType>> = {
     tasks: TasksScreen,
     goals: GoalsScreen,
     crews: CrewsScreen,
     automations: AutomationsScreen,
     notes: NotesScreen,
     inbox: InboxScreen,
-    social: SocialScreen,
     stewards: StewardsScreen,
   };
   const Component = isManagementSection(section) ? screens[section] : undefined;

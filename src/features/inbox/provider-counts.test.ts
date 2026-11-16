@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import { act, createElement, type ComponentProps, type PropsWithChildren } from "react";
+import { act, createElement, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { ProviderInboxComment } from "./provider-conversation";
+import { ProviderInboxComment, ProviderInboxConversation } from "./provider-conversation";
 import { PrReviewSummary } from "./provider-pr-review-summary";
 
 vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
@@ -17,7 +17,10 @@ vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Wrap, Stack: Wrap, Row: Wrap, Section: Wrap, Disclosure: Wrap, QueryState: () => null,
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
-    SectionHeader: ({ title }: { title: string }) => createElement("h2", null, title),
+    SectionHeader: ({ title, count }: { title: string; count?: number }) => createElement("h2", null, title, count === undefined ? null : new Intl.NumberFormat("tr").format(count)),
+    Sheet: ({children,visible}:PropsWithChildren<{visible:boolean}>)=>visible?createElement("aside",null,children):null,
+    ScreenList: ({header,data,renderItem}:{header:ReactNode;data:unknown[];renderItem:(row:{item:unknown})=>ReactNode})=>
+      createElement("section",{"data-row-count":data.length},header,...data.map((item,index)=>createElement("article",{key:index},renderItem({item})))),
     Button: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label) };
 });
 
@@ -30,13 +33,15 @@ async function render(element: Parameters<ReturnType<typeof createRoot>["render"
 }
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; node?.remove(); vi.unstubAllGlobals(); });
 
-it.each([1, 1284])("labels collapsed reply counts %s without dynamic translation keys", async count => {
+it.each([1, 1284])("counts %s replies as independent conversation rows", async count => {
   const comment: ComponentProps<typeof ProviderInboxComment>["comment"] = {
     id: "thread-parent", kind: "comment", url: "https://example.test/comments/parent", resolved: false, author: "Aleksandra Wiśniewska-Kowalczyk", body: "Review the original issue.", createdAt: "2026-11-13T00:00:00Z",
     replies: Array.from({ length: count }, (_, index) => ({ id: `comment-${index}`, kind: "comment", url: `https://example.test/comments/${index}`, resolved: false, author: "Jo", body: "Retain the draft.", createdAt: "2026-11-13T00:00:00Z", replies: [] })),
   };
-  await render(createElement(ProviderInboxComment, { comment, provider: "github", depth: 3, onReply: vi.fn() }));
-  expect(node.textContent).toContain(`Show replies: ${new Intl.NumberFormat("tr").format(count)}`);
+  await render(createElement(ProviderInboxConversation, { thread:{data:{comments:[comment],truncated:false}}, provider: "github", onReply: vi.fn(), disabled:false }));
+  expect(node.querySelector("[data-row-count]")?.getAttribute("data-row-count")).toBe(String(count+1));
+  expect(node.querySelector("h2")?.textContent).toContain(new Intl.NumberFormat("tr").format(count+1));
+  expect(node.querySelector("article")?.textContent).not.toContain("Jo");
 });
 
 it("formats diff counts while retaining exact item and file identity", async () => {
@@ -46,5 +51,7 @@ it("formats diff counts while retaining exact item and file identity", async () 
   };
   await render(createElement(PrReviewSummary, props));
   expect(node.textContent).toContain("+1.284"); expect(node.textContent).toContain("−2.345");
+  expect(node.textContent).not.toContain("src/draft-1284.ts");
+  await act(async()=>[...node.querySelectorAll("button")].find(button=>button.textContent==="Show files")!.click());
   expect(node.textContent).toContain("#1284"); expect(node.textContent).toContain("src/draft-1284.ts");
 });

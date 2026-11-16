@@ -38,14 +38,12 @@ export function encodeSecurityPreferences(preferences: SecurityPreferences) {
   return JSON.stringify({ version: 2, ...preferences });
 }
 
-export function migrateSecurityPreference(
-  value: string | null,
-  available: boolean,
-) {
+/** A fresh install starts unlocked; the owner turns the app lock on in Settings. */
+export function migrateSecurityPreference(value: string | null) {
   if (value !== null && value !== "on" && value !== "off")
     throw new Error("Invalid legacy security preference");
   return {
-    enabled: value === "on" || (value === null && available),
+    enabled: value === "on",
     autoLockTimeoutMs: 0,
   } as const;
 }

@@ -34,10 +34,14 @@ export function ComposerSendButton({
   const color = disabled ? colors.muted : colors.primaryText;
   const Icon = mode === "steer" ? CornerDownRight : mode === "queue" ? ListPlus : ArrowUp;
   const alternateName = alternate ? names[alternate] : "";
+  // Same detail sentences as the Settings send-mode options, so the long-press meaning is still explained.
+  const alternateDetail = alternate === "steer"
+    ? copy("Çalışan ajana hemen ilet.", "Send to the running agent now.")
+    : alternate === "queue" ? copy("Ajan bitince gönder.", "Send after the agent finishes.") : "";
   return (
     <ChatCircleAction
       label={label}
-      hint={alternate ? copy("Basılı tut: {p0}", "Press and hold for {p0}", { p0: alternateName }) : undefined}
+      hint={alternate ? copy("Basılı tut: {p0}. {p1}", "Press and hold for {p0}. {p1}", { p0: alternateName, p1: alternateDetail }) : undefined}
       active={!disabled}
       disabled={disabled}
       busy={busy}

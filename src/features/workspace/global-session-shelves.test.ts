@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { globalSessionRows, recentGlobalSessionRows } from "./global-session-shelves";
+import { globalSessionRows, recentGlobalSessionRows, urgencyGlobalSessionRows } from "./global-session-shelves";
 
 const layout = (folders: object[]) => ({ folders, order: { pinned: [], loose: [] } });
 const folder = (id: string, sessionIds: string[], extra: object = {}) =>
@@ -10,6 +10,16 @@ const e = (project: never, id: string, extra: object = {}) =>
   ({ project, session: { id, title: id, status: "idle", updatedAt: 1, ...extra } }) as never;
 const keys = (rows: ReturnType<typeof globalSessionRows>) =>
   rows.map((row) => (row.kind === "header" ? `${row.shelf}:${row.count}` : row.key));
+
+it("orders attention, running and other sessions by activity within the seven-day window", () => {
+  const a = p("a"), now = 30 * 86_400_000, day = 86_400_000;
+  const directory = [e(a, "idle", { updatedAt: now }), e(a, "run", { status: "running", updatedAt: now - day }),
+    e(a, "failed", { issue: "failed", updatedAt: now - 2 * day }), e(a, "input", { needsInput: true, updatedAt: now - day }),
+    e(a, "old", { needsInput: true, updatedAt: now - 8 * day })];
+  expect(keys(urgencyGlobalSessionRows(directory, now))).toEqual(["a:input", "a:failed", "a:run", "a:idle"]);
+  expect(keys(urgencyGlobalSessionRows(directory))).toContain("a:old");
+  expect(directory[0]).toMatchObject({ session: { id: "idle" } });
+});
 
 it("shows global recents in activity order without pin or folder blocks hiding the newest session", () => {
   const a = p("a", [folder("f", ["old"])]);

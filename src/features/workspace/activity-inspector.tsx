@@ -8,6 +8,7 @@ import { TranscriptBlock } from "./transcript-block";
 import type { Block } from "./wire";
 import type { TranscriptBlockProps } from "./session-types";
 import { useMobileTheme } from "@/ui/theme";
+import { metrics } from "@/ui/tokens";
 
 export type ActivityInspection = { ids: string[]; selectedId?: string; author?: string };
 
@@ -37,7 +38,7 @@ export function ActivityInspector({ blocks, inspection, onChange, live, ...props
     headerAction={selected ? <ChatToolbarAction label={copy("İşlem listesi", "Action list")}
       onPress={() => onChange({ ...inspection, selectedId: undefined })} /> : undefined}>
     {selected ? <TranscriptBlock key={selected.id} block={selected} {...props} activityDetail />
-      : <FlatList data={blocks} keyExtractor={(block) => block.id} style={{ flex: 1 }}
+      : <FlatList data={blocks} keyExtractor={(block) => block.id} style={{ flex: 1 }} contentContainerStyle={{ width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
         initialNumToRender={12} maxToRenderPerBatch={12} windowSize={7}
         renderItem={({ item, index: position }) => <ChatSummary
           label={`${position + 1}. ${activityTitle(item) || copy("Araç işlemi", "Tool action")}`}

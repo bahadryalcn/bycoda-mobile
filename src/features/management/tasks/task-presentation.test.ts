@@ -36,6 +36,7 @@ vi.mock("@/ui/sheet-guard", () => ({
     return { requestClose: vi.fn() };
   },
 }));
+vi.mock("../shared/record-bits", () => ({ joinMeta: (parts: unknown[]) => parts.filter(Boolean).join(" · "), useRelativeTime: () => () => "" }));
 vi.mock("../shared/agent", () => ({ useEffectiveAgent: (value: unknown) => value }));
 vi.mock("../shared/agent-fields", () => ({ AgentFields: () => null }));
 vi.mock("../shared/status", () => ({ Status: () => null, statusLabel: (value: string) => value }));

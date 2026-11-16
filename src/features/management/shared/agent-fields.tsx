@@ -1,10 +1,10 @@
+import { Cpu } from "@/ui/duotone-icon";
 import { useCopy } from "@/ui/copy";
 import { useState } from "react";
 import { catalogProviders } from "@/features/workspace/catalog";
 import { ErrorText } from "@/ui/primitives";
 import { NumberField } from "@/ui/number-field";
 import { Body, Disclosure, IdentifierField, NavigationRow, QueryState, SelectField } from "@/ui/primitives";
-import Cpu from "lucide-react-native/icons/cpu";
 import { useMobileTheme } from "@/ui/theme";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";

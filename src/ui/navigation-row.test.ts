@@ -17,6 +17,8 @@ vi.mock("./typography", () => ({
 vi.mock("@/ui/theme", () => ({
   useMobileTheme: () => ({ colors: {}, semanticColors: {}, pressedFill: "#000", uiStyles: { press: {}, grow: {}, label: {}, caption: {} } }),
 }));
+vi.mock("panelui-native/primitives/animated-pressable", () => ({ AnimatedPressable: ({ children }: PropsWithChildren) => createElement("button", null, children) }));
+vi.mock("panelui-native/components/separator", () => ({ Separator: () => null }));
 vi.mock("./busy-indicator", () => ({ BusyIndicator: () => null }));
 vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));

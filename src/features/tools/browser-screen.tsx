@@ -320,10 +320,6 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
             <Button label={copy("Metni yaz", "Type text")} disabled={!controlling || busy || !text} onPress={() => input({ kind: "text", text })} />
           </Disclosure>
         </> : null}
-        <Disclosure label={copy("Ayrıntılar", "Details")}>
-          <Body muted>{copy("Bu tarayıcı seçili bilgisayarda paylaşılır.", "This browser is shared on the selected computer.")}</Body>
-          {state.url ? <Body mono>{state.url}</Body> : null}
-        </Disclosure>
         </> : null}
       </Screen>
     );

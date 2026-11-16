@@ -34,7 +34,7 @@ it("exposes public Host routing binding and preserves it on instruction edits un
   expect(state.fields.get("Model source")?.value).toBe("pool:team");
   expect(state.fields.get("Model source")?.options).toContainEqual({ value: "pool:team", label: "Team pool" });
   expect(state.fields.has("Allowed models")).toBe(false);
-  expect(container.textContent).toContain("not an allowed-model filter");
+  expect((state.fields.get("Model source") as { hint?: string }).hint).toContain("not an allowed-model filter");
   await act(async () => state.fields.get("Instructions")!.onChangeText!("Owner edited instructions"));
   act(() => state.submit!());
   expect(save.mock.calls[0][0]).toMatchObject({ instructions: "Owner edited instructions", modelChoice: { kind: "pool", poolId: "team" } });

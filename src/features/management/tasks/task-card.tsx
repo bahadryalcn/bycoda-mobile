@@ -21,16 +21,17 @@ import {
   ActionMenu,
   Body,
   Button,
-  Disclosure,
   ErrorNotice,
   IconButton,
   MutationState,
   Row,
+  Stack,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
-import { Status, statusLabel } from "../shared/status";
+import { Status } from "../shared/status";
+import { joinMeta, useRelativeTime } from "../shared/record-bits";
 import { Hint } from "@/ui/hint";
 import { taskActions } from "../task-actions";
 import { ReviewNotes } from "./review-notes";
@@ -40,6 +41,7 @@ import { stamp } from "../shared/format";
 
 export function TaskCard({
   task,
+  projectName,
   busy,
   editorOpen,
   onEdit,
@@ -57,6 +59,7 @@ export function TaskCard({
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
+  const relative = useRelativeTime();
   const moves = taskActions(task, machine?.capabilities);
   const supported = !!machine?.capabilities?.includes("tasks.workspaces");
   const moving = move.isPending && move.variables?.taskId === task.id;
@@ -276,12 +279,9 @@ export function TaskCard({
   return (
     <RecordCard
       title={task.title}
-      hint={[statusLabel(presentedStatus, copy), admissionWait?.reason, agentPresentation(task.harness, task.model)]
-        .filter(Boolean)
-        .join(" · ")}
       status={<Status value={presentedStatus} />}
       metadata={
-        [admissionWait?.reason, agentPresentation(task.harness, task.model)].filter(Boolean).join(" · ") || undefined
+        joinMeta([admissionWait?.reason, agentPresentation(task.harness, task.model), projectName, relative(task.updatedAt)]) || undefined
       }
       menu={
         <Row style={{ gap: 0, flexWrap: "nowrap", alignItems: "flex-start" }}>
@@ -358,7 +358,8 @@ export function TaskCard({
           task.baseBranch ||
           task.branch ||
           task.diffStat ? (
-            <Disclosure label={copy("Çalışma", "Execution")}>
+            <Stack>
+              <Body muted style={uiStyles.caption}>{copy("Çalışma", "Execution")}</Body>
               {(task.worktreeCwd || task.workspace?.checkoutCwd) && (
                 <Body mono>
                   {copy("Çalışma", "Execution")}: {task.worktreeCwd || task.workspace?.checkoutCwd}
@@ -372,7 +373,7 @@ export function TaskCard({
               )}
               {task.branch && <Body mono>{task.branch}</Body>}
               {task.diffStat && <Body mono>{task.diffStat}</Body>}
-            </Disclosure>
+            </Stack>
           ) : null}
           <ReviewNotes task={task} />
         </>

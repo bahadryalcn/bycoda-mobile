@@ -1,6 +1,7 @@
 import { AssistantUtteranceVad } from "./assistant-call-loop";
 import { pcmBase64, resamplePcm } from "../../../../src/features/voice/model/voiceVad";
 import { graphemes } from "../../../../src/shared/lib/text/truncate";
+import { assistantMicrophoneLevel } from "./assistant-voice-presentation";
 
 export function speechParts(text: string): string[] {
   const parts: string[] = [];
@@ -28,6 +29,7 @@ export type AssistantVoiceDependencies = {
   state(state: AssistantVoiceState, target?: AssistantVoiceTarget): void;
   transcript(target: AssistantVoiceTarget, text: string): void | Promise<void>;
   error(error: unknown): void;
+  level?(value: number): void;
 };
 
 /** Foreground microphone lifetime is independent of the expanded conversation route. */
@@ -44,7 +46,7 @@ export class AssistantVoice {
   private phase: AssistantVoiceState = "idle";
   private utterance?: AssistantUtteranceVad;
   constructor(private readonly dependencies: AssistantVoiceDependencies) {}
-  private update(phase: AssistantVoiceState) { this.phase = phase; this.dependencies.state(phase, this.target); }
+  private update(phase: AssistantVoiceState) { this.phase = phase; if (phase !== "recording") this.dependencies.level?.(0); this.dependencies.state(phase, this.target); }
   private current(epoch: number) { return epoch === this.epoch && this.port?.current() === true; }
   private async release() {
     clearInterval(this.keepAlive); this.keepAlive = undefined;
@@ -71,6 +73,7 @@ export class AssistantVoice {
       const capture = await this.dependencies.capture((data, rate) => {
         if (!this.current(epoch) || this.phase !== "recording") { if (!port.current()) this.cancel(); return; }
         const pcm = resamplePcm(data, rate);
+        this.dependencies.level?.(assistantMicrophoneLevel(pcm));
         const remaining = 480_000 - this.samples;
         if (remaining <= 0) return;
         const frame = pcm.slice(0, remaining);

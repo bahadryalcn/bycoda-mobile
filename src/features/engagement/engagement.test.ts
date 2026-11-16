@@ -30,6 +30,7 @@ describe("mobile public app links", () => {
     expect(engagementLinks(null, "ios")).toEqual({
       reviewUrl: null,
       storeUrl: null,
+      appPageUrl: null,
       shareUrl: repositoryUrl,
     });
     expect(
@@ -42,6 +43,7 @@ describe("mobile public app links", () => {
       storeUrl: "https://apps.apple.com/app/bycoda/id123456789",
       reviewUrl:
         "https://apps.apple.com/app/bycoda/id123456789?action=write-review",
+      appPageUrl: "https://apps.apple.com/app/bycoda/id123456789",
       shareUrl: "https://apps.apple.com/app/bycoda/id123456789",
     });
     const regional = {
@@ -63,6 +65,8 @@ describe("mobile public app links", () => {
         "https://play.google.com/store/apps/details?id=com.bycoda.mobile",
       reviewUrl:
         "https://play.google.com/store/apps/details?id=com.bycoda.mobile&showAllReviews=true",
+      appPageUrl:
+        "https://play.google.com/store/apps/details?id=com.bycoda.mobile",
       shareUrl:
         "https://play.google.com/store/apps/details?id=com.bycoda.mobile",
     });
@@ -101,8 +105,16 @@ describe("mobile public app links", () => {
     expect(engagementLinks(config, "web")).toEqual({
       storeUrl: null,
       reviewUrl: null,
+      appPageUrl: repositoryUrl,
       shareUrl: repositoryUrl,
     });
+  });
+
+  it("offers no app page when none is configured, while sharing still falls back to the repository", () => {
+    const links = engagementLinks({ extra: { engagement: {} } }, "web");
+    expect(links.appPageUrl).toBeNull();
+    expect(links.shareUrl).toBe(repositoryUrl);
+    expect(engagementLinks({ extra: { engagement: { publicAppUrl: "https://bycoda.example.com/app" } } }, "web").appPageUrl).toBe("https://bycoda.example.com/app");
   });
 
   it.each([

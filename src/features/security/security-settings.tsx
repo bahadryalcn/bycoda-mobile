@@ -9,7 +9,6 @@ import type { AutoLockTimeoutMs } from "../../state/security-types";
 import { useCopy } from "../../ui/copy";
 import {
   Body,
-  Disclosure,
   ErrorNotice,
   NavigationGroup,
   NavigationRow,
@@ -17,6 +16,7 @@ import {
   Stack,
   ToggleField,
 } from "../../ui/primitives";
+import { HintSection } from "../../ui/info-hint";
 import { IconTile } from "../../ui/icon-tile";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
@@ -75,7 +75,13 @@ export function SecuritySettings() {
         />
       </NavigationGroup>
       {security.enabled ? (
-        <Stack style={{ gap: space.sm }}>
+        <HintSection
+          title={copy("Kilitleme", "Locking")}
+          help={copy(
+            "Uygulama arka plana geçtiğinde seçtiğin süre sonunda tekrar giriş gerekir. Bu süre içinde dönersen kaldığın yerden devam edersin. İçerik arka planda hemen gizlenir. Uygulamayı yeniden açtığında veya Şimdi kilitle’yi kullandığında her zaman giriş gerekir.",
+            "Authentication is required after the chosen time in the background. Return sooner to continue where you left off. Content is hidden immediately in the background. A fresh app launch or Lock now always requires authentication.",
+          )}
+        >
           <NavigationGroup>
             <SelectField
               variant="row"
@@ -92,15 +98,7 @@ export function SecuritySettings() {
               }}
             />
           </NavigationGroup>
-          <Disclosure label={copy("Kilitleme nasıl çalışır?", "How locking works")}>
-            <Body muted>
-              {copy(
-                "Uygulama arka plana geçtiğinde bu sürenin sonunda tekrar giriş gerekir. Bu süre içinde dönersen kaldığın yerden devam edersin. İçerik arka planda hemen gizlenir. Uygulamayı yeniden açtığında veya Şimdi kilitle’yi kullandığında her zaman giriş gerekir.",
-                "Authentication is required after this much time in the background. Return sooner to continue where you left off. Content is hidden immediately in the background. A fresh app launch or Lock now always requires authentication.",
-              )}
-            </Body>
-          </Disclosure>
-        </Stack>
+        </HintSection>
       ) : null}
       {!security.available ? (
         <NavigationGroup>

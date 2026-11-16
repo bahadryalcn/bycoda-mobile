@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ProviderInboxDetail } from "./provider-detail";
 import { InboxJobError } from "./provider-jobs";
 vi.mock("@/i18n",()=>({useLocale:()=>"tr"}));
+vi.mock("lucide-react-native/icons/info",()=>({default:()=>null}));
 const state = vi.hoisted(() => ({ active: "machine", project: "project", allowed: true, error: null as Error | null,
   reads: [] as Array<{action: string; enabled: boolean}>, detailsRetry: vi.fn(), threadRetry: vi.fn(), availabilityRetry: vi.fn(),
   job: vi.fn(), open: vi.fn(), confirms: [] as Array<()=>void>, changes: new Map<string,(value:string)=>void>(), presses: new Map<string,()=>void>() }));
@@ -35,6 +36,10 @@ vi.mock("@/ui/primitives",()=>{
   const Wrap=({children}:PropsWithChildren)=>createElement("div",null,children);
   const Button=({label,disabled,busy,onPress}:{label:string;disabled?:boolean;busy?:boolean;onPress:()=>void})=>{state.presses.set(label,onPress);return createElement("button",{disabled:disabled||busy,onClick:onPress},label);};
   return {Body:Wrap,Heading:Wrap,Stack:Wrap,Row:Wrap,Card:Wrap,Section:Wrap,Disclosure:Wrap,Button,
+    SectionHeader:({title}:{title:string})=>createElement("h2",null,title),
+    IconButton:Button,
+    ScreenList:({header,data,renderItem}: {header:unknown;data:unknown[];renderItem:(row:{item:unknown})=>unknown})=>
+      createElement("section",{"data-conversation-list":true},header as never,...data.map((item,index)=>createElement("div",{key:index},renderItem({item}) as never))),
     Badge:({label}:{label:string})=>createElement("span",null,label),
     Screen:({children,refresh}:PropsWithChildren<{refresh:()=>void}>)=>createElement("main",null,createElement(Button,{label:"Refresh",onPress:refresh}),children),
     Sheet:({children,visible,title,onClose}:PropsWithChildren<{visible:boolean;title:string;onClose:()=>void}>)=>visible?createElement("aside",{"aria-label":title},children,createElement(Button,{label:"Close composer",onPress:onClose})):null,

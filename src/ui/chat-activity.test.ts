@@ -46,7 +46,11 @@ vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }
 vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/sparkles", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/circle-check", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/terminal", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/circle", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/circle-stop", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/search", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/file", () => ({ default: () => null }));
 vi.mock("panelui-native/components/task", () => {
   const Task = Object.assign(
     ({ status, children }: PropsWithChildren<{ status: string }>) =>
@@ -69,6 +73,10 @@ vi.mock("panelui-native/components/task", () => {
 });
 vi.mock("panelui-native/components/reasoning", () => ({ Reasoning: "div" }));
 vi.mock("panelui-native/components/plan", () => ({ Plan: "div" }));
+vi.mock("panelui-native/components/thinking-orb", () => ({
+  ThinkingOrb: ({ state, paused }: { state: string; paused?: boolean }) =>
+    createElement("i", { "data-orb": state, "data-paused": String(!!paused) }),
+}));
 vi.mock("panelui-native/components/shimmer", () => ({
   Shimmer: ({
     enabled,
@@ -84,14 +92,15 @@ vi.mock("panelui-native/components/shimmer", () => ({
 import { ChatActivity, ChatStreaming } from "./chat-activity";
 
 describe("chat continuous animation lifecycle", () => {
-  it("keeps literal commands on one monospace line beside a short status and full inspector name", () => {
+  it("keeps literal commands on one monospace line with the status in the inspector name", () => {
     fixture.reduced = true;
     const command = "echo **literal** && pnpm test --filter workspace";
     const html = renderToStaticMarkup(createElement(ChatActivity, {
       title: command, detail: "Full output", status: "running", onInspect: vi.fn(),
     }));
     expect(html).toContain('data-lines="1" data-mono="true"');
-    expect(html).toContain(">Working<");
+    expect(html).toContain(". Working. Full output");
+    expect(html).not.toContain(">Working<");
     expect(html).toContain("echo **literal** &amp;&amp; pnpm test --filter workspace");
     expect(html).toContain("Full output");
     expect(html).toContain("&quot;minHeight&quot;:48");
@@ -137,8 +146,44 @@ describe("chat continuous animation lifecycle", () => {
     );
     expect(html).toContain('aria-label="Read source. Stopped. src/chat.tsx"');
     expect(html).not.toContain("aria-expanded");
-    expect(html).toContain(">Stopped<");
     expect(html).not.toContain("Pending");
+  });
+
+  it("opens onto the steps behind a work group, each a way into the inspector", () => {
+    fixture.reduced = true;
+    const onInspect = vi.fn();
+    const html = renderToStaticMarkup(
+      createElement(ChatActivity, {
+        title: "Read 2 files",
+        status: "complete",
+        defaultOpen: true,
+        onInspect,
+        steps: [
+          { id: "a", label: "Opened", file: "index.tsx", state: "done" },
+          { id: "b", label: "Ran", code: "pnpm test", state: "failed" },
+        ],
+      }),
+    );
+    expect(html).toContain('aria-expanded="true"');
+
+    expect(html).toMatch(/data-mono="false"[^>]*>Read 2 files</);
+    expect(html).toContain('aria-label="Opened index.tsx"');
+    expect(html).toContain(">index.tsx<");
+    expect(html).toContain(">pnpm test<");
+    expect(html).toContain("All details");
+  });
+
+  it("keeps a settled work group folded until asked", () => {
+    const html = renderToStaticMarkup(
+      createElement(ChatActivity, {
+        title: "Read 2 files",
+        status: "complete",
+        onInspect: vi.fn(),
+        steps: [{ id: "a", label: "Opened", file: "index.tsx", state: "done" }],
+      }),
+    );
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("index.tsx");
   });
 
   it("retains expanded semantics for actual inline disclosure", () => {
@@ -188,5 +233,30 @@ describe("chat continuous animation lifecycle", () => {
     expect(render()).toContain('data-animating="false"');
     fixture.reduced = false;
     expect(render()).toContain('data-animating="true"');
+  });
+});
+
+describe("chat busy orb", () => {
+  it("says which kind of busy a running row is and holds still while hidden or reduced", () => {
+    fixture.active = true;
+    fixture.reduced = false;
+    const render = () =>
+      renderToStaticMarkup(
+        createElement(ChatActivity, { title: "Reading a.ts", status: "running", busy: "searching" }),
+      );
+    expect(render()).toContain('data-orb="searching" data-paused="false"');
+    fixture.active = false;
+    expect(render()).toContain('data-paused="true"');
+    fixture.active = true;
+    expect(
+      renderToStaticMarkup(createElement(ChatActivity, { title: "Done", status: "complete" })),
+    ).not.toContain("data-orb");
+  });
+  it("pairs the streaming label with its orb", () => {
+    fixture.active = true;
+    fixture.reduced = true;
+    const html = renderToStaticMarkup(createElement(ChatStreaming, { label: "Writing", state: "composing" }));
+    expect(html).toContain('data-orb="composing" data-paused="true"');
+    expect(html).toContain("Writing");
   });
 });

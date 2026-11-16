@@ -6,7 +6,7 @@ import { accountConfig } from "../model/config";
 import { deviceRegistration } from "../model/device-registration";
 import { readDeviceInfo } from "../model/device-info";
 import { secureDeviceIdStore, securePushMarkStore } from "../model/device-store";
-import { useAccountPushSync } from "../model/push-account";
+import { useAccountHostPushDedupe, useAccountPushSync } from "../model/push-account";
 import { useAccountPushReads } from "../model/push-read";
 import { useAccountAccess } from "../model/account-access";
 import { AccountContext, type AccountAuth, type AccountState } from "./account-context";
@@ -82,6 +82,7 @@ export function AccountSession({
   }, [auth.loaded, auth.signedIn, runtime, attempt]);
 
   useAccountPushSync(auth.signedIn ? runtime : null, device);
+  useAccountHostPushDedupe(auth.signedIn ? runtime : null, device);
   useAccountPushReads(auth.signedIn ? runtime : null, device);
 
   const signOut = useCallback(async () => {

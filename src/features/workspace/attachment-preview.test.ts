@@ -21,6 +21,11 @@ vi.mock("expo-image", () => ({ Image: ({ contentFit, accessibilityLabel, onError
 vi.mock("lucide-react-native/icons/file-text", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/film", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/maximize-2", () => ({ default: () => null }));
+vi.mock("panelui-native/components/attachment", () => {
+  const Attachment: any = ({ accessibilityLabel, onPress, children }: any) => h("button", { "aria-label": accessibilityLabel, onClick: onPress }, children);
+  Attachment.Media = ({ children }: any) => h("span", null, children);
+  return { Attachment };
+});
 vi.mock("./composer-links", () => ({ ComposerLinks: () => null }));
 vi.mock("./attachment-presentation", () => ({ composerLinks: () => [] }));
 vi.mock("./draft-append", () => ({ appendToDraft: () => {} }));

@@ -185,7 +185,7 @@ it("explains a one-shot quota request and requires its own explicit confirmation
   state.value = { kind: "quotaRefresh", label: "Work", color: null };
   state.submit.mockResolvedValue(undefined);
   await render();
-  expect(container.textContent).toContain("five-minute cooldown");
+  expect(container.textContent).toContain("Five-minute cooldown");
   await click("Review request");
   expect(state.submit).not.toHaveBeenCalled();
   expect(container.textContent).toContain(

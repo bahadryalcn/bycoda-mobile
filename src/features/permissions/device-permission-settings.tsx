@@ -98,11 +98,13 @@ ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`);
           {row("camera", Camera)}
           {row("microphone", Mic)}
           {row("notifications", Bell)}
+          {/* The system picker grants access per selection, so there is no app permission to read or request. */}
           <Row>
             <IconTile color={colors.muted}><ImageIcon size={18} strokeWidth={2} color={colors.muted} /></IconTile>
             <Stack style={{ flex: 1, minWidth: 0 }}>
               <Body>{copy("Fotoğraflar ve dosyalar", "Photos and files")}</Body>
             </Stack>
+            <Badge label={copy("Sistem seçicisi", "System picker")} />
           </Row>
         </NavigationGroup>
         <IssueSummary issues={issues} retrying={action.isPending} onRetry={() => { void runFor("refresh", () => refresh(failed)); }} />

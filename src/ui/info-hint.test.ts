@@ -33,6 +33,15 @@ it("hides the explanation until the info icon is tapped, and labels it for assis
   expect(container.textContent).toBe("Token");
 });
 
+it("reveals even a short explicit info text behind the icon when always is set", async () => {
+  await act(async () => root.render(h(HintLabel, { label: "Scope", help: "Per project", always: true })));
+  expect(container.textContent).toBe("Scope");
+  const button = container.querySelector("button")!;
+  expect(button.getAttribute("aria-label")).toBe("Info: Per project");
+  await act(async () => button.click());
+  expect(container.textContent).toContain("Per project");
+});
+
 it("renders no icon without help and none for a short unit hint", async () => {
   await act(async () => root.render(h(HintLabel, { label: "Limit", help: "0 = unlimited" })));
   expect(container.querySelector("button")).toBeNull();

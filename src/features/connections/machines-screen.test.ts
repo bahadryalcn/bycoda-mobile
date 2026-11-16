@@ -17,7 +17,7 @@ vi.mock("@/ui/tokens", () => ({ colors: {}, metrics: {}, space: {} }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
 vi.mock("@/ui/brand", () => ({ LegalLinks: () => null }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: () => null }));
-vi.mock("expo-router", () => ({ router: {}, Stack: { Screen: ({options}: {options: {gestureEnabled: boolean; headerLeft?: () => import("react").ReactNode}}) => { fixture.options = options; return options.headerLeft?.() ?? null; } } }));
+vi.mock("expo-router", () => ({ router: {}, useLocalSearchParams: () => ({}), Stack: { Screen: ({options}: {options: {gestureEnabled: boolean; headerLeft?: () => import("react").ReactNode}}) => { fixture.options = options; return options.headerLeft?.() ?? null; } } }));
 vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => true }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),

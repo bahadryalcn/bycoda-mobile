@@ -149,9 +149,7 @@ export function ProjectGroupHeader({
       <ProjectIcon appearance={appearance} group size={18} box={24} />
       <Text numberOfLines={1} style={[uiStyles.label, { flex: 1, minWidth: 0, fontWeight: "700" }]}>{name}</Text>
       {running ? <StatusText label={runningLabel} tone="live" /> : null}
-      <View style={{ minWidth: metrics.countPill, paddingHorizontal: space.sm, borderRadius: radii.pill, backgroundColor: colors.fill, alignItems: "center" }}>
-        <Text style={[uiStyles.caption, { fontVariant: ["tabular-nums"] }]}>{count}</Text>
-      </View>
+      <Badge label={String(count)} />
       {collapsible ? <DisclosureChevron expanded={expanded} color={colors.muted} size={16} /> : null}
     </>
   );

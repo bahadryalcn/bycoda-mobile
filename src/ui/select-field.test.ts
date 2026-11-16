@@ -5,13 +5,21 @@ import { afterEach, expect, it, vi } from "vitest";
 import { SelectField, MultiSelectField } from "./select-field";
 import { PrivateContentAccessProvider } from "./private-access";
 import { SheetGuardContext } from "./sheet-guard-context";
-const s = vi.hoisted(() => ({ actions: new Map<string, () => void>(), search: undefined as undefined | ((value: string) => void),
+const s = vi.hoisted(() => ({ actions: new Map<string, () => void>(), primitives: new Map<string, any>(), search: undefined as undefined | ((value: string) => void),
   locale: "en", options: [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }] as { value: string; label: string; disabled?: boolean }[],
   values: [] as string[], multiple: false, max: undefined as number | undefined, disabled: false, allowed: true, changes: [] as string[][] }));
 vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: { info: {}, danger: {} }, uiStyles: {} }) }));
+vi.mock("./use-reduced-motion", () => ({ useReducedMotionPreference: () => true }));
+vi.mock("panelui-native/primitives/animated-pressable", async () => {
+  const { Pressable } = await import("react-native");
+  return { AnimatedPressable: (props: any) => {
+    s.primitives.set(props.accessibilityLabel, props);
+    return h(Pressable, props);
+  } };
+});
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string, args?: any) => en.replace(/\{(p\d+)\}/g, (_, key) => args?.[key]) }));
 vi.mock("@/i18n", () => ({ useLocale: () => s.locale }));
-vi.mock("./tokens", () => ({ colors: {}, metrics: {}, opacity: {}, radii: {}, semanticColors: { info: {}, danger: {} }, space: {} }));
+vi.mock("./tokens", async () => ({ ...await vi.importActual<typeof import("./tokens")>("./tokens"), colors: {}, semanticColors: { info: {}, danger: {} } }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
 vi.mock("./info-hint", () => ({ HintLabel: ({ label, help }: any) => h("span", { "data-help": help }, label), UnitHint: () => null, isUnitHint: () => false }));
 vi.mock("./disclosure-motion", () => ({ DisclosureChevron: () => null }));
@@ -41,17 +49,30 @@ vi.mock("./dialogs", () => ({ Sheet: ({ visible, children, onClose, headerAction
   s.actions.set("Close", onClose); return visible ? h("section", null, headerAction, children) : null;
 } }));
 let root: ReturnType<typeof createRoot> | undefined, container: HTMLDivElement;
-async function render() {
+async function render(extra: { compact?: boolean } = {}) {
   if (!root) { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); root = createRoot(container); }
-  const common = { label: "Choice", options: s.options, searchable: true, disabled: s.disabled,
+  const common = { ...extra, label: "Choice", options: s.options, searchable: true, disabled: s.disabled,
     onChange: (value: string | string[]) => s.changes.push(Array.isArray(value) ? value : [value]) };
   await act(async () => root!.render(h(PrivateContentAccessProvider, { value: { allowed: s.allowed, check: () => s.allowed } },
     s.multiple ? h(MultiSelectField, { ...common, values: s.values, max: s.max }) : h(SelectField, { ...common, value: s.values[0] }))));
 }
 async function call(name: string) { await act(async () => s.actions.get(name)!()); }
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; vi.unstubAllGlobals();
-  s.actions.clear(); s.search = undefined; s.locale = "en"; s.options = [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }];
+  s.actions.clear(); s.primitives.clear(); s.search = undefined; s.locale = "en"; s.options = [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }];
   s.values = []; s.max = undefined; s.multiple = s.disabled = false; s.allowed = true; s.changes = [];
+});
+it("keeps compact triggers and option rows at 48dp through PanelUI primitives", async () => {
+  await render({ compact: true });
+  const trigger = [...s.primitives.values()].find(props => props.accessibilityRole === "combobox");
+  const style = Object.assign({}, ...trigger.style.filter(Boolean));
+  expect(style.minHeight).toBeGreaterThanOrEqual(48);
+  expect(trigger.pressScale).toBe(1);
+  expect(trigger.pressOpacity).toBe(1);
+  await call("Open");
+  const row = s.primitives.get("Alpha");
+  expect(row.style.minHeight).toBeGreaterThanOrEqual(48);
+  expect(row.accessibilityRole).toBe("radio");
+  expect(row.accessibilityState).toEqual({ checked: false, disabled: false });
 });
 it("retires row events after close and a later reopening", async () => {
   await render(); await call("Open"); const old = s.actions.get("Alpha")!; await call("Close");

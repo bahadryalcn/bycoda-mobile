@@ -1,6 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { LifecycleButton as PanelButton } from "./busy-indicator";
 import { haptic } from "./motion";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Laptop from "lucide-react-native/icons/laptop";
@@ -136,33 +137,35 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
   const name = machine?.name ?? copy("Bilgisayar bağla", "Connect a computer");
   const degraded = phase !== "unpaired" && phase !== "connected" && phase !== "checking" && unlocked;
   const pill = (
-          <Pressable
+          <PanelButton
             accessibilityRole="button"
             accessibilityLabel={[heading, name, machine ? status : undefined, subtitle, copy("Bilgisayar seç", "Choose computer")]
               .filter(Boolean)
               .join(". ")}
             accessibilityState={{ expanded: menuOpen && unlocked }}
             aria-expanded={menuOpen && unlocked}
+            variant="ghost"
+            pressScale={1}
+            className="rounded-full border-0 shadow-none active:opacity-75"
             hitSlop={hitSlopFor(metrics.chipHeight)}
             onPress={() => {
               haptic.select();
               if (process.env.EXPO_OS !== "web") setMenuOpen(unlocked);
             }}
-            style={({ pressed }) => [
-              {
-                flexDirection: "row",
-                alignItems: "center",
-                gap: space.xs + 2,
-                height: metrics.chipHeight,
-                paddingStart: space.row,
-                paddingEnd: space.sm,
-                borderRadius: radii.pill,
-                backgroundColor: colors.fill,
-                flexShrink: 1,
-                minWidth: 64,
-              },
-              pressed && { backgroundColor: pressedFill },
-            ]}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space.xs + 2,
+              height: metrics.chipHeight,
+              minHeight: metrics.chipHeight,
+              paddingStart: space.row,
+              paddingEnd: space.sm,
+              paddingVertical: 0,
+              borderRadius: radii.pill,
+              backgroundColor: menuOpen && unlocked ? pressedFill : colors.fill,
+              flexShrink: 1,
+              minWidth: 64,
+            }}
           >
             {machine ? (
               health.isFetching && !successAt ? (
@@ -177,7 +180,7 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
               {degraded ? `${name} · ${status}` : name}
             </Text>
             <ChevronDown size={12} strokeWidth={2.6} color={colors.muted} style={{ flexShrink: 0 }} />
-          </Pressable>
+          </PanelButton>
   );
   return (
     // The title keeps its full width; when title and pill no longer fit (large text), the pill wraps below it.

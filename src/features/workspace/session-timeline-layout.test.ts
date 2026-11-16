@@ -16,6 +16,7 @@ vi.mock("@/ui/primitives", () => ({
   ErrorText: () => null,
   PressableCard: ({ children }: PropsWithChildren) => createElement("button", null, children),
 }));
+vi.mock("panelui-native/components/chip", () => ({ Chip: ({ children }: PropsWithChildren) => createElement("button", null, children) }));
 vi.mock("lucide-react-native/icons/link", () => ({ default: () => null }));
 vi.mock("./activity-group", () => ({ ActivityGroup: () => createElement("button", { style: { minHeight: 48 } }, "Work") }));
 vi.mock("./transcript-block", () => ({ TranscriptBlock: () => null }));

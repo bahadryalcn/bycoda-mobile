@@ -8,6 +8,7 @@ const f = vi.hoisted(() => ({ store: undefined as any, uuid: 0,
   editUrl: undefined as any, claim: vi.fn(async () => {}), clear: vi.fn(async () => {}),
   frameAccess: undefined as any,
 }));
+vi.mock("@/ui/duotone-icon", () => ({ Server: () => null, Smartphone: () => null }));
 vi.mock("lucide-react-native/icons/wrench", () => ({ default: () => null }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => String(++f.uuid) }));
@@ -20,7 +21,8 @@ vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 vi.mock("lucide-react-native/icons/smartphone", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/house", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
+vi.mock("@/ui/copy",() => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, space: {} }));

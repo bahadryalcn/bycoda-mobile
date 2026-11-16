@@ -1,5 +1,6 @@
 import { useCopy } from "@/ui/copy";
 import { ErrorNotice, Loading, SelectField } from "@/ui/primitives";
+import { isConnectionLevelError } from "@/ui/error-message";
 import { useProjectList } from "../../workspace/use-project-directory";
 
 import type { ScopeProps } from "./types";
@@ -42,7 +43,8 @@ export function Scope({ allowAll = false, projectId, onChange }: ScopeProps) {
       />
       {/* Field-level feedback stays one compact line: a full StateView here would stretch the
           toolbar row (sliding its actions) and compete with the screen's own state. */}
-      {projects.error ? <ErrorNotice error={projects.error} onRetry={() => { if (!projects.isFetching) void projects.refetch?.(); }}
+      {/* A lost or revoked connection is the screen's state to report; the filter only waits. */}
+      {projects.error && !isConnectionLevelError(projects.error) ? <ErrorNotice error={projects.error} onRetry={() => { if (!projects.isFetching) void projects.refetch?.(); }}
         retrying={projects.isFetching} /> : projects.data === undefined && projects.isLoading ? <Loading
         label={copy("Projeler yükleniyor…", "Loading projects…")} /> : null}
     </>

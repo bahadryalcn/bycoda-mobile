@@ -3,6 +3,8 @@ import type { Device } from "../contracts";
 import { allowDevicePermission, notifications, readDevicePermission } from "../../permissions/device-permissions";
 import { expoProjectId, expoPushToken } from "../../push/push-registration";
 import type { AccountRuntime } from "./account-runtime";
+import { usePushStatus } from "../../push/push-model";
+import { syncHostCanonical } from "./push-host-canonical";
 import { securePushMarkStore } from "./device-store";
 import { syncPushToken, type PushSyncResult } from "./push-sync";
 
@@ -65,4 +67,18 @@ export function useAccountPushSync(runtime: AccountRuntime | null, device: Devic
       subscription?.remove();
     };
   }, [runtime, device]);
+}
+
+/**
+ * The Host is canonical for agent events while this phone is registered on it: the account's push
+ * channel for them is turned off, and restored when the Host registration stops.
+ */
+export function useAccountHostPushDedupe(runtime: AccountRuntime | null, device: Device | null) {
+  const hostActive = usePushStatus((state) => state.status.state === "registered");
+  useEffect(() => {
+    if (!runtime || !device || !accountPushAvailable()) return;
+    syncHostCanonical(runtime.client, hostActive).catch((error: unknown) => {
+      console.warn("[account] Host push dedupe failed.", error instanceof Error ? error.message : error);
+    });
+  }, [runtime, device, hostActive]); // re-sync whenever Host push registration starts or stops
 }

@@ -12,16 +12,29 @@ function SessionActivity(props: LiveActivityProps, environment: LiveActivityEnvi
   "widget";
   const waiting = props.needsInput > 0;
   const total = props.running + props.needsInput;
-  const tint = waiting ? "orange" : "blue";
-  const headline = waiting ? `${props.needsInput} ${props.labels.needsInput}` : `${props.running} ${props.labels.running}`;
+  const palette = props.palette?.[environment.colorScheme === "dark" ? "dark" : "light"];
+  const tint = waiting ? (palette?.warning ?? "primary") : (palette?.accent ?? "primary");
+  const headline = waiting
+    ? `${props.needsInput} ${props.labels.needsInput}`
+    : `${props.running} ${props.labels.running}`;
   const note = environment.isStale ? props.labels.stale : headline;
   const banner = (
     <VStack alignment="leading" spacing={6}>
       <HStack spacing={6}>
-        <Image systemName={waiting ? "hand.raised.fill" : "play.circle.fill"} size={16} color={tint} />
+        <Image
+          systemName={waiting ? "hand.raised.fill" : "play.circle.fill"}
+          size={16}
+          color={tint}
+        />
         <Text modifiers={[font({ textStyle: "headline" }), lineLimit(1)]}>{props.title}</Text>
         <Spacer />
-        <Text modifiers={[font({ textStyle: "subheadline", weight: "semibold" }), foregroundStyle(environment.isStale ? "secondary" : tint), lineLimit(1)]}>
+        <Text
+          modifiers={[
+            font({ textStyle: "subheadline", weight: "semibold" }),
+            foregroundStyle(environment.isStale ? "secondary" : tint),
+            lineLimit(1),
+          ]}
+        >
           {note}
         </Text>
       </HStack>
@@ -30,9 +43,16 @@ function SessionActivity(props: LiveActivityProps, environment: LiveActivityEnvi
           <Image
             systemName={row.status === "needs_input" ? "hand.raised.fill" : "play.circle.fill"}
             size={12}
-            color={row.status === "needs_input" ? "orange" : "blue"}
+            color={
+              row.status === "needs_input"
+                ? (palette?.warning ?? "primary")
+                : (palette?.accent ?? "primary")
+            }
           />
-          <Text modifiers={[font({ textStyle: "subheadline" }), lineLimit(1)]}>{row.title || row.project}</Text>
+          <Text modifiers={[font({ textStyle: "subheadline" }), lineLimit(1)]}>
+            {row.title || row.project}
+          </Text>
+          <Text modifiers={[font({ textStyle: "caption" }), lineLimit(1)]}>{row.detail}</Text>
           <Spacer />
         </HStack>
       ))}
@@ -45,12 +65,34 @@ function SessionActivity(props: LiveActivityProps, environment: LiveActivityEnvi
         {`${props.title} · ${note}`}
       </Text>
     ),
-    compactLeading: <Image systemName={waiting ? "hand.raised.fill" : "play.circle.fill"} size={14} color={tint} />,
-    compactTrailing: <Text modifiers={[font({ textStyle: "caption", weight: "semibold" })]}>{String(total)}</Text>,
-    minimal: <Image systemName={waiting ? "hand.raised.fill" : "play.circle.fill"} size={14} color={tint} />,
-    expandedLeading: <Image systemName={waiting ? "hand.raised.fill" : "play.circle.fill"} size={20} color={tint} />,
+    compactLeading: (
+      <Image
+        systemName={waiting ? "hand.raised.fill" : "play.circle.fill"}
+        size={14}
+        color={tint}
+      />
+    ),
+    compactTrailing: (
+      <Text modifiers={[font({ textStyle: "caption", weight: "semibold" })]}>{String(total)}</Text>
+    ),
+    minimal: (
+      <Image
+        systemName={waiting ? "hand.raised.fill" : "play.circle.fill"}
+        size={14}
+        color={tint}
+      />
+    ),
+    expandedLeading: (
+      <Image
+        systemName={waiting ? "hand.raised.fill" : "play.circle.fill"}
+        size={20}
+        color={tint}
+      />
+    ),
     expandedCenter: <Text modifiers={[font({ textStyle: "headline" }), lineLimit(1)]}>{note}</Text>,
-    expandedTrailing: <Text modifiers={[font({ textStyle: "title3", weight: "bold" })]}>{String(total)}</Text>,
+    expandedTrailing: (
+      <Text modifiers={[font({ textStyle: "title3", weight: "bold" })]}>{String(total)}</Text>
+    ),
     expandedBottom: banner,
   };
 }

@@ -114,6 +114,9 @@ export function createSessionsApi(transport: HostTransport, request: HostRequest
           title?: string;
           archived?: boolean;
           pinned?: boolean;
+          unread?: boolean;
+          snoozedUntil?: number | null;
+          expectedRevision?: number;
           authorityGeneration?: number;
         },
         options?: RemoteRequestOptions,

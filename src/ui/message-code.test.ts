@@ -17,6 +17,7 @@ vi.mock("./primitives",()=>{
  Button:({label,onPress,disabled}:{label:string;onPress:()=>void;disabled?:boolean})=>createElement("button",{onClick:onPress,disabled},label),
  Sheet:({visible,children,footer,title}:PropsWithChildren<{visible:boolean;title:string;footer?:import("react").ReactNode}>)=>visible?createElement("section",{"data-title":title},children,createElement("footer",null,footer)):null};
 });
+vi.mock("panelui-native/components/code-block",()=>({CodeBlock:({code,textStyle}:{code:string;textStyle?:unknown})=>createElement("pre",{"data-code-source":true,"data-code-style":JSON.stringify(textStyle)},code)}));
 import { MessageCode } from "./message-code";
 let root:ReturnType<typeof createRoot>|undefined,container:HTMLDivElement;
 let props:{code:string;language:string;complete?:boolean;textSize?:"compact"|"standard"|"large";readerTitle?:string;copyLabel?:string;allowPreview?:boolean;output?:boolean;error?:boolean};

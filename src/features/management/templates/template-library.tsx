@@ -8,13 +8,13 @@ import Plus from "lucide-react-native/icons/plus";
 import {
   Badge,
   Body,
-  Button,
   Empty,
   ErrorNotice,
   IconButton,
   NavigationRow,
   Row,
   SearchField,
+  SegmentedControl,
   Skeleton,
   StateView,
   Stack,
@@ -55,13 +55,22 @@ export function TemplateLibrary({
   const rows = state.rows.filter((row) =>
     matchesSearch(`${row.name} ${row.trigger ?? ""} ${row.body}`, search, locale),
   );
+  const sourceSwitch = (
+    <SegmentedControl
+      hideLabel
+      label={copy("Şablon kaynağı", "Template source")}
+      value={computer ? "computer" : "phone"}
+      onChange={(value) => setComputer(value === "computer")}
+      options={[
+        { value: "phone", label: copy("Telefon", "Phone") },
+        { value: "computer", label: copy("Bilgisayar", "Computer") },
+      ]}
+    />
+  );
   if (computer && scope && projectId)
     return (
       <Stack style={{ flex: 1 }}>
-        <Button
-          label={copy("Telefon şablonlarına dön", "Back to phone templates")}
-          onPress={() => setComputer(false)}
-        />
+        {sourceSwitch}
         <DesktopPreferences
           scope={scope}
           projectId={projectId}
@@ -162,13 +171,7 @@ export function TemplateLibrary({
       }
       header={
         <Stack>
-          {scope && projectId ? (
-            <Button
-              tone="quiet"
-              label={copy("Bilgisayar şablonları", "Computer templates")}
-              onPress={() => setComputer(true)}
-            />
-          ) : null}
+          {scope && projectId ? sourceSwitch : null}
           {state.error && !loadFailed ? (
             <ErrorNotice
               error={state.error}

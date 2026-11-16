@@ -1,6 +1,7 @@
 import { View } from "react-native";
+import { useState } from "react";
 import type { RemoteInboxItem } from "../../../../src/features/inbox/model/remoteInbox";
-import { Badge, Body, Disclosure, Row, SectionHeader, Stack } from "@/ui/primitives";
+import { Badge, Body, Button, Row, SectionHeader, Sheet, ScreenList, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
 import { useMobileTheme } from "@/ui/theme";
@@ -8,7 +9,6 @@ import { radii, space } from "@/ui/tokens";
 import { providerStateLabel, providerStateTone } from "./provider-labels";
 import type { PrReviewContext, PrReviewLine } from "./provider-review-model";
 
-const FILE_LIMIT = 100;
 const shortHead = (commitId: string) => commitId.slice(0, 7);
 
 /** Title, state and totals first; the changed-file list stays one tap away. */
@@ -17,7 +17,7 @@ export function PrReviewSummary({ item, context }: { item: RemoteInboxItem; cont
   const locale = useLocale();
   const numbers = new Intl.NumberFormat(locale);
   const { semanticColors } = useMobileTheme();
-  const files = context?.files.slice(0, FILE_LIMIT) ?? [];
+  const [filesOpen, setFilesOpen] = useState(false);
   return (
     <Stack>
       <Stack style={{ gap: space.xs }}>
@@ -35,19 +35,16 @@ export function PrReviewSummary({ item, context }: { item: RemoteInboxItem; cont
           <Body style={{ color: semanticColors.success.text }}>{`+${numbers.format(context.additions)}`}</Body>
           <Body style={{ color: semanticColors.danger.text }}>{`−${numbers.format(context.deletions)}`}</Body>
         </Row>
-        {files.length ? <Disclosure label={copy("Dosyaları göster", "Show files")}>
-          <Stack style={{ gap: space.xs }}>
-            {files.map((file) => (
-              <View key={file.path} style={{ flexDirection: "row", gap: space.sm, alignItems: "flex-start" }}>
+        {context.files.length ? <Button tone="quiet" label={copy("Dosyaları göster", "Show files")} onPress={() => setFilesOpen(true)} /> : null}
+        {filesOpen ? <Sheet visible size="full" scroll={false} title={copy("Değişen dosyalar", "Files changed")} onClose={() => setFilesOpen(false)}>
+          <ScreenList data={context.files} keyExtractor={file => file.path} renderItem={({item: file}) => (
+              <View style={{ flexDirection: "row", gap: space.sm, paddingVertical: space.sm, alignItems: "flex-start" }}>
                 <Body mono style={{ flexShrink: 1, flexGrow: 1 }}>{file.path}</Body>
                 <Body style={{ color: semanticColors.success.text }}>{`+${numbers.format(file.additions)}`}</Body>
                 <Body style={{ color: semanticColors.danger.text }}>{`−${numbers.format(file.deletions)}`}</Body>
               </View>
-            ))}
-            {context.files.length > FILE_LIMIT ? <Body muted>
-              {copy("+{p0} dosya daha", "+{p0} more files", { p0: numbers.format(context.files.length - FILE_LIMIT) })}</Body> : null}
-          </Stack>
-        </Disclosure> : null}
+            )} />
+        </Sheet> : null}
         <SectionHeader flush title={copy("İnceleme", "Review")} />
       </> : null}
     </Stack>

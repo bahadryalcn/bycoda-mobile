@@ -38,7 +38,7 @@ describe("shared remote error copy", () => {
   it.each([
     [
       "Unlock the app before connecting to this computer.",
-      "Bağlanmak için Bycoda’nın kilidini aç.",
+      "Bağlanmak için bycoda’nın kilidini aç.",
     ],
     [
       "This device credential is invalid or revoked. Pair the computer again.",

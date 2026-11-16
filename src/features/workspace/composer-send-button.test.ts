@@ -19,7 +19,11 @@ it("does not announce success after a void alternate submission callback", () =>
   expect(state.haptic).toHaveBeenCalledOnce();
   expect(state.toast).not.toHaveBeenCalled();
   expect(view.props.longPressLabel).toBe("Queue");
-  expect(view.props.hint).toBe("Press and hold for Queue");
+  expect(view.props.hint).toBe("Press and hold for Queue. Send after the agent finishes.");
+});
+it("describes the long-press alternate for each mode and names none when there is no alternate", () => {
+  expect(render({ mode: "queue", alternate: "steer" }).props.hint).toBe("Press and hold for Steer. Send to the running agent now.");
+  expect(render({ mode: "send", alternate: null }).props.hint).toBeUndefined();
 });
 it("does not infer delivery from an unresolved send promise", async () => {
   let finish!: () => void;

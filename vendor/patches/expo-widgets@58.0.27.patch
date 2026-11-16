@@ -1,0 +1,91 @@
+diff --git a/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt b/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
+index 3df9e4a4d92155a00d3f5652d17d20be10bef1c1..e128b052779745c6f78fdc5038a77f835bc93130 100644
+--- a/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
++++ b/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
+@@ -418,6 +418,9 @@ private fun ModifierType.toPeekModifier(converterContext: ConverterContext): Gla
+     "fillMaxHeight" -> asRecord<FillMaxHeightParams>(converterContext)?.let { GlanceModifier.fillMaxHeight() }
+     "background" -> asRecord<BackgroundParams>(converterContext)?.color?.toGlanceColorProvider()
+       ?.let { GlanceModifier.background(it) }
++    "semantics" -> this["contentDescription"]?.asString()?.let { description ->
++      GlanceModifier.semantics { contentDescription = description }
++    }
+     "cornerRadius" -> asRecord<CornerRadiusParams>(converterContext)?.let { GlanceModifier.cornerRadius(it.radius.dp) }
+     // Unsupported Expo UI modifiers are ignored until they have exact Glance semantics.
+     else -> null
+diff --git a/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt b/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt
+index edabde8f51b3bd9162b634e46f2f09686c3a3b8a..fc4e343925422896b2d48cd66763e8231bde4550 100644
+--- a/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt
++++ b/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt
+@@ -25,7 +25,7 @@ internal class ExpoWidgetsPeekWidget(
+     val layout = WidgetsLayoutRegistry.layout(appContext, widgetName)
+       ?: return createErrorRoot("No layout found for $widgetName")
+     val props = WidgetsLayoutRegistry.props(appContext, widgetName)
+-    val environment = getWidgetEnvironment(appContext)
++    val environment = getWidgetEnvironment(appContext) + mapOf("width" to size.width.value, "height" to size.height.value)
+     val node = evaluateLayout(appContext, layout, props, environment)
+ 
+     return node.toPeekRoot(appContext, InteractionSource.Widget(widgetName), size)
+diff --git a/android/src/main/java/expo/modules/widgets/WidgetInteractionAction.kt b/android/src/main/java/expo/modules/widgets/WidgetInteractionAction.kt
+index b0b6479c2292763fd18eaee78b5e8d2dc4234493..86c3c8a545b57b2bfcd9a01b143172f713b1bd52 100644
+--- a/android/src/main/java/expo/modules/widgets/WidgetInteractionAction.kt
++++ b/android/src/main/java/expo/modules/widgets/WidgetInteractionAction.kt
+@@ -5,6 +5,7 @@ import android.content.Intent
+ import android.net.Uri
+ import androidx.glance.action.Action
+ import androidx.glance.appwidget.action.actionSendBroadcast
++import androidx.glance.appwidget.action.actionStartActivity
+ import expo.modules.widgets.notifications.ExpoWidgetsNotificationReceiver
+ 
+ internal const val WIDGET_INTERACTION_ACTION = "expo.modules.widgets.ACTION_WIDGET_INTERACTION"
+@@ -27,6 +28,12 @@ internal data class WidgetInteraction(
+ )
+ 
+ internal fun WidgetInteraction.toGlanceAction(context: Context): Action {
++  // Home-screen links launch directly through a PendingIntent, without a JS listener or broadcast trampoline.
++  val uri = target.takeIf { it.length <= 2048 }?.let { Uri.parse(it) }
++  if (source is InteractionSource.Widget && uri?.scheme == "bycoda" && uri.host in setOf("session", "sessions", "machines")) {
++    return actionStartActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(context.packageName)
++      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
++  }
+   val intent = when (source) {
+     is InteractionSource.Widget -> Intent(WIDGET_INTERACTION_ACTION)
+       .setComponent(widgetProviderComponentName(context, source.name))
+diff --git a/android/src/main/java/expo/modules/widgets/WidgetObject.kt b/android/src/main/java/expo/modules/widgets/WidgetObject.kt
+index 881ad3b1afaedcc3a6df829adfce51d3a1a35b7a..ec9f3249c068e18fb03951f066cf352c1714dcc1 100644
+--- a/android/src/main/java/expo/modules/widgets/WidgetObject.kt
++++ b/android/src/main/java/expo/modules/widgets/WidgetObject.kt
+@@ -1,6 +1,11 @@
+ package expo.modules.widgets
+ 
+ import android.content.Context
++import android.content.Intent
++import android.app.AlarmManager
++import android.app.PendingIntent
++import android.appwidget.AppWidgetManager
++import android.os.SystemClock
+ import expo.modules.kotlin.sharedobjects.SharedObject
+ 
+ internal class WidgetObject(
+@@ -25,5 +30,22 @@ internal class WidgetObject(
+   fun updateSnapshot(props: Map<String, Any?>) {
+     WidgetsStorage.set(context, "__expo_widgets_${name}_props", props)
+     reload()
++    scheduleExpiry(props)
++  }
++
++  // Inexact, non-waking alarm: stale feedback redraws without JS; Android may defer it in Doze.
++  private fun scheduleExpiry(props: Map<String, Any?>) {
++    val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
++    val ids = AppWidgetManager.getInstance(context).getAppWidgetIds(widgetProviderComponentName(context, name))
++    val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
++      .setComponent(widgetProviderComponentName(context, name))
++      .putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
++    val pending = PendingIntent.getBroadcast(context, name.hashCode(), intent,
++      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
++    manager.cancel(pending)
++    val expiresAt = props["expiresAt"] as? Number ?: return
++    if (props["state"] != "ready" || ids.isEmpty()) return
++    val delay = maxOf(1000L, expiresAt.toLong() - System.currentTimeMillis())
++    manager.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + delay, pending)
+   }
+ }

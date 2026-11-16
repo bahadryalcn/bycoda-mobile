@@ -15,6 +15,7 @@ vi.mock("@/ui/metric-row", () => ({
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
+vi.mock("panelui-native/components/badge", () => ({ Badge: () => null }));
 vi.mock("panelui-native/components/bar-chart", () => ({ BarChart: () => null }));
 vi.mock("panelui-native/components/kpi", () => ({ Kpi: () => null }));
 vi.mock("panelui-native/components/pie-chart", () => ({

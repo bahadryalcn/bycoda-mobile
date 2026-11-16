@@ -196,15 +196,15 @@ export function ProviderAccountEditor({
                 ) : value.kind === "quotaRefresh" ? (
                   <Body muted>
                     {copy(
-                      "Bilgisayar Claude kotasını bir kez sorgular. Oturum açılmaz veya kimlik yenilenmez; otomatik tekrar yoktur. Hesap başına beş dakika bekleme uygulanır.",
-                      "The computer reads Claude quota once. It does not sign in or renew authentication, and does not retry automatically. Each account has a five-minute cooldown.",
+                      "Kota bir kez okunur; oturum açılmaz, kimlik yenilenmez. Hesap başına 5 dakika bekleme var.",
+                      "Reads quota once; no sign-in or renewal. Five-minute cooldown per account.",
                     )}
                   </Body>
                 ) : (
                   <Body muted>
                     {copy(
-                      "Bu hesap bundan sonra yeni konuşmalarda varsayılan olacak.",
-                      "This account will be the default for new conversations.",
+                      "Yeni konuşmalarda bu hesap kullanılır.",
+                      "New conversations use this account.",
                     )}
                   </Body>
                 )}
@@ -224,14 +224,14 @@ export function ProviderAccountEditor({
             <Disclosure label={copy("Ayrıntılar", "Details")}>
               <Body muted>
                 {copy(
-                  "Görünen ad ve renk bilgisayardaki hesap ayarlarını değiştirir. Varsayılan seçimi yalnız gelecekteki konuşmalar içindir; açık konuşmaların hesabı değişmez.",
-                  "Display name and color change the computer's account settings. The default applies only to future conversations; open conversations keep their accounts.",
+                  "Ad ve renk bilgisayardaki hesap ayarlarını değiştirir. Varsayılan yalnız yeni konuşmalar içindir; açık konuşmalar hesabını korur.",
+                  "Name and color change the computer's account settings. The default applies to new conversations only; open ones keep their account.",
                 )}
               </Body>
               <Body muted>
                 {copy(
-                  "Başka bir pencerede yapılan değişikliklerle çakışma olabilir. Kaydetmeden önce ayarlar yeniden kontrol edilir.",
-                  "Changes in another window may conflict. Settings are checked again before saving.",
+                  "Kaydetmeden önce ayarlar yeniden kontrol edilir; başka pencerede yapılan değişiklikle çakışırsa kaydedilmez.",
+                  "Settings are checked again before saving; a conflicting change from another window is not overwritten.",
                 )}
               </Body>
             </Disclosure>

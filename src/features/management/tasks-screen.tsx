@@ -40,6 +40,7 @@ import { TaskBulkActions } from "./tasks/bulk-actions";
 import type { TaskEditorFlow } from "./tasks/types";
 import { useMobileTheme } from "@/ui/theme";
 import { useLocalSearchParams } from "expo-router";
+import { useProjectList } from "../workspace/use-project-directory";
 
 export function TasksScreen() {
   const { colors } = useMobileTheme();
@@ -50,6 +51,7 @@ export function TasksScreen() {
   const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
   const [bulkBusy, setBulkBusy] = useState(false);
   const machine = useActiveMachine();
+  const projects = useProjectList();
   const linked = useLocalSearchParams<{ taskId?: string; projectId?: string; machineId?: string }>();
   const { projectId: selectedProjectId, setProjectId } = useLocalProjectScope();
   const linkedTaskId = linked.machineId === machine?.id ? linked.taskId : undefined;
@@ -143,7 +145,7 @@ export function TasksScreen() {
       linkedTaskId ? task.id === linkedTaskId : taskMatchesFilter(task, filter) &&
       matchesSearch(task.title + " " + task.prompt, search, locale),
   );
-  const filterContext = <AppliedFilters filters={[`${copy("Durum", "Status")}: ${filterOptions.find(option => option.value === filter)?.label ?? filter}`]} />;
+  const filterContext = <AppliedFilters filters={[filter !== "active" && `${copy("Durum", "Status")}: ${filterOptions.find(option => option.value === filter)?.label ?? filter}`]} />;
   return (
     <ScreenList<HostTask>
       title={copy("Görevler", "Tasks")}
@@ -259,6 +261,7 @@ export function TasksScreen() {
       renderItem={({ item: task }) => (
         <TaskCard
           task={task}
+          projectName={projects.data?.find((project) => project.id === task.projectId)?.name}
           busy={busy}
           editorOpen={!!draft || !!deliveryTask}
           move={move}

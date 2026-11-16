@@ -20,6 +20,7 @@ import {
   FormActions, NavigationRow, Notice, QueryState, Row, Screen, SelectField, Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { useInfoHint } from "@/ui/info-hint";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useMobileTheme } from "@/ui/theme";
 import { haptic } from "@/ui/motion";
@@ -59,7 +60,7 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
   const confirmedTerminal = terminals.find(entry => entry.id === confirm?.id);
   const [editingCommand, setEditingCommand] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [showHelp, setShowHelp] = useState(false);
+  const help = useInfoHint(copy("Satır tabanlı kabuk. Etkileşimli tam ekran uygulamalar desteklenmez. Durdur, kabuğu ve alt işlemlerini sonlandırır.", "Line-based shell. Interactive full-screen apps are unavailable. Stop ends the shell and its child processes."));
   const [focused, setFocused] = useState(true);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const output = useTerminalOutput(client, project.id, selected?.id ?? "", autoRefresh, focused);
@@ -175,7 +176,6 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
         </View>
         {selected ? <ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
           { key: "refresh", label: copy("Otomatik yenile", "Auto refresh"), selected: autoRefresh, onPress: () => setAutoRefresh(!autoRefresh) },
-          { key: "help", label: copy("Yardım", "Help"), selected: showHelp, onPress: () => setShowHelp(value => !value) },
           { key: "stop", label: copy("Terminali durdur", "Stop terminal"), destructive: true,
             disabled: !writable || busy || uncertain || terminal?.state !== "running", onPress: () => setConfirm({ operation: "stop", id: selected.id, name: selected.name }) },
           { key: "close", label: copy("Terminali kapat", "Close terminal"), destructive: true,
@@ -188,11 +188,10 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
       {selected ? <>
         <Row>
           <Body mono muted style={uiStyles.grow}>{terminal?.cwd}</Body>
+          {help.button}
           <Badge label={terminal?.state === "running" ? copy("Çalışıyor", "Running") : copy("Durduruldu", "Stopped")} tone={terminal?.state === "running" ? "active" : "default"} />
         </Row>
-        {showHelp ?
-          <Body muted>{copy("Satır tabanlı kabuk. Etkileşimli tam ekran uygulamalar desteklenmez. Durdur, kabuğu ve alt işlemlerini sonlandırır.", "Line-based shell. Interactive full-screen apps are unavailable. Stop ends the shell and its child processes.")}</Body>
-        : null}
+        {help.panel}
         <QueryState query={output} loading="inline" onManageConnections={manageConnections} />
         {output.data?.truncated ? <Notice message={copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")} /> : null}
         {output.data ? <TerminalOutputView key={selected.id} output={terminalDisplayOutput(output.data.output)} /> : null}

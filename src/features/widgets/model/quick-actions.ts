@@ -10,7 +10,11 @@ const allowedHref = /^\/(?:sessions|session\/[^/?#]+|project\/[^/?#]+)(?:\?[^#]*
 export function quickActionItems(copy: (tr: string, en: string) => string): QuickActionItem[] {
   return [
     // `new=1` makes the sessions screen open its new-session sheet.
-    { id: "new-session", title: copy("Yeni oturum", "New session"), params: { href: "/sessions?new=1" } },
+    {
+      id: "new-session",
+      title: copy("Yeni oturum", "New session"),
+      params: { href: "/sessions?new=1" },
+    },
     { id: "sessions", title: copy("Oturumlar", "Sessions"), params: { href: "/sessions" } },
   ];
 }

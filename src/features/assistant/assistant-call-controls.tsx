@@ -12,18 +12,18 @@ import { startAssistantCall, endAssistantCall, pictureInPictureAssistant, muteAs
 import { openAssistantCompanion, cancelAssistantVoice } from "./assistant-companion-state";
 import type { AssistantVoiceTarget } from "./assistant-voice";
 
-export function AssistantCallButton({ target, enabled, current }: { target: AssistantVoiceTarget; enabled: boolean; current(): boolean }) {
+export function AssistantCallButton({ target, enabled, current, onStart }: { target: AssistantVoiceTarget; enabled: boolean; current(): boolean; onStart?(): void }) {
   const copy = useCopy(), { colors } = useMobileTheme(), call = useAssistantCall();
   const active = call.phase !== "idle";
   return <View style={{ gap: space.xs }}>
     <Row>
-    <Button label={active ? copy("Görüşmeyi bitir", "End voice call") : copy("Sesli görüşme", "Voice call")}
+    <Button label={active && !onStart ? copy("Görüşmeyi bitir", "End voice call") : copy("Sesli görüşme", "Voice call")}
       busy={call.phase === "starting"} disabled={!active && !enabled}
       tone={active ? "quiet" : "primary"}
-      onPress={() => { if (active) endAssistantCall(); else { cancelAssistantVoice(); openAssistantCompanion(target.machineId, target.environmentId); void startAssistantCall(target, current); } }}>
+      onPress={() => { if (onStart) onStart(); else if (active) endAssistantCall(); else { cancelAssistantVoice(); openAssistantCompanion(target.machineId, target.environmentId); void startAssistantCall(target, current); } }}>
       <Row>{active ? <PhoneOff size={18} color={colors.accent} /> : <AudioLines size={18} color={colors.primaryText} />}</Row>
     </Button>
-    {active ? <>
+    {active && !onStart ? <>
       <IconButton label={call.muted ? copy("Mikrofonu aç", "Unmute microphone") : copy("Mikrofonu kapat", "Mute microphone")}
         onPress={() => muteAssistantCall(!call.muted)}><MicOff size={18} color={call.muted ? colors.danger : colors.text} /></IconButton>
       <IconButton label={copy("Küçük pencerede aç", "Open picture in picture")} onPress={() => { void pictureInPictureAssistant().catch(error => useAssistantCall.setState({ error })); }}>

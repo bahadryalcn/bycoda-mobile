@@ -1,8 +1,8 @@
 import { useLocale } from "@/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { router, type Href } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { Body, Button, ErrorNotice, NavigationGroup, NavigationRow, Notice, Section, Separator, Stack } from "@/ui/primitives";
+import { Button, ErrorNotice, Notice, Separator, Stack } from "@/ui/primitives";
+import { HintSection } from "@/ui/info-hint";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
 import { DELETION_GRACE_DAYS } from "../contracts";
@@ -35,14 +35,15 @@ export function ManageAccountSection() {
   const scheduled = pending ? new Date(pending.purgeAfter).toLocaleDateString(locale) : "";
 
   return (
-    <Section title={copy("Hesabı yönet veya sil", "Manage or delete account")}>
+    <HintSection
+      title={copy("Hesabı yönet veya sil", "Manage or delete account")}
+      help={copy(
+        "Silme isteği {p0} günlük bir bekleme süresi başlatır; bu sürede iptal edebilirsin. Veri dışa aktarımı hesap portalında da bulunur.",
+        "A deletion request starts a {p0}-day grace period in which you can cancel it. Data export is also available in the account portal.",
+        { p0: String(DELETION_GRACE_DAYS) },
+      )}
+    >
       <Stack>
-        <NavigationGroup>
-          <NavigationRow
-            label={copy("Bildirim ayarları", "Notification settings")}
-            onPress={() => router.navigate("/account-notifications" as Href)}
-          />
-        </NavigationGroup>
         <ErrorNotice error={portal.error} message={copy("Sayfa açılamadı.", "The page could not be opened.")} />
         <Button
           label={copy("Hesap portalında yönet", "Manage in account portal")}
@@ -73,13 +74,6 @@ export function ManageAccountSection() {
           </>
         ) : (
           <>
-            <Body muted>
-              {copy(
-                "Silme isteği {p0} günlük bir bekleme süresi başlatır; bu sürede iptal edebilirsin. Veri dışa aktarımı hesap portalında da bulunur.",
-                "A deletion request starts a {p0}-day grace period in which you can cancel it. Data export is also available in the account portal.",
-                { p0: String(DELETION_GRACE_DAYS) },
-              )}
-            </Body>
             <ErrorNotice error={request.error} message={copy("Silme isteği gönderilemedi.", "The deletion request could not be sent.")} />
             <Button
               label={copy("Hesabı uygulamada sil", "Delete account in the app")}
@@ -103,6 +97,6 @@ export function ManageAccountSection() {
           </>
         )}
       </Stack>
-    </Section>
+    </HintSection>
   );
 }

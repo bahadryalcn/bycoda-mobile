@@ -31,8 +31,8 @@ export function ProviderAccountActions({ value, review, applied, current, disabl
     submitLabel={copy("Kapat", "Close")} onSubmit={onClose} disabled={busy} tone="default"
     feedback={<>{failure}<Notice tone={applied ? "success" : "warning"} message={
       applied && value.kind === "quotaRefresh" ? copy(
-        "Kota gözlemi tamamlandı. Sonucu güncellenen hesap listesinde görün.",
-        "Quota observation completed. View the result in the refreshed account list.",
+        "Kota okundu. Sonucu hesap listesinde veya Limitler’de görün.",
+        "Quota read. See the result in the account list or Limits.",
       ) : applied ? copy(
         "Hesap ayarları kaydedildi. Yeni bir değişiklik için güncel listeyi yeniden açın.",
         "Account settings saved. Reopen the refreshed list for another change.",

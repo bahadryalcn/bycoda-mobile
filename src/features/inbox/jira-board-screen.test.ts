@@ -10,7 +10,7 @@ const state = vi.hoisted(() => ({
   requests: [] as Request[], selected: null as null | { issue: unknown; snapshot: unknown },
   activeId: "machine", projectId: "project", fetching: false, error: null as unknown, reflect: true,
   selectors: new Map<string, (value: string) => void>(), rowPress: null as null | (() => void),
-  refetch: vi.fn(), apply: null as null | (() => void), actions: new Map<string, () => void>(),
+  refetch: vi.fn(), apply: null as null | (() => void), actions: new Map<string, () => void>(), singleBoard: false,
 }));
 vi.mock("@/state/machines", () => ({
   useActiveMachine: () => ({ id: "machine", name: "Computer", capabilities: ["inbox.jiraBoard.v1"] }),
@@ -27,7 +27,7 @@ vi.mock("./provider-queries", () => ({ useInboxRead: (request: Request, enabled:
     snapshot.board.id = request.input!.boardId!;
     snapshot.scope = { scope: request.input!.scope!, sprintId: request.input!.sprintId ?? null, pageToken: request.input!.pageToken ?? null };
   }
-  return { data: request.action === "jira-boards" ? [{ id: 1, name: "Fixture board" }, { id: 2, name: "Second board" }] : snapshot,
+  return { data: request.action === "jira-boards" ? (state.singleBoard ? [{ id: 1, name: "Fixture board" }] : [{ id: 1, name: "Fixture board" }, { id: 2, name: "Second board" }]) : snapshot,
     isSuccess: enabled, isFetching: state.fetching, error: request.action === "jira-board-read" ? state.error : null,
     refetch: () => state.refetch(request.action) };
 } }));
@@ -73,7 +73,7 @@ async function mount(empty = false, canWrite = true, issueState = "To do") {
     configuration: { sprints: [{ id: 7, name: "Active sprint", state: "active", goal: "Preserve scope" }], columns: [{ name: "Todo", statusIds: ["todo"] }, { name: "Done", statusIds: ["done"] }] },
     page: { issues: empty ? [] : [{ identifier: "ABC-1", title: "Fixture issue", statusId: "todo", state: issueState }], nextPageToken: "page2" } };
   props = { origin: { machineId: "machine", projectId: "project" }, canRead: true, canWrite, onClose: vi.fn() };
-  root = createRoot(container); await render(); await select("Jira board", "1");
+  root = createRoot(container); await render(); if (!state.singleBoard) await select("Jira board", "1");
 }
 async function select(label: string, value: string) { await act(async () => {
   const node = container.querySelector(`select[aria-label="${label}"]`) as HTMLSelectElement;
@@ -83,7 +83,7 @@ function button(label: string) { return [...container.querySelectorAll("button")
 async function click(label: string) { await act(async () => button(label).click()); }
 function latestRead() { return state.requests.filter((request) => request.action === "jira-board-read").at(-1)!.input!; }
 afterEach(async () => { await act(async () => root?.unmount()); container.remove(); state.requests = []; state.selected = null; state.activeId = "machine"; state.projectId = "project";
-  state.fetching = false; state.error = null; state.reflect = true; state.apply = null; state.actions.clear(); state.selectors.clear(); state.rowPress = null; vi.clearAllMocks(); vi.unstubAllGlobals(); });
+  state.fetching = false; state.error = null; state.reflect = true; state.singleBoard = false; state.apply = null; state.actions.clear(); state.selectors.clear(); state.rowPress = null; vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
 it("explains a page-local empty column and clears only that filter", async () => {
   await mount(); await click("Filters"); await select("Column", "2"); await click("Apply");
@@ -98,12 +98,26 @@ it("distinguishes an empty page without claiming the full board is empty", async
   await mount(true); expect(container.textContent).toContain("Issues on this page: 0"); expect(container.textContent).toContain("No issues on this page.");
   expect(container.textContent).not.toContain("Clear column filter"); expect(container.querySelector("footer")!.textContent).toContain("Next page");
 });
+
+it("clears active board filters directly and returns to the first page without changing the board",async()=>{
+  await mount();await click("Filters");await select("Board scope","backlog");await click("Apply");
+  await click("Next page");expect(latestRead().pageToken).toBe("page2");
+  await click("Clear filters");
+  expect(latestRead()).toMatchObject({boardId:1,scope:"board"});
+  expect(latestRead().pageToken).toBeUndefined();
+  expect(container.querySelector('[data-count]')?.getAttribute("data-count")).toBe("0");
+});
 it.each([true, false])("retains full custom state, original issue/snapshot and canWrite=%s", async (canWrite) => {
   const custom = "Waiting for security, accessibility and owner approval before release"; await mount(false, canWrite, custom);
-  const row = container.querySelector('button[aria-label^="ABC-1"]') as HTMLButtonElement;
-  expect(row.getAttribute("aria-label")).toBe(`ABC-1 · Fixture issue. ${custom}`); expect(row.textContent).toContain(custom); expect(row.disabled).toBe(!canWrite);
+  const row = container.querySelector('button[aria-label^="Fixture issue"]') as HTMLButtonElement;
+  expect(row.getAttribute("aria-label")).toBe(`Fixture issue. ABC-1. ${custom}`); expect(row.textContent).toContain(custom); expect(row.disabled).toBe(false);
   await act(async () => row.click());
-  if (canWrite) { expect(state.selected?.issue).toBe(snapshot.page.issues[0]); expect(state.selected?.snapshot).toBe(snapshot); } else expect(state.selected).toBeNull();
+  expect(state.selected?.issue).toBe(snapshot.page.issues[0]); expect(state.selected?.snapshot).toBe(snapshot);
+});
+it("loads issues automatically when there is one Jira board", async () => {
+  state.singleBoard = true; await mount();
+  expect(latestRead()).toMatchObject({ projectId: "project", boardId: 1, scope: "board" });
+  expect(container.textContent).toContain("ABC-1");
 });
 it("stages and cancels scope/column changes without changing the active read key", async () => {
   await mount(); expect(container.querySelector('select[aria-label="Board scope"]')).toBeNull();

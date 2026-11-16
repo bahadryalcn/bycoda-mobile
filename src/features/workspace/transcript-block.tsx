@@ -470,7 +470,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
               </Row>
             ) : null}
             {isBlockStreaming(value) ? (
-              <ChatStreaming label={copy("Yazıyor…", "Writing…")} />
+              <ChatStreaming label={copy("Yazıyor…", "Writing…")} state="composing" />
             ) : null}
             {value.role === "user" && value.turnOutcome === "stopped" ? (
               <Badge label={copy("Sen durdurdun", "Stopped by you")} tone="default" />

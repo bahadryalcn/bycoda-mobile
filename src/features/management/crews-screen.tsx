@@ -163,7 +163,6 @@ export function CrewsScreen() {
       }
       header={
         <>
-          {supported ? <ActiveCrews /> : null}
           {!supported ? (
             <StateView
               illustration="permission"
@@ -197,6 +196,7 @@ export function CrewsScreen() {
                   },
                 ]}
               />
+              {tab === "runs" ? <ActiveCrews /> : null}
               <SearchField
                 ref={searchInput}
                 label={tab === "definitions" ? copy("Ekip adında ara", "Search crew names") : tab === "runs" ? copy("Çalışma başlığında ara", "Search work titles") : copy("Üye adında ara", "Search member names")}

@@ -111,7 +111,8 @@
       [
         "expo-notifications",
         {
-          "defaultChannel": "bycoda"
+          "defaultChannel": "bycoda",
+          "enableBackgroundRemoteNotifications": true
         }
       ],
       [
@@ -184,7 +185,8 @@
                 "supportedFamilies": [
                   "systemSmall",
                   "accessoryCircular",
-                  "accessoryRectangular"
+                  "accessoryRectangular",
+                  "accessoryInline"
                 ]
               },
               "android": {
@@ -248,7 +250,10 @@
           "enableBackgroundRecording": false,
           "enableBackgroundPlayback": false
         }
-      ]
+      ],
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

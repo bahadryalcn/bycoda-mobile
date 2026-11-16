@@ -6,7 +6,6 @@ import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { startDiagnostics } from "../src/features/diagnostics/diagnostics-runtime";
 import { AppProviders } from "../src/app-providers";
-import { fontSize } from "../src/ui/tokens";
 import { ScreenChromeProvider } from "../src/ui/layout";
 import { HeaderBackButton } from "../src/ui/header-back-button";
 import { useCopy } from "../src/ui/copy";
@@ -20,7 +19,7 @@ startDiagnostics();
 function RootNavigation() {
   const copy = useCopy();
   const reducedMotion = useReducedMotionPreference();
-  const { mode, colors } = useMobileTheme();
+  const { mode, colors, uiStyles } = useMobileTheme();
   const baseTheme = mode === "dark" ? DarkTheme : DefaultTheme;
   const navigationTheme = {
     ...baseTheme,
@@ -42,7 +41,7 @@ function RootNavigation() {
               headerStyle: { backgroundColor: colors.background },
               animation: reducedMotion ? "none" : "default",
               headerTintColor: colors.text,
-              headerTitleStyle: { fontSize: fontSize.title, fontWeight: "600" },
+              headerTitleStyle: uiStyles.title,
               headerBackButtonDisplayMode: "minimal",
               // One back presentation for every stack header; the native arrow is replaced, not mixed in.
               headerLeft: ({ canGoBack }) => canGoBack ? <HeaderBackButton onPress={() => router.back()} /> : null,

@@ -23,7 +23,7 @@ export function speechWav(chunks: { audio: string; sampleRate: number }[]) {
   return bytes;
 }
 
-export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependencies, "state" | "transcript" | "error">): AssistantVoiceDependencies {
+export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependencies, "state" | "transcript" | "error" | "level">): AssistantVoiceDependencies {
   let stopPlayback = () => {};
   const android = Platform.OS === "android" ? nativeVoiceCompanion() : null;
   const playback = android ? androidVoicePlayback(android) : null;

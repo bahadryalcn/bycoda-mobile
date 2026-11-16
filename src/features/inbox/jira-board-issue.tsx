@@ -1,10 +1,15 @@
 import { useInboxLocalScope } from "./inbox-local-scope";
 import { useLayoutEffect, useRef, useState } from "react";
+import { Linking } from "react-native";
 import { useCopy } from "@/ui/copy";
+import { useAsyncAction } from "@/state/actions";
 
-import { Badge, Body, Button, Heading, Notice, QueryState, Row, SelectField, Sheet, Stack } from "@/ui/primitives";
+import { Badge, Body, Button, Disclosure, Heading, MutationState, Notice, QueryState, Row, SelectField, Sheet, Stack } from "@/ui/primitives";
+import { MessageText } from "@/ui/message-text";
+import { useLocale } from "@/i18n";
 import { ErrorText } from "../workspace/shared";
 import { useInboxRead } from "./provider-queries";
+import { inboxItemInput, isInboxPrivateFailure } from "./provider-model";
 
 import { useJiraBoardDelivery } from "./jira-board-delivery";
 import { JiraBoardActionReview, type JiraBoardReview } from "./jira-board-action-review";
@@ -27,6 +32,7 @@ export function JiraBoardIssueActions({
   onClose: () => void;
 }) {
   const inboxScope = useInboxLocalScope();
+  const locale = useLocale();
   const copy = useCopy(),
     [snapshot] = useState(incoming),
     [issue] = useState(incomingIssue),
@@ -47,7 +53,11 @@ export function JiraBoardIssueActions({
     writeAllowed = useRef(canWrite);
   writeAllowed.current = canWrite;
   const current = () => inboxScope.matches(origin);
+  const details = useInboxRead({ action: "details", input: inboxItemInput(issue, origin.projectId) }, current());
+  const openLink = useAsyncAction<void>();
+  const readable = current() && !isInboxPrivateFailure(details.error);
   const locked =
+    !readable ||
     !canWrite ||
     delivery.busy ||
     !delivery.draft.ready ||
@@ -138,28 +148,40 @@ export function JiraBoardIssueActions({
     <Sheet
       visible
       size="form"
-      title={issue.identifier}
+      title={readable ? issue.identifier : copy("Ayrıntılar", "Details")}
       onClose={onClose}
       dismissible={!delivery.busy}
       footer={
         <Button
-          label={delivery.result ? copy("Kapat", "Close") : copy("İşlemi incele", "Review action")}
+          tone="primary"
+          label={!readable || delivery.result ? copy("Kapat", "Close") : copy("İşlemi incele", "Review action")}
           busy={delivery.busy}
-          disabled={delivery.result ? false : locked || !!review || !command}
-          onPress={delivery.result ? onClose : submit}
+          disabled={!readable || delivery.result ? false : locked || !!review || !command}
+          onPress={!readable || delivery.result ? onClose : submit}
         />
       }
     >
       <Stack>
-        <Heading>{issue.title}</Heading>
-        <Row><Body muted>{snapshot.board.name}</Body><Badge label={issue.state} /></Row>
-        <Body muted>
-          {copy(
-            "İşlem bilgisayarda tam hedefiyle yeniden onaylanır. Jira’daki eşzamanlı değişiklikler sunucu tarafında atomik olarak kilitlenemez.",
-            "The exact action requires approval on the computer. Concurrent changes in Jira cannot be locked atomically by this client.",
-          )}
-        </Body>
-        <ErrorText error={delivery.draft.error || delivery.error} />
+        {readable ? <>
+          <Heading>{issue.title}</Heading>
+          <Row><Body muted>{snapshot.board.name}</Body><Badge label={issue.state} /></Row>
+          <Body>{copy("Atanan", "Assignee")}: {issue.assignees?.map(person => person.login).join(", ") || copy("Atanmamış", "Unassigned")}</Body>
+          {issue.priority ? <Body>{copy("Öncelik", "Priority")}: {issue.priority}</Body> : null}
+          {issue.labels?.length ? <Body>{copy("Etiketler", "Labels")}: {issue.labels.map(label => label.name).join(", ")}</Body> : null}
+          {issue.updatedAt ? <Body>{copy("Güncellendi", "Updated")}: {new Date(issue.updatedAt).toLocaleString(locale)}</Body> : null}
+          <QueryState query={details} />
+          {details.data ? <>
+            <Body>{copy("Bildiren", "Reporter")}: {details.data.author || copy("Bilinmiyor", "Unknown")}</Body>
+            <Disclosure label={copy("Açıklama", "Description")} defaultExpanded>
+              <MessageText text={details.data.body || copy("Açıklama yok.", "No description.")} role="assistant" />
+            </Disclosure>
+          </> : null}
+          {/^https?:\/\//i.test(issue.url ?? "") ? <Button tone="quiet" label={copy("Jira’da aç", "Open in Jira")} busy={openLink.isPending} onPress={() => {
+            void openLink.run(async () => { if (current()) await Linking.openURL(issue.url); });
+          }} /> : null}
+          <MutationState mutation={openLink} />
+        </> : <QueryState query={details} />}
+        <ErrorText error={readable ? delivery.draft.error || delivery.error : undefined} />
         {pending ? (
           <>
             <Notice
@@ -168,17 +190,18 @@ export function JiraBoardIssueActions({
                 "The Jira action outcome is unconfirmed. Check the existing request before another action.",
               )}
             />
-            <Body mono>{`${pending.command.input.key} · ${pending.command.action}`}</Body>
+            {readable ? <Body mono>{`${pending.command.input.key} · ${pending.command.action}`}</Body> : null}
             <Button
               label={copy("İşlem sonucunu kontrol et", "Check action result")}
               busy={delivery.busy}
+              disabled={!readable}
               onPress={() => {
                 void delivery.reconcile();
               }}
             />
           </>
         ) : null}
-        {delivery.result ? (
+        {readable && delivery.result ? (
           <Notice
             tone={delivery.result.outcome === "submitted" ? "success" : "warning"}
             message={
@@ -188,7 +211,7 @@ export function JiraBoardIssueActions({
             }
           />
         ) : null}
-        {delivery.draft.error ? (
+        {readable && delivery.draft.error ? (
           <Button
             label={copy("Taslağı yeniden yükle", "Retry loading draft")}
             onPress={() => {
@@ -196,6 +219,7 @@ export function JiraBoardIssueActions({
             }}
           />
         ) : null}
+        {readable ? <>
         <SelectField
           label={copy("İşlem", "Action")}
           value={action}
@@ -287,6 +311,7 @@ export function JiraBoardIssueActions({
             />
           </>
         ) : null}
+        </> : null}
       </Stack>
     </Sheet>
     {review && !locked ? <JiraBoardActionReview review={review} snapshot={snapshot} issue={issue}

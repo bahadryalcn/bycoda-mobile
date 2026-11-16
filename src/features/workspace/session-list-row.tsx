@@ -1,3 +1,5 @@
+import { sessionIsSnoozed } from "./session-attention-model";
+import { stamp as dateStamp } from "../management/shared/format";
 import { useSessionDraftPresence } from "./use-session-draft-presence";
 import { memo, useEffect } from "react";
 import { View, useWindowDimensions } from "react-native";
@@ -43,11 +45,13 @@ export const SessionListRow = memo(function SessionListRow({
   projectCwd,
   projectAppearance,
   showProject,
+  selected,
   session,
   ancestors,
   compressed,
   canRead,
   settled,
+  snoozed = sessionIsSnoozed(session),
   onPress,
 }: {
   machineId: string;
@@ -57,12 +61,14 @@ export const SessionListRow = memo(function SessionListRow({
   projectAppearance?: HostProject["appearance"];
   /** All-session views name the project in the meta line; a project's own list does not. */
   showProject?: boolean;
+  selected?: boolean;
   session: HostSessionSummary;
   ancestors?: readonly string[];
   compressed?: boolean;
   canRead: (projectId: string) => boolean;
   /** The Host marks this session settled (shown in the collapsed Settled group). */
   settled?: boolean;
+  snoozed?: boolean;
   /** Receives the session id so the parent can pass one stable callback to every row. */
   onPress: (sessionId: string, projectId: string) => void;
 }) {
@@ -111,6 +117,7 @@ export const SessionListRow = memo(function SessionListRow({
       : undefined;
   const label = [
     title,
+    session.unread ? copy("Okunmadı", "Unread") : undefined,
     managedLabel,
     projectName,
     status.label,
@@ -139,6 +146,7 @@ export const SessionListRow = memo(function SessionListRow({
         <View>
           <PressableCard
             label={label}
+            selected={selected}
             optionsLabel={optionsLabel}
             onPress={() => {
               openSessionSeen(machineId, session.id);
@@ -149,6 +157,7 @@ export const SessionListRow = memo(function SessionListRow({
               minHeight: metrics.rowHeightSession,
               justifyContent: "center",
               paddingVertical: space.row,
+              backgroundColor: selected ? colors.selected : undefined,
             }}
           >
             <View
@@ -167,16 +176,20 @@ export const SessionListRow = memo(function SessionListRow({
                   <Body
                     selectable={false}
                     numberOfLines={fontScale > 1 ? undefined : 2}
-                    style={[uiStyles.label, { fontWeight: "600", flexShrink: 1 }]}
+                    style={[uiStyles.label, { fontWeight: session.unread ? "700" : "600", flexShrink: 1 }]}
                   >
                     {title}
                   </Body>
+                  {session.unread ? (
+                    <View accessible={false} style={{ width: space.sm, height: space.sm, borderRadius: space.sm, marginTop: space.xs, backgroundColor: colors.accent }} />
+                  ) : null}
                   {managedLabel ? (
                     <View style={{ paddingTop: space.xxs }}>
                       <Bot {...decorativeSvgProps} size={14} color={colors.info} />
                     </View>
                   ) : null}
                 </View>
+                {snoozed ? <Body muted style={uiStyles.caption}>{copy("Uyanma zamanı", "Wakes at")} · {dateStamp(session.snoozedUntil ?? undefined)}</Body> : null}
                 {showProject ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2 }}>
                     <ProjectIcon appearance={projectAppearance} size={14} box={16} />

@@ -62,11 +62,12 @@ export function useInfoHint(text: string | undefined) {
 }
 
 /** Field label with the info icon at its end and the explanation revealed beneath it. */
-export function HintLabel({ label, help, style, trailing }: {
-  label: string; help?: string; style?: StyleProp<TextStyle>; trailing?: ReactNode;
+export function HintLabel({ label, help, always, style, trailing }: {
+  label: string; help?: string; /** Reveal even a short text behind the icon (an explicit info prop). */ always?: boolean;
+  style?: StyleProp<TextStyle>; trailing?: ReactNode;
 }) {
   const { uiStyles } = useMobileTheme();
-  const info = useInfoHint(isUnitHint(help) ? undefined : help);
+  const info = useInfoHint(!always && isUnitHint(help) ? undefined : help);
   return (
     <View style={{ gap: space.xxs }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>

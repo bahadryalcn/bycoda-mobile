@@ -66,7 +66,7 @@ export function ProjectReorderSheet({
         <Animated.ScrollView
           ref={scrollRef}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: space.screen, gap: space.sm }}
+          contentContainerStyle={{ padding: space.screen, gap: space.sm, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
         >
           {open && grouped ? (
             <View style={{ alignSelf: "flex-start" }}>

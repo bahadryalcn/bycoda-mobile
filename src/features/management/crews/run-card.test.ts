@@ -83,6 +83,7 @@ vi.mock("@/ui/primitives", () => {
     Body: wrapper,
     Row: wrapper,
     Stack: wrapper,
+    Disclosure: wrapper,
     NavigationGroup: wrapper,
     Button: action,
     IconButton: action,

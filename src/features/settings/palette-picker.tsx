@@ -38,7 +38,6 @@ export function PalettePicker({ value, disabled, onChange }: Props) {
   const { mode, colors } = useMobileTheme();
   return (
     <Stack>
-    <Body style={{ marginTop: space.md }}>{copy("Renk paleti", "Color palette")}</Body>
     <View accessibilityRole="radiogroup" accessibilityLabel={copy("Renk paleti", "Color palette")} style={layout.grid}>
       {[0, 3, 6].map((start) => <View key={start} style={{ flexDirection: "row", gap: space.md, width: "100%" }}>
       {PALETTES.slice(start, start + 3).map((palette) => {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { providerName } from "../workspace/provider-choices";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useLocalSearchParams } from "expo-router";
 import { View } from "react-native";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
@@ -9,9 +9,10 @@ import { useHostQuery } from "@/state/queries";
 import { hostKey } from "@/state/host-request";
 import type { HostProject } from "@/domain/types";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
-import { Body, Button, Disclosure, IconButton, Notice, QueryState, ScreenList, SectionHeader, SegmentedControl, SelectField, StateView } from "@/ui/primitives";
+import { Body, Button, Disclosure, IconButton, Notice, QueryState, ScreenList, SectionHeader, SegmentedControl, StateView } from "@/ui/primitives";
 import { MetricRow } from "@/ui/metric-row";
 import { useCopy } from "@/ui/copy";
+import { useInfoHint } from "@/ui/info-hint";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import {
@@ -30,7 +31,9 @@ export function UsageScreen({ project }: { project: HostProject }) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const cache = useQueryClient();
-  const [tab, setTab] = useState<UsageTab>("tokens");
+  // Deep link from the provider sheet opens the Limits tab; any other value keeps the default tab.
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<UsageTab>(() => params.tab === "limits" ? "limits" : "tokens");
   const selectedKey = hostKey(machine?.id ?? null, [tab === "limits" ? "usage-limits" : tab === "cost" ? "usage-cost" : "session-usage"]);
   const selectedFetching = useIsFetching({ queryKey: selectedKey }) > 0;
   const selectedSupported = !!machine?.environmentId && !!machine.capabilities?.includes(tab === "limits" ? "usage.limits.read" : tab === "cost" ? "usage.cost.read" : "usage.sessions.read");
@@ -104,6 +107,10 @@ export function UsageScreen({ project }: { project: HostProject }) {
     });
   };
   const { colors } = useMobileTheme();
+  const calcInfo = useInfoHint(copy(
+    "Bu bilgisayarda gözlemlenen proje oturumları; başlangıcı bu aralıkta olan turlar sayılır. Hesap kotası ve fatura dahil değildir. Eksik değerler sıfır değildir.",
+    "Project sessions observed on this computer; turns starting in this range are counted. Account quotas and bills are excluded. Missing values are not zero.",
+  ));
   const refreshControl = (
     <IconButton
       label={copy("Yenile", "Refresh")}
@@ -139,34 +146,27 @@ export function UsageScreen({ project }: { project: HostProject }) {
           {tab === "cost" ? (machine?.capabilities?.includes("usage.cost.read") ? <UsageCost /> : <UsageUnavailable tab="cost" />) : null}
           {tab === "limits" ? (machine?.capabilities?.includes("usage.limits.read") ? <UsageLimits /> : <UsageUnavailable tab="limits" />) : null}
           {tab === "tokens" ? <>
-          <SelectField
-            label={copy("Zaman aralığı", "Time range")}
-            value={days}
-            disabled={!supported || action !== null || query.isFetching}
-            options={[
-              { value: "1", label: copy("Son 24 saat", "Last 24 hours") },
-              { value: "7", label: copy("Son 7 gün", "Last 7 days") },
-            ]}
-            onChange={(value) => {
-              if (value !== "1" && value !== "7" || pending.current || query.isFetching || !supported || latestProject.current !== project.id || !isReviewedMachine(review, useMachines.getState())) return;
-              setDays(value);
-              setCursor(undefined);
-            }}
-          />
-          <Disclosure label={copy("Nasıl hesaplanır?", "How is usage calculated?")}>
-            <Body muted>{copy("Bu bilgisayarda gözlemlenen proje oturumları.", "Project sessions observed on this computer.")}</Body>
-            <Body muted>{copy(
-              "Hesap kotası, abonelik faturası ve token bütçesi dahil değildir.",
-              "Account quotas, subscription bills and token budgets are excluded.",
-            )}</Body>
-            <Body muted>
-            {copy(
-              "Başlangıcı bu aralıkta olan turlar sayılır. Süre, tamamlanan turun tüm süresidir; token verisi sağlayıcı bildirirse görünür. Eksik değerler sıfır değildir.",
-              "Counts turns starting in this interval. Duration covers the entire settled turn; tokens appear when reported by the provider. Missing values are not zero.",
-            )}
-            </Body>
-            <Body muted>{new Date(sinceMs).toISOString()} — {new Date(untilMs).toISOString()} · UTC</Body>
-          </Disclosure>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <SegmentedControl
+                hideLabel
+                label={copy("Zaman aralığı", "Time range")}
+                value={days}
+                disabled={!supported || action !== null || query.isFetching}
+                options={[
+                  { value: "1", label: copy("24 saat", "24 hours") },
+                  { value: "7", label: copy("7 gün", "7 days") },
+                ]}
+                onChange={(value) => {
+                  if (value !== "1" && value !== "7" || pending.current || query.isFetching || !supported || latestProject.current !== project.id || !isReviewedMachine(review, useMachines.getState())) return;
+                  setDays(value);
+                  setCursor(undefined);
+                }}
+              />
+            </View>
+            <View style={{ minHeight: 48, justifyContent: "center" }}>{calcInfo.button}</View>
+          </View>
+          {calcInfo.panel}
           {!supported ? (
             <StateView
               illustration="permission"
@@ -200,8 +200,8 @@ export function UsageScreen({ project }: { project: HostProject }) {
                 <Notice
                   tone="warning"
                   message={copy(
-                    "Kapsam kısmi: sayfa veya tarama sınırı ya da tarihsiz turlar var. Bu değerler tüm kullanımın toplamı değildir.",
-                    "Coverage is partial: page or scan limits, or undated turns are present. These values are not total usage.",
+                    "Kapsam kısmi; bu değerler tüm kullanımın toplamı değildir.",
+                    "Coverage is partial; these values are not total usage.",
                   )}
                 />
               ) : null}

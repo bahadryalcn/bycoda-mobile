@@ -1,50 +1,30 @@
 import { useMobileTheme } from "@/ui/theme";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, useWindowDimensions } from "react-native";
+import Animated, { FadeIn, FadeInDown, ReduceMotion } from "react-native-reanimated";
 import { router, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BrandLogo, LegalLinks } from "@/ui/brand";
 import { useCopy } from "@/ui/copy";
 import { AccountComputersSection } from "./account-computers-section";
-import { Body, Heading, StateView } from "@/ui/primitives";
-import { IconTile } from "@/ui/icon-tile";
-import Laptop from "lucide-react-native/icons/laptop";
-import FolderOpen from "lucide-react-native/icons/folder-open";
-import MessageSquare from "lucide-react-native/icons/message-square";
-import ShieldCheck from "lucide-react-native/icons/shield-check";
-import { metrics, space } from "@/ui/tokens";
+import { Body, Button, Heading } from "@/ui/primitives";
+import { CodeArt, codeArtWidth } from "@/ui/code-art";
+import { DotField } from "@/ui/dot-field";
+import { fontSize, lineHeight, metrics, space } from "@/ui/tokens";
 import { useBottomInset } from "@/ui/layout";
 
-type Benefit = { key: string; icon: typeof Laptop; title: string; detail: string };
-
-/** First run: brand on top, one headline, three benefit rows, primary and secondary actions, legal footer. */
+/**
+ * First run after sign-in: the website's code-glyph guide, one line on where to start and the scan
+ * action. Content scrolls when the account already lists computers.
+ */
 export function WelcomeScreen() {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const insets = useSafeAreaInsets();
   const bottomInset = useBottomInset();
-  const benefits: Benefit[] = [
-    {
-      key: "projects",
-      icon: FolderOpen,
-      title: copy("Projelerine göz at", "Browse your projects"),
-      detail: copy("Oturumlarını telefondan takip et.", "Follow your sessions from your phone."),
-    },
-    {
-      key: "respond",
-      icon: MessageSquare,
-      title: copy("Agentlara yanıt ver", "Answer your agents"),
-      detail: copy("Bekleyen soruları hemen yanıtla.", "Reply to pending questions right away."),
-    },
-    {
-      key: "secure",
-      icon: ShieldCheck,
-      title: copy("Bilgisayarında kalır", "Stays on your computer"),
-      detail: copy("Projeler ve komutlar bilgisayarında çalışır.", "Projects and commands run on your computer."),
-    },
-  ];
+  const { width, height } = useWindowDimensions();
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen options={{ title: copy("Projeler", "Projects") }} />
+      <DotField />
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
@@ -55,37 +35,35 @@ export function WelcomeScreen() {
           paddingStart: Math.max(insets.left, space.screen),
           paddingEnd: Math.max(insets.right, space.screen),
           paddingTop: space.lg,
-          paddingBottom: Math.max(bottomInset, insets.bottom, space.md),
-          gap: space.md,
+          paddingBottom: Math.max(bottomInset, insets.bottom, space.md) + space.lg,
+          gap: space.xl,
         }}
       >
-        <View style={{ alignItems: "center", paddingTop: space.xl }}>
-          <BrandLogo centered />
-        </View>
-        <AccountComputersSection />
-        <View style={{ flex: 1, justifyContent: "center", gap: space.lg }}>
-          <StateView
-            illustration="connect-computer"
-            title={copy("Kaldığın yerden devam et.", "Pick up where you left off.")}
-            description={copy("Başlamak için bilgisayarında bycoda’yı aç.", "Open bycoda on your computer to get started.")}
-            action={{ label: copy("Bilgisayarını bağla", "Connect your computer"), onPress: () => router.navigate("/machines") }}
-            secondaryAction={{ label: copy("Uygulamayı keşfet", "Explore the app"), onPress: () => router.navigate("/demo") }}
-          />
-          <View style={{ gap: space.md }} accessibilityRole="list">
-            {benefits.map(({ key, icon: Icon, title, detail }) => (
-              <View key={key} accessibilityRole="listitem" style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-                <IconTile>
-                  <Icon size={18} strokeWidth={2} color={colors.muted} />
-                </IconTile>
-                <View style={{ flex: 1, gap: space.xxs }}>
-                  <Heading style={uiStyles.title}>{title}</Heading>
-                  <Body muted>{detail}</Body>
-                </View>
+        <Animated.View entering={FadeIn.duration(700).reduceMotion(ReduceMotion.System)}
+          style={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
+          <CodeArt name="guideTip" active width={codeArtWidth("guideTip", { width: width * 0.8, height: height * 0.5 })} />
+        </Animated.View>
+        <Animated.View entering={FadeInDown.duration(600).delay(300).reduceMotion(ReduceMotion.System)}>
+          <AccountComputersSection others={
+            <View style={{ gap: space.lg }}>
+              <View style={{ gap: space.sm }}>
+                <Heading style={[uiStyles.largeTitle, { textAlign: "center", fontSize: fontSize.display, lineHeight: lineHeight.display }]}>
+                  {copy("Bilgisayarını bağla", "Connect your computer")}
+                </Heading>
+                <Body muted style={{ textAlign: "center" }}>
+                  {copy("Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
+                    "In bycoda on your computer, choose “Connect your phone” and scan the QR code.")}
+                </Body>
               </View>
-            ))}
-          </View>
-        </View>
-        <LegalLinks onOpen={(document) => router.navigate(`/legal/${document}`)} />
+              <View style={{ gap: space.xs }}>
+                <Button label={copy("QR kodu tara", "Scan QR code")} tone="primary" fullWidth
+                  onPress={() => router.navigate({ pathname: "/machines", params: { start: "scan" } })} />
+                <Button label={copy("Uygulamayı keşfet", "Explore the app")} tone="quiet" fullWidth
+                  onPress={() => router.navigate("/demo")} />
+              </View>
+            </View>
+          } />
+        </Animated.View>
       </ScrollView>
     </View>
   );

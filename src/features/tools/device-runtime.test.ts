@@ -30,7 +30,7 @@ async function click(label: string) { await act(async () => [...container.queryS
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; state.id = "machine"; state.requests = []; state.queries = []; state.running = false; state.uncertain = false; vi.unstubAllGlobals(); });
 it("reads exact device preflight on open and requires a separate confirmation for setup with agent access off", async () => {
   await render(); expect(state.queries).toContainEqual({ method: "devices.preflight", params: { projectId: "project", deviceId: "device" } }); expect(state.requests).toEqual([]);
-  await click("Set up device tools"); expect(state.requests).toEqual([]); expect(container.textContent).toContain("downloads and installs");
+  await click("Set up device tools"); expect(state.requests).toEqual([]); expect(container.textContent).toContain("downloaded and installed");
   await click("Confirm"); expect(state.requests).toEqual([{ method: "devices.setup", params: { projectId: "project", agentAccess: false } }]);
 });
 it("requires explicit permission selection for agent device control", async () => {

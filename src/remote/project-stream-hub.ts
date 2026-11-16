@@ -43,8 +43,13 @@ export function retainProjectStream(
   if (owned.last) {
     const value = owned.last;
     queueMicrotask(() => {
-      if (owned.released || !owned.listeners.has(listener)) return;
-      listener.apply(value, () => undefined).catch((error) => listener.onError(asError(error)));
+      if (owned.released || !owned.listeners.has(listener) || owned.last !== value) return;
+      const current = () => {
+        client.assertCurrentAccess();
+        if (owned.released || !owned.listeners.has(listener) || owned.last !== value)
+          throw new Error("The project stream is no longer current.");
+      };
+      listener.apply(value, current).catch((error) => listener.onError(asError(error)));
     });
   }
   return () => {
@@ -69,21 +74,41 @@ function broadcast(entry: Entry, error: Error) {
     }
   }
 }
+function retire(client: HostTransport, projectId: string, entry: Entry) {
+  entry.released = true;
+  entry.last = undefined;
+  clearTimeout(entry.timer);
+  entry.subscription?.close();
+  const entries = hubs.get(client);
+  if (entries?.get(projectId) === entry) entries.delete(projectId);
+}
 function open(client: HostTransport, projectId: string, entry: Entry): void {
   watchProjectStream(
     client,
     projectId,
     async (value, assertCurrent) => {
+      const current = () => {
+        assertCurrent();
+        if (entry.released || entry.last !== value)
+          throw new Error("The project stream is no longer current.");
+      };
+      assertCurrent();
+      if (entry.released) throw new Error("The project stream is no longer current.");
       entry.last = value;
       entry.attempt = 0;
       await Promise.all(
         [...entry.listeners].map((listener) =>
-          listener.apply(value, assertCurrent).catch((error) => listener.onError(asError(error))),
+          listener.apply(value, current).catch((error) => listener.onError(asError(error))),
         ),
       );
-      assertCurrent();
+      current();
     },
-    (error) => broadcast(entry, error),
+    (error) => {
+      if (entry.released) return;
+      if (FATAL_KINDS.includes((error as { kind?: string }).kind ?? ""))
+        retire(client, projectId, entry);
+      broadcast(entry, error);
+    },
   ).then(
     (subscription) => {
       if (entry.released) subscription.close();
@@ -92,14 +117,13 @@ function open(client: HostTransport, projectId: string, entry: Entry): void {
     (error) => {
       if (entry.released) return;
       const failure = asError(error);
-      broadcast(entry, failure);
       if (FATAL_KINDS.includes((failure as { kind?: string }).kind ?? "")) {
         // Let the next retain start a fresh attempt instead of reusing a dead entry.
-        entry.released = true;
-        const entries = hubs.get(client);
-        if (entries?.get(projectId) === entry) entries.delete(projectId);
+        retire(client, projectId, entry);
+        broadcast(entry, failure);
         return;
       }
+      broadcast(entry, failure);
       entry.timer = setTimeout(() => {
         if (!entry.released) open(client, projectId, entry);
       }, backoffDelayMs(entry.attempt++));

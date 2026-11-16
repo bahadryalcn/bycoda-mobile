@@ -33,6 +33,8 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/tokens", () => ({ metrics: {}, space: {} }));
 vi.mock("./shared", () => ({ relativeTime: () => "1m", sessionStatus: () => ({ label: "Ready" }) }));
+// The real formatter loads expo-localization and the machine store, which need the Expo runtime.
+vi.mock("../management/shared/format", () => ({ stamp: () => "" }));
 vi.mock("./session-row-actions", () => ({ SessionRowActions: ({ children }: { children(open: () => void): unknown }) => children(() => {}) }));
 
 let root: ReturnType<typeof createRoot>;

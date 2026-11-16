@@ -1,34 +1,36 @@
 import { useState } from "react";
-import { View } from "react-native";
-import { BrandLogo, LegalLinks } from "@/ui/brand";
-import { Body, Heading, Screen, Sheet, Stack } from "@/ui/primitives";
+import { ScrollView, useWindowDimensions } from "react-native";
+import { LegalLinks } from "@/ui/brand";
+import { Notice, Sheet } from "@/ui/primitives";
+import { OnboardingShell } from "@/ui/onboarding-shell";
 import { useCopy } from "@/ui/copy";
-import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import { LegalDocument, legalDocumentTitle, type LegalDocumentId } from "../../legal/legal-document";
-import { SignInPanel } from "./SignInPanel";
+import { SignInPanel, type SignInStep } from "./SignInPanel";
 
-/** Compact, scrollable entry with legal information available before navigation mounts. */
+/** Signed-out entry: full-screen pages show what bycoda does; sign-in and legal links stay at the bottom. */
 export function AccountWelcome({ unavailable = false }: { unavailable?: boolean }) {
   const copy = useCopy();
-  const { uiStyles } = useMobileTheme();
+  const { height } = useWindowDimensions();
   const [document, setDocument] = useState<LegalDocumentId | null>(null);
-  return <Screen title={copy("Hesap", "Account")}>
-    <Stack style={{ gap: space.xxl }}>
-      <View style={{ gap: space.xl, paddingTop: space.xl }}>
-        <BrandLogo />
-        <Stack style={{ gap: space.sm }}>
-          <Heading style={uiStyles.pageTitle}>{copy("Hesabınla devam et", "Continue with your account")}</Heading>
-          <Body muted>{unavailable
-            ? copy("Bu sürümde hesap girişi ayarlanmamış. Devam etmek için giriş desteği olan bir sürüm kullan.", "Account sign-in is not configured in this build. Use a build with sign-in enabled to continue.")
-            : copy("Bilgisayarlarına ve oturumlarına güvenle bağlanmak için giriş yap.", "Sign in to securely connect to your computers and sessions.")}</Body>
-        </Stack>
-      </View>
-      {!unavailable ? <SignInPanel /> : null}
+  // The e-mail code step needs the room next to the keyboard; the pages return on "Back".
+  const [step, setStep] = useState<SignInStep>("choose");
+  return <>
+    <OnboardingShell hidePages={step === "code"} pages={[
+      { key: "control", art: "guideWalk", title: copy("Agentların cebinde", "Your agents, in your pocket") },
+      { key: "respond", art: "serene", lightArt: "wave", title: copy("Hiçbir soruyu bekletme", "Never keep a question waiting") },
+      { key: "secure", art: "guideFront", title: copy("Kodun bilgisayarında kalır", "Your code stays on your computer") },
+    ]}>
+      <ScrollView style={{ flexGrow: 0, maxHeight: height * 0.45 }} keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: space.md }}>
+        {unavailable
+          ? <Notice tone="warning" message={copy("Bu sürümde hesap girişi ayarlanmamış. Devam etmek için giriş desteği olan bir sürüm kullan.", "Account sign-in is not configured in this build. Use a build with sign-in enabled to continue.")} />
+          : <SignInPanel onStepChange={setStep} />}
+      </ScrollView>
       <LegalLinks onOpen={setDocument} />
-    </Stack>
+    </OnboardingShell>
     {document ? <Sheet visible title={legalDocumentTitle(document, copy)} onClose={() => setDocument(null)}>
       <LegalDocument document={document} />
     </Sheet> : null}
-  </Screen>;
+  </>;
 }

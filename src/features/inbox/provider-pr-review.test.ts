@@ -97,6 +97,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
     Body: Wrap,
+    Disclosure: Wrap,
     Stack: Wrap,
     Row: Wrap,
     QueryState: () => null,
@@ -217,7 +218,7 @@ it("requires explicit head review, uses the displayed removed-side anchor and su
     line: 1,
     body: "Keep the old behavior",
   });
-  await click("Submit review");
+  await click("Review before sending");
   expect(state.submit).not.toHaveBeenCalled();
   expect(preflight()).not.toBeNull();
   await click("Submit");
@@ -242,7 +243,7 @@ it.each([
       event,
     };
     await mount();
-    await click("Submit review");
+    await click("Review before sending");
     expect(preflight()?.textContent).toContain(label);
     expect(preflight()?.textContent).toContain(state.head);
     expect(preflight()?.textContent).toContain("Reviewed summary");
@@ -260,7 +261,7 @@ it("shows a partial patch read-only without creating inline targets and blocks a
   expect(container.textContent).toContain("-old");
   expect(container.textContent).toContain("+new");
   expect(container.textContent).not.toContain("Comment on this line");
-  await click("Submit review");
+  await click("Review before sending");
   state.project = "different-project";
   await click("Submit");
   expect(state.submit).not.toHaveBeenCalled();
@@ -274,7 +275,7 @@ it("keeps old inline drafts when the head moves and requires confirmation before
   };
   await mount();
   expect(container.textContent).toContain("Old inline comments are retained");
-  await click("Submit review");
+  await click("Review before sending");
   expect(state.submit).not.toHaveBeenCalled();
   await click("Review current head");
   expect(state.draft?.comments).toHaveLength(1);
@@ -286,15 +287,15 @@ it("keeps old inline drafts when the head moves and requires confirmation before
 
 it("cancels without changing the full summary or inline draft and retires old confirmation", async () => {
   state.draft = { ...emptyPrReviewDraft(), commitId: state.head, body: "Long summary\n".repeat(1800), comments: [{path:"src/file.ts",side:"RIGHT",line:1,body:"Keep the added line"}] };
-  await mount(); const before = JSON.stringify(state.draft); await click("Submit review");
+  await mount(); const before = JSON.stringify(state.draft); await click("Review before sending");
   expect(preflight()?.textContent).toContain(state.draft.body); expect(preflight()?.textContent).toContain("New line 1");
   expect(preflight()?.textContent).toContain("Keep the added line"); const old = state.presses.get("Submit")!;
   await click("Cancel"); expect(preflight()).toBeNull(); expect(JSON.stringify(state.draft)).toBe(before);
-  await click("Submit review"); await act(async () => old()); expect(state.submit).not.toHaveBeenCalled();
+  await click("Review before sending"); await act(async () => old()); expect(state.submit).not.toHaveBeenCalled();
   const confirm = state.presses.get("Submit")!; await act(async () => {confirm();confirm();}); expect(state.submit).toHaveBeenCalledOnce();
 });
 it.each(["read","write","busy","readiness","head","query-error","fetching","draft"])("retires the preflight after %s changes", async (kind) => {
-  state.draft = { ...emptyPrReviewDraft(), commitId:state.head, body:"Reviewed summary" }; await mount(); await click("Submit review"); const old = state.presses.get("Submit")!;
+  state.draft = { ...emptyPrReviewDraft(), commitId:state.head, body:"Reviewed summary" }; await mount(); await click("Review before sending"); const old = state.presses.get("Submit")!;
   if(kind==="read") props={...props,canRead:false}; if(kind==="write")props={...props,canWrite:false};
   if(kind==="busy")state.busy=true; if(kind==="readiness")state.ready=false; if(kind==="head")state.head="b".repeat(40);
   if(kind==="query-error")state.queryError=Error("Access unavailable"); if(kind==="fetching")state.fetching=true;
@@ -304,14 +305,14 @@ it.each(["read","write","busy","readiness","head","query-error","fetching","draf
   await render();await act(async()=>old());expect(state.submit).not.toHaveBeenCalled();expect(preflight()).toBeNull();
 });
 it("retires confirmation on unmount",async()=>{
-  state.draft={...emptyPrReviewDraft(),commitId:state.head,body:"Summary"};await mount();await click("Submit review");const old=state.presses.get("Submit")!;
+  state.draft={...emptyPrReviewDraft(),commitId:state.head,body:"Summary"};await mount();await click("Review before sending");const old=state.presses.get("Submit")!;
   await act(async()=>root.unmount());await act(async()=>old());expect(state.submit).not.toHaveBeenCalled();
 });
 
 it.each(["read","project","machine","capability","auth","identity"])("conceals all cached private context across %s loss and restores the unchanged draft", async (kind) => {
   state.draft={...emptyPrReviewDraft(),commitId:state.head,body:"Private summary",comments:[{path:"src/file.ts",side:"LEFT",line:1,body:"Private inline"}]};
   await mount();await click("src/file.ts:LEFT:1");const before=JSON.stringify(state.draft);
-  const change=state.changes.get("Review summary")!, refresh=state.presses.get("Refresh diff")!,send=state.presses.get("Submit review")!,bind=state.presses.get("Review current head")!,add=state.presses.get("Comment on this line")!;
+  const change=state.changes.get("Review summary")!, refresh=state.presses.get("Refresh diff")!,send=state.presses.get("Review before sending")!,bind=state.presses.get("Review current head")!,add=state.presses.get("Comment on this line")!;
   if(kind==="read")props={...props,canRead:false};if(kind==="project")state.project="other";if(kind==="machine")state.active="other";if(kind==="capability")state.supported=false;
   if(kind==="auth"||kind==="identity")state.queryError=Object.assign(Error("Access unavailable"),{kind});
   await render();expect(container.textContent).not.toContain("owner/repo");expect(container.textContent).not.toContain(state.head);expect(container.textContent).not.toContain("src/file.ts");

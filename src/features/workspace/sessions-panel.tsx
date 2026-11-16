@@ -1,3 +1,6 @@
+import { sessionIsSnoozed } from "./session-attention-model";
+import { useElapsedNow } from "./use-elapsed-now";
+import { useHostReadActive } from "@/state/queries";
 import { HierarchyFrame, HierarchyWidthProvider } from "@/ui/hierarchy-frame";
 import { useMobileTheme } from "@/ui/theme";
 import { sameSessionListConnectionFailure } from "./session-list-feedback";
@@ -116,6 +119,7 @@ export function ProjectSessions({
     },
   );
   const { selectedProvider, selectedAccountId, models, selectedModel, bundled } = selection;
+  const attentionNow = useElapsedNow(useHostReadActive() && (sessions.data ?? []).some(session => !!session.snoozedUntil));
   const visible = filterSessionDirectory(
     (sessions.data ?? []).filter(
       (session) => Boolean(session.archived) === archived && listedProjectSession(session),
@@ -132,7 +136,7 @@ export function ProjectSessions({
     !!search.trim(),
     settledIds,
     archived,
-    { doneIds, now: Date.now() },
+    { doneIds, now: attentionNow },
   );
   const sharedConnectionFailure = sameSessionListConnectionFailure(
     directoryQuery?.error,
@@ -340,7 +344,8 @@ export function ProjectSessions({
                     ancestors={item.ancestors}
                     compressed={compressed}
                     canRead={readable}
-                    settled={settledIds.has(session.id)}
+                    snoozed={sessionIsSnoozed(session, attentionNow)}
+              settled={settledIds.has(session.id)}
                     onPress={openSession}
                   />
                 </View>

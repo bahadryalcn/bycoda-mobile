@@ -1,3 +1,4 @@
+import { duringSystemPrompt } from "@/state/system-prompt";
 export type DevicePermission = { granted: boolean; canAskAgain: boolean; status: string };
 
 /** A first request must reach the OS; Settings is recovery for a permanent denial. */
@@ -8,7 +9,7 @@ export async function requestDevicePermission(
 ) {
   const current = await read();
   if (current.granted) return current;
-  if (current.canAskAgain) return request();
+  if (current.canAskAgain) return duringSystemPrompt(request);
   await openSettings();
   return current;
 }

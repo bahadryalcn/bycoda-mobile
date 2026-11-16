@@ -6,6 +6,7 @@ import { reportSender } from "./report-config";
 import { Stack as RouterStack, router } from "expo-router";
 import { assertAppAccess } from "@/state/security";
 import { useCopy } from "@/ui/copy";
+import { useInfoHint } from "@/ui/info-hint";
 import { ConsentField } from "@/ui/consent-field";
 import Animated from "react-native-reanimated";
 import Flag from "lucide-react-native/icons/flag";
@@ -39,6 +40,10 @@ function tile(Glyph: typeof Flag, color: string) {
 export function ContentReportScreen() {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const privacyInfo = useInfoHint(copy(
+    "Yalnızca açıklaman ve eklemeyi seçtiğin alıntı incelenmek üzere bycoda’ya gönderilir. Bu taslak yalnızca bellekte tutulur; uygulama sonlandırılırsa kaybolur.",
+    "Only your description and any excerpt you choose are sent to bycoda for review. This draft is kept only in memory and is lost if the app process ends.",
+  ));
   const { draft, status, error, receiptId, requestId, revision } = useContentReport();
   const [discarding, setDiscarding] = useState<ReportReview | null>(null);
   const active = useRef(true);
@@ -166,24 +171,22 @@ export function ContentReportScreen() {
         onChange={(consent) => updateContentReport({ consent })} />
       <ErrorText error={visibleError === "consent"} message={errorLabels.consent} />
       </Section>
+      <Body muted>
+          {copy(
+            "Erişim anahtarı, eşleştirme kodu, özel dosya veya kişisel bilgi ekleme.",
+            "Do not add access keys, pairing codes, private files or personal information.",
+          )}
+      </Body>
       <Disclosure label={copy("Bildirim ve gizlilik", "Reporting & privacy")}>
-        <Body>
-          {copy(
-            "Yalnızca açıklaman ve eklemeyi seçtiğin alıntı incelenmek üzere bycoda’ya gönderilir.",
-            "Only your description and any excerpt you choose are sent to bycoda for review.",
-          )}
-        </Body>
-        <Body muted>
-          {copy(
-            "Erişim anahtarlarını, eşleştirme kodlarını, özel proje dosyalarını veya kişisel bilgileri ekleme. Bu taslak yalnızca bellekte tutulur; uygulama sonlandırılırsa kaybolur.",
-            "Remove access keys, pairing codes, private project files and personal information. This draft is kept only in memory and is lost if the app process ends.",
-          )}
-        </Body>
-        <Button
-          label={copy("Gizlilik politikası", "Privacy policy")}
-          tone="quiet"
-          onPress={() => router.push("/legal/privacy")}
-        />
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm }}>
+          <Button
+            label={copy("Gizlilik politikası", "Privacy policy")}
+            tone="quiet"
+            onPress={() => router.push("/legal/privacy")}
+          />
+          {privacyInfo.button}
+        </View>
+        {privacyInfo.panel}
       </Disclosure>
       <Sheet visible={!!discarding} size="compact" title={copy("Taslağı sil", "Discard draft")} onClose={closeReview}>
         <Body>{copy("Bu bildirim taslağı silinsin mi?", "Discard this report draft?")}</Body>

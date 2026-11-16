@@ -1,9 +1,10 @@
 import { createThemedStyles, useThemedStyles } from "./themed-styles";
 import { useMobileTheme } from "./theme";
 import { Image } from "expo-image";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { LifecycleButton as PanelButton } from "./busy-indicator";
 import { useCopy } from "./copy";
-import { colors, fontSize, metrics, opacity, space } from "./tokens";
+import { colors, fontSize, space } from "./tokens";
 
 const logo = require("../../../public/brand/bycoda/logo-horizontal-white.png");
 const mark = require("../../../public/brand/bycoda/mark-white.png");
@@ -50,15 +51,18 @@ export function LegalLinks({ onOpen }: { onOpen: (document: LegalLinkTarget) => 
   return (
     <View style={styles.links}>
       {links.map(({ document, label }) => (
-        <Pressable
+        <PanelButton
           key={document}
           accessibilityRole="link"
           accessibilityLabel={label}
+          variant="ghost"
+          size="sm"
+          pressScale={1}
+          className="min-h-12 min-w-12 max-w-full rounded-control bg-transparent px-0 active:opacity-75"
           onPress={() => onOpen(document)}
-          style={({ pressed }) => [styles.link, { opacity: pressed ? opacity.pressed : 1 }]}
         >
           <Text style={styles.linkLabel}>{label}</Text>
-        </Pressable>
+        </PanelButton>
       ))}
     </View>
   );
@@ -74,13 +78,6 @@ const brandStyles = createThemedStyles(() => ({
     justifyContent: "center",
     columnGap: space.lg,
     paddingTop: space.sm,
-  },
-  link: {
-    minHeight: metrics.controlHeight,
-    minWidth: metrics.touchTarget,
-    maxWidth: "100%",
-    justifyContent: "center",
-    paddingVertical: space.sm,
   },
   linkLabel: {
     color: colors.muted,

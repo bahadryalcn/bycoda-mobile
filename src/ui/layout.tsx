@@ -1,7 +1,7 @@
 import { useMobileTheme } from "./theme";
 import { scrollKeyboardDismissMode } from "./scroll-keyboard";
 import { createContext, use, useMemo, useCallback, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { KeyboardAvoidingView, KeyboardAwareScrollView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body } from "./typography";
@@ -9,11 +9,13 @@ import Animated from "react-native-reanimated";
 import { reveal } from "./motion";
 import { metrics, space } from "./tokens";
 import { Card as PanelCard } from "panelui-native/components/card";
+import { PageHeader } from "panelui-native/components/page-header";
 import { surfaceClasses } from "./design-system";
 import { usePullRefresh } from "./use-pull-refresh";
 import { HeaderBackButton } from "./header-back-button";
 import { FormActionScrollOwner } from "./form-action-context";
 import { screenFooterLimits } from "./screen-footer-model";
+import { ConnectionFeedbackScope } from "./connection-feedback-scope";
 import type { PropsWithChildren, ReactNode } from "react";
 import type { ScreenProps, ContainerProps, CardProps, SectionProps, CodePanelProps } from "./component-props";
 
@@ -84,22 +86,22 @@ export function ScreenHeading({ title, subtitle, context, actions, onBack }: {
   const back = !!onBack && !chrome.nativeTitle;
   if (!showTitle && !subtitle && !context && !actions && !accessory && !back) return null;
   return (
-    <View style={uiStyles.pageHeading}>
+    <PageHeader variant="page" align="start" className="bg-transparent" style={uiStyles.pageHeading}>
       {back ? <HeaderBackButton onPress={onBack!} /> : null}
       {showTitle || subtitle || context ? (
-        <View style={[uiStyles.pageIdentity, { flexBasis: 120 * Math.max(1, fontScale) }]}>
+        <PageHeader.Content className="p-0 gap-0" style={[uiStyles.pageIdentity, { flexBasis: 120 * Math.max(1, fontScale) }]}>
           {customIdentity ? customIdentity({ title: title!, subtitle }) : (
             <>
-              {showTitle ? <Text selectable accessibilityRole="header" style={uiStyles.pageTitle}>{title}</Text> : null}
-              {subtitle ? <Body muted style={uiStyles.caption}>{subtitle}</Body> : null}
+              {showTitle ? <PageHeader.Title selectable style={uiStyles.pageTitle}>{title}</PageHeader.Title> : null}
+              {subtitle ? <PageHeader.Description selectable style={uiStyles.caption}>{subtitle}</PageHeader.Description> : null}
             </>
           )}
           {context ? (showTitle || subtitle ? <View style={uiStyles.pageContext}>{context}</View> : context) : null}
-        </View>
+        </PageHeader.Content>
       ) : null}
       {accessory}
-      {actions ? <View style={uiStyles.pageActions}>{actions}</View> : null}
-    </View>
+      {actions ? <PageHeader.Actions className="p-0" style={uiStyles.pageActions}>{actions}</PageHeader.Actions> : null}
+    </PageHeader>
   );
 }
 
@@ -129,20 +131,22 @@ export function LargeTitle({
   const chrome = use(ScreenChrome);
   return (
     <Animated.View entering={reveal} style={uiStyles.titleGroup}>
+      <PageHeader variant="page" align="start" className="bg-transparent" style={{ gap: space.xxs }}>
       {chrome.headerAccessory ? (
         <View style={{ alignSelf: "flex-start", maxWidth: "100%" }}>{chrome.headerAccessory}</View>
       ) : null}
       <View style={uiStyles.titleRow}>
-        <Text selectable accessibilityRole="header" style={[uiStyles.largeTitle, uiStyles.titleText]}>
+        <PageHeader.Title selectable style={[uiStyles.largeTitle, uiStyles.titleText]}>
           {title}
-        </Text>
-        {actions ? <View style={uiStyles.titleActions}>{actions}</View> : null}
+        </PageHeader.Title>
+        {actions ? <PageHeader.Actions className="p-0" style={uiStyles.titleActions}>{actions}</PageHeader.Actions> : null}
       </View>
       {subtitle ? (
-        <Body muted style={uiStyles.caption}>
+        <PageHeader.Description selectable style={uiStyles.caption}>
           {subtitle}
-        </Body>
+        </PageHeader.Description>
       ) : null}
+      </PageHeader>
     </Animated.View>
   );
 }
@@ -190,7 +194,7 @@ export function Screen({
       <KeyboardAvoidingView enabled={!!footer} behavior="padding" automaticOffset style={{ flex: 1 }}>
       <View style={[uiStyles.screen, { paddingBottom: chrome.bottomInset }]} onLayout={measureFrame}>
         {heading ? <ScreenHeader onLayout={measureHeader}>{heading}</ScreenHeader> : null}
-        {children}
+        <ConnectionFeedbackScope>{children}</ConnectionFeedbackScope>
         {actionArea}
       </View>
       </KeyboardAvoidingView>
@@ -233,7 +237,8 @@ export function Screen({
         ]}
       >
         {heading}
-        {children}
+        {/* Sections of one screen share a single connection-level message. */}
+        <ConnectionFeedbackScope>{children}</ConnectionFeedbackScope>
       </KeyboardAwareScrollView>
     {actionArea}
     </View>

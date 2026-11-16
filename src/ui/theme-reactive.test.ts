@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { useMobileTheme } from "./theme";
 import { createThemedStyles, useThemedStyles } from "./themed-styles";
 import { applyMobileTheme, colors, resolveMobilePalette, themePalettes } from "./tokens";
+import { applyTypography } from "./typography-runtime";
+import { DEFAULT_TYPOGRAPHY } from "./typography-preferences";
 
 vi.mock("./styles", async () => {
   const { createThemedStyles } = await import("./themed-styles");
@@ -13,9 +15,32 @@ vi.mock("./styles", async () => {
 });
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-afterEach(() => applyMobileTheme("dark", "classic"));
+afterEach(() => { applyMobileTheme("dark", "classic"); applyTypography(DEFAULT_TYPOGRAPHY); });
 
 const extra = createThemedStyles(() => ({ label: { color: colors.text } }));
+const textSheet = createThemedStyles(() => ({ body: { fontSize: 15, lineHeight: 20 } }));
+
+it("updates mounted text and theme identities without remounting the reader", async () => {
+  let mounts = 0;
+  let previous: unknown;
+  function Reader() {
+    const theme = useMobileTheme();
+    const styles = useThemedStyles(textSheet);
+    const [draft] = useState(() => { mounts++; return "unsent draft"; });
+    previous = theme;
+    return createElement("div", { "data-size": styles.body.fontSize }, draft);
+  }
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () => root.render(createElement(Reader)));
+  const initialTheme = previous;
+  await act(async () => applyTypography({ ...DEFAULT_TYPOGRAPHY, scale: 1.2 }));
+  expect(container.firstElementChild?.getAttribute("data-size")).toBe("18");
+  expect(container.textContent).toBe("unsent draft");
+  expect(mounts).toBe(1);
+  expect(previous).not.toBe(initialTheme);
+  await act(async () => root.unmount());
+});
 
 function Probe() {
   const { colors, uiStyles } = useMobileTheme();

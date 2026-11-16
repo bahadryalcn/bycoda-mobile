@@ -3,7 +3,9 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const fixture=vi.hoisted(()=>({code:vi.fn(),cancel:vi.fn(),submit:null as null|(()=>void)}));
+const fixture=vi.hoisted(()=>({code:vi.fn(),cancel:vi.fn(),submit:null as null|(()=>void),clipboard:""}));
+vi.mock("expo-clipboard",()=>({hasStringAsync:async()=>!!fixture.clipboard,getStringAsync:async()=>fixture.clipboard}));
+vi.mock("./pairing-code",()=>({parseMobilePairingCode:(value:string)=>{if(!value.startsWith("valid-"))throw new Error("invalid");return {};}}));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
 vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));
@@ -23,7 +25,14 @@ const settle=()=>act(async()=>{await new Promise(resolve=>setTimeout(resolve,15)
 const click=(label:string)=>[...container.querySelectorAll("button")].find(button=>button.textContent===label)!.click();
 async function fill(value:string){await act(async()=>{const input=container.querySelector("textarea")!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value")!.set!.call(input,value);input.dispatchEvent(new Event("input",{bubbles:true}));});}
 beforeEach(async()=>{vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);container=document.createElement("div");document.body.append(container);root=createRoot(container);client=new QueryClient();fixture.code.mockRejectedValue(new Error("Synthetic invalid code"));await act(async()=>root!.render(createElement(QueryClientProvider,{client},createElement(PairingPaste,{disabled:false,onCode:fixture.code,onCancel:fixture.cancel}))));});
-afterEach(async()=>{await act(async()=>root?.unmount());root=undefined;container.remove();client.clear();vi.resetAllMocks();vi.unstubAllGlobals();});
+afterEach(async()=>{await act(async()=>root?.unmount());root=undefined;container.remove();client.clear();vi.resetAllMocks();vi.unstubAllGlobals();fixture.clipboard="";});
+async function remount(clipboard:string){await act(async()=>root!.unmount());fixture.clipboard=clipboard;root=createRoot(container);await act(async()=>root!.render(createElement(QueryClientProvider,{client},createElement(PairingPaste,{disabled:false,onCode:fixture.code,onCancel:fixture.cancel}))));await settle();}
+it("fills the empty field from a copied valid pairing code",async()=>{
+ await remount(" valid-code ");expect(container.querySelector("textarea")!.value).toBe("valid-code");expect(fixture.code).not.toHaveBeenCalled();
+});
+it("leaves the field empty when the copied text is not a pairing code",async()=>{
+ await remount("hello");expect(container.querySelector("textarea")!.value).toBe("");
+});
 it("retains invalid input for correction and clears stale validation feedback when edited",async()=>{
  await fill("synthetic-code-one");await act(async()=>click("Preview computer"));await settle();expect(container.textContent).toContain("Synthetic invalid code");expect(container.querySelector("textarea")!.value).toBe("synthetic-code-one");
  await fill("synthetic-code-two");await settle();expect(container.textContent).not.toContain("Synthetic invalid code");

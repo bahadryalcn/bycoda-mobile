@@ -1,31 +1,10 @@
+import { FolderOpen, GitBranch, MessagesSquare, CheckSquare, Target, Users, Clock, NotebookPen, Bot, Activity, Layers, Plug, KeyRound, ShieldCheck, Server, ScrollText, Smartphone, Globe, Terminal, ChartColumn } from "@/ui/duotone-icon";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "@/ui/search-matching";
 import { router, type Href } from "expo-router";
 import { useState } from "react";
 import { ProjectPicker } from "../workspace/project-picker";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
-import FolderOpen from "lucide-react-native/icons/folder-open";
-import GitBranch from "lucide-react-native/icons/git-branch";
-import MessagesSquare from "lucide-react-native/icons/messages-square";
-import CheckSquare from "lucide-react-native/icons/square-check-big";
-import Target from "lucide-react-native/icons/target";
-import Users from "lucide-react-native/icons/users";
-import Clock from "lucide-react-native/icons/clock";
-import NotebookPen from "lucide-react-native/icons/notebook-pen";
-import Bot from "lucide-react-native/icons/bot";
-import Megaphone from "lucide-react-native/icons/megaphone";
-import Activity from "lucide-react-native/icons/activity";
-import Plug from "lucide-react-native/icons/plug";
-import KeyRound from "lucide-react-native/icons/key-round";
-import Inbox from "lucide-react-native/icons/inbox";
-import Laptop from "lucide-react-native/icons/laptop";
-import ShieldCheck from "lucide-react-native/icons/shield-check";
-import Server from "lucide-react-native/icons/server";
-import ScrollText from "lucide-react-native/icons/scroll-text";
-import Smartphone from "lucide-react-native/icons/smartphone";
-import Globe from "lucide-react-native/icons/globe";
-import Terminal from "lucide-react-native/icons/terminal";
-import ChartColumn from "lucide-react-native/icons/chart-column";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { Empty, NavigationGroup, NavigationRow, Section } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -53,9 +32,8 @@ const tools: readonly Tool[] = [
   { id: "crews", label: managementSections.crews, icon: Users, managementSection: "crews" },
   { id: "automations", label: managementSections.automations, icon: Clock, managementSection: "automations" },
   { id: "stewards", label: managementSections.stewards, icon: ShieldCheck, managementSection: "stewards" },
+  { id: "jira", label: ["Jira", "Jira"], icon: Layers },
   { id: "notes", label: managementSections.notes, icon: NotebookPen, managementSection: "notes" },
-  { id: "social", label: managementSections.social, icon: Megaphone, managementSection: "social" },
-  { id: "inbox", label: ["Gelen kutusu", "Inbox"], icon: Inbox },
   { id: "terminals", label: ["Terminaller", "Terminals"], icon: Terminal, hostTool: "terminals" },
   { id: "servers", label: ["Geliştirme sunucuları", "Dev servers"], icon: Server, hostTool: "servers" },
   { id: "logs", label: ["Çalışma günlükleri", "Runtime logs"], icon: ScrollText, hostTool: "logs" },
@@ -63,7 +41,6 @@ const tools: readonly Tool[] = [
   { id: "usage", label: ["Oturum kullanımı", "Session usage"], icon: ChartColumn, hostTool: "usage" },
   { id: "browser", label: ["Tarayıcı", "Browser"], icon: Globe, hostTool: "browser" },
   { id: "devices", label: ["Cihazlar", "Devices"], icon: Smartphone, hostTool: "devices" },
-  { id: "computers", label: ["Bilgisayarlar", "Computers"], icon: Laptop },
   { id: "providers", label: ["Sağlayıcı merkezi", "Provider center"], icon: Plug },
   { id: "access", label: ["Bilgisayar erişimi", "Host access"], icon: KeyRound },
 ];
@@ -73,10 +50,9 @@ const hostCapabilities = { servers: "dev.servers", devices: "device.host", brows
 /** Task groups also supply search vocabulary; an empty group never leaves a heading. */
 const groups: readonly { title: CopyPair; ids: readonly string[] }[] = [
   { title: ["Proje", "Project"], ids: ["sessions", "files", "git", "notes"] },
-  { title: ["İşler", "Work"], ids: ["tasks", "goals", "crews", "automations", "stewards"] },
-  { title: ["İletişim", "Communication"], ids: ["assistant", "inbox", "social"] },
+  { title: ["İşler", "Work"], ids: ["assistant", "tasks", "jira", "goals", "crews", "automations", "stewards"] },
   { title: ["Geliştirme", "Development"], ids: ["terminals", "servers", "logs", "diagnostics", "usage", "browser", "devices"] },
-  { title: ["Bilgisayar", "Computer"], ids: ["providers", "access", "computers"] },
+  { title: ["Bilgisayar", "Computer"], ids: ["providers", "access"] },
 ];
 
 export function ToolDirectory({
@@ -100,6 +76,8 @@ export function ToolDirectory({
   const [pending, setPendingTool] = useState<{ tool: Tool; connection: ConnectionScope } | null>(null);
   const pendingTool = pending?.connection === connection && connection.isCurrent() ? pending.tool : null;
   const visible = tools.filter((tool) => {
+    // The dock already owns Sessions; only a project's sheet uses it to switch back to its sessions view.
+    if (tool.id === "sessions" && !onProjectView) return false;
     const group = groups.find((group) => group.ids.includes(tool.id));
     return matchesSearch([copy(...tool.label), group ? copy(...group.title) : ""].join(" "), query, locale);
   });
@@ -128,9 +106,9 @@ export function ToolDirectory({
         router.navigate({ pathname: "/tools/[tool]", params: { tool: tool.hostTool, projectId: targetProjectId ?? "", machineId: machine.id } } as Href);
       else if (tool.managementSection) router.navigate(`/manage/${tool.managementSection}`);
       else if (tool.id === "assistant") router.navigate("/assistant" as Href);
+      // The inbox owns its project scope and asks for one when Jira has none.
+      else if (tool.id === "jira") router.navigate({ pathname: "/(tabs)/inbox", params: { view: "jira" } } as Href);
       else if (tool.id === "sessions") router.navigate("/(tabs)/chats" as Href);
-      else if (tool.id === "inbox") router.navigate("/inbox");
-      else if (tool.id === "computers") router.navigate("/machines");
       else if (tool.id === "providers") router.navigate({ pathname: "/tools/[tool]", params: { tool: "providers", machineId: machine.id } } as Href);
       else if (tool.id === "access") router.navigate({ pathname: "/tools/[tool]", params: { tool: "access", machineId: machine.id } } as Href);
     };

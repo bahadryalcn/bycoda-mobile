@@ -7,6 +7,12 @@ export function remoteErrorKind(error: unknown) {
   return error instanceof RemoteHostError ? error.kind : undefined;
 }
 
+/** Failures of the computer connection itself, which a screen reports once rather than per request. */
+export function isConnectionLevelError(error: unknown) {
+  const kind = remoteErrorKind(error);
+  return kind === "auth" || kind === "identity" || kind === "network" || kind === "unsupported";
+}
+
 function remoteMessage(error: RemoteHostError, copy: ErrorCopy): string {
   if (["auth", "host", "protocol"].includes(error.kind)) {
     const known = knownConnectionMessage(error.message, copy);
@@ -44,7 +50,7 @@ function remoteMessage(error: RemoteHostError, copy: ErrorCopy): string {
           );
     case "auth":
       if (error.message === "Unlock the app before connecting to this computer.")
-        return copy("Bağlanmak için Bycoda’nın kilidini aç.", "Unlock Bycoda to connect.");
+        return copy("Bağlanmak için bycoda’nın kilidini aç.", "Unlock bycoda to connect.");
       if (
         error.message ===
         "The saved device credential could not be read. Unlock the app or pair this computer again."

@@ -110,9 +110,9 @@ it.each([0, 1, 1284])("labels the %s returned records with an active-locale coun
   expect(container.querySelector("[data-applied-filters]")?.textContent).toContain(`Items: ${new Intl.NumberFormat("tr").format(count)}`);
 });
 it("clears an empty filter result without changing filters before Apply", async () => {
-  fixture.empty = true; await render(); expect(fixture.request.assignedToMe).toBe(true);
-  await click("Filters"); await click("Assigned to me only"); expect(fixture.request.assignedToMe).toBe(true);
-  await click("Dismiss filters"); await click("Clear filters");
+  fixture.empty = true; await render(); expect(fixture.request.assignedToMe).toBe(false);
+  await click("Filters"); await click("Assigned to me only"); expect(fixture.request.assignedToMe).toBe(false);
+  await click("Apply"); expect(fixture.request.assignedToMe).toBe(true); await click("Clear filters");
   expect(fixture.request).toEqual({ assignedToMe: false, state: "open", search: "" });
   expect(buttons("Clear filters")).toHaveLength(0);
 });
@@ -164,12 +164,23 @@ it("keeps a selected detail and its draft outside the virtualized header when av
 
 it("describes committed filters without previewing cancelled draft choices",async()=>{
  await render();const summary=()=>container.querySelector("[data-applied-filters]")!.textContent;
- expect(summary()).toContain("Assigned to me only");
+ expect(summary()).not.toContain("Assigned to me only");
  await click("Filters");await click("Include closed items");
  expect(summary()).not.toContain("Include closed items");
  await click("Dismiss filters");expect(summary()).not.toContain("Include closed items");
  await click("Filters");await click("Include closed items");await click("Apply");
  expect(summary()).toContain("Include closed items");expect(fixture.request.state).toBe("all");
+});
+
+it("clears applied filters and search directly while matching records remain visible",async()=>{
+ await render();await click("Filters");await click("Include closed items");await click("Apply");
+ await input("Search","parser");await act(async()=>vi.advanceTimersByTime(350));
+ expect(fixture.request).toMatchObject({state:"all",search:"parser"});
+ expect(container.querySelector("main")!.dataset.rowCount).toBe("40");
+ await click("Clear filters");
+ expect(fixture.request).toMatchObject({state:"open",assignedToMe:false,search:""});
+ expect((container.querySelector('input[aria-label="Search"]') as HTMLInputElement).value).toBe("");
+ expect(container.querySelector("[data-applied-filters]")?.textContent).not.toContain("Include closed items");
 });
 
 it.each(["availability","not-ready","machine","project","auth","identity"])("conceals cached rows/search/providers and retires staged filters across %s loss",async kind=>{

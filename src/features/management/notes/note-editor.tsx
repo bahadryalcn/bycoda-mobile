@@ -4,8 +4,7 @@ import { Stack, MutationState, SegmentedControl } from "@/ui/primitives";
 import { MessageText } from "@/ui/message-text";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useRef, useState } from "react";
-import Trash2 from "lucide-react-native/icons/trash-2";
-import { ActionMenu, Body, Button, Card, Field, FormActions, QueryState, Row, Section } from "@/ui/primitives";
+import { Body, Button, Card, Field, FormActions, QueryState, Section } from "@/ui/primitives";
 import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
@@ -54,7 +53,7 @@ export function ExistingNote({ id, ...props }: ExistingNoteProps) {
 }
 
 export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEditorProps) {
-  const { colors, uiStyles } = useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const base = useRef(initial).current;
   const form = useFormDraft(base);
@@ -148,43 +147,29 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
         onCancel={requestClose}
       />
       {draft.expectedUpdatedAt > 0 && (
-        <Row style={{ justifyContent: "flex-end" }}>
-          <ActionMenu
-            label={copy("Not işlemleri", "Note actions")}
-            actions={[
-              {
-                key: "delete",
-                icon: <Trash2 size={18} color={colors.danger} />,
-                label: copy("Notu sil", "Delete note"),
-                destructive: true,
-                disabled: busy,
-                onPress: () =>
-                  confirmAction(
-                    copy("Notu sil", "Delete note"),
-                    copy(
-                      "Bu not bilgisayardan kalıcı olarak silinecek.",
-                      "This note will be permanently deleted from the computer.",
-                    ),
-                    copy("Sil", "Delete"),
-                    () =>
-                      remove.mutate(
-                        { id: draft.id, expectedUpdatedAt: draft.expectedUpdatedAt },
-                        { onSuccess: finish },
-                      ),
-                    copy("Vazgeç", "Cancel"),
-                  ),
-              },
-            ]}
-          />
-        </Row>
+        <Button
+          tone="danger"
+          label={copy("Notu sil", "Delete note")}
+          disabled={busy}
+          onPress={() =>
+            confirmAction(
+              copy("Notu sil", "Delete note"),
+              copy(
+                "Bu not bilgisayardan kalıcı olarak silinecek.",
+                "This note will be permanently deleted from the computer.",
+              ),
+              copy("Sil", "Delete"),
+              () =>
+                remove.mutate(
+                  { id: draft.id, expectedUpdatedAt: draft.expectedUpdatedAt },
+                  { onSuccess: finish },
+                ),
+              copy("Vazgeç", "Cancel"),
+            )
+          }
+        />
       )}
       {changed && !storage.isError && !storage.isPending && <Body muted>{copy("Taslak bu telefonda saklandı.", "Draft saved on this phone.")}</Body>}
-      <Body muted style={uiStyles.caption}>
-        {copy(
-          "Bilgisayarda daha yeni bir düzenleme varsa kaydetme engellenir ve taslağınız korunur.",
-          "If the computer has a newer edit, saving is blocked and your draft is retained.",
-        )}
-      </Body>
     </Stack>
   );
 }

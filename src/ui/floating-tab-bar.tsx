@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { type ComponentProps, type ReactNode } from "react";
-import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import { I18nManager, Text, View, useWindowDimensions } from "react-native";
+import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
 import type { Tabs } from "expo-router";
-import MoreHorizontal from "lucide-react-native/icons/more-horizontal";
-import Plus from "lucide-react-native/icons/plus";
+import { DockIcon } from "./dock-icon";
 import { useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Sheet } from "./dialogs";
@@ -12,6 +12,7 @@ import { useCopy } from "./copy";
 import { useMobileTheme } from "./theme";
 import { fontSize, metrics, opacity, radii, space } from "./tokens";
 import { haptic } from "./motion";
+import { useReducedMotionPreference } from "./use-reduced-motion";
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 export type FloatingTabBarProps = TabBarProps & {
@@ -27,7 +28,6 @@ function TabItem({
   focused,
   icon,
   badge,
-  width,
   onPress,
   onLongPress,
 }: {
@@ -36,32 +36,31 @@ function TabItem({
   focused: boolean;
   icon: ReactNode;
   badge?: string | number;
-  width: `${number}%`;
   onPress: () => void;
   onLongPress?: () => void;
 }) {
   const { colors } = useMobileTheme();
+  const reducedMotion = useReducedMotionPreference();
   return (
-    <Pressable
+    // Tabs.Trigger cannot forward route labels or long-press events; the navigator owns selection.
+    <AnimatedPressable
+      pressScale={1}
+      pressOpacity={reducedMotion ? 1 : opacity.pressed}
       accessibilityRole="tab"
       accessibilityLabel={accessibleLabel}
       accessibilityState={{ selected: focused }}
       aria-selected={focused}
       onPress={onPress}
       onLongPress={onLongPress}
-      style={({ pressed }) => [
+      style={[
         {
-          width,
+          width: metrics.touchTarget,
+          height: metrics.touchTarget,
           minWidth: metrics.touchTarget,
           minHeight: metrics.touchTarget,
           alignItems: "center",
           justifyContent: "center",
-          gap: space.xs,
-          paddingHorizontal: space.xxs,
-          paddingVertical: space.sm,
           borderRadius: radii.control,
-          backgroundColor: focused ? colors.fill : "transparent",
-          opacity: pressed ? opacity.pressed : 1,
         },
       ]}
     >
@@ -82,8 +81,8 @@ function TabItem({
               end: -space.xs,
               paddingHorizontal: space.xxs,
               borderRadius: radii.badge,
-              backgroundColor: colors.panel,
-              color: colors.accent,
+              backgroundColor: colors.accentSolid,
+              color: colors.primaryText,
               fontSize: fontSize.caption,
               fontVariant: ["tabular-nums"],
             }}
@@ -92,22 +91,23 @@ function TabItem({
           </Text>
         ) : null}
       </View>
-      <Text
-        style={{
-          maxWidth: "100%",
-          textAlign: "center",
-          fontSize: fontSize.caption,
-          fontWeight: focused ? "700" : "500",
-          color: focused ? colors.accent : colors.muted,
-        }}
-      >
-        {label}
-      </Text>
-    </Pressable>
+      {focused ? (
+        <View
+          style={{
+            position: "absolute",
+            bottom: space.xs,
+            width: space.xs,
+            height: space.xs,
+            borderRadius: radii.pill,
+            backgroundColor: colors.accent,
+          }}
+        />
+      ) : null}
+    </AnimatedPressable>
   );
 }
 
-/** One quiet row. Large text moves overflow destinations into an accessible sheet. */
+/** Content-width icon dock without movement. Large text moves overflow destinations into a sheet. */
 export function FloatingTabBar({
   state,
   descriptors,
@@ -117,6 +117,7 @@ export function FloatingTabBar({
   quickAction,
 }: FloatingTabBarProps) {
   const { colors } = useMobileTheme();
+  const reducedMotion = useReducedMotionPreference();
   const copy = useCopy();
   const insets = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();
@@ -126,12 +127,17 @@ export function FloatingTabBar({
     metrics.contentWidth,
     width - Math.max(insets.left, space.xs) - Math.max(insets.right, space.xs),
   );
-  const commandWidth = quickAction ? metrics.touchTarget + space.sm : 0;
-  const slots = Math.max(2, Math.floor((available - commandWidth) / (metrics.touchTarget * Math.max(1, fontScale))));
+  const commandWidth = quickAction ? metrics.touchTarget + space.sm * 2 + 1 : 0;
+  const slots = Math.max(
+    2,
+    Math.floor(
+      (available - space.sm * 2 - 2 - commandWidth) /
+        (metrics.touchTarget * Math.max(1, fontScale)),
+    ),
+  );
   const overflow = slots < state.routes.length;
   const shown = overflow ? state.routes.slice(0, slots - 1) : state.routes;
   const hidden = overflow ? state.routes.slice(slots - 1) : [];
-  const tabWidth = `${100 / (shown.length + Number(overflow))}%` as const;
   // Navigator content and toasts clear exactly the rendered navigation footprint.
   useEffect(() => {
     if (keyboard) {
@@ -169,78 +175,127 @@ export function FloatingTabBar({
   return (
     <>
       <View
+        pointerEvents="box-none"
         onLayout={({ nativeEvent: { layout } }) => onInsetChange?.(layout.height)}
         style={{
           position: "absolute",
           start: 0,
           end: 0,
           bottom: 0,
-          paddingStart: Math.max(insets.left, space.xs),
-          paddingEnd: Math.max(insets.right, space.xs),
+          paddingStart: Math.max(I18nManager.isRTL ? insets.right : insets.left, space.xs),
+          paddingEnd: Math.max(I18nManager.isRTL ? insets.left : insets.right, space.xs),
           paddingTop: space.xs,
           paddingBottom: Math.max(insets.bottom, space.xs),
         }}
       >
-        <View style={{ width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: space.sm }}>
         <View
-          accessibilityRole="tablist"
           style={{
-            flex: 1,
+            alignSelf: "center",
             flexDirection: "row",
+            alignItems: "center",
             backgroundColor: colors.panel,
-            borderRadius: radii.bubble,
-            paddingVertical: space.xxs,
+            borderColor: colors.border,
+            borderWidth: 1,
+            borderRadius: radii.composer,
+            padding: space.sm,
+            shadowColor: colors.scrim,
+            shadowOffset: { width: 0, height: space.xs },
+            shadowOpacity: 0.18,
+            shadowRadius: space.sm,
+            elevation: 4,
           }}
         >
-          {shown.map((route) => {
-            const options = descriptors[route.key]!.options;
-            const focused = state.routes[state.index]?.key === route.key;
-            return (
+          <View
+            accessibilityRole="tablist"
+            style={{
+              flexDirection: "row",
+            }}
+          >
+            {shown.map((route) => {
+              const options = descriptors[route.key]!.options;
+              const focused = state.routes[state.index]?.key === route.key;
+              return (
+                <TabItem
+                  key={route.key}
+                  label={String(label(route))}
+                  accessibleLabel={String(badgeLabel(route))}
+                  focused={focused}
+                  badge={options.tabBarBadge as string | number | undefined}
+                  icon={options.tabBarIcon?.({
+                    focused,
+                    color: focused ? colors.text : colors.muted,
+                    size: 24,
+                  })}
+                  onPress={() => navigate(route)}
+                  onLongPress={() => emitter.emit({ type: "tabLongPress", target: route.key })}
+                />
+              );
+            })}
+            {overflow ? (
               <TabItem
-                key={route.key}
-                label={String(label(route))}
-                accessibleLabel={String(badgeLabel(route))}
-                focused={focused}
-                width={tabWidth}
-                badge={options.tabBarBadge as string | number | undefined}
-                icon={options.tabBarIcon?.({
-                  focused,
-                  color: focused ? colors.accent : colors.muted,
-                  size: 22,
-                })}
-                onPress={() => navigate(route)}
-                onLongPress={() => emitter.emit({ type: "tabLongPress", target: route.key })}
+                label={moreLabel}
+                accessibleLabel={overflowLabel}
+                badge={overflowBadge}
+                focused={hidden.some((route) => state.routes[state.index]?.key === route.key)}
+                icon={
+                  <DockIcon
+                    name="more"
+                    color={
+                      hidden.some((route) => state.routes[state.index]?.key === route.key)
+                        ? colors.text
+                        : colors.muted
+                    }
+                  />
+                }
+                onPress={() => setMore(true)}
               />
-            );
-          })}
-          {overflow ? (
-            <TabItem
-              label={moreLabel}
-              accessibleLabel={overflowLabel}
-              badge={overflowBadge}
-              width={tabWidth}
-              focused={hidden.some((route) => state.routes[state.index]?.key === route.key)}
-              icon={<MoreHorizontal size={22} color={colors.muted} />}
-              onPress={() => setMore(true)}
-            />
-          ) : null}
-        </View>
-        {quickAction ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={quickAction.label}
-                  accessibilityHint={quickAction.optionsLabel}
-                  accessibilityActions={[{ name: "longpress", label: quickAction.optionsLabel }]}
-                  onAccessibilityAction={({ nativeEvent }) => { if (nativeEvent.actionName === "longpress") quickAction.onLongPress(); }}
-                  onPress={quickAction.onPress}
-                  onLongPress={quickAction.onLongPress}
-                  style={({ pressed }) => ({ width: metrics.touchTarget, minWidth: metrics.touchTarget, minHeight: metrics.touchTarget, alignItems: "center", justifyContent: "center", opacity: pressed ? opacity.pressed : 1 })}
+            ) : null}
+          </View>
+          {quickAction ? (
+            <>
+              <View
+                style={{
+                  width: 1,
+                  height: 24,
+                  marginHorizontal: space.sm,
+                  backgroundColor: colors.border,
+                }}
+              />
+              <AnimatedPressable
+                pressScale={1}
+                pressOpacity={reducedMotion ? 1 : opacity.pressed}
+                accessibilityRole="button"
+                accessibilityLabel={quickAction.label}
+                accessibilityHint={quickAction.optionsLabel}
+                accessibilityActions={[{ name: "longpress", label: quickAction.optionsLabel }]}
+                onAccessibilityAction={({ nativeEvent }) => {
+                  if (nativeEvent.actionName === "longpress") quickAction.onLongPress();
+                }}
+                onPress={quickAction.onPress}
+                onLongPress={quickAction.onLongPress}
+                style={{
+                  width: metrics.touchTarget,
+                  minWidth: metrics.touchTarget,
+                  minHeight: metrics.touchTarget,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <View
+                  style={{
+                    width: metrics.touchTarget,
+                    height: metrics.touchTarget,
+                    borderRadius: radii.bubble,
+                    backgroundColor: colors.accentSolid,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
                 >
-                  <View style={{ width: metrics.touchTarget, height: metrics.touchTarget, borderRadius: radii.preview, backgroundColor: colors.accentSolid, alignItems: "center", justifyContent: "center" }}>
-                    <Plus size={24} strokeWidth={2} color={colors.primaryText} />
-                  </View>
-                </Pressable>
-        ) : null}
+                  <DockIcon name="new-session" color={colors.primaryText} />
+                </View>
+              </AnimatedPressable>
+            </>
+          ) : null}
         </View>
       </View>
       {more ? (

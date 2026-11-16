@@ -37,7 +37,7 @@ export function CrewProfileCard({ value, roleLabel, busy, editorOpen, machineId,
         memberModelSource(value, copy) ?? (candidate && agentPresentation(candidate.harness, candidate.model)),
         value.projectId ? copy("Bu proje", "This project") : copy("Bilgisayar geneli", "Host-wide"),
       ])}
-      preview={<MemberAvatars agents={[value]} />}
+      preview={value.instructions ? <Body muted numberOfLines={2}>{value.instructions}</Body> : null}
       details={<Body>{value.instructions}</Body>}
       menu={
         <RecordTrailing>

@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DIAGNOSTIC_RETENTION_DAYS } from "../account/contracts";
 import { useAccount } from "../account/ui/account-context";
-import { Body, Button, Field, Notice, Section, SelectRow, Stack } from "../../ui/primitives";
+import { Button, Field, Notice, SelectRow, Stack } from "../../ui/primitives";
+import { HintSection } from "../../ui/info-hint";
 import { useCopy } from "../../ui/copy";
 import { useDiagnosticResultText } from "./diagnostic-copy";
 import { sendDiagnostics, useDiagnosticPrefs } from "./diagnostics-runtime";
@@ -27,10 +28,10 @@ export function DiagnosticsSettings() {
     void hydrate();
   }, [hydrate]);
 
-  const options: { value: DiagnosticMode; label: string }[] = [
-    { value: "off", label: copy("Kapalı", "Off") },
-    { value: "ask", label: copy("Bana sor", "Ask me") },
-    { value: "auto", label: copy("Otomatik gönder", "Send automatically") },
+  const options: { value: DiagnosticMode; label: string; detail: string }[] = [
+    { value: "off", label: copy("Kapalı", "Off"), detail: copy("Günlükleri şimdi gönder demedikçe hiçbir şey gönderilmez.", "Nothing is sent unless you choose Send logs now.") },
+    { value: "ask", label: copy("Bana sor", "Ask me"), detail: copy("Çökmeden sonra göndermek isteyip istemediğin sorulur.", "After a crash you are asked whether to send them.") },
+    { value: "auto", label: copy("Otomatik gönder", "Send automatically"), detail: copy("Çökmeden sonra otomatik gönderilir, ayrıca haftada bir.", "After a crash they are sent automatically, and once a week.") },
   ];
   const choose = (value: DiagnosticMode) => {
     setResult(null);
@@ -62,24 +63,20 @@ export function DiagnosticsSettings() {
         ? { tone: result === "sent" ? "success" : result === "empty" || result === "not-configured" ? "info" : "danger", text: resultText(result) }
         : null;
   return (
-    <Section title={copy("Tanılama günlükleri", "Diagnostic logs")}>
+    <HintSection
+      title={copy("Tanılama günlükleri", "Diagnostic logs")}
+      help={copy(
+        "Tanılama günlükleri uygulama günlükleridir; gizli bilgiler, e-posta adresleri ve kullanıcı adın bu telefonda çıkarılır. Konuşmalarını, istemlerini veya kodunu asla içermez. {p0} gün saklanır.",
+        "Diagnostic logs are the app logs, with secrets, e-mail addresses and your user name removed on this phone. They never include your conversations, prompts or code. They are kept {p0} days.",
+        { p0: DIAGNOSTIC_RETENTION_DAYS },
+      )}
+    >
       <Stack>
-        <Body muted>
-          {copy(
-            "Tanılama günlükleri uygulama günlükleridir; gizli bilgiler, e-posta adresleri ve kullanıcı adın cihazında çıkarılır. Konuşmalarını, istemlerini veya kodunu asla içermez. {p0} gün saklanır.",
-            "Diagnostic logs are the app logs, with secrets, e-mail addresses and your user name removed on this phone. They never include your conversations, prompts or code. They are kept {p0} days.",
-            { p0: DIAGNOSTIC_RETENTION_DAYS },
-          )}{" "}
-          {(mode ?? "ask") === "auto"
-            ? copy("Çökmeden sonra otomatik gönderilir, ayrıca haftada bir.", "After a crash they are sent automatically, and once a week.")
-            : (mode ?? "ask") === "ask"
-              ? copy("Çökmeden sonra göndermek isteyip istemediğin sorulur.", "After a crash you are asked whether to send them.")
-              : copy("Günlükleri şimdi gönder demedikçe hiçbir şey gönderilmez.", "Nothing is sent unless you choose Send logs now.")}
-        </Body>
         {options.map((option) => (
           <SelectRow
             key={option.value}
             label={option.label}
+            detail={option.detail}
             selected={(mode ?? "ask") === option.value}
             onPress={() => choose(option.value)}
           />
@@ -98,6 +95,6 @@ export function DiagnosticsSettings() {
         />
         {shown ? <Notice tone={shown.tone} message={shown.text} /> : null}
       </Stack>
-    </Section>
+    </HintSection>
   );
 }

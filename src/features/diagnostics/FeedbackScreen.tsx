@@ -116,7 +116,6 @@ export function FeedbackScreen() {
         </Stack>
       ) : (
         <Stack>
-          <Body muted>{copy("Neyin işe yaradığını, neyin yaramadığını ve neyin olmasını istediğini anlat.", "Tell us what works, what does not and what you wish existed.")}</Body>
           <SegmentedControl
             label={copy("Geri bildirim türü", "Kind of feedback")}
             value={draft.kind}
@@ -146,13 +145,13 @@ export function FeedbackScreen() {
           </Row>
           <ToggleField
             label={copy("Uygulama sürümünü ve sistemi ekle", "Include app version and system")}
-            detail={copy("Uygulama sürümü, platform, işletim sistemi sürümü ve yayın kanalı.", "App version, platform, OS version and release channel.")}
+            help={copy("Uygulama sürümü, platform, işletim sistemi sürümü ve yayın kanalı.", "App version, platform, OS version and release channel.")}
             value={draft.includeContext}
             onChange={(includeContext) => patch({ includeContext })}
           />
           <ToggleField
             label={copy("Tanılama günlüklerini ekle", "Attach diagnostic logs")}
-            detail={copy("Gizli bilgileri çıkarılmış uygulama günlükleri nedeni bulmamıza yardım eder. Konuşmalarını asla içermez.", "Redacted app logs help us find the cause. They never include your conversations.")}
+            help={copy("Gizli bilgileri çıkarılmış uygulama günlükleri nedeni bulmamıza yardım eder. Konuşmalarını asla içermez.", "Redacted app logs help us find the cause. They never include your conversations.")}
             value={attachLogs}
             onChange={(value) => patch({ attachLogs: value })}
           />

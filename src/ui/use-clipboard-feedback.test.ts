@@ -14,17 +14,40 @@ import { PrivateContentAccessProvider } from "./private-access";
 import { useClipboardFeedback } from "./use-clipboard-feedback";
 
 let api: ReturnType<typeof useClipboardFeedback>;
-function Probe({ payload, enabled = true }: { payload: string; enabled?: boolean }) {
-  const feedback = useClipboardFeedback(payload, enabled); api = feedback;
+function Probe({ payload, enabled = true, prepare }: { payload: string; enabled?: boolean; prepare?: () => Promise<string> }) {
+  const feedback = useClipboardFeedback(payload, enabled, undefined, prepare); api = feedback;
   return createElement("div", null, createElement("button", { onClick: feedback.copy }, "copy"),
     createElement("p", { id: "state" }, `${feedback.copied ? "copied" : "idle"}|${feedback.busy ? "busy" : "free"}|${feedback.error?.message ?? ""}`));
 }
 let root: ReturnType<typeof createRoot> | undefined; let container: HTMLDivElement;
-async function render(payload: string, enabled = true) {
+async function render(payload: string, enabled = true, prepare?: () => Promise<string>) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   if (!root) { container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container); }
-  await act(async () => root!.render(createElement(Probe, { payload, enabled })));
+  await act(async () => root!.render(createElement(Probe, { payload, enabled, prepare })));
 }
+
+it("prepares async text once and never copies after access is revoked", async () => {
+  let resolve!: (text: string) => void;
+  const prepare = vi.fn(() => new Promise<string>(done => { resolve = done; }));
+  await render("session", true, prepare);
+  await act(async () => { press(); press(); });
+  expect(prepare).toHaveBeenCalledOnce();
+  expect(clip.calls).toEqual([]);
+  security.allowed = false;
+  await act(async () => resolve("private text"));
+  expect(clip.calls).toEqual([]);
+});
+it("shows preparation failures and allows an explicit retry", async () => {
+  const prepare = vi.fn().mockRejectedValueOnce(new Error("read failed")).mockResolvedValue("User: hello");
+  await render("session", true, prepare);
+  await act(async () => press());
+  expect(state()).toBe("idle|free|read failed");
+  expect(clip.calls).toEqual([]);
+  await act(async () => press());
+  expect(clip.calls).toEqual(["User: hello"]);
+  await act(async () => clip.pending[0]!.resolve());
+  expect(state()).toBe("copied|free|");
+});
 const state = () => container.querySelector("#state")!.textContent;
 const press = () => container.querySelector("button")!.click();
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; container?.remove(); clip.calls = []; clip.pending = []; vi.unstubAllGlobals(); });

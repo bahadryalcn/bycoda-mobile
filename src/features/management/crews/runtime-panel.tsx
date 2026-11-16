@@ -446,7 +446,7 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
             </Disclosure>
           )}
           <Button
-            tone="quiet"
+            tone="primary"
             label={copy("Ekip çalışmasını tamamla", "Finish crew work")}
             disabled={!available() || !canFinishCrewRun(detail)}
             onPress={() =>

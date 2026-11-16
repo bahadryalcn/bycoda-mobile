@@ -4,6 +4,7 @@ import {
   performSessionRowAction,
   reviewSessionRow,
   sessionRowReviewMatches,
+  sessionActionState,
 } from "./session-row-action-model";
 
 const summary: HostSessionSummary = {
@@ -27,6 +28,29 @@ const snapshot = (changes: Partial<HostSession> = {}) =>
   }) as HostSession;
 const review = () => reviewSessionRow("machine", "project", summary);
 describe("session row reviewed mutations", () => {
+  it("projects running, archived, settled and pinned actions", () => {
+    expect(sessionActionState({ status: "running", runId: "run" }, false)).toMatchObject({ canStop: true, canDelete: false, canSettle: false });
+    expect(sessionActionState({ status: "idle", archived: true, pinned: true }, true)).toEqual({ pin: "unpin", archive: "unarchive", settle: "unsettle", canStop: false, canDelete: true, canSettle: true });
+    expect(sessionActionState({ status: "idle" }, false)).toMatchObject({ pin: "pin", archive: "archive", settle: "settle", canStop: false });
+    expect(sessionActionState({ status: "running" }, false).canStop).toBe(false);
+  });
+  it("renames through the shared title path after revision preflight", async () => {
+    const write = vi.fn(async () => ({}));
+    await performSessionRowAction("rename", review(), { assertCurrent() {}, read: async () => snapshot(), write }, " New title ");
+    expect(write).toHaveBeenCalledExactlyOnceWith({ projectId: "project", sessionId: "session", title: "New title", authorityGeneration: 2 });
+  });
+  it("cancels only the exact reviewed run and rejects a replacement", async () => {
+    const running = reviewSessionRow("machine", "project", { ...summary, status: "running", runId: "run" });
+    const write = vi.fn(async () => ({}));
+    const ports = { assertCurrent() {}, read: async () => snapshot({ status: "running", runId: "run" }), write };
+    await performSessionRowAction("stop", running, ports);
+    expect(write).toHaveBeenCalledExactlyOnceWith({ type: "cancel", sessionId: "session", runId: "run", authorityGeneration: 2 });
+    // Streaming transcript revisions do not replace the run the owner reviewed.
+    await performSessionRowAction("stop", running, { ...ports, read: async () => snapshot({ status: "running", runId: "run", revision: 99 }) });
+    write.mockClear();
+    await expect(performSessionRowAction("stop", running, { ...ports, read: async () => snapshot({ status: "running", runId: "other" }) })).rejects.toThrow("changed");
+    expect(write).not.toHaveBeenCalled();
+  });
   it.each(["archive", "delete"] as const)(
     "sends %s once with captured project and authority",
     async (action) => {

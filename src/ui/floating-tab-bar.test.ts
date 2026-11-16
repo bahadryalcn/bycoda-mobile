@@ -34,9 +34,15 @@ vi.mock("./navigation-row", () => ({
       trailing,
     ),
 }));
-vi.mock("lucide-react-native/icons/more-horizontal", () => ({ default: () => null }));
+vi.mock("./dock-icon", () => ({
+  DockIcon: ({ name, color }: { name: string; color: string }) =>
+    createElement("i", { "data-icon": name, "data-color": color }),
+}));
 const state = vi.hoisted(() => ({
   keyboard: false,
+  rtl: false,
+  insetLeft: 0,
+  insetRight: 0,
   emit: vi.fn(() => ({ defaultPrevented: false })),
   navigate: vi.fn(),
   haptic: vi.fn(),
@@ -73,6 +79,10 @@ vi.mock("lucide-react-native/icons/plus", () => ({
 }));
 vi.mock("./motion", () => ({ haptic: { select: state.haptic }, indicatorTiming: {} }));
 vi.mock("./use-reduced-motion", () => ({ useReducedMotionPreference: () => true }));
+vi.mock("panelui-native/primitives/animated-pressable", async () => {
+  const { Pressable } = await import("react-native");
+  return { AnimatedPressable: Pressable };
+});
 vi.mock("react-native-reanimated", () => ({
   default: {
     View: ({ children }: PropsWithChildren) => createElement("div", null, children),
@@ -83,7 +93,7 @@ vi.mock("react-native-reanimated", () => ({
   LinearTransition: { duration: () => ({}) },
 }));
 vi.mock("react-native-safe-area-context", () => ({
-  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0 }),
+  useSafeAreaInsets: () => ({ bottom: 0, left: state.insetLeft, right: state.insetRight }),
 }));
 vi.mock("react-native-keyboard-controller", () => ({
   useKeyboardState: (select: (s: { isVisible: boolean }) => unknown) =>
@@ -91,6 +101,11 @@ vi.mock("react-native-keyboard-controller", () => ({
 }));
 vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
+  I18nManager: {
+    get isRTL() {
+      return state.rtl;
+    },
+  },
   AccessibilityInfo: {
     isReduceTransparencyEnabled: () => Promise.resolve(state.reduceTransparency),
     addEventListener: () => ({ remove: () => {} }),
@@ -196,6 +211,9 @@ const props = {
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.keyboard = false;
+  state.rtl = false;
+  state.insetLeft = 0;
+  state.insetRight = 0;
   state.reduceTransparency = false;
   state.canBlur = true;
   state.width = 320;
@@ -217,8 +235,11 @@ it("uses an opaque navigation surface without a separate command", async () => {
   expect(container.querySelectorAll("[role=tab]")).toHaveLength(5);
 });
 it("starts a session on tap and opens quick actions on hold without selecting a tab", async () => {
-  const onPress = vi.fn(), onLongPress = vi.fn();
-  await render({ quickAction: { label: "New session", optionsLabel: "Quick actions", onPress, onLongPress } });
+  const onPress = vi.fn(),
+    onLongPress = vi.fn();
+  await render({
+    quickAction: { label: "New session", optionsLabel: "Quick actions", onPress, onLongPress },
+  });
   const command = container.querySelector('[aria-label="New session"]') as HTMLElement;
   expect(command.getAttribute("role")).toBe("button");
   expect(JSON.parse(command.getAttribute("data-style")!).minHeight).toBeGreaterThanOrEqual(48);
@@ -230,19 +251,26 @@ it("starts a session on tap and opens quick actions on hold without selecting a 
 });
 it("keeps large-text destinations reachable while the quick action owns a slot", async () => {
   state.fontScale = 2;
-  await render({ quickAction: { label: "New session", optionsLabel: "Quick actions", onPress: vi.fn(), onLongPress: vi.fn() } });
+  await render({
+    quickAction: {
+      label: "New session",
+      optionsLabel: "Quick actions",
+      onPress: vi.fn(),
+      onLongPress: vi.fn(),
+    },
+  });
   expect(container.querySelector('[aria-label="New session"]')).not.toBeNull();
-  const more = [...container.querySelectorAll('[role="tab"]')].find(tab => tab.textContent?.includes("More")) as HTMLElement;
+  const more = [...container.querySelectorAll('[role="tab"]')].find((tab) =>
+    tab.getAttribute("aria-label")?.startsWith("More"),
+  ) as HTMLElement;
   await act(async () => more.click());
   expect(container.querySelector('[data-destination="settings"]')).not.toBeNull();
 });
 it("labels every tab, keeps every accessible name and never changes the tab row for the action", async () => {
   await render();
   const tabs = [...container.querySelectorAll("[role=tab]")];
-  expect(tabs.map((tab) => tab.textContent)).toEqual(
-    expect.arrayContaining([expect.stringContaining("projects")]),
-  );
-  for (const tab of tabs) expect(tab.textContent).not.toBe("");
+  expect(tabs[0]!.getAttribute("aria-label")).toBe("projects");
+  for (const tab of tabs) expect(tab.textContent).not.toContain(tab.getAttribute("aria-label"));
   expect(tabs[1]!.getAttribute("aria-label")).toBe("sessions, 99+");
   await render();
   expect(container.querySelectorAll("[role=tab]")).toHaveLength(tabs.length);
@@ -299,7 +327,9 @@ it("honors prevented navigation and follows an already-open keyboard without cha
   expect(container.querySelector("[role=tablist]")).toBeNull();
   state.keyboard = false;
   await render();
-  expect(container.querySelector('[aria-selected="true"]')?.textContent).toBe("projects");
+  expect(container.querySelector('[aria-selected="true"]')?.getAttribute("aria-label")).toBe(
+    "projects",
+  );
   expect(state.navigate).not.toHaveBeenCalled();
 });
 
@@ -325,10 +355,10 @@ it("keeps long translated labels readable without font shrinking or scaling caps
   await render({ descriptors });
   const tabs = [...container.querySelectorAll("[role=tab]")];
   for (const tab of tabs) {
-    const label = tab.querySelector("span")!;
-    expect(label.hasAttribute("data-lines")).toBe(false);
-    expect(label.hasAttribute("data-scale-cap")).toBe(false);
-    expect(label.hasAttribute("data-shrink")).toBe(false);
+    expect(tab.getAttribute("aria-label")).toContain(
+      tab === tabs[tabs.length - 1] ? "Benachrichtigung" : "Çalışma",
+    );
+    expect(tab.textContent).not.toContain("Çalışma");
     expect(tabStyle(tab).minHeight).toBeGreaterThanOrEqual(48);
   }
 });
@@ -337,7 +367,7 @@ it("keeps one row at large text and reaches overflow destinations through More",
   await render();
   const tabs = [...container.querySelectorAll("[role=tab]")];
   expect(tabs).toHaveLength(3);
-  expect(tabs.map((tab) => tabStyle(tab).width)).toEqual(Array(3).fill("33.333333333333336%"));
+  expect(tabs.map((tab) => tabStyle(tab).width)).toEqual(Array(3).fill(48));
   const listStyle = JSON.parse(
     container.querySelector("[role=tablist]")!.getAttribute("data-style")!,
   );
@@ -387,29 +417,82 @@ it("retains running counts when large text moves Sessions into overflow", async 
   expect(session?.textContent).toContain("99+");
 });
 
-it("separates create from all five navigation destinations at phone width", async () => {
-  await render({ quickAction: { label: "New session", optionsLabel: "Quick actions", onPress: vi.fn(), onLongPress: vi.fn() } });
+it("places create inside the content-width dock beside five tabs when they fit", async () => {
+  state.width = 360;
+  await render({
+    quickAction: {
+      label: "New session",
+      optionsLabel: "Quick actions",
+      onPress: vi.fn(),
+      onLongPress: vi.fn(),
+    },
+  });
   const command = container.querySelector('[aria-label="New session"]')!;
   const rail = container.querySelector('[role="tablist"]')!;
   expect(rail.contains(command)).toBe(false);
+  expect(rail.parentElement?.contains(command)).toBe(true);
+  const dockStyle = JSON.parse(rail.parentElement!.getAttribute("data-style")!);
+  expect(dockStyle.width).toBeUndefined();
+  expect(dockStyle.borderWidth).toBe(1);
+  expect(dockStyle.padding).toBe(6);
+  expect(dockStyle.borderRadius).toBe(24);
   expect(rail.querySelectorAll('[role="tab"]')).toHaveLength(5);
   expect(JSON.parse(command.getAttribute("data-style")!).width).toBe(48);
-  expect([...rail.querySelectorAll('[role="tab"]')].map(tab => tabStyle(tab).width)).toEqual(Array(5).fill("20%"));
+  expect([...rail.querySelectorAll('[role="tab"]')].map((tab) => tabStyle(tab).width)).toEqual(
+    Array(5).fill(48),
+  );
 });
 
 it("keeps narrow large-type navigation and create independently reachable", async () => {
-  state.width = 280; state.fontScale = 3;
-  await render({ state: { ...props.state, index: 4 }, quickAction: { label: "Yeni oturum oluştur", optionsLabel: "Diğer hızlı işlemler", onPress: vi.fn(), onLongPress: vi.fn() } });
+  state.width = 280;
+  state.fontScale = 3;
+  await render({
+    state: { ...props.state, index: 4 },
+    quickAction: {
+      label: "Yeni oturum oluştur",
+      optionsLabel: "Diğer hızlı işlemler",
+      onPress: vi.fn(),
+      onLongPress: vi.fn(),
+    },
+  });
   const command = container.querySelector('[aria-label="Yeni oturum oluştur"]')!;
   const rail = container.querySelector('[role="tablist"]')!;
   expect(rail.contains(command)).toBe(false);
   expect(rail.querySelectorAll('[role="tab"]')).toHaveLength(2);
   const selected = rail.querySelector('[aria-selected="true"]') as HTMLElement;
-  expect(selected.textContent).toContain("More");
+  expect(selected.getAttribute("aria-label")).toContain("More");
   expect(tabStyle(selected).minHeight).toBeGreaterThanOrEqual(48);
   await act(async () => selected.click());
-  const destinations = [...container.querySelectorAll('[data-destination]')];
-  expect(destinations.map(row => row.getAttribute("data-destination"))).toEqual(["sessions", "inbox", "tools", "settings"]);
-  expect(container.querySelector('[data-destination="settings"]')?.getAttribute("aria-selected")).toBe("true");
+  const destinations = [...container.querySelectorAll("[data-destination]")];
+  expect(destinations.map((row) => row.getAttribute("data-destination"))).toEqual([
+    "sessions",
+    "inbox",
+    "tools",
+    "settings",
+  ]);
+  expect(
+    container.querySelector('[data-destination="settings"]')?.getAttribute("aria-selected"),
+  ).toBe("true");
   expect(container.querySelector('[aria-label="Yeni oturum oluştur"]')).toBe(command);
+});
+
+it("maps asymmetric physical safe areas to logical RTL dock padding", async () => {
+  state.rtl = true;
+  state.insetLeft = 8;
+  state.insetRight = 28;
+  await render();
+  const host = container.querySelector("[data-layout]")!;
+  const style = JSON.parse(host.getAttribute("data-style")!);
+  expect(style.paddingStart).toBe(28);
+  expect(style.paddingEnd).toBe(8);
+});
+
+it("keeps active tabs unfilled with a single 4dp indicator", async () => {
+  await render();
+  const tabs = [...container.querySelectorAll("[role=tab]")];
+  for (const tab of tabs) expect(tabStyle(tab).backgroundColor).toBeUndefined();
+  const dots = [...tabs[0]!.querySelectorAll("[data-style]")]
+    .map((node) => JSON.parse(node.getAttribute("data-style")!))
+    .filter((style) => style.width === 4 && style.height === 4);
+  expect(dots).toHaveLength(1);
 });

@@ -1,17 +1,16 @@
 import { View } from "react-native";
 import { providerName } from "../workspace/provider-choices";
+import { Badge } from "panelui-native/components/badge";
 import { BarChart } from "panelui-native/components/bar-chart";
-import { Kpi } from "panelui-native/components/kpi";
 import { PieChart } from "panelui-native/components/pie-chart";
 import { Body } from "@/ui/primitives";
 import { MetricRow } from "@/ui/metric-row";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { radii, space } from "@/ui/tokens";
+import { fontSize, radii, space } from "@/ui/tokens";
 import { compactTokens, type ProviderUsage } from "./usage-breakdown";
 
 /** Usage headline: one PanelUI KPI per figure, wrapping to a second row on a narrow phone. */
-const KPI_MIN_WIDTH = 100;
 /** A donut is drawn for two to this many providers; more than that becomes bars. */
 const MAX_DONUT_PROVIDERS = 6;
 const PIE_SIZE = 168;
@@ -19,21 +18,12 @@ const SWATCH = 10;
 
 export function UsageKpis({ items }: { items: { title: string; value: string }[] }) {
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-      {items.map((item) => (
-        <View key={item.title} style={{ flexGrow: 1, flexBasis: KPI_MIN_WIDTH, minWidth: 0 }}>
-          <Kpi>
-            <Kpi.Header>
-              <Kpi.Title>{item.title}</Kpi.Title>
-            </Kpi.Header>
-            <Kpi.Content>
-              <Kpi.Stat>
-                <Kpi.Value>{item.value}</Kpi.Value>
-              </Kpi.Stat>
-            </Kpi.Content>
-          </Kpi>
-        </View>
-      ))}
+    <View style={{ gap: space.sm }}>
+      {items[0] ? <View>
+        <Body muted>{items[0].title}</Body>
+        <Body style={{ fontSize: fontSize.display, fontWeight: "600" }}>{items[0].value}</Body>
+      </View> : null}
+      {items.slice(1).map((item) => <MetricRow key={item.title} label={item.title} value={item.value} />)}
     </View>
   );
 }
@@ -109,7 +99,8 @@ export function ProviderShare({ rows }: { rows: ProviderUsage[] }) {
               key={row.provider}
               style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
             >
-              <View
+              <Badge
+                shape="dot"
                 accessible={false}
                 style={{
                   width: SWATCH,

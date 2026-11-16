@@ -1,3 +1,8 @@
+import Clock from "lucide-react-native/icons/clock";
+import Mail from "lucide-react-native/icons/mail";
+import MailOpen from "lucide-react-native/icons/mail-open";
+import { sessionAttentionActions, sessionIsSnoozed } from "./session-attention-model";
+import { SessionSnoozeMenu } from "./session-snooze-menu";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import Archive from "lucide-react-native/icons/archive";
@@ -9,6 +14,8 @@ import PinOff from "lucide-react-native/icons/pin-off";
 import CircleCheck from "lucide-react-native/icons/circle-check";
 import Undo2 from "lucide-react-native/icons/undo-2";
 import GitBranch from "lucide-react-native/icons/git-branch";
+import Pencil from "lucide-react-native/icons/pencil";
+import Square from "lucide-react-native/icons/square";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine } from "@/state/reviewed-machine";
@@ -19,6 +26,7 @@ import {
   Body,
   ErrorText,
   FormActions,
+  Field,
   Notice,
   Row,
   Sheet,
@@ -37,13 +45,15 @@ import {
   performSessionRowAction,
   reviewSessionRow,
   sessionRowReviewMatches,
+  sessionActionState,
 } from "./session-row-action-model";
-import { relativeTime, sessionStatus } from "./shared";
+import { relativeTime, sessionStatus, useCommands, UncertainCommand } from "./shared";
 import { captureSessionAuthority } from "@/domain/session-authority";
-import { SessionActionList } from "./session-action-list";
+import { SessionRowCopyMenu } from "./session-row-copy-menu";
+import { sessionCopyLink } from "./session-copy-model";
 import { sessionDisplayTitle } from "./session-title";
 
-type RowAction = SwipeRowAction & { detail?: string; opens?: boolean };
+type RowAction = SwipeRowAction & { detail?: string; opens?: boolean; group?: "primary" | "secondary" | "state" };
 
 export type SessionRowActionsProps = {
   machineId: string;
@@ -70,6 +80,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     cache = useQueryClient();
   const update = useHostMutation<HostSessionSummary>("sessions.update", ["sessions", projectId]);
   const remove = useHostMutation<{ deleted: true }>("sessions.delete", ["sessions", projectId]);
+  const command = useCommands(["session", session.id, projectId]);
   const lifecycle = useHostMutation<unknown>(
     settled ? "sessions.lifecycle.unsettle" : "sessions.lifecycle.settle",
     ["sessions-lifecycle"],
@@ -93,9 +104,11 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     access.check() &&
     canRead();
   const writable = available && !!client && !!machine?.capabilities?.includes("sessions");
-  const live = useRef({ props, connection, available, writable, access });
-  live.current = { props, connection, available, writable, access };
-  const [panel, setPanel] = useState<"actions" | "details" | "delete" | null>(null);
+  const stopSupported = !!machine?.capabilities?.includes("transport.ws.sessions.v2");
+  const live = useRef({ props, connection, available, writable, stopSupported, access });
+  live.current = { props, connection, available, writable, stopSupported, access };
+  const [panel, setPanel] = useState<"actions" | "details" | "delete" | "rename" | "stop" | "snooze" | null>(null);
+  const [renameTitle, setRenameTitle] = useState(session.title);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null),
     [uncertain, setUncertain] = useState(false);
@@ -106,12 +119,19 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     update: update.mutateAsync,
     remove: remove.mutateAsync,
     lifecycle: lifecycle.mutateAsync,
+    command: command.mutateAsync,
   });
   type Review = ReturnType<typeof capture>;
   const issued = useRef<Review | null>(null);
   const [review, setReview] = useState<Review | null>(null);
-  const current = (value: Review, write = false) => {
+  const current = (value: Review, write = false, exactRun = false) => {
     const state = live.current;
+    const matches = exactRun
+      ? state.stopSupported &&
+        value.row.authorityGeneration === state.props.session.authorityGeneration &&
+        value.row.status === "running" && state.props.session.status === "running" &&
+        !!value.row.runId && value.row.runId === state.props.session.runId
+      : sessionRowReviewMatches(value.row, state.props.machineId, state.props.projectId, state.props.session);
     return (
       mounted.current &&
       state.available &&
@@ -125,27 +145,24 @@ export function SessionRowActions(props: SessionRowActionsProps) {
       value.row.machineId === state.props.machineId &&
       value.row.projectId === state.props.projectId &&
       value.row.sessionId === state.props.session.id &&
-      (!write ||
-        sessionRowReviewMatches(
-          value.row,
-          state.props.machineId,
-          state.props.projectId,
-          state.props.session,
-        ))
+      (!write || matches)
     );
   };
   // Returning to the same row never revives a confirmation retired by access or authority changes.
   useLayoutEffect(() => {
-    if (review && !current(review, true)) issued.current = null;
+    if (review && !current(review, true, panel === "stop")) issued.current = null;
   }, [
     review,
+    panel,
     available,
     writable,
+    stopSupported,
     connection,
     session.id,
     session.revision,
     session.authorityGeneration,
     session.status,
+    session.runId,
     session.archived,
   ]);
   const open = (next: NonNullable<typeof panel>) => {
@@ -155,6 +172,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     issued.current = value;
     setReview(value);
     setPanel(next);
+    if (next === "rename") setRenameTitle(session.title);
     if (!held.current) setError(null);
   };
   const close = () => {
@@ -164,9 +182,9 @@ export function SessionRowActions(props: SessionRowActionsProps) {
       setReview(null);
     }
   };
-  const run = async (action: "archive" | "delete", value: Review) => {
+  const run = async (action: "archive" | "delete" | "rename" | "stop", value: Review) => {
     if (
-      !current(value, true) ||
+      !current(value, true, action === "stop") ||
       issued.current !== value ||
       occupied.current ||
       held.current ||
@@ -182,11 +200,11 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     try {
       await performSessionRowAction(action, value.row, {
         assertCurrent: () => {
-          if (!current(value, true)) throw new Error("The session project is no longer available.");
+          if (!current(value, true, action === "stop")) throw new Error("The session project is no longer available.");
         },
         read: () => readTail(value.client!, value.row.sessionId, { signal: controller.signal }),
-        write: action === "archive" ? value.update : value.remove,
-      });
+        write: action === "stop" ? value.command : action === "delete" ? value.remove : value.update,
+      }, renameTitle);
       await Promise.all([
         cache.invalidateQueries({ queryKey: hostKey(value.row.machineId, ["project-summaries"]) }),
         cache.invalidateQueries({
@@ -200,10 +218,11 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     } catch (cause) {
       if (mounted.current) {
         setError(cause);
-        if (cause instanceof RemoteHostError && cause.uncertain) {
+        if ((cause instanceof RemoteHostError && cause.uncertain) || cause instanceof UncertainCommand) {
           held.current = true;
           setUncertain(true);
         }
+        else issued.current = value;
         if (!panel) {
           setReview(value);
           setPanel("actions");
@@ -223,7 +242,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     setPanel("actions");
     void run("archive", value);
   };
-  const quick = async (kind: "pin" | "settle") => {
+  const quick = async (kind: "pin" | "settle" | "unread" | "snooze", until?: number | null) => {
     if (!writable || occupied.current || held.current) return;
     const value = capture();
     if (!current(value, true)) return;
@@ -237,6 +256,12 @@ export function SessionRowActions(props: SessionRowActionsProps) {
           sessionId: session.id,
           pinned: !session.pinned,
           ...captureSessionAuthority(session),
+        });
+      else if (kind === "unread" || kind === "snooze")
+        await value.update({
+          projectId, sessionId: session.id, expectedRevision: session.revision,
+          ...captureSessionAuthority(session),
+          ...(kind === "unread" ? { unread: !session.unread } : { snoozedUntil: until }),
         });
       else await value.lifecycle({ sessionId: session.id });
       // The Sessions tab reads batched project summaries, not the per-project list.
@@ -268,6 +293,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     ? copy("Arşivden çıkar", "Unarchive")
     : copy("Arşivle", "Archive");
   const blocked = !writable || busy || uncertain;
+  const actionState = sessionActionState(session, !!settled);
   const pin: RowAction = {
     key: "pin",
     label: session.pinned ? copy("Sabiti kaldır", "Unpin") : copy("Sabitle", "Pin"),
@@ -277,17 +303,15 @@ export function SessionRowActions(props: SessionRowActionsProps) {
   };
   const settle: RowAction = {
     key: "settle",
+    group: "state",
     label: settled ? copy("Raftan indir", "Un-settle") : copy("Rafa kaldır", "Settle"),
     icon: settled ? <Undo2 /> : <CircleCheck />,
-    detail:
-      !settled && session.status === "running"
-        ? copy("Oturum çalışırken kullanılamaz.", "Unavailable while the session is running.")
-        : undefined,
-    disabled: blocked || (!settled && session.status === "running"),
+    disabled: blocked || !actionState.canSettle,
     onPress: () => void quick("settle"),
   };
   const archiveAction: RowAction = {
     key: "archive",
+    group: "state",
     label: archiveLabel,
     icon: session.archived ? <ArchiveRestore /> : <Archive />,
     disabled: blocked,
@@ -299,25 +323,36 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     icon: <Trash />,
     destructive: true,
     opens: true,
-    detail:
-      session.status === "running"
-        ? copy("Oturum çalışırken kullanılamaz.", "Unavailable while the session is running.")
-        : undefined,
-    disabled: blocked || session.status === "running",
+    disabled: blocked || !actionState.canDelete,
     onPress: () => open("delete"),
   };
   const detailsAction: RowAction = {
     key: "details",
+    group: "secondary",
     label: copy("Ayrıntılar", "Details"),
     icon: <Info />,
     opens: true,
     disabled: busy,
     onPress: () => open("details"),
   };
+  const rename: RowAction = { key: "rename", label: copy("Yeniden adlandır", "Rename"), icon: <Pencil />, disabled: blocked, opens: true, onPress: () => open("rename") };
+  const stop: RowAction = { key: "stop", group: "state", label: copy("Durdur", "Stop"), icon: <Square />, disabled: blocked, opens: true, onPress: () => open("stop") };
   const swipeActions = [pin, settle, deleteAction];
-  const sheetActions = [pin, settle, archiveAction, detailsAction, deleteAction];
+  const attention = sessionAttentionActions(session);
+  const snoozed = sessionIsSnoozed(session);
+  const attentionActions: RowAction[] = [
+    ...(attention.unread ? [{ key: "unread", group: "secondary" as const,
+      label: session.unread ? copy("Okundu olarak işaretle", "Mark as read") : copy("Okunmadı olarak işaretle", "Mark as unread"),
+      icon: session.unread ? <MailOpen /> : <Mail />, disabled: blocked,
+      onPress: () => void quick("unread") }] : []),
+    ...(attention.snooze ? [{ key: "snooze", group: "secondary" as const,
+      label: snoozed ? copy("Şimdi uyandır", "Wake now") : copy("Ertele", "Snooze"), icon: <Clock />,
+      disabled: blocked, opens: !snoozed,
+      onPress: () => { if (snoozed) void quick("snooze", null); else setPanel("snooze"); } }] : []),
+  ];
+  const sheetActions = [rename, pin, ...attentionActions, detailsAction, settle, archiveAction, ...(actionState.canStop && stopSupported ? [stop] : []), deleteAction];
   const valid = !!review && current(review);
-  const fresh = !!review && current(review, true);
+  const fresh = !!review && current(review, true, panel === "stop");
   const status = sessionStatus({ ...session, pinned: false }, copy, colors).label;
   const title = sessionDisplayTitle(session.title, copy("Yeni oturum", "New session"));
   const details = (
@@ -397,10 +432,14 @@ export function SessionRowActions(props: SessionRowActionsProps) {
                 ? copy("Oturum ayrıntıları", "Session details")
                 : panel === "delete"
                   ? copy("Oturumu sil", "Delete session")
+                  : panel === "rename" ? copy("Yeniden adlandır", "Rename")
+                  : panel === "stop" ? copy("Oturumu durdur", "Stop session")
+                  : panel === "snooze" ? copy("Ertele", "Snooze")
                   : copy("Oturum işlemleri", "Session actions")
             }
             onClose={close}
             dismissible={!busy}
+            dirty={panel === "rename" && renameTitle !== session.title}
           >
             {panel === "details" ? (
               details
@@ -409,7 +448,19 @@ export function SessionRowActions(props: SessionRowActionsProps) {
                 {title}
               </Body>
             )}
-            {panel === "delete" ? (
+            {(panel === "rename" || panel === "stop") && !fresh && !busy ? (
+              <Notice tone="warning" message={copy("Bu oturum değişti. Listeyi yenileyip tekrar inceleyin.", "This session changed. Refresh the list and review it again.")} />
+            ) : null}
+            {panel === "snooze" ? (
+              <SessionSnoozeMenu disabled={blocked || !fresh} onSelect={(until) => void quick("snooze", until)} />
+            ) : panel === "rename" ? (
+              <>
+                <Field label={copy("Başlık", "Title")} value={renameTitle} onChangeText={setRenameTitle} editable={!busy && !uncertain} error={!renameTitle.trim() ? copy("Bu alan gereklidir.", "This field is required.") : undefined} returnKeyType="done" />
+                <FormActions submitLabel={copy("Kaydet", "Save")} onSubmit={() => { void run("rename", review); }} busy={busy} disabled={!fresh || issued.current !== review || uncertain || !renameTitle.trim()} onCancel={close} cancelDisabled={busy} />
+              </>
+            ) : panel === "stop" ? (
+              <FormActions submitLabel={copy("Durdur", "Stop")} onSubmit={() => { void run("stop", review); }} busy={busy} disabled={!fresh || issued.current !== review || uncertain || !actionState.canStop} onCancel={close} cancelDisabled={busy} />
+            ) : panel === "delete" ? (
               <>
                 <Notice
                   tone="warning"
@@ -442,12 +493,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
                 />
               </>
             ) : panel === "actions" ? (
-              <SessionActionList
-                actions={sheetActions.map((action) => ({
-                  ...action,
-                  busy: busy && action.key === "archive",
-                }))}
-              />
+              <SessionRowCopyMenu actions={sheetActions} sessionId={review.row.sessionId} projectId={review.row.projectId} title={title} link={sessionCopyLink(machine?.environmentId, session.id)} client={review.client} current={() => current(review)} busy={busy} />
             ) : null}
             {uncertain ? (
               <Notice

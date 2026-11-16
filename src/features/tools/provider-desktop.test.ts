@@ -12,10 +12,13 @@ const state = vi.hoisted(() => ({
   pull: undefined as undefined | (() => unknown),
   methods: [] as string[],
   pending: [] as Promise<unknown>[],
+  limits: false,
+  navigate: vi.fn(),
 }));
 vi.mock("@/ui/provider-account-kind", () => ({ ProviderAccountKind: () => null }));
 vi.mock("./provider-account-editor", () => ({ ProviderAccountEditor: () => null }));
 vi.mock("react-native", () => ({ View: "div" }));
+vi.mock("expo-router", () => ({ router: { navigate: state.navigate } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 const machine = () => ({
   id: "machine",
@@ -24,6 +27,7 @@ const machine = () => ({
   capabilities: state.supported
     ? [
         "providers.desktop.v1",
+        ...(state.limits ? ["usage.limits.read", "usage.sessions.read"] : []),
         ...(state.metadata
           ? ["providers.desktop.metadata.v1"]
           : ["providers.desktop.quotaRefresh.v1"]),
@@ -72,6 +76,9 @@ vi.mock("@/ui/primitives", () => {
   return {
     Body: Wrapper,
     Row: Wrapper,
+    Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    NavigationRow: ({ label, onPress }: { label: string; onPress: () => void }) =>
+      createElement("button", { onClick: onPress }, label),
     Disclosure: Wrapper,
     Empty: ({ title }: { title: string }) => createElement("p", null, title),
     Sheet: Wrapper,
@@ -177,6 +184,8 @@ afterEach(async () => {
   state.pending = [];
   state.supported = true;
   state.metadata = true;
+  state.limits = false;
+  state.navigate.mockReset();
   state.error = false;
   state.empty = false;
   state.refetch.mockReset();
@@ -280,4 +289,15 @@ it("exposes Claude account actions when only quota observation is supported", as
   state.metadata = false;
   await render();
   expect(container.textContent).toContain("Account actions");
+});
+it("replaces the cached quota with a link to Usage Limits in the same machine and project scope", async () => {
+  state.limits = true;
+  await render();
+  expect(container.textContent).not.toContain("Quota information unavailable");
+  const link = [...container.querySelectorAll("button")].find((b) => b.textContent === "Account limits")!;
+  await act(async () => link.click());
+  expect(state.navigate).toHaveBeenCalledWith({
+    pathname: "/tools/[tool]",
+    params: { tool: "usage", projectId: "project", machineId: "machine", tab: "limits" },
+  });
 });

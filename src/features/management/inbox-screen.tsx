@@ -1,6 +1,6 @@
 import { ScreenList } from "@/ui/screen-list";
 import type { HostAttentionInbox, MobileInboxItem } from "@/domain/types";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActionMenu, Body, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, Sheet, StateView } from "@/ui/primitives";
 import { CollectionToolbar } from "@/ui/search-field";
@@ -20,7 +20,7 @@ import { View } from "react-native";
 import { inboxRelativeTime } from "./inbox-time";
 import { isInboxPrivateFailure } from "../inbox/provider-model";
 
-const attentionRoutes = { task: "tasks", goal: "goals", automation: "automations", social: "social", "pull-request": "tasks", session: "inbox" } as const;
+const attentionRoutes = { task: "tasks", goal: "goals", automation: "automations", social: null, "pull-request": "tasks", session: "inbox" } as const;
 
 /** Mail-style relative time ("5 dk", "2 sa", "dün") in the app language. */
 function relativeTime(value: number, copy: ReturnType<typeof useCopy>) {
@@ -31,7 +31,8 @@ function relativeTime(value: number, copy: ReturnType<typeof useCopy>) {
 
 export function InboxScreen() {
   const copy = useCopy();
-  const [mode, setMode] = useState<"attention" | "providers">("attention");
+  const { view } = useLocalSearchParams<{ view?: string }>();
+  const [mode, setMode] = useState<"attention" | "providers">(view === "jira" || view === "issues" ? "providers" : "attention");
   return (
     <InboxBrowseMemoryProvider><Screen scroll={false} title={copy("Gelen kutusu", "Inbox")}>
       <ScreenHeader>
@@ -46,7 +47,7 @@ export function InboxScreen() {
           onChange={setMode}
         />
       </ScreenHeader>
-      {mode === "providers" ? <ProviderInboxScreen embedded /> : <AttentionInboxScreen />}
+      {mode === "providers" ? <ProviderInboxScreen embedded openJira={view === "jira"} /> : <AttentionInboxScreen />}
     </Screen></InboxBrowseMemoryProvider>
   );
 }
@@ -70,7 +71,7 @@ function AttentionInboxScreen() {
   );
   const readable = scopeCurrent && query.isEnabled !== false && query.fetchStatus !== "paused" && !isInboxPrivateFailure(query.error);
   const data = readable ? query.data : undefined;
-  const groups = useMemo(() => groupAttention(data?.items ?? []), [data]);
+  const groups = useMemo(() => groupAttention((data?.items ?? []).filter(item => item.kind !== "social")), [data]);
   const rows = groups.ordered;
   const lease = useMemo(() => ({ active: false }), [readable, origin.machineId, origin.projectId]);
   useLayoutEffect(() => { lease.active = true; return () => { lease.active = false; }; }, [lease]);
@@ -126,7 +127,7 @@ function AttentionInboxScreen() {
             <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
               description={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
               "Record access is unavailable. Check the original computer and project connection.")} />
-          ) : <QueryState query={{...query, data, refetch: refresh}} empty={data?.items.length === 0}
+          ) : <QueryState query={{...query, data, refetch: refresh}} empty={data !== undefined && rows.length === 0}
             emptyIllustration="inbox-empty"
             emptyTitle={copy("Her şey yolunda", "You're all caught up")}
             emptyDetail={copy("Dikkat gerektiren bir şey olduğunda burada görünür.", "Anything that needs your attention will show up here.")} />}
@@ -138,7 +139,7 @@ function AttentionInboxScreen() {
         return (
           <View>
             {first ? <SectionHeader
-              title={urgent ? copy("Şimdi sizden bekleyenler", "Needs you now") : copy("Daha önce", "Earlier")}
+              title={urgent ? copy("Şimdi sizden bekleyenler", "Needs you now") : copy("Diğer işler", "Other activity")}
               count={urgent ? groups.now.length : groups.earlier.length} /> : null}
             <AttentionRow item={item} time={relativeTime(item.updatedAt, copy)} onPress={() => open(item)} />
           </View>

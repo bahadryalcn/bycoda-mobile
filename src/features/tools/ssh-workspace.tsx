@@ -17,7 +17,8 @@ import {
 } from "@/state/reviewed-operation-store";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
-import { Body, Button, FormActions, ErrorText, Notice, SelectField, Sheet } from "@/ui/primitives";
+import { useInfoHint } from "@/ui/info-hint";
+import { Body, Button, FormActions, ErrorText, Notice, Row, SelectField, Sheet } from "@/ui/primitives";
 import type { SessionScope } from "../workspace/session-types";
 import {
   readSshCatalog,
@@ -162,6 +163,10 @@ export function SshWorkspace({
     "Bu bilgisayar native SSH çalışma alanını desteklemiyor. Bilgisayardaki bycoda’yı güncelleyin.",
     "This computer does not support the native SSH workspace. Update bycoda on the computer.",
   );
+  const info = useInfoHint(copy(
+    "Oturum açma ve sunucu anahtarı onayı bilgisayarın Sunucular görünümündeki terminalde yapılır. Burada yalnızca bu isteğin oluşturduğu çalışma alanını takip edersiniz.",
+    "Sign-in and host-key approval happen in the terminal in Servers on the computer. This screen tracks only the workspace this request created.",
+  ));
   const stateLabel = (state: SshWorkspaceStatus["state"]) =>
     state === "opened-on-computer"
       ? copy("Bilgisayarda açıldı", "Opened on the computer")
@@ -182,21 +187,19 @@ export function SshWorkspace({
       dismissible={!busy}
       onClose={onClose}
     >
-      <Body>{machine?.name ?? opening.machineId}</Body>
+      <Row>
+        <Body>{machine?.name ?? opening.machineId}</Body>
+        {initialUnavailable ? null : info.button}
+      </Row>
+      {initialUnavailable ? null : info.panel}
       {!supported ? <Notice tone="warning" message={unavailableMessage} /> : null}
-      {!initialUnavailable ? <Notice
-        message={copy(
-          "Bilgisayardaki Sunucular görünümünü açın. Oturum açma ve sunucu anahtarı onayı o bilgisayarın terminalinde yapılır. Buradan yalnızca bu isteğin oluşturduğu çalışma alanını takip edersiniz.",
-          "Open Servers on the computer. Sign-in and host-key approval take place in that computer's terminal. This screen tracks only the workspace created by this request.",
-        )}
-      /> : null}
       <ErrorText error={error} />
       {active ? (
         <>
           <Notice
             message={copy(
-              "Kaydedilmiş SSH isteği tekrar gönderilmez. Sonuç bilinmiyorsa bilgisayardaki terminali inceleyin.",
-              "The saved SSH request is never resent. If the result is unknown, inspect the terminal on the computer.",
+              "Kayıtlı istek tekrar gönderilmez. Sonuç bilinmiyorsa bilgisayardaki terminali inceleyin.",
+              "The saved request is never resent. If the result is unknown, check the computer's terminal.",
             )}
           />
           {receipt ? <Body>{stateLabel(receipt.state)}</Body> : null}
@@ -312,19 +315,11 @@ export function SshWorkspace({
           <Body
             mono
           >{`${review.connection.name}\n${review.connection.host}:${review.connection.port}\n${review.configurationDigest}`}</Body>
-          <Notice
-            message={
-              review.operation === "close"
-                ? copy(
-                    "Yalnızca bu mobil isteğin oluşturduğu terminal kapatılır. Diğer masaüstü SSH kaynakları korunur.",
-                    "Only the terminal created by this mobile request is closed. Other desktop SSH resources are retained.",
-                  )
-                : copy(
-                    "Bilgisayarda güncel yapılandırma incelenip onaylanmadan bağlantı başlatılmaz.",
-                    "The connection starts after the current configuration is reviewed and approved on the computer.",
-                  )
-            }
-          />
+          <Body muted>
+            {review.operation === "close"
+              ? copy("Yalnızca bu isteğin terminali kapanır.", "Only this request's terminal closes.")
+              : copy("Bağlantı, bilgisayarda onaylanınca başlar.", "Starts once approved on the computer.")}
+          </Body>
           {reviewExpired ? (
             <>
               <Notice tone="warning" message={expiredMessage} />

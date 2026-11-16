@@ -8,7 +8,7 @@ vi.mock("../model/account-runtime", () => ({ createAccountRuntime: () => ({ regi
 vi.mock("../model/device-registration", () => ({ deviceRegistration: () => ({}) }));
 vi.mock("../model/device-info", () => ({ readDeviceInfo: () => ({}) }));
 vi.mock("../model/device-store", () => ({ secureDeviceIdStore: {}, securePushMarkStore: { clear: async () => {} } }));
-vi.mock("../model/push-account", () => ({ useAccountPushSync: () => {} }));
+vi.mock("../model/push-account", () => ({ useAccountPushSync: () => {}, useAccountHostPushDedupe: () => {} }));
 vi.mock("../model/push-read", () => ({ useAccountPushReads: () => {} }));
 vi.mock("../model/account-access", () => ({ useAccountAccess: { setState: vi.fn() } }));
 import { AccountSession } from "./AccountSession";

@@ -8,8 +8,16 @@ import type { HostProject, HostProjectDirectory } from "@/domain/types";
 import { deduplicateProjects } from "./activity-model";
 import { distinctDirectoryProjects } from "./project-directory";
 import { getProjectDirectoryReadiness } from "./project-readiness";
+import { directoryReadFence, directorySyncState, retainDirectorySync, subscribeDirectorySync, supportsDirectoryStream } from "./directory-sync";
 import { invalidateProjectPrivacy, projectPrivacyKey, projectVisibilityDenied, projectVisibilityExpired, subscribeProjectPrivacy } from "./project-privacy-cache";
 const DIRECTORY_QUERY_KEY = "directory";
+
+/** The reviewed computer is still the active, unlocked, consented one; the same gate guards every cache read. */
+function machineReadable(machine: { id: string; environmentId?: string } | undefined | null): boolean {
+  const state = useMachines.getState(); const security = useSecurity.getState(); const current = state.machines.find((row) => row.id === machine?.id);
+  return !!machine && state.activeId === machine.id && state.hydrated && !state.storageError && !state.connectionPending && !!current &&
+    current.environmentId === machine.environmentId && security.status === "unlocked" && security.appState === "active" && isAppContentVisible() && hasProviderPermission(current);
+}
 
 export function useProjectDirectory() {
   const machine = useActiveMachine();
@@ -41,6 +49,23 @@ export function useProjectDirectory() {
     if ((!client || !access) && machine?.id && cache.getQueryState(visibilityKey) && !invalidated)
       void invalidateProjectPrivacy(cache, machine.id);
   }, [client, access, cache, visibilityKey, invalidated, machine?.id]);
+  const streamable = grouped && !!client && supportsDirectoryStream(client);
+  // Reason: the directory stream is an external subscription whose lifetime is the transport,
+  // not the render; every caller shares one stream and releases it on unmount or computer change.
+  useEffect(() => {
+    if (!streamable || !client || !access) return;
+    return retainDirectorySync(cache, client, {
+      key: visibilityKey,
+      canApply: () => machineReadable(client.machine) &&
+        !projectVisibilityExpired(cache, visibilityKey) && !projectVisibilityDenied(cache, visibilityKey),
+    });
+  }, [streamable, client, access, cache, visibilityKey]);
+  const subscribeSync = useCallback((notify: () => void) => streamable && client ? subscribeDirectorySync(cache, client, notify) : () => undefined, [cache, client, streamable]);
+  const sync = useSyncExternalStore(
+    subscribeSync,
+    () => streamable && client ? directorySyncState(cache, client) : "polling" as const,
+    () => "polling" as const,
+  );
   const legacy = useHostQuery<HostProject[]>(
     ["projects"],
     "projects.list",
@@ -51,7 +76,15 @@ export function useProjectDirectory() {
     ["projects", DIRECTORY_QUERY_KEY],
     "projects.directory",
     {},
-    { interval: 15_000, enabled: grouped },
+    {
+      // The stream owns freshness while it is live or catching up; the poll is only its fallback.
+      interval: () => sync === "live" || sync === "catching-up" ? false : 15_000,
+      enabled: grouped,
+      queryFn: async (host, signal) => {
+        const settle = directoryReadFence(cache, visibilityKey);
+        return settle(await host.request<HostProjectDirectory>("projects.directory", {}, { signal }));
+      },
+    },
   );
   const source = grouped ? directory : legacy;
   // Use the authoritative entry after proof, never a lagging observer's old payload.
@@ -94,9 +127,7 @@ export function useProjectDirectory() {
   );
   const privacyPending = invalidated || denied || grouped && !!directoryData && !directoryData.privacyReady;
   const isProjectVisible = useCallback((projectId: string, expectedCwd?: string) => {
-    const state = useMachines.getState(); const security = useSecurity.getState(); const current = state.machines.find((row) => row.id === machine?.id);
-    if (!machine || state.activeId !== machine.id || !state.hydrated || state.storageError || state.connectionPending || !current ||
-      current.environmentId !== machine.environmentId || security.status !== "unlocked" || security.appState !== "active" || !isAppContentVisible() || !hasProviderPermission(current)) return false;
+    if (!machine || !machineReadable(machine)) return false;
     const method = grouped ? "projects.directory" : "projects.list";
     const key = hostKey(machine.id, grouped ? ["projects", DIRECTORY_QUERY_KEY, { method, params: {} }] : ["projects", { method, params: {} }]);
     if (projectVisibilityExpired(cache, key) || projectVisibilityDenied(cache, key)) return false;
@@ -106,7 +137,7 @@ export function useProjectDirectory() {
     }
     return cache.getQueryData<HostProject[]>(key)?.some((row) => row.id === projectId && (expectedCwd === undefined || row.cwd === expectedCwd)) === true;
   }, [machine?.id, machine?.environmentId, grouped, cache]);
-  return { query, projects, registered, groups, grouped, privacyPending, readable,
+  return { query, projects, registered, groups, grouped, privacyPending, readable, sync,
     readiness, directoryReady, verifying, privacyUnavailable, isProjectVisible };
 }
 

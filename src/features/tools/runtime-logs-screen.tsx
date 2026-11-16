@@ -132,21 +132,12 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
             {searchInput.tooLong ? <ErrorText error={copy(
               "Aramayı 512 karakter veya daha az olacak şekilde kısaltın.",
               "Shorten the search to 512 characters or fewer.",
-            )} /> : searchInput.query.length >= LOG_SEARCH_LIMIT - 64 ? <Body muted style={uiStyles.caption}>
-              {copy(
-                "Günlük araması en fazla 512 karakter olabilir.",
-                "Log search supports up to 512 characters.",
-              )}
-            </Body> : null}
+            )} /> : null}
             {!searchInput.tooLong ? (
               <QueryState
                 query={logs}
                 empty={!entries.length && sources.isSuccess && !sources.error && !unavailableSources.length}
                 emptyTitle={source || level || query ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz günlük yok.", "No logs yet.")}
-                emptyDetail={source || level || query ? undefined : copy(
-                  "Projenin çalışan araçlarının ve geliştirme sunucularının çıktısı burada görünür. Bir araç başlatın, ardından yenileyin.",
-                  "Output from this project's running tools and dev servers appears here. Start one, then refresh.",
-                )}
                 emptyAction={source || level ? {
                   label: copy("Filtreleri temizle", "Clear filters"),
                   onPress: () => { setSource(""); setLevel(""); clearSearch(); },

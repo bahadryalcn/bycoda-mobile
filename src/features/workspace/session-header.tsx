@@ -8,6 +8,9 @@ import { useMobileTheme } from "@/ui/theme";
 import { fontSize, lineHeight, metrics, radii, space } from "@/ui/tokens";
 import type { MobileColors } from "@/ui/tokens";
 import { ProviderIcon } from "@/ui/provider-identity";
+import { ChatAction } from "@/ui/chat-controls";
+import { useCopy } from "@/ui/copy";
+import List from "lucide-react-native/icons/list";
 import type { RemoteProvider } from "@/domain/types";
 import { sessionDisplayTitle } from "./session-title";
 import type { SessionHeaderTone } from "./session-header-model";
@@ -29,6 +32,8 @@ export function SessionHeader({
   tone,
   actions,
   provider,
+  showBack = true,
+  onShowSessions,
 }: {
   title: string;
   context?: string;
@@ -37,8 +42,11 @@ export function SessionHeader({
   actions?: ReactNode;
   /** Shown as an icon before the title; a "codex ·" title prefix is dropped. */
   provider?: RemoteProvider;
+  showBack?: boolean;
+  onShowSessions?: () => void;
 }) {
   const { colors, uiStyles } = useMobileTheme();
+  const copy = useCopy();
   const insets = useSafeAreaInsets();
   const color = toneColor(tone, colors);
   return (
@@ -53,7 +61,8 @@ export function SessionHeader({
       }}
     >
       <View style={{ minHeight: metrics.headerHeight, flexDirection: "row", alignItems: "center" }}>
-        <HeaderBackButton onPress={() => (router.canGoBack() ? router.back() : router.replace("/sessions"))} />
+        {showBack ? <HeaderBackButton onPress={() => (router.canGoBack() ? router.back() : router.replace("/sessions"))} /> : null}
+        {onShowSessions ? <ChatAction label={copy("Oturumlar", "Sessions")} onPress={onShowSessions}><List size={20} color={colors.muted} /></ChatAction> : null}
         <View style={{ flex: 1, minWidth: 0, justifyContent: "center" }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
             {provider ? <ProviderIcon provider={provider} size={16} /> : null}

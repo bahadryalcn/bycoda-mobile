@@ -87,11 +87,13 @@ vi.mock("@/state/machines", () => {
 vi.mock("@/state/queries", () => ({ useHostClient: () => ({ request: f.request }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
     FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, submitLabel)),
     Sheet: wrapper,
+    Row: wrapper,
     Body: wrapper,
     Notice: ({ message }: { message: string }) => createElement("div", null, message),
     ErrorText: () => null,

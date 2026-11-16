@@ -37,8 +37,8 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
           illustration="connect-computer"
           title={copy("Bilgisayarına bağlan", "Connect your computer")}
           description={copy(
-            "Bilgisayarındaki Bycoda’da telefon bağlantısını aç ve QR kodunu tara.",
-            "Open phone pairing in Bycoda on your computer and scan its QR code.",
+            "Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
+            "In bycoda on your computer, choose “Connect your phone” and scan the QR code.",
           )}
         />
         <Button
@@ -83,8 +83,8 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
         </Heading>
         <Body muted style={title}>
           {copy(
-            "Bilgisayarındaki Bycoda’da telefon bağlantısını aç ve QR kodunu tara.",
-            "Open phone pairing in Bycoda on your computer and scan its QR code.",
+            "Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
+            "In bycoda on your computer, choose “Connect your phone” and scan the QR code.",
           )}
         </Body>
       </View>

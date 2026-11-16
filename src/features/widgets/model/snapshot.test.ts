@@ -7,6 +7,7 @@ import {
   snapshotIdentity,
   truncateLabel,
   widgetTimeline,
+  widgetCacheContent,
   type BuildSnapshotInput,
   type WidgetSessionInput,
 } from "./snapshot";
@@ -32,6 +33,7 @@ function session(id: string, overrides: Partial<WidgetSessionInput> = {}): Widge
     title: `Secret title ${id}`,
     status: "running",
     updatedAt: now - 1_000,
+    completedAt: overrides.updatedAt ?? now - 1_000,
     ...overrides,
   };
 }
@@ -51,6 +53,61 @@ function input(overrides: Partial<BuildSnapshotInput> = {}): BuildSnapshotInput 
 }
 
 describe("buildWidgetSnapshot", () => {
+  it("keeps idle title cache and empty project identity behind the same privacy choices", () => {
+    const sessions = [
+      session("idle", { status: "idle", questionPrompt: "Private prompt", needsInput: false }),
+    ];
+    const safe = widgetCacheContent(
+      input({ sessions, projects: [{ id: "empty", name: "Empty project" }] }),
+    );
+    expect(safe.sessions[0].title).toBe("");
+    expect(safe.sessions[0].questionPrompt).toBeUndefined();
+    expect(safe.projects).toEqual([{ id: "empty", name: "Empty project" }]);
+    expect(widgetCacheContent(input({ sessions, unlocked: false }))).toEqual({
+      sessions: [],
+      projects: [],
+    });
+  });
+  it("does not present idle as completed without observed turn timing", () => {
+    const snapshot = buildWidgetSnapshot(
+      input({ sessions: [session("idle", { status: "idle", completedAt: undefined })] }),
+    )!;
+    expect(snapshot.sessions).toEqual([]);
+  });
+  it("gates question text independently and never copies raw failures", () => {
+    const sessions = [
+      session("question", { needsInput: true, questionPrompt: "Deploy now?" }),
+      session("failure", { issue: "failed", failureCategory: "rate_limited" }),
+    ];
+    const hidden = buildWidgetSnapshot(input({ sessions, showTitles: true }))!;
+    expect(hidden.sessions[0].kind).toBe("question");
+    expect(hidden.sessions[0].detail).not.toContain("Deploy now?");
+    const shown = buildWidgetSnapshot(
+      input({ sessions, showTitles: true, showQuestionText: true }),
+    )!;
+    expect(shown.sessions[0].detail).toBe("Deploy now?");
+    expect(shown.sessions[1].failureCategory).toBe("rate_limited");
+    expect(
+      JSON.stringify(buildWidgetSnapshot(input({ sessions, showQuestionText: true }))),
+    ).not.toContain("Deploy now?");
+    expect(buildWidgetSnapshot(input({ sessions, unlocked: false }))!.sessions).toEqual([]);
+  });
+  it("allowlists failure categories even when a malformed summary supplies raw text", () => {
+    const snapshot = buildWidgetSnapshot(
+      input({
+        sessions: [session("s", { issue: "failed", failureCategory: "/secret/token" as never })],
+      }),
+    )!;
+    expect(snapshot.sessions[0].failureCategory).toBe("failed");
+    expect(JSON.stringify(snapshot)).not.toContain("/secret/token");
+  });
+  it("uses real turn start timing and whole graphemes", () => {
+    const result = buildWidgetSnapshot(
+      input({ sessions: [session("s", { startedAt: now - 120_000 })] }),
+    )!;
+    expect(result.sessions[0].startedAt).toBe(now - 120_000);
+    expect(truncateLabel("👨‍👩‍👧‍👦abc", 3)).toBe("👨‍👩‍👧‍👦a…");
+  });
   it("counts statuses, sorts needs-input first and caps rows at five", () => {
     const sessions = [
       session("a", { updatedAt: now - 5_000 }),
@@ -75,7 +132,9 @@ describe("buildWidgetSnapshot", () => {
   });
 
   it("treats needsInput as waiting even while the session runs", () => {
-    const snapshot = buildWidgetSnapshot(input({ sessions: [session("a", { needsInput: true })] }))!;
+    const snapshot = buildWidgetSnapshot(
+      input({ sessions: [session("a", { needsInput: true })] }),
+    )!;
     expect(snapshot.counts).toEqual({ running: 0, needsInput: 1, failed: 0 });
   });
 
@@ -103,7 +162,7 @@ describe("buildWidgetSnapshot", () => {
     const shown = buildWidgetSnapshot(input({ sessions: [session("a")], showTitles: true }))!;
     expect(shown.sessions[0]!.title).toBe("Secret title a");
     expect(Object.keys(shown.sessions[0]!).sort()).toEqual(
-      ["id", "project", "status", "title", "updatedAt", "url"].sort(),
+      ["id", "project", "status", "kind", "detail", "title", "updatedAt", "url"].sort(),
     );
   });
 
@@ -168,7 +227,11 @@ describe("widgetTimeline", () => {
 
 describe("liveActivityProps", () => {
   it("is null when nothing runs or the app is locked", () => {
-    expect(liveActivityProps(buildWidgetSnapshot(input({ sessions: [session("a", { status: "idle" })] }))!)).toBeNull();
+    expect(
+      liveActivityProps(
+        buildWidgetSnapshot(input({ sessions: [session("a", { status: "idle" })] }))!,
+      ),
+    ).toBeNull();
     expect(liveActivityProps(buildWidgetSnapshot(input({ unlocked: false }))!)).toBeNull();
   });
 

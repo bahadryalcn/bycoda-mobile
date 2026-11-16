@@ -18,7 +18,7 @@ vi.mock("react-native", () => {
 vi.mock("lucide-react-native/icons/paperclip", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/sliders-horizontal", () => ({ default: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
-vi.mock("@/ui/tokens", () => ({ colors: {}, space: {} }));
+vi.mock("@/ui/tokens", () => ({ colors: {}, space: {}, metrics: {} }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, args?: Record<string, unknown>) => en.replace(/\{(\w+)\}/g, (_match, key) => String(args?.[key] ?? key)) }));
 vi.mock("@/i18n", () => ({ useLocale: () => state.locale }));

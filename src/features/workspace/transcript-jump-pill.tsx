@@ -1,14 +1,10 @@
-import { StyleSheet } from "react-native";
 import Animated from "react-native-reanimated";
 import ArrowDown from "lucide-react-native/icons/arrow-down";
-import { Body, PressableCard } from "@/ui/primitives";
+import { Fab } from "panelui-native/components/fab";
 import { reveal } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { fontSize, lineHeight, radii, space } from "@/ui/tokens";
-
-/** Visible size of the pill; close to the 48dp touch target without a hit-slop overlap. */
-const PILL_SIZE = 44;
+import { space } from "@/ui/tokens";
 
 /** Floating "back to latest" pill. It exists only while the list is not following the end. */
 export function TranscriptJumpPill({
@@ -33,40 +29,17 @@ export function TranscriptJumpPill({
       pointerEvents="box-none"
       style={{ position: "absolute", left: 0, right: 0, bottom: bottom + space.sm, alignItems: "center" }}
     >
-      <PressableCard
-        label={label}
+      <Fab
+        size="sm"
+        variant="surface"
+        extended={unseen}
+        className="h-12 min-w-12"
+        accessibilityLabel={label}
         onPress={onPress}
-        style={{
-          marginHorizontal: 0,
-          minWidth: PILL_SIZE,
-          minHeight: PILL_SIZE,
-          height: PILL_SIZE,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: space.xs,
-          paddingVertical: 0,
-          paddingHorizontal: unseen ? space.md : space.sm,
-          borderRadius: radii.pill,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: colors.border,
-          backgroundColor: colors.elevated,
-        }}
+        icon={<ArrowDown size={14} color={unseen ? colors.accent : colors.text} />}
       >
-        <ArrowDown size={14} color={unseen ? colors.accent : colors.text} />
-        {unseen ? (
-          <Body
-            style={{
-              fontSize: fontSize.caption,
-              lineHeight: lineHeight.caption,
-              fontWeight: "600",
-              color: colors.accent,
-            }}
-          >
-            {copy("Yeni", "New")}
-          </Body>
-        ) : null}
-      </PressableCard>
+        {unseen ? copy("Yeni", "New") : undefined}
+      </Fab>
     </Animated.View>
   );
 }

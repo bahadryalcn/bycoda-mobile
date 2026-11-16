@@ -7,7 +7,8 @@ import FileText from "lucide-react-native/icons/file-text";
 import ImageIcon from "lucide-react-native/icons/image";
 import Film from "lucide-react-native/icons/film";
 import Maximize from "lucide-react-native/icons/maximize-2";
-import { Body, Button, ErrorText, IconButton, Loading, PressableCard } from "@/ui/primitives";
+import { Attachment } from "panelui-native/components/attachment";
+import { Body, Button, ErrorText, IconButton, Loading } from "@/ui/primitives";
 import { ChatSummary } from "@/ui/chat-controls";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
@@ -18,7 +19,7 @@ import {
   attachmentPlan, downloadNeedsConfirmation, formatAttachmentSize, type AttachmentKind,
 } from "@/ui/media-inline-policy";
 import { useMobileTheme } from "@/ui/theme";
-import { radii, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import { InlineVideo } from "@/ui/media-video";
 import { usePrivateMediaData } from "@/ui/use-private-media-data";
 import { useReaderContentAccess, useReaderRetry, useReaderScope } from "@/ui/use-reader-scope";
@@ -90,10 +91,11 @@ export function AttachmentPreview({ id, name, size, mimeType, kind, context, onO
     const viewerNode = viewer ? <MediaViewer uri={data.uri} name={name} visible context={context} onClose={() => setViewer(false)} onUseAsReference={useAsReference} /> : null;
     if (kind === "image" && thumbnail) return (
       <View>
-        <PressableCard role="imagebutton" label={copy("Tam ekran aç: {p0}", "Open full screen: {p0}", { p0: name })} onPress={() => setViewer(true)} onLongPress={() => setViewer(true)}
-          style={{ width: THUMBNAIL, height: THUMBNAIL, padding: 0, minHeight: 0, overflow: "hidden", borderRadius: radii.control, backgroundColor: colors.raised }}>
-          <Image source={{ uri: data.uri }} accessibilityLabel={name} contentFit="contain" transition={0} onError={() => { if (content.check()) setImageFailed(true); }} style={{ width: THUMBNAIL, height: THUMBNAIL }} />
-        </PressableCard>
+        <Attachment size="xs" orientation="vertical" className="h-24 w-24 border-0 p-0" accessibilityLabel={copy("Tam ekran aç: {p0}", "Open full screen: {p0}", { p0: name })} onPress={() => setViewer(true)} onLongPress={() => setViewer(true)}>
+          <Attachment.Media variant="image" className="h-24 w-24 rounded-xl">
+            <Image source={{ uri: data.uri }} accessibilityLabel={name} contentFit="contain" transition={0} onError={() => { if (content.check()) setImageFailed(true); }} style={{ width: THUMBNAIL, height: THUMBNAIL }} />
+          </Attachment.Media>
+        </Attachment>
         {viewerNode}
       </View>
     );
@@ -101,10 +103,11 @@ export function AttachmentPreview({ id, name, size, mimeType, kind, context, onO
     if (kind !== "image") return <ChatSummary label={name} detail={[sizeLabel, copy("Aç", "Open")].filter(Boolean).join(" · ")} icon={<Icon size={16} color={colors.muted} />} onPress={() => { if (content.check()) onOpenFile(); }} />;
     return (
       <View style={{ gap: space.xs }}>
-        <PressableCard label={copy("Tam ekran aç: {p0}", "Open full screen: {p0}", { p0: name })} onPress={() => setViewer(true)} onLongPress={() => setViewer(true)}
-          style={{ padding: 0, overflow: "hidden", borderRadius: radii.control, backgroundColor: colors.raised }}>
-          <Image source={{ uri: data.uri }} accessibilityLabel={name} contentFit="contain" transition={0} onError={() => { if (content.check()) setImageFailed(true); }} style={{ width: "100%", aspectRatio: 1.5, maxHeight: 320 }} />
-        </PressableCard>
+        <Attachment size="xs" orientation="vertical" className="w-full border-0 p-0" accessibilityLabel={copy("Tam ekran aç: {p0}", "Open full screen: {p0}", { p0: name })} onPress={() => setViewer(true)} onLongPress={() => setViewer(true)}>
+          <Attachment.Media variant="image" className="w-full rounded-xl">
+            <Image source={{ uri: data.uri }} accessibilityLabel={name} contentFit="contain" transition={0} onError={() => { if (content.check()) setImageFailed(true); }} style={{ width: "100%", aspectRatio: 1.5, maxHeight: 320 }} />
+          </Attachment.Media>
+        </Attachment>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
           <Body muted style={{ flex: 1 }} numberOfLines={1}>{[name, sizeLabel].filter(Boolean).join(" · ")}</Body>
           <IconButton label={copy("Tam ekran", "Full screen")} density="compact" onPress={() => setViewer(true)}><Maximize size={16} color={colors.muted} /></IconButton>

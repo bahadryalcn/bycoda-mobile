@@ -1,3 +1,4 @@
+import { useLocale } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 
@@ -16,7 +17,9 @@ import {
 import { useWidgetPreferences } from "../model/widget-preferences";
 import { useWidgetFeedStore } from "../model/widget-feed";
 import { syncSessionActivity } from "../platform/live-activity";
-import { publishWidgetSnapshot } from "../platform/publish";
+import { publishAndCacheWidget, invalidateWidgetWork } from "../platform/widget-cache";
+import { useAccountAccess } from "../../account/model/account-access";
+import { widgetLabels } from "../model/widget-labels";
 
 const DEBOUNCE_MS = 1_000;
 /** Republish unchanged data before the 10 minute snapshot TTL marks it stale. */
@@ -29,8 +32,12 @@ const HEARTBEAT_MS = 4 * 60_000;
  */
 export function useWidgetPublisher() {
   const copy = useCopy();
+  const locale = useLocale();
   const machine = useActiveMachine();
   const unlocked = useSecurity((state) => state.status === "unlocked");
+  const lockEnabled = useSecurity((state) => state.enabled);
+  const signedIn = useAccountAccess((state) => state.status === "signedIn");
+  const showQuestionText = useWidgetPreferences((state) => state.showQuestionText);
   const feed = useWidgetFeedStore((state) => state.feed);
   const showTitles = useWidgetPreferences((state) => state.showTitles);
   const [appState, setAppState] = useState<AppStateStatus>(
@@ -39,21 +46,13 @@ export function useWidgetPublisher() {
   const [beat, setBeat] = useState(0);
   const [activity, setActivity] = useState<LiveActivityProps | null>(null);
   const published = useRef({ identity: "", at: 0 });
-  const labels: WidgetLabels = {
-    title: copy("Oturumlar", "Sessions"),
-    running: copy("Çalışıyor", "Running"),
-    needsInput: copy("Yanıt bekliyor", "Needs input"),
-    failed: copy("Başarısız", "Failed"),
-    done: copy("Tamamlandı", "Completed"),
-    empty: copy("Aktif oturum yok", "No active sessions"),
-    locked: copy("Devam etmek için bycoda'yı aç", "Open bycoda to continue"),
-    setup: copy("Bağlanmak için bycoda'yı aç", "Open bycoda to connect"),
-    stale: copy("Yenilemek için bycoda'yı aç", "Open bycoda to refresh"),
-  };
+  const labels = widgetLabels(copy);
   const labelsKey = JSON.stringify(labels);
   const machineId = machine?.id ?? null;
   const machineName = machine?.name ?? "";
+  const environmentId = machine?.environmentId ?? "";
 
+  // Keep foreground publication and the stale deadline in step with app lifecycle.
   useEffect(() => {
     const subscription = AppState.addEventListener("change", setAppState);
     const timer = setInterval(() => setBeat((value) => value + 1), HEARTBEAT_MS);
@@ -63,30 +62,38 @@ export function useWidgetPublisher() {
     };
   }, []);
 
+  // Publish only privacy-settled state; every changed authority retires queued writes.
   useEffect(() => {
     const now = Date.now();
-    const snapshot = buildWidgetSnapshot({
+    invalidateWidgetWork();
+    const input = {
       machine: machineId ? { id: machineId, name: machineName } : null,
-      unlocked,
+      unlocked: unlocked && signedIn,
       // A feed from another computer, or one the tabs screen cleared, is not trustworthy.
       ready: feed.ready && feed.machineId === machineId,
       sessions: feed.sessions,
+      projects: feed.projects,
+      locale,
       showTitles,
+      showQuestionText,
       now,
       labels: JSON.parse(labelsKey) as WidgetLabels,
       palette: widgetPalette,
-    });
+    };
+    const snapshot = buildWidgetSnapshot(input);
     if (!snapshot) return;
-    const identity = snapshotIdentity(snapshot);
+    const identity = `${snapshotIdentity(snapshot)}:${JSON.stringify(feed.projects)}`;
     const last = published.current;
     if (identity === last.identity && now - last.at < HEARTBEAT_MS) return;
     const timer = setTimeout(
       () => {
         published.current = { identity, at: Date.now() };
-        void publishWidgetSnapshot(snapshot).catch(() => {
-          // A failed write is retried by the next change or heartbeat.
-          published.current = { identity: "", at: 0 };
-        });
+        void publishAndCacheWidget(input, snapshot, environmentId, !lockEnabled && signedIn).catch(
+          () => {
+            // A failed write is retried by the next change or heartbeat.
+            published.current = { identity: "", at: 0 };
+          },
+        );
         const next = liveActivityProps(snapshot);
         setActivity((previous) =>
           JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
@@ -95,7 +102,20 @@ export function useWidgetPublisher() {
       snapshot.state === "ready" ? DEBOUNCE_MS : 0,
     );
     return () => clearTimeout(timer);
-  }, [machineId, machineName, unlocked, feed, showTitles, labelsKey, beat]);
+  }, [
+    machineId,
+    machineName,
+    environmentId,
+    unlocked,
+    lockEnabled,
+    signedIn,
+    feed,
+    showTitles,
+    showQuestionText,
+    locale,
+    labelsKey,
+    beat,
+  ]);
 
   // The activity exists only while the app is not in the foreground; returning ends it.
   useEffect(() => {

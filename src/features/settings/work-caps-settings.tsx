@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useActiveMachine } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { Body, Button, Disclosure, FormActions, Notice, NumberField, QueryState, SelectField, Stack } from "@/ui/primitives";
+import { Button, Disclosure, FormActions, Notice, NumberField, QueryState, SelectField, Stack } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { providerName } from "../workspace/provider-choices";
 import type { RemoteProvider } from "@/domain/types";
@@ -69,8 +69,8 @@ function WorkCapsEditor({ initial, current, providers, onReload }: { initial: Mo
   };
   const labels: Record<keyof Fields, string> = { dailyTokens: copy("Günlük token", "Daily tokens"), monthlyTokens: copy("Aylık token", "Monthly tokens"), dailyCost: copy("Günlük maliyet (USD)", "Daily cost (USD)"), monthlyCost: copy("Aylık maliyet (USD)", "Monthly cost (USD)") };
   return <Stack>
-    <Body muted>{copy("Work için takvim sınırları. Boş veya 0 = sınırsız. Sağlayıcı ve toplam sınırları birlikte uygulanır.", "Calendar caps for Work. Empty or 0 = unlimited. Provider and total caps both apply.")}</Body>
     <SelectField label={copy("Kapsam", "Scope")} value={scope} disabled={busy || held}
+      hint={copy("Boş veya 0 sınırsız. Sağlayıcı ve toplam sınırlar birlikte uygulanır.", "Empty or 0 is unlimited. Provider and total caps both apply.")}
       options={[{ value: "total", label: copy("Toplam", "Total") }, ...[...new Set([...providers, ...Object.keys(caps?.providers ?? {})])].map(value => ({ value, label: providerName(value) }))]} onChange={setScope} />
     {(Object.keys(labels) as (keyof Fields)[]).map(key => <NumberField key={key} label={labels[key]} value={value[key]} decimal={key.endsWith("Cost")} editable={!busy && !held}
       onChangeText={text => setEdits(previous => ({ ...previous, [scope]: { ...value, [key]: text } }))} />)}

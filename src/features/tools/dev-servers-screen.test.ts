@@ -7,6 +7,7 @@ const fixture = vi.hoisted(() => ({
   start: vi.fn(async (_params: unknown): Promise<any> => ({})), submit: undefined as any,
 }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
+vi.mock("@/ui/duotone-icon", () => ({ Server: () => null, Smartphone: () => null }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/server", () => ({ default: () => null }));

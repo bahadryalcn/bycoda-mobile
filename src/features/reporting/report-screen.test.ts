@@ -10,6 +10,7 @@ vi.mock("expo-router",()=>({Stack:{Screen:()=>null},router:{push:vi.fn()}}));
 vi.mock("@/state/security",()=>({assertAppAccess:()=>{if(fixture.locked)throw Error("Locked");}}));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
 vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));
+vi.mock("@/ui/info-hint",()=>({useInfoHint:()=>({button:null,panel:null})}));
 vi.mock("@/ui/styles",()=>({uiStyles:{}}));vi.mock("@/ui/tokens",()=>({colors:{},space:{}}));
 vi.mock("@/ui/icon-tile",()=>({IconTile:()=>null}));vi.mock("lucide-react-native/icons/flag",()=>({default:()=>null}));
 vi.mock("react-native",()=>({View:({children}:PropsWithChildren)=>createElement("div",null,children)}));
@@ -17,7 +18,7 @@ vi.mock("react-native-reanimated",()=>({default:{View:({children}:PropsWithChild
 vi.mock("@/ui/consent-field",()=>({ConsentField:()=>null}));
 vi.mock("@/ui/primitives",()=>{
  const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);
- return {Body:Wrapper,NavigationGroup:Wrapper,Disclosure:Wrapper,Section:Wrapper,Button:()=>null,ToggleField:()=>null,SelectField:()=>null,useSuccessToast:()=>()=>"",
+ return {Body:Wrapper,NavigationGroup:Wrapper,Disclosure:()=>null,Section:Wrapper,Button:()=>null,ToggleField:()=>null,SelectField:()=>null,useSuccessToast:()=>()=>"",
  Screen:({children,footer}:PropsWithChildren<{footer:import("react").ReactNode}>)=>createElement("main",null,createElement("article",null,children),createElement("footer",null,footer)),
  Field:({label,error}:{label:string;error?:string})=>createElement("section",{"data-field":label},error),
  ErrorText:({error,message}:{error:unknown;message:string})=>error?createElement("p",null,message):null,
@@ -60,4 +61,8 @@ it("retires discard review after a draft changes and rejects callbacks from an e
 it("never sends from a retained callback after the screen unmounts",async()=>{
  fixture.sender=vi.fn(async requestId=>({requestId,reportId:"receipt"}));await act(async()=>{updateContentReport({description:"Report"});updateContentReport({consent:true});});
  const submit=fixture.submits.filter(x=>x.label==="Send").at(-1)!.run;await act(async()=>root!.unmount());root=undefined;await act(async()=>submit());expect(fixture.sender).not.toHaveBeenCalled();
+});
+it("keeps only the must-see privacy warning inline; the full explanation sits behind the info icon",async()=>{
+ expect(container.textContent).toContain("Do not add access keys, pairing codes, private files or personal information.");
+ expect(container.textContent).not.toContain("kept only in memory");
 });

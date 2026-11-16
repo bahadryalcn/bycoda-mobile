@@ -6,9 +6,22 @@ import { emptyFeed, widgetFeedFromActivity, type ActivityLike } from "./widget-f
 
 describe("quickActionHref", () => {
   it("allows known in-app routes only", () => {
-    for (const href of ["/sessions", "/sessions?new=1", "/session/abc?projectId=p&machineId=m", "/project/p1"])
+    for (const href of [
+      "/sessions",
+      "/sessions?new=1",
+      "/session/abc?projectId=p&machineId=m",
+      "/project/p1",
+    ])
       expect(quickActionHref({ params: { href } })).toBe(href);
-    for (const href of ["/machines", "//evil.example", "https://evil.example", "/sessions#x", "/session/", 5, undefined])
+    for (const href of [
+      "/machines",
+      "//evil.example",
+      "https://evil.example",
+      "/sessions#x",
+      "/session/",
+      5,
+      undefined,
+    ])
       expect(quickActionHref({ params: { href } })).toBeNull();
     expect(quickActionHref(undefined)).toBeNull();
     expect(quickActionHref({ params: null })).toBeNull();
@@ -23,10 +36,16 @@ describe("quickActionHref", () => {
 
 describe("decodeWidgetPreferences", () => {
   it("defaults to hidden titles for missing or invalid storage", () => {
-    expect(decodeWidgetPreferences(null)).toEqual({ showTitles: false });
-    expect(decodeWidgetPreferences("{")).toEqual({ showTitles: false });
-    expect(decodeWidgetPreferences('{"showTitles":"yes"}')).toEqual({ showTitles: false });
-    expect(decodeWidgetPreferences('{"showTitles":true}')).toEqual({ showTitles: true });
+    expect(decodeWidgetPreferences(null)).toEqual({ showTitles: false, showQuestionText: false });
+    expect(decodeWidgetPreferences("{")).toEqual({ showTitles: false, showQuestionText: false });
+    expect(decodeWidgetPreferences('{"showTitles":"yes"}')).toEqual({
+      showTitles: false,
+      showQuestionText: false,
+    });
+    expect(decodeWidgetPreferences('{"showTitles":true}')).toEqual({
+      showTitles: true,
+      showQuestionText: false,
+    });
   });
 });
 
@@ -35,7 +54,13 @@ describe("widgetFeedFromActivity", () => {
     directory: [
       {
         project: { id: "p", name: "Proj" },
-        session: { id: "s", title: "T", status: "running", updatedAt: 1, delegationParent: { id: "x" } },
+        session: {
+          id: "s",
+          title: "T",
+          status: "running",
+          updatedAt: 1,
+          delegationParent: { id: "x" },
+        },
       },
     ],
     directoryReady: true,
@@ -47,7 +72,12 @@ describe("widgetFeedFromActivity", () => {
   it("forwards sessions only when the directory is settled and error free", () => {
     const feed = widgetFeedFromActivity("m", activity);
     expect(feed.ready).toBe(true);
-    expect(feed.sessions[0]).toMatchObject({ id: "s", projectId: "p", projectName: "Proj", child: true });
+    expect(feed.sessions[0]).toMatchObject({
+      id: "s",
+      projectId: "p",
+      projectName: "Proj",
+      child: true,
+    });
     for (const broken of [
       { privacyPending: true },
       { privacyUnavailable: true },

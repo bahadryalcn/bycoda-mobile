@@ -2,11 +2,16 @@
 import { act, createElement, useState, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
+const review = vi.hoisted(() => ({ approvals: 0 }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("expo-router", () => ({ router: { push: vi.fn() }, Stack: { Screen: () => null } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { muted: "muted" }, uiStyles: { grow: {}, caption: {}, heading: {} } }) }));
 vi.mock("./assistant-call-controls", () => ({ AssistantCallButton: () => createElement("button", { "data-call": true }, "Voice call") }));
+vi.mock("./assistant-call-session", () => ({ endAssistantCall: vi.fn() }));
+vi.mock("./assistant-voice-screen", () => ({ AssistantVoiceScreen: ({ children, composer, feedback }: PropsWithChildren<{ composer: React.ReactNode; feedback?: React.ReactNode }>) => createElement("div", null, children, composer, createElement("aside", null, feedback)) }));
+vi.mock("./use-assistant-transcript", () => ({ useAssistantTranscript: () => ({ visible: false, toggle: vi.fn() }) }));
+vi.mock("./use-assistant-voice-entry", () => ({ useAssistantVoiceEntry: () => ({ pending: false, start: vi.fn(), cancel: vi.fn() }) }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "host-a", name: "Work computer" }) }));
 vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ token: "epoch-a", review: { environmentId: "env-a" }, isCurrent: () => true }) }));
 vi.mock("@/state/queries", () => ({ useHostClient: () => ({}), useHostReadActive: () => true, hostKey: (id: string, parts: unknown[]) => [id, ...parts] }));
@@ -14,7 +19,7 @@ vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({ 
 vi.mock("./assistant-client", () => ({ AssistantMobileClient: class {} }));
 vi.mock("@/ui/error-message", () => ({ remoteErrorKind: () => null }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
-vi.mock("../approvals/use-approvals", () => ({ usePendingApprovalCount: () => 0 }));
+vi.mock("../approvals/use-approvals", () => ({ usePendingApprovalCount: () => review.approvals }));
 vi.mock("./assistant-permissions", () => ({ AssistantPermissions: () => null }));
 vi.mock("./assistant-jobs-section", () => ({ AssistantJobsSection: () => null }));
 vi.mock("./assistant-questions-section", () => ({ AssistantQuestionsSection: () => null }));
@@ -22,6 +27,7 @@ vi.mock("./assistant-composer", () => ({ AssistantComposer: ({ threadId }: { thr
 vi.mock("./assistant-voice-controls", () => ({ AssistantReadAloud: () => null }));
 vi.mock("./assistant-activity-section", () => ({ AssistantActivitySection: () => null }));
 vi.mock("./assistant-message-row", () => ({ AssistantMessageRow: () => null }));
+vi.mock("./assistant-live-speech", () => ({ AssistantLiveSpeech: () => null }));
 vi.mock("../workspace/session-keyboard-frame", () => ({ SessionKeyboardFrame: ({ children, composer }: PropsWithChildren<{ composer?: React.ReactNode }>) => createElement("div", null, children, composer) }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}), useQuery: () => ({ data: { snapshot: {
   profile: { name: "Assistant" }, presence: { state: "present" }, jobs: [], ownerQuestions: [],
@@ -43,6 +49,19 @@ vi.mock("@/ui/primitives", () => {
 });
 import { AssistantScreen } from "./assistant-screen";
 import { useAssistantCompanion } from "./assistant-companion-state";
+it("keeps pending approvals reachable with the voice transcript hidden", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  review.approvals = 2;
+  useAssistantCompanion.setState({ surface: "voice" });
+  const container = document.createElement("div"), root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(AssistantScreen)));
+    expect(container.querySelector("aside")?.textContent).toContain("Approvals ({p0} waiting)");
+  } finally {
+    await act(async () => root.unmount()); review.approvals = 0;
+    useAssistantCompanion.setState({ surface: "chat" }); vi.unstubAllGlobals();
+  }
+});
 it("distinguishes normal and planning threads in the same project using the public purpose field", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); const container = document.createElement("div"), root = createRoot(container);
   try {

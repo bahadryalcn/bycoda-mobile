@@ -129,6 +129,14 @@ export function useSessionSnapshot(
       },
       onError: (error) => {
         if (disposed) return;
+        // A removed or revoked session must not stay readable from the cache: drop its
+        // transcript and block copies. Drafts and held sends live in their own owners.
+        const failed = error as { kind?: string; category?: string };
+        if (failed.kind === "identity" || failed.category === "identity")
+          void cache.cancelQueries({ queryKey: key, exact: true }).then(() => {
+            cache.removeQueries({ queryKey: key, exact: true });
+            cache.removeQueries({ queryKey: hostKey(scope.machineId, ["session-block", scope.sessionId]) });
+          }).catch(() => undefined);
         streamFailing.current = true;
         setStreamError({ error, at: dataStamp.current });
       },

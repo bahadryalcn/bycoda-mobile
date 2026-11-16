@@ -172,6 +172,7 @@ export function MemberEditor({
       <Section title={copy("Model", "Model")}>
       <SelectField
         label={copy("Model kaynağı", "Model source")}
+        hint={copy("Otomatik seçim, bu üyenin aday listesinden bağımsız olarak bilgisayar sırası veya havuzundan uygun modeli seçebilir. Aşağıdaki adaylar bir izin filtresi değildir.", "Automatic routing can choose an eligible model from Host order or pool outside this member's candidate list. Candidates below are not an allowed-model filter.")}
         value={binding}
         disabled={locked || !routingSupported}
         options={[
@@ -189,7 +190,6 @@ export function MemberEditor({
         }}
       />
       {binding !== "fixed" && binding !== "legacy" ? <>
-        <Body muted>{copy("Otomatik seçim, bu üyenin aday listesinden bağımsız olarak bilgisayar sırası veya havuzundan uygun modeli seçebilir. Aşağıdaki adaylar bir izin filtresi değildir.", "Automatic routing can choose an eligible model from Host order or pool outside this member's candidate list. Candidates below are not an allowed-model filter.")}</Body>
         {routingState ? <Body muted>{copy("Geçerli kaynak", "Current source")}: {effective?.kind === "pool" ? activePool?.name ?? (effective.poolId) : binding === "default" && roleBinding.kind === "fixed" ? agentPresentation(roleBinding.target.harness, roleBinding.target.model) : copy("Bilgisayar model sırası", "Host model order")}
           {effective?.kind === "pool" && activePool ? ` · ${modelRoutingPoolEntryIds(routingState.pools, activePool.id).length}` : effective?.kind === "order" ? ` · ${routingState.entries.length}` : ""}</Body> : <Notice message={routing.isError ? copy("Model kaynağı okunamadı. Kayıtlı bağlantı korunur.", "Model source could not be read. Saved binding is preserved.") : copy("Model kaynağı henüz doğrulanmadı. Kayıtlı bağlantı korunur.", "Model source is not yet verified. Saved binding is preserved.")} />}
         {routing.isError ? <Button label={copy("Model kaynağını yeniden oku", "Reload model source")} tone="quiet" onPress={() => { void routing.refetch().catch(() => {}); }} /> : null}

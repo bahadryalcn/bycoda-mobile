@@ -7,7 +7,7 @@ import { ProviderInboxBrowse } from "./provider-browse";
 import { useInboxLocalScope } from "./inbox-local-scope";
 import { inboxOriginKey } from "./provider-model";
 
-export function ProviderInboxScreen({ embedded = false }: { embedded?: boolean }) {
+export function ProviderInboxScreen({ embedded = false, openJira = false }: { embedded?: boolean; openJira?: boolean }) {
   const machine = useActiveMachine();
   const { projectId } = useInboxLocalScope();
   const copy = useCopy();
@@ -29,5 +29,5 @@ export function ProviderInboxScreen({ embedded = false }: { embedded?: boolean }
   }
 
   const origin = { machineId: machine.id, projectId };
-  return <ProviderInboxBrowse key={inboxOriginKey(origin)} origin={origin} embedded={embedded} />;
+  return <ProviderInboxBrowse key={inboxOriginKey(origin)} origin={origin} embedded={embedded} openJira={openJira} />;
 }

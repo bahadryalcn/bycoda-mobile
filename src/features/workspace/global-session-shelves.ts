@@ -14,7 +14,7 @@ export type GlobalSessionRow =
 /** Folder collapse state is kept per project because folder ids are only unique inside one project. */
 export type FolderCollapse = Readonly<Record<string, Readonly<Record<string, boolean>>>>;
 
-const shelfOrder: readonly SessionShelfId[] = ["pinned", "needs", "running", "recent", "settled", "archived"];
+const shelfOrder: readonly SessionShelfId[] = ["pinned", "needs", "running", "recent", "settled", "snoozed", "archived"];
 /** Status shelves are flat; the owner's folders organize what is left in Recent and Archived. */
 const organized: ReadonlySet<SessionShelfId> = new Set(["recent", "archived"]);
 
@@ -34,13 +34,13 @@ export function globalSessionRows(
 ): GlobalSessionRow[] {
   const shelves = new Map<SessionShelfId, ShelfEntry[]>();
   for (const entry of directory) {
-    const id = shelfOf(entry.session, archived, settledIds);
+    const id = shelfOf(entry.session, archived, settledIds, signals.now);
     shelves.set(id, [...(shelves.get(id) ?? []), entry]);
   }
   return shelfOrder.flatMap((shelf): GlobalSessionRow[] => {
     const members = shelves.get(shelf);
     if (!members?.length) return [];
-    const expanded = searching || !(shelfCollapse[shelf] ?? shelf === "settled");
+    const expanded = searching || !(shelfCollapse[shelf] ?? (shelf === "settled" || shelf === "snoozed"));
     const header: Header = { kind: "header", key: `shelf:${shelf}`, shelf, count: members.length, expanded };
     if (!expanded) return [header];
     const rows = organized.has(shelf) ? organize(members, folderCollapse, searching) : flat(members);
@@ -67,6 +67,15 @@ export function recentGlobalSessionRows(directory: readonly ShelfEntry[], now?: 
       .filter(({ session }) => sessionActivityAt(session) >= cutoff)
       .sort((a, b) => sessionActivityAt(b.session) - sessionActivityAt(a.session)),
   );
+}
+
+/** Attention first, then running sessions, with newest activity first in each group. */
+export function urgencyGlobalSessionRows(directory: readonly ShelfEntry[], now?: number): GlobalSessionRow[] {
+  const cutoff = now === undefined ? -Infinity : now - GLOBAL_RECENT_WINDOW_MS;
+  const urgency = (session: ShelfEntry["session"]) =>
+    session.needsInput || session.issue === "failed" ? 0 : session.status === "running" ? 1 : 2;
+  return flat(directory.filter(({ session }) => sessionActivityAt(session) >= cutoff)
+    .sort((a, b) => urgency(a.session) - urgency(b.session) || sessionActivityAt(b.session) - sessionActivityAt(a.session)));
 }
 
 function organize(members: readonly ShelfEntry[], folderCollapse: FolderCollapse, searching: boolean): GlobalSessionRow[] {

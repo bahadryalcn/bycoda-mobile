@@ -59,6 +59,7 @@ function deviceHttpEffect(method: string): boolean {
 let streamIdSequence = 0;
 export type MobileStreamTarget = ReturnType<typeof SubscriptionOpenParamsSchema.parse>["target"];
 export type MobileStreamSubscription = { close(): void };
+export type MobileStreamPhase = "catching-up" | "live";
 export type MobileStreamApply = (
   event: SubscriptionEvent,
   assertCurrent: () => void,
@@ -329,10 +330,16 @@ export class HostTransport {
         ))
     );
   }
+  /**
+   * `onPhase` reports whether the view still waits for a fresh baseline ("catching-up":
+   * opening, reconnecting or after a resync) or holds the Host's latest ("live": an event
+   * was just applied). It never reports data the phone has not committed.
+   */
   async observeStream(
     target: MobileStreamTarget,
     apply: MobileStreamApply,
     onError: (error: Error) => void = () => undefined,
+    onPhase: (phase: MobileStreamPhase) => void = () => undefined,
   ): Promise<MobileStreamSubscription> {
     this.requireAccess();
     this.assertTargetAvailable(target.kind === "environment" ? {} : target);
@@ -387,6 +394,7 @@ export class HostTransport {
       }
       const expected = fence;
       const openingId = subscriptionId;
+      onPhase("catching-up");
       const pending = Promise.resolve()
         .then(() =>
           consumer.request("subscriptions.open", {
@@ -415,6 +423,7 @@ export class HostTransport {
     };
     const restart = () => {
       const previousId = subscriptionId;
+      onPhase("catching-up");
       subscriptionId = `mobile:${this.machine.id}:${++streamIdSequence}`;
       cursor = undefined;
       streamId = undefined;
@@ -548,6 +557,7 @@ export class HostTransport {
           if (applied) {
             cursor = event.params.cursor;
             attempt = 0;
+            onPhase("live");
           }
           return applied;
         } catch (error) {
@@ -569,6 +579,7 @@ export class HostTransport {
           fence++;
           streamId = undefined;
           opening = undefined;
+          onPhase("catching-up");
         }
         if (["blocked", "backoff", "suspended", "closed"].includes(state))
           onError(

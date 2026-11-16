@@ -58,7 +58,7 @@ export function AgentsSheet({ blocks, childRuns: children = [], onClose, ...prop
       headerAction={selected ? <ChatToolbarAction label={copy("Ajanlar", "Agents")} onPress={() => setSelectedId(undefined)} /> : undefined}>
       {selected ? <SubagentDetails key={selected.id} block={selected} {...props} /> : (
         <FlatList data={items}
-          ListHeaderComponent={children.length ? <View style={{ gap: space.sm, marginBottom: space.sm }}>{children.map((child) => <ChildRow key={child.sessionId} child={child} machineId={props.scope.machineId} provider={props.parentProvider} onOpen={onClose} />)}</View> : undefined} keyExtractor={(item) => item.id} style={{ flex: 1 }} contentContainerStyle={{ gap: space.sm }}
+          ListHeaderComponent={children.length ? <View style={{ gap: space.sm, marginBottom: space.sm }}>{children.map((child) => <ChildRow key={child.sessionId} child={child} machineId={props.scope.machineId} provider={props.parentProvider} onOpen={onClose} />)}</View> : undefined} keyExtractor={(item) => item.id} style={{ flex: 1 }} contentContainerStyle={{ gap: space.sm, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
           renderItem={({ item }) => item.kind === "heading" ? <SectionHeader title={item.label} /> : <AgentRow entry={item.entry} now={now} provider={props.parentProvider} onPress={() => setSelectedId(item.id)} />}
           ListEmptyComponent={children.length ? undefined : <Empty title={copy("Alt ajan yok", "No subagents")} detail={copy("Bu oturumda alt ajan çalışmadı. Ajan başlatıldığında burada görünür.", "No subagents have run in this session. They appear here when one starts.")} />} />
       )}

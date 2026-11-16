@@ -2,25 +2,28 @@
 import { act, createElement as h, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-const f = vi.hoisted(() => { vi.stubGlobal("require", () => 1); return { saved: null as string | null, read: undefined as Promise<string | null> | undefined, write: vi.fn(async () => {}), width: 390, height: 844, keyboard: 0, pan: {} as Record<string, (event?: any) => void> }; });
+const f = vi.hoisted(() => { vi.stubGlobal("require", () => 1); return { saved: null as string | null, read: undefined as Promise<string | null> | undefined, write: vi.fn(async () => {}), width: 390, height: 844, keyboard: 0, pan: {} as Record<string, (event?: any) => void>, tap: (_event: unknown, _success: boolean) => {} }; });
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: () => f.read ?? Promise.resolve(f.saved), setItem: f.write } }));
 vi.mock("react-native", () => ({ StyleSheet: { hairlineWidth: 1 }, useWindowDimensions: () => ({ width: f.width, height: f.height, fontScale: 3 }), View: ({ children, accessibilityLabel, onAccessibilityAction, style }: PropsWithChildren<any>) => h("div", { "aria-label": accessibilityLabel, "data-style": JSON.stringify(style), onClick: accessibilityLabel ? () => onAccessibilityAction?.({ nativeEvent: { actionName: "moveLeft" } }) : undefined }, children) }));
 vi.mock("expo-image", () => ({ Image: () => null }));
-vi.mock("react-native-gesture-handler", () => ({ GestureDetector: ({ children }: PropsWithChildren) => children, Gesture: { Pan: () => { const handlers: typeof f.pan = {}; f.pan = handlers; const chain: any = { minDistance: () => chain }; for (const name of ["onBegin", "onStart", "onUpdate", "onFinalize"]) chain[name] = (handler: any) => { handlers[name] = handler; return chain; }; return chain; } } }));
+vi.mock("./assistant-orb", () => ({ AssistantOrb: () => null }));
+vi.mock("react-native-gesture-handler", () => ({ GestureDetector: ({ children }: PropsWithChildren) => children, Gesture: { Exclusive: (...gestures: unknown[]) => gestures, Tap: () => { const chain = { maxDistance: () => chain, onEnd: (handler: typeof f.tap) => { f.tap = handler; return chain; } }; return chain; }, Pan: () => { const handlers: typeof f.pan = {}; f.pan = handlers; const chain: any = { minDistance: () => chain }; for (const name of ["onBegin", "onStart", "onUpdate", "onFinalize"]) chain[name] = (handler: any) => { handlers[name] = handler; return chain; }; return chain; } } }));
 vi.mock("react-native-reanimated", async () => { const { useRef } = await import("react"); return { default: { View: ({ children, style }: PropsWithChildren<any>) => h("article", { "data-position": JSON.stringify(style) }, children) }, useSharedValue: (value: number) => useRef({ value }).current, useAnimatedStyle: (read: () => unknown) => read(), withTiming: (value: number) => value }; });
 vi.mock("react-native-worklets", () => ({ scheduleOnRN: (call: (...args: any[]) => void, ...args: any[]) => call(...args) }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 0 }) }));
 vi.mock("react-native-keyboard-controller", () => ({ useKeyboardState: (select: any) => select({ isVisible: f.keyboard > 0, height: f.keyboard }) }));
 vi.mock("@/ui/use-reduced-motion", () => ({ useReducedMotionPreference: () => true }));
+vi.mock("panelui-native/components/badge", () => ({ Badge: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/primitives", () => ({ Body: ({ children }: PropsWithChildren) => h("p", null, children), IconButton: ({ children, label, onPress }: PropsWithChildren<any>) => h("button", { "aria-label": label, onClick: onPress }, children) }));
+vi.mock("@/ui/primitives", () => ({ Body: ({ children }: PropsWithChildren) => h("p", null, children), PressableCard: ({ children, label, onPress }: PropsWithChildren<any>) => h("button", { "aria-label": label, onClick: onPress }, children), IconButton: ({ children, label, onPress }: PropsWithChildren<any>) => h("button", { "aria-label": label, onClick: onPress }, children) }));
 vi.mock("lucide-react-native/icons/grip-horizontal", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/maximize-2", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/picture-in-picture-2", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/mic", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/mic-off", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/x", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/phone-off", () => ({ default: () => null }));
 import { AssistantFloatingWindow } from "./assistant-floating-window";
 let root: ReturnType<typeof createRoot>;
 afterEach(async () => { await act(async () => root?.unmount()); f.write.mockClear(); f.saved = null; f.read = undefined; f.width = 390; f.height = 844; f.keyboard = 0; vi.unstubAllGlobals(); });
@@ -34,17 +37,20 @@ it("grip drag and accessible movement persist clamped positions without firing c
   await act(async () => (container.querySelector('[aria-label="Move assistant window"]') as HTMLElement).click());
   expect(f.write).toHaveBeenLastCalledWith("bycoda.assistantWindow.position.v1", JSON.stringify({ x: 0, y: 0 }));
   await act(async () => (container.querySelector('[aria-label="Mute microphone"]') as HTMLElement).click()); expect(mute).toHaveBeenCalledOnce();
+  await act(async () => f.tap({}, false)); expect(expand).not.toHaveBeenCalled();
+  await act(async () => f.tap({}, true)); expect(expand).toHaveBeenCalledOnce();
 });
 
-it("keeps commands distinct from the grip at narrow large type and exposes PiP only when supplied", async () => {
+it("keeps commands distinct from the grip at narrow large type and preserves PiP", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); f.width = 280; f.height = 380; f.keyboard = 240;
   const container = document.createElement("div"); root = createRoot(container); const pip = vi.fn(), close = vi.fn();
   await act(async () => root.render(h(AssistantFloatingWindow, { title: "Long translated assistant title", status: "Listening", active: true, muted: true, onExpand: vi.fn(), onClose: close, onMute: vi.fn(), onPip: pip })));
   const grip = container.querySelector('[aria-label="Move assistant window"]')!;
   expect(grip.querySelector("button")).toBeNull();
-  for (const button of container.querySelectorAll("button")) expect(JSON.parse(button.parentElement!.getAttribute("data-style")!)).toMatchObject({ width: 48, minHeight: 48 });
-  await act(async () => (container.querySelector('[aria-label="Picture in picture"]') as HTMLElement).click()); expect(pip).toHaveBeenCalledOnce();
-  await act(async () => (container.querySelector('[aria-label="Close assistant"]') as HTMLElement).click()); expect(close).toHaveBeenCalledOnce();
+  for (const button of container.querySelectorAll('button[aria-label="Return to assistant"], button[aria-label="Unmute microphone"], button[aria-label="End voice call"]')) expect(JSON.parse(button.parentElement!.getAttribute("data-style")!)).toMatchObject({ width: 48, minHeight: 48 });
+  await act(async () => (container.querySelector('[aria-label="Picture in picture"]') as HTMLElement).click());
+  expect(pip).toHaveBeenCalledOnce();
+  await act(async () => (container.querySelector('[aria-label="End voice call"]') as HTMLElement).click()); expect(close).toHaveBeenCalledOnce();
 });
 it("a late saved position cannot overwrite a drag already in progress", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); let restore!: (value: string) => void; f.read = new Promise(resolve => { restore = resolve; });

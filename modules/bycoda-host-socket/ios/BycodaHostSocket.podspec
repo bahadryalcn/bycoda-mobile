@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
   s.source = { :git => '' }
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
-  s.dependency 'ExpoSecureStore', '57.0.4'
+  s.dependency 'ExpoSecureStore', '58.0.2'
   s.source_files = 'BycodaHostSocketModule.swift'
   s.test_spec 'Tests' do |test|
     test.source_files = 'Tests/**/*.swift'

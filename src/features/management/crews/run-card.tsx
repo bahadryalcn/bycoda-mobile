@@ -9,8 +9,7 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { hostKey, useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
-import { ActionMenu, Body, Button, ErrorNotice, IconButton, MutationState, NavigationGroup, NavigationRow, Row, Stack } from "@/ui/primitives";
-import { useMobileTheme } from "@/ui/theme";
+import { ActionMenu, Button, ErrorNotice, MutationState, NavigationGroup, NavigationRow, Row, Stack, Body } from "@/ui/primitives";
 import { RecordCard } from "@/ui/record-card";
 import { Status, statusLabel } from "../shared/status";
 import { stamp } from "../shared/format";
@@ -44,7 +43,6 @@ function CrewTaskRow({ task, model, supported, onOpenSession }: {
 }
 
 export function CrewRunCard({ run }: { run: CrewRunView }) {
-  const { colors } = useMobileTheme();
   const copy = useCopy();
   const glyph = useMenuGlyph();
   const machine = useActiveMachine();
@@ -85,10 +83,9 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
           () => { if (supported && useMachines.getState().activeId === machineId) (run.status === "paused" ? resume : pause).mutate({ projectId: run.projectId, runId: run.id }, { onError: refreshAfterFailure }); }, undefined, "default")} />}
     </Row> : null}
     menu={<RecordTrailing>
-      {run.coordinatorSessionId ? <IconButton disabled={!supported} label={copy("Koordinatör oturumu", "Coordinator session")} onPress={() => openSession(run.coordinatorSessionId!)}>
-        <MessageSquare size={18} color={colors.accent} />
-      </IconButton> : null}
       <ActionMenu label={copy("Ekip çalışması işlemleri", "Crew work actions")} actions={[
+      !!run.coordinatorSessionId && { key: "coordinator", icon: glyph(MessageSquare), label: copy("Koordinatör oturumu", "Coordinator session"),
+        disabled: !supported, onPress: () => openSession(run.coordinatorSessionId!) },
       machine?.capabilities?.includes("crews.run-delete.v1") && { key: "delete", icon: glyph(Trash2, true), label: copy("Çalışmayı sil", "Delete work"), destructive: true,
         disabled: busy || !supported || !canDeleteCrewRun(run),
         onPress: () => confirmAction(copy("Çalışmayı sil", "Delete work"), copy("Bu çalışma listeden kaldırılsın mı? Ekip, görevler ve oturumlar korunur.", "Remove this work from the list? The crew, tasks and conversations are kept."),
@@ -96,12 +93,14 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
       ]} />
     </RecordTrailing>}
     details={<CrewRuntimePanel run={run}>
-      <Body muted>{copy("Ekip üyeleri", "Crew members")}</Body>
-      <MemberLines agents={run.definition.agents} />
       <NavigationGroup>{run.tasks.map((task) => <CrewTaskRow key={task.id} task={task}
         model={run.assignments.find((assignment) => assignment.taskId === task.id)?.candidate.model}
         supported={supported} onOpenSession={openSession} />)}</NavigationGroup>
       {!run.tasks.length && <Body muted>{copy("Henüz ekip görevi oluşmadı.", "No crew tasks have been created yet.")}</Body>}
+      <Stack>
+        <Body muted>{copy("Ekip üyeleri", "Crew members")} · {run.definition.agents.length}</Body>
+        <MemberLines agents={run.definition.agents} />
+      </Stack>
     </CrewRuntimePanel>}>
     {run.status === "paused" && crewActivityKnown(run) && <Body muted>{crewHasRunningWork(run)
       ? copy("Yeni görev atamaları duraklatıldı. Devam eden işler tamamlanabilir.", "New assignments are paused. Running work can still finish.")

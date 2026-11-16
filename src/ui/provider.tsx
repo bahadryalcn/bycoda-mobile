@@ -7,12 +7,16 @@ import { Uniwind } from "uniwind";
 import { applyMobileTheme, uniwindThemeName } from "./tokens";
 import { useMobileTheme } from "./theme";
 import { useAppearance } from "../state/appearance";
+import { applyTypography } from "./typography-runtime";
 import { useSecurity } from "../state/security";
 
 /** Theme must also reach the initial lock/sign-in screen, before private providers mount. */
 export function MobileThemeController() {
   const requested = useAppearance((state) => state.themeMode);
   const palette = useAppearance((state) => state.palette);
+  const typography = useAppearance((state) => state.typography);
+  // Apply saved text choices in place, including on the lock screen.
+  useLayoutEffect(() => { applyTypography(typography); }, [typography]);
   const device = useColorScheme();
   const resolved = requested === "system" ? (device === "light" ? "light" : "dark") : requested;
   useLayoutEffect(() => {

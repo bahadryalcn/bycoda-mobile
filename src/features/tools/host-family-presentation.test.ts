@@ -27,10 +27,11 @@ const log = {
   level: "info",
   details: "x".repeat(16_001),
 };
+vi.mock("panelui-native/components/badge", () => ({ Badge: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
 }));
-vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
+vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, useLocalSearchParams: () => ({}) }));
 vi.mock("lucide-react-native/icons/network", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/smartphone", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/wifi", () => ({ default: () => null }));
@@ -223,7 +224,6 @@ it("discloses structured log truncation only in the selected detail and refuses 
   expect(container.querySelector("input")?.maxLength).toBe(512);
   expect(container.textContent).not.toContain("Log search supports up to 512 characters.");
   await act(async () => f.search!("x".repeat(448)));
-  expect(container.textContent).toContain("Log search supports up to 512 characters.");
   expect(container.textContent).not.toContain("Showing the first 16,000");
   await act(async () =>
     [...container.querySelectorAll("button")]

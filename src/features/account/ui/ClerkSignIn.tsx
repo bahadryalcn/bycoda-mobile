@@ -22,7 +22,7 @@ const STRATEGY = {
 } as const;
 
 /** Sign-in choices backed by Clerk: Google, Facebook, Apple, GitHub and an e-mail code. No passwords. */
-export default function ClerkSignIn() {
+export default function ClerkSignIn({ onStepChange }: { onStepChange?: (step: Step["name"]) => void }) {
   const copy = useCopy();
   const { colors } = useMobileTheme();
   const working = useRef(false);
@@ -30,7 +30,11 @@ export default function ClerkSignIn() {
   const { startAppleAuthenticationFlow } = useSignInWithApple();
   const { signIn, setActive: activateSignIn, isLoaded: signInLoaded } = useSignIn();
   const { signUp, setActive: activateSignUp, isLoaded: signUpLoaded } = useSignUp();
-  const [step, setStep] = useState<Step>({ name: "choose" });
+  const [step, setStepState] = useState<Step>({ name: "choose" });
+  const setStep = (next: Step) => {
+    setStepState(next);
+    onStepChange?.(next.name);
+  };
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -84,14 +88,14 @@ export default function ClerkSignIn() {
       }
     });
 
-  const verify = (current: Extract<Step, { name: "code" }>) =>
+  const verify = (current: Extract<Step, { name: "code" }>, value = code) =>
     run("verify", async () => {
       if (current.mode === "signIn") {
-        const result = await signIn!.attemptFirstFactor({ strategy: "email_code", code: code.trim() });
+        const result = await signIn!.attemptFirstFactor({ strategy: "email_code", code: value.trim() });
         if (result.status === "complete") await activateSignIn!({ session: result.createdSessionId });
         else throw new Error("incomplete");
       } else {
-        const result = await signUp!.attemptEmailAddressVerification({ code: code.trim() });
+        const result = await signUp!.attemptEmailAddressVerification({ code: value.trim() });
         if (result.status === "complete") await activateSignUp!({ session: result.createdSessionId });
         else throw new Error("incomplete");
       }
@@ -105,6 +109,7 @@ export default function ClerkSignIn() {
           label={copy("Doğrulama kodu", "Verification code")}
           value={code}
           onChangeText={setCode}
+          onComplete={(value) => void verify(step, value)}
           disabled={!!busy}
         />
         {error ? <Notice tone="danger" message={error} /> : null}
@@ -158,6 +163,10 @@ export default function ClerkSignIn() {
         autoCapitalize="none"
         autoCorrect={false}
         editable={!busy}
+        returnKeyType="send"
+        onSubmitEditing={() => {
+          if (signInLoaded && signUpLoaded && email.includes("@")) void sendCode();
+        }}
       />
       {error ? <Notice tone="danger" message={error} /> : null}
       <Button

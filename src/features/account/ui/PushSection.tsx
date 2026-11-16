@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppState } from "react-native";
-import { Button, Notice, Stack } from "@/ui/primitives";
+import { router, type Href } from "expo-router";
+import { Button, NavigationGroup, NavigationRow, Notice, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { HintSection } from "@/ui/info-hint";
 import { readDevicePermission } from "../../permissions/device-permissions";
@@ -57,13 +58,15 @@ export function PushSection() {
     };
   }, [available, runtime, device, owner]);
 
-  if (!available || !runtime || !device) return null;
+  if (!runtime) return null;
   return (
-    <HintSection title={copy("Bildirimler", "Notifications")} help={state === "on"
-      ? copy("Hesap bildirimleri bu telefonda açık. Kapatmak için sistem ayarlarını kullan.", "Account notifications are on for this phone. Turn them off in system settings.")
-      : copy("Yeni cihaz girişi gibi hesap olaylarını bu telefona gönder.", "Send account events, such as a sign-in from a new device, to this phone.")}>
+    <HintSection title={copy("Bildirimler", "Notifications")} help={!available || !device
+      ? copy("Bu telefonda bildirim gönderimi kullanılamıyor. Uygulama içi bildirimleri yine de ayarlayabilirsin.", "Push notifications are unavailable on this phone. You can still set in-app notifications.")
+      : state === "on"
+        ? copy("Hesap bildirimleri bu telefonda açık. Kapatmak için sistem ayarlarını kullan.", "Account notifications are on for this phone. Turn them off in system settings.")
+        : copy("Yeni cihaz girişi gibi hesap olaylarını bu telefona gönder.", "Send account events, such as a sign-in from a new device, to this phone.")}>
       <Stack>
-        {state === "on" ? null : (
+        {available && device && state !== "on" ? (
           <>
             {state === "blocked" ? (
               <Notice tone="warning" message={copy("Bildirim izni kapalı. Sistem ayarlarından aç.", "Notifications are blocked. Allow them in system settings.")} />
@@ -80,7 +83,13 @@ export function PushSection() {
               onPress={() => void update(state !== "read-error")}
             />
           </>
-        )}
+        ) : null}
+        <NavigationGroup>
+          <NavigationRow
+            label={copy("Bildirim ayarları", "Notification settings")}
+            onPress={() => router.navigate("/account-notifications" as Href)}
+          />
+        </NavigationGroup>
       </Stack>
     </HintSection>
   );

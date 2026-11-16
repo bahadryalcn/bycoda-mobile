@@ -268,3 +268,15 @@ it("keeps a camera operation failure beside Camera when a foreground refresh arr
   expect(mocks.read).toHaveBeenCalledTimes(3);
   expect(mocks.allow).toHaveBeenCalledExactlyOnceWith("camera");
 });
+
+it("shows the photos row as the system picker: no permission is read, requested or offered as an action", async () => {
+  mocks.read.mockResolvedValue(granted);
+  await render();
+  const photos = container.querySelector('[data-row="Photos and files"]');
+  expect(photos).toBeNull();
+  expect(container.textContent).toContain("Photos and files");
+  expect(container.textContent).toContain("System picker");
+  expect(buttons()).not.toContain("Photos and files");
+  expect(mocks.read.mock.calls.map(([kind]) => kind)).not.toContain("photos");
+  expect(mocks.allow).not.toHaveBeenCalled();
+});

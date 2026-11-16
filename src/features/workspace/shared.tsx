@@ -1,11 +1,12 @@
 import { useCallback, type PropsWithChildren } from "react";
 import { View } from "react-native";
+import { Badge as PanelBadge } from "panelui-native/components/badge";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Crypto from "expo-crypto";
 import { useHostClient } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { Body, Button, Card, ErrorText, MutationState, Notice } from "@/ui/primitives";
-import { radii, space, type MobileColors } from "@/ui/tokens";
+import { space, type MobileColors } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { shortDate } from "../management/shared/format";
@@ -70,9 +71,10 @@ export function sessionStatus(
 export function StatusDot({ color, size = 8 }: { color: string; size?: number }) {
   useMobileTheme();
   return (
-    <View
+    <PanelBadge
+      shape="dot"
       accessible={false}
-      style={{ width: size, height: size, borderRadius: radii.pill, backgroundColor: color }}
+      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }}
     />
   );
 }

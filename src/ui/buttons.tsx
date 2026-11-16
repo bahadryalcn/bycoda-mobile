@@ -1,5 +1,7 @@
 import { useMobileTheme } from "./theme";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
+import { Chip as PanelChip } from "panelui-native/components/chip";
 import { ProgressButton as PanelProgressButton } from "panelui-native/components/progress-button";
 import Check from "lucide-react-native/icons/check";
 import { Body } from "./typography";
@@ -92,21 +94,31 @@ export function Button({
     </PanelButton>
   );
 }
-export function ChoiceChip({ label, selected, ...props }: ChoiceChipProps) {
-  const { colors } = useMobileTheme();
+const chipVariants = { danger: "destructive", success: "success", warning: "warning", info: "info" } as const;
+
+/** Filter/choice pill on PanelUI Chip: the selected state, check icon and toggle semantics come from it. */
+export function ChoiceChip({ label, selected, accessibilityLabel, onPress, disabled, busy, tone, density = "compact", fullWidth, style }: ChoiceChipProps) {
+  const off = !!(disabled || busy);
+  const variant = tone && tone in chipVariants ? chipVariants[tone as keyof typeof chipVariants] : "outline";
   return (
-    <Button
-      {...props}
+    <PanelChip
+      accessibilityLabel={accessibilityLabel ?? label}
+      aria-busy={busy || undefined}
+      aria-disabled={off}
+      variant={variant}
+      size={density === "compact" ? "md" : "xl"}
+      selected={selected}
+      disabled={off}
+      hitSlop={hitSlopFor(density === "compact" ? metrics.chipHeight : metrics.buttonHeight)}
       onPress={() => {
         haptic.select();
-        props.onPress();
+        onPress();
       }}
-      selected={selected}
-      label={label}
-      density={props.density ?? "compact"}
+      style={[{ maxWidth: "100%", flexShrink: 1 }, fullWidth && { alignSelf: "stretch", justifyContent: "center" }, style]}
+      start={selected ? <Check size={14} strokeWidth={2.4} /> : undefined}
     >
-      {selected ? <Check size={14} strokeWidth={2.4} color={colors.accent} /> : null}
-    </Button>
+      {label}
+    </PanelChip>
   );
 }
 export function PressableCard({
@@ -122,9 +134,9 @@ export function PressableCard({
   role = "button",
   hitSlop,
 }: PressableCardProps) {
-  const { colors, uiStyles, pressedFill } = useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole={role}
       accessibilityLabel={label}
       hitSlop={hitSlop}
@@ -135,22 +147,21 @@ export function PressableCard({
       disabled={disabled}
       onPress={onPress}
       onLongPress={onLongPress}
+      pressScale={0.985}
+      pressOpacity={0.8}
       accessibilityActions={!disabled && onLongPress && optionsLabel ? [{ name: "longpress", label: optionsLabel }] : undefined}
       onAccessibilityAction={(event) => {
         if (!disabled && event.nativeEvent.actionName === "longpress") onLongPress?.();
       }}
-      style={({ pressed }) => [
-        StyleSheet.flatten([
-          uiStyles.press,
-          selected && uiStyles.selected,
-          style,
-          { opacity: disabled ? opacity.disabled : 1 },
-        ]),
-        pressed && !disabled && { backgroundColor: selected ? colors.selected : pressedFill },
-      ]}
+      style={StyleSheet.flatten([
+        uiStyles.press,
+        selected && uiStyles.selected,
+        style,
+        { opacity: disabled ? opacity.disabled : 1 },
+      ])}
     >
       {children}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 export function SelectRow({ label, detail, selected, onPress, disabled }: SelectRowProps) {

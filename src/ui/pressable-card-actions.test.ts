@@ -1,6 +1,8 @@
 import { expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 vi.mock("react-native", () => ({ Pressable: "pressable", View: "view", StyleSheet: { flatten: (style: unknown) => style } }));
+vi.mock("panelui-native/primitives/animated-pressable", () => ({ AnimatedPressable: "pressable" }));
+vi.mock("panelui-native/components/chip", () => ({ Chip: "chip" }));
 vi.mock("panelui-native/components/progress-button", () => ({ ProgressButton: "progress-button" }));
 vi.mock("./busy-indicator", () => ({ LifecycleButton: "button" }));
 vi.mock("./spinner-claim", () => ({ useSoleSpinner: () => false }));

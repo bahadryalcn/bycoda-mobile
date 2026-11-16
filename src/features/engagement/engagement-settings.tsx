@@ -48,7 +48,7 @@ export function EngagementSettings() {
   const nativeSharing = platform === "ios" || platform === "android";
 
   async function perform(action: NonNullable<typeof busy>) {
-    if (!active.current || pending.current || (action === "share" && !nativeSharing) || (action === "review" && !links.reviewUrl)) return;
+    if (!active.current || pending.current || (action === "share" && !nativeSharing) || (action === "review" && !links.reviewUrl) || (action === "public" && !links.appPageUrl)) return;
     pending.current = true;
     setBusy(action);
     setFeedbackFor(action);
@@ -84,7 +84,7 @@ export function EngagementSettings() {
           );
         }
       } else {
-        const url = action === "review" ? links.reviewUrl : action === "website" ? websiteUrl : links.shareUrl;
+        const url = action === "review" ? links.reviewUrl : action === "website" ? websiteUrl : links.appPageUrl;
         const result = await openPublicLink(url, (target) =>
           Linking.openURL(target),
         );
@@ -113,7 +113,7 @@ export function EngagementSettings() {
     <Stack style={{ gap: space.lg }}>
       <BrandLogo compact />
       <Stack>
-        <Body>bycoda · {copy("Sürüm: ", "Version: ")}{identity.version ?? copy("Bilinmiyor", "Unknown")}</Body>
+        <Body>{copy("Sürüm: ", "Version: ")}{identity.version ?? copy("Bilinmiyor", "Unknown")}</Body>
         <Body muted>{identity.preview
           ? copy("Önizleme — mağaza derlemesi değil.", "Preview — a store build is not running.")
           : `${copy("Derleme: ", "Build: ")}${identity.nativeBuild ?? copy("Bilinmiyor", "Unknown")}`}</Body>
@@ -150,14 +150,16 @@ export function EngagementSettings() {
             />
           </View>
           {feedback("share")}
-          <NavigationRow
-            label={copy("Uygulama sayfası", "App page")}
-            disabled={!!busy}
-            icon={tile(Globe, colors.muted)}
-            busy={busy === "public"}
-            onPress={() => { void perform("public"); }}
-          />
-          {feedback("public")}
+          {links.appPageUrl ? <>
+            <NavigationRow
+              label={copy("Uygulama sayfası", "App page")}
+              disabled={!!busy}
+              icon={tile(Globe, colors.muted)}
+              busy={busy === "public"}
+              onPress={() => { void perform("public"); }}
+            />
+            {feedback("public")}
+          </> : null}
           <NavigationRow
             label={copy("Geri bildirim gönder", "Send feedback")}
             disabled={!!busy}

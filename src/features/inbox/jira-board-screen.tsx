@@ -1,5 +1,5 @@
 import { useInboxLocalScope } from "./inbox-local-scope";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useActiveMachine } from "@/state/machines";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
@@ -46,6 +46,9 @@ export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
   const readAccess = useRef(readable); readAccess.current = readable;
   const available = () => mounted.current && readAccess.current && inboxScope.matches(opening);
   const boards = useInboxRead({ action: "jira-boards", input: { projectId: opening.projectId ?? "" } }, readable);
+  useEffect(() => {
+    if (readable && !boardId && boards.data?.length === 1) setBoard(String(boards.data[0]!.id));
+  }, [readable, boardId, boards.data]);
   const pageToken = pages.at(-1);
   const board = useInboxRead({ action: "jira-board-read", input: {
     projectId: opening.projectId ?? "", boardId: Number(boardId), scope,
@@ -112,6 +115,11 @@ export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
           </>} />
         {boardId && contentAvailable ? <AppliedFilters result={[computerName, projectName, scope === "board" ? scopeLabel : null, pageSummary].filter(Boolean).join(" · ")}
           filters={[scope !== "board" ? scopeLabel : false, selectedColumn?.name]} /> : <Body muted>{computerName}</Body>}
+        {boardId && contentAvailable && (scope !== "board" || column) ? <Button tone="quiet"
+          label={copy("Filtreleri temizle", "Clear filters")} onPress={() => {
+            if (!canBrowse()) return;
+            viewOwner.current = { key: "" }; closeFilters(); setScope("board"); setSprint(""); setColumn(""); setPages([undefined]);
+          }} /> : null}
         {boardId && readable ? <QueryState query={board} /> : null}
         {boardId && contentAvailable && board.data && !snapshot && !board.isFetching && !board.error ? <Notice tone="warning"
           message={copy("Pano görünümü değişti. Devam etmek için yenileyin.", "The board view changed. Refresh to continue.")} /> : null}
@@ -130,9 +138,10 @@ export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
           setPages((current) => current.at(-1) === pageToken && current.length < 100 && !current.includes(nextPage) ? [...current, nextPage] : current);
         }} /> : null}
       </Row>{cursorStopped ? <Notice message={copy("Sayfa sınırına veya tekrarlanan imlece ulaşıldı. Pano kapsamını değiştir veya önceki sayfaları incele.", "The page limit or a repeated cursor was reached. Change the board scope or review earlier pages.")} /> : null}</Stack> : undefined}
-      renderItem={({ item }) => <IssueRecordRow label={`${item.identifier} · ${item.title}`} state={item.state}
-        caption={item.assignees?.[0]?.login}
-        disabled={!contentAvailable || !canWrite || board.isFetching} onPress={() => { if (canBrowse() && snapshot) setSelected({ issue: item, snapshot }); }} />} />
+      renderItem={({ item }) => <IssueRecordRow label={item.title} detail={item.identifier} state={item.state}
+        extraBadges={item.priority ? [item.priority] : undefined}
+        caption={[item.assignees?.[0]?.login, item.updatedAt && new Date(item.updatedAt).toLocaleDateString(locale)].filter(Boolean).join(" · ")}
+        disabled={!contentAvailable || board.isFetching} onPress={() => { if (canBrowse() && snapshot) setSelected({ issue: item, snapshot }); }} />} />
     {filterDraft && contentAvailable ? <JiraBoardFilterSheet value={filterDraft.value} sprints={sprints} columns={snapshot?.configuration.columns ?? []}
       disabled={!readable || filterDraft.boardId !== boardId} feedback={<QueryState query={board} loading="inline" />}
       onClose={closeFilters} onChange={(value) => {

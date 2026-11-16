@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseMessage, type MessageNode } from "./message-model";
-import { linkOnlyItem } from "./message-link-item";
+import { linkOnlyItem, sourceList } from "./message-link-item";
 
 const firstItem = (markdown: string): MessageNode => {
   const list = parseMessage(markdown, true).find((node) => node.type === "bullet_list")!;
@@ -27,5 +27,20 @@ describe("linkOnlyItem", () => {
   });
   it("ignores items with nested content", () => {
     expect(linkOnlyItem(firstItem("- [a](https://a.example)\n  - child"))).toBeNull();
+  });
+});
+
+describe("sourceList", () => {
+  const items = (markdown: string) =>
+    parseMessage(markdown, true).find((node) => node.type === "bullet_list")!.children;
+  it("collects a list made only of two or more web links", () => {
+    expect(sourceList(items("- [A](https://a.example)\n- [B](https://www.b.example/x)"))).toEqual([
+      { href: "https://a.example/", title: "A", host: "a.example" },
+      { href: "https://www.b.example/x", title: "B", host: "b.example" },
+    ]);
+  });
+  it("keeps a single link or a mixed list as ordinary rows", () => {
+    expect(sourceList(items("- [A](https://a.example)"))).toBeNull();
+    expect(sourceList(items("- [A](https://a.example)\n- plain"))).toBeNull();
   });
 });

@@ -26,11 +26,11 @@ it("explains permission-window interruption without resuming or discarding the t
 });
 it("retains the original Room selection while minimized and expanded", () => {
   openAssistantCompanion("host-a", "env-a");
-  useAssistantCompanion.setState({ projectId: "project-a", thread: { id: "room-a" } as never });
+  useAssistantCompanion.setState({ surface: "voice", projectId: "project-a", thread: { id: "room-a" } as never });
   minimizeAssistantCompanion();
   expect(useAssistantCompanion.getState()).toMatchObject({ mode: "minimized", projectId: "project-a", thread: { id: "room-a" } });
   openAssistantCompanion("host-a", "env-a");
-  expect(useAssistantCompanion.getState()).toMatchObject({ mode: "full", thread: { id: "room-a" } });
+  expect(useAssistantCompanion.getState()).toMatchObject({ mode: "full", surface: "voice", thread: { id: "room-a" } });
 });
 it("never carries a Room selection or recognized private text into another computer", () => {
   openAssistantCompanion("host-a", "env-a");

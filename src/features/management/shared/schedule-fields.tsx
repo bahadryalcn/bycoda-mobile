@@ -21,6 +21,7 @@ export function ScheduleFields({ value, minute, onMinuteChange, onChange, disabl
   const runs = weekRunBlocks({ ...value, minute: Number(minute) });
   return <>
     <SelectField label={copy("Sıklık", "Frequency")} value={value.scheduleKind} disabled={disabled}
+      hint={copy("Bilgisayarın yerel saati kullanılır; sonraki çalışma telefondaki saatle gösterilir.", "Schedules use computer local time; the next run is shown in phone time.")}
       options={[
         { value: "hourly", label: copy("Saatlik", "Hourly") },
         { value: "daily", label: copy("Günlük", "Daily") },
@@ -47,6 +48,5 @@ export function ScheduleFields({ value, minute, onMinuteChange, onChange, disabl
         { value: "6", label: copy("Cumartesi", "Saturday") },
       ]} onChange={(day) => onChange({ dayOfWeek: Number(day) })} /> : null}
     <HoursOverview rows={WEEK_ORDER.map((day) => ({ key: String(day), label: dayNames[day], blocks: runs[day] }))} />
-    <Body muted>{copy("Bilgisayarın yerel saati kullanılır; sonraki çalışma telefondaki saatle gösterilir.", "Schedules use computer local time; the next run is shown in phone time.")}</Body>
   </>;
 }

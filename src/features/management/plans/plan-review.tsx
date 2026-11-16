@@ -3,10 +3,11 @@ import type { Block } from "@/domain/types";
 import { useMachines } from "@/state/machines";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useCopy } from "@/ui/copy";
-import { Body, Field, FormActions, Notice, Stack } from "@/ui/primitives";
+import { PlanSteps } from "@/ui/plan-steps";
+import { Badge, Body, Disclosure, Field, FormActions, Notice, Row, Stack } from "@/ui/primitives";
 import { ErrorText } from "@/features/workspace/shared";
 import type { TranscriptBlockProps } from "@/features/workspace/session-types";
-import { readyPlan, reviewedPlanCommand } from "./plan-review-model";
+import { planOutline, readyPlan, reviewedPlanCommand } from "./plan-review-model";
 
 export function PlanReview({ block, scope, disabled, onCommand, onClose }:
   Pick<TranscriptBlockProps, "block" | "scope" | "disabled" | "onCommand"> & { onClose: () => void }) {
@@ -38,12 +39,23 @@ export function PlanReview({ block, scope, disabled, onCommand, onClose }:
       setError(cause);
     } finally { setPending(false); }
   };
+  const steps = planOutline(text);
+  const editable = supported && !disabled && !pending && !attempted.current;
+  const field = <Field label={steps.length ? copy("Plan metni", "Plan text") : copy("Onaylanacak plan", "Plan to approve")}
+    info={copy("Uygula bu metni onaylar ve çalışmayı başlatır.", "Build approves this text and starts work.")}
+    value={text} onChangeText={setText} multiline maxLength={256_000} editable={editable}
+    style={{ minHeight: 220 }} />;
   return <Stack>
-    {!supported ? <Notice tone="warning" message={copy("Bu bilgisayarda plan düzenleme desteklenmiyor. Kayıtlı planı inceleyip uygulayabilirsiniz.", "This computer does not support editing plans. You can review and build the stored plan.")} /> : null}
-    {changed ? <Notice tone="warning" message={copy("Plan değişti. Güncel planı incelemek için kapatıp yeniden açın.", "The plan changed. Close and reopen to review the current plan.")} /> : null}
-    <Field label={copy("Onaylanacak plan", "Plan to approve")} hint={copy("Planı okumak çalışmayı başlatmaz. Uygula eylemi bu metni onaylar ve çalışmayı başlatır.", "Reading does not start work. Build approves this text and starts implementation.")} value={text} onChangeText={setText}
-      multiline maxLength={256_000} editable={supported && !disabled && !pending && !attempted.current}
-      style={{ minHeight: 220 }} />
+    <Row style={{ alignItems: "center" }}>
+      <Badge tone={changed ? "default" : "warning"} label={changed ? copy("Güncel değil", "Out of date") : copy("Onayınızı bekliyor", "Needs your approval")} />
+      {steps.length ? <Body muted>{copy("{p0} adım", "{p0} steps", { p0: steps.length })}</Body> : null}
+    </Row>
+    {!supported ? <Notice tone="warning" message={copy("Bu bilgisayar plan düzenlemeyi desteklemiyor; kayıtlı plan uygulanır.", "This computer can't edit plans; the stored plan is built.")} /> : null}
+    {changed ? <Notice tone="warning" message={copy("Plan değişti. Kapatıp yeniden açın.", "The plan changed. Close and reopen it.")} /> : null}
+    {steps.length ? <>
+      <PlanSteps steps={steps} />
+      <Disclosure label={supported ? copy("Plan metnini düzenle", "Edit plan text") : copy("Plan metni", "Plan text")}>{field}</Disclosure>
+    </> : field}
     <FormActions submitLabel={copy("Planı uygula", "Build this plan")} onSubmit={() => { void build(); }}
       disabled={disabled || changed || !text.trim() || attempted.current} busy={pending}
       onCancel={requestClose} feedback={<ErrorText error={error} />} />

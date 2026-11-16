@@ -2,6 +2,11 @@ import { expect,it } from "vitest";
 import { readJiraBoardSnapshot,readJiraBoards,readJiraTransitions,readJiraWriteOutcome } from "./jira-board-model";
 const issue={provider:"jira",kind:"jira",id:"7",identifier:"ENG-7",number:7,title:"Owner issue",url:"https://example.invalid/browse/ENG-7",state:"Open",statusId:"1",updatedAt:"2026-10-22T00:00:00Z",teamId:"1",repo:"ENG",projectPath:"",draft:false,labels:[],assignees:[]};
 const snapshot={snapshotId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",projectCwd:"/project",board:{id:7,name:"Engineering",kind:"scrum"},configuration:{columns:[{name:"Open",statusIds:["1"]}],rankFieldId:10010,rankSnapshotAvailable:true,boardKind:"scrum",sprints:[{id:3,name:"Current",state:"active",goal:"Ship"}]},page:{issues:[issue],nextPageToken:null},scope:{scope:"board",sprintId:null,pageToken:null}};
+it("accepts optional priority from newer hosts", () => {
+ expect(readJiraBoardSnapshot(snapshot).page.issues[0]?.priority).toBeUndefined();
+ expect(readJiraBoardSnapshot({...snapshot,page:{...snapshot.page,issues:[{...issue,priority:"High"}]}}).page.issues[0]?.priority).toBe("High");
+ expect(() => readJiraBoardSnapshot({...snapshot,page:{...snapshot.page,issues:[{...issue,priority:42}]}})).toThrow();
+});
 it("projects bounded native board metadata while preserving exact status/sprint identities",()=>{
  const read=readJiraBoardSnapshot({...snapshot,token:"never-projected",account:{email:"never-projected"}});
  expect(read.page.issues[0]?.identifier).toBe("ENG-7");expect(read.configuration.columns[0]?.statusIds).toEqual(["1"]);expect(read.configuration.sprints[0]?.id).toBe(3);

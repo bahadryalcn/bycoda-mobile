@@ -1,7 +1,8 @@
 import { useMobileTheme } from "@/ui/theme";
 import { createContext, use, type ReactNode } from "react";
 import { StyleSheet, View, useWindowDimensions, type TextProps } from "react-native";
-import { Pressable } from "react-native";
+import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
+import { Separator as PanelSeparator } from "panelui-native/components/separator";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Check from "lucide-react-native/icons/check";
 import { Body } from "./typography";
@@ -24,8 +25,8 @@ export function NavigationGroup({ children, style }: ContainerProps) {
 }
 
 export function Separator({ style }: Pick<ContainerProps, "style">) {
-  const { uiStyles } = useMobileTheme();
-  return <View accessible={false} style={[uiStyles.separator, style]} />;
+  const { colors } = useMobileTheme();
+  return <PanelSeparator thickness={StyleSheet.hairlineWidth} style={[{ backgroundColor: colors.separator }, style]} />;
 }
 
 export function NavigationRow({
@@ -50,7 +51,10 @@ export function NavigationRow({
   separator,
   accessibilityLabel,
   intent = selected === undefined ? "navigate" : "select",
+  compact = false,
 }: {
+  /** Single-line action menus use the standard 48dp touch target. */
+  compact?: boolean;
   /** Inset hairline under the row; defaults to true inside a NavigationGroup. */
   separator?: boolean;
   /** Bold label, e.g. an unread inbox item. */
@@ -80,7 +84,7 @@ export function NavigationRow({
   detailSelectable?: boolean;
   detailEllipsizeMode?: TextProps["ellipsizeMode"];
 }) {
-  const { colors, semanticColors, uiStyles, pressedFill } = useMobileTheme();
+  const { colors, semanticColors, uiStyles } = useMobileTheme();
   const plain = variant !== "card";
   const semantic = tone ? semanticColors[tone] : undefined;
   const inGroup = useInNavigationGroup();
@@ -88,8 +92,10 @@ export function NavigationRow({
   // Enlarged system text lets supporting lines grow instead of clipping them at the compact row limits.
   const grows = useWindowDimensions().fontScale > 1;
   const row = (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
+      pressScale={0.99}
+      pressOpacity={0.85}
       accessibilityLabel={accessibilityLabel ?? [label, detail, metadata].filter(Boolean).join(". ")}
       accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy, ...(selected === undefined ? {} : { selected }) }}
       aria-pressed={selected}
@@ -97,22 +103,21 @@ export function NavigationRow({
       aria-busy={!!busy}
       disabled={disabled || busy}
       onPress={onPress}
-      style={({ pressed }) => [
+      style={[
         uiStyles.press,
         plain && { borderWidth: 0, backgroundColor: "transparent" },
         !plain && { marginHorizontal: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.panel },
         semantic && !plain && { borderColor: semantic.border, backgroundColor: semantic.surface },
         {
-          minHeight: detail || metadata ? metrics.rowHeightSession : metrics.rowHeightProject,
+          minHeight: compact ? metrics.touchTarget : detail || metadata ? metrics.rowHeightSession : metrics.rowHeightProject,
           paddingHorizontal: plain ? space.sm : space.md,
-          paddingVertical: space.row,
+          paddingVertical: compact ? space.sm + space.xxs : space.row,
           flexDirection: "row",
           alignItems: "center",
           gap: gapIcon,
           opacity: disabled && !busy ? opacity.disabled : 1,
         },
         selected && { backgroundColor: colors.selected },
-        pressed && { backgroundColor: semantic?.surface ?? pressedFill },
       ]}
     >
       {icon ? (
@@ -152,7 +157,7 @@ export function NavigationRow({
         : intent === "navigate" ? <ChevronRight size={14} strokeWidth={2.4} color={colors.tertiary} style={{ flexShrink: 0 }} />
         : intent === "select" && selected && !trailing ? <Check size={16} color={colors.accent} style={{ flexShrink: 0 }} />
         : null}
-    </Pressable>
+    </AnimatedPressable>
   );
-  return line ? <View>{row}<View accessible={false} style={uiStyles.separator} /></View> : row;
+  return line ? <View>{row}<Separator /></View> : row;
 }

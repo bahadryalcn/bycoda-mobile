@@ -1,5 +1,6 @@
-import Folder from "lucide-react-native/icons/folder";
-import Layers from "lucide-react-native/icons/layers";
+import { Folder, Layers } from "./duotone-icon";
+import LineFolder from "lucide-react-native/icons/folder";
+import LineLayers from "lucide-react-native/icons/layers";
 import { useId, useState } from "react";
 import { Image } from "expo-image";
 import { View } from "react-native";
@@ -20,7 +21,7 @@ export function ProjectIcon({ appearance, group = false, size = 20, box = 32 }: 
   const [failedLogo, setFailedLogo] = useState<string>();
   const color = appearance?.color ?? colors.muted;
   const logo = appearance?.logo;
-  const Fallback = group ? Layers : Folder;
+  const Fallback = size < 20 ? (group ? LineLayers : LineFolder) : (group ? Layers : Folder);
   return (
     <View accessible={false} style={{ width: box, height: box, flexShrink: 0, alignItems: "center", justifyContent: "center" }}>
       {logo && failedLogo !== logo ? (

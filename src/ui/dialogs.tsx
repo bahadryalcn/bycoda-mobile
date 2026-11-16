@@ -14,6 +14,7 @@ import { space } from "./tokens";
 import { useCopy } from "./copy";
 import type { FormActionsProps, ConfirmationCardProps, SheetProps } from "./component-props";
 import { ScreenOverlay, useOverlayProgress } from "./overlays";
+import { ConnectionFeedbackScope } from "./connection-feedback-scope";
 import { SheetGuardContext, useSheetDismissal, useSheetGuards } from "./sheet-guard";
 import { useNativeSheetFocus } from "./use-native-sheet-focus";
 import { createSheetActionsStore } from "./sheet-actions-store";
@@ -55,6 +56,10 @@ function SheetActionArea({ store, footer, bottom, maxHeight, dirty }: {
         maxHeight, borderTopWidth: content ? StyleSheet.hairlineWidth : 0,
         borderTopColor: colors.border, backgroundColor: colors.panel }}
       contentContainerStyle={{
+      // Actions stay in the same centered column as the header and body on wide screens.
+      width: "100%",
+      maxWidth: metrics.contentWidth,
+      alignSelf: "center",
       paddingStart: Math.max(space.screen, insets.left),
       paddingEnd: Math.max(space.screen, insets.right),
       paddingTop: content ? space.md : 0,
@@ -243,6 +248,8 @@ export function Sheet({
           ) : null}
           <SheetActionsContext.Provider value={actionsStore}>
           <SheetGuardContext.Provider value={guardContext}>
+          {/* Sections of one sheet share a single connection-level message. */}
+          <ConnectionFeedbackScope>
             <View
               onLayout={({ nativeEvent: { layout } }) => setHeaderHeight((current) =>
                 Math.abs(current - layout.height) < 1 ? current : layout.height)}
@@ -319,6 +326,7 @@ export function Sheet({
               </View>
             )}
             <SheetActionArea store={actionsStore} footer={footer} bottom={insets.bottom} maxHeight={actionsMaximum} dirty={dirty || guards.dirty} />
+          </ConnectionFeedbackScope>
           </SheetGuardContext.Provider>
           </SheetActionsContext.Provider>
         </SheetSurface>

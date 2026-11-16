@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ send: vi.fn(), logs: vi.fn(), toast: vi.fn() }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, useLocalSearchParams: () => ({}) }));
+vi.mock("@/ui/info-hint", () => ({ HintSection: ({ children }: PropsWithChildren) => createElement("section", null, children) }));
 vi.mock("../account/ui/account-context", () => ({ useAccount: () => ({ status: "signedOut" }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./diagnostic-copy", () => ({ useDiagnosticResultText: () => (value: string) => value }));

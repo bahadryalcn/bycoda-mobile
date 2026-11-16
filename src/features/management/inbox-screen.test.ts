@@ -18,7 +18,7 @@ vi.mock("lucide-react-native/icons/eye", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/git-pull-request", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/shield-check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: () => null }));
-vi.mock("expo-router",()=>({router:{navigate:state.push}}));
+vi.mock("expo-router",()=>({router:{navigate:state.push},useLocalSearchParams:()=>({})}));
 vi.mock("expo-localization",()=>({getLocales:()=>[{languageTag:"en-US"}]}));
 vi.mock("react-native",()=>({View:({children}:PropsWithChildren)=>createElement("div",null,children)}));
 vi.mock("@/ui/search-field",()=>({CollectionToolbar:({field,actions}:any)=>createElement("section",null,field,actions)}));
@@ -56,8 +56,12 @@ it("validates the opening scope before intentional project selection and opens t
  await mount();await press();expect(state.select).toHaveBeenCalledExactlyOnceWith("target-project");expect(state.push).toHaveBeenCalledExactlyOnceWith({pathname:"/session/[id]",params:{id:"session-7",machineId:"machine",projectId:"target-project"}});
  expect(state.select.mock.invocationCallOrder[0]).toBeLessThan(state.push.mock.invocationCallOrder[0]!);
 });
-it.each([["task","tasks"],["goal","goals"],["automation","automations"],["social","social"],["pull-request","tasks"],["session","inbox"]] as const)("preserves the %s management destination",async(kind,destination)=>{
+it.each([["task","tasks"],["goal","goals"],["automation","automations"],["pull-request","tasks"],["session","inbox"]] as const)("preserves the %s management destination",async(kind,destination)=>{
  await mount();state.rows=[{...row,kind,sessionId:undefined,projectId:undefined}];await render();await press();expect(state.select).not.toHaveBeenCalled();expect(state.push).toHaveBeenCalledExactlyOnceWith(`/manage/${destination}`);
+});
+it("hides social attention without opening an unavailable screen",async()=>{
+ await mount();state.rows=[{...row,kind:"social",sessionId:undefined}];await render();
+ expect(host.textContent).not.toContain(row.title);expect(state.push).not.toHaveBeenCalled();
 });
 it.each(["machine","project"])("rejects a retained row immediately after live %s changes, before React rerenders",async(kind)=>{
  await mount();const old=state.presses.get(row.title)!;if(kind==="machine")state.active="other";else state.project="other";await act(async()=>old());expect(state.select).not.toHaveBeenCalled();expect(state.push).not.toHaveBeenCalled();

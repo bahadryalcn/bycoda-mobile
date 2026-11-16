@@ -15,6 +15,7 @@ export type ReviewNotesProps = { task: HostTask };
 export type ReviewNoteProps = ReviewNotesProps & { note: TaskReviewNote };
 export type TaskCardProps = {
   task: HostTask;
+  projectName?: string;
   busy: boolean;
   editorOpen: boolean;
   onEdit: (task: HostTask) => void;

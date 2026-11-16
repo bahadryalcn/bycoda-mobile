@@ -7,11 +7,10 @@ import { useProjectList } from "../workspace/use-project-directory";
 import { useLayoutEffect, useMemo, useReducer, useRef, useState, type ComponentRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import History from "lucide-react-native/icons/rotate-ccw-clock";
 import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import Plus from "lucide-react-native/icons/plus";
 import {
-  ActionMenu,
+  Button,
   Body,
   SectionHeader,
   IconButton,
@@ -43,7 +42,7 @@ import { noteDirectory, type NoteDirectoryRow, type NoteGrouping, type NoteOrder
 const draftStore = createNoteDraftStore(AsyncStorage);
 
 export function NotesScreen() {
-  const { colors } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const [search, setSearch] = useState("");
@@ -121,26 +120,6 @@ export function NotesScreen() {
       context={!editorOpen ? <Scope allowAll projectId={projectId} onChange={setProjectId} /> : undefined}
       actions={!editorOpen ? (
         <>
-          <ActionMenu
-            label={copy("Diğer not işlemleri", "More note actions")}
-            busy={recovery.isPending}
-            trigger={<History size={22} strokeWidth={2} color={colors.accent} />}
-            actions={[
-              {
-                key: "recover",
-                label: copy("Kaydedilmemiş taslağı aç", "Recover unsaved draft"),
-                disabled: editorOpen || save.isPending || remove.isPending || recovery.isPending,
-                onPress: () => {
-                  storage.reset();
-                  void recovery.run(async () => {
-                    const draft = localDraft ? await localDraft.recover() : null;
-                    if (draft) dispatch({ type: "recover", initial: draft, expected: flow });
-                    return draft;
-                  });
-                },
-              },
-            ]}
-          />
           <IconButton
             label={copy("Yeni not", "New note")}
             disabled={!canCreate}
@@ -191,6 +170,20 @@ export function NotesScreen() {
             ordering !== "updated" && (ordering === "created" ? copy("Son oluşturulanlar", "Recently created") : copy("Başlığa göre sırala", "Sort by title"))]} />
         </>
       ) : null}
+      {!editorOpen ? <Button
+        tone="quiet"
+        label={copy("Kaydedilmemiş taslağı aç", "Recover unsaved draft")}
+        busy={recovery.isPending}
+        disabled={save.isPending || remove.isPending || recovery.isPending}
+        onPress={() => {
+          storage.reset();
+          void recovery.run(async () => {
+            const draft = localDraft ? await localDraft.recover() : null;
+            if (draft) dispatch({ type: "recover", initial: draft, expected: flow });
+            return draft;
+          });
+        }}
+      /> : null}
       <MutationState mutation={recovery} />
       {flow.kind === "closed" && recovery.isSuccess && recovery.data === null && (
         <Notice
@@ -217,7 +210,6 @@ export function NotesScreen() {
             query={query}
             empty={visible?.length === 0}
             emptyTitle={search.trim() && query.data?.notes.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz not yok", "No notes yet")}
-            emptyDetail={query.data?.notes.length ? undefined : copy("Notlar bilgisayarınıza kaydedilir ve oturumlarda bağlam olarak kullanılabilir.", "Notes are saved on your computer and can be used as context in sessions.")}
             emptyAction={
               search.trim() && query.data?.notes.length
                 ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
@@ -227,18 +219,15 @@ export function NotesScreen() {
             }
           />
           {!!query.data && query.data.total > query.data.notes.length && (
-            <Body muted>
-              {copy(
-                "En son 500 not gösteriliyor. Daha dar bir proje seçin.",
-                "Showing the latest 500 notes. Select a project to narrow the list.",
-              )}
+            <Body muted style={uiStyles.caption}>
+              {copy("Son {p0} not gösteriliyor", "Showing the latest {p0} notes", { p0: query.data.notes.length })}
             </Body>
           )}
         </>
       ) : null}
     </>}
       renderItem={({ item }) => item.kind === "heading" ? <SectionHeader count={item.count} title={item.group === null ? (item.grouping === "tag" ? copy("Etiketsiz", "Untagged") : copy("Projesiz notlar", "Notes without a project")) : item.grouping === "tag" ? `#${item.group}` : projects.data?.find((project) => project.cwd === item.group)?.name ?? item.group} />
-        : <NoteSummaryRow note={item.note} disabled={editorOpen || busy} onPress={() => { recovery.reset(); storage.reset(); save.reset(); remove.reset(); dispatch({ type: "open", id: item.note.id }); }} />}
+        : <NoteSummaryRow note={item.note} projectName={!projectId && grouping !== "project" ? projects.data?.find((project) => project.cwd === item.note.sourceCwd)?.name : undefined} disabled={editorOpen || busy} onPress={() => { recovery.reset(); storage.reset(); save.reset(); remove.reset(); dispatch({ type: "open", id: item.note.id }); }} />}
     />
   );
 }

@@ -180,6 +180,9 @@ vi.mock("./session-agents", () => ({
     children(null),
 }));
 vi.mock("./session-settings", () => ({ SessionSettings: () => null }));
+vi.mock("./session-list-sheet", () => ({ SessionListSheet: () => null }));
+// Read acknowledgement has its own tests; its connection scope needs the Expo runtime.
+vi.mock("./use-session-viewed", () => ({ useSessionViewed: () => {} }));
 vi.mock("./transcript-skeleton", () => ({
   TranscriptSkeleton: ({ label }: { label?: string }) =>
     createElement("div", { "data-query": "loading" }, label ?? "Loading"),

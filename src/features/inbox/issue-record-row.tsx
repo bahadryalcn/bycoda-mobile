@@ -23,7 +23,7 @@ export function IssueRecordRow({ label, detail, state, stateTone, extraBadges, c
         {state ? <Badge label={state} tone={stateTone} /> : null}
         {badges.map((badge) => <Badge key={badge} label={badge} />)}
       </Row>
-      {caption ? <Body muted numberOfLines={1} style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption }}>{caption}</Body> : null}
+      {caption ? <Body muted style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption }}>{caption}</Body> : null}
     </> : undefined}
     disabled={disabled} onPress={onPress} />;
 }

@@ -36,6 +36,7 @@ export function pushRegistration(
   };
   return {
     pushToken,
+    widgetUpdates: true,
     platform: process.env.EXPO_OS === "ios" ? "ios" : "android",
     title: [...`bycoda · ${machineName}`].slice(0, 120).join(""),
     texts,

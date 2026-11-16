@@ -3,7 +3,7 @@ import { memo } from "react";
 import { ChatActivity } from "@/ui/chat-activity";
 import { useCopy } from "@/ui/copy";
 import { activityState, activitySummary } from "./transcript-model";
-import { workSummaryLine } from "./work-summary";
+import { workOrbState, workSteps, workSummaryLine } from "./work-summary";
 import type { Block } from "./wire";
 
 export const ActivityGroup = memo(function ActivityGroup({
@@ -29,6 +29,10 @@ export const ActivityGroup = memo(function ActivityGroup({
       title={running && failed ? `${label} · ${copy("Çalışıyor", "Working")}` : label}
       reasoning={reasoning}
       detail={summary.title || title}
+      steps={workSteps(blocks, copy, running)}
+      // The work in flight is what the reader watches; settled turns stay folded.
+      defaultOpen={running}
+      busy={workOrbState(blocks)}
       status={
         failed
           ? "error"
@@ -40,7 +44,7 @@ export const ActivityGroup = memo(function ActivityGroup({
                 ? "complete"
                 : "record"
       }
-      onInspect={() => onInspect()}
+      onInspect={onInspect}
     />
   );
 });

@@ -1,9 +1,4 @@
 import { router, Tabs, usePathname } from "expo-router";
-import Folder from "lucide-react-native/icons/folder";
-import Inbox from "lucide-react-native/icons/inbox";
-import LayoutGrid from "lucide-react-native/icons/layout-grid";
-import Settings from "lucide-react-native/icons/settings";
-import MessagesSquare from "lucide-react-native/icons/messages-square";
 import { View, type ColorValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MachineHealthMonitor, MachinePill } from "../../src/ui/machine-bar";
@@ -11,30 +6,25 @@ import { setToastClearance } from "../../src/ui/provider";
 import { useCopy } from "../../src/ui/copy";
 import { useMachines } from "../../src/state/machines";
 import { ScreenChromeProvider, type HeaderIdentityProps } from "../../src/ui/layout";
-import { NavigationRow, Sheet } from "../../src/ui/primitives";
 import { NewSessionSheet } from "../../src/features/workspace/new-session-sheet";
+import { DockIcon, type DockIconName } from "../../src/ui/dock-icon";
 import { FloatingTabBar, type FloatingTabBarProps } from "../../src/ui/floating-tab-bar";
 import { useMobileTheme } from "../../src/ui/theme";
 import {
   TabActivityBridge,
   useRunningSessionBadge,
 } from "../../src/features/workspace/tab-activity-bridge";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ComponentProps,
-  type ComponentType,
-} from "react";
+import { useAdaptiveLayout } from "../../src/ui/adaptive-layout";
+import { TabletRail } from "../../src/features/workspace/tablet-rail";
+import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 
 type IconProps = { color: ColorValue; focused: boolean };
 function ComputerPageIdentity({ title, subtitle }: HeaderIdentityProps) {
   return <MachinePill heading={title} subtitle={subtitle} />;
 }
-const icon = (Glyph: ComponentType<{ color: string; size: number; strokeWidth: number }>) =>
-  function TabIcon({ color, focused }: IconProps) {
-    return <Glyph color={String(color)} size={22} strokeWidth={focused ? 2.1 : 1.8} />;
+const icon = (name: DockIconName) =>
+  function TabIcon({ color }: IconProps) {
+    return <DockIcon name={name} color={color} />;
   };
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
@@ -96,15 +86,17 @@ export default function TabsLayout() {
     (s) => s.hydrated && !s.storageError && s.machines.length === 0,
   );
   const pathname = usePathname();
+  const { split } = useAdaptiveLayout();
   const isWelcome = pathname === "/" && firstConnection;
   // The dock overlays the scene on the tab roots; content and toasts clear its measured height.
-  const dockVisible = dockRoots.includes(pathname);
+  // A wide tablet navigates with the rail instead, which takes real layout space.
+  const railVisible = split && !isWelcome;
+  const dockVisible = !railVisible && dockRoots.includes(pathname);
   const latestBar = useRef<TabBarProps | null>(null);
   const [, setBarState] = useState("");
   const barProps = latestBar.current;
   const [dockHeight, setDockHeight] = useState(0);
   const [newSessionOpen, setNewSessionOpen] = useState(false);
-  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const bottomInset = dockVisible ? dockHeight : 0;
   const renderTabBar = useCallback(
     (props: TabBarProps) => <DockProxy props={props} latest={latestBar} onState={setBarState} />,
@@ -123,8 +115,9 @@ export default function TabsLayout() {
     >
       {machineId ? <MachineHealthMonitor /> : null}
       {machineId ? <TabActivityBridge /> : null}
-      <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: colors.background }}>
-        <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, paddingTop: railVisible ? 0 : insets.top, flexDirection: railVisible ? "row" : "column", backgroundColor: colors.background }}>
+        {railVisible ? <TabletRail /> : null}
+        <View style={{ flex: 1, paddingTop: railVisible ? insets.top : 0 }}>
           <Tabs
             key={machineId}
             tabBar={renderTabBar}
@@ -135,46 +128,50 @@ export default function TabsLayout() {
           >
             <Tabs.Screen
               name="index"
-              options={{ title: copy("Projeler", "Projects"), tabBarIcon: icon(Folder) }}
+              options={{ title: copy("Projeler", "Projects"), tabBarIcon: icon("projects") }}
             />
             <Tabs.Screen
               name="chats"
               options={{
                 title: copy("Oturumlar", "Sessions"),
-                tabBarIcon: icon(MessagesSquare),
+                tabBarIcon: icon("sessions"),
               }}
             />
             <Tabs.Screen
               name="inbox"
-              options={{ title: copy("Gelen kutusu", "Inbox"), tabBarIcon: icon(Inbox) }}
+              options={{ title: copy("Gelen kutusu", "Inbox"), tabBarIcon: icon("inbox") }}
             />
             <Tabs.Screen
               name="manage"
-              options={{ title: copy("Araçlar", "Tools"), tabBarIcon: icon(LayoutGrid) }}
+              options={{ title: copy("Araçlar", "Tools"), tabBarIcon: icon("tools") }}
             />
             <Tabs.Screen
               name="settings"
-              options={{ title: copy("Ayarlar", "Settings"), tabBarIcon: icon(Settings) }}
+              options={{ title: copy("Ayarlar", "Settings"), tabBarIcon: icon("settings") }}
             />
           </Tabs>
         </View>
         {dockVisible && barProps ? (
-          <BadgedDock {...barProps} onInsetChange={setDockHeight} quickAction={machineId ? {
-            label: copy("Yeni oturum", "New session"),
-            optionsLabel: copy("Hızlı işlemler", "Quick actions"),
-            onPress: () => setNewSessionOpen(true),
-            onLongPress: () => setQuickActionsOpen(true),
-          } : undefined} />
+          <BadgedDock
+            {...barProps}
+            onInsetChange={setDockHeight}
+            quickAction={
+              machineId
+                ? {
+                    label: copy("Yeni oturum", "New session"),
+                    optionsLabel: copy("Sesli asistan", "Voice assistant"),
+                    onPress: () => setNewSessionOpen(true),
+                    // Holding the dock's new-session button is the fastest way into a voice call.
+                    onLongPress: () =>
+                      router.navigate({ pathname: "/assistant", params: { voice: "1" } }),
+                  }
+                : undefined
+            }
+          />
         ) : null}
         {machineId ? (
           <NewSessionSheet visible={newSessionOpen} onClose={() => setNewSessionOpen(false)} />
         ) : null}
-        <Sheet visible={quickActionsOpen} title={copy("Hızlı işlemler", "Quick actions")} size="compact" onClose={() => setQuickActionsOpen(false)}>
-          <NavigationRow label={copy("Yeni oturum", "New session")} intent="command" onPress={() => { setQuickActionsOpen(false); setNewSessionOpen(true); }} />
-          <NavigationRow label={copy("Asistan", "Assistant")} onPress={() => { setQuickActionsOpen(false); router.navigate("/assistant"); }} />
-          <NavigationRow label={copy("Aktif oturumlar", "Active sessions")} onPress={() => { setQuickActionsOpen(false); router.navigate("/sessions"); }} />
-          <NavigationRow label={copy("Bilgisayarlar", "Computers")} onPress={() => { setQuickActionsOpen(false); router.navigate("/machines"); }} />
-        </Sheet>
       </View>
     </ScreenChromeProvider>
   );

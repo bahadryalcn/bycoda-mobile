@@ -5,7 +5,7 @@ import { sameFormValue, useFormDraft } from "@/state/form-draft";
 import { ErrorNotice, Field, FormActions, Loading, Notice, Section } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useSheetGuard } from "@/ui/sheet-guard";
-import { space } from "@/ui/tokens";
+import { useMobileTheme } from "@/ui/theme";
 import { MAX_TEMPLATE_BODY, normalizeTemplates, type PromptTemplate } from "./template-model";
 import { useTemplates } from "./template-store";
 import { TemplateInsertAction } from "./template-insert-action";
@@ -14,6 +14,7 @@ import { TemplateActionsMenu } from "./template-actions-menu";
 export function TemplateEditor({ initial, onClose, onInsert }: {
   initial: PromptTemplate; onClose: () => void; onInsert: () => void;
 }) {
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const [baseline] = useState(useTemplates.getState().rows);
   const form = useFormDraft(initial);
@@ -46,7 +47,7 @@ export function TemplateEditor({ initial, onClose, onInsert }: {
   const triggerInvalid = !!trigger && (!/^[a-z0-9][a-z0-9-]{0,23}$/.test(trigger) ||
     baseline.some((row) => row.id !== initial.id && row.trigger === trigger));
   const required = copy("Bu alan gerekli.", "This field is required.");
-  return <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space.screen, gap: space.md }}>
+  return <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={uiStyles.content}>
     {existing ? <TemplateInsertAction disabled={form.dirty || blocked} onInsert={onInsert}
       secondaryAction={<TemplateActionsMenu templateId={initial.id} name={initial.name} disabled={blocked}
         onDelete={() => { void save(true); }} />} /> : null}

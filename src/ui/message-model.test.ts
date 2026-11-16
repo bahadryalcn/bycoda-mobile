@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { messageCacheKey, messageDigest, parseMessage, messageDisplaySource, messageNodeText, type MessageNode } from "./message-model";
-import { highlightCode } from "./message-highlight";
 const flatten = (nodes: MessageNode[]): MessageNode[] => nodes.flatMap((node) => [node, ...flatten(node.children)]);
 describe("native rich message model", () => {
   it("renders scoped file links with spaces and balanced parentheses without changing literal examples", () => {
@@ -57,10 +56,7 @@ describe("native rich message model", () => {
     expect(flatten(raw).some((node) => node.type.startsWith("html"))).toBe(false);
     expect(raw.map(messageNodeText).join("")).toContain("<script>");
   });
-  it("keeps highlighted source byte-for-byte intact and limits pathological input", () => {
-    const source = 'const x = "hello"; // note\nreturn x + 12;';
-    expect(highlightCode(source, "ts").map((token) => token.text).join("")).toBe(source);
-    expect(highlightCode(source, "unknown")).toEqual([{ text: source, kind: "plain" }]);
+  it("limits pathological input", () => {
     expect(parseMessage("x".repeat(300_000)).map(messageNodeText).join("").length).toBe(256_000);
   });
 });

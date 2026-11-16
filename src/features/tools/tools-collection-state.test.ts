@@ -19,11 +19,8 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/server", () => ({ default: () => null }));
+vi.mock("@/ui/duotone-icon", () => ({ Server: () => null, Smartphone: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/smartphone", () => ({
-  default: () => null,
-}));
 vi.mock("./dev-server-detail", () => ({ DevServerDetail: () => null }));
 vi.mock("./device-runtime", () => ({ DeviceRuntime: () => null }));
 vi.mock("./device-viewer", () => ({ DeviceViewer: () => null }));

@@ -8,6 +8,7 @@ vi.mock("react-native", () => ({ View: ({ children, onLayout, importantForAccess
   if (onLayout) layout.resize = onLayout;
   return h("div", { "data-message": importantForAccessibility === "no-hide-descendants" ? true : undefined }, children);
 } }));
+vi.mock("panelui-native/components/skeleton", () => ({ Skeleton: () => h("span") }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/use-delayed-visible", () => ({ useDelayedVisible: () => true }));

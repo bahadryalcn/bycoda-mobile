@@ -1,4 +1,5 @@
 import type { Block } from "./wire";
+import { activityState, activityTitle } from "./transcript-model";
 
 type Copy = (tr: string, en: string, values?: Record<string, string | number>) => string;
 type WorkKind = "research" | "edit" | "run" | "agent" | "other";
@@ -144,3 +145,108 @@ export function workSummaryLine(steps: readonly Block[], copy: Copy, live = fals
   return [...order.map(clause), ...(noteClause ? [noteClause] : [])].join(" · ");
 }
 
+
+/** One line inside an expanded work group: a verb, then a file chip, a command or prose. */
+export type WorkStep = {
+  id: string;
+  label: string;
+  file?: string;
+  code?: string;
+  text?: string;
+  state: "running" | "failed" | "done";
+};
+
+function firstLine(text: string | undefined) {
+  return text?.trim().split(/\r?\n/, 1)[0]?.trim() || undefined;
+}
+
+/**
+ * The record behind `workSummaryLine`, one line per step in the order the agent did them:
+ * "Read [a.ts]", "Ran `pnpm test`". Reasoning and notes keep their first line of prose.
+ */
+export function workSteps(steps: readonly Block[], copy: Copy, live = false): WorkStep[] {
+  return steps.flatMap((block): WorkStep[] => {
+    const status = activityState(block);
+    const now = live && status === "running";
+    const state = status === "failed" ? "failed" : now ? "running" : "done";
+    if (block.interjection)
+      return [{ id: block.id, label: copy("Not", "Note"), text: firstLine(block.text), state }];
+    if (block.role === "reasoning")
+      return [
+        {
+          id: block.id,
+          label: now ? copy("Düşünüyor", "Thinking") : copy("Düşündü", "Thought"),
+          text: firstLine(block.text),
+          state,
+        },
+      ];
+    if (!isTool(block)) {
+      const text = firstLine(block.text);
+      return text ? [{ id: block.id, label: text, state }] : [];
+    }
+    const title = activityTitle(block);
+    const kind = toolKind(block);
+    const path = target(block);
+    const file = path === block.id ? undefined : leaf(path);
+    switch (kind) {
+      case "edit":
+        return [
+          {
+            id: block.id,
+            label: now ? copy("Düzenleniyor", "Editing") : copy("Düzenlendi", "Edited"),
+            file,
+            text: file ? undefined : title,
+            state,
+          },
+        ];
+      case "research":
+        if (isSearch(block))
+          return [
+            {
+              id: block.id,
+              label: now ? copy("Aranıyor", "Searching") : copy("Arandı", "Searched"),
+              code: block.tool?.preview?.query || title.replace(/^(find|search|grep|glob)\s+/i, ""),
+              state,
+            },
+          ];
+        return [
+          {
+            id: block.id,
+            label: now ? copy("Açılıyor", "Opening") : copy("Açıldı", "Opened"),
+            file,
+            text: file ? undefined : title,
+            state,
+          },
+        ];
+      case "run":
+        return [
+          {
+            id: block.id,
+            label: now ? copy("Çalışıyor", "Running") : copy("Çalıştırıldı", "Ran"),
+            code: firstLine(title.replace(/^(bash|shell|powershell|pwsh)\s*[:>]?\s*/i, "")),
+            state,
+          },
+        ];
+      case "agent":
+        return [
+          {
+            id: block.id,
+            label: now ? copy("Alt agent çalışıyor", "Subagent running") : copy("Alt agent", "Subagent"),
+            text: title,
+            state,
+          },
+        ];
+      default:
+        return [{ id: block.id, label: title || copy("Araç", "Tool"), state }];
+    }
+  });
+}
+
+/** Which kind of busy the step in flight is, as PanelUI ThinkingOrb names it. */
+export function workOrbState(steps: readonly Block[]): "working" | "searching" | "shaping" | "solving" {
+  const current = [...steps].reverse().find((block) => activityState(block) === "running");
+  if (!current || current.role === "reasoning") return current ? "solving" : "working";
+  if (!isTool(current)) return "working";
+  const kind = toolKind(current);
+  return kind === "research" ? "searching" : kind === "edit" ? "shaping" : "working";
+}

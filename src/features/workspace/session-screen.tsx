@@ -1,3 +1,4 @@
+import { useSessionViewed } from "./use-session-viewed";
 import { TranscriptSkeleton } from "./transcript-skeleton";
 import { SessionProjectMismatch } from "@/remote/session-project";
 import { SessionProjectRecovery } from "./session-project-recovery";
@@ -24,6 +25,7 @@ import { SessionSettings } from "./session-settings";
 import { SessionToolbar } from "./session-toolbar";
 import { SessionTranscript } from "./session-transcript";
 import { SessionHeader } from "./session-header";
+import { SessionListSheet } from "./session-list-sheet";
 import { SessionParentBar } from "./session-parent-bar";
 import { sessionHeaderStatus } from "./session-header-model";
 import type { TranscriptView } from "./transcript-model";
@@ -35,7 +37,7 @@ import type { HostSession } from "./wire";
 import { sessionIntent } from "@/domain/session-authority";
 import { TranscriptScrollPosition } from "./transcript-scroll";
 
-export function SessionScreen({ id, projectId, targetTurnId }: SessionScreenProps) {
+export function SessionScreen({ id, projectId, targetTurnId, layout = "phone" }: SessionScreenProps) {
   const machine = useActiveMachine();
   const copy = useCopy();
   const environmentId = machine?.environmentId;
@@ -66,6 +68,7 @@ export function SessionScreen({ id, projectId, targetTurnId }: SessionScreenProp
     <SessionWorkspace
       key={`${machine.id}:${id}`}
       id={id}
+      layout={layout}
       targetTurnId={targetTurnId}
       projectId={projectId}
       machineId={machine.id}
@@ -80,6 +83,7 @@ function SessionWorkspace({
   machineId,
   machineName,
   targetTurnId,
+  layout = "phone",
 }: SessionWorkspaceProps) {
   const copy = useCopy();
   const insets = useSafeAreaInsets();
@@ -154,9 +158,11 @@ function SessionWorkspace({
   }
   if (snapshot.parked) retained.current = undefined;
   const session = visible ? snapshot.data : retained.current;
+  useSessionViewed(machineId, snapshot.data, visible, canRead);
   const projectId = privacy.projectId ?? session?.projectId;
   const command = useCommands(["session", id, projectId]);
   const [settings, setSettings] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [transcriptView, setTranscriptView] = useState<TranscriptView>("messages");
   const blocked = !visible || command.isPending || command.error instanceof UncertainCommand;
@@ -224,6 +230,8 @@ function SessionWorkspace({
     <ComposerTransferProvider scope={scope}>
       <Screen scroll={false}>
         <SessionHeader
+          showBack={layout !== "split"}
+          onShowSessions={layout === "tablet" ? () => setSessionsOpen(true) : undefined}
           title={
             visible
               ? session?.session.title || copy("Oturum", "Session")
@@ -265,6 +273,7 @@ function SessionWorkspace({
             ) : null
           }
         />
+        {layout === "tablet" && sessionsOpen ? <SessionListSheet visible onClose={() => setSessionsOpen(false)} machineId={machineId} selectedSessionId={id} /> : null}
         {visible ? <SessionParentBar session={session} machineId={machineId} /> : null}
         {!visible ? (
           <View style={{ flex: 1 }}>

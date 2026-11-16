@@ -7,7 +7,7 @@ import { FormActions, Sheet, StateView } from "@/ui/primitives";
 import { ScreenChromeProvider } from "@/ui/layout";
 import { PrivateContentBoundary, usePrivateContentAccess } from "@/ui/private-content";
 import { useCopy } from "@/ui/copy";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import { useProjectList } from "./use-project-directory";
 import { ProjectDirectoryFeedback } from "./project-directory-feedback";
 import { BrowserScreen } from "../tools/browser-screen";
@@ -46,7 +46,7 @@ export function SessionBrowser({ scope, projectId, onClose }: { scope: SessionSc
   const unavailable = <StateView illustration="locked" title={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />;
   return <Sheet visible title={copy("Tarayıcı", "Browser")} size="full" scroll={false} onClose={close}
     footer={!usable ? <FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} /> : undefined}>
-    {!usable ? <ScrollView contentContainerStyle={{ flexGrow: 1, gap: space.sm, paddingHorizontal: space.screen, paddingVertical: space.sm }}>
+    {!usable ? <ScrollView contentContainerStyle={{ flexGrow: 1, gap: space.sm, paddingHorizontal: space.screen, paddingVertical: space.sm, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}>
       {!available ? unavailable : !supported ? <StateView illustration="error" title={copy("Bu bilgisayar ortak tarayıcıyı desteklemiyor.", "This computer does not support the shared browser.")} />
         : retired.current ? <StateView illustration="error" title={copy("Proje klasörü değişti. Tarayıcıyı güncel projeden yeniden aç.", "The project folder changed. Reopen the browser from the current project.")} />
         : denied.current && !projects.error && !projects.isFetching ? unavailable

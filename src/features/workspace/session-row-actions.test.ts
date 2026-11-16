@@ -15,11 +15,22 @@ const f = vi.hoisted(() => ({
   read: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
+  command: vi.fn(),
   invalidate: vi.fn(async () => undefined),
   confirm: undefined as (() => void) | undefined,
   cancel: undefined as (() => void) | undefined,
+  changeTitle: undefined as ((value: string) => void) | undefined,
   actions: new Map<string, () => void>(),
 }));
+vi.mock("lucide-react-native/icons/clock", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/mail", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/mail-open", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
+vi.mock("./session-row-copy-menu", async () => {
+  const { SessionActionList } = await import("./session-action-list");
+  return { SessionRowCopyMenu: ({ actions }: { actions: Action[] }) => createElement(SessionActionList, { actions }) };
+});
 vi.mock("lucide-react-native/icons/archive", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/archive-restore", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/trash", () => ({ default: () => null }));
@@ -86,6 +97,8 @@ vi.mock("@/ui/tokens", () => ({ colors: { muted: "muted" } }));
 vi.mock("@/ui/provider-identity", () => ({ ProviderIcon: () => null }));
 // Status precedence is covered against the real helper in shared-relative-time.test.ts.
 vi.mock("./shared", () => ({
+  useCommands: () => ({ mutateAsync: f.command }),
+  UncertainCommand: class extends Error {},
   relativeTime: () => "Now",
   sessionStatus: (value: { status: string; needsInput?: boolean }) => ({
     label: value.needsInput ? "Needs reply" : value.status === "running" ? "Running" : "Ready",
@@ -120,6 +133,10 @@ vi.mock("@/ui/primitives", () => {
     Row: wrapper,
     Disclosure: wrapper,
     Button: button,
+    Field: ({ value, onChangeText }: { value: string; onChangeText(value: string): void }) => {
+      f.changeTitle = onChangeText;
+      return createElement("input", { value, readOnly: true });
+    },
     Badge: ({ label, tone }: { label: string; tone?: string }) =>
       createElement("span", { "data-tone": tone }, label),
     Sheet: ({
@@ -197,6 +214,7 @@ beforeEach(async () => {
   f.actions.clear();
   f.update.mockReset().mockResolvedValue({});
   f.remove.mockReset().mockResolvedValue({ deleted: true });
+  f.command.mockReset().mockResolvedValue({});
   f.read.mockReset().mockImplementation(async () => ({
     ...session,
     session: { id: session.id, title: session.title },
@@ -365,4 +383,42 @@ it("settles through the lifecycle mutation and refreshes the settled list", asyn
   expect(f.invalidate).toHaveBeenCalledWith({
     queryKey: ["machine", "machine", "sessions-lifecycle"],
   });
+});
+
+
+it("keeps rename draft after failure and retries only on explicit submission", async () => {
+  f.update.mockRejectedValueOnce(new Error("write failed")).mockResolvedValueOnce({});
+  await press("rename");
+  await act(() => f.changeTitle!("  Changed title  "));
+  await act(() => f.confirm!());
+  expect(node.querySelector("input")?.value).toBe("  Changed title  ");
+  expect(node.textContent).toContain("write failed");
+  expect(f.update).toHaveBeenCalledOnce();
+  await act(() => f.confirm!());
+  expect(f.update).toHaveBeenLastCalledWith({ projectId: "project", sessionId: "session", title: "Changed title", authorityGeneration: 2 });
+  expect(node.querySelector("aside")).toBeNull();
+});
+
+it("requires confirmation before sending one exact-run Stop command", async () => {
+  session = { ...session, status: "running", runId: "run" };
+  f.capabilities = ["sessions", "transport.ws.sessions.v2"];
+  await render();
+  await press("stop");
+  expect(node.textContent).toContain("Stop session");
+  expect(f.command).not.toHaveBeenCalled();
+  session = { ...session, revision: 7 };
+  await render();
+  const confirm = f.confirm!;
+  await act(async () => { confirm(); confirm(); });
+  expect(f.command).toHaveBeenCalledExactlyOnceWith({ type: "cancel", sessionId: "session", runId: "run", authorityGeneration: 2 });
+});
+
+it("writes unread and snooze with the displayed revision and authority", async () => {
+  session = { ...session, unread: false, snoozedUntil: null };
+  await render(); await press("unread");
+  expect(f.update).toHaveBeenLastCalledWith({ projectId: "project", sessionId: "session", unread: true, expectedRevision: 3, authorityGeneration: 2 });
+  f.actions.clear(); await render(); await press("snooze");
+  expect(f.update).toHaveBeenCalledTimes(1);
+  await press("hour");
+  expect(f.update).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: "project", sessionId: "session", expectedRevision: 3, authorityGeneration: 2, snoozedUntil: expect.any(Number) }));
 });

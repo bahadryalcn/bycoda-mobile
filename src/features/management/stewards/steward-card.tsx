@@ -6,7 +6,6 @@ import type { useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { RecordCard } from "@/ui/record-card";
-import { useMobileTheme } from "@/ui/theme";
 import Play from "lucide-react-native/icons/play";
 import Pause from "lucide-react-native/icons/pause";
 import Pencil from "lucide-react-native/icons/pencil";
@@ -16,7 +15,7 @@ import {
   ActionMenu,
   Body,
   ErrorNotice,
-  IconButton,
+  Button,
   MutationState,
 } from "@/ui/primitives";
 import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
@@ -45,7 +44,6 @@ export function StewardCard({
   onEdit,
 }: StewardCardProps) {
   const copy = useCopy();
-  const { colors } = useMobileTheme();
   const machine = useActiveMachine();
   const projects = useProjectList();
   const glyph = useMenuGlyph();
@@ -89,12 +87,10 @@ export function StewardCard({
           <Body muted>{agentPresentation(item.harness, item.model)}</Body>
         </>
       }
+      footer={<Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running}
+        disabled={busy || !!item.run || editorOpen} onPress={runNow} />}
       menu={
         <RecordTrailing>
-        <IconButton label={copy("Şimdi çalıştır", "Run now")} busy={running}
-          disabled={busy || !!item.run || editorOpen} onPress={runNow}>
-          <Play size={18} color={colors.accent} />
-        </IconButton>
         <ActionMenu
           label={copy("Proje sorumlusu işlemleri", "Steward actions")}
           busy={

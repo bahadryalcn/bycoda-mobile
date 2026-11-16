@@ -1,4 +1,5 @@
 import type { QueryLike } from "@/ui/query-presentation";
+import type { ReactNode } from "react";
 import type {
   RemoteInboxComment,
   RemoteInboxDetails,
@@ -36,6 +37,9 @@ export type ProviderInboxDetailProps = {
 export type ProviderInboxDescriptionProps = { details: RemoteInboxDetails };
 
 export type ProviderInboxConversationProps = {
+  header?: ReactNode;
+  refresh?: () => unknown;
+  visible?: boolean;
   provider: RemoteInboxProvider;
   thread: QueryLike & { data?: RemoteInboxThread };
   hideFeedback?: boolean;

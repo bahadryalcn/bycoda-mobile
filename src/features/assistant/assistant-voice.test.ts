@@ -11,7 +11,7 @@ function setup() {
     : method === "voice.local.transcribe" ? { text: "Review the current project" } : {});
   const dependencies = {
     capture: vi.fn(async (onBuffer: typeof buffer, onEnded?: typeof ended) => { buffer = onBuffer; ended = onEnded ?? (() => {}); return capture; }),
-    play: vi.fn(async () => {}), stopPlayback: vi.fn(), state: vi.fn(), transcript: vi.fn(), error: vi.fn(),
+    play: vi.fn(async () => {}), stopPlayback: vi.fn(), state: vi.fn(), transcript: vi.fn(), error: vi.fn(), level: vi.fn(),
   };
   const port = { current: () => current, request } as unknown as VoicePort;
   return { voice: new AssistantVoice(dependencies), dependencies, port, request, capture,
@@ -30,6 +30,18 @@ it("captures real PCM, resamples hardware audio and returns text only to its cap
   expect(atob(payload[1].audio)).toHaveLength(3200);
   expect(state.dependencies.transcript).toHaveBeenCalledWith(target, "Review the current project");
   expect(state.request.mock.calls.map(([method]) => method)).toEqual(["voice.local.start", "voice.local.transcribe", "voice.local.release"]);
+});
+
+it("publishes measured microphone energy only during recording and clears it on cancellation", async () => {
+  const state = setup();
+  await state.voice.record(state.port, target);
+  state.buffer(new Int16Array(3200).fill(4096));
+  expect(state.dependencies.level).toHaveBeenLastCalledWith(0.5);
+  state.voice.cancel();
+  expect(state.dependencies.level).toHaveBeenLastCalledWith(0);
+  state.dependencies.level.mockClear();
+  state.buffer(new Int16Array(3200).fill(32767));
+  expect(state.dependencies.level).not.toHaveBeenCalled();
 });
 
 it("never starts a Host lease or mic when native microphone permission fails", async () => {

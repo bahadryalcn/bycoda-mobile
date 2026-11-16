@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { View } from "react-native";
 import type { TextLayoutEvent } from "react-native";
-import { Body, Button } from "@/ui/primitives";
+import { Collapsible } from "panelui-native/components/collapsible";
+import { Body } from "@/ui/primitives";
 import { useChatTextStyles } from "@/ui/chat-styles";
 import { useChatAppearance } from "@/state/chat-appearance";
 import { useCopy } from "@/ui/copy";
@@ -22,7 +23,7 @@ export function UserMessageText({ text }: { text: string }) {
   const measure = (event: TextLayoutEvent) =>
     setOverflows(event.nativeEvent.lines.length > USER_MESSAGE_LINES);
   return (
-    <View style={{ gap: space.xxs }}>
+    <Collapsible variant="ghost" open={expanded} onOpenChange={setExpanded} style={{ gap: space.xxs }}>
       <View>
         <Body
           selectable={expanded || !overflows}
@@ -45,14 +46,16 @@ export function UserMessageText({ text }: { text: string }) {
         )}
       </View>
       {overflows ? (
-        <Button
-          label={expanded ? copy("Daha az göster", "Show less") : copy("Daha fazla göster", "Show more")}
-          density="compact"
-          tone="quiet"
-          style={{ alignSelf: "flex-start" }}
-          onPress={() => setExpanded((value) => !value)}
-        />
+        <Collapsible.Trigger
+          accessibilityLabel={expanded ? copy("Daha az göster", "Show less") : copy("Daha fazla göster", "Show more")}
+          className="min-h-12 justify-start gap-2 py-0"
+        >
+          <Collapsible.Title className="flex-none text-sm text-muted-foreground">
+            {expanded ? copy("Daha az göster", "Show less") : copy("Daha fazla göster", "Show more")}
+          </Collapsible.Title>
+          <Collapsible.Indicator />
+        </Collapsible.Trigger>
       ) : null}
-    </View>
+    </Collapsible>
   );
 }

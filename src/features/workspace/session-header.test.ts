@@ -11,6 +11,10 @@ vi.mock("@/ui/primitives", () => ({
   HeaderBackButton: ({ onPress }: { onPress: () => void }) => createElement("button", { onClick: onPress }, "Back"),
 }));
 vi.mock("@/ui/provider-identity", () => ({ ProviderIcon: () => null }));
+vi.mock("@/ui/chat-controls", () => ({
+  ChatAction: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
+}));
+vi.mock("lucide-react-native/icons/list", () => ({ default: () => null }));
 vi.mock("expo-router", () => ({ router: { canGoBack: () => nav.canGoBack, back: nav.back, replace: nav.replace } }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
@@ -62,6 +66,26 @@ it("goes back, or falls back to the session list when there is no history", asyn
     nav.canGoBack = false;
     await act(async () => button.click());
     expect(nav.replace).toHaveBeenCalledWith("/sessions");
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("drops the back button beside a split list and offers the session list on a tablet", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div"),
+    root = createRoot(container);
+  const showSessions = vi.fn();
+  try {
+    await act(async () => root.render(createElement(SessionHeader, { title: "Fix login", status: "Ready", tone: "muted", showBack: false })));
+    expect(container.textContent).not.toContain("Back");
+    expect(container.textContent).not.toContain("Sessions");
+    await act(async () => root.render(createElement(SessionHeader, { title: "Fix login", status: "Ready", tone: "muted", onShowSessions: showSessions })));
+    const buttons = [...container.querySelectorAll("button")].map((button) => button.textContent);
+    expect(buttons).toEqual(["Back", "Sessions"]);
+    await act(async () => container.querySelectorAll("button")[1]!.click());
+    expect(showSessions).toHaveBeenCalledOnce();
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

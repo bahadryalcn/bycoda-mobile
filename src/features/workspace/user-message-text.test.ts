@@ -20,9 +20,18 @@ vi.mock("@/ui/primitives", () => ({
     }, [children, onTextLayout]);
     return h(onTextLayout ? "i" : "p", { "data-lines": numberOfLines }, children);
   },
-  Button: ({ label, onPress }: { label: string; onPress: () => void }) =>
-    h("button", { onClick: onPress }, label),
 }));
+vi.mock("panelui-native/components/collapsible", async () => {
+  const { createContext, useContext } = await import("react");
+  const Toggle = createContext<() => void>(() => undefined);
+  const Collapsible = ({ children, open, onOpenChange }: PropsWithChildren<{ open: boolean; onOpenChange: (open: boolean) => void }>) =>
+    h(Toggle.Provider, { value: () => onOpenChange(!open) }, h("div", null, children));
+  Collapsible.Trigger = ({ children, accessibilityLabel }: PropsWithChildren<{ accessibilityLabel: string }>) =>
+    h("button", { onClick: useContext(Toggle) }, accessibilityLabel, children);
+  Collapsible.Title = () => null;
+  Collapsible.Indicator = () => null;
+  return { Collapsible };
+});
 vi.mock("@/ui/chat-styles", () => ({ useChatTextStyles: () => ({}) }));
 vi.mock("@/state/chat-appearance", () => ({ useChatAppearance: () => "standard" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));

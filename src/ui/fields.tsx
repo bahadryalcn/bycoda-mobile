@@ -147,11 +147,11 @@ function FieldGroup({ suffix, disabled, children }: { suffix?: string; disabled:
   );
 }
 
-export function Field({ label, hint, error, ...props }: InputProps) {
+export function Field({ label, hint, info, error, ...props }: InputProps) {
   const { uiStyles } = useMobileTheme();
   return (
     <View style={[uiStyles.field, (error || isUnitHint(hint)) && { paddingBottom: space.xs }]}>
-      <HintLabel label={label} help={hint} />
+      <HintLabel label={label} help={info ?? hint} always={!!info} />
       <Input label={label} error={error} hint={hint} {...props} />
       {error ? <FieldError message={error} /> : <UnitHint hint={hint} />}
     </View>

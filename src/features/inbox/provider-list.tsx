@@ -77,7 +77,7 @@ export function ProviderInboxRow({ item, onOpen }: ProviderInboxRowProps) {
             .join(" · ")}
           state={providerStateLabel(item.state, copy)}
           stateTone={providerStateTone(item.state)}
-          extraBadges={item.draft ? [copy("Taslak", "Draft")] : undefined}
+          extraBadges={[...(item.draft ? [copy("Taslak", "Draft")] : []), ...(item.provider === "jira" && item.priority ? [item.priority] : [])]}
           caption={[item.assignees?.[0]?.login, updated].filter(Boolean).join(" · ") || undefined}
           onPress={() => onOpen(item)}
         />;

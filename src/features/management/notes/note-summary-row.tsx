@@ -15,11 +15,14 @@ export function NoteSummaryRow({
   disabled,
   onPress,
   labelLines,
+  projectName,
 }: {
   note: Note;
   disabled: boolean;
   onPress: () => void;
   labelLines?: number;
+  /** Project the note belongs to; shown when listing across projects. */
+  projectName?: string;
 }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
@@ -29,7 +32,7 @@ export function NoteSummaryRow({
   const edited = relative(note.updatedAt);
   const tags = note.tags.slice(0, MAX_TAG_BADGES);
   const extraTags = note.tags.length - tags.length;
-  const accessibilityLabel = [title, edited, note.tags.map((tag) => `#${tag}`).join(" "), note.sourceCwd]
+  const accessibilityLabel = [title, edited, note.tags.map((tag) => `#${tag}`).join(" "), projectName ?? note.sourceCwd]
     .filter(Boolean)
     .join(". ");
   return (
@@ -51,9 +54,9 @@ export function NoteSummaryRow({
     >
       <Body selectable={false} numberOfLines={labelLines ?? 2} style={[uiStyles.title, { fontWeight: "600" }]}>{title}</Body>
       {excerpt ? <Body muted selectable={false} numberOfLines={2}>{excerpt}</Body> : null}
-      {edited || tags.length || note.sourceSessionId ? (
+      {edited || projectName || tags.length || note.sourceSessionId ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }}>
-          {edited ? <Body muted selectable={false} style={uiStyles.caption}>{edited}</Body> : null}
+          {edited || projectName ? <Body muted selectable={false} numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1 }]}>{[projectName, edited].filter(Boolean).join(" · ")}</Body> : null}
           {tags.map((tag) => <Badge key={tag} label={`#${tag}`} />)}
           {extraTags > 0 ? <Badge label={`+${extraTags}`} /> : null}
           {note.sourceSessionId ? <Badge label={copy("Oturumdan", "From session")} tone="info" /> : null}

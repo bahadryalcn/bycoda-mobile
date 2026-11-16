@@ -21,7 +21,7 @@ import {
 import { useCopy } from "@/ui/copy";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
-import type { HostGoal } from "@/domain/types";
+import type { HostGoal, HostTask } from "@/domain/types";
 import { useAgentProviders } from "./shared/agent";
 import { Scope } from "./shared/scope";
 import { useLocalProjectScope } from "./shared/local-project-scope";
@@ -68,6 +68,8 @@ export function GoalsScreen() {
   const { providers, query: providerQuery } = useAgentProviders(projectId);
   const query = useHostQuery<HostGoal[]>(["goals"], "goals.list", {}, { interval: goalsPollInterval });
   const projects = useProjectList();
+  const taskQuery = useHostQuery<HostTask[]>(["tasks", null], "tasks.list", {}, { interval: 15_000 });
+  const doneTaskIds = new Set(taskQuery.data?.filter((task) => task.status === "done").map((task) => task.id));
   const create = useHostMutation<HostGoal>("goals.create", ["goals"]);
   const approve = useHostMutation<HostGoal>("goals.approve", ["goals"]);
   const cancel = useHostMutation<HostGoal>("goals.cancel", ["goals"]);
@@ -185,7 +187,6 @@ export function GoalsScreen() {
         query={query}
         empty={visible?.length === 0}
         emptyTitle={(search.trim() || filter !== "all") && scoped?.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz epic yok", "No epics yet")}
-        emptyDetail={scoped?.length ? undefined : copy("Epic, bilgisayardaki ajanın projelerinizde görevlere böleceği bir sonuçtur.", "A epic is an outcome the agent on your computer breaks into tasks across your projects.")}
         emptyAction={
           scoped?.length && (search.trim() || filter !== "all")
             ? search.trim()
@@ -201,6 +202,8 @@ export function GoalsScreen() {
         <GoalCard
           goal={goal}
           projects={projects.data ?? []}
+          progress={taskQuery.data ? { done: goal.taskIds.filter((id) => doneTaskIds.has(id)).length, total: goal.taskIds.length } : undefined}
+          tasks={taskQuery.data?.filter((task) => goal.taskIds.includes(task.id))}
           busy={busy}
           editorOpen={flow.kind !== "closed"}
           approve={approve}

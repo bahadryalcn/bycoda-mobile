@@ -24,12 +24,12 @@ import { useInboxScrollMemory } from "./use-inbox-scroll-memory";
 export { type ProviderInboxBrowseProps } from "./provider-component-types";
 type Filters = { assigned: boolean; all: boolean };
 
-export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxBrowseProps) {
+export function ProviderInboxBrowse({ origin, embedded = false, openJira = false }: ProviderInboxBrowseProps & { openJira?: boolean }) {
   const inboxScope = useInboxLocalScope();
   useMobileTheme();
   const copy = useCopy(), machine = useActiveMachine();
   const locale = useLocale();
-  const [jiraBoards, setJiraBoards] = useState(false);
+  const [jiraBoards, setJiraBoards] = useState(openJira && !!origin.projectId);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [filterDraft, setFilterDraft] = useState<Filters | null>(null);
   const filterOwner = useRef(filterDraft); filterOwner.current = filterDraft;
@@ -134,20 +134,24 @@ export function ProviderInboxBrowse({ origin, embedded = false }: ProviderInboxB
         {available && notice ? <Notice tone="success" message={notice} /> : null}
         {view.kind === "browse" && !connectionsOpen ? accessFeedback : null}
         {available ? <>
+          {machine?.capabilities?.includes("inbox.jiraBoard.v1") ? <Button tone="quiet"
+            label={origin.projectId ? copy("Jira panoları", "Jira boards") : copy("Jira için proje seçin", "Select a project for Jira")}
+            disabled={!origin.projectId} onPress={() => { if (canBrowse() && origin.projectId) setJiraBoards(true); }} /> : null}
           <SearchToolbar search={<SearchField label={copy("Ara", "Search")} value={search}
             onChangeText={value => dispatch({type:"search",value})} autoCorrect={false} placeholder={copy("Issue veya PR ara", "Search issues or PRs")} />}
             actions={<>
               <FilterButton count={Number(assigned)+Number(all)} onPress={() => { if(canBrowse()) changeFilters({assigned,all}); }} />
               <ActionMenu label={copy("Diğer işlemler", "More actions")} busy={items.isFetching && items.data !== undefined} actions={[
                 {key:"connections",label:copy("Bağlı servisler","Connected services"),onPress:()=>{if(canBrowse())setConnectionsOpen(true);}},
-                machine?.capabilities?.includes("inbox.jiraBoard.v1") && {key:"jira",label:copy("Jira panoları","Jira boards"),disabled:!origin.projectId,
-                  onPress:()=>{if(canBrowse()&&origin.projectId)setJiraBoards(true);}},
                 {key:"refresh",label:copy("Yenile","Refresh"),disabled:items.isFetching,onPress:()=>{void retryItems();}},
               ]} />
             </>} />
           <AppliedFilters result={items.data ? copy("Kayıtlar: {p0}", "Items: {p0}", { p0: new Intl.NumberFormat(locale).format(items.data.items.length) }) : undefined}
             filters={[assigned&&copy("Yalnız bana atananlar","Assigned to me only"),all&&copy("Kapalı kayıtları da göster","Include closed items")]} />
-          <QueryState query={{...items,refetch:retryItems}} empty={empty} searching={!!(search.trim()||assigned||all)} emptyIllustration="inbox-empty" emptyTitle={copy("Bu filtrede kayıt yok","No items match these filters")}
+          {search.trim() || assigned || all ? <Button tone="quiet" label={copy("Filtreleri temizle", "Clear filters")}
+            onPress={() => dispatch({type:"clear-filters"})} /> : null}
+          <QueryState query={{...items,refetch:retryItems}} empty={empty} searching={!!(search.trim()||assigned||all)} emptyIllustration="inbox-empty" emptyTitle={search.trim() || assigned || all
+            ? copy("Bu filtrede kayıt yok","No items match these filters") : copy("Açık kayıt yok", "No open items")}
             emptyAction={search.trim()||assigned||all?{label:copy("Filtreleri temizle","Clear filters"),onPress:()=>dispatch({type:"clear-filters"})}:undefined} />
           {items.data ? <ProviderInboxFeedback result={items.data} retrying={items.isFetching} onRetry={retryItems} /> : null}
         </> : null}

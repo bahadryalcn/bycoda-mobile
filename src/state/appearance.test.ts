@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 import { APPEARANCE_STORAGE_KEY, createAppearanceStore } from "./appearance";
+import { DEFAULT_TYPOGRAPHY } from "../ui/typography-preferences";
 
 function storage() {
   return {
@@ -38,7 +39,7 @@ describe("appearance preference", () => {
     finish('{"themeMode":"dark"}');
     await Promise.all([loading, saving]);
     expect(store.getState().themeMode).toBe("light");
-    expect(adapter.setItem).toHaveBeenLastCalledWith(APPEARANCE_STORAGE_KEY, '{"version":1,"themeMode":"light","palette":"classic"}');
+    expect(adapter.setItem).toHaveBeenLastCalledWith(APPEARANCE_STORAGE_KEY, JSON.stringify({ version: 1, themeMode: "light", palette: "classic", typography: DEFAULT_TYPOGRAPHY }));
   });
 
   it("keeps rapid writes ordered and reports storage failure without losing selection", async () => {
@@ -50,7 +51,7 @@ describe("appearance preference", () => {
     expect(store.getState()).toMatchObject({ themeMode: "dark", storageError: expect.any(Error) });
     await Promise.all([store.getState().setThemeMode("light"), store.getState().setThemeMode("system")]);
     expect(store.getState()).toMatchObject({ themeMode: "system", storageError: null });
-    expect(adapter.setItem).toHaveBeenLastCalledWith(APPEARANCE_STORAGE_KEY, '{"version":1,"themeMode":"system","palette":"classic"}');
+    expect(adapter.setItem).toHaveBeenLastCalledWith(APPEARANCE_STORAGE_KEY, JSON.stringify({ version: 1, themeMode: "system", palette: "classic", typography: DEFAULT_TYPOGRAPHY }));
   });
 
   it("loads a stored value without a palette as classic and normalises unknown palettes", async () => {
@@ -70,7 +71,7 @@ describe("appearance preference", () => {
     await store.getState().setThemeMode("dark");
     await store.getState().setPalette("kiln");
     expect(store.getState().palette).toBe("kiln");
-    expect(adapter.setItem).toHaveBeenLastCalledWith(APPEARANCE_STORAGE_KEY, '{"version":1,"themeMode":"dark","palette":"kiln"}');
+    expect(adapter.setItem).toHaveBeenLastCalledWith(APPEARANCE_STORAGE_KEY, JSON.stringify({ version: 1, themeMode: "dark", palette: "kiln", typography: DEFAULT_TYPOGRAPHY }));
     await store.getState().setPalette("nope" as never);
     expect(store.getState().palette).toBe("classic");
   });

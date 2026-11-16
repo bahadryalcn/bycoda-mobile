@@ -9,6 +9,7 @@ vi.mock("@/ui/tokens", () => ({ radii: {}, space: { row: 12 } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => undefined }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({}) }));
 vi.mock("react-native", () => ({ View: () => null }));
+vi.mock("panelui-native/components/badge", () => ({ Badge: () => null }));
 vi.mock("../management/shared/format", () => ({
   shortDate: (value: number, now: number) =>
     new Date(value).getFullYear() === new Date(now).getFullYear() ? "short" : "short+year",

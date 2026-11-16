@@ -3,7 +3,7 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine } from "@/state/reviewed-machine";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { Body, Button, Disclosure, FormActions, MutationState, Notice, QueryState, StateView, StatusRow, Sheet, Stack, ToggleField } from "@/ui/primitives";
+import { Body, Button, FormActions, MutationState, Notice, QueryState, StateView, StatusRow, Sheet, Stack, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
 import type { DeviceHostStatus } from "./types";
@@ -56,23 +56,22 @@ export function DeviceRuntime({ projectId, deviceId, onClose }: { projectId: str
     </Stack> : null}
     <Button busy={preflight.isFetching || status.isFetching || (impactSupported && impact.isFetching)} tone="quiet" label={copy("Yenile", "Refresh")} disabled={!supported || busy || preflight.isFetching} onPress={() => { void preflight.refetch(); void status.refetch(); if (impactSupported) void impact.refetch(); }} />
     {impactSupported ? <><QueryState query={impact} loading="none" />{impact.data ? <>
-      <Body>{copy("Etkin önizleme işleri", "Active preview jobs")}: {impact.data.activeCount}</Body>
+      <StatusRow label={copy("Etkin önizleme işleri", "Active preview jobs")}><Body muted>{impact.data.activeCount}</Body></StatusRow>
       {impact.data.owned.map((job) => <Body key={job.id} mono>{job.deviceId} · {job.state}</Body>)}
-      {impact.data.otherActiveCount ? <Body>{copy("Diğer bağlamlardaki etkin işler", "Active jobs in other contexts")}: {impact.data.otherActiveCount}</Body> : null}
+      {impact.data.otherActiveCount ? <StatusRow label={copy("Diğer bağlamlardaki etkin işler", "Active jobs in other contexts")}><Body muted>{impact.data.otherActiveCount}</Body></StatusRow> : null}
     </> : null}</> : null}
     {uncertain ? <Notice tone="warning" message={copy("İşlemin sonucu bilinmiyor. Yeniden göndermeden bilgisayardaki durumu kontrol edin.", "The operation outcome is unknown. Check the computer state before sending again.")} /> : null}
     {review ? <>
-      {review === "setup" ? <><Notice message={copy("Bu işlem seçili bilgisayara cihaz araçlarını indirip kurar.", "This downloads and installs device tools on the selected computer.")} />
+      {review === "setup" ? <><Notice message={copy("Cihaz araçları bu bilgisayara indirilip kurulur.", "Device tools are downloaded and installed on this computer.")} />
         <ToggleField label={copy("Ajanların cihazları kontrol etmesine izin ver", "Allow agents to control devices")} value={agentAccess} onChange={setAgentAccess} disabled={busy || uncertain} /></> : null}
-      {review === "stop" ? <Notice tone="warning" message={copy("Bu bilgisayardaki ortak cihaz servisi durur; diğer cihaz kontrolleri de etkilenir.", "The shared device service on this computer will stop, affecting other device controls.")} /> : null}
+      {review === "stop" ? <Notice tone="warning" message={copy("Ortak cihaz servisi durur; diğer cihaz kontrolleri de etkilenir.", "The shared device service stops, affecting other device controls.")} /> : null}
       <FormActions feedback={<> <Body>{copy("Seçili bilgisayarda incelenen işlemi uygula?", "Apply the reviewed action on the selected computer?")}</Body> <MutationState mutation={setup} /><MutationState mutation={start} /><MutationState mutation={stop} /> </>}
         submitLabel={copy("Onayla", "Confirm")} cancelLabel={copy("Vazgeç", "Cancel")} busy={busy} disabled={!supported || uncertain} onSubmit={run} onCancel={() => setReview(undefined)} />
     </> : <>
-      <Button tone="quiet" label={copy("Cihaz araçlarını kur", "Set up device tools")} disabled={!supported || busy || uncertain || status.isFetching} onPress={() => { setAgentAccess(false); setReview("setup"); }} />
-      <Button tone="primary" label={copy("Cihaz servisini başlat", "Start device service")} disabled={!supported || busy || uncertain || !status.data?.installed || status.data.running} onPress={() => setReview("start")} />
-      <Button label={copy("Cihaz servisini durdur", "Stop device service")} tone="danger" disabled={!supported || busy || uncertain || !status.data?.running || !impactSupported || impact.isFetching || impact.data?.activeCount !== 0} onPress={() => setReview("stop")} />
+      <Button tone="quiet" fullWidth label={copy("Cihaz araçlarını kur", "Set up device tools")} disabled={!supported || busy || uncertain || status.isFetching} onPress={() => { setAgentAccess(false); setReview("setup"); }} />
+      <Button tone="primary" fullWidth label={copy("Cihaz servisini başlat", "Start device service")} disabled={!supported || busy || uncertain || !status.data?.installed || status.data.running} onPress={() => setReview("start")} />
+      <Button fullWidth label={copy("Cihaz servisini durdur", "Stop device service")} tone="danger" disabled={!supported || busy || uncertain || !status.data?.running || !impactSupported || impact.isFetching || impact.data?.activeCount !== 0} onPress={() => setReview("stop")} />
     </>}
     {!review ? <><MutationState mutation={setup} /><MutationState mutation={start} /><MutationState mutation={stop} /></> : null}
-    <Disclosure label={copy("Ayrıntılar", "Details")}><Body mono>{opening.machineId} / {opening.projectId}</Body></Disclosure>
   </Sheet>;
 }

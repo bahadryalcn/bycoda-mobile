@@ -7,6 +7,13 @@ import type { Block } from "./wire";
 import type { TranscriptBlockProps } from "./session-types";
 
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children), StyleSheet: { hairlineWidth: 1 } }));
+vi.mock("panelui-native/components/collapsible", () => ({
+  Collapsible: Object.assign(({ children }: PropsWithChildren) => h("div", null, children), {
+    Trigger: ({ children }: PropsWithChildren) => h("button", null, children),
+    Content: ({ children }: PropsWithChildren) => h("div", null, children),
+    Indicator: () => null,
+  }),
+}));
 vi.mock("lucide-react-native/icons/ellipsis", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/terminal", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/list-checks", () => ({ default: () => null }));

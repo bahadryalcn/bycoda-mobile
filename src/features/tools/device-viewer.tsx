@@ -1,6 +1,4 @@
 import { useRef, useState } from "react";
-import House from "lucide-react-native/icons/house";
-import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
@@ -11,7 +9,6 @@ import {
   Button,
   Disclosure,
   Field,
-  IconButton,
   MutationState,
   NavigationRow,
   Notice,
@@ -41,7 +38,7 @@ export function DeviceViewer({
   onDevice: (device: DeviceSummary) => void;
   onClose: () => void;
 }) {
-  const { colors, uiStyles } = useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machineId = useMachines((state) => state.activeId);
   const machine = useActiveMachine();
@@ -144,6 +141,7 @@ export function DeviceViewer({
         <Button
           label={copy("Cihazı başlat", "Boot device")}
           tone="primary"
+          fullWidth
           disabled={!current()}
           busy={boot.isPending}
           onPress={() => {
@@ -173,24 +171,25 @@ export function DeviceViewer({
               onPress={device.platform === "android" ? (point) => send({ type: "press", ...point }) : undefined}
             />
           ) : null}
-          <Row style={{ justifyContent: "flex-end" }}>
-            <IconButton
+          {/* Wrapping row of labelled buttons: each grows to share the line and drops below on large text or landscape. */}
+          <Row style={{ flexWrap: "wrap" }}>
+            <Button
               label={copy("Ana ekran", "Home")}
+              tone="quiet"
+              style={{ flexGrow: 1, flexBasis: 140 }}
               disabled={!enabled}
               onPress={() => send({ type: "home" })}
-            >
-              <House size={22} strokeWidth={2} color={colors.accent} />
-            </IconButton>
-            <IconButton
+            />
+            <Button
               label={copy("Ekranı yenile", "Refresh screen")}
+              tone="quiet"
+              style={{ flexGrow: 1, flexBasis: 140 }}
               busy={frame.isFetching}
               disabled={!current() || busy}
               onPress={() => {
                 if (current()) void frame.refetch();
               }}
-            >
-              <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
-            </IconButton>
+            />
           </Row>
           <NavigationGroup>
             <ToggleField
@@ -224,6 +223,7 @@ export function DeviceViewer({
             />
             <Button
               label={copy("Uygulamayı aç", "Open app")}
+              fullWidth
               disabled={!enabled || !app.trim()}
               onPress={() => send({ type: "openApp", app: app.trim() })}
             />
@@ -236,6 +236,7 @@ export function DeviceViewer({
             />
             <Button
               label={copy("Metni yaz", "Type text")}
+              fullWidth
               disabled={!enabled || !text}
               onPress={() => send({ type: "type", text })}
             />
@@ -246,6 +247,7 @@ export function DeviceViewer({
             />
             <Button
               label={copy("Etikete dokun", "Press element")}
+              fullWidth
               disabled={!enabled || !element.trim()}
               onPress={() => send({ type: "pressElement", label: element.trim() })}
             />

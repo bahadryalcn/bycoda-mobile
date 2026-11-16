@@ -1,17 +1,16 @@
-import { PagedRows } from "../management/shared/paged-rows";
 import { MessageText } from "@/ui/message-text";
 import { stamp } from "../management/shared/format";
-import { useState } from "react";
+import { useMemo } from "react";
 import type {
   ProviderInboxConversationProps,
   ProviderInboxCommentProps,
 } from "./provider-component-types";
 import { inboxReplyTarget } from "../../../../src/features/inbox/model/remoteInbox";
-import { Badge, Body, Button, QueryState, Row, Section, Stack } from "@/ui/primitives";
+import { Badge, Body, Button, QueryState, Row, SectionHeader, ScreenList, Stack } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
-import { useLocale } from "@/i18n";
 import { useMobileTheme } from "@/ui/theme";
+import { inboxConversationRows } from "./provider-conversation-model";
 
 export {
   type ProviderInboxConversationProps,
@@ -25,26 +24,35 @@ export function ProviderInboxConversation({
   disabled,
   onManageConnections,
   hideFeedback = false,
+  header,
+  refresh,
+  visible = true,
 }: ProviderInboxConversationProps) {
   const copy = useCopy();
+  const rows = useMemo(() => inboxConversationRows(visible ? thread.data?.comments ?? [] : []), [visible, thread.data]);
   return (
-    <Section title={copy("Konuşma", "Conversation")}>
-      {!hideFeedback ? <QueryState
+    <ScreenList data={rows} keyExtractor={row => row.key} query={thread} refresh={refresh}
+      header={<Stack>
+      {header}
+      {visible ? <SectionHeader flush title={copy("Konuşma", "Conversation")} count={rows.length} /> : null}
+      {visible && !hideFeedback ? <QueryState
         query={thread}
         onManageConnections={onManageConnections}
         empty={thread.data?.comments.length === 0}
         emptyTitle={copy("Henüz yorum yok.", "No comments yet.")}
       /> : null}
-      <PagedRows items={thread.data?.comments ?? []} renderItem={(comment) => (
+      {visible && thread.data?.truncated ? <Body muted>{copy("Konuşmanın bir bölümü gösteriliyor. Tüm yorumları serviste açın.",
+        "Part of this conversation is shown. Open the provider for all comments.")}</Body> : null}
+      </Stack>}
+      renderItem={({item: row}) => (
         <ProviderInboxComment
-          key={comment.id}
-          comment={comment}
+          comment={row.comment}
+          depth={row.depth}
           provider={provider}
           onReply={onReply}
           disabled={disabled}
         />
       )} />
-    </Section>
   );
 }
 
@@ -57,10 +65,8 @@ export function ProviderInboxComment({
 }: ProviderInboxCommentProps) {
   const { uiStyles } = useMobileTheme();
   const copy = useCopy();
-  const locale = useLocale();
-  const [expanded, setExpanded] = useState(false);
   return (
-    <Stack style={{ paddingVertical: space.sm, marginStart: depth > 0 && depth <= 2 ? space.md : 0 }}>
+    <Stack style={{ paddingVertical: space.md, marginStart: depth > 0 ? space.md : 0 }}>
       <Row>
         <Body style={[uiStyles.label, uiStyles.grow]}>{comment.author}</Body>
         {comment.resolved ? <Badge label={copy("Çözüldü", "Resolved")} tone="success" /> : null}
@@ -73,23 +79,6 @@ export function ProviderInboxComment({
           tone="quiet"
           disabled={disabled}
           onPress={() => onReply(comment)}
-        />
-      ) : null}
-      {depth < 3 || expanded ? (
-        (comment.replies ?? []).map((reply) => (
-          <ProviderInboxComment
-            key={reply.id}
-            comment={reply}
-            provider={provider}
-            onReply={onReply}
-            depth={depth + 1}
-            disabled={disabled}
-          />
-        ))
-      ) : comment.replies?.length ? (
-        <Button
-          label={copy("Yanıtları göster: {p0}", "Show replies: {p0}", { p0: new Intl.NumberFormat(locale).format(comment.replies.length) })}
-          onPress={() => setExpanded(true)}
         />
       ) : null}
     </Stack>

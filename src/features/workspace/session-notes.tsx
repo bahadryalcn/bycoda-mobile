@@ -4,7 +4,7 @@ import { useConnectionScope } from "@/state/connection-scope";
 import { useHostQuery } from "@/state/queries";
 import { useLocale } from "@/i18n";
 import { View } from "react-native";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import { matchesSearch, normalizeSearch } from "../management/shared/search";
 import { Body, FormActions, Notice, QueryState, ScreenList, SearchField, Sheet, Stack } from "@/ui/primitives";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
@@ -112,7 +112,7 @@ export function SessionNotes({ scope, projectId, onClose }: { scope: SessionScop
       <Body selectable>{opening.machineName}</Body>
       <QueryState query={detailPresentation} empty={readable && detail.data === null} emptyTitle={copy("Not bulunamadı.", "Note not found.")} />
       {note ? <PrivateContentAccessProvider value={{ allowed: readable, check: () => lease.active && current() }}><Body selectable>{note.title}</Body><MessageText text={note.body} /></PrivateContentAccessProvider> : !readable && !detail.error && detail.fetchStatus !== "paused" ? unavailable : null}
-    </Stack> : <View style={{ flex: 1, minHeight: 0 }}><Stack style={{ paddingHorizontal: space.screen }}><Body selectable>{opening.machineName}</Body><SearchField label={copy("Yüklenen kayıtlarda ara", "Search loaded records")} value={listReadable ? search : ""} editable={listReadable} maxLength={200} onChangeText={changeSearch} /></Stack><ScreenList<Note> {...position.listProps} data={rows} query={listPresentation} keyExtractor={item => item.id}
+    </Stack> : <View style={{ flex: 1, minHeight: 0, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}><Stack style={{ paddingHorizontal: space.screen }}><Body selectable>{opening.machineName}</Body><SearchField label={copy("Yüklenen kayıtlarda ara", "Search loaded records")} value={listReadable ? search : ""} editable={listReadable} maxLength={200} onChangeText={changeSearch} /></Stack><ScreenList<Note> {...position.listProps} data={rows} query={listPresentation} keyExtractor={item => item.id}
       header={<Stack>
         <QueryState query={listPresentation} empty={listReadable && list.isSuccess && !rows.length} emptyTitle={searchKey ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz not yok", "No notes yet")} emptyAction={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined} />
         {!listReadable ? !list.error && list.fetchStatus !== "paused" ? unavailable : null : list.data && list.data.total > list.data.notes.length ? <Notice message={copy("En son 500 not gösteriliyor.", "Showing the latest 500 notes.")} /> : null}

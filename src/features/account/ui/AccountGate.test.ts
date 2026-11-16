@@ -7,13 +7,19 @@ vi.mock("./AccountScreen", () => ({ AccountScreen: "AccountScreen" }));
 vi.mock("react-native-safe-area-context", () => ({ SafeAreaView: "SafeAreaView" }));
 import { AccountGate } from "./AccountGate";
 
-it.each(["unavailable", "loading", "signedOut"])("blocks workspace mounting while account is %s", status => {
-  state.status = status;
+it("keeps the top inset while the account is loading", () => {
+  state.status = "loading";
   const result = AccountGate({ children: h("workspace") });
-  expect(isValidElement(result) && result.type).toBe("SafeAreaView");
   if (!isValidElement<{ edges: string[]; children: { type: unknown } }>(result)) throw new Error("Missing account entry");
+  expect(result.type).toBe("SafeAreaView");
   expect(result.props.edges).toEqual(["top"]);
   expect(result.props.children.type).toBe("AccountScreen");
+});
+
+it.each(["unavailable", "signedOut"])("shows the full-bleed account entry instead of the workspace while %s", status => {
+  state.status = status;
+  const result = AccountGate({ children: h("workspace") });
+  expect(isValidElement(result) && result.type).toBe("AccountScreen");
 });
 
 it("mounts the requested workspace only after authentication", () => {

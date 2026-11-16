@@ -1,7 +1,8 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useRef } from "react";
 import { FlatList, View, useWindowDimensions } from "react-native";
-import { Body, Button, ErrorText, Loading, PressableCard, Row } from "@/ui/primitives";
+import { Item } from "panelui-native/components/item";
+import { Body, Button, ErrorText, Loading, Row } from "@/ui/primitives";
 import { radii, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import type { ComposerSuggestion } from "./use-composer-catalog";
@@ -44,12 +45,14 @@ export function ComposerSuggestions({ items, loading, error, trigger, selected, 
         const path = trigger === "@" ? item.name.replaceAll("\\", "/") : null;
         const label = path ? path.slice(path.lastIndexOf("/") + 1) : `${trigger}${item.name}`;
         const detail = path && path.includes("/") ? path : item.detail;
-        return <PressableCard label={[`${trigger}${item.name}`, item.detail].filter(Boolean).join(". ")}
-          selected={index === selected} onPress={() => onPick(item)}
-          style={{ padding: space.sm, gap: space.xs, borderWidth: 0, borderRadius: radii.control, backgroundColor: index === selected ? colors.selected : "transparent" }}>
-          <Body numberOfLines={2}>{label}</Body>
-          {detail ? <Body muted numberOfLines={2} ellipsizeMode="middle" style={uiStyles.caption}>{detail}</Body> : null}
-        </PressableCard>;
+        return <Item size="sm" variant={index === selected ? "muted" : "default"} className="min-h-12 gap-1"
+          accessibilityLabel={[`${trigger}${item.name}`, item.detail].filter(Boolean).join(". ")}
+          aria-selected={index === selected} onPress={() => onPick(item)}>
+          <Item.Content>
+            <Item.Title numberOfLines={2}>{label}</Item.Title>
+            {detail ? <Item.Description numberOfLines={2} ellipsizeMode="middle">{detail}</Item.Description> : null}
+          </Item.Content>
+        </Item>;
       }} />
   </View>;
 }
