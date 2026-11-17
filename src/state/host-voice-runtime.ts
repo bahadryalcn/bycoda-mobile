@@ -2,7 +2,7 @@ import type { CredentialBinding, HostSocketNative } from "../../modules/bycoda-h
 import { MobileHostWsConnection, HostWsError, type HostWsRequestOptions } from "../remote/ws-connection";
 
 export type AssistantVoiceScope = { sessionId: string; threadId: string; projectId?: string };
-const voiceMethods = new Set(["environment.describe", "voice.local.start", "voice.local.transcribe", "voice.local.release", "voice.local.speak", "voice.local.speechNext", "voice.local.keepAlive"]);
+const voiceMethods = new Set(["environment.describe", "voice.local.start", "voice.local.transcribe", "voice.cloud.transcribe", "voice.local.release", "voice.local.speak", "voice.local.speechNext", "voice.local.keepAlive"]);
 /** Background authority is one native microphone session and one reviewed Room thread. */
 export function allowsVoiceRequest(scope: AssistantVoiceScope, method: string, params: Record<string, unknown>) {
   if (voiceMethods.has(method)) return true;

@@ -9,6 +9,8 @@ import kotlinx.coroutines.CompletableDeferred
 object VoiceCompanionRuntime {
   @Volatile internal var service: VoiceCompanionService? = null
   @Volatile internal var pending: Pair<String, CompletableDeferred<Unit>>? = null
+  /** AudioDeviceInfo id chosen by the owner's microphone priority; null keeps the system default. */
+  @Volatile internal var preferredInputId: Int? = null
   private val listeners = CopyOnWriteArraySet<(Map<String, Any?>) -> Unit>()
   private val main = Handler(Looper.getMainLooper())
   fun add(listener: (Map<String, Any?>) -> Unit) { listeners.add(listener) }

@@ -7,7 +7,9 @@ import {
   Badge,
   Body,
   Button,
+  ConfirmationCard,
   Disclosure,
+  FieldError,
   IdentifierField,
   NavigationRow,
   QueryState,
@@ -21,6 +23,7 @@ import { IconTile } from "@/ui/icon-tile";
 import { useCopy } from "@/ui/copy";
 import { GroupedListRow, rowInset } from "./shared";
 import { useGitBranches } from "./git-queries";
+import { branchNameProblem } from "./git-branch-name";
 import type { GitBranchesPanelProps } from "./git-types";
 
 export function GitBranchesPanel({
@@ -38,6 +41,8 @@ export function GitBranchesPanel({
   const locale = useLocale();
   const branches = useGitBranches(scope);
   const [search, setSearch] = useState("");
+  const [confirmingCreate, setConfirmingCreate] = useState(false);
+  const problem = branchNameProblem(name);
   const searchRef = useRef<TextInputInstance>(null);
   const rows = useMemo(
     () =>
@@ -83,15 +88,56 @@ export function GitBranchesPanel({
           <Button
             tone="primary"
             label={copy("Yeni dal oluştur", "Create branch")}
-            disabled={!name.trim()}
+            disabled={!!problem}
             busy={creating}
-            onPress={onCreate}
+            onPress={() => setConfirmingCreate(true)}
           />
+          {problem && name.trim() ? (
+            <FieldError
+              message={
+                problem === "managed"
+                  ? copy(
+                      "bycoda/s/ ve bycoda/t/ yönetilen çalışma alanlarına ayrılmıştır.",
+                      "bycoda/s/ and bycoda/t/ are reserved for managed workspaces.",
+                    )
+                  : copy(
+                      "Geçerli bir dal adı gir (boşluk, .., ~, ^, :, ?, *, [ ve \\ olmadan).",
+                      "Enter a valid branch name (no spaces, .., ~, ^, :, ?, *, [ or \\).",
+                    )
+              }
+            />
+          ) : null}
           </Disclosure>
           {children}
         </>
       }
     >
+      {confirmingCreate && !problem ? (
+        <Sheet
+          visible
+          size="compact"
+          title={copy("Yeni dal oluştur", "Create branch")}
+          dismissible={!creating}
+          onClose={() => setConfirmingCreate(false)}
+        >
+          <ConfirmationCard
+            tone="default"
+            message={copy(
+              "\"{p0}\" dalı oluşturulup bu dala geçilsin mi?",
+              "Create \"{p0}\" and switch to it?",
+              { p0: name.trim() },
+            )}
+            cancelLabel={copy("Vazgeç", "Cancel")}
+            onCancel={() => setConfirmingCreate(false)}
+            confirmLabel={copy("Dalı oluştur", "Create branch")}
+            busy={creating}
+            onConfirm={() => {
+              setConfirmingCreate(false);
+              onCreate();
+            }}
+          />
+        </Sheet>
+      ) : null}
       <ScreenList
         grouped
         data={rows}

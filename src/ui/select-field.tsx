@@ -229,8 +229,8 @@ function SelectionField<T extends string>({
             flexDirection: "row",
             alignItems: "center",
             gap: gapIcon,
-            paddingHorizontal: 0,
-            paddingVertical: space.sm,
+            paddingHorizontal: grouped ? space.sm : 0,
+            paddingVertical: space.row,
             backgroundColor: "transparent",
             ...(!available ? { opacity: opacity.disabled } : {}),
           }}

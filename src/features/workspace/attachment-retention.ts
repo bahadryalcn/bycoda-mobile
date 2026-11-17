@@ -1,4 +1,5 @@
 import { decodeComposerDraft } from "./composer-draft";
+import { decodeOutbox, outboxKey } from "../outbox/model/outbox";
 import { decodeQueuedMessageEdit } from "./composer-queue-edit";
 import { decodeQuestionAttachments, questionAttachmentKey, questionDraftFiles, retainedQuestionFiles } from "./question-attachment-draft";
 
@@ -9,6 +10,8 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 /** Canonical durable custody scan. Every source must decode successfully before cleanup. */
 export async function retainedAttachmentFiles(storage: Storage, machineId: string, sessionId: string, environmentId: string): Promise<Reference[]> {
   const files: Reference[] = [];
+  const pendingSends = decodeOutbox(await storage.getItem(outboxKey(machineId, sessionId)));
+  files.push(...pendingSends.flatMap(row => row.draft.attachments));
   const composer = await storage.getItem(`bycoda.mobile.draft.v1:${machineId}:${sessionId}`);
   if (composer !== null) {
     if (!composer.startsWith("bycoda-composer-v2:\n")) throw new Error("Saved attachment draft ownership is unknown.");

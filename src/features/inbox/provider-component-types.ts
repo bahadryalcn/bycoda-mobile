@@ -37,6 +37,8 @@ export type ProviderInboxDetailProps = {
 export type ProviderInboxDescriptionProps = { details: RemoteInboxDetails };
 
 export type ProviderInboxConversationProps = {
+  showBotActivity?: boolean;
+  onReaction?: (comment: RemoteInboxComment, mode: "add" | "remove", content: string) => void;
   header?: ReactNode;
   refresh?: () => unknown;
   visible?: boolean;
@@ -49,6 +51,7 @@ export type ProviderInboxConversationProps = {
 };
 
 export type ProviderInboxCommentProps = {
+  onReaction?: (comment: RemoteInboxComment, mode: "add" | "remove", content: string) => void;
   comment: RemoteInboxComment;
   provider: RemoteInboxProvider;
   onReply: (comment: RemoteInboxComment) => void;

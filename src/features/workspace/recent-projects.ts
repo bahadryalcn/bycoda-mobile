@@ -35,3 +35,9 @@ export function recentProjects<T extends { id: string }>(
 ): T[] {
   return orderProjectsByRecency(projects, input).slice(0, Math.max(0, limit));
 }
+
+/** The most recently used visible project, or undefined when none was ever used. */
+export function lastUsedProject<T extends { id: string }>(projects: readonly T[], input: RecencyInput): T | undefined {
+  const [first] = orderProjectsByRecency(projects, input);
+  return first && projectRecency(first.id, input) > 0 ? first : undefined;
+}

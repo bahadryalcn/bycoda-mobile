@@ -1,3 +1,4 @@
+import { readableColumn } from "@/ui/readable-width";
 import { scrollKeyboardDismissMode } from "@/ui/scroll-keyboard";
 import { useMobileTheme } from "@/ui/theme";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +23,7 @@ import { providerName } from "./provider-choices";
 import { CommandError } from "./shared";
 import { useEarlierSession } from "./session-queries";
 import { SessionQuestions } from "./session-questions";
+import { SessionSecretRequests } from "../secrets/session-secret-requests";
 import { questionCardStates } from "./question-card-state";
 import {
   awaitingFirstOutput,
@@ -45,6 +47,8 @@ import {
 import { citedTurnEntry } from "./session-reference-target";
 import { TranscriptJumpPill } from "./transcript-jump-pill";
 import { TranscriptRow, type TranscriptRowProps } from "./transcript-row";
+import { applyToolVisibility } from "./transcript-visibility";
+import { useChatDisplay } from "@/ui/chat-display";
 
 /** Initial guess only; every row is measured, including activity touch targets and large text. */
 const ESTIMATED_ITEM_SIZE = 72;
@@ -165,14 +169,13 @@ export function SessionTranscript({
     [applyScroll],
   );
 
-  const visibleBlocks = useMemo(
-    () =>
-      presentation.current.update(blocks ?? [], session?.session.harness, {
-        view,
-        running: session?.status === "running",
-      }),
-    [blocks, session?.session.harness, session?.status, view],
-  );
+  const toolVisibility = useChatDisplay((state) => state.toolVisibility);
+  const visibleBlocks = useMemo(() => {
+    const running = session?.status === "running";
+    const entries = presentation.current.update(blocks ?? [], session?.session.harness, { view, running });
+    // The Details view is the explicit inspection surface and always lists every record.
+    return view === "messages" ? applyToolVisibility(entries, toolVisibility, running) : entries;
+  }, [blocks, session?.session.harness, session?.status, view, toolVisibility]);
   const live = session?.status === "running";
   const [targetState, setTargetState] = useState<"searching" | "ready" | "failed" | "dismissed">(
     targetTurnId ? "searching" : "dismissed",
@@ -492,7 +495,7 @@ export function SessionTranscript({
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={scrollKeyboardDismissMode()}
           contentInsetAdjustmentBehavior="never"
-          contentContainerStyle={{ paddingTop: space.sm, paddingBottom: bottomInset + space.sm }}
+          contentContainerStyle={{ ...readableColumn, paddingTop: space.sm, paddingBottom: bottomInset + space.sm }}
           scrollEventThrottle={16}
           onScroll={onScroll}
           onScrollBeginDrag={onScrollBeginDrag}
@@ -516,6 +519,8 @@ export function SessionTranscript({
           }
           ListFooterComponent={
             <View style={uiStyles.stack}>
+              <OutboxTranscript scope={scope} blocked={blocked} />
+              <SessionSecretRequests machineId={scope.machineId} sessionId={scope.sessionId} disabled={blocked} />
               {live && session?.session.retryMessage?.trim() ? (
                 <ProviderRetryNotice
                   provider={providerName(session.session.harness)}
@@ -605,3 +610,4 @@ export function SessionTranscript({
     </View>
   );
 }
+import { OutboxTranscript } from "../outbox/ui/outbox-transcript";

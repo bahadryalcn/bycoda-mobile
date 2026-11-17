@@ -5,6 +5,8 @@ import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -52,6 +54,21 @@ class BycodaVoiceCompanionModule : Module() {
     OnCreate { VoiceCompanionRuntime.add(listener) }
     OnDestroy { VoiceCompanionRuntime.remove(listener); VoiceCompanionRuntime.service?.end("revoked") }
     Function("getState") { VoiceCompanionRuntime.state() }
+    /** Input devices as {name, type, uid}; type is a coarse kind (builtin, wired, bluetooth, carplay or other). */
+    Function("listInputs") {
+      val manager = context().getSystemService(Context.AUDIO_SERVICE) as AudioManager
+      manager.getDevices(AudioManager.GET_DEVICES_INPUTS).map { device ->
+        val kind = when (device.type) {
+          AudioDeviceInfo.TYPE_BUILTIN_MIC -> "builtin"
+          AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_LINE_ANALOG, AudioDeviceInfo.TYPE_LINE_DIGITAL -> "wired"
+          AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET -> "bluetooth"
+          else -> "other"
+        }
+        mapOf("name" to device.productName.toString(), "type" to kind, "uid" to device.id.toString())
+      }
+    }
+    /** The next capture prefers this input; null (or a device that is gone) keeps the default microphone. */
+    Function("setPreferredInput") { uid: String? -> VoiceCompanionRuntime.preferredInputId = uid?.toIntOrNull() }
     AsyncFunction("beginSession") Coroutine { -> beginSession(true) }
     AsyncFunction("beginPlaybackSession") Coroutine { -> beginSession(false) }
     AsyncFunction("startCapture") Coroutine { id: String, captureId: String ->

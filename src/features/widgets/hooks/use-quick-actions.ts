@@ -5,7 +5,11 @@ import { router, useRootNavigationState, type Href } from "expo-router";
 
 import { useCopy } from "@/ui/copy";
 
-import { quickActionHref, quickActionItems } from "../model/quick-actions";
+import { useShareIntentReceiver } from "../../sharing/hooks/use-share-intent-receiver";
+
+import { quickActionHref, quickActionItems, recentQuickActionSessions } from "../model/quick-actions";
+import { useWidgetFeedStore } from "../model/widget-feed";
+import { useWidgetPreferences } from "../model/widget-preferences";
 
 let initialConsumed = false;
 
@@ -15,6 +19,8 @@ let initialConsumed = false;
  * being lost or stacking over it.
  */
 export function useQuickActions() {
+  // Same app-lifecycle mount point: the system share sheet is another inbound entry point.
+  useShareIntentReceiver();
   const copy = useCopy();
   const routerReady = !!useRootNavigationState()?.key;
   const queued = useRef<string | null>(null);
@@ -42,15 +48,20 @@ export function useQuickActions() {
     router.push(href as Href);
   }, [routerReady, arrivals]);
 
-  const itemsKey = JSON.stringify(quickActionItems(copy));
+  const feed = useWidgetFeedStore((state) => state.feed);
+  const showTitles = useWidgetPreferences((state) => state.showTitles);
+  const itemsKey = JSON.stringify(
+    quickActionItems(copy, recentQuickActionSessions(feed, showTitles)),
+  );
   useEffect(() => {
-    const icons: Record<string, string> =
-      Platform.OS === "ios"
-        ? { "new-session": "symbol:square.and.pencil", sessions: "symbol:list.bullet" }
-        : { "new-session": "shortcut_icon", sessions: "shortcut_icon" };
+    const ios = Platform.OS === "ios";
+    const icons: Record<string, string> = ios
+      ? { "new-session": "symbol:square.and.pencil", sessions: "symbol:list.bullet" }
+      : { "new-session": "shortcut_icon", sessions: "shortcut_icon" };
     const items = (JSON.parse(itemsKey) as ReturnType<typeof quickActionItems>).map((item) => ({
       ...item,
-      icon: icons[item.id],
+      // Recent sessions have no fixed id; fall back to a generic icon.
+      icon: icons[item.id] ?? (ios ? "symbol:bubble.left" : "shortcut_icon"),
     }));
     void QuickActions.setItems(items).catch(() => undefined);
   }, [itemsKey]);

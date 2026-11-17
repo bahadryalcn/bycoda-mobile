@@ -120,13 +120,15 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
           </Disclosure>
           {!canReview ? <Notice message={copy("İşlem etkisini güvenle doğrulamak için bilgisayardaki bycoda'yı güncelle.", "Update bycoda on the computer to safely review process impact.")} /> : null}
           {uncertain ? <Notice tone="warning" message={copy("İşlemin sonucu bilinmiyor. Tekrar göndermeden önce güncel durumu kontrol et.", "The operation outcome is unknown. Check the current state before sending another action.")} /> : null}
-          {!details.error ? <Button busy={reconciling} tone="quiet" label={copy("Durumu yenile", "Refresh state")} disabled={busy || details.isFetching || reconciling} onPress={() => { void reconcile(); }} /> : null}
           {!intent ? <Row>
             {current.state === "running" || current.state === "starting" ? <Button label={copy("Durdur", "Stop")} disabled={disabled} onPress={() => prepare("stop")} /> : null}
             {current.managed ? <Button label={copy("Yeniden başlat", "Restart")} disabled={disabled || !includeChildren} onPress={() => prepare("restart")} /> : null}
             {stop.data?.requiresForce || kill.data?.requiresForce || restart.isError ? <Button tone="danger" label={copy("Zorla durdur", "Force stop")} disabled={disabled} onPress={() => prepare("kill")} /> : null}
           </Row> : null}
-          {current.logsAvailable ? <Button tone="quiet" label={copy("Günlükler", "Logs")} selected={showLogs} onPress={() => setShowLogs((value) => !value)} /> : null}
+          {!details.error || current.logsAvailable ? <Row>
+            {!details.error ? <Button busy={reconciling} tone="quiet" label={copy("Durumu yenile", "Refresh state")} disabled={busy || details.isFetching || reconciling} onPress={() => { void reconcile(); }} /> : null}
+            {current.logsAvailable ? <Button tone="quiet" label={copy("Günlükler", "Logs")} selected={showLogs} onPress={() => setShowLogs((value) => !value)} /> : null}
+          </Row> : null}
           {intent ? <><Body mono>{`${reviewScopeLabel}\n${intent.processes.map((process) => `PID ${process.pid} · ${process.name} · ${process.startedAt}`).join("\n")}\n${copy("Etkilenen portlar", "Affected ports")}: ${intent.ports.join(", ") || "—"}`}</Body><Body>{intent.action === "kill" ? copy("Listelenen işlemleri zorla durdur? Kaydedilmemiş uygulama verileri kaybolabilir.", "Force stop the listed processes? Unsaved application data may be lost.") : intent.action === "stop" ? copy("Bu sunucuyu seçili bilgisayarda durdur?", "Stop this server on the selected computer?") : copy("Bu sunucuyu seçili bilgisayarda yeniden başlat?", "Restart this server on the selected computer?")}</Body><FormActions
             feedback={<> {localError ? <ErrorText error={localError} /> : null} <MutationState mutation={stop} /> <MutationState mutation={restart} /> <MutationState mutation={kill} /> </>}
             cancelLabel={copy("Vazgeç", "Cancel")}

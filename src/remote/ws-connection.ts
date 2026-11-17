@@ -351,7 +351,7 @@ export class MobileHostWsConnection {
     const timeout = Number.isFinite(requested)
       ? Math.max(
           WS_LIMITS.minResponseTimeoutMs,
-          Math.min(WS_LIMITS.maxResponseTimeoutMs, requested),
+          Math.min(method === "projects.clone" ? definition.responseTimeoutMs : WS_LIMITS.maxResponseTimeoutMs, requested),
         )
       : definition.responseTimeoutMs;
     return new Promise((resolve, reject) => {

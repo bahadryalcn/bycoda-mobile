@@ -248,9 +248,10 @@ export class HostTransport {
       ["sessions.sync", "machine.changes"].includes(method) && typeof params.waitMs === "number"
         ? Math.max(0, params.waitMs) + 5_000
         : 0;
-    const requestedTimeout = options.timeoutMs ?? Math.max(DEFAULT_TIMEOUT_MS, waiting);
+    const operationTimeout = method === "projects.clone" ? 630_000 : method === "sessions.sideQuestion" ? 150_000 : DEFAULT_TIMEOUT_MS;
+    const requestedTimeout = options.timeoutMs ?? Math.max(operationTimeout, waiting);
     const timeout = Number.isFinite(requestedTimeout)
-      ? Math.min(180_000, Math.max(1_000, requestedTimeout))
+      ? Math.min(method === "projects.clone" ? 630_000 : 180_000, Math.max(1_000, requestedTimeout))
       : DEFAULT_TIMEOUT_MS;
     const deadline = Date.now() + timeout;
     const attempts = read && options.retry !== false ? 2 : 1;
@@ -705,9 +706,10 @@ export class HostTransport {
   ): Promise<T> {
     const controller = new AbortController();
     this.wsActive.add(controller);
-    const requested = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const operationTimeout = method === "projects.clone" ? 630_000 : method === "sessions.sideQuestion" ? 150_000 : DEFAULT_TIMEOUT_MS;
+    const requested = options.timeoutMs ?? operationTimeout;
     const timeout = Number.isFinite(requested)
-      ? Math.max(1_000, Math.min(180_000, requested))
+      ? Math.max(1_000, Math.min(method === "projects.clone" ? 630_000 : 180_000, requested))
       : DEFAULT_TIMEOUT_MS;
     const deadline = Date.now() + timeout;
     let timedOut = false;

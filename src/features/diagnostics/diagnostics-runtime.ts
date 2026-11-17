@@ -18,6 +18,7 @@ import { readDeviceInfo } from "../account/model/device-info";
 import type { AccountState } from "../account/ui/account-context";
 import { installDiagnosticCapture, readCrashMarker, type DiagnosticCapture } from "./diagnostic-capture";
 import { CRASH_MARKER } from "./diagnostic-files";
+import { archiveCrashMarker, formatCrashLog, readCrashHistory } from "./crash-history";
 import { expoDiagnosticFiles } from "./expo-diagnostic-files";
 import { createDiagnosticPrefs, createDiagnosticPreferenceStore } from "./diagnostic-prefs";
 import { buildDiagnosticReport, sendDiagnosticReport, type DiagnosticSendResult } from "./diagnostic-report";
@@ -29,6 +30,8 @@ let capture: DiagnosticCapture | null = null;
 /** Installs log capture, the fatal-error marker and rejection tracking once, at app start. */
 export function startDiagnostics(): void {
   if (capture || process.env.EXPO_OS === "web") return;
+  // The marker is cleared once a report is handled; the history keeps the crash for "Copy last crash log".
+  archiveCrashMarker(files);
   const global = globalThis as {
     ErrorUtils?: Parameters<typeof installDiagnosticCapture>[0]["errorUtils"];
     HermesInternal?: {
@@ -98,6 +101,13 @@ function environmentText(account: AccountState, hostVersions: readonly string[])
 export const hasCrashMarker = () => readCrashMarker(files) !== null;
 export const clearCrashMarker = () => files.remove(CRASH_MARKER);
 export const crashMarker = () => readCrashMarker(files);
+/** Text of the newest recorded crash, or null when the app never crashed. */
+export function lastCrashLog(): string | null {
+  const [latest] = readCrashHistory(files);
+  const pending = readCrashMarker(files);
+  const newest = pending && (!latest || pending.occurredAt > latest.occurredAt) ? pending : latest;
+  return newest ? formatCrashLog(newest) : null;
+}
 
 export const useDiagnosticPrefs = createDiagnosticPreferenceStore(diagnosticPrefs);
 

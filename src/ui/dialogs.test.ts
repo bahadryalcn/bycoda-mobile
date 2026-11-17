@@ -28,6 +28,8 @@ vi.mock("react-native-keyboard-controller", () => ({
   useKeyboardState: (select: (state: { isVisible: boolean }) => unknown) => select({ isVisible: true }),
 }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 24, left: 0 }) }));
+vi.mock("./adaptive-layout", () => ({ useAdaptiveLayout: () => ({ tablet: false, split: false }) }));
+vi.mock("../../modules/bycoda-key-commands", () => ({ useKeyCommand: () => undefined }));
 vi.mock("lucide-react-native/icons/x", () => ({ default: () => null }));
 vi.mock("./theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: { grow: { flex: 1 }, header: {}, title: {}, content: {} } }) }));
 vi.mock("./tokens", () => ({ metrics: { touchTarget: 48, inputHeight: 48, contentWidth: 760 }, radii: {}, space: { sm: 6, xs: 4, md: 12, lg: 16, xl: 20, screen: 16 } }));

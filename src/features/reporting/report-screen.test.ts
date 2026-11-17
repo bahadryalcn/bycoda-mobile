@@ -18,7 +18,7 @@ vi.mock("react-native-reanimated",()=>({default:{View:({children}:PropsWithChild
 vi.mock("@/ui/consent-field",()=>({ConsentField:()=>null}));
 vi.mock("@/ui/primitives",()=>{
  const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);
- return {Body:Wrapper,NavigationGroup:Wrapper,Disclosure:()=>null,Section:Wrapper,Button:()=>null,ToggleField:()=>null,SelectField:()=>null,useSuccessToast:()=>()=>"",
+ return {Body:Wrapper,NavigationGroup:Wrapper,NavigationRow:()=>null,Disclosure:()=>null,Section:Wrapper,Button:()=>null,ToggleField:()=>null,SelectField:()=>null,useSuccessToast:()=>()=>"",
  Screen:({children,footer}:PropsWithChildren<{footer:import("react").ReactNode}>)=>createElement("main",null,createElement("article",null,children),createElement("footer",null,footer)),
  Field:({label,error}:{label:string;error?:string})=>createElement("section",{"data-field":label},error),
  ErrorText:({error,message}:{error:unknown;message:string})=>error?createElement("p",null,message):null,

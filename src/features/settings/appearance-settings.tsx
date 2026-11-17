@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { useState } from "react";
 import { Notice, SegmentedControl, Section, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -20,6 +21,8 @@ export function AppearanceSettings() {
   const setThemeMode = useAppearance((state) => state.setThemeMode);
   const palette = useAppearance((state) => state.palette);
   const setPalette = useAppearance((state) => state.setPalette);
+  const navigationStyle = useAppearance((state) => state.navigationStyle);
+  const setNavigationStyle = useAppearance((state) => state.setNavigationStyle);
   const hydrated = useAppearance((state) => state.hydrated);
   const storageError = useAppearance((state) => state.storageError);
   const retryStorage = useAppearance((state) => state.retryStorage);
@@ -61,6 +64,21 @@ export function AppearanceSettings() {
           onChange={(value) => { void setPalette(value); }}
         />
       </Section>
+      {Platform.OS === "android" ? (
+        <Section title={copy("Gezinme stili", "Navigation style")}>
+          <SegmentedControl
+            label={copy("Gezinme stili", "Navigation style")}
+            hideLabel
+            value={navigationStyle}
+            disabled={!hydrated}
+            options={[
+              { value: "floating", label: copy("Yüzen", "Floating") },
+              { value: "bar", label: copy("Çubuk", "Bar") },
+            ]}
+            onChange={(value) => { void setNavigationStyle(value); }}
+          />
+        </Section>
+      ) : null}
       <TypographySettings />
       <ChatAppearanceSettings />
       <AppearancePreview />

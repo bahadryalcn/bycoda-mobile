@@ -2,6 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { requestDevicePermission } from "./permission-flow";
 
 describe("device permission recovery", () => {
+  it("requests again after a retryable denial", async () => {
+    const request = vi.fn().mockResolvedValue({ granted: true, canAskAgain: true, status: "granted" });
+    const settings = vi.fn();
+    await requestDevicePermission(async () => ({ granted: false, canAskAgain: true, status: "denied" }), request, settings);
+    expect(request).toHaveBeenCalledOnce();
+    expect(settings).not.toHaveBeenCalled();
+  });
   it("requests OS permission instead of opening Settings on a fresh install", async () => {
     const read = vi.fn().mockResolvedValue({ granted: false, canAskAgain: true, status: "undetermined" });
     const request = vi.fn().mockResolvedValue({ granted: true, canAskAgain: true, status: "granted" });

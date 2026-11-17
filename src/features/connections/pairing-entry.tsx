@@ -4,18 +4,18 @@ import Animated from "react-native-reanimated";
 import QrCode from "lucide-react-native/icons/qr-code";
 import ClipboardPaste from "lucide-react-native/icons/clipboard-paste";
 import PencilLine from "lucide-react-native/icons/pencil-line";
-import { Body, Button, Heading, NavigationGroup, NavigationRow, Row, StateView } from "@/ui/primitives";
+import { Button, NavigationGroup, NavigationRow, Row } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { HintLabel } from "@/ui/info-hint";
 import { ManualConnectionForm } from "./manual-connection-form";
 import { PairingPreview } from "./pairing-preview";
 import { PairingPaste } from "./pairing-paste";
 import type { PairingEntryProps } from "./connection-types";
 
 const centered = { alignItems: "stretch" as const, gap: space.sm };
-const title = { textAlign: "left" as const };
 
 function tile(Glyph: typeof QrCode, color: string) {
   return (
@@ -26,17 +26,16 @@ function tile(Glyph: typeof QrCode, color: string) {
 }
 
 export function PairingEntry({ controller, disabled }: PairingEntryProps) {
-  const { colors } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const { entry, busy } = controller;
   if (entry.kind === "choices")
     return (
       <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
-        <StateView
-          compact
-          illustration="connect-computer"
-          title={copy("Bilgisayarına bağlan", "Connect your computer")}
-          description={copy(
+        <HintLabel
+          label={copy("Bilgisayarına bağlan", "Connect your computer")}
+          style={uiStyles.heading}
+          always help={copy(
             "Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
             "In bycoda on your computer, choose “Connect your phone” and scan the QR code.",
           )}
@@ -48,13 +47,13 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
           disabled={disabled || busy}
           onPress={() => controller.begin("scan")}
         ><QrCode size={20} color={colors.primaryText} /></Button>
+        <Button
+          label={copy("Kodu yapıştır", "Paste pairing code")}
+          tone="secondary" fullWidth
+          disabled={disabled || busy}
+          onPress={() => controller.begin("paste")}
+        />
         <NavigationGroup>
-          <NavigationRow
-            label={copy("Kodu yapıştır", "Paste pairing code")}
-            icon={tile(ClipboardPaste, colors.muted)}
-            disabled={disabled || busy}
-            onPress={() => controller.begin("paste")}
-          />
           <NavigationRow
             label={copy("Manuel bağlan", "Connect manually")}
             detail={copy("Farklı ağlardan özel bağlantı", "Private access across networks")}
@@ -78,15 +77,11 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <View style={centered}>
-        <Heading style={title}>
-          {controller.connectionMode === "lan" ? copy("Yerel ağ", "Local network") : "Tailscale"}
-        </Heading>
-        <Body muted style={title}>
-          {copy(
+        <HintLabel label={controller.connectionMode === "lan" ? copy("Yerel ağ", "Local network") : "Tailscale"} style={uiStyles.heading}
+          always help={copy(
             "Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
             "In bycoda on your computer, choose “Connect your phone” and scan the QR code.",
-          )}
-        </Body>
+          )} />
       </View>
       <NavigationGroup>
         <NavigationRow

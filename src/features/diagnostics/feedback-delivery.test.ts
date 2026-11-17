@@ -10,12 +10,13 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("./diagnostic-copy", () => ({ useDiagnosticResultText: () => (value: string) => value }));
 vi.mock("./diagnostics-runtime", () => ({
   useDiagnosticPrefs: (select: (state: unknown) => unknown) => select({ consent: { mode: "ask" }, hydrate: async () => {}, setMode: async () => {} }),
-  clearCrashMarker: vi.fn(), feedbackClient: () => ({ signedIn: false, client: null }), feedbackContext: vi.fn(), sendDiagnostics: fixture.logs,
+  clearCrashMarker: vi.fn(), lastCrashLog: () => null, feedbackClient: () => ({ signedIn: false, client: null }), feedbackContext: vi.fn(), sendDiagnostics: fixture.logs,
 }));
+vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn(async () => true) }));
 vi.mock("./feedback-model", async () => ({ ...await vi.importActual<typeof import("./feedback-model")>("./feedback-model"), submitFeedback: fixture.send }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Group, Row: Group, Stack: Group, Section: Group, SegmentedControl: () => null, ChoiceChip: () => null, ToggleField: () => null, SelectRow: () => null,
+  return { Body: Group, StateView: ({ title, description }: { title: string; description?: string }) => createElement("p", null, title, description), Row: Group, Stack: Group, Section: Group, SegmentedControl: () => null, ChoiceChip: () => null, ToggleField: () => null, SegmentedRow: () => null, NavigationGroup: Group,
     Screen: ({ children, footer }: PropsWithChildren<{ footer?: React.ReactNode }>) => createElement("main", null, children, footer),
     Field: ({ label, value, onChangeText }: { label: string; value: string; onChangeText: (value: string) => void }) => createElement("input", { "aria-label": label, value, onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChangeText(event.target.value) }),
     FormActions: ({ onSubmit }: { onSubmit: () => void }) => createElement("button", { onClick: onSubmit }, "Send"),

@@ -24,10 +24,13 @@ import { matchesSearch } from "@/ui/search-matching";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
+import { matchLaunchProject, useLaunchRequest } from "../sharing/model/launch-request";
+import { appendToDraft } from "./draft-append";
 import { ProjectDirectorySlot } from "./project-directory-feedback";
 import { projectPathLabel } from "./project-directory";
 import { latestProjectActivity } from "./project-summaries";
-import { orderProjectsByRecency, projectRecency, RECENT_PROJECT_LIMIT } from "./recent-projects";
+import { useAppPreferences } from "../navigation-prefs/app-preferences";
+import { lastUsedProject, orderProjectsByRecency, projectRecency, RECENT_PROJECT_LIMIT } from "./recent-projects";
 import { CommandError, relativeTime } from "./shared";
 import { providerName } from "./provider-choices";
 import { useCreateSession } from "./use-create-session";
@@ -66,11 +69,27 @@ function NewSessionOpening({ onClose }: { onClose: () => void }) {
     : showAll
       ? ordered
       : ordered.slice(0, RECENT_PROJECT_LIMIT);
+  // With "new sessions use the last project", the newest project is ready until another is picked.
+  const { preferences: appPrefs } = useAppPreferences();
+  const last =
+    appPrefs.newSessionUsesLastProject && readable && machine
+      ? lastUsedProject(ordered, times)
+      : undefined;
+  // A prompt link or share may name the project; it is only preselected, never started.
+  const launch = useLaunchRequest((state) => state.request);
+  const linked = readable && machine ? matchLaunchProject(ordered, launch?.project) : undefined;
+  const current: Picked | undefined =
+    picked ??
+    (linked && machine
+      ? { project: linked, machineId: machine.id, attempt: 0 }
+      : last && machine
+        ? { project: last, machineId: machine.id, attempt: 0 }
+        : undefined);
   const selected =
-    picked &&
-    picked.machineId === machine?.id &&
-    ordered.some((project) => project.id === picked.project.id)
-      ? picked
+    current &&
+    current.machineId === machine?.id &&
+    ordered.some((project) => project.id === current.project.id)
+      ? current
       : undefined;
 
   const created = useLatestCallback((project: HostProject, sessionId: string) => {
@@ -78,17 +97,30 @@ function NewSessionOpening({ onClose }: { onClose: () => void }) {
     if (!machineId || useMachines.getState().activeId !== machineId) return;
     useMachines.getState().selectProject(project.id);
     void rememberOpenedProject(machineId, project.id).catch(() => {});
+    // Shared or linked content goes into the new session's composer draft (appended, so an
+    // existing draft is kept) and is never sent.
+    const shared = useLaunchRequest.getState().take();
+    if (shared) {
+      const target = { machineId, sessionId };
+      if (shared.text) appendToDraft(target, { text: shared.text });
+      for (const file of shared.files) appendToDraft(target, { file });
+    }
     router.navigate({
       pathname: "/session/[id]",
       params: { id: sessionId, projectId: project.id, machineId },
     });
     onClose();
   });
+  // Leaving without starting a session drops the queued content; starting one consumes it.
+  const leave = () => {
+    useLaunchRequest.getState().clear();
+    onClose();
+  };
   const close = () => {
-    if (!locked) onClose();
+    if (!locked) leave();
   };
   const addProject = () => {
-    onClose();
+    leave();
     router.push("/");
   };
   const feedback = {
@@ -135,13 +167,24 @@ function NewSessionOpening({ onClose }: { onClose: () => void }) {
             label={copy("Asistan", "Assistant")}
             disabled={locked}
             onPress={() => {
-              onClose();
+              leave();
               router.push("/assistant");
             }}
           >
             <Mic size={20} color={colors.accent} />
           </IconButton>
         </View>
+        {launch ? (
+          <Body muted style={uiStyles.caption}>
+            {launch.files.length
+              ? copy(
+                  "Paylaşılan içerik taslağa eklenecek ({p0} dosya).",
+                  "Shared content will be added to the draft ({p0} files).",
+                  { p0: launch.files.length },
+                )
+              : copy("Metin taslağa eklenecek.", "The text will be added to the draft.")}
+          </Body>
+        ) : null}
         {selected ? (
           <QuickStart
             key={`${selected.project.id}:${selected.attempt}`}
@@ -187,7 +230,7 @@ function NewSessionOpening({ onClose }: { onClose: () => void }) {
               }
               renderItem={({ item }) => {
                 const last = projectRecency(item.id, times);
-                const busy = locked && picked?.project.id === item.id;
+                const busy = locked && selected?.project.id === item.id;
                 return (
                   <NavigationRow
                     variant="plain"

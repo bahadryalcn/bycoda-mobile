@@ -8,6 +8,7 @@ vi.mock("expo-clipboard",()=>({hasStringAsync:async()=>!!fixture.clipboard,getSt
 vi.mock("./pairing-code",()=>({parseMobilePairingCode:(value:string)=>{if(!value.startsWith("valid-"))throw new Error("invalid");return {};}}));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
+vi.mock("@/ui/info-hint", () => ({ HintLabel: ({label}: {label: string}) => createElement("h2", null, label) }));
 vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));
 vi.mock("@/ui/tokens",()=>({space:{}}));vi.mock("@/ui/styles",()=>({uiStyles:{}}));
 vi.mock("react-native",()=>({Text:({children}:PropsWithChildren)=>createElement("p",null,children),View:({children}:PropsWithChildren)=>createElement("div",null,children)}));

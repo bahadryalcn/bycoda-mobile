@@ -2,7 +2,7 @@ import { useElapsedNow } from "./use-elapsed-now";
 import { useHostReadActive } from "@/state/queries";
 import { sessionIsSnoozed } from "./session-attention-model";
 import { router, Stack } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useHostQuery } from "@/state/queries";
 import { NewSessionSheet } from "./new-session-sheet";
 import { useLatestCallback } from "./use-latest-callback";
@@ -51,6 +51,7 @@ type FilterDraft = { status: StatusFilter; archived: boolean; snoozed: boolean; 
 export function ActiveSessionsScreen({
   overview = false,
   initialCreate = false,
+  createRequest,
   urgency = false,
   selectedSessionId,
   onOpenSession,
@@ -58,6 +59,8 @@ export function ActiveSessionsScreen({
   overview?: boolean;
   /** Opens the new-session sheet once, e.g. from the "New session" quick action. */
   initialCreate?: boolean;
+  /** Changes with every warm prompt link or share, so the sheet opens again on a mounted screen. */
+  createRequest?: string;
   /** Tablet list column: sessions needing attention first, then running, then the rest. */
   urgency?: boolean;
   /** Highlights the session shown beside the list. */
@@ -88,6 +91,10 @@ export function ActiveSessionsScreen({
   const [listFilters, setListFilters] = useState<SessionListFilters>(defaultSessionListFilters);
   const [draft, setDraft] = useState<FilterDraft | null>(null);
   const [creating, setCreating] = useState(overview && initialCreate);
+  // Reaction to an external request (warm link, share) arriving after this screen mounted.
+  useEffect(() => {
+    if (overview && createRequest) setCreating(true);
+  }, [overview, createRequest]);
   const [collapsed, setCollapsed] = useState<Partial<Record<SessionShelfId, boolean>>>({});
   const [folderCollapse, setFolderCollapse] = useState<FolderCollapse>({});
   const projectOptions = (activity.projects.data ?? []).map((project) => ({
@@ -265,15 +272,9 @@ export function ActiveSessionsScreen({
                 }}>
                 <SegmentedControl label={copy("Durum", "Status")} value={draft.status} options={statusOptions}
                   disabled={draft.archived} onChange={(status) => setDraft({ ...draft, status })} />
-                <ToggleField label={copy("Ertelenmiş oturumlar", "Snoozed sessions")} value={draft.snoozed} disabled={draft.archived}
-                  onChange={(value) => setDraft({ ...draft, snoozed: value })} />
-                <ToggleField label={copy("Arşivlenmiş oturumlar", "Archived sessions")} value={draft.archived}
-                  onChange={(value) => setDraft({ ...draft, archived: value })} />
                 <SelectField label={copy("Proje", "Project")} searchable value={draft.project}
                   options={[{ value: "", label: copy("Tüm projeler", "All projects") }, ...projectOptions]}
                   disabled={activity.privacyPending} onChange={(project) => setDraft({ ...draft, project })} />
-                <ToggleField label={managedLabel} value={draft.list.managed}
-                  onChange={(managed) => setDraft({ ...draft, list: { ...draft.list, managed } })} />
                 <SelectField label={copy("Zaman", "Time")} value={draft.list.time} options={timeOptions}
                   onChange={(time) => setDraft({ ...draft, list: { ...draft.list, time } })} />
                 {providerOptions.length > 1 || draft.list.hiddenProviders.length ? (
@@ -284,6 +285,12 @@ export function ActiveSessionsScreen({
                       hiddenProviders: providers.filter((provider) => !shown.includes(provider)),
                     } })} />
                 ) : null}
+                <ToggleField label={managedLabel} value={draft.list.managed}
+                  onChange={(managed) => setDraft({ ...draft, list: { ...draft.list, managed } })} />
+                <ToggleField label={copy("Ertelenmiş oturumlar", "Snoozed sessions")} value={draft.snoozed} disabled={draft.archived}
+                  onChange={(value) => setDraft({ ...draft, snoozed: value })} />
+                <ToggleField label={copy("Arşivlenmiş oturumlar", "Archived sessions")} value={draft.archived}
+                  onChange={(value) => setDraft({ ...draft, archived: value })} />
               </FilterSheet> : null}
             </>
           ) : (

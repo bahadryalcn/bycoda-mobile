@@ -14,6 +14,7 @@ export type ComposerDraft = {
   selectedMentionRefs: SelectedMention[];
   noteCard?: NoteComposerCard;
   queueIntent?: PendingQueueIntent;
+  clientMessageId?: string;
 };
 export const emptyComposerDraft = (): ComposerDraft => ({
   version: 2,
@@ -25,6 +26,9 @@ export function decodeComposerDraft(raw: string): ComposerDraft {
   // Existing v1 keys contain raw prose, including JSON pasted by the owner.
   if (!raw.startsWith("bycoda-composer-v2:\n")) return { ...emptyComposerDraft(), text: raw };
   const value = JSON.parse(raw.slice("bycoda-composer-v2:\n".length)) as ComposerDraft;
+  if (value.clientMessageId !== undefined &&
+    (typeof value.clientMessageId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.clientMessageId)))
+    throw new Error("Saved message identity is invalid.");
   if (
     typeof value.text !== "string" ||
     !Array.isArray(value.attachments) ||

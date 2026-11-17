@@ -16,6 +16,11 @@ export async function duringSystemPrompt<T>(prompt: () => Promise<T>): Promise<T
   }
 }
 
+/** Whether an app-initiated system prompt (or its late "inactive" echo) covers the app right now. */
+export function systemPromptCovering() {
+  return open > 0 || resumePending;
+}
+
 /** Whether an "inactive" app state belongs to an app-initiated system prompt; records the state. */
 export function inactiveFromSystemPrompt(state: string) {
   const covered = state === "inactive" && (open > 0 || resumePending);

@@ -27,6 +27,20 @@ beforeEach(() => {
   mocks.notificationRequest.mockResolvedValue({ granted: true, canAskAgain: true, status: "granted" });
 });
 describe("native device permission integration", () => {
+  it.each(["microphone", "camera"] as const)("requests retryable %s denial instead of opening Settings", async kind => {
+    const read = kind === "camera" ? mocks.cameraRead : mocks.microphoneRead;
+    const request = kind === "camera" ? mocks.cameraRequest : mocks.microphoneRequest;
+    read.mockResolvedValue({ granted: false, canAskAgain: true, status: "denied" });
+    await allowDevicePermission(kind);
+    expect(request).toHaveBeenCalledOnce();
+    expect(mocks.settings).not.toHaveBeenCalled();
+  });
+  it("opens Settings for a permanently blocked camera", async () => {
+    mocks.cameraRead.mockResolvedValue({ granted: false, canAskAgain: false, status: "denied" });
+    await allowDevicePermission("camera");
+    expect(mocks.settings).toHaveBeenCalledOnce();
+    expect(mocks.cameraRequest).not.toHaveBeenCalled();
+  });
   it("requests microphone permission through audio without starting recording or opening settings", async () => {
     await allowDevicePermission("microphone");
     expect(mocks.microphoneRead).toHaveBeenCalledOnce();

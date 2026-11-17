@@ -44,6 +44,15 @@ describe("mobile session stream revision and identity fences", () => {
       expect(error).not.toHaveProperty("kind", "identity");
     }
   });
+  it("reads a session stored under a folded legacy row as the listed project, and only those rows", () => {
+    const listed = sessionStreamValue(event("snapshot", session(1)), undefined, "session-a", "listed", [
+      "project-a",
+    ]);
+    expect(listed).toMatchObject({ projectId: "listed" });
+    expect(() =>
+      sessionStreamValue(event("snapshot", session(1)), undefined, "session-a", "listed", ["other"]),
+    ).toThrow("Transcript project identity changed.");
+  });
   it("projects a new authority floor at the same transcript revision while preserving old pending intents", () => {
     const known = { ...session(4), authorityGeneration: 2 };
     const next = { ...session(4), authorityGeneration: 3 };

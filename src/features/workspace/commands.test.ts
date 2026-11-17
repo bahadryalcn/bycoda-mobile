@@ -14,6 +14,17 @@ const mockClient = (request: ReturnType<typeof vi.fn>) => ({
 });
 
 describe("mobile command recovery", () => {
+  it("reconciles durable outbox identity without replacing its transport error or replaying", async () => {
+    const id = "8CA190F8-9E1B-477D-9565-2FB1283AC578";
+    const failure = { kind: "network", uncertain: true };
+    const request = vi.fn().mockRejectedValueOnce(failure).mockResolvedValueOnce(null);
+    await expect(dispatchCommand(mockClient(request), "transport-id", {
+      type: "send", sessionId: "session", text: "hello", clientMessageId: id,
+    })).rejects.toBe(failure);
+    expect(request.mock.calls.map(call => call[0])).toEqual(["commands.dispatch", "commands.status"]);
+    expect(request.mock.calls[0][1].commandId).toBe(id.toLowerCase());
+    expect(request.mock.calls[1][1]).toEqual({ commandId: id.toLowerCase() });
+  });
   it("retains the original generation and command ID after uncertain delivery without replay", async () => {
     const request = vi.fn().mockRejectedValue({ kind: "network", uncertain: true });
     const error = await dispatchCommand(mockClient(request), "old-intent", {

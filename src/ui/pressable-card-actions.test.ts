@@ -12,6 +12,7 @@ vi.mock("./theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {}, p
 vi.mock("./motion", () => ({ haptic: { select: vi.fn() } }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./design-system", () => ({ controlClasses: () => "" }));
+vi.mock("./use-hover", () => ({ useHover: () => ({ hovered: false, handlers: {} }) }));
 import { PressableCard } from "./buttons";
 it("disabled cards cannot invoke their long-press command through accessibility actions", () => {
   const open = vi.fn();

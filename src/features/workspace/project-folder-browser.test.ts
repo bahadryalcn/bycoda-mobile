@@ -3,6 +3,7 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useSheetDismissal } from "@/ui/sheet-guard";
+vi.mock("./clone-repository", () => ({ CloneRepositorySheet: () => null }));
 
 const fixture = vi.hoisted(() => ({
   pending: false,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { type ComponentProps, type ReactNode } from "react";
-import { I18nManager, Text, View, useWindowDimensions } from "react-native";
+import { I18nManager, Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
 import type { Tabs } from "expo-router";
 import { DockIcon } from "./dock-icon";
@@ -8,10 +8,12 @@ import { useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Sheet } from "./dialogs";
 import { NavigationRow } from "./navigation-row";
+import { useAppearance } from "../state/appearance";
 import { useCopy } from "./copy";
 import { useMobileTheme } from "./theme";
 import { fontSize, metrics, opacity, radii, space } from "./tokens";
 import { haptic } from "./motion";
+import { wideDock } from "./adaptive-layout-model";
 import { useReducedMotionPreference } from "./use-reduced-motion";
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
@@ -21,6 +23,95 @@ export type FloatingTabBarProps = TabBarProps & {
   /** Session creation is a command, not another navigation destination. */
   quickAction?: { label: string; optionsLabel: string; onPress(): void; onLongPress(): void };
 };
+
+/** Material 3 navigation bar destination: icon in an active-indicator pill, label below. */
+function BarItem({
+  label,
+  accessibleLabel = label,
+  focused,
+  icon,
+  badge,
+  onPress,
+  onLongPress,
+  fixedWidth = false,
+  largeLabel = false,
+}: {
+  /** Destination slot with a fixed width (floating capsule) instead of sharing a stretched bar. */
+  fixedWidth?: boolean;
+  /** One type step above caption, for the wider tablet dock. */
+  largeLabel?: boolean;
+  label: string;
+  accessibleLabel?: string;
+  focused: boolean;
+  icon: ReactNode;
+  badge?: string | number;
+  onPress: () => void;
+  onLongPress?: () => void;
+}) {
+  const { colors } = useMobileTheme();
+  const reducedMotion = useReducedMotionPreference();
+  return (
+    <AnimatedPressable
+      pressScale={1}
+      pressOpacity={reducedMotion ? 1 : opacity.pressed}
+      accessibilityRole="tab"
+      accessibilityLabel={accessibleLabel}
+      accessibilityState={{ selected: focused }}
+      aria-selected={focused}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={{
+        ...(fixedWidth ? { width: metrics.tabletRailWidth } : { flex: 1 }),
+        minHeight: metrics.touchTarget + space.md,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: space.xxs,
+      }}
+    >
+      <View
+        style={{
+          width: metrics.touchTarget + space.sm,
+          height: metrics.touchTarget - space.md,
+          borderRadius: radii.pill,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: focused ? colors.selected : "transparent",
+        }}
+      >
+        {icon}
+        {badge ? (
+          <Text
+            accessible={false}
+            style={{
+              position: "absolute",
+              top: 0,
+              end: space.xs,
+              paddingHorizontal: space.xxs,
+              borderRadius: radii.badge,
+              backgroundColor: colors.accentSolid,
+              color: colors.primaryText,
+              fontSize: fontSize.caption,
+              fontVariant: ["tabular-nums"],
+            }}
+          >
+            {badge}
+          </Text>
+        ) : null}
+      </View>
+      <Text
+        accessible={false}
+        numberOfLines={1}
+        style={{
+          color: focused ? colors.text : colors.muted,
+          fontSize: largeLabel ? fontSize.small : fontSize.caption,
+          fontWeight: focused ? "600" : "400",
+        }}
+      >
+        {label}
+      </Text>
+    </AnimatedPressable>
+  );
+}
 
 function TabItem({
   label,
@@ -120,11 +211,16 @@ export function FloatingTabBar({
   const reducedMotion = useReducedMotionPreference();
   const copy = useCopy();
   const insets = useSafeAreaInsets();
-  const { width, fontScale } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
+  const navigationStyle = useAppearance((s) => s.navigationStyle);
+  const bar = Platform.OS === "android" && navigationStyle === "bar";
+  // Tablets and landscape large phones get labeled destinations in a wider dock.
+  const wide = wideDock(width, height);
+  const labeled = bar || wide;
   const keyboard = useKeyboardState((s) => s.isVisible);
   const [more, setMore] = useState(false);
   const available = Math.min(
-    metrics.contentWidth,
+    wide ? metrics.wideDockWidth : metrics.contentWidth,
     width - Math.max(insets.left, space.xs) - Math.max(insets.right, space.xs),
   );
   const commandWidth = quickAction ? metrics.touchTarget + space.sm * 2 + 1 : 0;
@@ -132,7 +228,7 @@ export function FloatingTabBar({
     2,
     Math.floor(
       (available - space.sm * 2 - 2 - commandWidth) /
-        (metrics.touchTarget * Math.max(1, fontScale)),
+        ((wide && !bar ? metrics.tabletRailWidth : metrics.touchTarget) * Math.max(1, fontScale)),
     ),
   );
   const overflow = slots < state.routes.length;
@@ -171,6 +267,8 @@ export function FloatingTabBar({
       navigateToTab(route.key);
     }
   };
+  const Item = labeled ? BarItem : TabItem;
+  const itemProps = labeled ? { fixedWidth: !bar, largeLabel: wide } : {};
   if (keyboard) return null;
   return (
     <>
@@ -184,39 +282,42 @@ export function FloatingTabBar({
           bottom: 0,
           paddingStart: Math.max(I18nManager.isRTL ? insets.right : insets.left, space.xs),
           paddingEnd: Math.max(I18nManager.isRTL ? insets.left : insets.right, space.xs),
-          paddingTop: space.xs,
-          paddingBottom: Math.max(insets.bottom, space.xs),
+          paddingTop: bar ? 0 : space.xs,
+          paddingBottom: bar ? insets.bottom : Math.max(insets.bottom, space.xs),
+          ...(bar ? { backgroundColor: colors.panel, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border } : null),
         }}
       >
         <View
           style={{
-            alignSelf: "center",
+            alignSelf: bar ? "stretch" : "center",
             flexDirection: "row",
             alignItems: "center",
-            backgroundColor: colors.panel,
-            borderColor: colors.border,
-            borderWidth: 1,
-            borderRadius: radii.composer,
-            padding: space.sm,
+            backgroundColor: bar ? "transparent" : colors.panel,
+            borderColor: bar ? "transparent" : colors.border,
+            borderWidth: bar ? 0 : 1,
+            borderRadius: bar ? 0 : radii.composer,
+            padding: bar ? 0 : space.sm,
             shadowColor: colors.scrim,
             shadowOffset: { width: 0, height: space.xs },
-            shadowOpacity: 0.18,
+            shadowOpacity: bar ? 0 : 0.18,
             shadowRadius: space.sm,
-            elevation: 4,
+            elevation: bar ? 0 : 4,
           }}
         >
           <View
             accessibilityRole="tablist"
             style={{
               flexDirection: "row",
+              flex: bar ? 1 : undefined,
             }}
           >
             {shown.map((route) => {
               const options = descriptors[route.key]!.options;
               const focused = state.routes[state.index]?.key === route.key;
               return (
-                <TabItem
+                <Item
                   key={route.key}
+                  {...itemProps}
                   label={String(label(route))}
                   accessibleLabel={String(badgeLabel(route))}
                   focused={focused}
@@ -232,8 +333,9 @@ export function FloatingTabBar({
               );
             })}
             {overflow ? (
-              <TabItem
+              <Item
                 label={moreLabel}
+                {...itemProps}
                 accessibleLabel={overflowLabel}
                 badge={overflowBadge}
                 focused={hidden.some((route) => state.routes[state.index]?.key === route.key)}
@@ -255,7 +357,7 @@ export function FloatingTabBar({
             <>
               <View
                 style={{
-                  width: 1,
+                  width: bar ? 0 : 1,
                   height: 24,
                   marginHorizontal: space.sm,
                   backgroundColor: colors.border,

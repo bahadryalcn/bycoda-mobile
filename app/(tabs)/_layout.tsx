@@ -14,8 +14,11 @@ import {
   TabActivityBridge,
   useRunningSessionBadge,
 } from "../../src/features/workspace/tab-activity-bridge";
+import { useAppPreferences } from "../../src/features/navigation-prefs/app-preferences";
+import { dockTabState } from "../../src/features/navigation-prefs/tab-preferences";
 import { useAdaptiveLayout } from "../../src/ui/adaptive-layout";
 import { TabletRail } from "../../src/features/workspace/tablet-rail";
+import { TabletQuickPanel } from "@/features/workspace/tablet-quick-panel";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 
 type IconProps = { color: ColorValue; focused: boolean };
@@ -53,9 +56,12 @@ function DockProxy({
 }
 
 /** Only this small bar subscribes to the running count, not the navigator. */
-function BadgedDock({ ...props }: FloatingTabBarProps) {
+function BadgedDock({ ...dockProps }: FloatingTabBarProps) {
   const copy = useCopy();
   const running = useRunningSessionBadge((s) => s.count);
+  const { preferences } = useAppPreferences();
+  // Hidden tabs keep their routes (deep links) but get no dock button.
+  const props = { ...dockProps, state: dockTabState(dockProps.state, preferences.tabs) } as FloatingTabBarProps;
   const chats = props.state.routes.find((route) => route.name === "chats");
   if (!chats || !running) return <FloatingTabBar {...props} />;
   const descriptor = props.descriptors[chats.key]!;
@@ -86,11 +92,11 @@ export default function TabsLayout() {
     (s) => s.hydrated && !s.storageError && s.machines.length === 0,
   );
   const pathname = usePathname();
-  const { split } = useAdaptiveLayout();
+  const { tablet } = useAdaptiveLayout();
   const isWelcome = pathname === "/" && firstConnection;
   // The dock overlays the scene on the tab roots; content and toasts clear its measured height.
-  // A wide tablet navigates with the rail instead, which takes real layout space.
-  const railVisible = split && !isWelcome;
+  // Every tablet layout navigates with the rail instead, which takes real layout space.
+  const railVisible = tablet && !isWelcome;
   const dockVisible = !railVisible && dockRoots.includes(pathname);
   const latestBar = useRef<TabBarProps | null>(null);
   const [, setBarState] = useState("");
@@ -168,6 +174,9 @@ export default function TabsLayout() {
                 : undefined
             }
           />
+        ) : null}
+        {tablet && !isWelcome ? (
+          <TabletQuickPanel bottomInset={dockVisible ? dockHeight : insets.bottom} />
         ) : null}
         {machineId ? (
           <NewSessionSheet visible={newSessionOpen} onClose={() => setNewSessionOpen(false)} />

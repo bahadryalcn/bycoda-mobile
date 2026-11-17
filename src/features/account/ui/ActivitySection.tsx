@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
-import { Body, Button, Section, Stack } from "@/ui/primitives";
+import { ErrorNotice, Section, Skeleton, Stack } from "@/ui/primitives";
 import { MetricRow } from "@/ui/metric-row";
 import { useCopy } from "@/ui/copy";
 import { activitySummaryQuery, splitMinutes } from "../model/activity-query";
@@ -49,14 +49,16 @@ export function ActivitySection() {
             <MetricRow label={copy("Bu yıl", "This year")} value={format(summary.data.year)} />
           </>
         ) : (
-          <>
-          <Body muted>
-            {summary.isError
-              ? copy("Aktif süre şu an alınamadı.", "Active time could not be loaded right now.")
-              : copy("Yükleniyor…", "Loading…")}
-          </Body>
-          {summary.isError ? <Button label={copy("Yeniden dene", "Try again")} busy={summary.isFetching} disabled={summary.isFetching} onPress={() => void summary.refetch()} /> : null}
-          </>
+          summary.isError ? (
+            <ErrorNotice
+              error={summary.error}
+              retrying={summary.isFetching}
+              onRetry={() => void summary.refetch()}
+              message={copy("Aktif süre şu an alınamadı.", "Active time could not be loaded right now.")}
+            />
+          ) : (
+            <Skeleton variant="content" rows={2} />
+          )
         )}
       </Stack>
     </Section>

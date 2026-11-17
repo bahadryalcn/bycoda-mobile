@@ -1,10 +1,15 @@
 import { useWindowDimensions } from "react-native";
 import { adaptiveLayout, type AdaptiveLayout } from "./adaptive-layout-model";
+import { useFoldState } from "./fold-state";
 
-export { SPLIT_LIST_WIDTH, type AdaptiveLayout } from "./adaptive-layout-model";
+export { splitListWidth, wideDock, type AdaptiveLayout } from "./adaptive-layout-model";
 
-/** Follows rotation and window resizing (iPad Split View, Android multi-window). */
+/**
+ * Follows rotation, window resizing (iPad Split View, Android multi-window), foldable unfold/fold
+ * and the foldable iPhone's inner/outer display. Nothing is cached: every input is a live hook.
+ */
 export function useAdaptiveLayout(): AdaptiveLayout {
   const { width, height } = useWindowDimensions();
-  return adaptiveLayout(width, height);
+  const fold = useFoldState();
+  return adaptiveLayout(width, height, fold);
 }

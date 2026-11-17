@@ -104,6 +104,7 @@ export function SecuritySettings() {
         <NavigationGroup>
           <NavigationRow
             label={copy("Telefon güvenliğini yeniden kontrol et", "Check phone security again")}
+            intent="command"
             icon={tile(RefreshCw, colors.info)}
             disabled={security.busy}
             onPress={() => {
@@ -115,6 +116,7 @@ export function SecuritySettings() {
       <NavigationGroup>
         <NavigationRow
           label={copy("Şimdi kilitle", "Lock now")}
+          intent="command"
           icon={tile(LockKeyhole, colors.accent)}
           disabled={!security.enabled || security.busy || security.status !== "unlocked"}
           onPress={security.lock}

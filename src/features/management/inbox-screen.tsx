@@ -1,8 +1,8 @@
 import { ScreenList } from "@/ui/screen-list";
 import type { HostAttentionInbox, MobileInboxItem } from "@/domain/types";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActionMenu, Body, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, Sheet, StateView } from "@/ui/primitives";
+import { ActionMenu, Body, Button, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, Sheet, StateView } from "@/ui/primitives";
 import { CollectionToolbar } from "@/ui/search-field";
 import { useCopy } from "@/ui/copy";
 import { useHostQuery } from "@/state/queries";
@@ -36,6 +36,7 @@ export function InboxScreen() {
   return (
     <InboxBrowseMemoryProvider><Screen scroll={false} title={copy("Gelen kutusu", "Inbox")}>
       <ScreenHeader>
+        <Button label={copy("Pull request’ler", "Pull requests")} tone="quiet" onPress={() => router.push("/pull-requests" as Href)} />
         <SegmentedControl
           hideLabel
           label={copy("Gelen kutusu", "Inbox")}

@@ -1,0 +1,61 @@
+import { useLayoutEffect, useMemo, useState } from "react";
+import { Badge, Body, Button, Disclosure, Field, QueryState, Row, SelectField, Stack } from "@/ui/primitives";
+import { useCopy } from "@/ui/copy";
+import { confirmAction } from "@/ui/confirm";
+import { useInboxRead } from "../../inbox/provider-queries";
+import type { InboxItemInput, InboxWriteCommand } from "../../inbox/provider-protocol";
+import { isInboxPrivateFailure } from "../../inbox/provider-model";
+import { providerStateLabel, providerStateTone } from "../../inbox/provider-labels";
+
+/** Writes use the detail owner's scope lease, single flight and uncertain-result hold. */
+export function PullRequestMetadata({ input, canRead, disabled, onCommand }: { input: InboxItemInput; canRead: boolean; disabled: boolean; onCommand: (command: InboxWriteCommand) => void }) {
+  const copy = useCopy();
+  const [login, setLogin] = useState(""), [label, setLabel] = useState("");
+  const reviewers = useInboxRead({ action: "reviewers", input: { ...input, mode: "list", logins: [] } }, canRead);
+  const labels = useInboxRead({ action: "labels", input: { ...input, mode: "list", names: [] } }, canRead);
+  const checks = useInboxRead({ action: "checks", input }, canRead);
+  const privateFailure = isInboxPrivateFailure(reviewers.error, labels.error, checks.error);
+  const lease = useMemo(() => ({ active: false }), [canRead, disabled, privateFailure]);
+  // Retire native confirmation callbacks when metadata access or write availability changes.
+  useLayoutEffect(() => { lease.active = true; return () => { lease.active = false; }; }, [lease]);
+  if (!canRead || privateFailure) return <Stack>
+    <QueryState query={{ ...reviewers, data: undefined }} /><QueryState query={{ ...labels, data: undefined }} /><QueryState query={{ ...checks, data: undefined }} />
+  </Stack>;
+  const confirm = (command: InboxWriteCommand, description: string) => {
+    if (disabled || !lease.active) return;
+    confirmAction(copy("Pull request’i güncelle", "Update pull request"), `${input.item.repo} #${input.item.number}\n${description}`, copy("Uygula", "Apply"), () => { if (lease.active) onCommand(command); }, copy("Vazgeç", "Cancel"));
+  };
+  const checkLabels: Record<string, string> = { pass: copy("Başarılı", "Passed"), fail: copy("Başarısız", "Failed"), pending: copy("Bekliyor", "Pending"), skipping: copy("Atlandı", "Skipped"), cancel: copy("İptal edildi", "Cancelled"), unknown: copy("Bilinmiyor", "Unknown") };
+  const checkTones = { pass: "success", fail: "danger", pending: "warning" } as const;
+  return <Stack>
+    <Disclosure label={copy("Kontroller", "Checks")} defaultExpanded>
+      <QueryState query={checks} />
+      {checks.data ? <><Body mono>{checks.data.headOid}</Body>
+        {checks.data.checks.length === 0 ? <Body muted>{copy("Kontrol yok", "No checks")}</Body> : checks.data.checks.map((check, index) => <Row key={`${check.name}:${index}`}><Body>{[check.workflow, check.name].filter(Boolean).join(" · ")}</Body><Badge label={checkLabels[check.state] ?? checkLabels.unknown!} tone={checkTones[check.state as keyof typeof checkTones] ?? "default"} /></Row>)}
+      </> : null}
+    </Disclosure>
+    <Disclosure label={copy("İnceleyenler", "Reviewers")}>
+      <QueryState query={reviewers} />
+      {reviewers.data?.reviewRequests.map((reviewer, index) => <Row key={`${reviewer.login ?? reviewer.name}:${index}`}>
+        <Body>{reviewer.login ?? reviewer.name}</Body>
+        {reviewer.login ? <Button tone="quiet" disabled={disabled || !!reviewers.error || reviewers.isFetching} label={copy("İnceleyeni kaldır", "Remove reviewer")} onPress={() => confirm({ action: "reviewers", input: { ...input, mode: "remove", logins: [reviewer.login!], confirm: "CHANGE_PR_REVIEWERS" } }, reviewer.login!)} /> : null}
+      </Row>)}
+      {reviewers.data?.latestReviews.map((review, index) => <Row key={`${review.author.login}:${index}`}><Body>{review.author.login}</Body><Badge label={providerStateLabel(review.state, copy)} tone={providerStateTone(review.state)} /></Row>)}
+      <Field label={copy("GitHub kullanıcı adı", "GitHub username")} value={login} maxLength={100} editable={!disabled} onChangeText={setLogin} />
+      <Button label={copy("İnceleme iste", "Request review")} disabled={disabled || !/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(login) || !reviewers.data || !!reviewers.error || reviewers.isFetching}
+        onPress={() => confirm({ action: "reviewers", input: { ...input, mode: "request", logins: [login], confirm: "CHANGE_PR_REVIEWERS" } }, login)} />
+    </Disclosure>
+    <Disclosure label={copy("Etiketler", "Labels")}>
+      <QueryState query={labels} />
+      {labels.data?.labels.map(current => <Row key={current.name}><Badge label={current.name} />
+        <Button label={copy("Etiketi kaldır", "Remove label")} tone="quiet" disabled={disabled || !!labels.error || labels.isFetching}
+          onPress={() => confirm({ action: "labels", input: { ...input, mode: "remove", names: [current.name], confirm: "CHANGE_PR_LABELS" } }, current.name)} />
+      </Row>)}
+      <SelectField label={copy("Depo etiketi", "Repository label")} value={label} disabled={disabled || !labels.data || !!labels.error || labels.isFetching}
+        options={(labels.data?.available ?? []).map(current => ({ value: current.name, label: current.name }))} onChange={setLabel} />
+      <Button label={copy("Etiket ekle", "Add label")} disabled={disabled || !label || !labels.data?.available.some(current => current.name === label) || !!labels.error || labels.isFetching}
+        onPress={() => confirm({ action: "labels", input: { ...input, mode: "add", names: [label], confirm: "CHANGE_PR_LABELS" } }, label)} />
+      {labels.data?.truncated ? <Body muted>{copy("Depo etiketlerinin bir bölümü gösteriliyor.", "Part of the repository labels are shown.")}</Body> : null}
+    </Disclosure>
+  </Stack>;
+}

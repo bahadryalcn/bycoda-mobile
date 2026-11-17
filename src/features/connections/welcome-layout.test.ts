@@ -15,8 +15,9 @@ vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ t
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/layout", () => ({ useBottomInset: () => layout.inset }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("./account-computers-section", () => ({ AccountComputersSection: ({ others }: { others: unknown }) => others }));
-vi.mock("@/ui/primitives", () => ({ Body: ({ children }: PropsWithChildren) => h("p", null, children), Heading: ({ children }: PropsWithChildren) => h("h2", null, children), Button: () => null }));
+vi.mock("@/ui/primitives", () => ({ Row: passThrough, Body: ({ children }: PropsWithChildren) => h("p", null, children), Heading: ({ children }: PropsWithChildren) => h("h2", null, children), Button: () => null }));
 vi.mock("@/ui/code-art", () => ({ CodeArt: () => null, codeArtWidth: () => 200 }));
 vi.mock("@/ui/dot-field", () => ({ DotField: () => null }));
 it("reserves measured navigation once and respects each landscape safe edge", () => {

@@ -1,7 +1,11 @@
 import type { MobileColors, MobileThemeMode } from "./tokens.ts";
+import { readSystemColorSwatches } from "../../modules/bycoda-system-colors/index.ts";
 
-/** Selectable colour palettes. `classic` is the original app look; the rest mirror the desktop presets. */
-export const PALETTE_IDS = ["classic", "bycoda", "olive", "tide", "kiln", "dusk", "ink", "sand", "rose"] as const;
+/**
+ * Selectable colour palettes. `classic` is the original app look; the middle ones mirror the desktop presets;
+ * `material` follows the Android 12+ system (Material You) colours and is offered only where they exist.
+ */
+export const PALETTE_IDS = ["classic", "bycoda", "olive", "tide", "kiln", "dusk", "ink", "sand", "rose", "material"] as const;
 export type PaletteId = (typeof PALETTE_IDS)[number];
 export const DEFAULT_PALETTE: PaletteId = "classic";
 
@@ -16,6 +20,8 @@ export type PaletteDefinition = {
   lightness: number;
   /** Dark-mode accent as six hex digits (no leading marker). */
   accent: string;
+  /** Colours come from the Android system palette; falls back to `classic` when they are unavailable. */
+  dynamic?: boolean;
 };
 
 // Data copied from the desktop `themePalettes` presets. `classic` keeps static colours in tokens.ts.
@@ -29,6 +35,8 @@ export const PALETTES: readonly PaletteDefinition[] = [
   { id: "ink", name: "Ink", nameTr: "Ink", hue: 216, saturation: 0, lightness: 5, accent: "B8B8B8" },
   { id: "sand", name: "Sand", nameTr: "Sand", hue: 42, saturation: 22, lightness: 7, accent: "D3B879" },
   { id: "rose", name: "Rose", nameTr: "Rose", hue: 345, saturation: 20, lightness: 7, accent: "D68FA5" },
+  // Hue/accent are the classic fallback values used for the info tint when the system palette is missing.
+  { id: "material", name: "Material You", nameTr: "Material You", hue: 240, saturation: 4, lightness: 5, accent: "64B0FF", dynamic: true },
 ];
 
 export function normalizePalette(value: unknown): PaletteId {
@@ -94,6 +102,10 @@ const READABLE = 4.8;
  * success/danger/warning, scrim and the media viewer stay as in `base`.
  */
 export function derivePaletteColors(definition: PaletteDefinition, mode: MobileThemeMode, base: MobileColors): MobileColors {
+  if (definition.dynamic) {
+    const swatches = readMaterialYouSwatches(mode);
+    return swatches ? materialYouColors(base, swatches) : base;
+  }
   const { hue: h, saturation: s, lightness: L } = definition;
   const hsl = (sat: number, light: number) => hslToHex(h, sat, light);
   if (mode === "dark") {
@@ -160,6 +172,63 @@ export function derivePaletteColors(definition: PaletteDefinition, mode: MobileT
   };
 }
 
+/** Material You needs Android 12 (API 31): the system dynamic colour palette. */
+export const MATERIAL_YOU_MIN_API = 31;
+export function materialYouAvailable(os: string, apiLevel: number | string) {
+  return os === "android" && Number(apiLevel) >= MATERIAL_YOU_MIN_API;
+}
+
+/**
+ * The Material 3 roles the Material You palette is built from, as six-digit hex. Android resolves the
+ * system colours natively (`@android:color/system_*`); JavaScript cannot read them back as hex.
+ */
+export type MaterialYouSwatches = {
+  primary: string;
+  onPrimary: string;
+  primaryContainer: string;
+  onPrimaryContainer: string;
+  surface: string;
+  surfaceVariant: string;
+  onSurface: string;
+  onSurfaceVariant: string;
+};
+
+/**
+ * Reads Android system tones synchronously before palette caching. Other platforms and
+ * older installed binaries without the local module retain the classic palette.
+ */
+export function readMaterialYouSwatches(mode: MobileThemeMode = "light"): MaterialYouSwatches | null {
+  return readSystemColorSwatches(mode === "dark");
+}
+
+/** Maps Material 3 roles onto the mobile colour set; M3 role pairs already meet text contrast. */
+export function materialYouColors(base: MobileColors, swatches: MaterialYouSwatches): MobileColors {
+  const s = swatches;
+  return {
+    ...base,
+    background: s.surface,
+    panel: s.surface,
+    raised: s.surfaceVariant,
+    fill: s.surfaceVariant,
+    elevated: s.surface,
+    border: s.surfaceVariant,
+    separator: s.surfaceVariant,
+    text: s.onSurface,
+    muted: s.onSurfaceVariant,
+    subtle: s.onSurfaceVariant,
+    tertiary: s.onSurfaceVariant,
+    accent: s.primary,
+    accentSolid: s.primary,
+    primaryText: s.onPrimary,
+    info: s.primary,
+    live: s.primary,
+    brand: s.onSurface,
+    selected: s.primaryContainer,
+    userMessage: s.surfaceVariant,
+    glass: s.surface + "F5",
+  };
+}
+
 /** White or the given dark ink, whichever reads better on the fill. */
 function bestInk(fill: string, dark: string) {
   const white = hslToHex(0, 0, 100);
@@ -177,6 +246,9 @@ export function deriveInfoTone(colors: MobileColors, mode: MobileThemeMode, defi
   };
 }
 
-/** Uniwind theme names: classic keeps light/dark; every other palette adds `<id>` and `<id>-dark`. */
+/**
+ * Uniwind theme names: classic keeps light/dark; every other palette adds `<id>` and `<id>-dark`.
+ * `material` reuses base theme names; MobileThemeController supplies native dynamic CSS roles.
+ */
 export const uniwindThemeName = (palette: PaletteId, mode: MobileThemeMode) =>
-  palette === "classic" ? mode : mode === "dark" ? `${palette}-dark` : palette;
+  palette === "classic" || palette === "material" ? mode : mode === "dark" ? `${palette}-dark` : palette;

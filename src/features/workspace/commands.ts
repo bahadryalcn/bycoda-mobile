@@ -29,6 +29,7 @@ export async function dispatchCommand(
   params: Record<string, unknown>,
 ): Promise<CommandReceipt> {
   const original = { ...params };
+  if (typeof original.clientMessageId === "string") commandId = original.clientMessageId.toLowerCase();
   const originalMachineId = client.machine.id;
   assertApprovalCommand(client.machine.capabilities, original);
   try {
@@ -47,6 +48,8 @@ export async function dispatchCommand(
     } catch {
       /* Explicit recovery remains bound to the original computer. */
     }
+    // The durable outbox owns idempotent message recovery; retain the transport kind.
+    if (typeof original.clientMessageId === "string") throw error;
     throw new UncertainCommand(
       commandId,
       originalMachineId,

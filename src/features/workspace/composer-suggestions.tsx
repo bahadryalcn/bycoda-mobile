@@ -1,15 +1,26 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FlatList, View, useWindowDimensions } from "react-native";
 import { Item } from "panelui-native/components/item";
 import { Body, Button, ErrorText, Loading, Row } from "@/ui/primitives";
 import { radii, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import type { ComposerSuggestion } from "./use-composer-catalog";
+import { useKeyCommand } from "../../../modules/bycoda-key-commands";
+import { movePaletteSelection } from "@/features/keyboard/keyboard-model";
 
-export function ComposerSuggestions({ items, loading, error, trigger, selected, onPick, onRetry, onClose, maximumHeight, compact }: { maximumHeight: number; compact: boolean; items: ComposerSuggestion[]; loading: boolean; error: unknown; trigger: string; selected: number; onPick: (item: ComposerSuggestion) => void; onRetry: () => void; onClose: () => void }) {
+export function ComposerSuggestions({ items, loading, error, trigger, selected: inputSelected, keyboardActive = false, onPick, onRetry, onClose, maximumHeight, compact }: { keyboardActive?: boolean; maximumHeight: number; compact: boolean; items: ComposerSuggestion[]; loading: boolean; error: unknown; trigger: string; selected: number; onPick: (item: ComposerSuggestion) => void; onRetry: () => void; onClose: () => void }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const [hardwareSelection, setHardwareSelection] = useState<{ items: ComposerSuggestion[]; index: number } | null>(null);
+  const selected = hardwareSelection?.items === items ? hardwareSelection.index : inputSelected;
+  const move = (direction: -1 | 1) => setHardwareSelection({ items, index: movePaletteSelection(selected, items.length, direction) });
+  const choose = () => { const item = items[Math.max(0, selected)]; if (item) onPick(item); };
+  useKeyCommand({ key: "ArrowDown", title: copy("Sonraki sonuç", "Next result"), enabled: keyboardActive, priority: 20, textInput: true }, () => move(1));
+  useKeyCommand({ key: "ArrowUp", title: copy("Önceki sonuç", "Previous result"), enabled: keyboardActive, priority: 20, textInput: true }, () => move(-1));
+  useKeyCommand({ key: "Enter", title: copy("Seç", "Select"), enabled: keyboardActive && items.length > 0, priority: 20, textInput: true }, choose);
+  useKeyCommand({ key: "Tab", title: copy("Seç", "Select"), enabled: keyboardActive && items.length > 0, priority: 20, textInput: true }, choose);
+  useKeyCommand({ key: "Escape", title: copy("Kapat", "Close"), enabled: keyboardActive, priority: 20, textInput: true }, onClose);
   const { fontScale } = useWindowDimensions();
   const list = useRef<FlatList<ComposerSuggestion>>(null);
   const revealRetried = useRef(false);

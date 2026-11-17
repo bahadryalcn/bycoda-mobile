@@ -8,11 +8,12 @@ import { useMobileTheme } from "@/ui/theme";
 import { radii, space } from "@/ui/tokens";
 import { providerStateLabel, providerStateTone } from "./provider-labels";
 import type { PrReviewContext, PrReviewLine } from "./provider-review-model";
+import { isTestFile } from "../pull-requests/model/list";
 
 const shortHead = (commitId: string) => commitId.slice(0, 7);
 
 /** Title, state and totals first; the changed-file list stays one tap away. */
-export function PrReviewSummary({ item, context }: { item: RemoteInboxItem; context?: PrReviewContext }) {
+export function PrReviewSummary({ item, context, hideTests = false, onSelectFile }: { item: RemoteInboxItem; context?: PrReviewContext; hideTests?: boolean; onSelectFile?: (path: string) => void }) {
   const copy = useCopy();
   const locale = useLocale();
   const numbers = new Intl.NumberFormat(locale);
@@ -37,9 +38,9 @@ export function PrReviewSummary({ item, context }: { item: RemoteInboxItem; cont
         </Row>
         {context.files.length ? <Button tone="quiet" label={copy("Dosyaları göster", "Show files")} onPress={() => setFilesOpen(true)} /> : null}
         {filesOpen ? <Sheet visible size="full" scroll={false} title={copy("Değişen dosyalar", "Files changed")} onClose={() => setFilesOpen(false)}>
-          <ScreenList data={context.files} keyExtractor={file => file.path} renderItem={({item: file}) => (
+          <ScreenList data={context.files.filter(file => !hideTests || !isTestFile(file.path))} keyExtractor={file => file.path} renderItem={({item: file}) => (
               <View style={{ flexDirection: "row", gap: space.sm, paddingVertical: space.sm, alignItems: "flex-start" }}>
-                <Body mono style={{ flexShrink: 1, flexGrow: 1 }}>{file.path}</Body>
+                {onSelectFile ? <Button tone="quiet" label={file.path} onPress={() => { onSelectFile(file.path); setFilesOpen(false); }} /> : <Body mono style={{ flexShrink: 1, flexGrow: 1 }}>{file.path}</Body>}
                 <Body style={{ color: semanticColors.success.text }}>{`+${numbers.format(file.additions)}`}</Body>
                 <Body style={{ color: semanticColors.danger.text }}>{`−${numbers.format(file.deletions)}`}</Body>
               </View>

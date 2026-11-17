@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 const f=vi.hoisted(()=>({keyboard:0,frame:undefined as undefined|((e:any)=>void),space:null as number|null}));
 vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));
 vi.mock("react-native",()=>({View:({children,onLayout}:any)=>{if(onLayout)f.frame=onLayout;return createElement("div",null,children);}}));
+vi.mock("@/ui/adaptive-layout",()=>({useAdaptiveLayout:()=>({tabletop:null})}));
 vi.mock("react-native-safe-area-context",()=>({useSafeAreaInsets:()=>({left:0,right:0,bottom:0,top:0})}));
 vi.mock("react-native-keyboard-controller",()=>({useKeyboardState:(select:any)=>select({height:f.keyboard}),useReanimatedKeyboardAnimation:()=>({height:{value:-f.keyboard},progress:{value:0}})}));
 vi.mock("react-native-reanimated",()=>({default:{View:({children}:any)=>createElement("div",null,children)},useAnimatedStyle:(read:any)=>read()}));

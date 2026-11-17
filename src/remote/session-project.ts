@@ -10,6 +10,21 @@ export class SessionProjectMismatch extends Error {
   }
 }
 
+/**
+ * The Host lists one row per folder and folds legacy path spellings into it (`aliasIds`),
+ * while each session still reads with the id it was stored under. A session of a folded
+ * row therefore reads as the listed project; any other id stays a mismatch.
+ */
+export function foldSessionProject<T extends { projectId: string }>(
+  value: T,
+  projectId: string,
+  aliasIds: readonly string[] | undefined,
+): T {
+  return value.projectId !== projectId && aliasIds?.includes(value.projectId)
+    ? { ...value, projectId }
+    : value;
+}
+
 type ProjectReader = {
   assertCurrentAccess(): void;
   request<T>(

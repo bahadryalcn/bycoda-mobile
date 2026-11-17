@@ -83,6 +83,13 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
   const hasDrafts = Object.values(drafts).some((draft) => !!draft.trim());
   // Computer switches must flush this exact identity before connection ownership changes.
   useEffect(() => registerWorkspaceDraft(draftKey, () => draft.persist()), [draftKey, draft.persist]);
+  const leaveBlocked = busy || uncertain;
+  useEffect(() => {
+    // Reason: a swipe that is refused after it revealed the previous route looks like a glitch; keep it off while leaving is blocked.
+    if (!leaveBlocked) return;
+    navigation.setOptions({ gestureEnabled: false });
+    return () => navigation.setOptions({ gestureEnabled: true });
+  }, [leaveBlocked, navigation]);
   usePreventRemove(busy || hasDrafts || uncertain || !!draft.error, ({ data }) => {
     if (!pending.current && !busy) {
       if (uncertain) setLeaving(data.action);

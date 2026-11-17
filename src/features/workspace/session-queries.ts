@@ -12,13 +12,15 @@ import { retainSessionAuthority } from "@/domain/session-authority";
 import { watchSessionStream } from "@/remote/session-sync";
 import { isTransientConnectionError } from "@/state/query-retry";
 import type { MobileStreamSubscription } from "@/remote/host-transport";
-import { SessionProjectMismatch } from "@/remote/session-project";
+import { SessionProjectMismatch, foldSessionProject } from "@/remote/session-project";
 
 export function useSessionSnapshot(
   scope: SessionScope,
   options: {
     enabled?: boolean;
     projectId?: string;
+    /** Legacy ids the directory folded into `projectId`; their sessions read as `projectId`. */
+    projectAliases?: readonly string[];
     canRead?: () => boolean;
     restoreBefore?: () => number | undefined;
   } = {},
@@ -94,6 +96,7 @@ export function useSessionSnapshot(
     void watchSessionStream(client, {
       sessionId: scope.sessionId,
       projectId: options.projectId,
+      aliasIds: () => liveOptions.current.projectAliases,
       known: () => cache.getQueryData<HostSession | null>(key) ?? undefined,
       apply: async (snapshot, assertCurrent) => {
         current();
@@ -190,6 +193,7 @@ export function useSessionSnapshot(
           throw new RemoteHostError(scope.machineId, "identity", "Transcript identity changed.");
         throw error;
       }
+      value = foldSessionProject(value, options.projectId, options.projectAliases);
       if (options.canRead?.() === false || value.session.id !== scope.sessionId)
         throw new RemoteHostError(
           scope.machineId,
@@ -212,7 +216,7 @@ export function useSessionSnapshot(
         if (signal.aborted) throw new Error("Session restore cancelled.");
         if (earlier.history?.before !== undefined && earlier.history.before >= before)
           throw new Error("Transcript restore cursor did not advance.");
-        value = earlier;
+        value = foldSessionProject(earlier, options.projectId, options.projectAliases);
       }
       if (options.canRead?.() === false || value.session.id !== scope.sessionId)
         throw new RemoteHostError(

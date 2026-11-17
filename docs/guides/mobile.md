@@ -84,6 +84,23 @@ Apple association needs the real signing Team ID and bundle ID; Android associat
 needs the installed app's signing certificate fingerprint. Store and installation
 destinations must refer to published, verified artifacts.
 
+## Start a session from a link or the share sheet
+
+`https://link.bycoda.codes/new/v1?prompt=<text>&project=<id>` and
+`bycoda://new/v1?prompt=<text>&project=<id>` open the new-session sheet. URL-encode
+the values. `prompt` is required (at most 8000 characters, no control characters);
+`project` is optional (at most 256 characters) and preselects the project with that
+id or exact unique name when it is visible on the active computer. Other parameters
+make the link invalid and it opens the session list only. The prompt is placed in the
+composer draft of the new session; nothing is sent, and an existing draft is never
+replaced. Starting the session is still your choice in the sheet, and closing the
+sheet discards the queued prompt.
+
+Sharing text, a link, images or files to bycoda from another app (iOS share extension,
+Android share target) works the same way: the content is queued for the new-session
+sheet and arrives as the draft text and composer attachments, never sent
+automatically. Android `content://` files are copied into the app cache first.
+
 ## Crew settings
 
 Crew working limits control parallel tasks, assignment count and duration.
@@ -675,3 +692,34 @@ app-group timeline and updates an existing Live Activity only when a background 
 execution. Force-stopped Android apps and force-quit iOS apps cannot guarantee refresh. Expired
 snapshots ask you to open bycoda; there is no direct APNs Live Activity relay. Native widget sizing,
 direct Android links and background task support require a rebuilt app, alongside an updated Host.
+
+## Waiting to send
+
+When a message cannot reach your computer, a compatible Host keeps it in this phone's Waiting to
+send outbox. Retry now reconnects immediately; Edit opens its preserved draft; Delete discards
+the pending delivery. The phone retries in conversation order when the selected computer reconnects
+or the app returns to the foreground. It retains your chosen model and files, and does not replay
+while the app or project is locked. Sign-out, an archived/deleted conversation, or 24 hours of
+waiting stops delivery and leaves a visible notice. Older Hosts keep existing draft recovery.
+
+## Pull requests
+
+Open Pull requests from Inbox for all projects, or from a project header for that project's scope.
+Filter by lifecycle, author or requested review and choose updated, created or oldest order. Open
+a PR for description, checks, conversation, reviewer/label management and comment reactions.
+Files and review provides per-file diffs and commit-bound inline comments; hiding tests preserves
+drafts. Merge, squash and rebase require the reviewed head. Public writes ask for confirmation;
+check uncertain outcomes in GitHub before another write. Provider lists and repository-label
+discovery are bounded and disclose partial results.
+
+## Keyboard and appearance
+
+On a physical keyboard, Command/Ctrl+K opens the command palette, Command/Ctrl+F focuses list
+search, and Command/Ctrl+Enter sends through the usual guarded action. Preferences controls whether
+plain hardware Enter sends; Shift+Enter and the software keyboard keep adding newlines.
+Navigation settings customize dock order and visibility; hidden destinations remain routable.
+
+Android 12 and newer can use Material You in Appearance. A rebuilt app reads Android's system
+accent and neutral tones for both native styles and shared control colors. Older binaries without
+the system-colors module retain Classic. Restart the app after changing the system wallpaper to
+refresh the cached dynamic palette. iOS and web retain Classic when a Material You preference is restored.

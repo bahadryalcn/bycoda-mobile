@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { startDiagnostics } from "../src/features/diagnostics/diagnostics-runtime";
 import { AppProviders } from "../src/app-providers";
+import { KeyboardCommandsProvider, KeyboardScreen } from "../src/features/keyboard/keyboard-provider";
 import { ScreenChromeProvider } from "../src/ui/layout";
 import { HeaderBackButton } from "../src/ui/header-back-button";
 import { useCopy } from "../src/ui/copy";
@@ -37,6 +38,7 @@ function RootNavigation() {
     <ThemeProvider value={navigationTheme}>
         <ScreenChromeProvider nativeTitle>
           <Stack
+            screenLayout={({ children }) => <KeyboardScreen>{children}</KeyboardScreen>}
             screenOptions={{
               headerStyle: { backgroundColor: colors.background },
               animation: reducedMotion ? "none" : "default",
@@ -65,6 +67,9 @@ function RootNavigation() {
               options={{ title: copy("Oturumlar", "Sessions") }}
             />
             <Stack.Screen name="manage/[section]" options={{ title: copy("Yönet", "Manage") }} />
+            <Stack.Screen name="pull-requests/index" options={{ title: copy("Pull request’ler", "Pull requests") }} />
+            <Stack.Screen name="pull-requests/[id]" options={{ title: copy("Pull request", "Pull request") }} />
+            <Stack.Screen name="licenses" options={{ title: copy("Açık kaynak lisansları", "Open-source licenses") }} />
             <Stack.Screen name="tools/[tool]" options={{ title: copy("Araçlar", "Tools") }} />
             <Stack.Screen name="legal/[document]" options={{ title: copy("Yardım", "Help") }} />
             <Stack.Screen
@@ -94,7 +99,7 @@ export default function RootLayout() {
   }, [background]);
   return (
     <>
-      <AppProviders><RootNavigation /></AppProviders>
+      <AppProviders><KeyboardCommandsProvider><RootNavigation /></KeyboardCommandsProvider></AppProviders>
       {/* Expo Go owns the native plist; use one global status bar owner instead of native-stack traits. */}
       <StatusBar style={barStyle} />
       {process.env.EXPO_OS === "android" ? <NavigationBar style={barStyle} hidden={false} /> : null}

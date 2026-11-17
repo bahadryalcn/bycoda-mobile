@@ -85,3 +85,21 @@ describe("workspace view transitions", () => {
     });
   });
 });
+
+describe("opening a file from the changes list", () => {
+  const start = { segment: "git", pickingWorktree: false } as const;
+  it("returns to the changes list when the file closes", () => {
+    const open = projectViewReducer(start, { type: "open-file", path: "a.ts" });
+    expect(open).toMatchObject({ segment: "files", file: "a.ts", returnTo: "git" });
+    expect(projectViewReducer(open, { type: "close-file" })).toMatchObject({ segment: "git", file: undefined, returnTo: undefined });
+  });
+  it("stays on files when the file was opened from files", () => {
+    const open = projectViewReducer({ segment: "files", pickingWorktree: false }, { type: "open-file", path: "a.ts" });
+    expect(projectViewReducer(open, { type: "close-file" }).segment).toBe("files");
+  });
+  it("forgets the return target when the segment changes", () => {
+    const open = projectViewReducer(start, { type: "open-file", path: "a.ts" });
+    const moved = projectViewReducer(open, { type: "segment", segment: "sessions" });
+    expect(projectViewReducer(moved, { type: "close-file" }).segment).toBe("sessions");
+  });
+});

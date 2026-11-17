@@ -24,7 +24,9 @@ import {
   Screen,
   Stack,
   Sheet,
+  ToggleField,
 } from "@/ui/primitives";
+import { PullRequestMetadata } from "../pull-requests/ui/metadata";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
 import { useSheetGuard } from "@/ui/sheet-guard";
@@ -78,6 +80,7 @@ export function ProviderInboxDetail({
   const form = useFormDraft<InboxCommentDraft>(emptyInboxCommentDraft);
   const [composing, setComposing] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [showBotActivity, setShowBotActivity] = useState(true);
   const [pendingAction, setPendingAction] = useState<InboxWriteCommand["action"] | null>(null);
   const submission = useAsyncAction<InboxWriteResult>();
   const openProvider = useAsyncAction<void>();
@@ -87,6 +90,8 @@ export function ProviderInboxDetail({
   const input = inboxItemInput(item, origin.projectId);
   const details = useInboxRead<"details">({ action: "details", input }, readAllowed);
   const thread = useInboxRead<"thread">({ action: "thread", input }, readAllowed);
+  const mergeContext = useInboxRead<"review-context">({ action: "review-context", input },
+    readAllowed && !!client?.machine.capabilities?.includes("inbox.review.v1") && item.provider === "github" && item.kind === "pr" && item.state.toLowerCase() === "open" && !item.draft);
   const contentAvailable = readAllowed && !isInboxPrivateFailure(availability.error, details.error, thread.error);
   const sharedReadFailure = !!details.error && !!thread.error && details.error.message === thread.error.message &&
     (details.error as {kind?: string}).kind === (thread.error as {kind?: string}).kind;
@@ -140,14 +145,17 @@ export function ProviderInboxDetail({
 
   function stateAction(action: RemoteInboxPrAction) {
     if (!writableNow()) return;
+    const merging = action === "merge" || action === "squash" || action === "rebase";
+    const expectedHeadOid = merging ? mergeContext.data?.headOid : undefined;
+    if (merging && (!expectedHeadOid || mergeContext.isFetching || mergeContext.error)) return;
     confirmAction(
       copy("Pull request durumunu değiştir", "Change pull request state"),
-      `${item.repo} #${item.number}\n${providerActionLabel(action, copy)}`,
+      `${item.repo} #${item.number}\n${providerActionLabel(action, copy)}${expectedHeadOid ? `\n${expectedHeadOid}` : ""}`,
       copy("Uygula", "Apply"),
       () =>
         submit({
           action: "pr-action",
-          input: { ...input, prAction: action, confirm: "CHANGE_PR_STATE" },
+          input: { ...input, prAction: action, ...(expectedHeadOid ? { expectedHeadOid } : {}), confirm: "CHANGE_PR_STATE" },
         }),
       copy("Vazgeç", "Cancel"),
     );
@@ -157,6 +165,7 @@ export function ProviderInboxDetail({
     if (!currentOrigin()) return;
     return Promise.all([
       availability.refetch(),
+      cache.invalidateQueries({ queryKey: hostKey(origin.machineId, ["provider-inbox"]) }),
       ...(latest.current.readAllowed ? [details.refetch(), thread.refetch()] : []),
     ]);
   }
@@ -180,6 +189,7 @@ export function ProviderInboxDetail({
     : busy ? copy("Çalışıyor…", "Working…") : undefined : undefined;
   const prActions = providerPrActions(item);
   const reviewAvailable = item.kind === "pr" && item.provider === "github" && client?.machine.capabilities?.includes("inbox.review.v1");
+  const snapshotLabels = item.provider === "github" && item.kind === "pr" ? [] : item.labels ?? [];
   return (
     <Screen
       scroll={false}
@@ -195,6 +205,12 @@ export function ProviderInboxDetail({
         onManageConnections={manageConnections}
         onReply={(comment) => { if (editableNow()) { form.setField("reply", comment); setComposing(true); } }}
         disabled={busy || !writeAllowed}
+        showBotActivity={showBotActivity}
+        onReaction={item.provider === "github" && item.kind === "pr" ? (comment, mode, content) => {
+          if (!writableNow()) return;
+          confirmAction(copy("Yorum tepkisini değiştir", "Change comment reaction"), `${comment.author}\n${content}\n${mode === "add" ? copy("Ekle", "Add") : copy("Kaldır", "Remove")}`,
+            copy("Uygula", "Apply"), () => submit({ action: "reaction", input: { ...input, mode, content, subjectId: comment.id, confirm: "CHANGE_PR_REACTION" } }), copy("Vazgeç", "Cancel"));
+        } : undefined}
         header={<Stack>
       {contentAvailable ? <>
         <Heading>{item.title}</Heading>
@@ -227,21 +243,23 @@ export function ProviderInboxDetail({
             ...prActions.map((action) => ({
               key: action,
               label: providerActionLabel(action, copy),
-              disabled: busy || uncertain || !writeAllowed,
+              disabled: busy || uncertain || !writeAllowed || (["merge", "squash", "rebase"].includes(action) && (!mergeContext.data?.headOid || mergeContext.isFetching || !!mergeContext.error)),
               onPress: () => stateAction(action),
             })),
           ]}
         /> : null}
       </Row>
       {contentAvailable ? <MutationState mutation={openProvider} /> : null}
+      {contentAvailable && (pendingAction === "reviewers" || pendingAction === "labels" || pendingAction === "reaction") ? <MutationState mutation={submission} /> : null}
       {contentAvailable && pendingAction === "pr-action" ? <MutationState mutation={submission} /> : null}
+      {contentAvailable && mergeContext.error && mergeContext.error.message !== details.error?.message && mergeContext.error.message !== thread.error?.message && client?.machine.capabilities?.includes("inbox.review.v1") && item.provider === "github" && item.kind === "pr" && item.state.toLowerCase() === "open" && !item.draft ? <QueryState query={mergeContext} loading="none" /> : null}
       {scopeCurrent ? <QueryState query={{ ...availability, refetch: refreshConversation }} loading="none" onManageConnections={manageConnections} /> : null}
       {accessMessage || operationMessage ? <Notice tone={uncertain || desktopUnavailable ? "warning" : undefined}
         message={[accessMessage, operationMessage].filter(Boolean).join(" ")} /> : null}
       {contentAvailable ? <>
-      {(item.labels?.length || item.assignees?.length) ? <Disclosure label={copy("Etiketler ve atananlar", "Labels and assignees")}>
+      {(snapshotLabels.length || item.assignees?.length) ? <Disclosure label={snapshotLabels.length ? copy("Etiketler ve atananlar", "Labels and assignees") : copy("Atananlar", "Assignees")}>
       <Row>
-        {(item.labels ?? []).map((label) => (
+        {snapshotLabels.map((label) => (
           <Badge key={label.name} label={label.name} />
         ))}
         {(item.assignees ?? []).map((assignee) => (
@@ -251,9 +269,13 @@ export function ProviderInboxDetail({
       </Disclosure> : null}
       <QueryState query={{...details, refetch: sharedReadFailure ? refreshConversation : refreshDetails}} onManageConnections={manageConnections} />
       {details.data ? <ProviderInboxDescription details={details.data} /> : null}
+      {item.provider === "github" && item.kind === "pr" ? <>
+        <ToggleField label={copy("Bot etkinliğini göster", "Show bot activity")} value={showBotActivity} onChange={setShowBotActivity} />
+        <PullRequestMetadata input={input} canRead={contentAvailable} disabled={busy || uncertain || !writeAllowed} onCommand={submit} />
+      </> : null}
       <Row>
       {reviewAvailable ? <Button tone="primary"
-        label={copy("Pull request incelemesi", "Pull request review")} disabled={busy || uncertain || !readAllowed} onPress={() => { if (readableNow() && !latest.current.busy && !latest.current.uncertain) setReviewing(true); }} /> : null}
+        label={copy("Dosyalar ve inceleme", "Files and review")} disabled={busy || uncertain || !readAllowed} onPress={() => { if (readableNow() && !latest.current.busy && !latest.current.uncertain) setReviewing(true); }} /> : null}
       <Button tone={reviewAvailable ? "quiet" : "primary"} label={form.values.body.trim() ? copy("Yorum taslağına dön", "Continue comment draft") : copy("Yorum ekle", "Add a comment")} disabled={busy || !writeAllowed} onPress={() => { if (editableNow()) setComposing(true); }} />
       </Row>
       </> : readAllowed ? <>

@@ -1,4 +1,6 @@
-import type { ComponentType, ReactNode } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
+import MessageCircleQuestion from "lucide-react-native/icons/message-circle-question";
+import { SideChatSheet } from "@/features/side-chat/side-chat-sheet";
 import { StyleSheet, View } from "react-native";
 import ArrowRightLeft from "lucide-react-native/icons/arrow-right-left";
 import ClipboardCheck from "lucide-react-native/icons/clipboard-check";
@@ -84,7 +86,8 @@ export function SessionOptionsMenu({
 }) {
   const copy = useCopy();
   const { colors } = useMobileTheme();
-  const icon = (Glyph: IconComponent): ReactNode => (
+  const [sideOpen, setSideOpen] = useState(false);
+  const icon =(Glyph: IconComponent): ReactNode => (
     <IconTile><Glyph size={18} strokeWidth={2} color={colors.muted} /></IconTile>
   );
   const go = (action: () => void) => () => {
@@ -96,6 +99,8 @@ export function SessionOptionsMenu({
     : undefined;
   const showNotes = !!projectId && hasSession;
   return (
+    <>
+    <SideChatSheet visible={sideOpen} sessionId={sessionId} onClose={() => setSideOpen(false)} />
     <Sheet visible={visible} title={copy("Oturum seçenekleri", "Session options")} onClose={onClose}>
       <Stack style={{ gap: space.lg }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
@@ -167,6 +172,15 @@ export function SessionOptionsMenu({
                 detail={runningNote}
                 disabled={blocked || running}
                 onPress={go(actions.secondOpinion)}
+              />
+              <NavigationRow
+                icon={icon(MessageCircleQuestion)}
+                label={copy("Yan soru", "Side question")}
+                disabled={blocked}
+                onPress={() => {
+                  onClose();
+                  setSideOpen(true);
+                }}
               />
               {projectId ? (
                 <NavigationRow
@@ -252,6 +266,7 @@ export function SessionOptionsMenu({
         ) : null}
       </Stack>
     </Sheet>
+    </>
   );
 }
 

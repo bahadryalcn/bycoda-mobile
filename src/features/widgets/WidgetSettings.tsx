@@ -1,13 +1,15 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect } from "react";
 
 import { useCopy } from "@/ui/copy";
 import { ToggleField } from "@/ui/fields";
-import { Notice } from "@/ui/primitives";
+import { Notice, SegmentedRow } from "@/ui/primitives";
 
 import { useWidgetPreferences } from "./model/widget-preferences";
+import { useUsageWidgetPreferences } from "./model/usage-widget-preferences";
+import { usageWindowOptions } from "./model/usage-widget";
 
 /** Opt-in for session titles on home and lock screen widgets, which sit outside the app lock. */
-export function WidgetSettings({ icon }: { icon?: ReactNode }) {
+export function WidgetSettings() {
   const copy = useCopy();
   const showTitles = useWidgetPreferences((state) => state.showTitles);
   const showQuestionText = useWidgetPreferences((state) => state.showQuestionText);
@@ -18,14 +20,27 @@ export function WidgetSettings({ icon }: { icon?: ReactNode }) {
   const pending = useWidgetPreferences((state) => state.pending);
   const storageError = useWidgetPreferences((state) => state.storageError);
   const retryStorage = useWidgetPreferences((state) => state.retryStorage);
+  const usageWindows = useUsageWidgetPreferences((state) => state.windows);
+  const usageHydrated = useUsageWidgetPreferences((state) => state.hydrated);
+  const hydrateUsage = useUsageWidgetPreferences((state) => state.hydrate);
+  const setUsageWindows = useUsageWidgetPreferences((state) => state.setWindows);
   useEffect(() => {
     // Read the stored privacy choice before the editor may change it.
     void hydrate();
-  }, [hydrate]);
+    void hydrateUsage();
+  }, [hydrate, hydrateUsage]);
   return (
     <>
+      <SegmentedRow
+        label={copy("Kullanım limitleri widget'ı", "Usage limits widget")}
+        value={usageWindows}
+        disabled={!usageHydrated}
+        options={usageWindowOptions(copy)}
+        onChange={(value) => {
+          void setUsageWindows(value);
+        }}
+      />
       <ToggleField
-        icon={icon}
         label={copy("Oturum başlıklarını widget'larda göster", "Show session titles on widgets")}
         help={copy(
           "Widget'lar uygulama kilidinin dışında görünür. Kapalıyken yalnızca proje adları görünür.",

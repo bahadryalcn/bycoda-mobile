@@ -19,7 +19,9 @@ import {
   Sheet,
   Stack,
   StateView,
+  ToggleField,
 } from "@/ui/primitives";
+import { isTestFile } from "../pull-requests/model/list";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { ErrorText } from "../workspace/shared";
@@ -58,6 +60,8 @@ export function ProviderPrReview({
   const mounted = useRef(false);
   useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; reviewOwner.current = null; }; }, []);
   const [editor, setEditor] = useState<number | null>(null);
+  const [selectedPath, setSelectedPath] = useState("");
+  const [hideTests, setHideTests] = useState(false);
   const supported =
     item.kind === "pr" &&
     item.provider === "github" &&
@@ -217,11 +221,17 @@ export function ProviderPrReview({
       }
     >
       <ScreenList<PrReviewLine & { commentable: boolean }>
-        data={contentAvailable ? rows.lines : []}
+        data={contentAvailable ? rows.lines.filter(line => (!selectedPath || line.path === selectedPath) && (!hideTests || !isTestFile(line.path))) : []}
         keyExtractor={(line) => line.id}
         header={
           <Stack>
-            {contentAvailable ? <PrReviewSummary item={item} context={context} /> : null}
+            {contentAvailable ? <PrReviewSummary item={item} context={context} hideTests={hideTests} onSelectFile={setSelectedPath} /> : null}
+            {contentAvailable && context ? <>
+              <ToggleField label={copy("Test dosyalarını gizle", "Hide test files")} value={hideTests} onChange={value => { setHideTests(value); if (value && isTestFile(selectedPath)) setSelectedPath(""); }} />
+              <SelectField label={copy("Dosya", "File")} value={selectedPath} onChange={setSelectedPath}
+                options={[{ value: "", label: copy("Tüm dosyalar", "All files") }, ...context.files.filter(file => !hideTests || !isTestFile(file.path)).map(file => ({ value: file.path, label: file.path }))]} />
+              {selectedPath && !rows.lines.some(line => line.path === selectedPath) ? <Body muted>{copy("Bu dosya için metin diff’i yok. Dosya ikili olabilir veya diff kısmi olabilir.", "No text diff for this file. The file may be binary or the diff may be partial.")}</Body> : null}
+            </> : null}
             {!originCurrent || !canRead ? (
               <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
                 description={copy("İnceleme erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",

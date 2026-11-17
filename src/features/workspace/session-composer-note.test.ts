@@ -5,6 +5,15 @@ import { afterEach, expect, it, vi } from "vitest";
 import { SessionComposer } from "./session-composer";
 import { emptyComposerDraft, type ComposerDraft } from "./composer-draft";
 import type { ComposerTransfer } from "./composer-transfer-model";
+vi.mock("../../../modules/bycoda-key-commands", () => ({ useKeyCommand: () => null }));
+vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => true }));
+vi.mock("@/features/keyboard/keyboard-preferences", () => ({
+  useKeyboardPreferenceHydration: () => null,
+  useKeyboardPreferences: (select: (state: unknown) => unknown) => select({ hydrated: true, enterSends: true }),
+}));
+vi.mock("@/features/account/ui/account-context", () => ({ useAccount: () => ({ status: "signedIn", device: { id: "account" } }) }));
+vi.mock("../outbox/runtime/store", () => ({ sendOutbox: { read: async () => [] } }));
+vi.mock("../outbox/runtime/custody", () => ({ cleanOutboxFiles: async () => {} }));
 
 const state = vi.hoisted(() => ({ activeId: "machine", supported: true, browserSupported: false, stageBrowser: vi.fn(), removeStaged: vi.fn(), draft: null as ComposerDraft | null,
   templateInsert: null as null | ((body: string) => void),
@@ -20,6 +29,8 @@ vi.mock("./composer-access", () => ({ ComposerAccessMenu: () => null }));
 vi.mock("lucide-react-native/icons/send", () => ({ default: () => null }));
 vi.mock("expo-image",() => ({ Image: () => null }));
 vi.mock("./composer-links", () => ({ ComposerLinks: () => null }));
+vi.mock("./use-dictation", () => ({ useDictation: () => ({ view: {}, error: null, phase: "idle", toggle: () => {}, clearError: () => {} }) }));
+vi.mock("./composer-dictation", () => ({ ComposerDictationButton: () => null, ComposerDictationFeedback: () => null }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children), useWindowDimensions: () => ({ height: 800, fontScale: 1 }) }));
 vi.mock("lucide-react-native/icons/arrow-up", () => ({ default: () => null }));

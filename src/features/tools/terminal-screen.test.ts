@@ -17,7 +17,7 @@ const fixture = vi.hoisted(() => ({
   refresh: undefined as any, blockedLeave: false, submit: undefined as any,
 }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, router: { push: vi.fn() }, useFocusEffect: () => undefined }));
-vi.mock("expo-router/react-navigation", () => ({ useNavigation: () => ({ dispatch: vi.fn() }), usePreventRemove: (blocked: boolean) => { fixture.blockedLeave = blocked; } }));
+vi.mock("expo-router/react-navigation", () => ({ useNavigation: () => ({ dispatch: vi.fn(), setOptions: vi.fn() }), usePreventRemove: (blocked: boolean) => { fixture.blockedLeave = blocked; } }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "synthetic-request-id" }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));

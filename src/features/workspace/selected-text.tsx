@@ -63,9 +63,9 @@ export function SelectedText({ text, scope, onClose }: { text: string; scope: Co
       <Button label={copy("Alıntıyı taslağa ekle", "Add quote to draft")} disabled={!excerpt || !bridge || changed || transferred} onPress={() => insert(false)} />
       <Button tone="quiet" label={copy("Çeviri isteği hazırla", "Prepare translation")} disabled={!excerpt || !bridge || changed || transferred} onPress={() => insert(true)} />
     </ReaderActionArea>}>
-    <Body muted>{copy("Aşağıdaki metinde bir bölümü basılı tutup seçin. Seçtiğiniz kısım yanıt taslağınıza alıntı olarak eklenir ya da çeviri isteği olarak hazırlanır. Gönder'e dokunana kadar hiçbir şey gönderilmez.", "Touch and hold to select part of the text below. The selection is added to your reply draft as a quote, or prepared as a translation request. Nothing is sent until you tap Send.")}</Body>
     {changed ? <Notice tone="warning" message={copy("Kaynak veya hedef değişti. Metin seçimini yeniden açın.", "The source or destination changed. Reopen text selection.")} /> : null}
     <Field key={page.index} label={copy("Mesaj metni (salt okunur)", "Message text (read-only)")} value={displayed} readOnly multiline showSoftInputOnFocus={false}
+      info={copy("Aşağıdaki metinde bir bölümü basılı tutup seçin. Seçtiğiniz kısım yanıt taslağınıza alıntı olarak eklenir ya da çeviri isteği olarak hazırlanır. Gönder'e dokunana kadar hiçbir şey gönderilmez.", "Touch and hold to select part of the text below. The selection is added to your reply draft as a quote, or prepared as a translation request. Nothing is sent until you tap Send.")}
       scrollEnabled onSelectionChange={(event) => { if (!ownsPage()) return; current.current.selection = event.nativeEvent.selection; setSelection(event.nativeEvent.selection); }} style={{ height: Math.max(160, height * 0.32) }} />
     <SelectField label={copy("Çeviri dili (yalnız çeviri için)", "Translate to (translation only)")} value={language} options={LANGUAGES} onChange={(value) => { if (!ownsPage()) return; current.current.language = value; setLanguage(value); }} />
   </Sheet>;

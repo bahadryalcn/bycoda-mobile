@@ -4,7 +4,9 @@ import * as Clipboard from "expo-clipboard";
 import Animated from "react-native-reanimated";
 import { space } from "@/ui/tokens";
 import { useAsyncAction } from "@/state/actions";
-import { Body, FormActions, Heading, IdentifierField, MutationState } from "@/ui/primitives";
+import { FormActions, IdentifierField, MutationState } from "@/ui/primitives";
+import { HintLabel } from "@/ui/info-hint";
+import { useMobileTheme } from "@/ui/theme";
 import { enterItem } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { MOBILE_PAIRING_MAX_BYTES } from "../../../../src/integrations/mobile-pairing";
@@ -25,10 +27,12 @@ export async function copiedPairingCode(): Promise<string | undefined> {
 }
 
 export function PairingPaste({ disabled, onCode, onCancel }: PairingPasteProps) {
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const [text, setText] = useState("");
   const read = useAsyncAction();
   const active = useRef(true);
+  // Reason: late clipboard and submit results must not change an abandoned entry.
   useLayoutEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   // Reason: a code already copied on this phone fills the empty field once, without overwriting typing.
   useEffect(() => {
@@ -40,13 +44,10 @@ export function PairingPaste({ disabled, onCode, onCancel }: PairingPasteProps) 
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <View style={{ gap: space.sm }}>
-        <Heading>{copy("Bağlantı kodunu yapıştır", "Paste pairing code")}</Heading>
-        <Body muted>
-          {copy(
+        <HintLabel label={copy("Bağlantı kodunu yapıştır", "Paste pairing code")} style={uiStyles.heading} always help={copy(
             "Bilgisayarındaki bycoda’dan bağlantı kodunu kopyalayıp buraya yapıştır.",
             "Copy the pairing code from bycoda on your computer and paste it here.",
-          )}
-        </Body>
+          )} />
       </View>
         <IdentifierField
           label={copy("Bağlantı kodu", "Pairing code")}

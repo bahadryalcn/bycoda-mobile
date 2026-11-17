@@ -10,6 +10,8 @@ afterEach(() => { vi.clearAllMocks(); f.start.mockReset().mockResolvedValue(); }
 const scope = { sessionId: "native-session", threadId: "reviewed-thread", projectId: "reviewed-project" };
 it("limits background access to voice, the reviewed thread and exact project", () => {
   expect(allowsVoiceRequest(scope, "voice.local.transcribe", {})).toBe(true);
+  expect(allowsVoiceRequest(scope, "voice.cloud.transcribe", {})).toBe(true);
+  expect(allowsVoiceRequest(scope, "voice.cloud.setKey", {})).toBe(false);
   expect(allowsVoiceRequest(scope, "assistant.request", { op: "threads.send", threadId: scope.threadId })).toBe(true);
   expect(allowsVoiceRequest(scope, "assistant.request", { op: "threads.sendIdentity" })).toBe(true);
   expect(allowsVoiceRequest(scope, "assistant.request", { op: "threads.sendIdentity", threadId: "other" })).toBe(false);

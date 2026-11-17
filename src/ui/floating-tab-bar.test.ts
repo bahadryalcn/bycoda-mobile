@@ -49,6 +49,7 @@ const state = vi.hoisted(() => ({
   reduceTransparency: false,
   canBlur: true,
   width: 320,
+  height: 640,
   fontScale: 1,
 }));
 vi.mock("./theme", () => ({
@@ -111,7 +112,7 @@ vi.mock("react-native", () => ({
     addEventListener: () => ({ remove: () => {} }),
   },
   StyleSheet: { hairlineWidth: 1 },
-  useWindowDimensions: () => ({ width: state.width, fontScale: state.fontScale }),
+  useWindowDimensions: () => ({ width: state.width, height: state.height, fontScale: state.fontScale }),
   View: ({
     children,
     accessibilityRole,
@@ -217,6 +218,7 @@ beforeEach(() => {
   state.reduceTransparency = false;
   state.canBlur = true;
   state.width = 320;
+  state.height = 640;
   state.fontScale = 1;
   state.emit.mockReturnValue({ defaultPrevented: false });
   root = createRoot(container);
@@ -495,4 +497,24 @@ it("keeps active tabs unfilled with a single 4dp indicator", async () => {
     .map((node) => JSON.parse(node.getAttribute("data-style")!))
     .filter((style) => style.width === 4 && style.height === 4);
   expect(dots).toHaveLength(1);
+});
+it("shows labels in a wider dock on tablets and landscape large phones", async () => {
+  for (const [width, height] of [[834, 1194], [844, 390]] as const) {
+    state.width = width;
+    state.height = height;
+    await render();
+    const tabs = [...container.querySelectorAll("[role=tab]")];
+    expect(tabs).toHaveLength(5);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["projects", "99+sessions", "inbox", "tools", "settings"]);
+    expect(JSON.parse(tabs[0]!.getAttribute("data-style")!).width).toBe(88);
+    expect(container.querySelector("[data-lines='1']")).not.toBeNull();
+  }
+});
+it("keeps the icon-only dock on a portrait phone", async () => {
+  state.width = 390;
+  state.height = 844;
+  await render();
+  for (const tab of container.querySelectorAll("[role=tab]")) {
+    expect(tab.textContent).not.toContain("projects");
+  }
 });

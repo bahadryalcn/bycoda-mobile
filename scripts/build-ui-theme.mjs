@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { themeColorRoles } from "../src/ui/theme-color-roles.ts";
 import { writeFile, readFile } from "node:fs/promises";
 import { PALETTE_IDS, uniwindThemeName, resolveMobilePalette, space, radii, fontSize, lineHeight, metrics } from "../src/ui/tokens.ts";
 
@@ -7,87 +8,7 @@ const requireUniwind = createRequire(require.resolve("uniwind/package.json"));
 const { converter, formatCss } = requireUniwind("culori");
 const toOklch = converter("oklch");
 function paletteFor(paletteId, mode) {
-const { colors, semantic: semanticColors } = resolveMobilePalette(paletteId, mode);
-const palette = {
-  background: colors.background,
-  foreground: colors.text,
-  card: colors.panel,
-  "card-foreground": colors.text,
-  popover: colors.elevated,
-  "popover-foreground": colors.text,
-  primary: colors.accentSolid,
-  "primary-foreground": colors.primaryText,
-  secondary: colors.raised,
-  "secondary-foreground": colors.text,
-  muted: colors.fill,
-  "muted-foreground": colors.muted,
-  accent: colors.selected,
-  "accent-foreground": colors.text,
-  destructive: colors.danger,
-  "destructive-foreground": colors.danger,
-  "destructive-solid-foreground": colors.primaryText,
-  border: colors.border,
-  input: colors.border,
-  ring: colors.info,
-  panel: colors.panel,
-  raised: colors.raised,
-  separator: colors.separator,
-  subtle: colors.subtle,
-  tertiary: colors.tertiary,
-  fill: colors.fill,
-  elevated: colors.elevated,
-  ink: colors.text,
-  live: colors.live,
-  "user-message": colors.userMessage,
-  scrim: colors.scrim,
-  overlay: colors.raised,
-  "overlay-foreground": colors.text,
-  "surface-1": colors.panel,
-  "surface-2": colors.raised,
-  "surface-3": colors.raised,
-  "surface-4": colors.elevated,
-  surface: colors.panel,
-  "surface-secondary": colors.raised,
-  "surface-tertiary": colors.raised,
-  skeleton: colors.border,
-  inset: colors.background,
-  "primary-soft": semanticColors.info.surface,
-  "primary-soft-foreground": colors.accent,
-  "success-foreground": colors.success,
-  "warning-foreground": colors.warning,
-  "info-foreground": colors.info,
-  "success-solid-foreground": colors.primaryText,
-  "warning-solid-foreground": colors.primaryText,
-  "info-solid-foreground": colors.primaryText,
-  "destructive-soft": semanticColors.danger.surface,
-  "success-soft": semanticColors.success.surface,
-  "warning-soft": semanticColors.warning.surface,
-  "info-soft": semanticColors.info.surface,
-  "info-subtle": semanticColors.info.surface,
-  "success-subtle": semanticColors.success.surface,
-  "warning-subtle": semanticColors.warning.surface,
-  "destructive-subtle": semanticColors.danger.surface,
-  "code-keyword": colors.accent,
-  "code-string": colors.success,
-  "code-number": colors.warning,
-  "code-comment": colors.muted,
-  "code-function": colors.info,
-  "code-property": colors.text,
-  "code-punctuation": colors.muted,
-  "code-inserted": colors.success,
-  "code-deleted": colors.danger,
-  "chart-1": colors.info,
-  "chart-2": colors.success,
-  "chart-3": colors.warning,
-  "chart-4": colors.danger,
-  "chart-5": colors.subtle,
-};
-for (const [name, tone] of Object.entries(semanticColors)) {
-  palette[name] = tone.text;
-  palette[`${name}-surface`] = tone.surface;
-  palette[`${name}-border`] = tone.border;
-}
-return palette;
+  return themeColorRoles(resolveMobilePalette(paletteId, mode));
 }
 const cssColor = (color) => formatCss(toOklch(color));
 const declarations = Object.entries(paletteFor("classic", "dark")).map(

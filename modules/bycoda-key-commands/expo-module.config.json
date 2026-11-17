@@ -1,0 +1,7 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["BycodaKeyCommandsModule"] },
+  "android": {
+    "modules": ["expo.modules.bycodakeycommands.BycodaKeyCommandsModule"]
+  }
+}

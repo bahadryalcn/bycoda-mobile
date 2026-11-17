@@ -24,18 +24,20 @@ vi.mock("@/ui/confirm",()=>({confirmAction:(_title:string,_body:string,_label:st
 vi.mock("@/ui/sheet-guard",()=>({useSheetGuard:({onClose}:{onClose:()=>void})=>({requestClose:onClose,requestCloseThen:(action:()=>void)=>action()})}));
 vi.mock("@/ui/message-text",()=>({MessageText:({text}:{text:string})=>createElement("p",null,text)}));
 vi.mock("./provider-pr-review",()=>({ProviderPrReview:()=>null}));
+vi.mock("../pull-requests/ui/metadata",()=>({PullRequestMetadata:()=>null}));
+vi.mock("./provider-reactions",()=>({ProviderReactions:()=>null}));
 vi.mock("./provider-jobs",async()=>({...await vi.importActual("./provider-jobs"),runInboxJob:state.job}));
 const details={body:"Private description",author:"Private author",headRefName:"private-feature",baseRefName:"private-main"};
 const comment={id:"comment-1",threadId:"thread-1",author:"Private commenter",body:"Private conversation",createdAt:"2026-11-03T00:00:00Z",replies:[]};
 vi.mock("./provider-queries",()=>({useInboxRead:({action}:{action:string},enabled:boolean)=>{
-  state.reads.push({action,enabled});return {data:action==="details"?details:{comments:[comment],truncated:false},error:state.error,isSuccess:!state.error,isFetching:false,
+  state.reads.push({action,enabled});return {data:action==="details"?details:action==="review-context"?{headOid:"a".repeat(40)}:{comments:[comment],truncated:false},error:state.error,isSuccess:!state.error,isFetching:false,
     refetch:action==="details"?state.detailsRetry:state.threadRetry};
 }}));
 vi.mock("@/ui/dialogs",async()=>{const ui=await import("@/ui/primitives");return {Sheet:ui.Sheet,FormActions:ui.FormActions};});
 vi.mock("@/ui/primitives",()=>{
   const Wrap=({children}:PropsWithChildren)=>createElement("div",null,children);
   const Button=({label,disabled,busy,onPress}:{label:string;disabled?:boolean;busy?:boolean;onPress:()=>void})=>{state.presses.set(label,onPress);return createElement("button",{disabled:disabled||busy,onClick:onPress},label);};
-  return {Body:Wrap,Heading:Wrap,Stack:Wrap,Row:Wrap,Card:Wrap,Section:Wrap,Disclosure:Wrap,Button,
+  return {Body:Wrap,Heading:Wrap,Stack:Wrap,Row:Wrap,Card:Wrap,Section:Wrap,Disclosure:Wrap,Button,ToggleField:()=>null,
     SectionHeader:({title}:{title:string})=>createElement("h2",null,title),
     IconButton:Button,
     ScreenList:({header,data,renderItem}: {header:unknown;data:unknown[];renderItem:(row:{item:unknown})=>unknown})=>
@@ -62,6 +64,11 @@ async function type(value:string){await act(async()=>state.changes.get("Comment"
 async function confirm(){await act(async()=>{state.presses.get("Send")!();await new Promise(r=>setTimeout(r,0));});}
 const field=()=>container.querySelector('textarea[aria-label="Comment"]') as HTMLTextAreaElement|null;
 afterEach(async()=>{await act(async()=>root?.unmount());root=undefined;container?.remove();cache?.clear();props={...defaults};state.active="machine";state.project="project";state.allowed=true;state.error=null;state.reads=[];state.confirms=[];state.changes.clear();state.presses.clear();vi.clearAllMocks();vi.unstubAllGlobals();});
+it("binds a confirmed merge to the displayed head",async()=>{
+ await mount();await click("Merge");expect(state.confirms).toHaveLength(1);
+ await act(async()=>{state.confirms[0]!();await new Promise(r=>setTimeout(r,0));});
+ expect(state.job).toHaveBeenCalledWith(expect.anything(),expect.objectContaining({action:"pr-action",input:expect.objectContaining({prAction:"merge",expectedHeadOid:"a".repeat(40),confirm:"CHANGE_PR_STATE"})}));
+});
 it("shows one authorized record identity and preserves exact reply target through confirmation",async()=>{
  await mount();expect(container.textContent?.match(/Private record title/g)).toHaveLength(1);expect(container.textContent).toContain("Private description");expect(container.textContent).toContain("Private conversation");
  await click("Reply");await type("Reviewed reply");await click("Send comment");expect(state.job).not.toHaveBeenCalled();await confirm();

@@ -33,6 +33,7 @@ import { useCopy } from "../../ui/copy";
 import { flushWorkspaceDrafts } from "../workspace/draft-guard";
 import { revokeProviderConsent } from "../privacy/provider-consent";
 import { deleteSavedDrafts, disconnectSavedComputers, matchesReviewedComputers } from "./local-data";
+import { LocalDataCaches } from "./local-data-caches";
 import { clearAttachmentDraftFiles } from "../workspace/attachment-files";
 import { clearMediaCache } from "@/ui/media-loader";
 
@@ -192,6 +193,7 @@ export function LocalDataControls() {
           />
         </NavigationGroup>
       </Animated.View>
+      <LocalDataCaches />
       <Animated.View entering={enterItem(1)} style={{ gap: space.sm }}>
         <NavigationGroup>
           <NavigationRow

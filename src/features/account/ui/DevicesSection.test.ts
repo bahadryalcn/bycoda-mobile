@@ -11,7 +11,7 @@ vi.mock("@/ui/confirm", () => ({ confirmAction: fixture.confirm }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean }) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);
-  return { Body: Group, Badge: () => null, Section: Group, Stack: Group, NavigationGroup: Group, Button, NavigationRow: Button,
+  return { Body: Group, Badge: () => null, Skeleton: () => null, Section: Group, Stack: Group, NavigationGroup: Group, Button, NavigationRow: Button,
     Field: ({ label, value, onChangeText, editable }: { label: string; value: string; editable?: boolean; onChangeText: (value: string) => void }) => createElement("label", null, label, createElement("input", { "aria-label": label, value, disabled: editable === false, onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChangeText(event.target.value) })),
     ErrorNotice: ({ error }: { error: Error | null }) => error ? createElement("p", null, error.message) : null,
     Sheet: (props: PropsWithChildren<{ dirty?: boolean; dismissible?: boolean; onClose(): void }>) => { fixture.sheet = props; return createElement("aside", null, props.children); },

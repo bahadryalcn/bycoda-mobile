@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { Badge, Body, Button, ErrorNotice, FormActions, Field, NavigationGroup, NavigationRow, Section, Sheet, Stack } from "@/ui/primitives";
+import { Badge, Button, ErrorNotice, FormActions, Field, NavigationGroup, NavigationRow, Section, Sheet, Skeleton, Stack } from "@/ui/primitives";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
 import { useSheetGuard } from "@/ui/sheet-guard";
@@ -61,7 +61,7 @@ export function DevicesSection() {
       <Stack>
         <ErrorNotice error={list.error} onRetry={() => void list.refetch()} message={copy("Cihazlar alınamadı.", "Devices could not be loaded.")} />
         <ErrorNotice error={revoke.error} message={copy("Oturum kapatılamadı.", "Could not sign out that device.")} />
-        {list.isPending && !list.error ? <Body muted>{copy("Yükleniyor…", "Loading…")}</Body> : null}
+        {list.isPending && !list.error ? <Skeleton variant="content" rows={2} /> : null}
         <NavigationGroup>
           {items.map((item) => (
             <NavigationRow

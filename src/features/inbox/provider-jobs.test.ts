@@ -31,6 +31,22 @@ afterEach(() => {
 });
 
 describe("durable provider inbox RPC adapter", () => {
+  it("does not replay metadata or reaction writes after acceptance when polling fails", async () => {
+    vi.useFakeTimers();
+    const commands: InboxJobRequest[] = [
+      { action: "reviewers", input: { item: comment.input.item, mode: "request", logins: ["alice"], confirm: "CHANGE_PR_REVIEWERS" } },
+      { action: "labels", input: { item: comment.input.item, mode: "add", names: ["bug"], confirm: "CHANGE_PR_LABELS" } },
+      { action: "reaction", input: { item: comment.input.item, mode: "remove", subjectId: "IC_123", content: "HEART", confirm: "CHANGE_PR_REACTION" } },
+    ];
+    for (const command of commands) {
+      const { client, request } = fixture();
+      request.mockResolvedValueOnce({ id: "job", state: "running" }).mockRejectedValueOnce(new RemoteHostError("machine-a", "network", "Disconnected"));
+      const pending = runInboxJob(client, command), failure = expect(pending).rejects.toMatchObject({ uncertain: true });
+      await vi.advanceTimersByTimeAsync(1000);
+      await failure;
+      expect(request.mock.calls.map(call => call[0])).toEqual(["inbox.provider.request", "inbox.provider.result"]);
+    }
+  });
   it("uses a previously persisted attempt ID without changing existing callers and marks known failed receipts terminal", async () => {
     const { client, request } = fixture();
     request.mockResolvedValueOnce({ id: "known-job", state: "failed", error: "Owner rejected" });

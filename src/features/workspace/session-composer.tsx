@@ -26,6 +26,9 @@ import { useComposerSuggestions } from "./use-composer-suggestions";
 import { useComposerDelivery } from "./use-composer-delivery";
 import { useComposerAttachments } from "./use-composer-attachments";
 import { useDraftAppend } from "./use-draft-append";
+import { useDictation } from "./use-dictation";
+import { ComposerDictationButton, ComposerDictationFeedback } from "./composer-dictation";
+import { appendDictation } from "./dictation-model";
 import { useMounted } from "@/state/use-mounted";
 import { ComposerSuggestions } from "./composer-suggestions";
 import { ComposerAttachments } from "./composer-attachments";
@@ -74,6 +77,16 @@ import { ComposerContextMeter } from "./composer-context-meter";
 import { composerContextReading } from "./composer-context";
 import { ComposerAccessMenu } from "./composer-access";
 import { composerAccessAvailable } from "./composer-access-model";
+import { useIsFocused } from "expo-router/react-navigation";
+import { useKeyCommand } from "../../../modules/bycoda-key-commands";
+import { useCommandPalette } from "@/features/keyboard/keyboard-context";
+import { useKeyboardPreferences, useKeyboardPreferenceHydration } from "@/features/keyboard/keyboard-preferences";
+import { useAccount } from "@/features/account/ui/account-context";
+import { OUTBOX_CAPABILITY, offlineSendFailure, outboxDraftIdentity, sameOutboxDraft, type OutboxRow } from "../outbox/model/outbox";
+import { sendOutbox } from "../outbox/runtime/store";
+import { lockOutbox } from "../outbox/runtime/delivery";
+import { registerOutboxEditor } from "../outbox/runtime/composer-edit";
+import { cleanOutboxFiles } from "../outbox/runtime/custody";
 
 export function SessionComposer({
   scope,
@@ -85,7 +98,14 @@ export function SessionComposer({
   const { colors } = useMobileTheme();
   useTemplateHydration();
   const copy = useCopy();
+  useKeyboardPreferenceHydration();
+  const enterSends = useKeyboardPreferences((state) => state.hydrated && !state.error && state.enterSends);
+  const routeFocused = useIsFocused();
+  const [inputFocused, setInputFocused] = useState(false);
+  const palette = useCommandPalette();
   const client = useHostClient();
+  const account = useAccount();
+  const outboxIntent = useRef<string | null>(null);
   const queue = useSessionQueue(scope);
   const submission = useRef(false);
   const queuedDraft = useRef<QueuedComposerDraft | null>(null);
@@ -168,6 +188,46 @@ export function SessionComposer({
     setLocalError,
   });
   const { uploading, picking, transfers, transfer, claimedFiles } = uploads;
+  useEffect(() => {
+    // Recover write-ahead identity after process death before composer cleanup.
+    if (!ready) return;
+    let current = true;
+    void sendOutbox.read(scope.machineId, scope.sessionId).then(async rows => {
+      if (!current || submission.current || !valueRef.current) return;
+      for (const delivered of rows.filter(row => row.status === "delivered" && !sameOutboxDraft(row.draft, valueRef.current!))) {
+        await sendOutbox.remove(delivered);
+        await cleanOutboxFiles(delivered).catch(() => {});
+      }
+      const row = rows.find(row => row.status !== "dropped" && sameOutboxDraft(row.draft, valueRef.current!));
+      if (!row) return;
+      outboxIntent.current = row.id;
+      if (row.status === "waiting" || row.status === "delivered") {
+        setValue(emptyComposerDraft());
+        await persist();
+        if (row.status === "delivered") {
+          await sendOutbox.remove(row);
+          await cleanOutboxFiles(row).catch(() => {});
+        }
+        outboxIntent.current = null;
+      }
+    }).catch(cause => { if (current) setLocalError(cause); });
+    return () => { current = false; };
+  }, [scope.machineId, scope.sessionId, ready, persist, setValue, valueRef]);
+  useEffect(() => {
+    // The composer remains sole draft writer, including explicit outbox Edit.
+    return registerOutboxEditor(scope, async (row) => {
+      if (!ready || submission.current || transfer.current || row.accountId !== account.device?.id ||
+        account.status !== "signedIn" || useMachines.getState().activeId !== scope.machineId)
+        throw new Error(copy("Taslak şu anda düzenlenemiyor.", "Draft cannot be edited right now."));
+      const current = valueRef.current ?? emptyComposerDraft();
+      if (current.text || current.attachments.length || current.noteCard)
+        throw new Error(copy("Bekleyen mesajı düzenlemeden önce mevcut taslağı kaydet veya temizle.", "Save or clear the current draft before editing the waiting message."));
+      outboxIntent.current = row.id;
+      const restored = { ...row.draft, clientMessageId: row.id };
+      setValue(restored);
+      await persist();
+    });
+  }, [scope.machineId, scope.sessionId, ready, account.status, account.device?.id, persist, setValue, valueRef, copy]);
   useDraftAppend({
     draftKey,
     scopeKey: `${scope.machineId}:${scope.sessionId}`,
@@ -177,18 +237,31 @@ export function SessionComposer({
     setLocalError,
     locked: () => submission.current || !!transfer.current,
   });
+  const dictation = useDictation({
+    machineId: scope.machineId,
+    sessionId: scope.sessionId,
+    locked: !ready || busy || uploading,
+    onText: (spoken) => {
+      if (submission.current || transfer.current) throw new Error(copy("Gönderim sürerken sesle yazılamaz.", "Wait for the current send or upload to finish."));
+      setValue((current) => {
+        const base = current ?? emptyComposerDraft();
+        return { ...base, text: appendDictation(base.text, spoken) };
+      });
+    },
+  });
   const submit = async (override?: ComposerDelivery) => {
     // Draft mode saves the message on the Host, whatever the delivery mode is.
     const sendMode =
       activeComposerMode(valueRef.current?.text ?? "") === "draft" ? "send" : (override ?? mode);
     if (!ready || blocked || busy || uploading || submission.current || !client || !session) return;
-    if (sendMode === "queue" && (!queue.supported || !!queue.error || queue.changing)) return;
+    if (sendMode === "queue" && (!queue.supported || (!!queue.error && !client.machine.capabilities?.includes(OUTBOX_CAPABILITY)) || queue.changing)) return;
     const submitted = valueRef.current;
     if (
       !submitted ||
       (!submitted.text.trim() && !submitted.attachments.length && !submitted.noteCard)
     )
       return;
+    let savedMessageId: string | undefined;
     try {
       if (
         client.machine.id !== scope.machineId ||
@@ -197,6 +270,7 @@ export function SessionComposer({
         return;
       validateNoteDelivery(submitted.noteCard, sendMode, submitted.text, noteContextSupported);
       captureSessionAuthority(session);
+      savedMessageId = outboxDraftIdentity(submitted);
     } catch (cause) {
       setLocalError(cause);
       return;
@@ -226,6 +300,13 @@ export function SessionComposer({
     const controller = new AbortController();
     // Capture before uploads, attachment persistence or queue baseline reads.
     const intendedSession = { ...session, ...captureSessionAuthority(session) };
+    const clientMessageId = outboxIntent.current ?? savedMessageId ?? (sendMode === "queue" ? queuedDraft.current?.id : undefined) ?? randomUUID();
+    outboxIntent.current = clientMessageId;
+    const outboxSupported = client.machine.capabilities?.includes(OUTBOX_CAPABILITY) && account.status === "signedIn" && !!account.device?.id;
+    const unlockOutbox = outboxSupported ? lockOutbox(scope) : undefined;
+    if (outboxSupported && !unlockOutbox) return;
+    let outboxRow: OutboxRow | undefined;
+    let acceptedOutbox = false;
     if (sendMode === "queue")
       queuedDraft.current = queuedComposerDraft(
         queuedDraft.current,
@@ -233,10 +314,29 @@ export function SessionComposer({
         randomUUID,
         intendedSession,
       );
+    if (sendMode === "queue" && queuedDraft.current) queuedDraft.current.id = clientMessageId;
     submission.current = true;
     uploads.begin(controller);
     setLocalError(null);
     try {
+      if (outboxSupported) {
+        const references = submitted.attachments.map(({ uri: _uri, claimId: _claimId, ...reference }) => reference);
+        const command = sendMode === "queue"
+          ? queuedComposerMessage(clientMessageId, { ...intendedSession, authorityGeneration: queuedDraft.current!.authorityGeneration }, submitted.text, references, submitted.noteCard)
+          : composerCommand(intendedSession, sendMode, submitted.text, references, submitted.noteCard);
+        outboxRow = {
+          id: clientMessageId, machineId: scope.machineId, sessionId: scope.sessionId,
+          projectId: intendedSession.projectId,
+          environmentId: client.machine.environmentId, accountId: account.device!.id,
+          createdAt: Date.now(), mode: sendMode, draft: submitted,
+          command: { ...command, sessionId: scope.sessionId, clientMessageId },
+          model: { harness: intendedSession.session.harness, model: intendedSession.session.model,
+            modelSettings: { ...intendedSession.session.modelSettings }, providerAccountId: intendedSession.session.providerAccountId },
+          status: "blocked", attempted: false,
+        };
+        // Write ahead: a process interruption retains the original send identity.
+        await sendOutbox.put(outboxRow);
+      }
       if (sendMode === "queue") {
         setValue((current) =>
           current ? retainQueuedComposerIntent(current, queuedDraft.current!) : current,
@@ -255,26 +355,38 @@ export function SessionComposer({
         scope.sessionId,
         submitted.attachments.map((file) => claimedFiles.current.get(file.id) ?? file),
       );
+      if (outboxRow) {
+        outboxRow.draft = { ...submitted, attachments: submitted.attachments.map(file => claimedFiles.current.get(file.id) ?? file) };
+        outboxRow.command = { ...outboxRow.command, attachments };
+        outboxRow.attempted = true;
+        await sendOutbox.update(outboxRow);
+      }
       if (sendMode === "queue") {
         await queue.enqueue(
-          queuedComposerMessage(
+          { ...queuedComposerMessage(
             queuedDraft.current!.id,
             { ...intendedSession, authorityGeneration: queuedDraft.current!.authorityGeneration },
             submitted.text,
             attachments,
             submitted.noteCard,
-          ),
+          ), ...(outboxSupported ? { clientMessageId } : {}) },
         );
       } else
-        await onCommand(
-          composerCommand(
+        await onCommand({
+          ...composerCommand(
             intendedSession,
             sendMode,
             submitted.text,
             attachments,
             submitted.noteCard,
           ),
-        );
+          ...(outboxSupported ? { clientMessageId } : {}),
+        });
+      if (outboxRow) {
+        acceptedOutbox = true;
+        outboxRow.status = "delivered";
+        await sendOutbox.update(outboxRow);
+      }
       if (!mounted.current) return;
       if (sameComposerContent(valueRef.current, submitted)) {
         setValue(emptyComposerDraft());
@@ -292,6 +404,8 @@ export function SessionComposer({
             : current,
         );
       await persist();
+      if (outboxRow) await sendOutbox.remove(outboxRow);
+      outboxIntent.current = null;
       submitted.attachments.forEach((file) => {
         removeStagedFile(file);
         claimedFiles.current.delete(file.id);
@@ -300,8 +414,27 @@ export function SessionComposer({
       void attachmentReleases.flush(client).catch(() => {});
       haptic.success();
     } catch (cause) {
-      if (mounted.current) setLocalError(cause);
+      if (outboxRow && offlineSendFailure(cause) && !controller.signal.aborted) {
+        try {
+          outboxRow.draft = { ...submitted, attachments: submitted.attachments.map(file => claimedFiles.current.get(file.id) ?? file) };
+          outboxRow.status = "waiting";
+          await sendOutbox.update(outboxRow);
+          if (mounted.current && sameComposerContent(valueRef.current, submitted)) {
+            setValue(emptyComposerDraft());
+            setSelection({ start: 0, end: 0 });
+            await persist();
+            outboxIntent.current = null;
+          }
+          if (mounted.current) setLocalError(null);
+        } catch (storageError) {
+          if (mounted.current) setLocalError(storageError);
+        }
+      } else {
+        if (outboxRow && !acceptedOutbox) await sendOutbox.remove(outboxRow).catch(() => {});
+        if (mounted.current) setLocalError(cause);
+      }
     } finally {
+      unlockOutbox?.();
       submission.current = false;
       uploads.end();
     }
@@ -384,10 +517,14 @@ export function SessionComposer({
     (!prompt.trim() && !value.attachments.length && !value.noteCard) ||
     !!noteError ||
     unavailable ||
-    (target === "queue" && (!queue.supported || !!queue.error)) ||
+    (target === "queue" && (!queue.supported || (!!queue.error && !client?.machine.capabilities?.includes(OUTBOX_CAPABILITY)))) ||
     (target === "send" && running) ||
     (target === "steer" && !canSteer);
   const sendDisabled = sendDisabledFor(mode);
+  const keyboardActive = routeFocused && inputFocused && !palette.visible && !picker && !templatePicker;
+  const hardwareSend = () => { if (!sendDisabled) void submit().catch(setLocalError); };
+  useKeyCommand({ key: "Enter", primary: true, title: copy("Gönder", "Send"), enabled: keyboardActive, textInput: true }, hardwareSend);
+  useKeyCommand({ key: "Enter", title: copy("Gönder", "Send"), enabled: keyboardActive && enterSends && !token, textInput: true }, hardwareSend);
   const alternateMode = running ? busyAlternateMode(mode, delivery.available) : null;
   const alternate = alternateMode && !sendDisabledFor(alternateMode) ? alternateMode : null;
   const insertTemplateBody = (body: string) => {
@@ -485,6 +622,7 @@ export function SessionComposer({
         {token ? (
           <View onLayout={measureSuggestions}>
             <ComposerSuggestions
+              keyboardActive={keyboardActive}
               maximumHeight={suggestionLimits.maximum}
               compact={suggestionLimits.compact}
               items={suggestions.items}
@@ -625,6 +763,8 @@ export function SessionComposer({
             </ChatCircleAction>
           }
           field={{
+            onFocus: () => setInputFocused(true),
+            onBlur: () => setInputFocused(false),
             accessibilityLabel: copy("Mesaj", "Message"),
             selection,
             onSelectionChange: (event) => setSelection(event.nativeEvent.selection),
@@ -660,6 +800,7 @@ export function SessionComposer({
                   />
                 </ChatCircleAction>
               ) : null}
+              <ComposerDictationButton dictation={dictation} />
               {canStop && !hasContent ? null : (
                 <ComposerSendButton
                   mode={mode}
@@ -675,6 +816,7 @@ export function SessionComposer({
           }
         />
         <View onLayout={measureFooter} style={{ gap: space.xs }}>
+          <ComposerDictationFeedback dictation={dictation} />
           <ComposerNotices
             error={error || localError}
             mode={mode}

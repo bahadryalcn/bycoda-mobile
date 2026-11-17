@@ -7,6 +7,7 @@ import { useChatAppearance } from "@/state/chat-appearance";
 import { chatTextSizeOptions } from "./chat-appearance-options";
 import { chatAppearanceFeedback } from "./chat-appearance-feedback";
 import { useAsyncAction } from "@/state/actions";
+import { ChatDisplaySettings } from "./chat-appearance-display";
 
 /** Message text size with its read/save recovery; the Appearance page owns the preview below it. */
 export function ChatAppearanceSettings() {
@@ -34,6 +35,7 @@ export function ChatAppearanceSettings() {
           }}
         />
       </Section>
+      <ChatDisplaySettings />
       {!hydrated ? <Skeleton /> : null}
       {feedback ? (
         <Notice

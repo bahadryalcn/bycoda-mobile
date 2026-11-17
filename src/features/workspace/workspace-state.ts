@@ -6,6 +6,8 @@ export type ProjectView = {
   cwd?: string;
   pickingWorktree: boolean;
   file?: string;
+  /** Segment a file was opened from (Changes), so closing it lands back on that list. */
+  returnTo?: WorkspaceSegment;
 };
 export type ProjectViewAction =
   | { type: "segment"; segment: WorkspaceSegment }
@@ -16,15 +18,21 @@ export type ProjectViewAction =
 export function projectViewReducer(state: ProjectView, action: ProjectViewAction): ProjectView {
   switch (action.type) {
     case "segment":
-      return { ...state, segment: action.segment, pickingWorktree: false };
+      return { ...state, segment: action.segment, pickingWorktree: false, returnTo: undefined };
     case "toggle-worktrees":
       return { ...state, pickingWorktree: !state.pickingWorktree };
     case "worktree":
       return { segment: state.segment, cwd: action.cwd, pickingWorktree: false };
     case "open-file":
-      return { ...state, segment: "files", file: action.path, pickingWorktree: false };
+      return {
+        ...state,
+        segment: "files",
+        file: action.path,
+        pickingWorktree: false,
+        returnTo: state.segment === "files" ? state.returnTo : state.segment,
+      };
     case "close-file":
-      return { ...state, file: undefined };
+      return { ...state, segment: state.returnTo ?? state.segment, file: undefined, returnTo: undefined };
   }
 }
 

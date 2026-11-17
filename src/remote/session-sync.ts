@@ -19,12 +19,17 @@ import {
 import { applySessionSync } from "../../../src/features/connections/model/protocol";
 import type { MobileStreamSubscription } from "./host-transport";
 import { retainSessionAuthority } from "@/domain/session-authority";
-import { SessionProjectMismatch } from "./session-project";
+import { SessionProjectMismatch, foldSessionProject } from "./session-project";
 
 const MAX_TRANSFER_UNITS = 32 * 1024 * 1024;
 
-function requireSessionRead(value: unknown, sessionId: string, projectId: string): HostSession {
-  const parsed = SessionViewSchema.parse(value);
+function requireSessionRead(
+  value: unknown,
+  sessionId: string,
+  projectId: string,
+  aliasIds?: readonly string[],
+): HostSession {
+  const parsed = foldSessionProject(SessionViewSchema.parse(value), projectId, aliasIds);
   const session = parsed.session;
   const settings = session.modelSettings;
   if (session.id === sessionId && parsed.projectId !== projectId)
@@ -78,10 +83,11 @@ export function sessionStreamValue(
   known: HostSession | undefined,
   sessionId: string,
   projectId: string,
+  aliasIds?: readonly string[],
 ): HostSession | "resync" {
   let next: HostSession;
   if (event.params.kind === "snapshot")
-    next = requireSessionRead(event.params.data, sessionId, projectId);
+    next = requireSessionRead(event.params.data, sessionId, projectId, aliasIds);
   else if (event.params.kind === "delta") {
     const sync = SessionSyncSchema.parse(event.params.data);
     if (sync.kind !== "delta" || !known || sync.base !== known.revision) return "resync";
@@ -91,9 +97,14 @@ export function sessionStreamValue(
       { ...sync.value, session: { ...sync.value.session, blocks: sync.blocks } },
       sessionId,
       projectId,
+      aliasIds,
     );
     try {
-      next = applySessionSync(known, sync as unknown as SessionSync);
+      next = foldSessionProject(
+        applySessionSync(known, sync as unknown as SessionSync),
+        projectId,
+        aliasIds,
+      );
     } catch {
       return "resync";
     }
@@ -108,6 +119,8 @@ export function watchSessionStream(
   options: {
     sessionId: string;
     projectId: string;
+    /** Folded legacy ids of the listed project (`aliasIds` from the directory). */
+    aliasIds?: () => readonly string[] | undefined;
     known(): HostSession | undefined;
     apply(value: HostSession, assertCurrent: () => void): Promise<void>;
     onError?(error: Error): void;
@@ -122,6 +135,7 @@ export function watchSessionStream(
         options.known(),
         options.sessionId,
         options.projectId,
+        options.aliasIds?.(),
       );
       if (value === "resync") return "resync";
       await options.apply(value, assertCurrent);

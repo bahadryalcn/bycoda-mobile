@@ -40,6 +40,7 @@ import { useCopy } from "@/ui/copy";
 import { haptic } from "@/ui/motion";
 import { IconTile } from "@/ui/icon-tile";
 import type { FileEntry } from "./wire";
+import { InScreenBack } from "@/ui/in-screen-back";
 import { FileReview } from "./file-review";
 import { FileActions } from "./file-actions";
 import { filesReducer } from "./workspace-state";
@@ -183,6 +184,13 @@ export function ProjectFiles({
   return (
     <>
       {review}
+      {/* An open file, a folder level or a search is in-screen state; the native swipe would reveal the previous route. */}
+      <InScreenBack active={!!selected || (state.view.kind === "browse" && (!!path || !!search))}
+        onBack={() => {
+          if (selected) { browse(); onClearInitialPath?.(); }
+          else if (search) dispatch({ type: "search", value: "" });
+          else navigate(fileParentPath(path));
+        }} />
       <View style={{ flex: 1, display: selected ? "none" : "flex" }}>
       <ScreenList<FileRow>
         grouped

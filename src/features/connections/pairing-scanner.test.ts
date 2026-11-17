@@ -8,6 +8,7 @@ const fixture = vi.hoisted(() => ({ permission: { granted: true, canAskAgain: tr
   listeners: new Map<string, Set<(state: string) => void>>(), close: vi.fn(), paste: vi.fn(), code: vi.fn(), settings: vi.fn() }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/info-hint", () => ({ HintLabel: ({label}: {label: string}) => createElement("p", null, label) }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, radii: {}, space: {}, metrics: { entryWidth: 440 } }));
 vi.mock("@/state/security", () => ({ useSecurity: (selector: (value: unknown) => unknown) => selector({ status: fixture.unlocked ? "unlocked" : "locked" }) }));
@@ -26,6 +27,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);
   const Button=({label,onPress,disabled}:{label:string;onPress:()=>void;disabled?:boolean})=>createElement("button",{onClick:onPress,disabled},label);
   return { Body:Wrapper, Notice:({message}:{message:string})=>createElement("p",null,message), Screen:({children,footer}:PropsWithChildren<{footer?:import("react").ReactNode}>)=>createElement("main",null,children,footer), IconButton:Button, HeaderBackButton:({onPress}:{onPress:()=>void})=>createElement("button",{onClick:onPress},"Geri"), Button,
+    StateView:({title,action}:{title:string;action?:{label:string;onPress:()=>void;busy?:boolean}})=>createElement("section",null,title,action?createElement(Button,{label:action.label,onPress:action.onPress,disabled:action.busy}):null),
     Loading:({label}:{label:string})=>createElement("p",null,label),
     MutationState:({mutation}:{mutation:{error?:Error}})=>mutation.error?createElement("p",null,mutation.error.message):null,
     ErrorNotice:({error,onRetry,retryLabel}:{error?:Error|string;onRetry?:()=>void;retryLabel?:string})=>error?createElement("div",null,createElement("p",null,error instanceof Error?error.message:error),onRetry?createElement(Button,{label:retryLabel??"Retry",onPress:onRetry}):null):null,
@@ -62,7 +64,7 @@ it("replaces initial camera loading with actionable permission-read recovery",as
 });
 it.each(["back","paste","blur"])("ignores an already-delivered barcode handler after %s",async reason=>{
  await render();await settle();const old=fixture.camera!.onBarcodeScanned!;
- if(reason==="paste")await click("Paste instead");else await event(reason);
+ if(reason==="paste")await click("Paste pairing code");else await event(reason);
  await act(async()=>old({data:"late"}));await settle();expect(fixture.code).not.toHaveBeenCalled();
 });
 
@@ -82,4 +84,25 @@ it("retires the physical camera even when blur and focus updates are batched",as
  await act(async()=>{fixture.listeners.get("blur")?.forEach(fn=>fn(""));fixture.listeners.get("focus")?.forEach(fn=>fn(""));});await settle();
  await act(async()=>old({data:"old-frame"}));await settle();expect(fixture.code).not.toHaveBeenCalled();
  await act(async()=>fixture.camera!.onBarcodeScanned!({data:"new-frame"}));await settle();expect(fixture.code).toHaveBeenCalledExactlyOnceWith("new-frame");
+});
+
+it("requests camera access on first entry and keeps paste with the content", async () => {
+ fixture.permission={granted:false,canAskAgain:true,status:"undetermined"};
+ await render();await settle();
+ expect(fixture.request).toHaveBeenCalledOnce();
+ expect(fixture.settings).not.toHaveBeenCalled();
+ const paste=[...container.querySelectorAll("button")].find(button=>button.textContent==="Paste pairing code")!;
+ expect(paste.parentElement?.closest("main > div")).not.toBeNull();
+ await click("Paste pairing code");
+ expect(fixture.paste).toHaveBeenCalledOnce();
+});
+
+it.each([true,false])("camera denial canAskAgain=%s chooses request or Settings", async canAskAgain => {
+ fixture.permission={granted:false,canAskAgain,status:"denied"};
+ await render();await settle();
+ expect(fixture.request).not.toHaveBeenCalled();
+ await click(canAskAgain?"Allow camera":"Open camera settings");await settle();
+ expect(fixture.request).toHaveBeenCalledTimes(canAskAgain?1:0);
+ expect(fixture.settings).toHaveBeenCalledTimes(canAskAgain?0:1);
+ expect(container.textContent).toContain("Paste pairing code");
 });

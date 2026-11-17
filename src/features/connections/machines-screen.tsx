@@ -47,11 +47,11 @@ export function MachinesScreen() {
   const { operation, busy, recover } = controller;
   const { start } = useLocalSearchParams<{ start?: string }>();
   const started = useRef(false);
-  // Welcome's primary action opens the scanner directly instead of repeating the choice screen.
+  // Reason: welcome actions open their entry directly, once per mounted route.
   useEffect(() => {
-    if (start !== "scan" || started.current) return;
+    if ((start !== "scan" && start !== "paste") || started.current) return;
     started.current = true;
-    controller.begin("scan");
+    controller.begin(start);
   }, [start, controller]);
   const [managing, setManaging] = useState<string | null>(null);
   const selected = machines.find((machine) => machine.id === managing);

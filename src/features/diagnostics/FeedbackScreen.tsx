@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Stack as RouterStack, useLocalSearchParams } from "expo-router";
 import { useAccount } from "../account/ui/account-context";
-import { Body, ChoiceChip, Field, FormActions, Notice, Row, Screen, SegmentedControl, Stack, ToggleField, showToast } from "../../ui/primitives";
+import { Body, ChoiceChip, Field, FormActions, Notice, Row, Screen, SegmentedControl, Stack, StateView, ToggleField, showToast } from "../../ui/primitives";
 import { useCopy } from "../../ui/copy";
 import { useDiagnosticResultText } from "./diagnostic-copy";
 import { clearCrashMarker, feedbackClient, feedbackContext, sendDiagnostics, useDiagnosticPrefs } from "./diagnostics-runtime";
@@ -106,7 +106,11 @@ export function FeedbackScreen() {
       <RouterStack.Screen options={{ title: copy("Geri bildirim gönder", "Send feedback") }} />
       {sent ? (
         <Stack>
-          <Body>{copy("Geri bildirimin için teşekkürler! Referans: {p0}", "Thank you for your feedback. Reference: {p0}", { p0: sent.reference })}</Body>
+          <StateView
+            illustration="success"
+            title={copy("Geri bildirimin için teşekkürler!", "Thank you for your feedback!")}
+            description={copy("Referans: {p0}", "Reference: {p0}", { p0: sent.reference })}
+          />
           {sent.logs && sent.logs !== "sent" ? (
             <Notice
               tone="warning"
@@ -128,6 +132,7 @@ export function FeedbackScreen() {
             placeholder={placeholders[draft.kind]}
             value={draft.message}
             error={error}
+            info={copy("Gizli bilgileri yapıştırma.", "Do not paste secrets.")}
             hint={`${length}/${FEEDBACK_MESSAGE_MAX}`}
             onChangeText={(message) => patch({ message })}
           />
@@ -155,7 +160,6 @@ export function FeedbackScreen() {
             value={attachLogs}
             onChange={(value) => patch({ attachLogs: value })}
           />
-          <Body muted>{copy("Gizli bilgileri yapıştırma.", "Do not paste secrets.")}</Body>
           {result?.status === "rate-limited" ? (
             <Notice tone="danger" message={copy("Çok fazla istek. Biraz bekleyip tekrar dene; mesajın korunuyor.", "Too many requests. Wait a little and try again; your message is kept.")} />
           ) : null}

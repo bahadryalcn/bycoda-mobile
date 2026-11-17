@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { readonlyRequest } from "./request-policy";
 
 describe("mobile media retry policy", () => {
+  it("retries parity reads and never replays paid side questions or public mutations", () => {
+    for (const method of ["projects.clone.progress", "workspaces.list", "workspaces.delivery.review", "voice.local.models", "voice.local.modelStatus", "voice.local.setupStatus", "voice.cloud.status"])
+      expect(readonlyRequest(method, {})).toBe(true);
+    for (const method of ["projects.clone", "workspaces.delivery.merge", "sessions.sideQuestion", "inbox.provider.request", "voice.cloud.transcribe"])
+      expect(readonlyRequest(method, {})).toBe(false);
+  });
   it("retries queue reads without replaying edits or queue consumption", () => {
     expect(readonlyRequest("sessions.queue.get", {})).toBe(false);
     for (const method of ["sessions.queue.change", "sessions.queue.claim", "sessions.queue.finish"])

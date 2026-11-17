@@ -17,6 +17,7 @@ import {
   Sheet,
   StateView,
 } from "@/ui/primitives";
+import { InScreenBack } from "@/ui/in-screen-back";
 import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { useActiveMachine } from "@/state/machines";
@@ -28,6 +29,8 @@ import { GitDiffPanel } from "./git-diff";
 import { GitHistoryPanel } from "./git-history";
 import { GitStashes } from "./git-stashes";
 import { GitManagement } from "./git-management";
+import { GitDeliverySheet } from "./git-delivery";
+import { isManagedBranch } from "./git-branch-name";
 import { ConflictReview } from "./conflict-review";
 import { GitActionsSheet } from "./git-actions-sheet";
 import { GitLinkPullRequestSheet, useLinkedPullRequest } from "./git-link-pr";
@@ -79,6 +82,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
   const [actionsOpen, setActionsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [linkPrOpen, setLinkPrOpen] = useState(false);
+  const [deliveryOpen, setDeliveryOpen] = useState(false);
   const prLink = useLinkedPullRequest(scope);
   const showBranches = () => dispatch({ type: "view", view: { kind: "branches" } });
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -123,28 +127,23 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
       unregister?.();
     };
   }, [busy, hasDraft, draft.ready, draft.error, persist, draftKey, onDraftGuard, copy]);
-  usePreventRemove(busy || hasDraft || !!selection || historyOpen || stashesOpen || managementOpen || !!conflictReview, ({ data: event }) => {
+  const inSubview = !!selection || historyOpen || stashesOpen || managementOpen || !!conflictReview;
+  // Leaves the innermost in-screen sub-view; false when the list itself is showing.
+  const exitSubview = () => {
+    if (historyOpen) setHistoryOpen(false);
+    else if (stashesOpen) stashExit.current?.();
+    else if (managementOpen) managementExit.current?.();
+    else if (gitReviewExit.current) gitReviewExit.current();
+    else if (selection) showFiles();
+    else return false;
+    return true;
+  };
+  // The native swipe is off while a sub-view or a running action owns back, so it never reveals
+  // the previous route; the edge swipe and the Android back button run the same exit.
+  const edge = <InScreenBack active={inSubview || busy} onBack={() => { if (!busy) exitSubview(); }} />;
+  usePreventRemove(busy || hasDraft || inSubview, ({ data: event }) => {
     if (busy) return;
-    if (historyOpen) {
-      setHistoryOpen(false);
-      return;
-    }
-    if (stashesOpen) {
-      stashExit.current?.();
-      return;
-    }
-    if (managementOpen) {
-      managementExit.current?.();
-      return;
-    }
-    if (gitReviewExit.current) {
-      gitReviewExit.current();
-      return;
-    }
-    if (selection) {
-      showFiles();
-      return;
-    }
+    if (exitSubview()) return;
     void persist()
       .then(() => navigation.dispatch(event.action))
       .catch(() => {});
@@ -157,6 +156,12 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
     draft.setValue((current) => ({ message: "", branchName: "", ...current, ...patch }));
   const choose = (confirmation: GitConfirmation) => {
     if (busy || !draft.ready) return;
+    // Managed branches refuse a direct push; offer the reviewed delivery flow instead.
+    if (confirmation.kind === "push" && isManagedBranch(data?.branch)) {
+      setActionsOpen(false);
+      setDeliveryOpen(true);
+      return;
+    }
     setConfirmationError(null);
     dispatch({
       type: "confirm",
@@ -269,17 +274,17 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
     [data?.files, fileQuery, fileFilter, selection],
   );
   if (historyOpen && root)
-    return <GitHistoryPanel key={JSON.stringify([machine?.id, projectId, cwd, root])} scope={scope} onClose={() => setHistoryOpen(false)} />;
+    return <>{edge}<GitHistoryPanel key={JSON.stringify([machine?.id, projectId, cwd, root])} scope={scope} onClose={() => setHistoryOpen(false)} /></>;
   if (stashesOpen && root)
-    return <GitStashes key={stashScope} scope={scope} onClose={() => setStashesOpen(false)}
+    return <>{edge}<GitStashes key={stashScope} scope={scope} onClose={() => setStashesOpen(false)}
       onBusyChange={(value) => setStashWrite((current) => !value && current?.scope !== stashScope ? current : { scope: stashScope, busy: value })}
-      registerExit={(exit) => { stashExit.current = exit; }} />;
+      registerExit={(exit) => { stashExit.current = exit; }} /></>;
   if (managementOpen && root)
-    return <GitManagement key={stashScope} scope={scope} initialTab={managementTab} onClose={() => setManagementOpen(false)}
+    return <>{edge}<GitManagement key={stashScope} scope={scope} initialTab={managementTab} onClose={() => setManagementOpen(false)}
       onBusyChange={(value) => setStashWrite((current) => !value && current?.scope !== stashScope ? current : { scope: stashScope, busy: value })}
-      registerExit={(exit) => { managementExit.current = exit; }} />;
+      registerExit={(exit) => { managementExit.current = exit; }} /></>;
   if (conflictReview && root)
-    return <ConflictReview key={`${stashScope}:${conflictReview}`} scope={scope} path={conflictReview} onClose={() => setConflictReview(null)} onChanged={() => { void index.refetch(); }} onBusyChange={(value) => setStashWrite((current) => !value && current?.scope !== stashScope ? current : { scope: stashScope, busy: value })} registerExit={(exit) => { gitReviewExit.current = exit; }} />;
+    return <>{edge}<ConflictReview key={`${stashScope}:${conflictReview}`} scope={scope} path={conflictReview} onClose={() => setConflictReview(null)} onChanged={() => { void index.refetch(); }} onBusyChange={(value) => setStashWrite((current) => !value && current?.scope !== stashScope ? current : { scope: stashScope, busy: value })} registerExit={(exit) => { gitReviewExit.current = exit; }} /></>;
   if (!data || data.repository === false) {
     const regionError = queryOwnsRegion(index);
     return (
@@ -315,6 +320,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
   }
   return (
     <>
+      {edge}
       <ScreenList<GitListRow>
         grouped
         data={rows}
@@ -513,6 +519,9 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
           refresh: () => { void index.refetch(); },
         }}
       />
+      {deliveryOpen && data.branch ? (
+        <GitDeliverySheet scope={scope} branch={data.branch} onClose={() => setDeliveryOpen(false)} />
+      ) : null}
       <GitLinkPullRequestSheet visible={linkPrOpen && !state.confirmation} projectId={projectId} link={prLink} onClose={() => setLinkPrOpen(false)} />
       <Sheet
         visible={actionsOpen && !state.confirmation}

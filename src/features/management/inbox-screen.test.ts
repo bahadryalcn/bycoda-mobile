@@ -37,7 +37,8 @@ vi.mock("../inbox/inbox-browse-memory-provider",()=>({InboxBrowseMemoryProvider:
 vi.mock("../inbox/attention-row",()=>({AttentionRow:({item,onPress}:{item:{title:string};onPress:()=>void})=>{state.presses.set(item.title,onPress);return createElement("button",{onClick:onPress},item.title);}}));
 vi.mock("@/ui/primitives",()=>{
  const Wrap=({children}:PropsWithChildren)=>createElement("div",null,children);
- return{Body:Wrap,Row:Wrap,SectionHeader:({title}:{title:string})=>createElement("h3",null,title),Badge:({label}:{label:string})=>createElement("span",null,label),
+ const Button=({label,onPress}:any)=>createElement("button",{onClick:onPress},label);
+ return{Button,Body:Wrap,Row:Wrap,SectionHeader:({title}:{title:string})=>createElement("h3",null,title),Badge:({label}:{label:string})=>createElement("span",null,label),
  ActionMenu:({actions}:any)=>{state.actions=actions.filter(Boolean);return createElement("div",null,...state.actions.map(a=>createElement("button",{key:a.key,onClick:a.onPress},a.key)));},
  Sheet:({visible,children,onClose}:any)=>visible?createElement("aside",null,children,createElement("button",{onClick:onClose},"Close help")):null,Screen:Wrap,ScreenHeader:Wrap,StateView:({title,description}:{title:string;description?:string})=>createElement("p",null,title,description),
  QueryState:({query}:{query:{error?:Error}})=>query.error?createElement("p",null,query.error.message):null,

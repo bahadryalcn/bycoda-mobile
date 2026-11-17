@@ -26,6 +26,7 @@ import type { HostSettingsEditorProps } from "./settings-types";
 import { ShellProfileSettings } from "./shell-profile-settings";
 import { useMobileTheme } from "../../ui/theme";
 import { WorkCapsSettings } from "./work-caps-settings";
+import { AgentDefaultsSettings } from "./agent-defaults-settings";
 
 export function HostSettingsEditor({ machineId, machineName, target }: HostSettingsEditorProps) {
   const { uiStyles } = useMobileTheme();
@@ -168,6 +169,7 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
         </>
       ) : null}
       <WorkCapsSettings current={current} enabled={validScope} />
+      <AgentDefaultsSettings current={current} enabled={validScope} />
       <ShellProfileSettings target={opening.target} enabled={validScope} />
     </Stack>
   );

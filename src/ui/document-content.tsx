@@ -15,6 +15,10 @@ import { useCopy } from "./copy";
 import { useMediaSharing } from "./use-media-sharing";
 import { space } from "./tokens";
 
+import { AudioPlayer } from "./preview-audio";
+import { CsvTable } from "./preview-csv-table";
+import { ZipList } from "./preview-zip-list";
+
 const PdfDocument = lazy(() => import("./pdf-document").then(module => ({ default: module.PdfDocument })));
 
 type DocumentContentProps = {
@@ -43,8 +47,11 @@ function DocumentContentBody({ name, text, uri, mimeType = resolveMediaMime(name
   const pdf = mediaType === "application/pdf";
   const video = mediaType.startsWith("video/");
   const html = mediaType === "text/html";
+  const audio = mediaType.startsWith("audio/");
+  const zip = mediaType === "application/zip";
+  const csv = mediaType === "text/csv" || mediaType === "text/tab-separated-values";
   const markdown = mediaType === "text/markdown" || /\.(?:md|markdown)$/i.test(name.split(/[?#]/)[0]!);
-  const canPreview = html || markdown;
+  const canPreview = html || markdown || csv;
   const extension = /\.([a-z0-9]+)$/i.exec(name.split(/[?#]/)[0]!)?.[1]?.toLowerCase();
   const language = html ? "html" : markdown ? "markdown" : mediaType === "application/json" ? "json" : extension || "text";
   const live = useRef(true);
@@ -85,8 +92,11 @@ function DocumentContentBody({ name, text, uri, mimeType = resolveMediaMime(name
         busy={query.isFetching} onPress={() => { if (live.current) void query.refetch({ cancelRefetch: false }); }} /> : null}
       {pdf && uri ? <Suspense fallback={<Loading label={copy("PDF yükleniyor…", "Loading PDF…")} />}>
         <PdfDocument uri={uri} name={name} context={context} />
-      </Suspense> : video && uri ? <InlineVideo uri={uri} name={name} /> : body !== undefined ? (
-        !source && html ? <HtmlDocument html={body} name={name} context={context} />
+      </Suspense> : video && uri ? <InlineVideo uri={uri} name={name} />
+        : audio && uri ? <AudioPlayer uri={uri} name={name} />
+        : zip && uri ? <ZipList uri={uri} /> : body !== undefined ? (
+        !source && csv ? <CsvTable name={name} text={body} />
+          : !source && html ? <HtmlDocument html={body} name={name} context={context} />
           : !source && markdown ? <MessageContent onOpenFile={onOpenFile} text={body}
             context={context ? { ...context, basePath: name } : undefined} />
           : <MessageCode code={body} language={language} context={context}

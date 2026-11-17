@@ -27,6 +27,7 @@ vi.mock("@/ui/fields", () => ({
     ),
 }));
 vi.mock("@/ui/primitives", () => ({
+  SegmentedRow: () => null,
   Notice: ({
     message,
     onRetry,

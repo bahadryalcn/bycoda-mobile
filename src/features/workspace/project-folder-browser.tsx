@@ -29,6 +29,7 @@ import { ProjectIcon } from "@/ui/project-icon";
 import { GroupedListRow, rowInset } from "./shared";
 import { queryOwnsRegion } from "./query-region";
 import type { ProjectDirectories } from "./projects-screen-types";
+import { CloneRepositorySheet } from "./clone-repository";
 
 type Location = { value: string; label: string; detail?: string };
 const pathKey = (path: string) => {
@@ -54,6 +55,7 @@ export function ProjectFolderBrowser({
   const [path, setPath] = useState<string>();
   const [manual, setManual] = useState("");
   const [search, setSearch] = useState("");
+  const [cloning, setCloning] = useState(false);
   const searchRef = useRef<TextInputInstance>(null);
   // Drives and home stay listed while another folder loads (its query data is briefly empty).
   const [rootsSource, setRootsSource] = useState<ProjectDirectories>();
@@ -209,6 +211,14 @@ export function ProjectFolderBrowser({
           </GroupedListRow>
         )}
         footer={
+          <>
+          <Button
+            label={copy("Depoyu klonla", "Clone repository")}
+            tone="quiet"
+            density="compact"
+            disabled={!current || !!folders.error || mutation.isPending}
+            onPress={() => setCloning(true)}
+          />
           <Disclosure label={copy("Yol gir", "Enter path")}>
             <IdentifierField
               label={copy("Klasör yolu", "Folder path")}
@@ -228,8 +238,19 @@ export function ProjectFolderBrowser({
               onPress={() => navigate(manual.trim())}
             />
           </Disclosure>
+          </>
         }
       />
+      {cloning && current ? (
+        <CloneRepositorySheet
+          parentPath={current}
+          onClose={() => setCloning(false)}
+          onCloned={(cloned) => {
+            setCloning(false);
+            onOpen(cloned);
+          }}
+        />
+      ) : null}
     </Sheet>
   );
 }

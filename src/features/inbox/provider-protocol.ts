@@ -10,6 +10,7 @@ import type {
   RemoteInboxReview,
 } from "../../../../src/features/inbox/model/remoteInbox";
 import type { PrReviewContext } from "./provider-review-model";
+import type { PrChecks, PrLabels, PrReviewers } from "../pull-requests/model/results";
 import type { JiraMobileBoard,JiraBoardSnapshot,JiraMobileTransition,JiraWriteOutcome } from "./jira-board-model";
 
 export type InboxOrigin = {
@@ -37,6 +38,7 @@ export type InboxCommentParams = {
 
 export type InboxPrParams = {
   prAction: RemoteInboxPrAction;
+  expectedHeadOid?: string;
   confirm: "CHANGE_PR_STATE";
 };
 
@@ -45,6 +47,10 @@ export type InboxJobInputs = {
   list: { projectId?: string; query: RemoteInboxQuery };
   details: InboxItemInput;
   thread: InboxItemInput;
+  checks: InboxItemInput;
+  reviewers: InboxItemInput & { mode: "list" | "request" | "remove"; logins: string[]; confirm?: "CHANGE_PR_REVIEWERS" };
+  labels: InboxItemInput & { mode: "list" | "add" | "remove"; names: string[]; confirm?: "CHANGE_PR_LABELS" };
+  reaction: InboxItemInput & { mode: "add" | "remove"; subjectId: string; content: string; confirm: "CHANGE_PR_REACTION" };
   comment: InboxItemInput & InboxCommentParams;
   "pr-action": InboxItemInput & InboxPrParams;
   "review-context": InboxItemInput;
@@ -61,6 +67,10 @@ export type InboxJobResults = {
   list: RemoteInboxList;
   details: RemoteInboxDetails;
   thread: RemoteInboxThread;
+  checks: PrChecks;
+  reviewers: PrReviewers;
+  labels: PrLabels;
+  reaction: unknown;
   comment: unknown;
   "pr-action": unknown;
   "review-context": PrReviewContext;
@@ -73,13 +83,13 @@ export type InboxJobResults = {
 };
 
 export type InboxJobAction = keyof InboxJobInputs;
-export type InboxReadAction = "providers" | "list" | "details" | "thread" | "review-context" | "jira-boards" | "jira-board-read" | "jira-issue-transitions";
+export type InboxReadAction = "providers" | "list" | "details" | "thread" | "checks" | "reviewers" | "labels" | "review-context" | "jira-boards" | "jira-board-read" | "jira-issue-transitions";
 
 export type InboxJobRequest<Action extends InboxJobAction = InboxJobAction> = {
   [Kind in Action]: { action: Kind; input: InboxJobInputs[Kind] };
 }[Action];
 
-export type InboxWriteCommand = InboxJobRequest<"comment" | "pr-action" | "review" | "jira-board-transition" | "jira-board-move">;
+export type InboxWriteCommand = InboxJobRequest<"comment" | "pr-action" | "review" | "reviewers" | "labels" | "reaction" | "jira-board-transition" | "jira-board-move">;
 export type InboxWriteResult = {
   action: InboxWriteCommand["action"];
   result: unknown;

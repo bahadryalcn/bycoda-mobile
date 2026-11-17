@@ -79,13 +79,20 @@ export function clearAttachmentDraftFiles(retainedScopes: readonly string[]) {
 export async function stageLocalFile(file: { uri: string; name: string; mimeType?: string }, scope: string): Promise<StagedAttachment> {
   const owner = createDraftStorageOwner(AsyncStorage, `bycoda.mobile.draft.v1:${scope}`);
   return owner.run(async () => {
-    if (!file.uri.startsWith("file:")) throw new Error("Only a downloaded file can be attached.");
-    const directory = new Directory(Paths.document, "chat-drafts", encodeURIComponent(scope));
-    directory.create({ idempotent: true, intermediates: true });
-    const source = new File(file.uri), id = randomUUID(), mimeType = file.mimeType ?? "application/octet-stream";
-    const staged: StagedAttachment = { id, name: file.name || source.name || "attachment", mimeType, size: source.size, uri: new File(directory, id).uri,
-      kind: mimeType.startsWith("image/") ? "image" : mimeType.startsWith("audio/") ? "audio" : "file" };
-    validateAttachment(staged);
-    try { await source.copy(new File(staged.uri)); return staged; } catch (error) { removeStagedFile(staged); throw error; }
+    const shared = file.uri.startsWith("content:");
+    if (!shared && !file.uri.startsWith("file:")) throw new Error("Only a downloaded file can be attached.");
+    // Android share grants (content://) can expire with the sending app, so read them once into
+    // our cache first; the cached copy is private and removed again below.
+    const cached = shared ? new File(Paths.cache, `shared-${randomUUID()}`) : undefined;
+    try {
+      if (cached) await new File(file.uri).copy(cached);
+      const directory = new Directory(Paths.document, "chat-drafts", encodeURIComponent(scope));
+      directory.create({ idempotent: true, intermediates: true });
+      const source = cached ?? new File(file.uri), id = randomUUID(), mimeType = file.mimeType ?? "application/octet-stream";
+      const staged: StagedAttachment = { id, name: file.name || source.name || "attachment", mimeType, size: source.size, uri: new File(directory, id).uri,
+        kind: mimeType.startsWith("image/") ? "image" : mimeType.startsWith("audio/") ? "audio" : "file" };
+      validateAttachment(staged);
+      try { await source.copy(new File(staged.uri)); return staged; } catch (error) { removeStagedFile(staged); throw error; }
+    } finally { if (cached?.exists) cached.delete(); }
   });
 }

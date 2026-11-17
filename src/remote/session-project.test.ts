@@ -78,3 +78,11 @@ it("refuses missing project records and aborts rather than registering a folder"
   ).rejects.toThrow();
   expect(f.request).toHaveBeenCalledTimes(1);
 });
+
+it("folds only the directory's named legacy ids into the listed project", async () => {
+  const { foldSessionProject } = await import("./session-project");
+  const read = { projectId: "legacy", revision: 1 };
+  expect(foldSessionProject(read, "listed", ["legacy"])).toEqual({ projectId: "listed", revision: 1 });
+  expect(foldSessionProject(read, "listed", ["other"])).toBe(read);
+  expect(foldSessionProject(read, "listed", undefined)).toBe(read);
+});

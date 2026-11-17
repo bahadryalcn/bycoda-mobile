@@ -1,12 +1,16 @@
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
-import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
+import { Fragment, Suspense, lazy, memo, useMemo, useState, type ReactNode } from "react";
 import { Linking, ScrollView, Text, View } from "react-native";
 import Square from "lucide-react-native/icons/square";
 import SquareCheck from "lucide-react-native/icons/square-check";
 import { decorativeSvgProps } from "./accessibility";
 import { Body, ErrorText } from "./primitives";
-import { space } from "./tokens";
+import { radii, space } from "./tokens";
+import { latexToText } from "./message-math";
+
+// Lazy: the typesetting engine loads on the first formula, not with every chat screen.
+const MessageMath = lazy(() => import("./message-math-view"));
 import { useCopy } from "./copy";
 import { markdownTarget } from "./message-inline";
 import { parseMessage, MESSAGE_RENDER_LIMIT, type MessageNode } from "./message-model";
@@ -89,6 +93,22 @@ export const MessageContent = memo(function MessageContent({
   );
   const inline = (nodes: MessageNode[]): ReactNode =>
     nodes.map((node, index) => {
+      if (node.type === "math_inline" || node.type === "math_display")
+        return (
+          <Suspense
+            key={index}
+            fallback={<Text style={[typography.code, typography.inlineCode, { fontStyle: "italic" }]}>{latexToText(node.text)}</Text>}
+          >
+            <MessageMath
+              tex={node.text}
+              block={false}
+              display={node.type === "math_display"}
+              fontSize={bodyStyle.fontSize ?? 15}
+              color={colors.text}
+              fallbackStyle={{ ...typography.code, ...typography.inlineCode }}
+            />
+          </Suspense>
+        );
       const child = node.children.length ? inline(node.children) : node.text;
       if (node.type === "image")
         return compactMedia ? null : <Text key={index}>{node.attrs.alt || node.text}</Text>;
@@ -188,6 +208,32 @@ export const MessageContent = memo(function MessageContent({
             compact={compactMedia}
             textSize={textSize ?? preference}
           />
+        );
+      if (node.type === "math_block")
+        return (
+          <Suspense
+            key={key}
+            fallback={
+              <ScrollView
+                horizontal
+                accessibilityLabel={node.text}
+                style={{ backgroundColor: colors.panel, borderRadius: radii.control }}
+                contentContainerStyle={{ padding: space.sm }}
+              >
+                <Text style={[typography.code, { fontStyle: "italic" }]}>{latexToText(node.text)}</Text>
+              </ScrollView>
+            }
+          >
+            <MessageMath
+              tex={node.text}
+              block
+              display
+              fontSize={bodyStyle.fontSize ?? 15}
+              color={colors.text}
+              panelColor={colors.panel}
+              fallbackStyle={typography.code}
+            />
+          </Suspense>
         );
       if (node.type === "hr")
         return (

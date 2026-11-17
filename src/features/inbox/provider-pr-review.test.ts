@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   active: "machine",
   project: "project",
   truncated: false,
+  extraFile: false,
   head: "a".repeat(40),
   draft: null as PrReviewDraft | null,
   submit: vi.fn(),
@@ -47,9 +48,9 @@ vi.mock("./provider-queries", () => ({
       headOid: state.head,
       additions: 1,
       deletions: 1,
-      files: [{ path: "src/file.ts", additions: 1, deletions: 1 }],
+      files: [{ path: "src/file.ts", additions: 1, deletions: 1 }, ...(state.extraFile ? [{ path: "src/api.test.ts", additions: 1, deletions: 0 }] : [])],
       patch:
-        "diff --git a/src/file.ts b/src/file.ts\n--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+new\n",
+        "diff --git a/src/file.ts b/src/file.ts\n--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+new\n" + (state.extraFile ? "diff --git a/src/api.test.ts b/src/api.test.ts\n--- /dev/null\n+++ b/src/api.test.ts\n@@ -0,0 +1 @@\n+test-line\n" : ""),
       truncated: state.truncated,
     },
     refetch: state.refetch,
@@ -101,6 +102,7 @@ vi.mock("@/ui/primitives", () => {
     Stack: Wrap,
     Row: Wrap,
     QueryState: () => null,
+    ToggleField: ({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) => createElement("button", { onClick: () => onChange(!value) }, label),
     SectionHeader: ({ title }: { title: string }) => createElement("div", null, title),
     Sheet: ({ children, footer, title }: PropsWithChildren<{ footer?: ReactNode; title: string }>) =>
       createElement("div", { role: "dialog", "aria-label": title }, children, footer),
@@ -137,7 +139,7 @@ vi.mock("@/ui/primitives", () => {
         disabled: !editable,
         onChange: (event) => onChangeText((event.currentTarget as HTMLTextAreaElement).value),
       }); },
-    SelectField: () => null,
+    SelectField: ({ label, onChange }: { label: string; onChange: (value: string) => void }) => { state.changes.set(label, onChange); return null; },
     ScreenList: ({
       data,
       header,
@@ -199,6 +201,7 @@ afterEach(async () => {
   state.project = "project";
   state.head = "a".repeat(40);
   state.truncated = false;
+  state.extraFile = false;
   state.supported = true;
   state.confirms = [];
   state.confirmBodies = [];
@@ -228,6 +231,16 @@ it("requires explicit head review, uses the displayed removed-side anchor and su
     body: "Please preserve behavior",
     comments: [{ path: "src/file.ts", side: "LEFT", line: 1, body: "Keep the old behavior" }],
   });
+});
+it("selects per-file diffs and hides test files without dropping inline drafts", async () => {
+  state.extraFile = true; await mount();
+  expect(container.textContent).toContain("+test-line"); expect(container.textContent).toContain("+new");
+  await click("Review current head"); await click("Comment on this line", 0); await type("Inline comment", "Keep this draft");
+  await act(async () => state.changes.get("File")!("src/api.test.ts"));
+  expect(container.textContent).toContain("+test-line"); expect(container.textContent).not.toContain("+new");
+  await click("Hide test files"); expect(container.textContent).not.toContain("+test-line"); expect(container.textContent).toContain("+new");
+  expect(state.draft?.comments[0]).toMatchObject({ path: "src/file.ts", side: "LEFT", line: 1, body: "Keep this draft" });
+  await click("Hide test files"); expect(container.textContent).toContain("+test-line");
 });
 it.each([
   ["COMMENT", "Comment"],

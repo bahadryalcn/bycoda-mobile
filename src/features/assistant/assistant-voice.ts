@@ -15,12 +15,19 @@ export function speechParts(text: string): string[] {
   return parts;
 }
 
+/** Thrown when the phone denied microphone access; the UI offers to open system Settings. */
+export class MicrophonePermissionError extends Error {
+  constructor() { super("Microphone permission is required. Enable it in phone settings."); this.name = "MicrophonePermissionError"; }
+}
+
 export type AssistantVoiceTarget = { machineId: string; environmentId: string; threadId: string };
 export type AssistantVoiceState = "idle" | "preparing" | "recording" | "transcribing" | "speaking";
 export type VoicePort = {
   current(): boolean;
   request<T>(method: string, params: Record<string, unknown>, options: { retry: false; timeoutMs: number }): Promise<T>;
 };
+/** Marks a dictation that is transcribed by the cloud: there is no local lease to release. */
+const CLOUD_LEASE = "cloud";
 export type VoiceCapture = { start(): Promise<void>; stop(): void };
 export type AssistantVoiceDependencies = {
   capture(onBuffer: (data: Int16Array, sampleRate: number) => void, onEnded?: (reason: string, error?: string) => void): Promise<VoiceCapture>;
@@ -30,6 +37,8 @@ export type AssistantVoiceDependencies = {
   transcript(target: AssistantVoiceTarget, text: string): void | Promise<void>;
   error(error: unknown): void;
   level?(value: number): void;
+  /** Transcription engine chosen in Settings → Voice; absent means this computer. */
+  engine?(): "local" | "cloud";
 };
 
 /** Foreground microphone lifetime is independent of the expanded conversation route. */
@@ -52,7 +61,7 @@ export class AssistantVoice {
     clearInterval(this.keepAlive); this.keepAlive = undefined;
     const lease = this.lease;
     this.lease = undefined;
-    if (lease) await lease.port.request("voice.local.release", { lease: lease.id }, { retry: false, timeoutMs: 5000 }).catch(() => {});
+    if (lease && lease.id !== CLOUD_LEASE) await lease.port.request("voice.local.release", { lease: lease.id }, { retry: false, timeoutMs: 5000 }).catch(() => {});
   }
   cancel() {
     this.epoch++;
@@ -88,12 +97,12 @@ export class AssistantVoice {
       });
       if (!this.current(epoch)) { capture.stop(); if (epoch === this.epoch) this.cancel(); return; }
       this.capture = capture;
-      const result = await port.request<{ lease: string }>("voice.local.start", { config: { natural: false }, recognitionOnly: true }, { retry: false, timeoutMs: 60000 });
+      const result = this.dependencies.engine?.() === "cloud" ? { lease: CLOUD_LEASE } : await port.request<{ lease: string }>("voice.local.start", { config: { natural: false }, recognitionOnly: true }, { retry: false, timeoutMs: 60000 });
       if (typeof result?.lease !== "string" || !result.lease) throw new Error("Invalid voice connection.");
       if (!this.current(epoch)) {
         capture.stop();
         if (epoch === this.epoch) this.cancel();
-        await port.request("voice.local.release", { lease: result.lease }, { retry: false, timeoutMs: 5000 }).catch(() => {});
+        if (result.lease !== CLOUD_LEASE) await port.request("voice.local.release", { lease: result.lease }, { retry: false, timeoutMs: 5000 }).catch(() => {});
         return;
       }
       this.lease = { port, id: result.lease };
@@ -124,7 +133,10 @@ export class AssistantVoice {
       let offset = 0;
       for (const frame of this.frames) { pcm.set(frame, offset); offset += frame.length; }
       this.frames = []; this.samples = 0;
-      const result = await lease.port.request<{ text: string }>("voice.local.transcribe", { lease: lease.id, audio: pcmBase64(pcm) }, { retry: false, timeoutMs: 40000 });
+      const audio = pcmBase64(pcm);
+      const result = lease.id === CLOUD_LEASE
+        ? await lease.port.request<{ text: string }>("voice.cloud.transcribe", { provider: "openrouter", audio }, { retry: false, timeoutMs: 40000 })
+        : await lease.port.request<{ text: string }>("voice.local.transcribe", { lease: lease.id, audio }, { retry: false, timeoutMs: 40000 });
       if (!this.current(epoch)) return;
       if (typeof result?.text !== "string" || !result.text.trim() || result.text.length > 16000) throw new Error("Speech could not be recognized. Try again.");
       await this.dependencies.transcript(target, result.text.trim());

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { useQuickActions } from "./hooks/use-quick-actions";
 import { useWidgetPublisher } from "./hooks/use-widget-publisher";
+import { useUsageWidgetPublisher } from "./hooks/use-usage-widget-publisher";
 import { useWidgetPreferences } from "./model/widget-preferences";
 import { useWidgetFeedStore } from "./model/widget-feed";
 import { useAccountAccess } from "../account/model/account-access";
@@ -53,6 +54,7 @@ function ActiveWidgetCoordinator() {
     void hydrate();
   }, [hydrate]);
   useWidgetPublisher();
+  useUsageWidgetPublisher();
   useQuickActions();
   return null;
 }

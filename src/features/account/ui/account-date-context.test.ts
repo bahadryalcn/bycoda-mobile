@@ -21,7 +21,7 @@ vi.mock("@/ui/info-hint", () => ({ HintSection: ({ children }: PropsWithChildren
 vi.mock("@/ui/metric-row", () => ({ MetricRow: () => null }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Group, Section: Group, Stack: Group, NavigationGroup: Group, NavigationRow: () => null, Separator: () => null, ErrorNotice: () => null, Button: () => null,
+  return { Body: Group, Section: Group, Stack: Group, NavigationGroup: Group, NavigationRow: () => null, Separator: () => null, ErrorNotice: () => null, Skeleton: () => null, Button: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message) };
 });
 import { ActivitySection } from "./ActivitySection";

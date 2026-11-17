@@ -8,11 +8,14 @@ const state = vi.hoisted(() => ({
   storageError: null as Error | null,
   setThemeMode: vi.fn(() => Promise.resolve()),
   setPalette: vi.fn(() => Promise.resolve()),
+  navigationStyle: "floating",
+  setNavigationStyle: vi.fn(() => Promise.resolve()),
   retryStorage: vi.fn((_error: Error) => Promise.resolve()),
   segmented: undefined as undefined | Record<string, any>,
   palettePicker: undefined as undefined | Record<string, any>,
   notice: undefined as undefined | Record<string, any>,
 }));
+vi.mock("react-native", () => ({ Platform: { OS: "ios" } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/tokens", () => ({ space: { md: 12, xl: 20 } }));
 vi.mock("@/state/actions", () => ({ useAsyncAction: () => ({ isPending: false, run: (work: () => Promise<void>) => work() }) }));

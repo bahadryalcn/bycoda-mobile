@@ -17,7 +17,7 @@ vi.mock("@/ui/tokens", () => ({ colors: {}, metrics: {}, space: {} }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
 vi.mock("@/ui/brand", () => ({ LegalLinks: () => null }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: () => null }));
-vi.mock("expo-router", () => ({ router: {}, useLocalSearchParams: () => ({}), Stack: { Screen: ({options}: {options: {gestureEnabled: boolean; headerLeft?: () => import("react").ReactNode}}) => { fixture.options = options; return options.headerLeft?.() ?? null; } } }));
+vi.mock("expo-router", () => ({ router: {}, useLocalSearchParams: () => ({ start: fixture.start }), Stack: { Screen: ({options}: {options: {gestureEnabled: boolean; headerLeft?: () => import("react").ReactNode}}) => { fixture.options = options; return options.headerLeft?.() ?? null; } } }));
 vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => true }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
@@ -37,6 +37,7 @@ vi.mock("./account-computers-section", () => ({ AccountComputersSection: ({ othe
 vi.mock("./pairing-entry", () => ({ PairingEntry: () => null }));
 vi.mock("./pairing-scanner", () => ({ PairingScanner: () => null }));
 const fixture = vi.hoisted(() => ({ kind: "choices", adding: false, reset: vi.fn(), remove: vi.fn(),
+  start: undefined as string | undefined, begin: vi.fn(),
   busy: false, dirty: false, cancel: vi.fn(), hardwareBack: null as (() => boolean) | null,
   options: undefined as {gestureEnabled:boolean; headerLeft?: () => import("react").ReactNode} | undefined,
   state: { hydrated: true, storageError: null as string | null, connectionPending: false, activeId: "first",
@@ -48,7 +49,7 @@ vi.mock("./use-computer-connection", () => ({
     entry: { kind: fixture.kind },
     operation: { reset: fixture.reset },
     recover: async (callback: () => Promise<void>) => { await callback(); },
-    busy: fixture.busy, cancel: fixture.cancel,
+    busy: fixture.busy, cancel: fixture.cancel, begin: fixture.begin,
   }),
 }));
 vi.mock("@/state/machines", () => ({ useMachines: Object.assign((select?: (state: unknown) => unknown) => (select ? select(fixture.state) : fixture.state), {
@@ -77,6 +78,19 @@ vi.mock("@/ui/primitives", () => {
 });
 import { MachinesScreen } from "./machines-screen";
 import { confirmAction } from "@/ui/confirm";
+
+it.each(["scan", "paste"])("opens welcome's %s entry only once", async start => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div"), root = createRoot(container);
+  fixture.start = start; fixture.begin.mockClear();
+  try {
+    await act(async () => root.render(createElement(MachinesScreen)));
+    await act(async () => root.render(createElement(MachinesScreen)));
+    expect(fixture.begin).toHaveBeenCalledExactlyOnceWith(start);
+  } finally {
+    await act(async () => root.unmount()); fixture.start = undefined; vi.unstubAllGlobals();
+  }
+});
 
 it("owns Back from the initial Add choices, blocks busy exit and restores route gestures on the list", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

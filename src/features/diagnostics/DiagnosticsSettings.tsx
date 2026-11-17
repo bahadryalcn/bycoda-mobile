@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DIAGNOSTIC_RETENTION_DAYS } from "../account/contracts";
 import { useAccount } from "../account/ui/account-context";
-import { Button, Field, Notice, SelectRow, Stack } from "../../ui/primitives";
+import * as Clipboard from "expo-clipboard";
+import { Button, Field, NavigationGroup, Notice, SegmentedRow, Stack } from "../../ui/primitives";
 import { HintSection } from "../../ui/info-hint";
 import { useCopy } from "../../ui/copy";
 import { useDiagnosticResultText } from "./diagnostic-copy";
-import { sendDiagnostics, useDiagnosticPrefs } from "./diagnostics-runtime";
+import { lastCrashLog, sendDiagnostics, useDiagnosticPrefs } from "./diagnostics-runtime";
 import type { DiagnosticMode } from "./diagnostic-prefs";
 import type { DiagnosticSendResult } from "./diagnostic-report";
 
@@ -31,11 +32,22 @@ export function DiagnosticsSettings() {
   const options: { value: DiagnosticMode; label: string; detail: string }[] = [
     { value: "off", label: copy("Kapalı", "Off"), detail: copy("Günlükleri şimdi gönder demedikçe hiçbir şey gönderilmez.", "Nothing is sent unless you choose Send logs now.") },
     { value: "ask", label: copy("Bana sor", "Ask me"), detail: copy("Çökmeden sonra göndermek isteyip istemediğin sorulur.", "After a crash you are asked whether to send them.") },
-    { value: "auto", label: copy("Otomatik gönder", "Send automatically"), detail: copy("Çökmeden sonra otomatik gönderilir, ayrıca haftada bir.", "After a crash they are sent automatically, and once a week.") },
+    { value: "auto", label: copy("Otomatik", "Automatic"), detail: copy("Çökme raporları sormadan gönderilir.", "Crash reports are sent without asking.") },
   ];
   const choose = (value: DiagnosticMode) => {
     setResult(null);
     setMode(value).catch(() => setResult("save-failed"));
+  };
+  const [copied, setCopied] = useState<boolean | null>(null);
+  const copyCrash = async () => {
+    const text = lastCrashLog();
+    if (!text) return setCopied(false);
+    try {
+      await Clipboard.setStringAsync(text);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
   };
   const sendNow = async () => {
     if (pending.current || !mounted.current) return;
@@ -72,15 +84,16 @@ export function DiagnosticsSettings() {
       )}
     >
       <Stack>
-        {options.map((option) => (
-          <SelectRow
-            key={option.value}
-            label={option.label}
-            detail={option.detail}
-            selected={(mode ?? "ask") === option.value}
-            onPress={() => choose(option.value)}
+        {/* One consent with three states, so one control: automatic sends crash reports (and the weekly log) without asking. */}
+        <NavigationGroup>
+          <SegmentedRow
+            label={copy("Günlükleri paylaş", "Share logs")}
+            help={options.map((option) => `${option.label}: ${option.detail}`).join(" ")}
+            value={mode ?? "ask"}
+            options={options.map(({ value, label }) => ({ value, label }))}
+            onChange={choose}
           />
-        ))}
+        </NavigationGroup>
         <Field
           label={copy("Ne ters gitti? (isteğe bağlı)", "What went wrong? (optional)")}
           value={note}
@@ -94,6 +107,17 @@ export function DiagnosticsSettings() {
           onPress={() => void sendNow()}
         />
         {shown ? <Notice tone={shown.tone} message={shown.text} /> : null}
+        <Button
+          label={copy("Son çökme kaydını kopyala", "Copy last crash log")}
+          tone="quiet"
+          onPress={() => void copyCrash()}
+        />
+        {copied !== null ? (
+          <Notice
+            tone={copied ? "success" : "info"}
+            message={copied ? copy("Çökme kaydı kopyalandı.", "Crash log copied.") : copy("Kayıtlı çökme yok.", "No crash recorded.")}
+          />
+        ) : null}
       </Stack>
     </HintSection>
   );

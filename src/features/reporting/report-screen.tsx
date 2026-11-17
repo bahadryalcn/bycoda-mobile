@@ -10,7 +10,7 @@ import { useInfoHint } from "@/ui/info-hint";
 import { ConsentField } from "@/ui/consent-field";
 import Animated from "react-native-reanimated";
 import Flag from "lucide-react-native/icons/flag";
-import { Body, Button, Disclosure, ErrorText, Field, NavigationGroup, Screen, Section, SelectField, Sheet, FormActions, Notice, ToggleField, useSuccessToast } from "@/ui/primitives";
+import { Body, Disclosure, ErrorText, Field, NavigationGroup, NavigationRow, Screen, Section, SelectField, Sheet, FormActions, Notice, ToggleField, useSuccessToast } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
 import { space } from "@/ui/tokens";
@@ -44,6 +44,10 @@ export function ContentReportScreen() {
     "Yalnızca açıklaman ve eklemeyi seçtiğin alıntı incelenmek üzere bycoda’ya gönderilir. Bu taslak yalnızca bellekte tutulur; uygulama sonlandırılırsa kaybolur.",
     "Only your description and any excerpt you choose are sent to bycoda for review. This draft is kept only in memory and is lost if the app process ends.",
   ));
+  const warning = copy(
+    "Erişim anahtarı, eşleştirme kodu, özel dosya veya kişisel bilgi ekleme.",
+    "Do not add access keys, pairing codes, private files or personal information.",
+  );
   const { draft, status, error, receiptId, requestId, revision } = useContentReport();
   const [discarding, setDiscarding] = useState<ReportReview | null>(null);
   const active = useRef(true);
@@ -171,21 +175,15 @@ export function ContentReportScreen() {
         onChange={(consent) => updateContentReport({ consent })} />
       <ErrorText error={visibleError === "consent"} message={errorLabels.consent} />
       </Section>
-      <Body muted>
-          {copy(
-            "Erişim anahtarı, eşleştirme kodu, özel dosya veya kişisel bilgi ekleme.",
-            "Do not add access keys, pairing codes, private files or personal information.",
-          )}
-      </Body>
+      <Body muted>{warning}</Body>
       <Disclosure label={copy("Bildirim ve gizlilik", "Reporting & privacy")}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm }}>
-          <Button
+        <NavigationGroup>
+          <NavigationRow
             label={copy("Gizlilik politikası", "Privacy policy")}
-            tone="quiet"
+            trailing={privacyInfo.button}
             onPress={() => router.push("/legal/privacy")}
           />
-          {privacyInfo.button}
-        </View>
+        </NavigationGroup>
         {privacyInfo.panel}
       </Disclosure>
       <Sheet visible={!!discarding} size="compact" title={copy("Taslağı sil", "Discard draft")} onClose={closeReview}>

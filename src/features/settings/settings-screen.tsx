@@ -4,7 +4,6 @@ import { router, type Href } from "expo-router";
 import Laptop from "lucide-react-native/icons/laptop";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
 import Smartphone from "lucide-react-native/icons/smartphone";
-import LayoutDashboard from "lucide-react-native/icons/layout-dashboard";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
 import LifeBuoy from "lucide-react-native/icons/life-buoy";
@@ -13,6 +12,7 @@ import Palette from "lucide-react-native/icons/palette";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import Globe from "lucide-react-native/icons/globe";
 import Flag from "lucide-react-native/icons/flag";
+import Scale from "lucide-react-native/icons/scale";
 import UserRound from "lucide-react-native/icons/user-round";
 import { IconTile } from "../../ui/icon-tile";
 import { LANGUAGES } from "../../localization";
@@ -26,6 +26,7 @@ import {
   Notice,
   Screen,
   Section,
+  SegmentedRow,
   SelectField,
   Sheet,
   StateView,
@@ -33,6 +34,10 @@ import {
 import { useCopy } from "../../ui/copy";
 import { SecuritySettings } from "../security/security-settings";
 import { EngagementSettings } from "../engagement/engagement-settings";
+import { UpdatesRow } from "../updates/UpdatesRow";
+import { KeyboardSettings } from "../keyboard/keyboard-preferences";
+import { NavigationSettings } from "../navigation-prefs/navigation-settings";
+import { VoiceSettings } from "../voice-settings/voice-settings";
 import { HostSettingsEditor } from "./host-settings-editor";
 import { LocalDataControls } from "./local-data-controls";
 import { DiagnosticsSettings } from "../diagnostics/DiagnosticsSettings";
@@ -158,27 +163,23 @@ export function SettingsScreen() {
             options={[{ value: "system" as const, label: copy("Sistem", "System") }, ...LANGUAGES]}
             onChange={setLanguage}
           />
-          <SelectField
-            variant="row"
+          <SegmentedRow
             icon={tile(MessageSquare)}
             label={copy("Ajan çalışırken gönder", "Send while agent is running")}
+            help={copy(
+              "Yönlendir: mesaj çalışan ajana hemen iletilir. Sıraya al: ajan bitince gönderilir.",
+              "Steer sends the message to the running agent now. Queue sends it after the agent finishes.",
+            )}
             value={busySend}
             disabled={!busySendHydrated}
             options={[
-              {
-                value: "steer" as const,
-                label: copy("Yönlendir", "Steer"),
-                detail: copy("Çalışan ajana hemen ilet.", "Send to the running agent now."),
-              },
-              {
-                value: "queue" as const,
-                label: copy("Sıraya al", "Queue"),
-                detail: copy("Ajan bitince gönder.", "Send after the agent finishes."),
-              },
+              { value: "steer" as const, label: copy("Yönlendir", "Steer") },
+              { value: "queue" as const, label: copy("Sıraya al", "Queue") },
             ]}
             onChange={(value) => { void busySendStore.getState().setMode(value); }}
           />
           {busySendError ? <Notice tone="warning" message={copy("Gönderim tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The send preference could not be read or saved. Select it again to retry.")} /> : null}
+          <KeyboardSettings />
         </NavigationGroup>
         {appearanceError ? (
           <Notice
@@ -195,6 +196,12 @@ export function SettingsScreen() {
           </Sheet>
         ) : null}
       </Section>
+      <Section title={copy("Gezinme", "Navigation")}>
+        <NavigationSettings />
+      </Section>
+      <Section title={copy("Ses", "Voice")}>
+        <VoiceSettings />
+      </Section>
       <Section title={copy("Erişim ve gizlilik", "Access & privacy")}>
         <NavigationGroup>
           <NavigationRow
@@ -207,13 +214,15 @@ export function SettingsScreen() {
             icon={tile(Smartphone)}
             onPress={() => setPanel("permissions")}
           />
-          <WidgetSettings icon={tile(LayoutDashboard)} />
           <NavigationRow
             label={titles.privacy}
             icon={tile(LockKeyhole)}
             onPress={() => setPanel("privacy")}
           />
         </NavigationGroup>
+      </Section>
+      <Section title={copy("Widget'lar", "Widgets")}>
+        <NavigationGroup><WidgetSettings /></NavigationGroup>
       </Section>
       <Section title={copy("Destek", "Support")}>
         <NavigationGroup>
@@ -228,6 +237,7 @@ export function SettingsScreen() {
             onPress={() => router.navigate("/report")}
           />
           <NavigationRow label={titles.about} icon={tile(Info)} onPress={() => setPanel("about")} />
+          <NavigationRow label={copy("Açık kaynak lisansları", "Open-source licenses")} icon={tile(Scale)} onPress={() => router.navigate("/licenses")} />
         </NavigationGroup>
       </Section>
       {panel && panel !== "visual" ? (
@@ -277,7 +287,10 @@ export function SettingsScreen() {
               <LocalDataControls />
             </>
           ) : (
-            <EngagementSettings />
+            <>
+              <EngagementSettings />
+              <UpdatesRow />
+            </>
           )}
         </Sheet>
       ) : null}

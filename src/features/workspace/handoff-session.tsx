@@ -264,7 +264,8 @@ export function HandoffSession({
       </Body>
       <Button
         label={copy("Aktarılacak bağlamı incele", "Review outgoing context")}
-        tone="quiet"
+        tone="secondary"
+        fullWidth
         disabled={locked || !input || source.status === "running" || !selected}
         busy={preview.isFetching}
         onPress={() => {

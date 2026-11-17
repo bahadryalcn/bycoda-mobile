@@ -53,6 +53,11 @@
               "scheme": "https",
               "host": "link.bycoda.codes",
               "pathPrefix": "/session/v1/"
+            },
+            {
+              "scheme": "https",
+              "host": "link.bycoda.codes",
+              "pathPrefix": "/new/v1"
             }
           ],
           "category": [
@@ -73,6 +78,12 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2b86d28c-1c30-4ca7-966d-bba4a8da19df"
     },
     "web": {
       "bundler": "metro",
@@ -199,6 +210,20 @@
               }
             },
             {
+              "name": "UsageLimits",
+              "displayName": "Usage limits",
+              "description": "Codex and Claude session and weekly limit usage.",
+              "ios": { "supportedFamilies": ["systemSmall", "systemMedium", "accessoryRectangular"] },
+              "android": {
+                "minWidth": 250,
+                "minHeight": 110,
+                "targetCellWidth": 4,
+                "targetCellHeight": 2,
+                "resizeMode": "both",
+                "initialLayout": "./src/features/widgets/ui/UsageLimits.android.tsx"
+              }
+            },
+            {
               "name": "SessionActivity",
               "displayName": "Session activity",
               "description": "Live status of running sessions.",
@@ -249,6 +274,28 @@
           "microphonePermission": "Speak to your Bycoda assistant. Audio is processed on your connected computer.",
           "enableBackgroundRecording": false,
           "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "iosAppGroupIdentifier": "group.com.bycoda.mobile",
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsText": true,
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
+            "NSExtensionActivationSupportsImageWithMaxCount": 7,
+            "NSExtensionActivationSupportsMovieWithMaxCount": 1,
+            "NSExtensionActivationSupportsFileWithMaxCount": 7
+          },
+          "androidIntentFilters": [
+            "text/*",
+            "image/*",
+            "application/*"
+          ],
+          "androidMultiIntentFilters": [
+            "image/*"
+          ]
         }
       ],
       "expo-sharing",

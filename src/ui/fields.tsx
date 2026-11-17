@@ -1,21 +1,32 @@
 import { useMobileTheme } from "./theme";
 import { useState, type ComponentProps, type ReactNode } from "react";
-import { StyleSheet, View, type TextInputProps } from "react-native";
+import { Pressable, StyleSheet, View, type TextInputProps } from "react-native";
 import { Switch } from "panelui-native/components/switch";
 import { Input as PanelInput } from "panelui-native/components/input";
 import { InputGroup } from "panelui-native/components/input-group";
 import { Body } from "./typography";
 import { FieldError } from "./feedback";
 import { haptic } from "./motion";
-import { metrics, space, gapIcon } from "./tokens";
+import { metrics, opacity, space, gapIcon } from "./tokens";
 import type { ToggleFieldProps, InputProps } from "./component-props";
 import { useInNavigationGroup } from "./navigation-row";
 import { HintLabel, InfoHint, InfoPanel, UnitHint, isUnitHint } from "./info-hint";
 
+/**
+ * The one boolean setting control: a row with a trailing Switch where the whole row toggles
+ * (accessibility role `switch`). Inside a NavigationGroup it matches NavigationRow's padding,
+ * icon slot and inset separator. An explanation goes in `help` (info icon that reveals on tap),
+ * never as a paragraph under the label; `detail` is only a short status or current value.
+ */
 export function ToggleField({ label, labelLines, detail, help, value, onChange, disabled, icon }: ToggleFieldProps) {
-  const { uiStyles } = useMobileTheme();
+  const { uiStyles, pressedFill } = useMobileTheme();
   const grouped = useInNavigationGroup();
   const [helpOpen, setHelpOpen] = useState(false);
+  const toggle = () => {
+    if (disabled) return;
+    haptic.select();
+    onChange(!value);
+  };
   const row = (
     <View
       style={{
@@ -23,31 +34,37 @@ export function ToggleField({ label, labelLines, detail, help, value, onChange, 
         alignItems: "center",
         gap: gapIcon,
         minHeight: grouped ? metrics.rowHeightProject : metrics.touchTarget,
-        paddingHorizontal: 0,
-        paddingVertical: grouped ? space.sm : 0,
+        paddingHorizontal: grouped ? space.sm : 0,
+        paddingVertical: grouped ? space.row : 0,
+        opacity: disabled ? opacity.disabled : 1,
       }}
     >
-      {icon ? <View style={{ alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</View> : null}
-      <View style={[uiStyles.grow, { gap: space.xxs }]}>
-        <Body style={uiStyles.label} numberOfLines={labelLines}>{label}</Body>
-        {detail ? (
-          <Body muted style={uiStyles.caption}>
-            {detail}
-          </Body>
-        ) : null}
-        <InfoPanel text={help ?? ""} open={helpOpen} />
-      </View>
-      {help ? <InfoHint text={help} open={helpOpen} onToggle={() => setHelpOpen((v) => !v)} /> : null}
-      <Switch
+      <Pressable
+        accessibilityRole="switch"
         accessibilityLabel={label}
         accessibilityHint={help ?? detail}
-        value={value}
-        onValueChange={(next: boolean) => {
-          haptic.select();
-          onChange(next);
-        }}
+        accessibilityState={{ checked: value, disabled: !!disabled }}
+        aria-checked={value}
+        aria-disabled={!!disabled}
         disabled={disabled}
-      />
+        onPress={toggle}
+        style={({ pressed }) => [
+          { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: gapIcon, minHeight: metrics.touchTarget },
+          pressed && { backgroundColor: pressedFill },
+        ]}
+      >
+        {icon ? <View style={{ alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</View> : null}
+        <View style={[uiStyles.grow, { gap: space.xxs }]}>
+          <Body style={uiStyles.label} numberOfLines={labelLines}>{label}</Body>
+          {detail ? <Body muted style={uiStyles.caption}>{detail}</Body> : null}
+          <InfoPanel text={help ?? ""} open={helpOpen} />
+        </View>
+      </Pressable>
+      {help ? <InfoHint text={help} open={helpOpen} onToggle={() => setHelpOpen((v) => !v)} /> : null}
+      {/* The row owns the announcement and the tap; the Switch only draws the state. */}
+      <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+        <Switch value={value} onValueChange={toggle} disabled={disabled} />
+      </View>
     </View>
   );
   // Same rhythm as NavigationRow: optional leading icon slot and an inset separator in groups.

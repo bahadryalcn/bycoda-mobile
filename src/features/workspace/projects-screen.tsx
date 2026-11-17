@@ -39,10 +39,13 @@ import {
   type DirectoryRow,
 } from "./project-directory";
 import { useProjectDirectory } from "./use-project-directory";
+import { GroupLockSection } from "../group-lock/group-lock-section";
 import { ProjectFolderBrowser } from "./project-folder-browser";
 import { WelcomeScreen } from "../connections/welcome-screen";
 import { useProjectActivity } from "./use-project-activity";
 import { runningProjectCounts } from "./activity-model";
+import { appPreferences, useAppPreferences } from "../navigation-prefs/app-preferences";
+import { groupProjectsByRepository } from "./repository-grouping";
 import { ProjectGroupHeader, ProjectRow, type ProjectRowView } from "./project-row";
 import { ProjectReorderSheet } from "./project-reorder-sheet";
 import {
@@ -84,13 +87,23 @@ export function ProjectsScreen() {
   const [detailsId, setDetailsId] = useState<string>();
   const {
     query,
-    projects,
-    groups,
+    projects: directoryProjects,
+    groups: directoryGroups,
+    directory,
     directoryReady,
     privacyUnavailable,
     readiness,
     isProjectVisible,
   } = useProjectDirectory();
+  const { preferences: appPrefs, hydrated: appPrefsHydrated } = useAppPreferences();
+  const byRepository = appPrefs.groupByRepository;
+  const { projects, groups } = useMemo(
+    () =>
+      byRepository
+        ? groupProjectsByRepository(directoryProjects)
+        : { projects: directoryProjects, groups: directoryGroups },
+    [byRepository, directoryProjects, directoryGroups],
+  );
   const activity = useProjectActivity();
   const running = useMemo(() => runningProjectCounts(activity.directory), [activity.directory]);
   const activeAt = useMemo(() => latestProjectActivity(activity.directory), [activity.directory]);
@@ -104,7 +117,7 @@ export function ProjectsScreen() {
   const projectKinds = routing.data?.projectKinds;
   const open = useHostMutation<HostProject>("projects.open", ["projects"]);
   const showGroups =
-    preferences.view === "grouped" &&
+    (preferences.view === "grouped" || byRepository) &&
     (groups.length > 0 || projects.some((project) => project.pinned));
   const custom = preferences.sort === "custom";
   const buildSections = useCallback(
@@ -270,6 +283,7 @@ export function ProjectsScreen() {
           />
         ) : null}
         {!adding ? <MutationState mutation={open} /> : null}
+        <GroupLockSection directory={directory} />
       </View>
     ),
     [
@@ -287,6 +301,7 @@ export function ProjectsScreen() {
       directoryReady,
       preferencesError,
       matching,
+      directory,
     ],
   );
   const keyExtractor = useCallback((row: DirectoryRow) => row.key, []);
@@ -402,6 +417,14 @@ export function ProjectsScreen() {
             { value: "list", label: copy("Liste", "List") },
           ]}
           onChange={(view) => updatePreferences({ view })}
+        />
+        <ToggleField
+          label={copy("Depoya göre grupla", "Group by repository")}
+          value={byRepository}
+          disabled={!appPrefsHydrated}
+          onChange={(groupByRepository) =>
+            void appPreferences.getState().update({ groupByRepository }).catch(() => undefined)
+          }
         />
         <SelectField
           label={copy("Sıralama", "Sort order")}

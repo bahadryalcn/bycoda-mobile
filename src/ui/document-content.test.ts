@@ -4,6 +4,9 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { DocumentContent } from "./document-content";
+vi.mock("./preview-audio", () => ({ AudioPlayer: () => createElement("p", null, "Audio preview") }));
+vi.mock("./preview-zip-list", () => ({ ZipList: () => createElement("p", null, "Archive preview") }));
+vi.mock("./preview-csv-table", () => ({ CsvTable: () => createElement("p", null, "CSV preview") }));
 
 const sharing = vi.hoisted(() => ({ share: vi.fn().mockRejectedValue(new Error("Cached file no longer exists")), sources:[] as Array<{code:string;language?:string}>, read:vi.fn(), buttons: [] as Array<{label:string;press:()=>void}> }));
 vi.mock("@/state/security", () => ({ isAppAccessAllowed: () => true, useSecurity: { getState: () => ({appState:"active",windowFocused:true}), subscribe: () => () => {} } }));
@@ -55,13 +58,20 @@ it("rejects retained Reload callbacks after a reader changes file",async()=>{
 });
 
 const press = (label: string) => act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === label)!.click());
+it.each([["archive.zip", "Archive preview"], ["recording.mp3", "Audio preview"]])("routes %s to the specialized preview and retains sharing", async (name, preview) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); root = createRoot(container);
+  await act(async () => root.render(createElement(QueryClientProvider, { client: cache }, createElement(DocumentContent, { name, uri: "file:///download" }))));
+  expect(container.textContent).toContain(preview);
+  expect(container.textContent).toContain("Share / save");
+  expect(sharing.read).not.toHaveBeenCalled();
+});
 it.each([["report.PDF", "PDF reader: report.PDF"], ["clip.mp4", "Video player: clip.mp4"]])("opens %s in its reader instead of treating bytes as text", async (name, expected) => {
  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); root=createRoot(container);
  await act(async()=>root.render(createElement(QueryClientProvider,{client:cache},createElement(DocumentContent,{name,mimeType:"Application/Octet-Stream; charset=binary",uri:"file:///download"}))));
  await act(async()=>{await new Promise(done=>setTimeout(done,10));});
  expect(container.textContent).toContain(expected);expect(container.textContent).toContain("Share / save");expect(sharing.read).not.toHaveBeenCalled();
 });
-it.each(["budget.xlsx", "slides.pptx", "archive.zip", "recording.mp3"])("keeps %s available through explicit system handoff",async name=>{
+it.each(["budget.xlsx", "slides.pptx"])("keeps %s available through explicit system handoff",async name=>{
  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);root=createRoot(container);
  await act(async()=>root.render(createElement(QueryClientProvider,{client:cache},createElement(DocumentContent,{name,uri:"file:///download"}))));
  expect(container.textContent).toContain("Open this file in another app.");expect(container.textContent).toContain("Share / save");expect(sharing.read).not.toHaveBeenCalled();expect(sharing.share).not.toHaveBeenCalled();

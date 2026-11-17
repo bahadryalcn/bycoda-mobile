@@ -71,8 +71,11 @@ export const lightColors: MobileColors = {
 
 export const themePalettes = { light: lightColors, dark: darkColors };
 export { PALETTE_IDS, PALETTES, DEFAULT_PALETTE, normalizePalette, uniwindThemeName, type PaletteId } from "./palettes.ts";
-export type ThemeKey = `${PaletteId}:${MobileThemeMode}`;
-export const themeKeyOf = (palette: PaletteId, mode: MobileThemeMode): ThemeKey => `${palette}:${mode}`;
+/** Bumped when the Material You swatches change; material keys then miss every cache built from old swatches. */
+let materialYouGeneration = 0;
+export type ThemeKey = `${PaletteId}:${MobileThemeMode}` | `${PaletteId}:${MobileThemeMode}:${number}`;
+export const themeKeyOf = (palette: PaletteId, mode: MobileThemeMode): ThemeKey =>
+  palette === "material" ? `${palette}:${mode}:${materialYouGeneration}` : `${palette}:${mode}`;
 export const splitThemeKey = (key: ThemeKey) => key.split(":") as [PaletteId, MobileThemeMode];
 
 let activePalette: PaletteId = DEFAULT_PALETTE;
@@ -103,6 +106,17 @@ export const subscribeMobileTheme = (listener: () => void) => {
 export function applyMobileTheme(mode: MobileThemeMode, palette: PaletteId = activePalette) {
   if (mode === activeTheme && palette === activePalette) return;
   setActive(palette, mode);
+  for (const listener of themeListeners) listener();
+}
+
+/**
+ * Drops the cached Material You palettes and re-keys them, so the next read derives colours from the
+ * current system swatches. Listeners are notified even when the active palette and mode are unchanged.
+ */
+export function refreshMaterialYouPalette() {
+  materialYouGeneration += 1;
+  for (const key of [...resolved.keys()]) if (key.startsWith("material:")) resolved.delete(key);
+  activeKey = themeKeyOf(activePalette, activeTheme);
   for (const listener of themeListeners) listener();
 }
 
@@ -210,6 +224,10 @@ export const metrics = {
   composerFieldMin: 48,
   multilineHeight: 96,
   contentWidth: 760,
+  /** Readable text column on wide panes (transcript, tablet tab roots). */
+  readableWidth: 760,
+  /** Detached tablet sheet card width. */
+  sheetCardWidth: 600,
   entryWidth: 520,
   /** Floating dock capsule height (touch target plus padding). */
   tabBarHeight: 56,
@@ -217,6 +235,10 @@ export const metrics = {
   dockActionSize: 56,
   dockGap: 8,
   dockMargin: 10,
+  /** Tablet navigation rail width (icon with label below); also a labeled dock destination slot. */
+  tabletRailWidth: 88,
+  /** Dock capsule cap on tablets and landscape large phones. */
+  wideDockWidth: 960,
 };
 /** Gap between a row icon and its text. */
 export const gapIcon = 8;

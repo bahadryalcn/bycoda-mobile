@@ -9,7 +9,6 @@ import { useIsFocused } from "expo-router/react-navigation";
 import { useAsyncAction } from "@/state/actions";
 import { useSecurity } from "@/state/security";
 import {
-  Body,
   Button,
   ErrorNotice,
   HeaderBackButton,
@@ -22,6 +21,7 @@ import { metrics, radii, space } from "@/ui/tokens";
 import { enterItem } from "@/ui/motion";
 import Animated from "react-native-reanimated";
 import { useCopy } from "@/ui/copy";
+import { HintLabel } from "@/ui/info-hint";
 import type { PairingScannerProps } from "./connection-types";
 
 export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps) {
@@ -52,6 +52,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
   currentCamera.current = cameraOwner;
   const active = useRef(available);
   active.current = available && !leaving.current;
+  // Reason: invalidate asynchronous camera work when screen ownership changes.
   useEffect(() => {
     active.current = available && !leaving.current;
     session.current++;
@@ -69,6 +70,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
       }
     });
   }, [refreshPermission, requestPermission, permissionAction.run]);
+  // Reason: refresh the native permission after returning from system Settings.
   useEffect(() => {
     if (available) void refresh();
   }, [available, refresh]);
@@ -103,27 +105,20 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
   }, []);
 
   return (
-    <Screen onContentViewport={measureViewport} footer={<Button
-      label={copy("Bunun yerine yapıştır", "Paste instead")}
-      tone="quiet" onPress={() => leave(onPaste)}
-    />}>
+    <Screen onContentViewport={measureViewport}>
       <Stack.Screen options={{ title: copy("QR kodu tara", "Scan QR code"), headerLeft: () => <HeaderBackButton onPress={() => leave(onClose)} /> }} />
-      <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
-      <Body muted onLayout={event => setIntroHeight(event.nativeEvent.layout.height)} style={{ textAlign: "center" }}>
-        {copy(
+      <Animated.View entering={enterItem(0)} style={{ width: "100%", maxWidth: metrics.entryWidth, alignSelf: "center", gap: space.lg }}>
+      <View onLayout={event => setIntroHeight(event.nativeEvent.layout.height)}>
+        <HintLabel label={copy("Bağlantı kodu", "Pairing code")} always help={copy(
           "Bilgisayarındaki bycoda bağlantı QR kodunu kameraya göster.",
           "Point the camera at the pairing QR code in bycoda on your computer.",
-        )}
-      </Body>
+        )} />
+      </View>
       {!permission && !permissionAction.isError ? <Loading label={copy("Kamera hazırlanıyor…", "Preparing camera…")} /> : null}
       {permission && !permission.granted ? (
         <StateView
           illustration="permission"
-          title={copy("Erişim gerekli", "Access needed")}
-          description={copy(
-            "QR kodunu okumak için kamera izni gerekiyor.",
-            "Camera access is needed to read the QR code.",
-          )}
+          title={copy("Kamera", "Camera")}
           action={{
             label: permission.canAskAgain
               ? copy("Kameraya izin ver", "Allow camera")
@@ -202,6 +197,11 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
         retryLabel={copy("Yeniden tara", "Scan again")}
         onRetry={() => { if (active.current && !scan.isPending) { scan.reset(); latched.current = false; } }}
       /> : <MutationState mutation={scan} /> }
+      <Button
+        label={copy("Kodu yapıştır", "Paste pairing code")}
+        tone="secondary" fullWidth disabled={scan.isPending || permissionAction.isPending}
+        onPress={() => leave(onPaste)}
+      />
       </View>
       </Animated.View>
     </Screen>

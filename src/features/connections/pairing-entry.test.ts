@@ -10,10 +10,11 @@ vi.mock("lucide-react-native/icons/clipboard-paste", () => ({ default: "Clipboar
 vi.mock("lucide-react-native/icons/pencil-line", () => ({ default: "PencilLine" }));
 vi.mock("lucide-react-native/icons/wifi", () => ({ default: "Wifi" }));
 vi.mock("lucide-react-native/icons/network", () => ({ default: "Network" }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: "IconTile" }));
+vi.mock("@/ui/info-hint", () => ({ HintLabel: "HintLabel" }));
 vi.mock("@/ui/primitives", () => ({ Body: "Body", Button: "Button", Heading: "Heading", NavigationGroup: "NavigationGroup", NavigationRow: "NavigationRow", Row: "Row", StateView: "StateView" }));
 vi.mock("./manual-connection-form", () => ({ ManualConnectionForm: "ManualConnectionForm" }));
 vi.mock("./pairing-preview", () => ({ PairingPreview: "PairingPreview" }));

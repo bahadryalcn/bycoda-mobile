@@ -2,6 +2,7 @@ import { useMobileTheme } from "@/ui/theme";
 import { memo } from "react";
 import { ChatActivity } from "@/ui/chat-activity";
 import { useCopy } from "@/ui/copy";
+import { useChatDisplay } from "@/ui/chat-display";
 import { activityState, activitySummary } from "./transcript-model";
 import { workOrbState, workSteps, workSummaryLine } from "./work-summary";
 import type { Block } from "./wire";
@@ -17,6 +18,7 @@ export const ActivityGroup = memo(function ActivityGroup({
 }) {
   useMobileTheme();
   const copy = useCopy();
+  const zen = useChatDisplay((state) => state.toolVisibility === "zen");
   const summary = activitySummary(blocks);
   const running = live && summary.running;
   const failed = blocks.some((block) => activityState(block) === "failed");
@@ -31,7 +33,8 @@ export const ActivityGroup = memo(function ActivityGroup({
       detail={summary.title || title}
       steps={workSteps(blocks, copy, running)}
       // The work in flight is what the reader watches; settled turns stay folded.
-      defaultOpen={running}
+      // Zen keeps the live row compact: one line that opens only on tap.
+      defaultOpen={running && !zen}
       busy={workOrbState(blocks)}
       status={
         failed

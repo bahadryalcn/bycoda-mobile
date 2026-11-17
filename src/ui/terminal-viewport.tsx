@@ -1,5 +1,7 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
 import { WebView } from "react-native-webview";
+import { useChatDisplay } from "./chat-display";
+import { withTerminalFontSize } from "./terminal-viewport-model";
 import { terminalDocument, readTerminalPacket, type TerminalPacket } from "./terminal-document";
 export type TerminalViewportHandle = { post: (packet: Record<string, unknown>) => void };
 export const TerminalViewport = forwardRef<
@@ -7,9 +9,10 @@ export const TerminalViewport = forwardRef<
   { nonce: string; onPacket: (packet: TerminalPacket) => void; onLost: () => void }
 >(function TerminalViewport({ nonce, onPacket, onLost }, ref) {
   const web = useRef<WebView<object>>(null);
+  const size = useChatDisplay((state) => state.terminalSize);
   const source = useMemo(
-    () => ({ html: terminalDocument(nonce), baseUrl: "about:blank" }),
-    [nonce],
+    () => ({ html: withTerminalFontSize(terminalDocument(nonce), size), baseUrl: "about:blank" }),
+    [nonce, size],
   );
   useImperativeHandle(
     ref,

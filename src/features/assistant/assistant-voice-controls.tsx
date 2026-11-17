@@ -9,6 +9,7 @@ import { useMobileTheme } from "@/ui/theme";
 import { cancelAssistantVoice, finishAssistantVoice, recordAssistantVoice, speakAssistantReply, useAssistantCompanion } from "./assistant-companion-state";
 import type { AssistantVoiceTarget } from "./assistant-voice";
 import { useAssistantCall } from "./assistant-call-state";
+import { isMicrophoneDenied, MicrophonePermissionNotice } from "../voice-settings/microphone-permission-notice";
 
 export function AssistantMicrophone({ target, enabled, current }: { target: AssistantVoiceTarget; enabled: boolean; current(): boolean }) {
   const copy = useCopy(), { colors } = useMobileTheme();
@@ -24,7 +25,7 @@ export function AssistantMicrophone({ target, enabled, current }: { target: Assi
 
 export function AssistantVoiceFeedback() {
   const copy = useCopy(), phase = useAssistantCompanion(state => state.voice), error = useAssistantCompanion(state => state.error);
-  return <>{error ? <View accessibilityLiveRegion="polite"><Disclosure tone="warning" label={copy("Ses kullanılamıyor", "Voice unavailable")}
+  return <>{isMicrophoneDenied(error) ? <MicrophonePermissionNotice /> : error ? <View accessibilityLiveRegion="polite"><Disclosure tone="warning" label={copy("Ses kullanılamıyor", "Voice unavailable")}
       detail={copy("Mikrofon iznini ve bilgisayardaki ses kurulumunu kontrol et.", "Check microphone permission and voice setup on your computer.")}>
       <Body selectable>{error instanceof Error ? error.message : String(error)}</Body>
     </Disclosure></View> : null}

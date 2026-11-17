@@ -23,6 +23,7 @@ vi.mock("@/ui/primitives", () => {
     SegmentedControl: (props: Record<string, any>) => { state.segmented = props; return null; },
   };
 });
+vi.mock("./chat-appearance-display", () => ({ ChatDisplaySettings: () => null }));
 import { ChatAppearanceSettings } from "./chat-appearance-settings";
 it("names the pending preference read and disables the selector until hydrated",()=>{
   state.hydrated=false;

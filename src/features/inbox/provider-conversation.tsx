@@ -11,6 +11,8 @@ import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { inboxConversationRows } from "./provider-conversation-model";
+import { isBotActivity } from "../pull-requests/model/list";
+import { ProviderReactions } from "./provider-reactions";
 
 export {
   type ProviderInboxConversationProps,
@@ -27,9 +29,11 @@ export function ProviderInboxConversation({
   header,
   refresh,
   visible = true,
+  showBotActivity = true,
+  onReaction,
 }: ProviderInboxConversationProps) {
   const copy = useCopy();
-  const rows = useMemo(() => inboxConversationRows(visible ? thread.data?.comments ?? [] : []), [visible, thread.data]);
+  const rows = useMemo(() => inboxConversationRows(visible ? thread.data?.comments ?? [] : []).filter(row => showBotActivity || !isBotActivity(row.comment.author)), [visible, thread.data, showBotActivity]);
   return (
     <ScreenList data={rows} keyExtractor={row => row.key} query={thread} refresh={refresh}
       header={<Stack>
@@ -51,6 +55,7 @@ export function ProviderInboxConversation({
           provider={provider}
           onReply={onReply}
           disabled={disabled}
+          onReaction={onReaction}
         />
       )} />
   );
@@ -62,6 +67,7 @@ export function ProviderInboxComment({
   onReply,
   depth = 0,
   disabled,
+  onReaction,
 }: ProviderInboxCommentProps) {
   const { uiStyles } = useMobileTheme();
   const copy = useCopy();
@@ -73,6 +79,7 @@ export function ProviderInboxComment({
       </Row>
       <Body muted style={uiStyles.caption}>{stamp(comment.createdAt)}</Body>
       <MessageText text={comment.body} role="assistant" />
+      {provider === "github" && onReaction ? <ProviderReactions disabled={disabled} onReaction={(mode, content) => onReaction(comment, mode, content)} /> : null}
       {inboxReplyTarget(provider, comment) ? (
         <Button
           label={copy("Yanıtla", "Reply")}

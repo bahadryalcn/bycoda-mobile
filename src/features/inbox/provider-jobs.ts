@@ -3,6 +3,7 @@ import type { RemoteInboxReceipt } from "../../../../src/features/inbox/model/re
 import { RemoteHostError, type HostTransport } from "@/remote/transport";
 import type { InboxJobAction, InboxJobRequest, InboxJobResults } from "./provider-protocol";
 import { readPrReviewContext } from "./provider-review-model";
+import { readPrChecks, readPrLabels, readPrReviewers } from "../pull-requests/model/results";
 import { readJiraBoards,readJiraBoardSnapshot,readJiraTransitions,readJiraWriteOutcome } from "./jira-board-model";
 
 export type InboxRpcClient = Pick<HostTransport, "request">;
@@ -55,7 +56,8 @@ export async function runInboxJob<Action extends InboxJobAction>(
   requestId = Crypto.randomUUID(),
 ): Promise<InboxJobResults[Action]> {
   if (!/^[A-Za-z0-9_-]{1,200}$/.test(requestId)) throw new InboxJobError("Invalid inbox request ID.");
-  const writes = request.action === "comment" || request.action === "pr-action" || request.action === "review" || request.action === "jira-board-transition" || request.action === "jira-board-move";
+  const mode = "mode" in request.input ? request.input.mode : undefined;
+  const writes = request.action === "comment" || request.action === "pr-action" || request.action === "review" || request.action === "reaction" || ((request.action === "reviewers" || request.action === "labels") && mode !== "list") || request.action === "jira-board-transition" || request.action === "jira-board-move";
   let receipt: RemoteInboxReceipt;
   try {
     receipt = await client.request<RemoteInboxReceipt>(
@@ -111,5 +113,5 @@ export async function runInboxJob<Action extends InboxJobAction>(
       receipt.state === "failed",
     );
   }
-  return (request.action === "review-context" ? readPrReviewContext(receipt.result) : request.action === "jira-boards" ? readJiraBoards(receipt.result) : request.action === "jira-board-read" ? readJiraBoardSnapshot(receipt.result) : request.action === "jira-issue-transitions" ? readJiraTransitions(receipt.result) : request.action === "jira-board-transition" || request.action === "jira-board-move" ? readJiraWriteOutcome(receipt.result) : receipt.result) as InboxJobResults[Action];
+  return (request.action === "checks" ? readPrChecks(receipt.result) : request.action === "labels" && mode === "list" ? readPrLabels(receipt.result) : request.action === "reviewers" && mode === "list" ? readPrReviewers(receipt.result) : request.action === "review-context" ? readPrReviewContext(receipt.result) : request.action === "jira-boards" ? readJiraBoards(receipt.result) : request.action === "jira-board-read" ? readJiraBoardSnapshot(receipt.result) : request.action === "jira-issue-transitions" ? readJiraTransitions(receipt.result) : request.action === "jira-board-transition" || request.action === "jira-board-move" ? readJiraWriteOutcome(receipt.result) : receipt.result) as InboxJobResults[Action];
 }

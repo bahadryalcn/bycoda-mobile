@@ -4,23 +4,33 @@ import { PortalHost, PortalProvider } from "panelui-native/primitives/portal";
 import { SafeAreaInsetsContext, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ToastHost } from "./toast";
 import { Uniwind } from "uniwind";
-import { applyMobileTheme, uniwindThemeName } from "./tokens";
+import { applyMobileTheme, uniwindThemeName, resolveMobilePalette } from "./tokens";
+import { themeColorRoles } from "./theme-color-roles";
 import { useMobileTheme } from "./theme";
 import { useAppearance } from "../state/appearance";
 import { applyTypography } from "./typography-runtime";
 import { useSecurity } from "../state/security";
+import { useMaterialYouWallpaperRefresh } from "./theme-material-you";
 
 /** Theme must also reach the initial lock/sign-in screen, before private providers mount. */
 export function MobileThemeController() {
   const requested = useAppearance((state) => state.themeMode);
   const palette = useAppearance((state) => state.palette);
   const typography = useAppearance((state) => state.typography);
+  // A new wallpaper changes Material You colours while the app is in the background.
+  useMaterialYouWallpaperRefresh();
   // Apply saved text choices in place, including on the lock screen.
   useLayoutEffect(() => { applyTypography(typography); }, [typography]);
   const device = useColorScheme();
   const resolved = requested === "system" ? (device === "light" ? "light" : "dark") : requested;
   useLayoutEffect(() => {
     applyMobileTheme(resolved, palette);
+    // Material You shares the base theme names. Restore their original roles when Classic is selected.
+    if (palette === "material" || palette === "classic") {
+      Uniwind.updateCSSVariables(resolved, Object.fromEntries(
+        Object.entries(themeColorRoles(resolveMobilePalette(palette, resolved))).map(([key, value]) => [`--color-${key}`, value]),
+      ));
+    }
     // Custom Uniwind themes do not follow the device, so a palette uses the resolved mode;
     // classic keeps following the system setting itself.
     Uniwind.setTheme((palette === "classic" ? requested : uniwindThemeName(palette, resolved)) as Parameters<typeof Uniwind.setTheme>[0]);

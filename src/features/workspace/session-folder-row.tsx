@@ -5,7 +5,7 @@ import Folder from "lucide-react-native/icons/folder";
 import Pin from "lucide-react-native/icons/pin";
 import { Body, PressableCard, Row } from "@/ui/primitives";
 import { DisclosureChevron } from "@/ui/disclosure-motion";
-import { fontSize, space } from "@/ui/tokens";
+import { fontSize, metrics, space } from "@/ui/tokens";
 import type { SessionDirectoryRow } from "./session-directory";
 import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
@@ -20,7 +20,7 @@ export function SessionFolderRow({ row, projectName, onToggle }: {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   return <HierarchyFrame depth={row.depth} typeSize={fontSize.small} reservedWidth={space.sm + 16 + space.row * 2 + 40}>{({indent,compressed}) => <PressableCard label={[[...(row.ancestors ?? []), row.folder.name].join(" / "), projectName, row.folder.pinned ? copy("Sabit", "Pinned") : "", `${row.count}`].filter(Boolean).join(". ")} expanded={row.expanded}
-    onPress={onToggle} style={{ minHeight: 40, paddingVertical: space.sm, paddingStart: space.sm + indent }}>
+    onPress={onToggle} style={{ minHeight: metrics.touchTarget, paddingVertical: space.sm, paddingStart: space.sm + indent }}>
     <Row style={{ flexWrap: "nowrap", gap: space.row }}>
       <Folder {...decorativeSvgProps} size={16} color={colors.muted} />
       <View style={[uiStyles.grow, { flexDirection: "row", alignItems: "center", gap: space.sm }]}>

@@ -39,6 +39,8 @@ vi.mock("@/ui/primitives", async () => {
   const Button = ({ label, onPress, disabled, busy }: any) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);
   const Input = ({ label, value, onChangeText, ref }: any) => createElement("input", { "aria-label": label, value, ref, onChange: (e: any) => onChangeText(e.target.value) });
   return { QueryState, Body: Group, CodeText: Group, Badge: Group, Row: Group, IconButton: Button, Disclosure: Group, Button, NavigationRow: Button, SearchField: Input, IdentifierField: Input,
+    FieldError: ({ error }: { error?: string }) => error ? createElement("p", null, error) : null,
+    ConfirmationCard: () => null,
     Sheet: ({ children, footer }: any) => createElement("section", null, children, footer),
     ScreenList: ({ header, footer, data, renderItem }: any) => createElement("main", null, createElement("header", null, header),
       createElement("section", null, data.map((item: unknown, index: number) => createElement("div", { key: index }, renderItem({ item, index })))), footer),

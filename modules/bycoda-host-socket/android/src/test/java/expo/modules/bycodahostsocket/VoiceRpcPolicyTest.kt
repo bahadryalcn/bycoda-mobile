@@ -20,7 +20,7 @@ class VoiceRpcPolicyTest {
     assertFalse(VoiceRpcPolicy.allowed("projects.directory", null, null, "other-project", "captured-room", "captured-project", false, false))
   }
   @Test fun ordinaryWorkspaceAndSetupMethodsRemainUnavailable() {
-    for (method in listOf("voice.local.start", "voice.local.transcribe", "voice.local.release", "voice.local.speak", "voice.local.speechNext", "voice.local.keepAlive", "connection.hello", "environment.describe")) assertTrue(allowed(method))
+    for (method in listOf("voice.local.start", "voice.local.transcribe", "voice.cloud.transcribe", "voice.local.release", "voice.local.speak", "voice.local.speechNext", "voice.local.keepAlive", "connection.hello", "environment.describe")) assertTrue(allowed(method))
     for (method in listOf("voice.local.setup", "voice.local.models", "voice.cloud.setKey", "voice.realtime.secret", "sessions.send", "terminal.write", "native.execute", "projects.list")) assertFalse(allowed(method))
     for (op in listOf("snapshot", "threads.open", "threads.list", "presence.set", "jobs.create")) assertFalse(allowed("assistant.request", op, "captured-room"))
   }

@@ -137,7 +137,9 @@ export function useProjectDirectory() {
     }
     return cache.getQueryData<HostProject[]>(key)?.some((row) => row.id === projectId && (expectedCwd === undefined || row.cwd === expectedCwd)) === true;
   }, [machine?.id, machine?.environmentId, grouped, cache]);
-  return { query, projects, registered, groups, grouped, privacyPending, readable, sync,
+  // The proven directory itself, for the locked/hidden group controls.
+  const readyDirectory = readable && directoryData?.privacyReady ? directoryData : undefined;
+  return { query, projects, registered, groups, grouped, privacyPending, readable, sync, directory: readyDirectory,
     readiness, directoryReady, verifying, privacyUnavailable, isProjectVisible };
 }
 

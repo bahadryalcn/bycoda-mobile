@@ -125,11 +125,10 @@ export function GitCommitPanel({
         />
         <Button
           label={copy("Commit", "Commit")}
-          density="compact"
           tone="primary"
+          fullWidth
           disabled={busy || commitDisabled}
           onPress={() => onChoose({ kind: "commit" })}
-          style={{ alignSelf: "flex-start" }}
         >
           <GitCommitHorizontal size={18} color={colors.primaryText} />
         </Button>

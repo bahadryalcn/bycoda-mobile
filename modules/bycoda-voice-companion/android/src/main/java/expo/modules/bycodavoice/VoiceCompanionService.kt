@@ -130,6 +130,10 @@ class VoiceCompanionService : Service() {
     check(size > 0) { "Microphone configuration is unavailable." }
     val next = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(size, 6400))
     if (next.state != AudioRecord.STATE_INITIALIZED) { next.release(); error("Microphone could not start.") }
+    // Preferred microphone: a missing or rejected device silently keeps the system default.
+    VoiceCompanionRuntime.preferredInputId?.let { wanted ->
+      (getSystemService(Context.AUDIO_SERVICE) as AudioManager).getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { it.id == wanted }?.let { runCatching { next.setPreferredDevice(it) } }
+    }
     try { acquireFocus(); next.startRecording() } catch (error: Exception) { next.release(); releaseFocus(); throw error }
     val version = captureGeneration.incrementAndGet()
     recorder = next; captureId = captureToken; capturing.set(true); phase = "recording"; armIdle(); updated()

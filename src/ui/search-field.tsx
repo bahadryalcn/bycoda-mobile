@@ -1,4 +1,5 @@
 import { useMobileTheme } from "./theme";
+import { useKeyboardSearch } from "@/features/keyboard/keyboard-search";
 import type { ComponentProps, ReactNode } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { SearchBar } from "panelui-native/components/search-bar";
@@ -62,12 +63,17 @@ export function SearchField({
   const { flex, flexGrow, flexShrink, flexBasis, alignSelf, width, minWidth, maxWidth, ...fieldStyle } =
     StyleSheet.flatten(style) ?? {};
   const inactive = editable === false || !!readOnly;
+  const keyboardSearch = useKeyboardSearch(!inactive);
   const { accessibilityHint, ...rest } = props;
   return (
     <View style={{ minWidth: minWidth ?? 0, maxWidth: maxWidth ?? "100%", flex, flexGrow, flexShrink, flexBasis, alignSelf: alignSelf ?? "stretch", width }}>
       <SearchBar
         {...(rest as ComponentProps<typeof SearchBar>)}
-        ref={ref as ComponentProps<typeof SearchBar>["ref"]}
+        ref={(input) => {
+          keyboardSearch.current = input;
+          if (typeof ref === "function") ref(input);
+          else if (ref) ref.current = input;
+        }}
         accessibilityLabel={label}
         accessibilityHint={error ?? hint ?? accessibilityHint}
         placeholder={placeholder}

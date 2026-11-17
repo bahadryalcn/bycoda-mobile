@@ -8,6 +8,24 @@ export type SessionReference = { locator: SessionReferenceLocator; turnId?: stri
 
 const webPrefix = "https://link.bycoda.codes/session/v1/";
 const nativePrefix = "bycoda://session/v1/";
+const promptPrefixes = ["https://link.bycoda.codes/new/v1", "bycoda://new/v1"];
+
+/** Accept only the versioned prompt-link format and bound input before routing. */
+export function parsePromptLink(value: string): { prompt: string; project?: string } | null {
+  if (typeof value !== "string" || value.length > 32768) return null;
+  const prefix = promptPrefixes.find((candidate) => value.startsWith(`${candidate}?`));
+  if (!prefix || value.includes("#")) return null;
+  const query = value.slice(prefix.length + 1);
+  if (/%(?![0-9a-fA-F]{2})/.test(query)) return null;
+  const params = new URLSearchParams(query);
+  if ([...params.keys()].some((key) => key !== "prompt" && key !== "project")) return null;
+  if (params.getAll("prompt").length !== 1 || params.getAll("project").length > 1) return null;
+  const prompt = params.get("prompt") ?? "";
+  const project = params.get("project");
+  if (!prompt.trim() || prompt.length > 8000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(prompt)) return null;
+  if (project !== null && !validId(project)) return null;
+  return { prompt, ...(project === null ? {} : { project }) };
+}
 const validId = (value: unknown): value is string =>
   typeof value === "string" &&
   value.length > 0 &&
@@ -55,6 +73,14 @@ export function parseSessionReference(value: string): SessionReference | null {
 
 /** Expo calls this for initial and subsequent native intents; widget routes remain unchanged. */
 export function rewriteSessionReferencePath(path: string): string {
+  const promptPath = path.startsWith("/new/v1?") ? `https://link.bycoda.codes${path}` : path;
+  const prompt = parsePromptLink(promptPath);
+  if (prompt) {
+    // Percent-encode by hand: URLSearchParams writes spaces as "+", which the router keeps literally.
+    const project = prompt.project ? `&project=${encodeURIComponent(prompt.project)}` : "";
+    return `/sessions?new=1&prompt=${encodeURIComponent(prompt.prompt)}${project}`;
+  }
+  if (promptPrefixes.some((prefix) => promptPath.startsWith(prefix))) return "/sessions";
   const link = path.startsWith("/session/v1/") ? `https://link.bycoda.codes${path}` : path;
   if (parseSessionReference(link)) return `/session-reference?link=${encodeURIComponent(link)}`;
   return link.startsWith(webPrefix) || link.startsWith(nativePrefix) ? "/session-reference" : path;

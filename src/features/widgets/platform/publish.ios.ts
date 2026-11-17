@@ -1,6 +1,7 @@
 import { requireOptionalNativeModule } from "expo";
 
 import { widgetTimeline, type WidgetSnapshot } from "../model/snapshot";
+import { usageWidgetTimeline, type UsageWidgetSnapshot } from "../model/usage-widget";
 
 /** No-op in Expo Go and any build without the ExpoWidgets native module. */
 export async function publishWidgetSnapshot(
@@ -16,4 +17,11 @@ export async function publishWidgetSnapshot(
   const timeline = widgetTimeline(snapshot);
   active.default.updateTimeline(timeline);
   attention.default.updateTimeline(timeline);
+}
+
+/** Usage widget: the reading now, and the same reading marked stale when it expires. */
+export async function publishUsageSnapshot(snapshot: UsageWidgetSnapshot): Promise<void> {
+  if (!requireOptionalNativeModule("ExpoWidgets")) return;
+  const usage = await import("../ui/UsageLimits");
+  usage.default.updateTimeline(usageWidgetTimeline(snapshot));
 }

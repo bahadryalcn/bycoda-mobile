@@ -9,6 +9,11 @@ import { WorkspaceRouteScope } from "../../src/features/workspace/route-scope";
 import { useAdaptiveLayout } from "../../src/ui/adaptive-layout";
 import { ScreenChromeProvider } from "../../src/ui/layout";
 import { SplitView } from "../../src/ui/split-view";
+import { TabletQuickPanel } from "../../src/features/workspace/tablet-quick-panel";
+
+/** Composer, its padding and an extra growing line; the composer height is owned by SessionScreen and is not exposed to the route. */
+// shortcut: fixed clearance, a very tall multi-line draft can reach the panel; expose the measured composer height from SessionKeyboardFrame when that happens.
+const COMPOSER_CLEARANCE = 144;
 
 export default function SessionRoute() {
   const { id, projectId, machineId, targetTurnId } = useLocalSearchParams<{
@@ -20,7 +25,7 @@ export default function SessionRoute() {
   const active = useMachines((s) => s.activeId);
   const { tablet, split } = useAdaptiveLayout();
   const insets = useSafeAreaInsets();
-  const session = (
+  const sessionScreen = (
     <SessionScreen
       key={`${active}:${id}:${projectId ?? ""}:${targetTurnId ?? ""}`}
       id={id}
@@ -29,7 +34,26 @@ export default function SessionRoute() {
       layout={split ? "split" : tablet ? "tablet" : "phone"}
     />
   );
-  if (!split) return <WorkspaceRouteScope machineId={machineId}>{session}</WorkspaceRouteScope>;
+  const session = (
+    <View style={{ flex: 1 }}>
+      {sessionScreen}
+      <TabletQuickPanel bottomInset={insets.bottom + COMPOSER_CLEARANCE} />
+    </View>
+  );
+  if (!split)
+    return (
+      <WorkspaceRouteScope machineId={machineId}>
+        {tablet ? (
+          // Portrait tablets keep the same rail as the tab roots beside the session.
+          <View style={{ flex: 1, flexDirection: "row" }}>
+            <TabletRail />
+            {session}
+          </View>
+        ) : (
+          session
+        )}
+      </WorkspaceRouteScope>
+    );
   return (
     <WorkspaceRouteScope machineId={machineId}>
       {/* The split keeps the list in place, so switching sessions must not slide the whole screen. */}

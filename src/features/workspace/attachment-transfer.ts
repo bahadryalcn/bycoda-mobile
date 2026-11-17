@@ -6,7 +6,8 @@ import { bytesToBase64, validateAttachment, type StagedAttachment } from "./atta
 import { attachmentOwnerId, attachmentReleases, supportsAttachmentOwnership } from "./attachment-ownership";
 import { isScopedStagedFile } from "./attachment-files";
 
-export async function uploadAttachment(client: HostTransport, file: StagedAttachment, sessionId: string, signal: AbortSignal, progress: (value: number) => void, custody: "composer" | "question" = "composer") {
+export async function uploadAttachment(client: HostTransport, file: StagedAttachment, sessionId: string, signal: AbortSignal, progress: (value: number) => void, custody: "composer" | "question" = "composer", assertCurrent: () => void = () => {}) {
+  assertCurrent();
   validateAttachment(file);
   if (file.browserAnnotation && (file.browserAnnotation.sessionId !== sessionId || !client.machine.capabilities?.includes("browser.annotation")))
     throw new Error("Browser attachment belongs to another conversation or is unsupported");
@@ -15,9 +16,12 @@ export async function uploadAttachment(client: HostTransport, file: StagedAttach
   if (!local.exists || local.size !== file.size) throw new Error("The selected file is no longer available. Remove it and choose it again.");
   const ownerId = supportsAttachmentOwnership(client) ? attachmentOwnerId(sessionId) : undefined;
   if (ownerId && !file.claimId) throw new Error("Save the attachment claim before uploading.");
+  assertCurrent();
   if (ownerId) await attachmentReleases.claim(client, sessionId, [file.id], file.claimId!, { signal });
+  assertCurrent();
   const ownership = ownerId ? { ownerId, claimId: file.claimId } : {};
   const status = await client.request<{ offset: number; hash?: string }>("attachments.status", { id: file.id, size: file.size, ...ownership }, { signal });
+  assertCurrent();
   if (!Number.isSafeInteger(status.offset) || status.offset < 0 || status.offset > file.size) throw new Error("Invalid upload acknowledgement.");
   const handle = local.open();
   try {
@@ -41,12 +45,14 @@ export async function uploadAttachment(client: HostTransport, file: StagedAttach
     }
     let offset = status.offset;
     do {
+      assertCurrent();
       if (signal.aborted) throw new Error("Upload cancelled.");
       handle.offset = offset;
       const bytes = await handle.readBytes(Math.min(192 * 1024, file.size - offset));
       const expected = offset + bytes.length;
       if (expected === offset && offset < file.size) throw new Error("The selected file is incomplete.");
       const acknowledgement = await client.request<{ offset: number }>("attachments.upload", { id: file.id, size: file.size, offset, data: bytesToBase64(bytes), ...ownership }, { signal });
+      assertCurrent();
       if (acknowledgement.offset !== expected) throw new Error("Invalid upload acknowledgement.");
       offset = expected;
       progress(file.size ? offset / file.size : 1);

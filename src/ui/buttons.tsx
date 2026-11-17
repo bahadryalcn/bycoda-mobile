@@ -10,6 +10,7 @@ import { LifecycleButton as PanelButton } from "./busy-indicator";
 import { useSoleSpinner } from "./spinner-claim";
 import { controlClasses } from "./design-system";
 import { haptic } from "./motion";
+import { useHover } from "./use-hover";
 import { useCopy } from "./copy";
 import type {
   ButtonProps,
@@ -134,7 +135,8 @@ export function PressableCard({
   role = "button",
   hitSlop,
 }: PressableCardProps) {
-  const { uiStyles } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
+  const hover = useHover(disabled);
   return (
     <AnimatedPressable
       accessibilityRole={role}
@@ -146,6 +148,7 @@ export function PressableCard({
       aria-expanded={expanded}
       disabled={disabled}
       onPress={onPress}
+      {...hover.handlers}
       onLongPress={onLongPress}
       pressScale={0.985}
       pressOpacity={0.8}
@@ -155,6 +158,7 @@ export function PressableCard({
       }}
       style={StyleSheet.flatten([
         uiStyles.press,
+        hover.hovered && !selected && { backgroundColor: colors.raised },
         selected && uiStyles.selected,
         style,
         { opacity: disabled ? opacity.disabled : 1 },

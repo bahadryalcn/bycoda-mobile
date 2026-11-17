@@ -7,6 +7,7 @@ import { SearchField } from "./search-field";
 import { metrics } from "./tokens";
 
 const state = vi.hoisted(() => ({ fields: [] as Record<string, unknown>[] }));
+vi.mock("@/features/keyboard/keyboard-search", () => ({ useKeyboardSearch: () => ({ current: null }) }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => h("div", null, children),
   StyleSheet: { hairlineWidth: 1, flatten: (value: unknown) => Object.assign({}, ...[value].flat(Infinity).filter(Boolean)) },

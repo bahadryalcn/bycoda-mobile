@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   parseSessionReference,
+  parsePromptLink,
   rewriteSessionReferencePath,
   referenceMachines,
   resolvedSessionRoute,
@@ -12,6 +13,17 @@ const native = "bycoda://session/v1/native/store/profile/session";
 const https = "https://link.bycoda.codes/session/v1/native/store/profile/session";
 
 describe("session reference entry", () => {
+  it("validates and rewrites prompt links without sending", () => {
+    expect(parsePromptLink("bycoda://new/v1?prompt=Hello%20world&project=demo"))
+      .toEqual({ prompt: "Hello world", project: "demo" });
+    expect(rewriteSessionReferencePath("/new/v1?prompt=Hello&project=demo"))
+      .toBe("/sessions?new=1&prompt=Hello&project=demo");
+    expect(rewriteSessionReferencePath("bycoda://new/v1?prompt=a+b%26c&project=my%20app"))
+      .toBe("/sessions?new=1&prompt=a%20b%26c&project=my%20app");
+    for (const link of ["bycoda://new/v1?prompt=a&prompt=b", "bycoda://new/v1?prompt=%zz", "bycoda://new/v1?prompt=a&project=..", `bycoda://new/v1?prompt=${"a".repeat(8001)}`]) {
+      expect(parsePromptLink(link)).toBeNull();
+    }
+  });
   it("retains exact native identity and cited turn for both supported schemes", () => {
     const expected = {
       locator: {

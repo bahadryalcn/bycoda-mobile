@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orderProjectsByRecency, projectRecency, recentProjects } from "./recent-projects";
+import { lastUsedProject, orderProjectsByRecency, projectRecency, recentProjects } from "./recent-projects";
 
 const project = (id: string) => ({ id });
 const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
@@ -31,5 +31,14 @@ describe("recent projects", () => {
   it("reads recency from either source", () => {
     expect(projectRecency("a", { activity: { a: 5 }, opened: { a: 9 } })).toBe(9);
     expect(projectRecency("z", { activity: {}, opened: {} })).toBe(0);
+  });
+});
+
+describe("last used project", () => {
+  it("returns the newest used visible project and nothing when none was used", () => {
+    const rows = ["a", "b"].map(project);
+    expect(lastUsedProject(rows, { activity: { a: 1 }, opened: { b: 5 } })?.id).toBe("b");
+    expect(lastUsedProject(rows, { activity: { a: 1 }, opened: { b: 5 }, isVisible: (id) => id !== "b" })?.id).toBe("a");
+    expect(lastUsedProject(rows, { activity: {}, opened: {} })).toBeUndefined();
   });
 });

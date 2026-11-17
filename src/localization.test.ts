@@ -3,6 +3,11 @@ import { LANGUAGES, catalogs, resolveLocale, translate } from "./localization";
 import { isLanguagePreference } from "../../src/shared/i18n/languages";
 
 describe("mobile language parity", () => {
+  it("translates parity confirmations before substituting model and branch names", () => {
+    expect(translate("de", "{p0} yukarı", "Move {p0} up", { p0: "Bluetooth" })).toBe("Bluetooth nach oben verschieben");
+    expect(translate("ja", "\"{p0}\" dalı oluşturulup bu dala geçilsin mi?", "Create \"{p0}\" and switch to it?", { p0: "feature" })).toBe("「feature」を作成して切り替えますか？");
+    expect(translate("zh-CN", "Paylaşılan içerik taslağa eklenecek ({p0} dosya).", "Shared content will be added to the draft ({p0} files).", { p0: 3 })).toBe("共享内容将添加到草稿（3 个文件）。");
+  });
   it("ships a complete offline catalog for every desktop language", () => {
     const keys = Object.keys(catalogs.en).sort();
     for (const { value } of LANGUAGES) {

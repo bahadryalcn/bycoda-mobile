@@ -20,6 +20,9 @@ import { useNativeSheetFocus } from "./use-native-sheet-focus";
 import { createSheetActionsStore } from "./sheet-actions-store";
 import { FormActionRow } from "./form-action-row";
 import { UnsavedBadge } from "./unsaved-badge";
+import { useAdaptiveLayout } from "./adaptive-layout";
+import { sheetCardMaxHeight, sheetPresentation } from "./sheet-layout-model";
+import { useKeyCommand } from "../../modules/bycoda-key-commands";
 
 const SheetActionsContext = createContext<ReturnType<typeof createSheetActionsStore> | null>(null);
 
@@ -78,6 +81,7 @@ function SheetSurface({
   children,
   style,
 }: import("react").PropsWithChildren<{
+  /** Full sheets and tablet cards settle with a short rise; bottom sheets slide in from the edge. */
   full: boolean;
   style: import("react-native").StyleProp<import("react-native").ViewStyle>;
 }>) {
@@ -169,14 +173,21 @@ export function Sheet({
     [guards.register, requestClose, requestCloseThen, requestCloseStackThen, blocked],
   );
   const full = size === "full";
+  const { tablet } = useAdaptiveLayout();
+  const presentation = sheetPresentation(tablet, full);
+  const card = presentation === "card";
+  // Hardware Escape closes the topmost sheet; a later-mounted nested sheet registers last and wins.
+  useKeyCommand({ key: "Escape", title: copy("Kapat", "Close"), enabled: visible && canClose, priority: 50 }, requestClose);
   // A caller-owned list/reader needs a definite viewport for virtualization.
   // Ordinary forms use our scroller and can fit their intrinsic content.
   const fill = full || (size === "form" && !scroll);
   // The inner frame is measured after the existing keyboard owner applies its
   // padding. Reserve an input-sized body, sharing space when both regions need
   // to scroll, rather than allowing a tall footer to collapse the editor.
-  const sheetHeight = Math.min(frameHeight, !full && size === "form" ? height * 0.9 : frameHeight);
-  const topChrome = full ? insets.top : space.sm + 5 + space.xs;
+  const sheetHeight = card
+    ? sheetCardMaxHeight(height, frameHeight, space.lg)
+    : Math.min(frameHeight, !full && size === "form" ? height * 0.9 : frameHeight);
+  const topChrome = full ? insets.top : card ? space.xs : space.sm + 5 + space.xs;
   // Long identities remain readable in their own viewport instead of consuming
   // the body. Keep the close/action target at the top, even at large text sizes.
   const headerMaximum = Math.max(metrics.touchTarget, Math.min(metrics.touchTarget * 2, Math.max(0, sheetHeight - topChrome) / 3));
@@ -197,12 +208,13 @@ export function Sheet({
         automaticOffset
         style={{
           flex: 1,
-          justifyContent: "flex-end",
-          paddingTop: full ? 0 : insets.top + space.lg,
+          justifyContent: card ? "center" : "flex-end",
+          paddingTop: full ? 0 : card ? space.lg : insets.top + space.lg,
+          paddingBottom: card ? space.lg : 0,
           backgroundColor: full ? colors.background : colors.scrim,
         }}
       >
-        <View style={{ flex: 1, justifyContent: "flex-end" }}
+        <View style={{ flex: 1, justifyContent: card ? "center" : "flex-end" }}
           onLayout={({ nativeEvent: { layout } }) => setFrameHeight((current) =>
             Math.abs(current - layout.height) < 1 ? current : layout.height)}>
         {!full ? (
@@ -214,14 +226,16 @@ export function Sheet({
           />
         ) : null}
         <SheetSurface
-          full={full}
+          full={full || card}
           style={{
             backgroundColor: colors.panel,
             borderWidth: full ? 0 : StyleSheet.hairlineWidth,
             borderColor: colors.border,
-            paddingTop: full ? insets.top : space.sm,
+            paddingTop: full ? insets.top : card ? space.xs : space.sm,
             borderTopStartRadius: full ? 0 : radii.sheet,
             borderTopEndRadius: full ? 0 : radii.sheet,
+            borderBottomStartRadius: card ? radii.sheet : 0,
+            borderBottomEndRadius: card ? radii.sheet : 0,
             overflow: "hidden",
             maxHeight: sheetHeight,
             // Forms fit short content; their maximum still reserves the route
@@ -229,11 +243,11 @@ export function Sheet({
             height: full ? "100%" : fill ? sheetHeight : undefined,
             flexShrink: 1,
             width: "100%",
-            maxWidth: full ? undefined : metrics.contentWidth,
+            maxWidth: full ? undefined : card ? metrics.sheetCardWidth : metrics.contentWidth,
             alignSelf: "center",
           }}
         >
-          {!full ? (
+          {presentation === "bottom" ? (
             <View
               accessible={false}
               style={{
@@ -325,7 +339,7 @@ export function Sheet({
                 {children}
               </View>
             )}
-            <SheetActionArea store={actionsStore} footer={footer} bottom={insets.bottom} maxHeight={actionsMaximum} dirty={dirty || guards.dirty} />
+            <SheetActionArea store={actionsStore} footer={footer} bottom={card ? 0 : insets.bottom} maxHeight={actionsMaximum} dirty={dirty || guards.dirty} />
           </ConnectionFeedbackScope>
           </SheetGuardContext.Provider>
           </SheetActionsContext.Provider>

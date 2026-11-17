@@ -1,9 +1,17 @@
 /** Only known reads may retry. Mutation requests must never be replayed. */
 const READ_METHODS = new Set([
   "environment.describe",
+  "secrets.input.list",
   "projects.list",
   "projects.directory",
   "projects.browse",
+  "projects.clone.progress",
+  "workspaces.list",
+  "workspaces.delivery.review",
+  "voice.local.models",
+  "voice.local.modelStatus",
+  "voice.local.setupStatus",
+  "voice.cloud.status",
   "models.list",
   "sessions.list",
   "sessions.get",
@@ -109,6 +117,10 @@ const READ_SOCIAL_ACTIONS = new Set([
 ]);
 
 export function readonlyRequest(method: string, params: Record<string, unknown>): boolean {
+  // Secret answers are single-use; no transport retry or offline replay.
+  if (method === "secrets.input.answer") return false;
+  // A draft report is replaced by the next full snapshot instead of being replayed.
+  if (method === "drafts.presence.report") return false;
   return (
     READ_METHODS.has(method) ||
     (method === "workspace.run" && (params.command === "git_management_snapshot" || params.command === "git_pr_destination" || params.command === "git_submodules")) ||

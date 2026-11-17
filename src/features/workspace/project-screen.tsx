@@ -16,7 +16,8 @@ import { MachineConnectionStatus } from "@/ui/machine-bar";
 import type { ProjectSessionControls } from "./sessions-panel-types";
 import Grid2x2 from "lucide-react-native/icons/grid-2x2";
 import GitBranch from "lucide-react-native/icons/git-branch";
-import { router, Stack } from "expo-router";
+import GitPullRequest from "lucide-react-native/icons/git-pull-request";
+import { router, Stack, type Href } from "expo-router";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
 import { useAsyncAction } from "@/state/actions";
@@ -182,6 +183,9 @@ export function ProjectScreen({
     if (!project || !machine) return content;
     const headerActions = <PrivateContentAccessProvider value={{ allowed: !!visibleProject, check: canUseProject }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+      <IconButton label={copy("Pull request’ler", "Pull requests")} onPress={() => { if (canUseProject()) router.push(`/pull-requests?projectId=${encodeURIComponent(id)}&machineId=${encodeURIComponent(machine.id)}` as Href); }}>
+        <GitPullRequest color={colors.muted} />
+      </IconButton>
       {sessionControls ? (
         <IconButton label={copy("Oturum ara", "Search sessions")} expanded={sessionControls.searchOpen}
           tone="default" onPress={sessionControls.toggleSearch}>

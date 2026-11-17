@@ -4,6 +4,7 @@ export { Screen, ScreenHeader, ScreenHeading, ContextControls, LargeTitle, Card,
 export { Button, ChoiceChip, PressableCard, SelectRow, IconButton } from "./buttons";
 export { HeaderBackButton } from "./header-back-button";
 export { ToggleField, Input, Field, IdentifierField } from "./fields";
+export { SegmentedRow, SettingIcon, ValueRow } from "./setting-rows";
 export { Badge, StatusText, Empty, Loading, ErrorText, ErrorNotice, Notice, FieldError, Skeleton } from "./feedback";
 export { StateView } from "./state-view";
 export { UnsavedBadge } from "./unsaved-badge";

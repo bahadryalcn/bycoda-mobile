@@ -10,6 +10,7 @@ vi.mock("expo-router",()=>({router:{push:vi.fn()}}));
 vi.mock("expo-constants",()=>({default:{expoConfig:{version:"1.0",android:{package:"com.bycoda.mobile"},extra:{engagement:{androidPlayStoreUrl:"https://play.google.com/store/apps/details?id=com.bycoda.mobile"}}}}}));
 vi.mock("expo-application", () => ({ nativeApplicationVersion: "1.0", nativeBuildVersion: "1", applicationId: "com.bycoda.mobile" }));
 vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
+vi.mock("@/ui/info-hint",()=>({HintSection:({title,children}:PropsWithChildren<{title:string}>)=>createElement("section",null,createElement("h2",null,title),children)}));
 vi.mock("@/ui/styles",()=>({uiStyles:{}}));vi.mock("@/ui/tokens",()=>({colors:{},space:{},lineHeight:{}}));vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));vi.mock("@/ui/icon-tile",()=>({IconTile:()=>null}));
 vi.mock("lucide-react-native/icons/star",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/share-2",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/globe",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/message-square",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/flag",()=>({default:()=>null}));
 vi.mock("@/ui/primitives",()=>{

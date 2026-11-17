@@ -27,6 +27,7 @@ import { AssistantMobileClient, type OwnerPresence } from "./assistant-client";
 import { usePendingApprovalCount } from "../approvals/use-approvals";
 import { AssistantComposer } from "./assistant-composer";
 import { minimizeAssistantCompanion, openAssistantCompanion, useAssistantCompanion } from "./assistant-companion-state";
+import { assistantNeedsUpdate } from "./assistant-unavailable";
 import { AssistantReadAloud } from "./assistant-voice-controls";
 import { AssistantCallButton } from "./assistant-call-controls";
 import { endAssistantCall } from "./assistant-call-session";
@@ -499,7 +500,12 @@ function AssistantWorkspace({
         <Body style={uiStyles.heading}>{copy("Asistanla konuş", "Talk with your assistant")}</Body>
         <Button label={copy("Konuşmayı aç", "Open conversation")} tone="primary" onPress={() => void open()}
           busy={busyKind === "open"} disabled={busy || !state || (!!projectId && !projects.isProjectVisible(projectId))} />
+        <Button label={copy("Sesli görüşme", "Voice call")} onPress={voiceEntry.start}
+          busy={voiceEntry.pending} disabled={busy || callActive || !writable || (!!projectId && !projects.isProjectVisible(projectId))} />
       </View> : null}
+      {!state && !snapshot.isPending && assistantNeedsUpdate(snapshot.error) ? <Empty compact illustration="permission"
+        title={copy("Bilgisayarındaki Bycoda'yı güncelle", "Update bycoda on your computer")}
+        detail={copy("Bu bilgisayar henüz asistanı sunmuyor. Güncelledikten sonra sohbet ve sesli görüşme burada açılır.", "This computer does not offer the assistant yet. After updating, chat and voice calls appear here.")} /> : null}
       {visibleThread ? (
         <>
           <QueryState query={history} loading="inline" />

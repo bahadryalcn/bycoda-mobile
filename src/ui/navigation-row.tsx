@@ -7,6 +7,7 @@ import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Check from "lucide-react-native/icons/check";
 import { Body } from "./typography";
 import { BusyIndicator } from "./busy-indicator";
+import { useHover } from "./use-hover";
 import { gapIcon, metrics, opacity, space, type SemanticTone } from "./tokens";
 import type { ContainerProps } from "./component-props";
 
@@ -85,6 +86,7 @@ export function NavigationRow({
   detailEllipsizeMode?: TextProps["ellipsizeMode"];
 }) {
   const { colors, semanticColors, uiStyles } = useMobileTheme();
+  const hover = useHover(disabled || busy);
   const plain = variant !== "card";
   const semantic = tone ? semanticColors[tone] : undefined;
   const inGroup = useInNavigationGroup();
@@ -103,9 +105,10 @@ export function NavigationRow({
       aria-busy={!!busy}
       disabled={disabled || busy}
       onPress={onPress}
+      {...hover.handlers}
       style={[
         uiStyles.press,
-        plain && { borderWidth: 0, backgroundColor: "transparent" },
+        plain && { borderWidth: 0, backgroundColor: hover.hovered && !selected ? colors.raised : "transparent" },
         !plain && { marginHorizontal: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.panel },
         semantic && !plain && { borderColor: semantic.border, backgroundColor: semantic.surface },
         {

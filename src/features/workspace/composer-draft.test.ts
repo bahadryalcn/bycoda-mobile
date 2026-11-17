@@ -1,4 +1,9 @@
 import { expect, it } from "vitest";
+it("retains outbox edit identity through draft storage and rejects malformed identity", () => {
+  const draft = { ...emptyComposerDraft(), text: "pending", clientMessageId: "8ca190f8-9e1b-477d-9565-2fb1283ac578" };
+  expect(decodeComposerDraft(encodeComposerDraft(draft)!)).toEqual(draft);
+  expect(() => decodeComposerDraft(encodeComposerDraft({ ...draft, clientMessageId: "invalid" })!)).toThrow("identity");
+});
 import {
   decodeComposerDraft,
   emptyComposerDraft,

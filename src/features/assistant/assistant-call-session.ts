@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { randomUUID } from "expo-crypto";
-import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from "expo-audio";
+import { requireMicrophonePermission } from "../permissions/microphone-permission";
 import { nativeVoiceCompanion, type NativeVoiceCompanion } from "../../../modules/bycoda-voice-companion";
 import { openAssistantVoiceRuntime } from "@/state/host-runtime";
 import { useMachines } from "@/state/machines";
@@ -71,9 +71,7 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
     if (selectedThread?.id !== target.threadId || isAssistantSendPending(key)) throw new Error("Wait for the current conversation message before starting a call.");
     native = nativeVoiceCompanion();
     if (!native) throw new Error("Voice calls require a native Bycoda build with background voice support.");
-    const before = await getRecordingPermissionsAsync();
-    const permission = before.granted ? before : await requestRecordingPermissionsAsync();
-    if (!permission.granted) throw new Error("Microphone permission is required for a voice call.");
+    await requireMicrophonePermission();
     if (version !== generation || !allowed() || !isReviewedMachine(review, useMachines.getState()) || !isAppAccessAllowed()) throw new Error("The assistant connection changed.");
     id = await native.beginSession();
     const current = () => {

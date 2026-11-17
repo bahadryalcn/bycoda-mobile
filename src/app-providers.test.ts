@@ -7,6 +7,7 @@ import { AppProviders } from "./app-providers";
 import { ScreenOverlay } from "./ui/overlays";
 
 const fixture = vi.hoisted(() => ({ status: "signedIn", overlayStatus: "", portalStatus: "" }));
+vi.mock("./features/outbox/runtime/coordinator", () => ({ OutboxCoordinator: () => null }));
 vi.mock("./features/assistant/assistant-companion", () => ({ AssistantCompanion: ({ children }: PropsWithChildren) => children }));
 vi.mock("react-native", () => ({
   View: ({ children, ref }: PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) => createElement("div", { ref }, children),
@@ -31,6 +32,7 @@ vi.mock("react-native-keyboard-controller", () => ({
 }));
 vi.mock("./ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("./ui/motion", () => ({ motionTiming: {} }));
+vi.mock("./features/outbox/runtime/draft-presence-reporter", () => ({ DraftPresenceReporter: () => null, draftPresenceConnected: vi.fn() }));
 vi.mock("./ui/tokens", () => ({ motion: { sheet: 280 } }));
 vi.mock("./ui/provider", () => ({
   MobileThemeController: () => null,

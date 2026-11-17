@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import { inlineRaster } from "./inline-raster";
 import { readLink } from "./message-inline";
+import { isInlineMath } from "./message-math";
 
 export type MessageNode = {
   type: string;
@@ -59,6 +60,64 @@ parser.block.ruler.before("paragraph", "internal_memory_citation", (state, start
     return true;
   }
   return false;
+});
+// LaTeX math: `$inline$` and `$$block$$` become math nodes, never raw dollar text. Rules run
+// after code spans/fences, so literal examples in code stay untouched.
+parser.inline.ruler.after("backticks", "math_inline", (state, silent) => {
+  const start = state.pos;
+  if (state.src[start] !== "$") return false;
+  const display = state.src[start + 1] === "$";
+  const open = display ? 2 : 1;
+  let end = start + open;
+  for (; end < state.posMax; end++) {
+    if (state.src[end] === "\\") end++;
+    else if (state.src[end] === "$" && (!display || state.src[end + 1] === "$")) break;
+  }
+  if (end >= state.posMax) return false;
+  const content = state.src.slice(start + open, end);
+  if (!content || content.includes("`") || (!display && !isInlineMath(content, state.src[end + 1]))) return false;
+  if (!silent) state.push(display ? "math_display" : "math_inline", "", 0).content = content;
+  state.pos = end + open;
+  return true;
+});
+// `\(..\)` and `\[..\]` delimiters; they must run before the escape rule, which would eat the backslash.
+parser.inline.ruler.before("escape", "math_paren", (state, silent) => {
+  const start = state.pos;
+  if (state.src[start] !== "\\") return false;
+  const kind = state.src[start + 1];
+  if (kind !== "(" && kind !== "[") return false;
+  const close = kind === "(" ? "\\)" : "\\]";
+  const end = state.src.indexOf(close, start + 2);
+  if (end < 0 || end >= state.posMax) return false;
+  const content = state.src.slice(start + 2, end);
+  if (!content.trim() || content.includes("`")) return false;
+  if (!silent) state.push(kind === "(" ? "math_inline" : "math_display", "", 0).content = content.trim();
+  state.pos = end + 2;
+  return true;
+});
+parser.block.ruler.before("fence", "math_block", (state, startLine, endLine, silent) => {
+  const first = state.src.slice(state.bMarks[startLine]! + state.tShift[startLine]!, state.eMarks[startLine]).trimEnd();
+  const open = first.startsWith("$$") ? "$$" : first.startsWith("\\[") ? "\\[" : "";
+  if (!open || state.sCount[startLine]! - state.blkIndent >= 4) return false;
+  const close = open === "$$" ? "$$" : "\\]";
+  const body: string[] = [first.slice(2)];
+  let line = startLine;
+  let closed = first.length > 2 && first.endsWith(close);
+  if (closed) body[0] = first.slice(2, -2);
+  while (!closed && ++line < endLine) {
+    const text = state.src.slice(state.bMarks[line]! + state.tShift[line]!, state.eMarks[line]).trimEnd();
+    if (text.endsWith(close)) {
+      body.push(text.slice(0, -2));
+      closed = true;
+    } else body.push(text);
+  }
+  if (!closed) return false;
+  if (silent) return true;
+  state.line = line + 1;
+  const token = state.push("math_block", "", 0);
+  token.content = body.join("\n").trim();
+  token.map = [startLine, state.line];
+  return true;
 });
 // File links are interpreted by our scoped native resolver, never by a browser.
 parser.validateLink = (url) =>

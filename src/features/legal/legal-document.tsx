@@ -1,7 +1,7 @@
 import { useAsyncAction } from "@/state/actions";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Linking, View, type LayoutChangeEvent } from "react-native";
-import { Body, Disclosure, Heading, MutationState, Section, Stack, NavigationGroup, NavigationRow } from "@/ui/primitives";
+import { Body, Disclosure, Heading, MutationState, Stack, NavigationGroup, NavigationRow } from "@/ui/primitives";
 import { lineHeight, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import {
@@ -14,7 +14,7 @@ import {
   websiteUrl,
   type LegalDocumentId,
 } from "./legal-content";
-import { useMobileTheme } from "@/ui/theme";
+import { HintSection } from "@/ui/info-hint";
 
 export const legalSectionId = (index: number) => `section-${index}`;
 export { legalDocumentTitle, isLegalDocument } from "./legal-content";
@@ -64,7 +64,6 @@ export function LegalDocument({ document, sectionLayout }: {
 }
 
 function DocumentLinks({ document }: { document: LegalDocumentId }) {
-  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const action = useAsyncAction();
   const [target, setTarget] = useState<string | null>(null);
@@ -138,7 +137,7 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
             },
           ];
   return (
-    <Section title={copy("İletişim ve bağlantılar", "Contact & links")}>
+    <HintSection title={copy("İletişim ve bağlantılar", "Contact & links")} help={copy("Dokunduğun bağlantı başka bir uygulamada açılır.", "Links open in another app when you tap them.")}>
       <NavigationGroup>
         {[{ label: copy("E-posta uygulamasını aç", "Open email app"), url: `mailto:${supportEmail}`, detail: supportEmail }, ...links].map(({ label, url, ...rest }) => (
           <View key={url}>
@@ -148,12 +147,6 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
           </View>
         ))}
       </NavigationGroup>
-      <Body muted style={uiStyles.caption}>
-        {copy(
-          "Dokunduğun bağlantı başka bir uygulamada açılır.",
-          "Links open in another app when you tap them.",
-        )}
-      </Body>
-    </Section>
+    </HintSection>
   );
 }

@@ -1,6 +1,6 @@
 import { useSessionViewed } from "./use-session-viewed";
 import { TranscriptSkeleton } from "./transcript-skeleton";
-import { SessionProjectMismatch } from "@/remote/session-project";
+import { SessionProjectMismatch, foldSessionProject } from "@/remote/session-project";
 import { SessionProjectRecovery } from "./session-project-recovery";
 import { ProjectDirectoryFeedback } from "./project-directory-feedback";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -96,7 +96,13 @@ function SessionWorkspace({
   const projectIdentity = useRef<{ projectId: string; session: { id: string } } | undefined>(
     undefined,
   );
-  const cachedSession = cache.getQueryData<HostSession>(key);
+  const routeAliases = projects.data?.find((row) => row.id === routeProjectId)?.aliasIds;
+  const storedSession = cache.getQueryData<HostSession>(key);
+  // A transcript cached before the directory folded its legacy row reads as the listed project.
+  const cachedSession =
+    storedSession && routeProjectId
+      ? foldSessionProject(storedSession, routeProjectId, routeAliases)
+      : storedSession;
   const privacy = sessionPrivacy({
     readable: projects.readable,
     pending: projects.privacyPending,
@@ -119,6 +125,7 @@ function SessionWorkspace({
   const snapshot = useSessionSnapshot(scope, {
     enabled: privacy.canRead,
     projectId: privacy.projectId,
+    projectAliases: projects.data?.find((row) => row.id === privacy.projectId)?.aliasIds,
     canRead,
     restoreBefore,
   });
