@@ -30,8 +30,12 @@ export async function openScopedVoiceConnection(native: HostSocketNative, bindin
     readBulk: async () => { throw new HostWsError("unsupported"); },
   };
   const connection = new MobileHostWsConnection(channel, binding, credential, 1, `voice-${scope.sessionId}`, undefined, undefined, assertCurrent);
-  try { await connection.start(); assertCurrent(); }
-  catch (error) { connection.close(); throw error; }
+  try {
+    await connection.start(); assertCurrent();
+    // A Host from before phone voice does not route these methods; say so instead of failing the
+    // first voice request as incompatible data.
+    if (!connection.supports("voice.local.start") || !connection.supports("voice.cloud.transcribe")) throw new HostWsError("unsupported");
+  } catch (error) { connection.close(); throw error; }
   return {
     current: isCurrent,
     request<T>(method: string, params: Record<string, unknown> = {}, options: HostWsRequestOptions = {}) {

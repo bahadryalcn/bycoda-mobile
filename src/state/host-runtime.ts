@@ -53,6 +53,8 @@ type Runtime = {
 };
 
 const BLOCKED_RECHECK_MS = 20_000;
+/** How long a starting voice call waits for the shared Host socket to (re)connect. */
+export const VOICE_READY_TIMEOUT_MS = 20_000;
 /**
  * In-memory references to the one shared socket. Every component's host client (43 hook call
  * sites, plus each host query) takes a lease, so a session screen passed the old cap of 64 and
@@ -71,8 +73,28 @@ export class MobileHostRuntimeRegistry {
   async openVoice(machine: MobileMachine, scope: AssistantVoiceScope, current: () => boolean) {
     this.assertAccess();
     const runtime = this.runtimes.get(machine.environmentId);
-    if (!this.native || !runtime || runtime.binding.machineId !== machine.id || runtime.state !== "ready") throw new HostWsError("unavailable");
+    if (!this.native || !runtime || runtime.binding.machineId !== machine.id) throw new HostWsError("unavailable");
+    // Returning from the microphone prompt (Android pauses the app for it) reconnects the shared
+    // socket under a new access epoch; the call waits for that instead of failing at once.
+    await this.whenReady(runtime);
     return openScopedVoiceConnection(this.native, { ...runtime.binding, accessEpoch: this.accessEpoch }, scope, current);
+  }
+  private whenReady(runtime: Runtime): Promise<void> {
+    if (runtime.state === "ready") return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const finish = (error?: HostWsError) => {
+        clearTimeout(timer);
+        runtime.states.delete(listen);
+        if (error) reject(error);
+        else resolve();
+      };
+      const listen = (state: MobileHostRuntimeState) => {
+        if (state === "ready") finish();
+        else if (state === "blocked" || state === "closed") finish(new HostWsError("unavailable"));
+      };
+      const timer = setTimeout(() => finish(new HostWsError("unavailable")), VOICE_READY_TIMEOUT_MS);
+      runtime.states.add(listen);
+    });
   }
   private invalidation: Promise<void> = Promise.resolve();
   constructor(

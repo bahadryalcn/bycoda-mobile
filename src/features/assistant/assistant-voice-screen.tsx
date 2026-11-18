@@ -14,12 +14,13 @@ import VolumeX from "lucide-react-native/icons/volume-x";
 import { Body, Button, Disclosure, IconButton } from "@/ui/primitives";
 import { CallControl } from "@/ui/call-control";
 import { useCopy } from "@/ui/copy";
+import { BusyIndicator } from "@/ui/busy-indicator";
 import { useMobileTheme } from "@/ui/theme";
 import { radii, space } from "@/ui/tokens";
 import { useAssistantCall } from "./assistant-call-state";
 import { finishAssistantCallTurn, muteAssistantCall, setAssistantCallSpeakerMuted, silenceAssistantCall } from "./assistant-call-session";
 import { AssistantAvatar } from "./assistant-avatar";
-import { AssistantOwnerAvatar } from "./assistant-owner-avatar";
+import { AssistantOwnerAvatar, useAssistantOwner } from "./assistant-owner-avatar";
 import { AssistantVoiceBackdrop, AssistantVoiceOrb } from "./assistant-voice-stage";
 import { assistantOrbState } from "./assistant-voice-presentation";
 import { SessionKeyboardFrame } from "../workspace/session-keyboard-frame";
@@ -29,17 +30,22 @@ import { SessionKeyboardFrame } from "../workspace/session-keyboard-frame";
  * (the owner's or the assistant's picture), the words in flight, and a phone-style control dock.
  * Opening the chat shrinks the stage to a strip; the transcript and composer stay mounted throughout.
  */
-export function AssistantVoiceScreen({ active, name, scope, avatar, transcriptVisible, pending, ready, composer, feedback, onToggleTranscript, onMinimize, onEnd, onStart, children }: PropsWithChildren<{
+export function AssistantVoiceScreen({ active, stage = false, name, scope, avatar, transcriptVisible, pending, ready, composer, feedback, onToggleTranscript, onMinimize, onEnd, onStart, children }: PropsWithChildren<{
   active: boolean;
+  /** The assistant's home sits on the same calm stage, so starting a call only wakes it up. */
+  stage?: boolean;
   composer: ReactNode; feedback?: ReactNode;
   name: string; scope: string; avatar?: string; transcriptVisible: boolean; pending: boolean; ready: boolean;
   onToggleTranscript(): void; onMinimize(): void; onEnd(): void; onStart(): void;
 }>) {
   const copy = useCopy(), { colors, uiStyles } = useMobileTheme(), insets = useSafeAreaInsets();
-  const call = useAssistantCall(), viewport = useWindowDimensions();
+  const call = useAssistantCall(), viewport = useWindowDimensions(), owner = useAssistantOwner();
   const state = pending && call.phase === "idle" && !call.error ? "thinking" : assistantOrbState(call.phase, call.muted, call.error);
   const live = call.phase !== "idle" && call.phase !== "starting";
-  const status = state === "error" ? copy("Görüşme durdu", "Call stopped")
+  // From the tap until the first listen: microphone permission and the computer's voice line.
+  const connecting = !call.error && (call.phase === "starting" || (pending && call.phase === "idle"));
+  const status = connecting ? copy("Bağlanıyor…", "Connecting…")
+    : state === "error" ? copy("Görüşme durdu", "Call stopped")
     : state === "muted" ? copy("Mikrofon kapalı", "Microphone muted")
     : state === "listening" ? copy("Dinleniyor", "Listening")
     : state === "speaking" ? copy("Sesli yanıt", "Speaking")
@@ -73,15 +79,17 @@ export function AssistantVoiceScreen({ active, name, scope, avatar, transcriptVi
       <PhoneOff size={26} color={colors.primaryText} />
     </CallControl>
   </View> : null;
-  const speakerPicture = ownerTurn ? <AssistantOwnerAvatar size="sm" /> : avatar ? <AssistantAvatar value={avatar} size={32} /> : null;
+  const speakerPicture = connecting ? <View style={{ paddingLeft: space.sm }}><BusyIndicator size="sm" color={colors.text} /></View>
+    : ownerTurn ? owner ? <AssistantOwnerAvatar owner={owner} size="sm" /> : null : avatar ? <AssistantAvatar value={avatar} size={32} /> : null;
   const speaker = <View style={{ flexDirection: "row", alignItems: "center", alignSelf: "center", maxWidth: "100%", gap: space.sm, minHeight: 40, paddingVertical: space.xs, paddingLeft: speakerPicture ? space.xs : space.lg, paddingRight: space.lg, borderRadius: radii.pill, backgroundColor: colors.glass }}>
     {speakerPicture}
-    <Body style={[uiStyles.buttonLabel, { flexShrink: 1 }]} accessibilityLiveRegion="polite">{status}</Body>
+    {/* Selectable text mis-measures inside a content-sized Android row and clips; a status needs no selection. */}
+    <Body selectable={false} style={[uiStyles.buttonLabel, { flexShrink: 1 }]} accessibilityLiveRegion="polite">{status}</Body>
   </View>;
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.background }}>
-    {active ? <AssistantVoiceBackdrop state={state} level={call.level} /> : null}
+    {active || stage ? <AssistantVoiceBackdrop state={active ? state : "idle"} level={active ? call.level : 0} /> : null}
     <View style={{ flex: 1, minHeight: 0, paddingTop: active ? insets.top : 0, paddingLeft: active ? insets.left : 0, paddingRight: active ? insets.right : 0 }}>
-    <SessionKeyboardFrame transparent={active} composer={<>
+    <SessionKeyboardFrame transparent={active || stage} composer={<>
       <View style={{ display: chatVisible ? "flex" : "none" }} accessibilityElementsHidden={!chatVisible} importantForAccessibility={chatVisible ? "auto" : "no-hide-descendants"}>{composer}</View>
       {dock}
     </>}>
@@ -110,8 +118,9 @@ export function AssistantVoiceScreen({ active, name, scope, avatar, transcriptVi
         <AssistantVoiceOrb state={state} level={call.level} size={orbSize} label={status} />
         {speaker}
         {caption ? <Body numberOfLines={4} style={[uiStyles.body, { textAlign: "center", maxWidth: 520 }]}>{caption}</Body>
+          : connecting ? <Body muted style={{ textAlign: "center", maxWidth: 420 }}>{copy("Mikrofon ve bilgisayarınla ses bağlantısı hazırlanıyor.", "Getting the microphone and the voice line to your computer ready.")}</Body>
           : state === "listening" ? <Body muted style={{ textAlign: "center", maxWidth: 420 }}>{copy("Doğal konuşun. Durduğunuzda sözleriniz gönderilir.", "Speak naturally. When you pause, your words are sent.")}</Body> : null}
-        {state === "listening" ? <Button label={copy("Şimdi gönder", "Send now")} tone="quiet" onPress={finishAssistantCallTurn}>
+        {state === "listening" ? <Button label={copy("Şimdi gönder", "Send now")} tone="quiet" style={{ alignSelf: "center" }} onPress={finishAssistantCallTurn}>
           <Send size={18} color={colors.accent} />
         </Button> : null}
         <View style={{ alignSelf: "stretch", maxWidth: 520, gap: space.sm }}>

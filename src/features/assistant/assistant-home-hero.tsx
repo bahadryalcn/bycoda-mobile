@@ -26,7 +26,8 @@ export function AssistantHomeHero({ name, avatar, machineName, scope, project, v
   onVoice(): void; onOpen(): void;
 }) {
   const copy = useCopy(), { colors, uiStyles } = useMobileTheme(), viewport = useWindowDimensions();
-  const size = Math.max(140, Math.min(200, viewport.width * 0.48));
+  // Close to the call's orb, so starting a call grows the same orb instead of swapping screens.
+  const size = Math.max(160, Math.min(260, viewport.width * 0.6, viewport.height * 0.32));
   return <View style={{ alignItems: "center", gap: space.lg, paddingVertical: space.xl, width: "100%", maxWidth: 520, alignSelf: "center" }}>
     <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
       <AssistantVoiceOrb state="idle" level={0} size={size} label={name} />

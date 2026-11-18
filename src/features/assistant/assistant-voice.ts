@@ -28,6 +28,12 @@ export type VoicePort = {
 };
 /** Marks a dictation that is transcribed by the cloud: there is no local lease to release. */
 const CLOUD_LEASE = "cloud";
+/**
+ * One utterance must fit one 1 MiB socket frame as base64 16 kHz PCM (the Host accepts at most
+ * 1,000,000 characters): 22 seconds. The call loop listens again right after it is sent.
+ */
+export const MAX_UTTERANCE_SAMPLES = 352_000;
+const MAX_UTTERANCE_MS = 22_000;
 export type VoiceCapture = { start(): Promise<void>; stop(): void };
 export type AssistantVoiceDependencies = {
   capture(onBuffer: (data: Int16Array, sampleRate: number) => void, onEnded?: (reason: string, error?: string) => void): Promise<VoiceCapture>;
@@ -88,7 +94,7 @@ export class AssistantVoice {
         const frame = pcm.slice(0, remaining);
         this.frames.push(frame); this.samples += frame.length;
         const ended = this.utterance?.push(frame) ?? false;
-        if (ended || this.samples >= 480_000) void this.finish();
+        if (ended || this.samples >= MAX_UTTERANCE_SAMPLES) void this.finish();
       }, (reason, error) => {
         if (epoch !== this.epoch || (this.phase !== "preparing" && this.phase !== "recording")) return;
         if (reason === "limit" && this.phase === "recording") { void this.finish(); return; }
@@ -109,7 +115,7 @@ export class AssistantVoice {
       await capture.start();
       if (!this.current(epoch)) { capture.stop(); if (epoch === this.epoch) this.cancel(); return; }
       this.update("recording");
-      this.timer = setTimeout(() => { void this.finish(); }, 30000);
+      this.timer = setTimeout(() => { void this.finish(); }, MAX_UTTERANCE_MS);
     } catch (error) {
       if (epoch === this.epoch) { this.cancel(); this.dependencies.error(error); }
     }

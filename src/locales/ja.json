@@ -1359,6 +1359,7 @@
   "Mute speaker": "スピーカーをミュート",
   "Unmute speaker": "スピーカーのミュートを解除",
   "Speak naturally. When you pause, your words are sent.": "自然に話してください。間を置くと、話した内容が送信されます。",
+  "Getting the microphone and the voice line to your computer ready.": "マイクとコンピューターへの音声回線を準備しています。",
   "Start a voice call or write a message.": "音声通話を始めるか、メッセージを書いてください。",
   "Send this branch’s commits to the remote Git repository?": "このブランチのコミットをリモート Git リポジトリに送信しますか?",
   "Send this queued message from your computer to preserve its special content.": "特殊な内容を保持するため、このキューメッセージはコンピューターから送信してください。",

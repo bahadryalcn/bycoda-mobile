@@ -15,7 +15,8 @@ vi.mock("@/ui/primitives", () => {
   const Button = ({ label, onPress, disabled, expanded, children }: PropsWithChildren<any>) => h("button", { "aria-label": label, "aria-expanded": expanded, disabled, onClick: onPress }, children);
   return { Body, Button, IconButton: Button, Disclosure: ({ children, label }: PropsWithChildren<{ label: string }>) => h("details", null, h("summary", null, label), children) };
 });
-vi.mock("@/ui/call-control", () => ({ CallControl: ({ label, accessibilityLabel, onPress, disabled, selected }: PropsWithChildren<any>) =>
+vi.mock("@/ui/busy-indicator", () => ({ BusyIndicator: () => h("i", { "data-busy": true }) }));
+vi.mock("@/ui/call-control",() => ({ CallControl: ({ label, accessibilityLabel, onPress, disabled, selected }: PropsWithChildren<any>) =>
   h("button", { "aria-label": accessibilityLabel ?? label, "aria-pressed": !!selected, disabled, onClick: onPress }, label) }));
 vi.mock("./assistant-call-session", () => ({ muteAssistantCall: f.mute, silenceAssistantCall: f.silence, setAssistantCallSpeakerMuted: f.speaker, finishAssistantCallTurn: f.finish }));
 vi.mock("./assistant-voice-stage", () => ({
@@ -23,7 +24,7 @@ vi.mock("./assistant-voice-stage", () => ({
   AssistantVoiceBackdrop: (props: unknown) => { f.backdrop(props); return null; },
 }));
 vi.mock("./assistant-avatar", () => ({ AssistantAvatar: ({ value }: { value?: string }) => h("i", { "data-avatar": value }) }));
-vi.mock("./assistant-owner-avatar", () => ({ AssistantOwnerAvatar: () => h("i", { "data-owner": true }) }));
+vi.mock("./assistant-owner-avatar", () => ({ useAssistantOwner: () => ({ initial: "B" }), AssistantOwnerAvatar: () => h("i", { "data-owner": true }) }));
 vi.mock("lucide-react-native/icons/audio-lines", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/pause", () => ({ default: () => null }));
@@ -83,6 +84,23 @@ it("shows the assistant's turn and lets Silence stop a spoken reply", async () =
   expect(container.textContent).toContain("Here is the plan.");
   await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Stop the reply and listen again"]')!.click());
   expect(f.silence).toHaveBeenCalledOnce();
+});
+it("shows a connecting state from the tap until the call listens, with End available", async () => {
+  const container = mount(); useAssistantCall.setState({ phase: "starting" });
+  await act(async () => root.render(h(Screen)));
+  expect(container.textContent).toContain("Connecting…"); expect(container.textContent).not.toContain("Waiting for reply");
+  expect(container.querySelector("[data-busy]")).not.toBeNull();
+  expect(f.orb).toHaveBeenLastCalledWith(expect.objectContaining({ state: "thinking" }));
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Mute microphone"]')!.disabled).toBe(true);
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="End voice call"]')!.disabled).toBeFalsy();
+  await act(async () => useAssistantCall.setState({ phase: "listening" }));
+  expect(container.textContent).toContain("Listening"); expect(container.querySelector("[data-busy]")).toBeNull();
+});
+it("puts the home on the call's calm stage before any call", async () => {
+  mount(); useAssistantCall.setState({ phase: "idle" });
+  await act(async () => root.render(h(AssistantVoiceScreen, { active: false, stage: true, name: "Ada", scope: "", transcriptVisible: false, pending: false, ready: true,
+    onToggleTranscript: vi.fn(), onStart: vi.fn(), onMinimize: vi.fn(), onEnd: vi.fn(), composer: null })));
+  expect(f.backdrop).toHaveBeenLastCalledWith(expect.objectContaining({ state: "idle", level: 0 }));
 });
 it("keeps mute and failure states explicit and permits a deliberate restart", async () => {
   const container = mount(); useAssistantCall.setState({ phase: "speaking", muted: true });

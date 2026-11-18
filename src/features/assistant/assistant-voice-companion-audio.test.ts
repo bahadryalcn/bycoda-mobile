@@ -4,7 +4,7 @@ const file = vi.hoisted(() => ({ write: vi.fn(), delete: vi.fn() }));
 vi.mock("expo-file-system", () => ({ Paths: { cache: "file:///cache" }, File: class {
   uri = "file:///cache/bycoda-voice-fixture.wav"; exists = true; write = file.write; delete = file.delete;
 } }));
-import { androidVoiceCapture, androidVoicePlayback } from "./assistant-voice-android";
+import { companionVoiceCapture, companionVoicePlayback } from "./assistant-voice-companion-audio";
 import { pcmBase64 } from "../../../../src/features/voice/model/voiceVad";
 
 function fixture() {
@@ -19,7 +19,7 @@ function fixture() {
 }
 it("accepts PCM only from the captured native session and reports bounded capture completion", async () => {
   const f = fixture(), buffer = vi.fn(), ended = vi.fn();
-  const capture = androidVoiceCapture(f.native, buffer, ended); await capture.start();
+  const capture = companionVoiceCapture(f.native, buffer, ended); await capture.start();
   f.emit({ type: "pcm", sessionId: "other", audio: "AAAA", sampleRate: 16000 });
   expect(buffer).not.toHaveBeenCalled();
   f.emit({ type: "pcm", audio: pcmBase64(new Int16Array([1, -2])), sampleRate: 16000 });
@@ -33,16 +33,16 @@ it("accepts PCM only from the captured native session and reports bounded captur
 });
 it("does not consume another utterance's PCM inside the same native call session", async () => {
   const f = fixture(), buffer = vi.fn();
-  const capture = androidVoiceCapture(f.native, buffer); await capture.start();
+  const capture = companionVoiceCapture(f.native, buffer); await capture.start();
   f.emit({ type: "pcm", captureId: "different-utterance", audio: pcmBase64(new Int16Array([1, -2])), sampleRate: 16000 });
   expect(buffer).not.toHaveBeenCalled(); capture.stop();
 });
 it("does not stop native capture when a never-started listener is canceled", () => {
-  const f = fixture(); androidVoiceCapture(f.native, vi.fn()).stop();
+  const f = fixture(); companionVoiceCapture(f.native, vi.fn()).stop();
   expect(f.native.stopCapture).not.toHaveBeenCalled();
 });
 it("uses distinct capture ownership for utterances sharing one native session", async () => {
-  const f = fixture(), first = androidVoiceCapture(f.native, vi.fn()), second = androidVoiceCapture(f.native, vi.fn());
+  const f = fixture(), first = companionVoiceCapture(f.native, vi.fn()), second = companionVoiceCapture(f.native, vi.fn());
   await first.start(); await second.start(); first.stop();
   const firstId = vi.mocked(f.native.startCapture).mock.calls[0]?.[1];
   const secondId = vi.mocked(f.native.startCapture).mock.calls[1]?.[1];
@@ -52,14 +52,14 @@ it("uses distinct capture ownership for utterances sharing one native session", 
 it("stops a deferred native start again after cancellation without adopting a new session", async () => {
   const f = fixture(); let finish!: () => void;
   vi.mocked(f.native.startCapture).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-  const capture = androidVoiceCapture(f.native, vi.fn()); const pending = capture.start();
+  const capture = companionVoiceCapture(f.native, vi.fn()); const pending = capture.start();
   capture.stop(); finish(); await pending;
   expect(f.native.stopCapture).toHaveBeenCalledTimes(2);
   expect(vi.mocked(f.native.stopCapture).mock.calls.every(([id]) => id === "original")).toBe(true);
 });
 it("settles native playback on notification stop and removes its temporary WAV", async () => {
   const f = fixture(); file.delete.mockClear();
-  const playback = androidVoicePlayback(f.native);
+  const playback = companionVoicePlayback(f.native);
   const pending = playback.play(new Uint8Array(44), () => true);
   expect(f.native.playWav).toHaveBeenCalledWith("original", expect.any(String), "file:///cache/bycoda-voice-fixture.wav");
   f.emit({ type: "ended", reason: "stopped" });
@@ -68,7 +68,7 @@ it("settles native playback on notification stop and removes its temporary WAV",
 });
 it("keeps playback cancellation scoped to its own utterance inside a shared call session", async () => {
   const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
-  const f = fixture(), first = androidVoicePlayback(f.native), second = androidVoicePlayback(f.native);
+  const f = fixture(), first = companionVoicePlayback(f.native), second = companionVoicePlayback(f.native);
   const oldPlay = first.play(new Uint8Array(44), () => true);
   const firstId = vi.mocked(f.native.playWav).mock.calls.at(-1)![1];
   const nextPlay = second.play(new Uint8Array(44), () => true);
@@ -83,7 +83,7 @@ it("cleans up standalone playback authority when writing its cache file fails", 
   const f = fixture();
   vi.spyOn(f.native, "getState").mockReturnValue({ active: false, sessionId: "", phase: "idle", muted: false, pip: false });
   file.write.mockImplementationOnce(() => { throw new Error("disk full"); });
-  await expect(androidVoicePlayback(f.native).play(new Uint8Array(44), () => true)).rejects.toThrow("disk full");
+  await expect(companionVoicePlayback(f.native).play(new Uint8Array(44), () => true)).rejects.toThrow("disk full");
   expect(f.native.beginPlaybackSession).toHaveBeenCalledOnce();
   expect(f.native.endSession).toHaveBeenCalledWith("standalone");
 });

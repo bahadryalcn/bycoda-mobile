@@ -5,8 +5,8 @@ import type { VoiceCapture } from "./assistant-voice";
 let captureSequence = 0;
 let playbackSequence = 0;
 
-/** The service outlives one utterance. Its session ID fences every native action. */
-export function androidVoiceCapture(native: NativeVoiceCompanion, onBuffer: (data: Int16Array, rate: number) => void,
+/** The native session (Android service, iOS call engine) outlives one utterance. Its ID fences every native action. */
+export function companionVoiceCapture(native: NativeVoiceCompanion, onBuffer: (data: Int16Array, rate: number) => void,
   onEnded?: (reason: string, error?: string) => void): VoiceCapture {
   const session = native.getState();
   if (!session.active || !session.sessionId) throw new Error("Start a voice session while Bycoda is visible before recording.");
@@ -31,8 +31,8 @@ export function androidVoiceCapture(native: NativeVoiceCompanion, onBuffer: (dat
   };
 }
 
-/** Native playback is also stopped by the notification actions while JS sleeps. */
-export function androidVoicePlayback(native: NativeVoiceCompanion) {
+/** Native playback is also stopped by the notification actions (Android) while JS sleeps. */
+export function companionVoicePlayback(native: NativeVoiceCompanion) {
   let stop = () => {};
   return {
     stop: () => stop(),

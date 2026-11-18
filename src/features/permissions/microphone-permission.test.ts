@@ -15,10 +15,17 @@ it.each(["undetermined", "denied"])("requests a %s microphone when the OS allows
   await requireMicrophonePermission();
   expect(native.request).toHaveBeenCalledOnce();
 });
-it("reserves Settings recovery for permanent denial", async () => {
+it("reserves Settings recovery for a denial the OS confirms permanent", async () => {
   native.read.mockResolvedValue({ granted: false, status: "denied", canAskAgain: false });
+  native.request.mockResolvedValue({ granted: false, status: "denied", canAskAgain: false });
   await expect(requireMicrophonePermission()).rejects.toBeInstanceOf(MicrophonePermissionError);
-  expect(native.request).not.toHaveBeenCalled();
+  expect(native.request).toHaveBeenCalledOnce();
+});
+it("asks again when a cached permanent denial is stale (permission newly declared)", async () => {
+  native.read.mockResolvedValue({ granted: false, status: "denied", canAskAgain: false });
+  native.request.mockResolvedValue({ granted: true, status: "granted", canAskAgain: true });
+  await requireMicrophonePermission();
+  expect(native.request).toHaveBeenCalledOnce();
 });
 it("keeps retryable denial out of the Settings notice", async () => {
   native.read.mockResolvedValue({ granted: false, status: "undetermined", canAskAgain: true });

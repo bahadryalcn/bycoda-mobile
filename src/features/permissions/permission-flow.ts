@@ -1,7 +1,12 @@
 import { duringSystemPrompt } from "@/state/system-prompt";
 export type DevicePermission = { granted: boolean; canAskAgain: boolean; status: string };
 
-/** A first request must reach the OS; Settings is recovery for a permanent denial. */
+/**
+ * Every request reaches the OS first; Settings is recovery for a denial the OS confirms permanent.
+ * A cached "cannot ask again" is not trusted on its own: Android reports it after a request for a
+ * permission the build did not declare, and after the declaration is fixed the OS can ask again.
+ * For a real permanent denial the OS answers at once without showing anything.
+ */
 export async function requestDevicePermission(
   read: () => Promise<DevicePermission>,
   request: () => Promise<DevicePermission>,
@@ -9,7 +14,7 @@ export async function requestDevicePermission(
 ) {
   const current = await read();
   if (current.granted) return current;
-  if (current.canAskAgain) return duringSystemPrompt(request);
-  await openSettings();
-  return current;
+  const answered = await duringSystemPrompt(request);
+  if (!answered.granted && !answered.canAskAgain) await openSettings();
+  return answered;
 }

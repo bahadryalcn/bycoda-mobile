@@ -19,6 +19,16 @@ it("borrows an overall Android call service without ending it between utterances
   expect(bridge.stopCapture).toHaveBeenCalledWith("native-session", expect.any(String));
   expect(bridge.beginSession).not.toHaveBeenCalled(); expect(bridge.endSession).not.toHaveBeenCalled();
 });
+it("records an iOS call through its native call engine, and dictation outside a call through expo-audio", async () => {
+  bridge.active = true;
+  const dependencies = nativeVoiceDependencies({ state: vi.fn(), transcript: vi.fn(), error: vi.fn() });
+  const call = await dependencies.capture(vi.fn()); await call.start(); call.stop();
+  expect(bridge.startCapture).toHaveBeenCalledWith("native-session", expect.any(String));
+  expect(native.start).not.toHaveBeenCalled(); expect(bridge.endSession).not.toHaveBeenCalled();
+  bridge.active = false;
+  const dictation = await dependencies.capture(vi.fn()); await dictation.start(); dictation.stop();
+  expect(native.start).toHaveBeenCalledOnce(); expect(bridge.beginSession).not.toHaveBeenCalled();
+});
 it("ends only its own foreground Android dictation session", async () => {
   platform.OS = "android";
   const dependencies = nativeVoiceDependencies({ state: vi.fn(), transcript: vi.fn(), error: vi.fn() });

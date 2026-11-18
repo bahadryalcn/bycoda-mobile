@@ -2,7 +2,7 @@ import { AudioModule, createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { File, Paths } from "expo-file-system";
 import { Platform } from "react-native";
 import { nativeVoiceCompanion } from "../../../modules/bycoda-voice-companion";
-import { androidVoiceCapture, androidVoicePlayback } from "./assistant-voice-android";
+import { companionVoiceCapture, companionVoicePlayback } from "./assistant-voice-companion-audio";
 import { decodePcmBase64 } from "../../../../src/features/voice/model/voiceVad";
 import type { AssistantVoiceDependencies } from "./assistant-voice";
 import { requireMicrophonePermission } from "../permissions/microphone-permission";
@@ -28,22 +28,26 @@ export function speechWav(chunks: { audio: string; sampleRate: number }[]) {
 
 export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependencies, "state" | "transcript" | "error" | "level">): AssistantVoiceDependencies {
   let stopPlayback = () => {};
-  const android = Platform.OS === "android" ? nativeVoiceCompanion() : null;
-  const playback = android ? androidVoicePlayback(android) : null;
+  const companion = nativeVoiceCompanion();
+  // Android always records and plays through the companion service. On iOS the companion owns only a
+  // started call (its running audio engine keeps the call alive in the background); dictation and
+  // read-aloud outside a call keep the foreground expo-audio path.
+  const native = () => Platform.OS === "android" || !!companion?.getState().active;
+  const playback = companion ? companionVoicePlayback(companion) : null;
   return {
     ...callbacks,
     engine: () => voicePreferences.getState().preferences.engine,
     async capture(onBuffer: (data: Int16Array, rate: number) => void, onEnded?: (reason: string, error?: string) => void) {
       await requireMicrophonePermission();
-      if (Platform.OS === "android") {
-        if (!android) throw new Error("Update Bycoda to use the native voice companion.");
-        const owned = !android.getState().active;
-        applyAndroidMicPriority(voicePreferences.getState().preferences.micOrder, android);
-        const id = owned ? await android.beginSession() : android.getState().sessionId;
+      if (native()) {
+        if (!companion) throw new Error("Update Bycoda to use the native voice companion.");
+        const owned = !companion.getState().active;
+        applyAndroidMicPriority(voicePreferences.getState().preferences.micOrder, companion);
+        const id = owned ? await companion.beginSession() : companion.getState().sessionId;
         try {
-          const capture = androidVoiceCapture(android, onBuffer, onEnded);
-          return { start: () => capture.start(), stop: () => { capture.stop(); if (owned) android.endSession(id); } };
-        } catch (error) { if (owned) android.endSession(id); throw error; }
+          const capture = companionVoiceCapture(companion, onBuffer, onEnded);
+          return { start: () => capture.start(), stop: () => { capture.stop(); if (owned) companion.endSession(id); } };
+        } catch (error) { if (owned) companion.endSession(id); throw error; }
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true, shouldPlayInBackground: false, interruptionMode: "doNotMix" });
       await applyMicPriority(voicePreferences.getState().preferences.micOrder, () => new AudioModule.AudioRecorder({}) as unknown as MicRecorder);
@@ -81,7 +85,7 @@ export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependenci
     },
     async play(chunks, current) {
       if (!chunks.length || !current()) return;
-      if (Platform.OS === "android") {
+      if (native()) {
         if (!playback) throw new Error("Update Bycoda to use the native voice companion.");
         await playback.play(speechWav(chunks), current); return;
       }

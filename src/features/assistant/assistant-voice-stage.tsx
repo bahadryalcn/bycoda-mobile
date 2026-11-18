@@ -13,17 +13,19 @@ export function assistantStageTones(state: AssistantOrbState, colors: MobileColo
   if (state === "listening") return { key: state, primary: colors.voiceListen, glow: colors.voiceListenGlow, strength: 0.6 };
   if (state === "thinking") return { key: state, primary: colors.voiceThink, glow: colors.voiceThinkGlow, strength: 0.55 };
   if (state === "speaking") return { key: state, primary: colors.voiceSpeak, glow: colors.voiceSpeakGlow, strength: 0.6 };
-  if (state === "error") return { key: state, primary: colors.danger, glow: colors.voiceThink, strength: 0.4 };
+  if (state === "error") return { key: state, primary: colors.danger, glow: colors.voiceThink, strength: 0.26 };
   if (state === "muted") return { key: state, primary: colors.tertiary, glow: colors.voiceListen, strength: 0.25 };
   return { key: state, primary: colors.voiceListen, glow: colors.voiceThink, strength: 0.32 };
 }
 
-/** The PanelUI orb shape that says what the call is doing; idle, muted and error hold still. */
+/**
+ * The PanelUI orb shape that says what the call is doing. Idle, muted and error hold the same still
+ * sphere the assistant's home shows, so a stopped call reads as a pause rather than a new screen.
+ */
 export function assistantStageOrb(state: AssistantOrbState): { shape: ThinkingOrbState; paused: boolean; speed: number } {
   if (state === "listening") return { shape: "listening", paused: false, speed: 1 };
   if (state === "thinking") return { shape: "working", paused: false, speed: 1 };
   if (state === "speaking") return { shape: "composing", paused: false, speed: 1.15 };
-  if (state === "error") return { shape: "shaping", paused: true, speed: 1 };
   return { shape: "listening", paused: true, speed: 1 };
 }
 

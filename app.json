@@ -20,7 +20,8 @@
           "NSAllowsLocalNetworking": true
         },
         "NSLocalNetworkUsageDescription": "Connect to your Bycoda computer on your private network.",
-        "NSMicrophoneUsageDescription": "Speak to your Bycoda assistant. Audio is processed on your connected computer."
+        "NSMicrophoneUsageDescription": "Speak to your Bycoda assistant. Audio is processed on your connected computer.",
+        "UIBackgroundModes": ["audio"]
       },
       "privacyManifests": {
         "NSPrivacyTracking": false,

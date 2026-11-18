@@ -487,7 +487,7 @@ original conversation, including while minimized. Pending recovery prevents anot
 recording from replacing it. A saved speech ID prevents duplicate insertion after
 an interrupted save or application restart.
 
-On Android, **Voice call** explicitly starts a hands-free conversation in the open
+On Android, iPhone and iPad, **Voice call** explicitly starts a hands-free conversation in the open
 Room thread. It listens, sends recognized speech after a pause, reads the reply
 aloud, then listens again. A call sends speech automatically; the separate
 **Dictate message** control still requires reviewing and sending the draft yourself.
@@ -505,12 +505,17 @@ remains unlocked. Its separate connection is limited to local voice operations,
 access verification and the captured assistant thread; it grants no background
 workspace browsing, arbitrary commands or new approval authority.
 
+On iPhone and iPad the call keeps the microphone open for its whole length, so it
+continues with the screen locked or the app in the background, like a phone call;
+iOS shows its microphone indicator instead of a notification, and the in-app controls
+(or the floating window) mute and end it. There is no picture-in-picture call window.
+Outside a call, dictation and read-aloud keep using the foreground audio path.
+
 **End voice call**, notification stop, closing the floating window, device/app lock,
 sign-out or revoked access ends the call and releases phone audio. When application
 lock is enabled, leaving the app stops the call even if the authentication delay
 has not expired. A call does not start itself from the background. Android service
-or audio interruptions may also end it. iOS background calling is not supported by
-this Android flow; manual foreground dictation/read-aloud retain their own limits.
+or audio interruptions (an incoming phone call, Siri) may also end it.
 
 ## Editing and conversation lists
 

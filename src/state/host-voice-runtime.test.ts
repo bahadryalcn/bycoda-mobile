@@ -1,12 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { HostSocketNative, CredentialBinding, NativeCredentialHandle } from "../../modules/bycoda-host-socket/src/types";
-const f = vi.hoisted(() => ({ start: vi.fn(async () => {}), close: vi.fn(), request: vi.fn(async () => ({})), args: [] as unknown[] }));
+const f = vi.hoisted(() => ({ start: vi.fn(async () => {}), close: vi.fn(), request: vi.fn(async () => ({})), supports: vi.fn((_method: string) => true), args: [] as unknown[] }));
 vi.mock("../remote/ws-connection", async importOriginal => ({
   ...await importOriginal<typeof import("../remote/ws-connection")>(),
-  MobileHostWsConnection: class { constructor(...args: unknown[]) { f.args = args; } start = f.start; close = f.close; request = f.request; },
+  MobileHostWsConnection: class { constructor(...args: unknown[]) { f.args = args; } start = f.start; close = f.close; request = f.request; supports = f.supports; },
 }));
 import { allowsVoiceRequest, openScopedVoiceConnection } from "./host-voice-runtime";
-afterEach(() => { vi.clearAllMocks(); f.start.mockReset().mockResolvedValue(); });
+afterEach(() => { vi.clearAllMocks(); f.start.mockReset().mockResolvedValue(); f.supports.mockReset().mockReturnValue(true); });
 const scope = { sessionId: "native-session", threadId: "reviewed-thread", projectId: "reviewed-project" };
 it("limits background access to voice, the reviewed thread and exact project", () => {
   expect(allowsVoiceRequest(scope, "voice.local.transcribe", {})).toBe(true);
@@ -47,5 +47,10 @@ it("closes a peer if authority expires while its handshake is pending", async ()
   let current = true;
   f.start.mockImplementationOnce(async () => { current = false; });
   await expect(openScopedVoiceConnection(native(), binding, scope, () => current)).rejects.toThrow();
+  expect(f.close).toHaveBeenCalledOnce();
+});
+it("names an outdated Host instead of failing the first voice request as incompatible data", async () => {
+  f.supports.mockImplementation(method => !method.startsWith("voice."));
+  await expect(openScopedVoiceConnection(native(), binding, scope, () => true)).rejects.toMatchObject({ category: "unsupported" });
   expect(f.close).toHaveBeenCalledOnce();
 });

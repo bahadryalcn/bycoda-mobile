@@ -1359,6 +1359,7 @@
   "Mute speaker": "Hoparlörü sustur",
   "Unmute speaker": "Hoparlörü aç",
   "Speak naturally. When you pause, your words are sent.": "Doğal konuşun. Durduğunuzda sözleriniz gönderilir.",
+  "Getting the microphone and the voice line to your computer ready.": "Mikrofon ve bilgisayarınla ses bağlantısı hazırlanıyor.",
   "Start a voice call or write a message.": "Sesli görüşme başlatın ya da yazarak sorun.",
   "Send this branch’s commits to the remote Git repository?": "Bu dalın commit’leri uzak Git deposuna gönderilsin mi?",
   "Send this queued message from your computer to preserve its special content.": "Özel içeriğini korumak için sıradaki bu mesajı bilgisayardan gönder.",

@@ -1359,6 +1359,7 @@
   "Mute speaker": "静音扬声器",
   "Unmute speaker": "取消扬声器静音",
   "Speak naturally. When you pause, your words are sent.": "自然地说话即可。停顿时，你说的内容会被发送。",
+  "Getting the microphone and the voice line to your computer ready.": "正在准备麦克风和与电脑的语音线路。",
   "Start a voice call or write a message.": "开始语音通话，或者写一条消息。",
   "Send this branch’s commits to the remote Git repository?": "将此分支的提交发送到远程 Git 存储库？",
   "Send this queued message from your computer to preserve its special content.": "请从电脑发送此排队消息，以保留其特殊内容。",

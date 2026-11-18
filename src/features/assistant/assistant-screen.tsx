@@ -184,6 +184,7 @@ function AssistantWorkspace({
   const state = current() && !denied(snapshot.error) ? snapshot.data?.snapshot : undefined;
   const threads = (state?.threads ?? []).filter((row) => assistantThreadVisible(row, access));
   const visibleThread = state && thread && assistantThreadVisible(thread, access) ? thread : null;
+  const home = !voiceMode && !visibleThread && !!state;
   // A job a tapped push pointed at is listed first.
   const jobs = (state?.jobs ?? [])
     .filter((job) => jobNeedsAttention(job) && jobVisible(job, access))
@@ -498,7 +499,7 @@ function AssistantWorkspace({
       </View> : null}
       {approvalAction}
       <QueryState query={snapshot} loading={state ? "inline" : "content"} />
-      {!voiceMode && !visibleThread && state ? <AssistantHomeHero name={title} avatar={state.profile.avatar}
+      {home ? <AssistantHomeHero name={title} avatar={state.profile.avatar}
         machineName={machineName} scope={scopeName} project={!!projectId}
         voiceBusy={voiceEntry.pending} openBusy={busyKind === "open"}
         voiceDisabled={busy || callActive || !writable || scopeHidden} openDisabled={busy || !state || scopeHidden}
@@ -562,6 +563,7 @@ function AssistantWorkspace({
   const conversation = (
     <ScreenList
       title={voiceMode ? undefined : title}
+      style={home ? { backgroundColor: "transparent" } : undefined}
       header={header}
       data={messages}
       keyExtractor={(message) => message.id}
@@ -580,7 +582,7 @@ function AssistantWorkspace({
   return (
     <>
     <Stack.Screen options={{ title, headerShown: !voiceMode && !voiceRequested }} />
-    <AssistantVoiceScreen active={voiceMode || voiceRequested} name={title}
+    <AssistantVoiceScreen active={voiceMode || voiceRequested} stage={home} name={title}
       composer={composer} feedback={<>{approvalAction}<QueryState query={snapshot} loading="inline" />{issue ? <Notice message={copy("İşlem tamamlanamadı. Bilgisayar bağlantısını ve erişimi kontrol edin.", "The operation could not be completed. Check this computer connection and access.")} /> : null}</>}
       scope={[machineName, scopeName].join(" · ")}
       avatar={state?.profile.avatar} transcriptVisible={transcript.visible}

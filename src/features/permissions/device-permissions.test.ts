@@ -37,9 +37,10 @@ describe("native device permission integration", () => {
   });
   it("opens Settings for a permanently blocked camera", async () => {
     mocks.cameraRead.mockResolvedValue({ granted: false, canAskAgain: false, status: "denied" });
+    mocks.cameraRequest.mockResolvedValueOnce({ granted: false, canAskAgain: false, status: "denied" });
     await allowDevicePermission("camera");
     expect(mocks.settings).toHaveBeenCalledOnce();
-    expect(mocks.cameraRequest).not.toHaveBeenCalled();
+    expect(mocks.cameraRequest).toHaveBeenCalledOnce();
   });
   it("requests microphone permission through audio without starting recording or opening settings", async () => {
     await allowDevicePermission("microphone");
@@ -48,11 +49,18 @@ describe("native device permission integration", () => {
     expect(mocks.notificationRequest).not.toHaveBeenCalled();
     expect(mocks.settings).not.toHaveBeenCalled();
   });
-  it("offers system settings after permanent microphone denial without asking again", async () => {
+  it("offers system settings once the OS confirms a permanent microphone denial", async () => {
     mocks.microphoneRead.mockResolvedValue({ granted: false, canAskAgain: false, status: "denied" });
+    mocks.microphoneRequest.mockResolvedValueOnce({ granted: false, canAskAgain: false, status: "denied" });
     await allowDevicePermission("microphone");
+    expect(mocks.microphoneRequest).toHaveBeenCalledOnce();
     expect(mocks.settings).toHaveBeenCalledOnce();
-    expect(mocks.microphoneRequest).not.toHaveBeenCalled();
+  });
+  it("keeps image picker from removing the microphone permission during native generation", () => {
+    const { expo } = JSON.parse(readFileSync(new URL("../../../app.json", import.meta.url), "utf8"));
+    const picker = expo.plugins.find((entry: unknown) => Array.isArray(entry) && entry[0] === "expo-image-picker");
+    expect(picker[1].microphonePermission).toEqual(expect.any(String));
+    expect(expo.android.blockedPermissions).not.toContain("android.permission.RECORD_AUDIO");
   });
   it("keeps image picker from removing the scanner permission during native generation", () => {
     const { expo } = JSON.parse(readFileSync(new URL("../../../app.json", import.meta.url), "utf8"));

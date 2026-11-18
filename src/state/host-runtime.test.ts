@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MobileHostRuntimeRegistry } from "./host-runtime";
+import { MobileHostRuntimeRegistry, VOICE_READY_TIMEOUT_MS } from "./host-runtime";
+import type { MobileMachine } from "../remote/types";
 import { binding, fakeNative } from "../remote/ws-connection.test-fixture";
 
 const registries: MobileHostRuntimeRegistry[] = [];
@@ -120,6 +121,52 @@ describe("single app mobile Host supervisor", () => {
     registry.setAccess(false, 2);
     registry.setAccess(true, 3);
     await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    lease.release();
+  });
+  it("lets a voice call wait for the shared socket to reconnect after the microphone prompt", async () => {
+    const f = fakeNative();
+    const voice = vi.fn(async () => {
+      throw new Error("voice credential reached");
+    });
+    Object.assign(f.native, { acquireVoiceCredential: voice, openVoice: vi.fn() });
+    const registry = new MobileHostRuntimeRegistry(f.native, "app-a", () => undefined, () => 0);
+    registries.push(registry);
+    const lease = registry.retain(binding, ["transport.ws.v2"])!;
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    let reconnect!: () => void;
+    vi.mocked(f.native.acquireCredential).mockImplementationOnce(async (b) => {
+      await new Promise<void>((resolve) => (reconnect = resolve));
+      return { handle: "opaque-handle", machineId: b.machineId, environmentId: b.environmentId, credentialGeneration: b.credentialGeneration, accessEpoch: b.accessEpoch };
+    });
+    // The Android permission dialog pauses the app; returning issues a new access epoch.
+    registry.setAccess(false, 2);
+    registry.setAccess(true, 3);
+    await vi.waitFor(() => expect(reconnect).toBeDefined());
+    const machine = { id: binding.machineId, environmentId: binding.environmentId } as MobileMachine;
+    const opening = registry.openVoice(machine, { sessionId: "voice-a", threadId: "thread-a" }, () => true);
+    opening.catch(() => undefined);
+    await Promise.resolve();
+    expect(voice).not.toHaveBeenCalled();
+    reconnect();
+    await expect(opening).rejects.toThrow("voice credential reached");
+    lease.release();
+  });
+  it("stops waiting for the voice socket when the computer stays unreachable", async () => {
+    const f = fakeNative();
+    const registry = new MobileHostRuntimeRegistry(f.native, "app-a", () => undefined, () => 0);
+    registries.push(registry);
+    const lease = registry.retain(binding, ["transport.ws.v2"])!;
+    await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+    vi.mocked(f.native.acquireCredential).mockImplementationOnce(() => new Promise(() => undefined));
+    registry.setAccess(false, 2);
+    registry.setAccess(true, 3);
+    await vi.waitFor(() => expect(lease.state()).toBe("connecting"));
+    vi.useFakeTimers();
+    const machine = { id: binding.machineId, environmentId: binding.environmentId } as MobileMachine;
+    const opening = registry.openVoice(machine, { sessionId: "voice-a", threadId: "thread-a" }, () => true);
+    opening.catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(VOICE_READY_TIMEOUT_MS);
+    await expect(opening).rejects.toThrow("not ready");
     lease.release();
   });
   it("shares one socket among more than 64 screen clients instead of failing them as busy", async () => {
