@@ -16,7 +16,8 @@ const f = vi.hoisted(() => ({
 }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
-  Modal: ({ children }: PropsWithChildren) => createElement("div", null, children),
+  Modal: ({ children, visible }: PropsWithChildren<{ visible?: boolean }>) =>
+    visible === false ? null : createElement("div", { "data-modal": "" }, children),
 }));
 vi.mock("react-native-keyboard-controller", () => ({
   KeyboardAvoidingView: ({ children }: PropsWithChildren) => createElement("div", null, children),
@@ -261,6 +262,13 @@ it("same-id changed endpoint cannot create, and privacy hides an already opened 
   f.private = true;
   await act(async () => root.render(createElement(MobilePty, props)));
   expect(container.querySelector("[data-viewport]")).toBeNull();
+});
+it("hides the native terminal modal while the app is locked", async () => {
+  await mount();
+  expect(container.querySelector("[data-modal]")).not.toBeNull();
+  f.security.status = "locked";
+  await act(async () => root.render(createElement(MobilePty, props)));
+  expect(container.querySelector("[data-modal]")).toBeNull();
 });
 it("background state forbids mutation even before a rerender", async () => {
   await mount();
