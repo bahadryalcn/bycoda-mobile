@@ -33,6 +33,7 @@ import { AssistantCallButton } from "./assistant-call-controls";
 import { endAssistantCall } from "./assistant-call-session";
 import { useAssistantCall } from "./assistant-call-state";
 import { AssistantVoiceScreen } from "./assistant-voice-screen";
+import { AssistantContextBadges, AssistantHomeHero } from "./assistant-home-hero";
 import { useAssistantTranscript } from "./use-assistant-transcript";
 import { useAssistantVoiceEntry } from "./use-assistant-voice-entry";
 import { AssistantPermissions } from "./assistant-permissions";
@@ -483,26 +484,26 @@ function AssistantWorkspace({
   const approvalAction = pendingApprovals ? <Button
     label={copy("Onaylar ({p0} bekliyor)", "Approvals ({p0} waiting)", { p0: pendingApprovals })}
     tone="primary" onPress={() => router.push("/approvals")} /> : null;
+  const title = state?.profile.name || copy("Asistan", "Assistant");
+  const scopeName = (projects.data ?? []).find(project => project.id === projectId)?.name || copy("Genel", "Global");
+  const scopeHidden = !!projectId && !projects.isProjectVisible(projectId);
   const header = (
     <>
-      {!voiceMode ? <Row>
-        <View style={uiStyles.grow}>
-          <Body muted numberOfLines={1} style={uiStyles.caption}>{machineName}</Body>
-          <Body numberOfLines={1} style={uiStyles.caption}>{(projects.data ?? []).find(project => project.id === projectId)?.name || copy("Genel", "Global")}</Body>
+      {!voiceMode && visibleThread ? <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+        <View style={[uiStyles.grow, { alignItems: "flex-start" }]}>
+          <AssistantContextBadges machineName={machineName} scope={scopeName} project={!!projectId} />
         </View>
-        {!voiceMode && visibleThread ? <AssistantCallButton target={{ machineId, environmentId, threadId: visibleThread.id }} onStart={voiceEntry.start}
-          enabled={writable} current={() => current() && (!visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId))} /> : null}
-      </Row> : null}
-      <Disclosure label={copy("Konuşmalar", "Conversations")}>{controls}</Disclosure>
-      {approvalAction}
-      <QueryState query={snapshot} loading="inline" />
-      {!voiceMode && !visibleThread && state ? <View style={{ gap: space.md, paddingVertical: space.xl }}>
-        <Body style={uiStyles.heading}>{copy("Asistanla konuş", "Talk with your assistant")}</Body>
-        <Button label={copy("Konuşmayı aç", "Open conversation")} tone="primary" onPress={() => void open()}
-          busy={busyKind === "open"} disabled={busy || !state || (!!projectId && !projects.isProjectVisible(projectId))} />
-        <Button label={copy("Sesli görüşme", "Voice call")} onPress={voiceEntry.start}
-          busy={voiceEntry.pending} disabled={busy || callActive || !writable || (!!projectId && !projects.isProjectVisible(projectId))} />
+        <AssistantCallButton target={{ machineId, environmentId, threadId: visibleThread.id }} onStart={voiceEntry.start}
+          enabled={writable} current={() => current() && (!visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId))} />
       </View> : null}
+      {approvalAction}
+      <QueryState query={snapshot} loading={state ? "inline" : "content"} />
+      {!voiceMode && !visibleThread && state ? <AssistantHomeHero name={title} avatar={state.profile.avatar}
+        machineName={machineName} scope={scopeName} project={!!projectId}
+        voiceBusy={voiceEntry.pending} openBusy={busyKind === "open"}
+        voiceDisabled={busy || callActive || !writable || scopeHidden} openDisabled={busy || !state || scopeHidden}
+        onVoice={voiceEntry.start} onOpen={() => void open()} /> : null}
+      <Disclosure label={copy("Konuşmalar", "Conversations")}>{controls}</Disclosure>
       {!state && !snapshot.isPending && assistantNeedsUpdate(snapshot.error) ? <Empty compact illustration="permission"
         title={copy("Bilgisayarındaki Bycoda'yı güncelle", "Update bycoda on your computer")}
         detail={copy("Bu bilgisayar henüz asistanı sunmuyor. Güncelledikten sonra sohbet ve sesli görüşme burada açılır.", "This computer does not offer the assistant yet. After updating, chat and voice calls appear here.")} /> : null}
@@ -543,7 +544,6 @@ function AssistantWorkspace({
       ) : null}
     </>
   );
-  const title = state?.profile.name || copy("Asistan", "Assistant");
   const composer = (
         visibleThread && writable ? (
           <AssistantComposer
@@ -582,7 +582,7 @@ function AssistantWorkspace({
     <Stack.Screen options={{ title, headerShown: !voiceMode && !voiceRequested }} />
     <AssistantVoiceScreen active={voiceMode || voiceRequested} name={title}
       composer={composer} feedback={<>{approvalAction}<QueryState query={snapshot} loading="inline" />{issue ? <Notice message={copy("İşlem tamamlanamadı. Bilgisayar bağlantısını ve erişimi kontrol edin.", "The operation could not be completed. Check this computer connection and access.")} /> : null}</>}
-      scope={[machineName, (projects.data ?? []).find(project => project.id === projectId)?.name || copy("Genel", "Global")].join(" · ")}
+      scope={[machineName, scopeName].join(" · ")}
       avatar={state?.profile.avatar} transcriptVisible={transcript.visible}
       pending={voiceEntry.pending} ready={writable && !busy}
       onToggleTranscript={transcript.toggle} onStart={voiceEntry.start}

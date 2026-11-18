@@ -17,6 +17,7 @@ vi.mock("@/ui/tokens", () => ({ colors: {}, metrics: {}, space: {} }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
 vi.mock("@/ui/brand", () => ({ LegalLinks: () => null }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: () => null }));
+vi.mock("./active-computer-status", () => ({ ActiveComputerStatus: () => createElement("span", null, "Active"), RetryConnectionRow: () => null }));
 vi.mock("expo-router", () => ({ router: {}, useLocalSearchParams: () => ({ start: fixture.start }), Stack: { Screen: ({options}: {options: {gestureEnabled: boolean; headerLeft?: () => import("react").ReactNode}}) => { fixture.options = options; return options.headerLeft?.() ?? null; } } }));
 vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => true }));
 vi.mock("react-native", () => ({
@@ -58,6 +59,7 @@ vi.mock("@/state/machines", () => ({ useMachines: Object.assign((select?: (state
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
+    StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
     Body: Wrapper,
     Disclosure: Wrapper,

@@ -99,6 +99,12 @@ requireValue(
     !app.android?.blockedPermissions?.includes("android.permission.CAMERA"),
   "Image picker must not block the QR scanner's Android camera permission.",
 );
+// `false` here blocks RECORD_AUDIO on Android and deletes NSMicrophoneUsageDescription on iOS,
+// which silently breaks dictation and voice calls.
+requireValue(
+  typeof plugins.get("expo-image-picker")?.microphonePermission === "string",
+  "Image picker must not block the assistant's microphone permission.",
+);
 requireValue(plugins.has("expo-notifications"), "Configure native notification permissions and channel.");
 requireValue(
   plugins.has("expo-secure-store"),

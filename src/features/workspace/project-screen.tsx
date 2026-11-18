@@ -219,7 +219,7 @@ export function ProjectScreen({
             { value: "sessions", label: copy("Oturumlar", "Sessions"), icon: MessagesSquare },
             { value: "files", label: copy("Dosyalar", "Files"), icon: Folder },
             { value: "git", label: copy("Değişiklikler", "Changes"), icon: GitBranch },
-            { value: "preferences", label: copy("Tercihler", "Preferences"), icon: SlidersHorizontal },
+            { value: "preferences", label: copy("Ayarlar", "Settings"), icon: SlidersHorizontal },
           ]}
           onChange={(value) => {
             if (segment !== value)

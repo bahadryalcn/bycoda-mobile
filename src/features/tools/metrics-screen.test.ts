@@ -103,5 +103,5 @@ it("keeps missing readings distinct from zero and reveals only fixed diagnostic 
   const sample: ResourceSample = { at: Date.now(), host: { totalMemoryBytes: 1024, freeMemoryBytes: 0, logicalCpus: 8, loadAverage: null },
     process: { pid: 9, rssBytes: 1024, heapUsedBytes: 512, externalBytes: 1024 * 1024, cpuPercent: null, uptimeSeconds: 120 } };
   await render(createElement(DiagnosticsDetails, { sample }));
-  expect(container.textContent).toContain("Process CPU: —"); expect(container.textContent).toContain("External memory: 1.0 MB"); expect(container.textContent).toContain("Load average (1 / 5 / 15 min): —");
+  expect(container.textContent).toContain("Process CPU—"); expect(container.textContent).toContain("External memory: 1.0 MB"); expect(container.textContent).toContain("Load average (1 / 5 / 15 min): —");
 });

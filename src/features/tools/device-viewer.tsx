@@ -1,3 +1,4 @@
+import { deviceSystemLabel } from "./device-system";
 import { useRef, useState } from "react";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -29,12 +30,15 @@ export function DeviceViewer({
   projectId,
   device,
   canControl,
+  viewOnly = false,
   onDevice,
   onClose,
 }: {
   projectId: string;
   device: DeviceSummary;
   canControl: boolean;
+  /** Live view only: no control, tools or boot, and no prompt to enable control. Used from a session. */
+  viewOnly?: boolean;
   onDevice: (device: DeviceSummary) => void;
   onClose: () => void;
 }) {
@@ -104,13 +108,14 @@ export function DeviceViewer({
     <Sheet visible title={device.name} size="full" dismissible={!busy} onClose={onClose}>
       <Row>
         <Body muted style={[uiStyles.caption, uiStyles.grow]}>
-          {[device.platform, device.version].filter(Boolean).join(" ")}
+          {deviceSystemLabel(device)}
         </Body>
         <Badge
           label={device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off")}
           tone={device.booted ? "active" : "default"}
         />
       </Row>
+      {!viewOnly ? (
       <Disclosure label={copy("Araçlar", "Tools")}>
         <NavigationRow
           label={copy("Cihaz servisi", "Device service")}
@@ -123,6 +128,7 @@ export function DeviceViewer({
           onPress={() => setPreview(true)}
         />
       </Disclosure>
+      ) : null}
       {runtime ? (
         <DeviceRuntime
           projectId={opening.projectId}
@@ -137,7 +143,7 @@ export function DeviceViewer({
           onClose={() => setPreview(false)}
         />
       ) : null}
-      {!device.booted ? (
+      {!device.booted && !viewOnly ? (
         <Button
           label={copy("Cihazı başlat", "Boot device")}
           tone="primary"
@@ -173,13 +179,15 @@ export function DeviceViewer({
           ) : null}
           {/* Wrapping row of labelled buttons: each grows to share the line and drops below on large text or landscape. */}
           <Row style={{ flexWrap: "wrap" }}>
-            <Button
-              label={copy("Ana ekran", "Home")}
-              tone="quiet"
-              style={{ flexGrow: 1, flexBasis: 140 }}
-              disabled={!enabled}
-              onPress={() => send({ type: "home" })}
-            />
+            {!viewOnly ? (
+              <Button
+                label={copy("Ana ekran", "Home")}
+                tone="quiet"
+                style={{ flexGrow: 1, flexBasis: 140 }}
+                disabled={!enabled}
+                onPress={() => send({ type: "home" })}
+              />
+            ) : null}
             <Button
               label={copy("Ekranı yenile", "Refresh screen")}
               tone="quiet"
@@ -197,14 +205,16 @@ export function DeviceViewer({
               value={live}
               onChange={setLive}
             />
+            {!viewOnly ? (
             <ToggleField
               label={copy("Cihazı kontrol et", "Control device")}
               value={control}
               disabled={!canControl}
               onChange={setControl}
             />
+            ) : null}
           </NavigationGroup>
-          {!canControl ? (
+          {!canControl && !viewOnly ? (
             <Notice
               message={copy(
                 "Cihaz kontrolünü önce bilgisayardaki bycoda’dan etkinleştir.",
@@ -213,6 +223,7 @@ export function DeviceViewer({
             />
           ) : null}
           <MutationState mutation={action} />
+          {!viewOnly ? (
           <Disclosure label={copy("Kontroller", "Controls")}>
             <Field
               label={copy("Uygulama veya paket kimliği", "App or bundle ID")}
@@ -252,6 +263,7 @@ export function DeviceViewer({
               onPress={() => send({ type: "pressElement", label: element.trim() })}
             />
           </Disclosure>
+        ) : null}
         </>
       ) : null}
     </Sheet>

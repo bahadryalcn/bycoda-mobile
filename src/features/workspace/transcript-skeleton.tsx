@@ -39,7 +39,7 @@ export function TranscriptSkeleton({ label }: { label?: string }) {
       accessibilityState={{ busy: true }}
       aria-busy
       onLayout={(event) => setHeight(event.nativeEvent.layout.height)}
-      style={{ flex: 1, gap: space.lg, paddingVertical: space.md }}
+      style={{ flex: 1, gap: space.lg, paddingVertical: space.md, paddingHorizontal: space.screen }}
     >
       {visible ? displayedRows.map((row, index) => (
         <View

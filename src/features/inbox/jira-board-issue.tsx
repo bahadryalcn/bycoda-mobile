@@ -176,7 +176,7 @@ export function JiraBoardIssueActions({
               <MessageText text={details.data.body || copy("Açıklama yok.", "No description.")} role="assistant" />
             </Disclosure>
           </> : null}
-          {/^https?:\/\//i.test(issue.url ?? "") ? <Button tone="quiet" label={copy("Jira’da aç", "Open in Jira")} busy={openLink.isPending} onPress={() => {
+          {/^https?:\/\//i.test(issue.url ?? "") ? <Button tone="quiet" flush label={copy("Jira’da aç", "Open in Jira")} busy={openLink.isPending} onPress={() => {
             void openLink.run(async () => { if (current()) await Linking.openURL(issue.url); });
           }} /> : null}
           <MutationState mutation={openLink} />

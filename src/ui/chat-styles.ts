@@ -46,7 +46,7 @@ function createTextStyles(size: (typeof sizes)[ChatTextSize]) {
       fontFamily: monoFont,
     },
     inlineCode: {
-      color: colors.accent,
+      color: colors.text,
       backgroundColor: colors.fill,
       fontWeight: "500",
     },

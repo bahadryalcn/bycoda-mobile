@@ -28,3 +28,15 @@ export function toolPreviewPage(source: ReturnType<typeof toolPreviewSource>, st
     kind: run.kind, text: sourceSlice(source.text, Math.max(start, run.start), Math.min(end, run.end)),
   })).filter(run => run.text.length > 0);
 }
+
+/** One display line per row so added and deleted lines can carry a full-width tint. */
+export function toolPreviewRows(runs: ReturnType<typeof toolPreviewPage>) {
+  const rows: { kind: Kind; text: string }[] = [];
+  for (const run of runs) {
+    const parts = run.text.split("\n");
+    // A leading separator newline belongs to the previous row, not to a new empty one.
+    if (run.text.startsWith("\n")) parts.shift();
+    for (const text of parts) rows.push({ kind: run.kind, text });
+  }
+  return rows;
+}

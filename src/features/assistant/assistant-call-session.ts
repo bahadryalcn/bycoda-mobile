@@ -6,6 +6,7 @@ import { openAssistantVoiceRuntime } from "@/state/host-runtime";
 import { useMachines } from "@/state/machines";
 import { useSecurity, isAppAccessAllowed } from "@/state/security";
 import { hasProviderPermission, useProviderPermission } from "../privacy/consent-access";
+import { isAccountAccessAllowed, useAccountAccess } from "../account/model/account-access";
 import { reviewedMachine, isReviewedMachine } from "@/state/reviewed-machine";
 import { AssistantVoice, type AssistantVoiceTarget, type VoicePort } from "./assistant-voice";
 import { nativeVoiceDependencies } from "./assistant-voice-native";
@@ -29,7 +30,7 @@ export function endAssistantCall() {
   generation++;
   const cancelStarting = cancelStartingCall; cancelStartingCall = undefined;
   const call = active; active = undefined;
-  useAssistantCall.setState({ phase: "idle", muted: false, level: 0, sessionId: undefined, lastReply: undefined, utterance: undefined, target: undefined, thread: undefined });
+  useAssistantCall.setState({ phase: "idle", muted: false, speakerMuted: false, level: 0, sessionId: undefined, lastReply: undefined, utterance: undefined, target: undefined, thread: undefined });
   cancelStarting?.();
   if (!call) return;
   try { call.release(); } finally { call.native.endSession(call.id); }
@@ -38,6 +39,20 @@ export function muteAssistantCall(muted: boolean) {
   if (!active) return;
   useAssistantCall.setState({ muted, level: 0 });
   active.native.setMuted(active.id, muted); active.loop.setMuted(muted);
+}
+/** Desktop "Silence": stop the reply being spoken and listen again. */
+export function silenceAssistantCall() {
+  return !!active && active.loop.interrupt();
+}
+export function setAssistantCallSpeakerMuted(speakerMuted: boolean) {
+  if (!active) return;
+  useAssistantCall.setState({ speakerMuted });
+  active.loop.setSpeakerMuted(speakerMuted);
+}
+/** Desktop "Finish turn": send what was heard so far instead of waiting for silence. */
+export function finishAssistantCallTurn() {
+  if (!active || useAssistantCall.getState().phase !== "listening" || useAssistantCall.getState().muted) return;
+  void active.engine.finish().catch(() => { /* The capture promise owns the reported failure. */ });
 }
 export async function pictureInPictureAssistant() {
   if (!active) return false;
@@ -74,10 +89,13 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
     await requireMicrophonePermission();
     if (version !== generation || !allowed() || !isReviewedMachine(review, useMachines.getState()) || !isAppAccessAllowed()) throw new Error("The assistant connection changed.");
     id = await native.beginSession();
+    // Starting needs the unlocked, visible app. A started call is the owner's explicit, fixed-thread
+    // voice line: like a phone call it continues in the background and behind the app lock, and it
+    // ends on sign-out, consent withdrawal, a changed computer, the notification Stop or End.
     const current = () => {
       const state = useMachines.getState();
       const liveMachine = state.machines.find(row => row.id === target.machineId);
-      return version === generation && !retired && isAppAccessAllowed() && hasProviderPermission(liveMachine) &&
+      return version === generation && !retired && isAccountAccessAllowed() && hasProviderPermission(liveMachine) &&
         isReviewedMachine(review, state) && native!.getState().active && native!.getState().sessionId === id;
     };
     const retire = () => { if (version === generation && !current()) { retired = true; endAssistantCall(); } };
@@ -155,7 +173,7 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
     });
     cleanups.push(() => loop.stop());
     cleanups.push(useMachines.subscribe(retire));
-    cleanups.push(useSecurity.subscribe(retire));
+    cleanups.push(useAccountAccess.subscribe(retire));
     cleanups.push(useProviderPermission.subscribe(retire));
     const events = native.addListener("onVoiceEvent", event => {
       if (retired || version !== generation || active?.id !== id || event.sessionId !== id) return;

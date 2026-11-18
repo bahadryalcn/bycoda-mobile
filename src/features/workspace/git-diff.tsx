@@ -53,6 +53,7 @@ export function GitDiffPanel({
           <Button
             label={copy("Dosyayı aç", "Open file")}
             tone="quiet"
+            flush
             disabled={busy}
             density="compact"
             onPress={() => onOpenFile(selection.path)}
@@ -69,7 +70,7 @@ export function GitDiffPanel({
             onPress={() => onStage(selection)}
           />
         </Row>
-        {!selection.staged && diff.data && preview && !diff.data.binary && !diff.data.tooLarge && !preview.tooLarge && !preview.truncated && !preview.unchanged ? <Button tone="quiet" label={copy("Değişiklikleri seç", "Select changes")} disabled={busy} onPress={() => setSelecting(true)} /> : null}
+        {!selection.staged && diff.data && preview && !diff.data.binary && !diff.data.tooLarge && !preview.tooLarge && !preview.truncated && !preview.unchanged ? <Button tone="quiet" flush label={copy("Değişiklikleri seç", "Select changes")} disabled={busy} onPress={() => setSelecting(true)} /> : null}
         <QueryState query={diff} />
         {textDiff && !preview ? <Body muted>{copy("Diff hesaplanıyor…", "Computing diff…")}</Body> : null}
         {!diff.data ? null : diff.data.binary || diff.data.tooLarge || preview?.tooLarge ? (

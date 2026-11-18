@@ -125,6 +125,8 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   const text =
     value.role === "system" && isError ? friendlyProviderFailure(rawText, copy) : rawText;
   const toolResults = toolResultTexts(value);
+  // Like the desktop inspection panel: the first block is the command/input when a separate output follows it.
+  const inputBlock = !!value.shell || (toolResults.length > 0 && !!(value.text || value.tool?.detail));
   const label =
     value.agentRun?.name ||
     value.tool?.title ||
@@ -209,7 +211,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
         />
       ) : null}
       {text && value.role === "tool" && !value.agentRun ? (
-        <MessageCode code={text} output compact error={isError} allowPreview={false} context={context} />
+        <MessageCode code={text} output compact error={isError} allowPreview={false} context={context} readerTitle={inputBlock ? copy("Komut", "Command") : undefined} copyLabel={inputBlock ? copy("Komutu kopyala", "Copy command") : undefined} />
       ) : text && value.role === "user" ? (
         <UserMessageText text={text} />
       ) : text ? (
@@ -224,9 +226,6 @@ export const TranscriptBlock = memo(function TranscriptBlock({
       ) : null}
       {toolResults.length ? (
         <View style={{ gap: space.sm }}>
-          <Body muted style={uiStyles.label}>
-            {copy("Çıktı", "Output")}
-          </Body>
           {toolResults.map((output, index) => (
             <MessageCode key={index} code={output} output compact error={isError} allowPreview={false} context={context} />
           ))}

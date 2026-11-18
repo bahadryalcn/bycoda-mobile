@@ -100,3 +100,27 @@ it("stop during silence backoff clears its timer without another capture", async
   s.loop.stop(); await vi.advanceTimersByTimeAsync(180000);
   expect(s.deps.capture).toHaveBeenCalledTimes(calls); expect(s.deps.error).not.toHaveBeenCalled();
 });
+it("interrupt stops only the spoken reply and returns to one new listener without an error", async () => {
+  const s = setup(), playback = deferred<void>(), next = deferred<string>();
+  s.deps.capture.mockImplementationOnce(() => s.audio.promise).mockImplementation(() => next.promise);
+  s.deps.speak.mockImplementationOnce(() => playback.promise);
+  s.loop.start(target);
+  expect(s.loop.interrupt()).toBe(false);
+  s.audio.resolve("Tell me");
+  await vi.waitFor(() => expect(s.deps.speak).toHaveBeenCalledOnce());
+  expect(s.loop.interrupt()).toBe(true); expect(s.deps.cancelAudio).toHaveBeenCalledOnce();
+  playback.reject(new Error("Playback canceled."));
+  await vi.waitFor(() => expect(s.deps.capture).toHaveBeenCalledTimes(2));
+  expect(s.deps.error).not.toHaveBeenCalled(); expect(s.loop.current()).toBe(true); expect(s.deps.send).toHaveBeenCalledOnce();
+  s.loop.stop(); next.resolve("");
+});
+it("a muted speaker keeps sending and listening but never plays replies", async () => {
+  const s = setup(), next = deferred<string>();
+  s.deps.capture.mockImplementationOnce(() => s.audio.promise).mockImplementation(() => next.promise);
+  s.loop.start(target); s.loop.setSpeakerMuted(true);
+  s.audio.resolve("Quiet please");
+  await vi.waitFor(() => expect(s.deps.capture).toHaveBeenCalledTimes(2));
+  expect(s.deps.send).toHaveBeenCalledOnce(); expect(s.deps.speak).not.toHaveBeenCalled();
+  expect(s.deps.state.mock.calls.map(call => call[0])).toEqual(["listening", "sending", "listening"]);
+  s.loop.stop(); next.resolve("");
+});

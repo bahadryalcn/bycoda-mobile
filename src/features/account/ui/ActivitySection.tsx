@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
-import { ErrorNotice, Section, Skeleton, Stack } from "@/ui/primitives";
-import { MetricRow } from "@/ui/metric-row";
+import { ErrorNotice, NavigationGroup, Section, SettingIcon, Skeleton, Stack, ValueRow } from "@/ui/primitives";
+import Calendar from "lucide-react-native/icons/calendar";
+import CalendarDays from "lucide-react-native/icons/calendar-days";
+import CalendarRange from "lucide-react-native/icons/calendar-range";
+import Clock from "lucide-react-native/icons/clock";
 import { useCopy } from "@/ui/copy";
 import { activitySummaryQuery, splitMinutes } from "../model/activity-query";
 import { useAccount } from "./account-context";
@@ -43,10 +46,12 @@ export function ActivitySection() {
       <Stack>
         {summary.data ? (
           <>
-            <MetricRow label={copy("Bugün", "Today")} value={format(summary.data.today)} />
-            <MetricRow label={copy("Bu hafta", "This week")} value={format(summary.data.week)} />
-            <MetricRow label={copy("Bu ay", "This month")} value={format(summary.data.month)} />
-            <MetricRow label={copy("Bu yıl", "This year")} value={format(summary.data.year)} />
+            <NavigationGroup>
+              <ValueRow icon={<SettingIcon glyph={Clock} />} label={copy("Bugün", "Today")} value={format(summary.data.today)} />
+              <ValueRow icon={<SettingIcon glyph={CalendarDays} />} label={copy("Bu hafta", "This week")} value={format(summary.data.week)} />
+              <ValueRow icon={<SettingIcon glyph={Calendar} />} label={copy("Bu ay", "This month")} value={format(summary.data.month)} />
+              <ValueRow icon={<SettingIcon glyph={CalendarRange} />} label={copy("Bu yıl", "This year")} value={format(summary.data.year)} />
+            </NavigationGroup>
           </>
         ) : (
           summary.isError ? (

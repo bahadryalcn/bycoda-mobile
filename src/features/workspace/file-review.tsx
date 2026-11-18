@@ -214,7 +214,7 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
   return (
     <View style={{ flex: 1, minHeight: 0, gap: space.xs }}>
       {source.targetLine !== undefined ? (
-        <Body muted>
+        <Body muted style={{ paddingHorizontal: space.screen }}>
           {copy(
             "Arama sonucu: {p0}. satır. Dosya içeriği değişmiş olabilir.",
             "Search result: line {p0}. File contents may have changed.",
@@ -223,18 +223,18 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
         </Body>
       ) : null}
       {source.locationUnavailable ? (
-        <Notice
+        <View style={{ paddingHorizontal: space.screen }}><Notice
           tone="warning"
           message={copy(
             "Arama satırı bu sınırlı önizlemede bulunamadı. Dosya değişmiş veya satır önizleme sınırının dışında olabilir.",
             "The search line is unavailable in this bounded preview. The file may have changed or the line may be beyond the preview limit.",
           )}
-        />
+        /></View>
       ) : null}
-      <Row>
+      <Row style={{ paddingHorizontal: space.screen }}>
         {initialLine !== undefined && !source.locationUnavailable ? (
           <Button
-            tone="quiet"
+            tone="quiet" flush
             label={
               atResult
                 ? copy("Dosyanın başını göster", "Show file beginning")
@@ -244,13 +244,13 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
           />
         ) : null}
         <Button
-          tone="quiet"
+          tone="quiet" flush
           label={selecting ? copy("Satır görünümü", "Line view") : copy("Metin seç", "Select text")}
           onPress={() => setSelecting(!selecting)}
         />
       </Row>
       {source.truncated ? (
-        <Body muted>
+        <Body muted style={{ paddingHorizontal: space.screen }}>
           {copy(
             "Önizleme sınırına ulaşıldı. Tam dosyayı bilgisayarında incele; içerik değiştirilmedi.",
             "Preview limit reached. Inspect the full file on your computer; its contents were not changed.",

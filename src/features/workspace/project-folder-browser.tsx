@@ -151,7 +151,7 @@ export function ProjectFolderBrowser({
         data={entries}
         keyExtractor={(entry) => entry.path}
         header={
-          <>
+          <View style={{ gap: space.xs, paddingTop: space.md }}>
             <SelectField
               label={copy("Disk veya konum", "Drive or location")}
               compact
@@ -195,7 +195,7 @@ export function ProjectFolderBrowser({
               />
             ) : null}
             {regionOwned ? null : regionState}
-          </>
+          </View>
         }
         contentContainerStyle={{ gap: 0 }}
         ListEmptyComponent={regionOwned ? regionState : undefined}

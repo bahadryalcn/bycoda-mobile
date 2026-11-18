@@ -356,8 +356,8 @@ export const MessageContent = memo(function MessageContent({
           <View
             key={key}
             style={{
-              borderStartWidth: 2,
-              borderStartColor: colors.info,
+              borderStartWidth: 3,
+              borderStartColor: colors.border,
               paddingStart: space.md,
               paddingVertical: space.xs,
               gap: space.sm,

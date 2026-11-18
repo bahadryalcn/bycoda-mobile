@@ -11,6 +11,7 @@ import { IssueSummary } from "@/ui/issue-summary";
 import { providerName } from "./provider-model";
 import { useRelativeTime } from "../management/shared/record-bits";
 import { IssueRecordRow } from "./issue-record-row";
+import { PullRequestStateBadge } from "../workspace/pull-request-state-badge";
 
 export {
   type ProviderConnectionsProps,
@@ -77,6 +78,7 @@ export function ProviderInboxRow({ item, onOpen }: ProviderInboxRowProps) {
             .join(" · ")}
           state={providerStateLabel(item.state, copy)}
           stateTone={providerStateTone(item.state)}
+          stateBadge={item.state.toUpperCase() === "MERGED" ? <PullRequestStateBadge state={item.state} label={providerStateLabel(item.state, copy)} /> : undefined}
           extraBadges={[...(item.draft ? [copy("Taslak", "Draft")] : []), ...(item.provider === "jira" && item.priority ? [item.priority] : [])]}
           caption={[item.assignees?.[0]?.login, updated].filter(Boolean).join(" · ") || undefined}
           onPress={() => onOpen(item)}

@@ -122,7 +122,7 @@ export function ChatActivity({
   const titleStyle = {
     fontSize: fontSize.control,
     lineHeight: lineHeight.control,
-    color: status === "error" ? colors.danger : status === "record" ? colors.tertiary : colors.muted,
+    color: status === "error" ? colors.danger : colors.muted,
   };
   const Chevron = onInspect && !inline ? ChevronRight : ChevronDown;
   const header = (
@@ -227,7 +227,7 @@ export function ChatActivity({
                   opacity: pressed ? 0.6 : 1,
                 })}
               >
-                <Body style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption, color: colors.tertiary }}>
+                <Body style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption, color: colors.muted }}>
                   {hidden > 0
                     ? copy("{p0} adım daha · Tüm ayrıntılar", "{p0} more steps · All details", { p0: hidden })
                     : copy("Tüm ayrıntılar", "All details")}

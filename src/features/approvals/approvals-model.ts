@@ -1,7 +1,7 @@
 import type { ApprovalView } from "../../../../src/shared/model/host-contracts/approvals";
 
 export type { ApprovalView };
-export const APPROVALS_CAPABILITY = "approvals.v1";
+export const APPROVALS_CAPABILITY = "approvals";
 const STATUSES = ["pending", "approved", "denied", "expired"] as const;
 
 /** Keeps only entries with every field the screen and a decision depend on; a malformed entry is dropped, never guessed. */

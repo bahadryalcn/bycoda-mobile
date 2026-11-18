@@ -36,6 +36,7 @@ vi.mock("./shared", () => ({ relativeTime: () => "1m", sessionStatus: () => ({ l
 // The real formatter loads expo-localization and the machine store, which need the Expo runtime.
 vi.mock("../management/shared/format", () => ({ stamp: () => "" }));
 vi.mock("./session-row-actions", () => ({ SessionRowActions: ({ children }: { children(open: () => void): unknown }) => children(() => {}) }));
+vi.mock("./session-row-status", () => ({ SessionRowStatus: ({ label }: { label: string }) => h("span", null, label) }));
 
 let root: ReturnType<typeof createRoot>;
 let container: HTMLDivElement;

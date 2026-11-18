@@ -199,6 +199,7 @@ function NewSessionOpening({ onClose }: { onClose: () => void }) {
               showAll ? copy("Son kullanılanlar", "Recent") : copy("Tüm projeler", "All projects")
             }
             tone="quiet"
+            flush
             disabled={!readable || locked}
             onPress={() => setShowAll(!showAll)}
           />

@@ -9,6 +9,7 @@ const fixture = vi.hoisted(() => ({
   close: undefined as undefined | (() => void),
   mutate: vi.fn(),
 }));
+vi.mock("./pull-request-state-badge", () => ({ PullRequestStateBadge: ({ label }: { label: string }) => createElement("span", null, label) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ capabilities: [] }) }));
 vi.mock("@/state/queries", () => ({

@@ -103,7 +103,7 @@ function TabOrderSheet({ onClose, label }: { onClose: () => void; label: (id: Do
             ))}
           </Sortable>
           <View style={{ alignSelf: "flex-start" }}>
-            <Button label={copy("Sekmeleri sıfırla", "Reset tabs")} tone="quiet" onPress={() => save(defaultTabPreferences)} />
+            <Button label={copy("Sekmeleri sıfırla", "Reset tabs")} tone="quiet" flush onPress={() => save(defaultTabPreferences)} />
           </View>
         </Animated.ScrollView>
       </GestureHandlerRootView>

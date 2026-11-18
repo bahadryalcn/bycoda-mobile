@@ -31,7 +31,7 @@ export function androidVoiceCapture(native: NativeVoiceCompanion, onBuffer: (dat
   };
 }
 
-/** Native playback is also stopped by screen lock and notification actions while JS sleeps. */
+/** Native playback is also stopped by the notification actions while JS sleeps. */
 export function androidVoicePlayback(native: NativeVoiceCompanion) {
   let stop = () => {};
   return {

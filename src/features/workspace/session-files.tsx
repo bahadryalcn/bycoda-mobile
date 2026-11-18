@@ -141,7 +141,6 @@ function SessionFilesScope({ scope, session, connection }: { scope: SessionScope
             style={{ backgroundColor: colors.panel }}
             data={readable ? filtered : []}
             keyExtractor={(file) => file.key}
-            header={readable ? <Body muted style={uiStyles.caption}>{opening.machineName}</Body> : undefined}
             ListEmptyComponent={
               <Empty
                 compact={false}

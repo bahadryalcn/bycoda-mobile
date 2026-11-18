@@ -3,6 +3,7 @@ import {
   composerContextReading,
   contextTokensLabel,
   contextTone,
+  formatContextApiTime,
   formatContextCost,
   formatContextTokens,
 } from "./composer-context";
@@ -40,4 +41,28 @@ it("uses desktop thresholds and token formatting", () => {
   expect(formatContextTokens(950)).toBe("950");
   expect(formatContextTokens(1_500_000)).toBe("1.5M");
   expect(formatContextTokens(-1)).toBe("0");
+});
+
+it("reads response speed and API time like the desktop panel", () => {
+  const reading = composerContextReading(
+    session(
+      { context: { used: 10, window: 100 }, usage: { costUsd: 1, apiMs: 65_000 } },
+      [{ id: "u", role: "user", durationMs: 4000, turnMetrics: { outputTokens: 200 } }],
+    ),
+  )!;
+  expect(reading.tps).toBe(50);
+  expect(reading.apiMs).toBe(65_000);
+  expect(formatContextApiTime(65_000)).toBe("1m 5s");
+  expect(composerContextReading(session({ context: { used: 1 } }))!.tps).toBeUndefined();
+});
+
+it("lists subagents with their last reported context level", () => {
+  const reading = composerContextReading(
+    session({ context: { used: 10, window: 100 } }, [
+      { id: "a", role: "tool", text: "Agent", agentRun: { name: "Fix tests" }, tool: { kind: "agent", callId: "c1", title: "Agent: Fix tests", agentContext: { used: 50, window: 100 } } },
+      { id: "b", role: "tool", text: "Agent", agentRun: { name: "Fix tests" }, tool: { kind: "agent", callId: "c1", title: "Agent: Fix tests" } },
+    ]),
+  )!;
+  expect(reading.agents).toHaveLength(1);
+  expect(reading.agents![0]).toMatchObject({ used: 50, ratio: 0.5 });
 });

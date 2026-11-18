@@ -16,6 +16,8 @@ export type AssistantCallDependencies = {
 export class AssistantCallLoop {
   private active = false;
   private muted = false;
+  private speakerMuted = false;
+  private speaking = false;
   private epoch = 0;
   private pending?: Promise<void>;
   private selected?: Readonly<AssistantVoiceTarget>;
@@ -31,7 +33,7 @@ export class AssistantCallLoop {
   start(target: AssistantVoiceTarget): boolean {
     if (this.active || this.pending || !this.dependencies.current(target)) return false;
     this.selected = Object.freeze({ ...target });
-    this.active = true; this.muted = false; this.epoch++;
+    this.active = true; this.muted = false; this.speakerMuted = false; this.epoch++;
     this.lastUtteranceAt = Date.now();
     this.launch();
     return true;
@@ -49,6 +51,19 @@ export class AssistantCallLoop {
     this.wake?.(); this.wake = undefined;
     if (value) { this.dependencies.cancelAudio(); this.dependencies.state("muted", this.selected); }
     else if (!this.pending) this.launch();
+  }
+  /** Stops the reply being spoken and returns to listening; the sent message and its reply stay in the conversation. */
+  interrupt(): boolean {
+    if (!this.speaking || this.muted || !this.current()) return false;
+    this.epoch++; this.speaking = false;
+    this.wake?.(); this.wake = undefined;
+    this.dependencies.cancelAudio();
+    return true;
+  }
+  /** Replies stay written in the conversation; muting the speaker only skips playback. */
+  setSpeakerMuted(value: boolean): void {
+    this.speakerMuted = value;
+    if (value) this.interrupt();
   }
   private valid(epoch: number) { return this.epoch === epoch && !this.muted && this.current(); }
   private launch() {
@@ -87,9 +102,10 @@ export class AssistantCallLoop {
         const reply = await this.dependencies.send(text, target, current);
         sending = false;
         if (!current()) return;
-        if (reply.trim()) {
+        if (reply.trim() && !this.speakerMuted) {
           this.dependencies.state("speaking", target);
-          await this.dependencies.speak(reply, target, current);
+          this.speaking = true;
+          try { await this.dependencies.speak(reply, target, current); } finally { this.speaking = false; }
         }
       }
     } catch (error) {

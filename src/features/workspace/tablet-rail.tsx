@@ -14,7 +14,8 @@ import { useMachines } from "../../state/machines";
 import { useAppPreferences } from "../navigation-prefs/app-preferences";
 import type { DockTabId } from "../navigation-prefs/tab-preferences";
 import { NewSessionSheet } from "./new-session-sheet";
-import { useRunningSessionBadge } from "./tab-activity-bridge";
+import { useInboxUnseenBadge, useRunningSessionBadge } from "./tab-activity-bridge";
+import { TAB_BADGE_DOT, TabBadge } from "../../ui/floating-tab-bar";
 
 type RailRoute = "/" | "/chats" | "/inbox" | "/manage" | "/settings";
 
@@ -78,24 +79,7 @@ function RailButton({
       >
         {caption ?? label}
       </Text>
-      {badge ? (
-        <Text
-          accessible={false}
-          style={{
-            position: "absolute",
-            top: space.xs,
-            end: space.md,
-            paddingHorizontal: space.xxs,
-            borderRadius: radii.badge,
-            backgroundColor: colors.accentSolid,
-            color: colors.primaryText,
-            fontSize: fontSize.caption,
-            fontVariant: ["tabular-nums"],
-          }}
-        >
-          {badge}
-        </Text>
-      ) : null}
+      {badge ? <TabBadge badge={badge} top={space.xs} end={space.md} /> : null}
     </AnimatedPressable>
   );
 }
@@ -108,6 +92,7 @@ export function TabletRail() {
   const pathname = usePathname();
   const machineId = useMachines((s) => s.activeId);
   const running = useRunningSessionBadge((s) => s.count);
+  const inboxUnseen = useInboxUnseenBadge((s) => s.unseen);
   const [newSessionOpen, setNewSessionOpen] = useState(false);
   const runningText = running > 99 ? "99+" : running;
 
@@ -125,7 +110,13 @@ export function TabletRail() {
         : copy("Oturumlar", "Sessions"),
       caption: copy("Oturumlar", "Sessions"),
     },
-    { id: "inbox", route: "/inbox", icon: "inbox", label: copy("Gelen kutusu", "Inbox") },
+    {
+      id: "inbox",
+      route: "/inbox",
+      icon: "inbox",
+      label: inboxUnseen ? copy("Gelen kutusu, yeni öğeler", "Inbox, new items") : copy("Gelen kutusu", "Inbox"),
+      caption: copy("Gelen kutusu", "Inbox"),
+    },
     { id: "manage", route: "/manage", icon: "tools", label: copy("Araçlar", "Tools") },
   ];
   // Same order and visibility as the phone dock; hidden tabs stay routable.
@@ -147,7 +138,7 @@ export function TabletRail() {
       label={label}
       caption={caption}
       selected={isActive(route)}
-      badge={route === "/chats" && running ? runningText : undefined}
+      badge={route === "/chats" && running ? runningText : route === "/inbox" && inboxUnseen ? TAB_BADGE_DOT : undefined}
       icon={<DockIcon name={icon} color={isActive(route) ? colors.text : colors.muted} />}
       onPress={() => go(route)}
     />

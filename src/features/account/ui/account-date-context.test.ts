@@ -18,10 +18,17 @@ vi.mock("@/i18n", () => ({ useLocale: () => fixture.locale }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: Record<string, string | number>) => en.replace(/\{(p\d+)\}/g, (_match, key: string) => String(values?.[key])) }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
 vi.mock("@/ui/info-hint", () => ({ HintSection: ({ children }: PropsWithChildren) => createElement("section", null, children) }));
-vi.mock("@/ui/metric-row", () => ({ MetricRow: () => null }));
+
+vi.mock("lucide-react-native/icons/calendar", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/calendar-days", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/calendar-range", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/clock", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/external-link", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/undo-2", () => ({ default: () => null }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Group, Section: Group, Stack: Group, NavigationGroup: Group, NavigationRow: () => null, Separator: () => null, ErrorNotice: () => null, Skeleton: () => null, Button: () => null,
+  return { Body: Group, Section: Group, Stack: Group, NavigationGroup: Group, NavigationRow: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label), SettingIcon: () => null, ValueRow: ({ label, value }: { label: string; value: string }) => createElement("p", null, `${label}: ${value}`), Separator: () => null, ErrorNotice: () => null, Skeleton: () => null, Button: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message) };
 });
 import { ActivitySection } from "./ActivitySection";

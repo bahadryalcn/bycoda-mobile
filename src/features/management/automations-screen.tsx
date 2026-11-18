@@ -137,7 +137,7 @@ export function AutomationsScreen() {
             />
           </FilterSheet>
           <SearchToolbar
-            search={<SearchField ref={searchInput} label={copy("Ad veya talimatta ara", "Search automation names and instructions")} value={search} onChangeText={setSearch} />}
+            search={<SearchField ref={searchInput} label={copy("Otomasyonlarda ara", "Search automations")} value={search} onChangeText={setSearch} />}
             actions={<FilterButton count={filter !== "all" ? 1 : 0} onPress={() => setFilterDraft(filter)} />}
           />
           <AppliedFilters filters={[filter !== "all" && `${copy("Durum", "State")}: ${filterOptions.find((option) => option.value === filter)?.label}`]} />

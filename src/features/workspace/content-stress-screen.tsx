@@ -5,7 +5,8 @@ import { ScreenList } from "@/ui/screen-list";
 import { space } from "@/ui/tokens";
 import { ActivityApproval } from "./activity-inspector-approval";
 import { QuestionCard } from "./question-card";
-import { RunStatusCard } from "./run-status-card";
+import { SessionActivityBar } from "./session-activity-bar";
+import { deriveSessionActivity } from "./session-activity-model";
 import { TranscriptStructured } from "./transcript-structured";
 import { contentStressApprovals, contentStressCode, contentStressQuestions, contentStressShell } from "./content-stress-fixtures";
 import type { ReactNode } from "react";
@@ -18,7 +19,7 @@ const rows = ["working", "code", "shell", "questions", "approvals"] as const;
 export function ContentStressScreen({ header }: { header: ReactNode }) {
   return <ScreenList title="Chat fixtures" header={header} data={rows} keyExtractor={item => item}
     renderItem={({ item }) => <View style={{ gap: space.sm, paddingVertical: space.sm }}>
-      {item === "working" ? <RunStatusCard live blocks={[contentStressShell]} /> : null}
+      {item === "working" ? <SessionActivityBar activity={deriveSessionActivity({ blocks: [contentStressShell], live: true })} browser={{ host: "localhost:5173" }} onAgents={() => {}} onDevice={() => {}} onBrowser={() => {}} /> : null}
       {item === "code" ? <MessageCode code={contentStressCode} language="typescript" compact allowPreview={false} /> : null}
       {item === "shell" ? <TranscriptStructured block={contentStressShell} /> : null}
       {item === "questions" ? contentStressQuestions.map(question => <QuestionCard key={question.requestId}

@@ -110,6 +110,7 @@ export function DiagnosticsSettings() {
         <Button
           label={copy("Son çökme kaydını kopyala", "Copy last crash log")}
           tone="quiet"
+          flush
           onPress={() => void copyCrash()}
         />
         {copied !== null ? (

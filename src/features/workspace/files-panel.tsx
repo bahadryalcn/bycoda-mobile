@@ -55,7 +55,7 @@ function Crumb({ label, home, current, onPress }: { label: string; home?: boolea
   const { colors, uiStyles } = useMobileTheme();
   return (
     <PressableCard label={label} onPress={onPress} hitSlop={{ top: 8, bottom: 8 }}
-      style={{ flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: 0, paddingHorizontal: space.sm, marginHorizontal: 0, minHeight: 32 }}>
+      style={{ flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: 0, paddingHorizontal: space.sm, marginHorizontal: 0, marginStart: home ? -space.sm : 0, minHeight: 32 }}>
       {home ? <Home size={14} color={current ? colors.text : colors.muted} /> : null}
       <Text numberOfLines={1} style={[uiStyles.label, { color: current ? colors.text : colors.muted, fontWeight: current ? "700" : "500" }]}>{label}</Text>
     </PressableCard>

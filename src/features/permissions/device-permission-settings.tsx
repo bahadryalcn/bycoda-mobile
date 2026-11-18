@@ -5,7 +5,7 @@ import Camera from "lucide-react-native/icons/camera";
 import Mic from "lucide-react-native/icons/mic";
 import ImageIcon from "lucide-react-native/icons/image";
 import { useAsyncAction } from "@/state/actions";
-import { Badge, Body, Button, FormActions, MutationState, NavigationGroup, NavigationRow, Row, SectionHeader, Stack, StateView } from "@/ui/primitives";
+import { Badge, Button, FormActions, MutationState, NavigationGroup, NavigationRow, Row, SectionHeader, Stack, StateView, ValueRow } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { useCopy } from "@/ui/copy";
 import { useInfoHint } from "@/ui/info-hint";
@@ -99,13 +99,9 @@ ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`);
           {row("microphone", Mic)}
           {row("notifications", Bell)}
           {/* The system picker grants access per selection, so there is no app permission to read or request. */}
-          <Row>
-            <IconTile color={colors.muted}><ImageIcon size={18} strokeWidth={2} color={colors.muted} /></IconTile>
-            <Stack style={{ flex: 1, minWidth: 0 }}>
-              <Body>{copy("Fotoğraflar ve dosyalar", "Photos and files")}</Body>
-            </Stack>
-            <Badge label={copy("Sistem seçicisi", "System picker")} />
-          </Row>
+          <ValueRow label={copy("Fotoğraflar ve dosyalar", "Photos and files")}
+            icon={<IconTile color={colors.muted}><ImageIcon size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
+            trailing={<Badge label={copy("Sistem seçicisi", "System picker")} />} />
         </NavigationGroup>
         <IssueSummary issues={issues} retrying={action.isPending} onRetry={() => { void runFor("refresh", () => refresh(failed)); }} />
         <Row style={{ justifyContent: "flex-end" }}>

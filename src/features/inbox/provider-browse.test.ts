@@ -15,6 +15,7 @@ const fixture = vi.hoisted(() => ({
   list: [] as RemoteInboxItem[],
   error: null as Error | null, route: vi.fn(),
 }));
+vi.mock("../workspace/pull-request-state-badge", () => ({ PullRequestStateBadge: ({ label }: { label: string }) => createElement("span", null, label) }));
 vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
 vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
 vi.mock("./inbox-browse-memory-provider",()=>({useInboxBrowseMemory:()=>fixture.memory}));

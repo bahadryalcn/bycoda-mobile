@@ -60,6 +60,9 @@ export function learnRoutes(machine: MobileMachine, reported: unknown): MobileRo
   );
 }
 
+/** The Host advertises more than 200 capabilities; a lower cap silently dropped the late ones (browser.shared, dev.servers, ...). */
+export const MAX_CAPABILITIES = 1000;
+
 export function restoreMachines(value: unknown): MobileMachine[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
@@ -107,7 +110,7 @@ export function restoreMachines(value: unknown): MobileMachine[] {
           capabilities: Array.isArray(source.capabilities)
             ? source.capabilities
                 .filter((v): v is string => typeof v === "string" && v.length <= 200)
-                .slice(0, 200)
+                .slice(0, MAX_CAPABILITIES)
             : undefined,
           lastConnectedAt:
             typeof source.lastConnectedAt === "number" && Number.isFinite(source.lastConnectedAt)

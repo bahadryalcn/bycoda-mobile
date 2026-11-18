@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { RemoteInboxItem } from "../../../../src/features/inbox/model/remoteInbox";
 import { ProviderInboxRow } from "./provider-list";
 
+vi.mock("../workspace/pull-request-state-badge", () => ({ PullRequestStateBadge: ({ label }: { label: string }) => createElement("span", null, label) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/issue-summary", () => ({ IssueSummary: () => null }));
 vi.mock("../management/shared/record-bits", () => ({ useRelativeTime: () => () => "" }));

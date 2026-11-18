@@ -17,8 +17,8 @@ export function TaskStatusIcon({ value }: { value: string }) {
     blocked: Alert, failed: Alert, done: Check, succeeded: Check, completed: Check,
     finished: Check, cancelled: Cancel, paused: Pause } as Record<string, typeof Circle>)[value] ?? Help;
   const color = ["blocked", "failed"].includes(value) ? colors.danger
-    : ["done", "succeeded", "completed", "finished"].includes(value) ? colors.success
-    : ["review", "awaiting-approval"].includes(value) ? colors.warning
+    : ["done", "succeeded", "completed", "finished", "review"].includes(value) ? colors.success
+    : ["awaiting-approval"].includes(value) ? colors.warning
     : ["running", "verifying", "planning"].includes(value) ? colors.accent : colors.muted;
   return <Icon size={18} color={color} {...decorativeSvgProps} />;
 }

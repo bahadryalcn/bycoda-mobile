@@ -7,6 +7,7 @@ vi.mock("../../../modules/bycoda-voice-companion", () => ({ nativeVoiceCompanion
 vi.mock("@/state/host-runtime", () => ({ openAssistantVoiceRuntime: async () => ({ release: f.release, request: vi.fn() }) }));
 vi.mock("@/state/machines", () => ({ useMachines: { getState: () => ({ machines: [{ id: "host", environmentId: "env" }] }), subscribe: () => () => {} } }));
 vi.mock("@/state/security", () => ({ isAppAccessAllowed: () => true, useSecurity: { getState: () => ({ appState: "active" }), subscribe: () => () => {} } }));
+vi.mock("../account/model/account-access", () => ({ isAccountAccessAllowed: () => true, useAccountAccess: { subscribe: () => () => {} } }));
 vi.mock("@/state/reviewed-machine", () => ({ reviewedMachine: (machine: unknown) => machine, isReviewedMachine: () => true }));
 vi.mock("../privacy/consent-access", () => ({ hasProviderPermission: () => true, useProviderPermission: { subscribe: () => () => {} } }));
 vi.mock("./assistant-send", () => ({ assistantSendKey: () => "send", readStoredSend: async () => null, isAssistantSendPending: () => false, sendRoomMessage: vi.fn() }));

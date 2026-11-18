@@ -25,7 +25,7 @@ export function ComposerDictationButton({ dictation }: { dictation: Dictation })
     busy: copy("Sesli görüşme veya kayıt sürüyor", "A voice call or recording is in progress"),
   } as const;
   return <ChatCircleAction label={labels[view.action]} active={view.active} disabled={view.disabled} busy={view.busy} onPress={dictation.toggle}>
-    {view.active ? <Square size={16} color={colors.primaryText} /> : <Mic size={19} strokeWidth={2.2} color={view.disabled && !view.busy ? colors.tertiary : colors.text} />}
+    {view.active ? <Square size={13} strokeWidth={0} fill={colors.primaryText} color={colors.primaryText} /> : <Mic size={19} strokeWidth={2.2} color={view.disabled && !view.busy ? colors.tertiary : colors.text} />}
   </ChatCircleAction>;
 }
 

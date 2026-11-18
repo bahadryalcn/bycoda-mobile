@@ -112,8 +112,7 @@ export function GitStashes({ scope, onClose, onBusyChange, registerExit }: {
   };
   const context = <><Body selectable>{opening.machineName}</Body><Body mono selectable>{opening.scope.root}</Body></>;
   return <>
-    <ScreenList title={copy("Stash’ler", "Stashes")} subtitle={readable ? opening.machineName : undefined}
-      context={readable ? <Body muted>{opening.scope.root?.split(/[\\/]/).filter(Boolean).at(-1)}</Body> : null}
+    <ScreenList title={copy("Stash’ler", "Stashes")} subtitle={readable ? [opening.machineName, opening.scope.root?.split(/[\\/]/).filter(Boolean).at(-1)].filter(Boolean).join(" · ") : undefined}
       actions={<Row>
         <IconButton label={copy("Stash oluştur", "Create stash")} disabled={unavailable} onPress={() => { if (current() && !latest.current.unavailable && !occupied.current) setCreating(true); }}><Plus size={20} color={colors.accent} /></IconButton>
         <ActionMenu label={copy("Stash işlemleri", "Stash actions")} actions={[

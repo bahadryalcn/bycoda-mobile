@@ -8,7 +8,9 @@ import FolderTree from "lucide-react-native/icons/folder-tree";
 import GitPullRequest from "lucide-react-native/icons/git-pull-request";
 import CircleDot from "lucide-react-native/icons/circle-dot";
 import Bot from "lucide-react-native/icons/bot";
-import { Body, PressableCard, StatusText } from "@/ui/primitives";
+import { Body, PressableCard } from "@/ui/primitives";
+import { SessionRowStatus } from "./session-row-status";
+import { sessionRowBadge } from "./session-row-status-model";
 import { ProjectIcon } from "@/ui/project-icon";
 import { ProviderIcon } from "@/ui/provider-identity";
 import { decorativeSvgProps } from "@/ui/accessibility";
@@ -26,16 +28,6 @@ import { sessionModelLabel } from "./catalog";
 import { observeSessionRuns, openSessionSeen, useUnseenDone } from "./session-done-store";
 import { sessionRowKind } from "./session-row-state";
 
-const statusTone = {
-  failed: "danger",
-  retrying: "warning",
-  interrupted: "warning",
-  input: "warning",
-  working: "live",
-  waiting: "default",
-  done: "success",
-  idle: "default",
-} as const;
 
 /** One compact conversation identity; secondary actions live in swipe and long-press. */
 export const SessionListRow = memo(function SessionListRow({
@@ -91,14 +83,18 @@ export const SessionListRow = memo(function SessionListRow({
   const done = useUnseenDone(machineId, session.id);
   const kind = sessionRowKind(session, done);
   const status = sessionStatus({ ...session, pinned: false }, copy, colors, done);
-  const stamp =
-    kind !== "idle" ? (
-      <StatusText label={status.label} tone={statusTone[kind]} />
-    ) : (
-      <Body selectable={false} muted style={uiStyles.caption}>
-        {relativeTime(sessionActivityAt(session), copy)}
-      </Body>
-    );
+  const badge = sessionRowBadge(kind, hasDraft);
+  const stamp = badge ? (
+    <SessionRowStatus
+      label={kind === "idle" ? draftLabel : status.label}
+      tone={badge.tone}
+      icon={badge.icon}
+    />
+  ) : (
+    <Body selectable={false} muted style={uiStyles.caption}>
+      {relativeTime(sessionActivityAt(session), copy)}
+    </Body>
+  );
   const optionsLabel = copy("Oturum seçenekleri", "Session options");
   const folder = compressed ? ancestors?.at(-1) : undefined;
   const meta = [showProject ? undefined : folder, session.branch].filter(Boolean).join(" · ");
@@ -235,11 +231,6 @@ export const SessionListRow = memo(function SessionListRow({
               </View>
               <View style={{ flexShrink: 0, alignItems: "flex-end", gap: space.xs }}>
                 {stamp}
-                {hasDraft ? (
-                  <Body selectable={false} muted style={uiStyles.caption}>
-                    {draftLabel}
-                  </Body>
-                ) : null}
               </View>
             </View>
           </PressableCard>

@@ -3,6 +3,7 @@ const f = vi.hoisted(() => ({
   machine: { id: "computer", environmentId: "env", providers: [] as string[] }, id: 0, listeners: [] as any[], loops: [] as any[], retireHooks: [] as (() => void)[],
   release: vi.fn(), removeEvent: vi.fn(), unsubscribe: vi.fn(), read: vi.fn(async () => null as unknown),
   end: vi.fn(), request: vi.fn(), cancel: vi.fn(), nativeMuted: false, loopMuteStates: [] as boolean[], consentAllowed: true, consentHooks: [] as (() => void)[],
+  signedIn: true, accountHooks: [] as (() => void)[], appAccess: true, interrupt: vi.fn(() => true), speaker: vi.fn(), finish: vi.fn(async () => {}),
 }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "id" }));
@@ -10,12 +11,13 @@ vi.mock("expo-audio", () => ({ getRecordingPermissionsAsync: async () => ({ gran
 vi.mock("../../../modules/bycoda-voice-companion", () => ({ nativeVoiceCompanion: () => ({ beginSession: async () => `session-${++f.id}`, endSession: f.end, setMuted: (_id: string, value: boolean) => { f.nativeMuted = value; }, getState: () => ({ active: true, sessionId: `session-${f.id}` }), addListener: (_name: string, listener: any) => { f.listeners.push(listener); return { remove: f.removeEvent }; } }) }));
 vi.mock("@/state/host-runtime", () => ({ openAssistantVoiceRuntime: async () => ({ release: f.release, request: f.request }) }));
 vi.mock("@/state/machines", () => ({ useMachines: { getState: () => ({ machines: [f.machine] }), subscribe: (listener: () => void) => { f.retireHooks.push(listener); return f.unsubscribe; } } }));
-vi.mock("@/state/security", () => ({ isAppAccessAllowed: () => true, useSecurity: { getState: () => ({ appState: "active" }), subscribe: () => f.unsubscribe } }));
+vi.mock("@/state/security", () => ({ isAppAccessAllowed: () => f.appAccess, useSecurity: { getState: () => ({ appState: "active" }), subscribe: () => f.unsubscribe } }));
+vi.mock("../account/model/account-access", () => ({ isAccountAccessAllowed: () => f.signedIn, useAccountAccess: { subscribe: (listener: () => void) => { f.accountHooks.push(listener); return f.unsubscribe; } } }));
 vi.mock("@/state/reviewed-machine", () => ({ reviewedMachine: (machine: unknown) => machine, isReviewedMachine: () => true }));
 vi.mock("../privacy/consent-access", () => ({ hasProviderPermission: (machine: { providers?: string[] }) => f.consentAllowed && !machine.providers?.includes("requires-new-consent"), useProviderPermission: { subscribe: (listener: () => void) => { f.consentHooks.push(listener); return f.unsubscribe; } } }));
 vi.mock("./assistant-send", () => ({ assistantSendKey: () => "send", readStoredSend: f.read, isAssistantSendPending: () => false, sendRoomMessage: vi.fn() }));
 vi.mock("./assistant-voice-native", () => ({ nativeVoiceDependencies: (value: unknown) => value }));
-vi.mock("./assistant-voice", () => ({ AssistantVoice: class { cancel = f.cancel; } }));
+vi.mock("./assistant-voice", () => ({ AssistantVoice: class { cancel = f.cancel; finish = f.finish; } }));
 vi.mock("./assistant-client", () => ({ AssistantMobileClient: class {} }));
 vi.mock("./assistant-companion-state", () => ({ useAssistantCompanion: { getState: () => ({ thread: { id: "thread", projectId: "project" } }) }, retainAssistantSpeech: vi.fn() }));
 vi.mock("./assistant-call-loop", () => ({ AssistantCallLoop: class {
@@ -23,11 +25,13 @@ vi.mock("./assistant-call-loop", () => ({ AssistantCallLoop: class {
   start() { this.dependencies.state("listening"); return true; }
   stop() { this.dependencies.state("idle"); }
   setMuted() { f.loopMuteStates.push(f.nativeMuted); }
+  interrupt() { return f.interrupt(); }
+  setSpeakerMuted(value: boolean) { f.speaker(value); }
 } }));
-import { startAssistantCall, endAssistantCall, muteAssistantCall } from "./assistant-call-session";
+import { startAssistantCall, endAssistantCall, muteAssistantCall, silenceAssistantCall, setAssistantCallSpeakerMuted, finishAssistantCallTurn } from "./assistant-call-session";
 import { useAssistantCall } from "./assistant-call-state";
 const target = { machineId: "computer", environmentId: "env", threadId: "thread" };
-afterEach(() => { endAssistantCall(); f.id = 0; f.listeners = []; f.loops = []; f.retireHooks = []; f.consentHooks = []; f.consentAllowed = true; f.machine = { ...f.machine, providers: [] }; f.nativeMuted = false; f.loopMuteStates = []; vi.clearAllMocks(); f.read.mockReset().mockResolvedValue(null); useAssistantCall.setState({ error: undefined }); });
+afterEach(() => { endAssistantCall(); f.id = 0; f.listeners = []; f.loops = []; f.retireHooks = []; f.consentHooks = []; f.consentAllowed = true; f.accountHooks = []; f.signedIn = true; f.appAccess = true; f.machine = { ...f.machine, providers: [] }; f.nativeMuted = false; f.loopMuteStates = []; vi.clearAllMocks(); f.read.mockReset().mockResolvedValue(null); useAssistantCall.setState({ error: undefined }); });
 it("retires native call access directly when provider consent is withdrawn", async () => {
   await startAssistantCall(target, () => true);
   f.consentAllowed = false; f.consentHooks[0]!();
@@ -71,4 +75,28 @@ it("keeps the current loop failure visible while releasing its native call", asy
   expect(useAssistantCall.getState().phase).toBe("idle");
   expect((useAssistantCall.getState().error as Error).message).toBe("provider unavailable");
   expect(f.release).toHaveBeenCalledOnce(); expect(f.end).toHaveBeenCalledWith("session-1");
+});
+it("keeps a started call through the app lock and background, but retires it on sign-out", async () => {
+  await startAssistantCall(target, () => true);
+  f.appAccess = false;
+  expect(f.loops[0].current()).toBe(true);
+  expect(useAssistantCall.getState().phase).toBe("listening");
+  f.signedIn = false; f.accountHooks[0]!();
+  expect(useAssistantCall.getState().phase).toBe("idle"); expect(f.end).toHaveBeenCalledWith("session-1");
+});
+it("still refuses to start a call while the app is locked", async () => {
+  f.appAccess = false;
+  await startAssistantCall(target, () => true);
+  expect(useAssistantCall.getState().phase).toBe("idle"); expect(f.loops).toHaveLength(0);
+});
+it("routes Silence, speaker mute and Finish turn to the active call only", async () => {
+  expect(silenceAssistantCall()).toBe(false); setAssistantCallSpeakerMuted(true); finishAssistantCallTurn();
+  expect(f.speaker).not.toHaveBeenCalled(); expect(f.finish).not.toHaveBeenCalled();
+  await startAssistantCall(target, () => true);
+  expect(silenceAssistantCall()).toBe(true);
+  setAssistantCallSpeakerMuted(true);
+  expect(f.speaker).toHaveBeenCalledWith(true); expect(useAssistantCall.getState().speakerMuted).toBe(true);
+  finishAssistantCallTurn(); expect(f.finish).toHaveBeenCalledOnce();
+  muteAssistantCall(true); finishAssistantCallTurn(); expect(f.finish).toHaveBeenCalledOnce();
+  endAssistantCall(); expect(useAssistantCall.getState().speakerMuted).toBe(false);
 });

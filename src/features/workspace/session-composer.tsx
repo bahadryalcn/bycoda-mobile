@@ -756,9 +756,9 @@ export function SessionComposer({
               onPress={compactSuggestions ? suggestions.close : () => setPicker(true)}
             >
               {compactSuggestions ? (
-                <X size={19} strokeWidth={2.4} color={colors.text} />
+                <X size={19} strokeWidth={2.2} color={colors.text} />
               ) : (
-                <Plus size={19} strokeWidth={2.4} color={colors.text} />
+                <Plus size={19} strokeWidth={2.2} color={colors.text} />
               )}
             </ChatCircleAction>
           }

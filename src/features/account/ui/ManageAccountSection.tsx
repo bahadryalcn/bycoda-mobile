@@ -1,12 +1,16 @@
 import { useLocale } from "@/i18n";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as WebBrowser from "expo-web-browser";
-import { Button, ErrorNotice, Notice, Separator, Stack } from "@/ui/primitives";
+import { ErrorNotice, NavigationGroup, NavigationRow, Notice, SettingIcon, Stack } from "@/ui/primitives";
+import ExternalLink from "lucide-react-native/icons/external-link";
+import Trash2 from "lucide-react-native/icons/trash-2";
+import Undo2 from "lucide-react-native/icons/undo-2";
 import { HintSection } from "@/ui/info-hint";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
 import { DELETION_GRACE_DAYS } from "../contracts";
 import { useAccount } from "./account-context";
+import { useAccountMe } from "./use-account-me";
 
 export const DELETE_ACCOUNT_URL = "https://account.bycoda.codes/delete";
 
@@ -14,13 +18,9 @@ export const DELETE_ACCOUNT_URL = "https://account.bycoda.codes/delete";
 export function ManageAccountSection() {
   const copy = useCopy();
   const locale = useLocale();
-  const { runtime, device } = useAccount();
+  const { runtime } = useAccount();
   const queries = useQueryClient();
-  const me = useQuery({
-    queryKey: ["account", "me"],
-    queryFn: () => runtime!.client.getMe(),
-    enabled: !!runtime && !!device,
-  });
+  const me = useAccountMe();
   const refresh = () => queries.invalidateQueries({ queryKey: ["account", "me"] });
   const request = useMutation({
     mutationFn: () => runtime!.client.requestDeletion({ body: {} }),
@@ -45,39 +45,43 @@ export function ManageAccountSection() {
     >
       <Stack>
         <ErrorNotice error={portal.error} message={copy("Sayfa açılamadı.", "The page could not be opened.")} />
-        <Button
-          label={copy("Hesap portalında yönet", "Manage in account portal")}
-          tone="secondary"
-          busy={portal.isPending}
-          disabled={portal.isPending}
-          onPress={() => portal.mutate()}
-        />
-        <Separator />
         {pending ? (
-          <>
-            <Notice
-              tone="warning"
-              message={copy(
-                "Hesabın {p0} tarihinde kalıcı olarak silinecek. O zamana kadar silmeyi iptal edebilirsin.",
-                "Your account will be permanently deleted on {p0}. You can cancel until then.",
-                { p0: scheduled },
-              )}
-            />
-            <ErrorNotice error={cancel.error} message={copy("Silme iptal edilemedi.", "Deletion could not be cancelled.")} />
-            <Button
+          <Notice
+            tone="warning"
+            message={copy(
+              "Hesabın {p0} tarihinde kalıcı olarak silinecek. O zamana kadar silmeyi iptal edebilirsin.",
+              "Your account will be permanently deleted on {p0}. You can cancel until then.",
+              { p0: scheduled },
+            )}
+          />
+        ) : null}
+        <ErrorNotice error={pending ? cancel.error : request.error} message={pending
+          ? copy("Silme iptal edilemedi.", "Deletion could not be cancelled.")
+          : copy("Silme isteği gönderilemedi.", "The deletion request could not be sent.")} />
+        <NavigationGroup>
+          <NavigationRow
+            intent="command"
+            icon={<SettingIcon glyph={ExternalLink} />}
+            label={copy("Hesap portalında yönet", "Manage in account portal")}
+            busy={portal.isPending}
+            disabled={portal.isPending}
+            onPress={() => portal.mutate()}
+          />
+          {pending ? (
+            <NavigationRow
+              intent="command"
+              icon={<SettingIcon glyph={Undo2} />}
               label={copy("Hesap silmeyi iptal et", "Cancel account deletion")}
-              tone="secondary"
               busy={cancel.isPending}
               disabled={cancel.isPending}
               onPress={() => cancel.mutate()}
             />
-          </>
-        ) : (
-          <>
-            <ErrorNotice error={request.error} message={copy("Silme isteği gönderilemedi.", "The deletion request could not be sent.")} />
-            <Button
-              label={copy("Hesabı uygulamada sil", "Delete account in the app")}
+          ) : (
+            <NavigationRow
+              intent="command"
               tone="danger"
+              icon={<SettingIcon glyph={Trash2} tone="danger" />}
+              label={copy("Hesabı sil", "Delete account")}
               busy={request.isPending}
               disabled={request.isPending || !me.data}
               onPress={() =>
@@ -94,8 +98,8 @@ export function ManageAccountSection() {
                 )
               }
             />
-          </>
-        )}
+          )}
+        </NavigationGroup>
       </Stack>
     </HintSection>
   );

@@ -6,7 +6,6 @@ import Animated from "react-native-reanimated";
 import { enterItem } from "../../ui/motion";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import { useSecurity } from "../../state/security";
-import { Image } from "expo-image";
 import {
   Body,
   ErrorNotice,
@@ -20,7 +19,7 @@ import { BeadButton } from "../../ui/bead-button";
 import { DotField } from "../../ui/dot-field";
 import { fontSize, lineHeight, metrics, space } from "../../ui/tokens";
 
-const lockHero = require("../../../assets/states/lock-hero.png");
+import { Illustration } from "../../ui/illustrations";
 import { useCopy } from "../../ui/copy";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LegalLinks, type LegalLinkTarget } from "../../ui/brand";
@@ -102,8 +101,7 @@ export function SecurityGate({ children }: PropsWithChildren) {
             <Loading label={copy("Güvenlik kontrol ediliyor…", "Checking security…")} centered />
           ) : (
             <>
-              <Image source={lockHero} contentFit="contain" accessible={false}
-                style={{ width: "100%", height: Math.min(height * 0.36, 340) }} />
+              <Illustration name="lock-hero" size={Math.min(height * 0.36, 340)} />
               <View style={{ alignItems: "center", gap: space.sm }}>
                 <Heading style={{ fontSize: fontSize.display, lineHeight: lineHeight.display, textAlign: "center" }}>
                   {security.status === "suspended"

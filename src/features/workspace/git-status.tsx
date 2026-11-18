@@ -20,7 +20,8 @@ import {
   PressableCard,
   Row,
 } from "@/ui/primitives";
-import { pullRequestStateLabel, pullRequestTone } from "./git-link-pr-model";
+import { pullRequestStateLabel } from "./git-link-pr-model";
+import { PullRequestStateBadge } from "./pull-request-state-badge";
 import { enterItem } from "@/ui/motion";
 import { radii, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
@@ -56,18 +57,18 @@ export function GitHeader({
         disabled={busy}
         onPress={onOpenActions}
         style={{
-          minHeight: 48, flexDirection: "row", alignItems: "center", gap: space.row, paddingVertical: 0, paddingHorizontal: space.row,
+          minHeight: 48, flexDirection: "row", alignItems: "center", gap: space.row, paddingVertical: space.row, paddingHorizontal: space.row,
           marginHorizontal: 0, borderRadius: radii.control, backgroundColor: colors.raised,
         }}
       >
-        <GitBranch size={18} strokeWidth={2} color={colors.accent} />
+        <GitBranch size={18} strokeWidth={2} color={colors.muted} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text numberOfLines={1} ellipsizeMode="middle" style={[uiStyles.label, { fontWeight: "700" }]}>{name}</Text>
           <GitSyncSummary index={index} />
           <Row style={{ gap: space.sm }}>
-            {linkedPr ? <Badge label={`#${linkedPr.number} · ${pullRequestStateLabel(linkedPr.state, copy)}`} tone={pullRequestTone(linkedPr.state)} /> : null}
-            {index.ahead ? <Text style={[uiStyles.caption, { color: colors.accent }]}>{`↑${numbers.format(index.ahead)}`}</Text> : null}
-            {index.behind ? <Text style={[uiStyles.caption, { color: colors.warning }]}>{`↓${numbers.format(index.behind)}`}</Text> : null}
+            {linkedPr ? <PullRequestStateBadge state={linkedPr.state} label={`#${linkedPr.number} · ${pullRequestStateLabel(linkedPr.state, copy)}`} /> : null}
+            {index.ahead ? <Text style={[uiStyles.caption, { color: colors.muted }]}>{`↑${numbers.format(index.ahead)}`}</Text> : null}
+            {index.behind ? <Text style={[uiStyles.caption, { color: colors.muted }]}>{`↓${numbers.format(index.behind)}`}</Text> : null}
           </Row>
         </View>
         <ChevronDown size={16} color={colors.muted} />
@@ -85,8 +86,8 @@ function GitSyncSummary({ index }: { index: GitHeaderProps["index"] }) {
     <Row style={{ gap: space.xs }}>
       <Body muted style={uiStyles.caption}>
         {copy("{p0} dosya", "{p0} files", { p0: numbers.format(index.files.length) })}
-        {index.additions ? <Body style={[uiStyles.caption, { color: colors.success }]}>{` · +${numbers.format(index.additions)}`}</Body> : null}
-        {index.deletions ? <Body style={[uiStyles.caption, { color: colors.danger }]}>{` · −${numbers.format(index.deletions)}`}</Body> : null}
+        {index.additions ? <Body style={[uiStyles.caption, { color: colors.diffAddText }]}>{` · +${numbers.format(index.additions)}`}</Body> : null}
+        {index.deletions ? <Body style={[uiStyles.caption, { color: colors.diffDelText }]}>{` · −${numbers.format(index.deletions)}`}</Body> : null}
       </Body>
     </Row>
   );

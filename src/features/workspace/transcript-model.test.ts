@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   activityState,
+  readableToolName,
   activitySummary,
   awaitingFirstOutput,
   canCollapseToolFailure,
@@ -376,5 +377,12 @@ describe("turn chrome", () => {
       ),
     ).toBe(false);
     expect(canContinueInterruptedTurn(session([block("u", "user"), block("a", "assistant")]))).toBe(false);
+  });
+});
+
+describe("readable tool names", () => {
+  it("drops the MCP server prefix and underscores", () => {
+    expect(readableToolName("mcp__t3-code__delegate_task")).toBe("delegate task");
+    expect(readableToolName("Read file")).toBe("Read file");
   });
 });

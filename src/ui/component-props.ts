@@ -1,4 +1,4 @@
-import type { PropsWithChildren, ReactNode, RefObject, Ref } from "react";
+import type { ComponentType, PropsWithChildren, ReactNode, RefObject, Ref } from "react";
 import type {
   StyleProp,
   TextInputProps,
@@ -29,6 +29,8 @@ export type ButtonProps = PropsWithChildren<{
   tone?: "default" | "primary" | "secondary" | "quiet" | SemanticTone;
   density?: "regular" | "compact";
   fullWidth?: boolean;
+  /** Text-style button at the start of a content column: pulls its padding outside the column so the label aligns with the content (touch target unchanged). */
+  flush?: boolean;
   style?: StyleProp<ViewStyle>;
 }>;
 
@@ -121,10 +123,7 @@ export type IconButtonProps = PropsWithChildren<{
   expanded?: boolean;
 }>;
 
-export type BadgeProps = {
-  label: string;
-  tone?: "default" | SemanticTone | "live" | "active";
-};
+export type BadgeProps = { label: string; tone?: "default" | SemanticTone | "live" | "active"; /** Optional leading glyph (a lucide icon component), drawn 12dp in the badge ink; decorative, the label carries the meaning. */ icon?: ComponentType<{ size?: number; strokeWidth?: number; color?: string }>; };
 
 /** Button-shaped recovery or next step shown by a state. */
 export type StateAction = { label: string; onPress: () => void; busy?: boolean };

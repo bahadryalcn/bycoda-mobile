@@ -71,7 +71,7 @@ function ApprovalOwner({ approval, scope, runId, disabled, onCommand, identity }
     </Row>
     {!runId ? <Body muted>{copy("Onay için oturumun güncel durumunu yükle.", "Refresh the session to approve.")}</Body> : null}
     {delivery?.status === "accepted" ? <Body muted>{copy("Karar gönderildi · doğrulama bekleniyor", "Decision sent · waiting for confirmation")}</Body> : null}
-    {delivery?.status === "unknown" ? <Body accessibilityRole="alert">{copy("Onayın teslimi doğrulanamadı", "Approval delivery not confirmed")}</Body> : null}
+    {delivery?.status === "unknown" ? <View accessibilityRole="alert"><Badge tone="warning" label={copy("Onayın teslimi doğrulanamadı", "Approval delivery not confirmed")} /></View> : null}
     {delivery?.status === "unknown" ? <Body muted>{copy("Yeniden denemeden önce konuşmayı kontrol et.", "Check the conversation before trying again.")}</Body> : null}
     <ErrorText error={error} />
   </View>;

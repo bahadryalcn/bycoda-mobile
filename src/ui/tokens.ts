@@ -1,4 +1,4 @@
-import { DEFAULT_PALETTE, PALETTES, derivePaletteColors, deriveInfoTone, type PaletteId } from "./palettes.ts";
+import { DEFAULT_PALETTE, PALETTES, derivePaletteColors, deriveInfoTone, diffColors, statusInk, statusTone, withDesktopStatus, type PaletteId } from "./palettes.ts";
 
 export const darkColors = {
   // Three-step layering (background < panel < raised) with hairline borders.
@@ -19,11 +19,14 @@ export const darkColors = {
   accent: "#64B0FF",
   accentSolid: "#0071E3",
   primaryText: "#FFFFFF",
+  /** Ink on solid status fills (desktop `--ui-tone-status-on-solid`): black on the bright dark-mode hues, white on light. */
+  statusOnSolid: "#000000",
   info: "#64B0FF",
   live: "#64B0FF",
-  success: "#32D74B",
-  danger: "#FF6961",
-  warning: "#FFD60A",
+  /** Desktop status hues (palettes.ts STATUS_HUES) with the desktop ink mix; classic canvas lightness is 5. */
+  success: statusInk("dark", "success", "#F5F5F7", 5),
+  danger: statusInk("dark", "danger", "#F5F5F7", 5),
+  warning: statusInk("dark", "warning", "#F5F5F7", 5),
   brand: "#F5F5F7",
   /** The guide's amber prayer beads: brand art and the unlock ring only, never text or status. */
   beads: "#F0A92E",
@@ -35,6 +38,22 @@ export const darkColors = {
   /** Full-screen media viewer: always a black stage with light controls, in both themes. */
   viewer: "#000000",
   viewerText: "#FFFFFF",
+  /**
+   * Voice call stage light: soft glows behind the call orb, one pair per call state (listening,
+   * thinking, speaking). Decorative only, never text, borders or status.
+   */
+  voiceListen: "#2F7BFF",
+  voiceListenGlow: "#3FD0FF",
+  voiceThink: "#8B5CF6",
+  voiceThinkGlow: "#E14FD8",
+  voiceSpeak: "#14C8B4",
+  voiceSpeakGlow: "#5EEA9A",
+  /**
+   * Diff rows mirror desktop `--color-diff-*`: `diffAdd`/`diffDel` markers, `*Bg` row tint (15%), `*Gutter`
+   * (25%), `*Text` readable ink; always pair with a +/- glyph. `merged`/`mergedSurface` are the purple
+   * "merged" tone (desktop `feature`).
+   */
+  ...diffColors("dark", "#131316"),
 };
 
 export type MobileThemeMode = "light" | "dark";
@@ -54,11 +73,12 @@ export const lightColors: MobileColors = {
   accent: "#0066CC",
   accentSolid: "#0066CC",
   primaryText: "#FFFFFF",
+  statusOnSolid: "#FFFFFF",
   info: "#0066CC",
   live: "#0066CC",
-  success: "#187A33",
-  danger: "#C4141E",
-  warning: "#8F5200",
+  success: statusInk("light", "success", "#17171A", 5),
+  danger: statusInk("light", "danger", "#17171A", 5),
+  warning: statusInk("light", "warning", "#17171A", 5),
   brand: "#17171A",
   beads: "#C47F12",
   selected: "#E6EFFA",
@@ -67,6 +87,13 @@ export const lightColors: MobileColors = {
   glass: "#FFFFFFF5",
   viewer: "#000000",
   viewerText: "#FFFFFF",
+  voiceListen: "#3D86FF",
+  voiceListenGlow: "#39C2F2",
+  voiceThink: "#9468F7",
+  voiceThinkGlow: "#E35BDA",
+  voiceSpeak: "#18BFAD",
+  voiceSpeakGlow: "#4FD98E",
+  ...diffColors("light", "#FFFFFF"),
 };
 
 export const themePalettes = { light: lightColors, dark: darkColors };
@@ -130,8 +157,10 @@ export function resolveMobilePalette(palette: PaletteId, mode: MobileThemeMode) 
     entry = palette === "classic"
       ? { colors: themePalettes[mode], semantic: semanticPalettes[mode] }
       : (() => {
-          const colors = derivePaletteColors(definition, mode, themePalettes[mode]);
-          return { colors, semantic: { ...semanticPalettes[mode], info: deriveInfoTone(colors, mode, definition) } };
+          const derived = derivePaletteColors(definition, mode, themePalettes[mode]);
+          if (derived === themePalettes[mode]) return { colors: derived, semantic: semanticPalettes[mode] };
+          const { colors, tones } = withDesktopStatus(derived, mode, definition.lightness);
+          return { colors, semantic: { ...semanticPalettes[mode], ...tones, info: deriveInfoTone(colors, mode, definition) } };
         })();
     resolved.set(key, entry);
   }
@@ -150,15 +179,15 @@ export const colors: MobileColors = Object.defineProperties({}, Object.fromEntri
 export const semanticPalettes = {
   dark: {
     info: { text: darkColors.info, surface: "#16273B", border: "#1F4570" },
-    success: { text: darkColors.success, surface: "#0F2A16", border: "#1D5A2A" },
-    warning: { text: darkColors.warning, surface: "#2E2606", border: "#5E4D0C" },
-    danger: { text: darkColors.danger, surface: "#331514", border: "#6B2B28" },
+    success: statusTone(darkColors.success, "dark", darkColors.panel, darkColors.border),
+    warning: statusTone(darkColors.warning, "dark", darkColors.panel, darkColors.border),
+    danger: statusTone(darkColors.danger, "dark", darkColors.panel, darkColors.border),
   },
   light: {
     info: { text: lightColors.info, surface: "#E6EFFA", border: "#B9D2F0" },
-    success: { text: lightColors.success, surface: "#E5F5E9", border: "#B4DFC0" },
-    warning: { text: lightColors.warning, surface: "#FFF3DD", border: "#F0D29C" },
-    danger: { text: lightColors.danger, surface: "#FDECEC", border: "#F3BDBD" },
+    success: statusTone(lightColors.success, "light", lightColors.panel, lightColors.border),
+    warning: statusTone(lightColors.warning, "light", lightColors.panel, lightColors.border),
+    danger: statusTone(lightColors.danger, "light", lightColors.panel, lightColors.border),
   },
 };
 export const semanticColors = Object.defineProperties({}, Object.fromEntries(

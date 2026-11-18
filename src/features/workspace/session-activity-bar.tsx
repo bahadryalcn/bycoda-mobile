@@ -1,0 +1,84 @@
+import type { ComponentType } from "react";
+import { ScrollView, View } from "react-native";
+import { Spinner } from "panelui-native/components/spinner";
+import Globe from "lucide-react-native/icons/globe";
+import Smartphone from "lucide-react-native/icons/smartphone";
+import Users from "lucide-react-native/icons/users";
+import { Body } from "@/ui/typography";
+import { PressableCard } from "@/ui/primitives";
+import { useCopy } from "@/ui/copy";
+import { useMobileTheme } from "@/ui/theme";
+import { fontSize, lineHeight, metrics, radii, space } from "@/ui/tokens";
+import { activityStateLabel, agentCountText, type SessionActivity } from "./session-activity-model";
+import { formatElapsed } from "./run-status-model";
+import { useElapsedNow } from "./use-elapsed-now";
+
+type Props = {
+  activity: SessionActivity;
+  /** Short name of the held device; omitted when the Host cannot say which. */
+  device?: { name?: string; platform?: string };
+  /** Host name of the held browser page; omitted when unknown. */
+  browser?: { host?: string };
+  onAgents: () => void;
+  onDevice: () => void;
+  onBrowser: () => void;
+};
+
+const TIMED = new Set(["working", "waiting", "needs-input"]);
+
+/**
+ * One strip above the composer: what the session is doing, then labelled segments for the
+ * agents, device and browser it is using. Segments scroll sideways instead of wrapping.
+ */
+export function SessionActivityBar({ activity, device, browser, onAgents, onDevice, onBrowser }: Props) {
+  const { colors } = useMobileTheme();
+  const copy = useCopy();
+  const timed = TIMED.has(activity.state) && activity.startedAt !== undefined;
+  const now = useElapsedNow(timed);
+  const hasAgents = activity.counts.total > 0;
+  if (activity.state === "idle" && !hasAgents && !device && !browser) return null;
+  const elapsed = timed && activity.startedAt! <= now ? formatElapsed(now - activity.startedAt!) : undefined;
+  const label = activityStateLabel(activity, copy);
+  const busy = activity.state === "working" || activity.state === "waiting" || activity.state === "background";
+  const dot = activity.state === "needs-input" ? colors.warning : activity.state === "done" ? colors.success : colors.tertiary;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", minHeight: metrics.touchTarget, flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0,
+      borderRadius: radii.card, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.separator, paddingLeft: space.md, gap: space.row }}>
+      {label ? (
+        <View accessible accessibilityLabel={[label, elapsed].filter(Boolean).join(" ")} accessibilityLiveRegion="polite"
+          style={{ flexDirection: "row", alignItems: "center", gap: space.row, flexShrink: 0, maxWidth: "55%" }}>
+          {busy ? <Spinner size="sm" color={colors.info} trackColor={colors.tertiary} /> : <View style={{ width: 8, height: 8, borderRadius: radii.pill, backgroundColor: dot }} />}
+          <Body style={{ flexShrink: 1, fontSize: fontSize.control, lineHeight: lineHeight.control, fontVariant: ["tabular-nums"] }}>
+            {[label, elapsed].filter(Boolean).join(" ")}
+          </Body>
+        </View>
+      ) : null}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}
+        contentContainerStyle={{ alignItems: "center", gap: space.sm, paddingRight: space.sm }}>
+        {hasAgents ? (
+          <Segment Icon={Users} text={agentCountText(activity.counts, copy)} a11y={`${agentCountText(activity.counts, copy, true)}. ${copy("Ajanları aç", "Open agents")}`} onPress={onAgents} />
+        ) : null}
+        {device ? (
+          <Segment Icon={Smartphone} text={device.name || copy("Cihaz", "Device")}
+            a11y={[copy("Ajan şu cihazı kullanıyor", "Agent is using device"), device.name, device.platform].filter(Boolean).join(" ") + `. ${copy("Canlı görüntüyü aç", "Open live view")}`} onPress={onDevice} />
+        ) : null}
+        {browser ? (
+          <Segment Icon={Globe} text={browser.host || copy("Tarayıcı", "Browser")}
+            a11y={[copy("Ajan tarayıcıyı kullanıyor", "Agent is using the browser"), browser.host].filter(Boolean).join(" ") + `. ${copy("Tarayıcıyı aç", "Open browser")}`} onPress={onBrowser} />
+        ) : null}
+      </ScrollView>
+    </View>
+  );
+}
+
+function Segment({ Icon, text, a11y, onPress }: { Icon: ComponentType<{ size?: number; color?: string }>; text: string; a11y: string; onPress: () => void }) {
+  const { colors } = useMobileTheme();
+  return (
+    <PressableCard label={a11y} onPress={onPress}
+      style={{ minHeight: metrics.touchTarget, flexDirection: "row", alignItems: "center", gap: space.row, paddingHorizontal: space.md, marginHorizontal: 0,
+        borderRadius: radii.pill, flexShrink: 0 }}>
+      <Icon size={16} color={colors.tertiary} />
+      <Body numberOfLines={1} style={{ fontSize: fontSize.control, lineHeight: lineHeight.control, fontVariant: ["tabular-nums"] }}>{text}</Body>
+    </PressableCard>
+  );
+}

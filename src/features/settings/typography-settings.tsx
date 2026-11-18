@@ -63,6 +63,7 @@ export function TypographySettings() {
         <Button
           label={copy("Yazı ayarlarını sıfırla", "Reset typography")}
           tone="quiet"
+          flush
           disabled={!hydrated || isDefaultTypography(typography)}
           onPress={() => { void resetTypography(); }}
         />

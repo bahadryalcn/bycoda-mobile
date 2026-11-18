@@ -20,7 +20,7 @@ async function inspect(directory) {
       /\b(?:bg|text|border|ring|fill|stroke)-\[#[\da-f]+\]/gi,
       "Use semantic theme utilities",
     ]);
-    if (relative !== "src/ui/tokens.ts")
+    if (relative !== "src/ui/tokens.ts" && relative !== "src/ui/palettes.ts")
       rules.push([/['"]#[\da-f]{3,8}['"]/gi, "Use colors from ui/tokens.ts"]);
     if (!relative.startsWith("src/ui/")) {
       rules.push([

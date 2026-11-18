@@ -6,7 +6,7 @@ import { Badge, Body, IconButton, PressableCard } from "@/ui/primitives";
 import { space, fontSize, lineHeight } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
-import { gitFilePresentation } from "./git-file-presentation";
+import { gitChangeLabel, gitFilePresentation } from "./git-file-presentation";
 import type { GitChangedFile } from "./wire";
 
 /** Preview and staging are separate touch targets; a tone badge names the change type. */
@@ -34,14 +34,7 @@ export function GitFileRow({
   const directory = separator < 0 ? "" : normalized.slice(0, separator);
   const status = gitFilePresentation(file.status);
   const stageLabel = staged ? copy("Stage’den çıkar", "Unstage") : copy("Stage’e al", "Stage");
-  const changeLabel =
-    status.kind === "added"
-      ? copy("Eklendi", "Added")
-      : status.kind === "deleted"
-        ? copy("Silindi", "Deleted")
-        : status.kind === "renamed"
-          ? copy("Yeniden adlandırıldı", "Renamed")
-          : copy("Değiştirildi", "Modified");
+  const changeLabel = gitChangeLabel(status.kind, copy);
   const stageState = staged ? copy("Stage’de", "Staged") : copy("Stage’de değil", "Unstaged");
   return (
     <View
@@ -67,7 +60,12 @@ export function GitFileRow({
             selectable={false}
             numberOfLines={2}
             ellipsizeMode="middle"
-            style={{ fontSize: fontSize.control, lineHeight: lineHeight.control, fontWeight: "600" }}
+            style={{
+              fontSize: fontSize.control,
+              lineHeight: lineHeight.control,
+              fontWeight: "600",
+              textDecorationLine: status.kind === "deleted" ? "line-through" : "none",
+            }}
           >
             {name}
           </Body>
@@ -84,20 +82,26 @@ export function GitFileRow({
                 {directory}
               </Body>
             ) : null}
-            <Body
-              selectable={false}
-              style={{ fontSize: fontSize.small, lineHeight: lineHeight.small, fontVariant: ["tabular-nums"] }}
-            >
+            {file.additions || file.deletions ? (
               <Body
                 selectable={false}
-                style={{ fontSize: fontSize.small, lineHeight: lineHeight.small, color: colors.success }}
-              >{`+${numbers.format(file.additions)}`}</Body>
-              {"  "}
-              <Body
-                selectable={false}
-                style={{ fontSize: fontSize.small, lineHeight: lineHeight.small, color: colors.danger }}
-              >{`−${numbers.format(file.deletions)}`}</Body>
-            </Body>
+                style={{ fontSize: fontSize.small, lineHeight: lineHeight.small, fontVariant: ["tabular-nums"] }}
+              >
+                {file.additions ? (
+                  <Body
+                    selectable={false}
+                    style={{ fontSize: fontSize.small, lineHeight: lineHeight.small, color: colors.diffAddText }}
+                  >{`+${numbers.format(file.additions)}`}</Body>
+                ) : null}
+                {file.additions && file.deletions ? "  " : null}
+                {file.deletions ? (
+                  <Body
+                    selectable={false}
+                    style={{ fontSize: fontSize.small, lineHeight: lineHeight.small, color: colors.diffDelText }}
+                  >{`−${numbers.format(file.deletions)}`}</Body>
+                ) : null}
+              </Body>
+            ) : null}
           </View>
         </View>
       </PressableCard>
@@ -105,7 +109,7 @@ export function GitFileRow({
         {staged ? (
           <Minus size={18} color={colors.muted} />
         ) : (
-          <Plus size={18} color={colors.accent} />
+          <Plus size={18} color={colors.muted} />
         )}
       </IconButton>
     </View>

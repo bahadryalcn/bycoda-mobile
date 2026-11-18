@@ -18,7 +18,7 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-/** Native audio owner: notification Stop and screen lock work even while JS is suspended. */
+/** Native audio owner: notification Mute and Stop work even while JS is suspended or the screen is locked. */
 class VoiceCompanionService : Service() {
   companion object {
     const val CHANNEL = "bycoda-voice"
@@ -65,19 +65,16 @@ class VoiceCompanionService : Service() {
     if (Build.VERSION.SDK_INT >= 26) focusRequest?.let { manager.abandonAudioFocusRequest(it) } else manager.abandonAudioFocus(focusListener)
     focusRequest = null
   }
-  private val lockReceiver = object : BroadcastReceiver() {
-    override fun onReceive(context: Context?, intent: Intent?) { end("locked") }
-  }
   private fun unlocked() = !(getSystemService(KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked && (getSystemService(POWER_SERVICE) as PowerManager).isInteractive
-  fun allowsSession(supplied: String) = !ended && VoiceSessionPolicy.matches(id, supplied) && unlocked()
+  // A started call continues with the screen off or locked, like a phone call; only starting
+  // needs an unlocked, visible app. The ongoing notification keeps Mute and Stop reachable.
+  fun allowsSession(supplied: String) = !ended && VoiceSessionPolicy.matches(id, supplied)
   fun snapshot(): Map<String, Any?> = mapOf("active" to (!ended && id.isNotEmpty()), "sessionId" to id, "phase" to phase, "muted" to muted, "pip" to pip)
   internal fun publish() { VoiceCompanionRuntime.emit(mapOf("type" to "state", "sessionId" to id, "state" to snapshot())) }
   private fun armIdle() { handler.removeCallbacks(idleStop); handler.postDelayed(idleStop, VoiceSessionPolicy.IDLE_TIMEOUT_MS) }
   override fun onCreate() {
     super.onCreate()
     if (Build.VERSION.SDK_INT >= 26) (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.bycoda_voice_channel), NotificationManager.IMPORTANCE_LOW))
-    val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
-    if (Build.VERSION.SDK_INT >= 33) registerReceiver(lockReceiver, filter, RECEIVER_NOT_EXPORTED) else registerReceiver(lockReceiver, filter)
   }
   override fun onBind(intent: Intent?) = null
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -218,5 +215,5 @@ class VoiceCompanionService : Service() {
     publish(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
   }
   override fun onTaskRemoved(rootIntent: Intent?) { end("task-removed"); super.onTaskRemoved(rootIntent) }
-  override fun onDestroy() { end("destroyed"); try { unregisterReceiver(lockReceiver) } catch (_: Exception) { }; super.onDestroy() }
+  override fun onDestroy() { end("destroyed"); super.onDestroy() }
 }

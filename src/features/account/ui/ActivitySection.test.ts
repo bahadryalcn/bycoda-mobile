@@ -9,9 +9,13 @@ vi.mock("./account-context", () => ({ useAccount: () => ({ runtime: { client: {}
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: Record<string, string | number>) => en.replace(/\{(p\d+)\}/g, (_, key) => String(values?.[key] ?? key)) }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Group, Section: Group, Stack: Group, Skeleton: () => null, ErrorNotice: ({ error, message, onRetry }: { error: unknown; message: string; onRetry(): void }) => error ? createElement("div", null, message, createElement("button", { onClick: onRetry }, "Retry")) : null };
+  return { Body: Group, Section: Group, Stack: Group, NavigationGroup: Group, SettingIcon: () => null, ValueRow: ({ label, value }: { label: string; value: string }) => createElement("p", null, `${label}: ${value}`), Skeleton: () => null, ErrorNotice: ({ error, message, onRetry }: { error: unknown; message: string; onRetry(): void }) => error ? createElement("div", null, message, createElement("button", { onClick: onRetry }, "Retry")) : null };
 });
-vi.mock("@/ui/metric-row", () => ({ MetricRow: ({ label, value }: { label: string; value: string }) => createElement("p", null, `${label}: ${value}`) }));
+
+vi.mock("lucide-react-native/icons/calendar", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/calendar-days", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/calendar-range", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/clock", () => ({ default: () => null }));
 import { ActivitySection } from "./ActivitySection";
 let root: ReturnType<typeof createRoot>, container: HTMLDivElement;
 beforeEach(() => { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); fixture.data = undefined; fixture.error = true; fixture.refetch.mockReset(); container = document.createElement("div"); root = createRoot(container); });

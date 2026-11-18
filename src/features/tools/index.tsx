@@ -7,6 +7,7 @@ import { useProjectList } from "../workspace/use-project-directory";
 import { useActiveMachine } from "@/state/machines";
 import { Empty, QueryState, Screen } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { space } from "@/ui/tokens";
 import { DevServersScreen } from "./dev-servers-screen";
 import { RuntimeLogsScreen } from "./runtime-logs-screen";
 import { DevicesScreen } from "./devices-screen";
@@ -45,13 +46,13 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
   );
   return (
     <View style={{ flex: 1 }}>
-      {!visibleProject || !supported ? <Screen title={toolName} scroll={false}><View style={{ flex: 1 }}>
+      {!visibleProject || !supported ? <Screen title={toolName} scroll={false}><View style={{ flex: 1, paddingHorizontal: space.screen }}>
         <ProjectDirectoryFeedback query={projects} readiness={projects.readiness}
           privacyUnavailable={projects.privacyUnavailable}
           loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
         {projects.directoryReady && machine?.capabilities && !supported ? <Empty compact={false} illustration="permission"
-          title={copy("Güncelleme gerekiyor", "Update needed")}
-          detail={copy("Bu araç için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on your computer to use this tool.")}
+          title={copy("Kullanılamıyor", "Unavailable")}
+          detail={copy("Bu bilgisayar bu aracı sunmuyor: bycoda eski olabilir veya araç bu sistemde yok.", "This computer doesn't offer this tool: bycoda may be outdated or the tool is unavailable here.")}
           action={{ label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} /> : null}
         {projects.directoryReady && !visibleProject && !(machine?.capabilities && !supported) ? <Empty compact={false} illustration="no-projects" title={projectId
           ? copy("Bu bilgisayarda proje bulunamadı.", "Project not found on this computer.")

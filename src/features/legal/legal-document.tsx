@@ -2,6 +2,8 @@ import { useAsyncAction } from "@/state/actions";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Linking, View, type LayoutChangeEvent } from "react-native";
 import { Body, Disclosure, Heading, MutationState, Stack, NavigationGroup, NavigationRow } from "@/ui/primitives";
+import ExternalLink from "lucide-react-native/icons/external-link";
+import { useMobileTheme } from "@/ui/theme";
 import { lineHeight, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import {
@@ -65,6 +67,7 @@ export function LegalDocument({ document, sectionLayout }: {
 
 function DocumentLinks({ document }: { document: LegalDocumentId }) {
   const copy = useCopy();
+  const { colors } = useMobileTheme();
   const action = useAsyncAction();
   const [target, setTarget] = useState<string | null>(null);
   const active = useRef(true);
@@ -141,7 +144,7 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
       <NavigationGroup>
         {[{ label: copy("E-posta uygulamasını aç", "Open email app"), url: `mailto:${supportEmail}`, detail: supportEmail }, ...links].map(({ label, url, ...rest }) => (
           <View key={url}>
-            <NavigationRow label={label} intent="command" detail={"detail" in rest ? rest.detail : undefined} detailLines={0}
+            <NavigationRow label={label} intent="command" detail={"detail" in rest ? rest.detail : undefined} detailLines={0} trailing={<ExternalLink size={16} color={colors.muted} />}
               disabled={action.isPending} busy={action.isPending && target === url} onPress={() => open(url)} />
             {target === url ? <MutationState mutation={action} /> : null}
           </View>

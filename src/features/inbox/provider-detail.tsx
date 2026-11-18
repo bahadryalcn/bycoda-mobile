@@ -224,13 +224,13 @@ export function ProviderInboxDetail({
         {!contentAvailable ? <Button
           label={copy("Gelen kutusuna dön", "Back to inbox")}
           disabled={busy}
-          tone="quiet"
+          tone="quiet" flush
           onPress={requestClose}
         /> : null}
         {contentAvailable && /^https:\/\//i.test(item.url) ? (
           <Button
             label={copy("Serviste aç", "Open in provider")}
-            tone="quiet"
+            tone="quiet" flush
             busy={openProvider.isPending}
             onPress={openProviderLink}
           />

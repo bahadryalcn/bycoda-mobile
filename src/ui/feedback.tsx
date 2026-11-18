@@ -1,3 +1,4 @@
+import { decorativeSvgProps } from "./accessibility";
 import { useMobileTheme } from "./theme";
 import { useState } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
@@ -31,21 +32,26 @@ import type {
 } from "./component-props";
 import type { SemanticTone } from "./tokens";
 
-export function Badge({ label, tone = "default" }: BadgeProps) {
+/** Compact tone pill; `icon` adds a decorative 12dp leading glyph in the badge ink. */
+export function Badge({ label, tone = "default", icon: Icon }: BadgeProps) {
   const { colors, semanticColors, uiStyles } = useMobileTheme();
   const semantic =
     tone === "default"
       ? undefined
       : semanticColors[tone === "active" || tone === "live" ? "info" : tone];
+  // The row wrapper keeps the pill content-sized and start-aligned in a column, and lets a row
+  // parent centre it; a bare `alignSelf: flex-start` pinned it to the top of every row.
   return (
+    <View style={{ flexDirection: "row", maxWidth: "100%" }}>
     <PanelBadge
       variant="outline"
       className="self-start rounded-control border-0 bg-fill"
       style={StyleSheet.flatten([
-        { alignSelf: "flex-start", maxWidth: "100%", flexDirection: "column", alignItems: "stretch", paddingHorizontal: space.sm, paddingVertical: space.xxs, backgroundColor: colors.fill, borderColor: colors.border, borderWidth: 0 },
+        { alignSelf: "flex-start", maxWidth: "100%", flexDirection: Icon ? "row" : "column", alignItems: Icon ? "center" : "stretch", gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xxs, backgroundColor: colors.fill, borderColor: colors.border, borderWidth: 0 },
         semantic && { backgroundColor: semantic.surface, borderColor: semantic.border },
       ])}
     >
+      {Icon ? <Icon {...decorativeSvgProps} size={12} strokeWidth={2} color={semantic?.text ?? colors.muted} /> : null}
       <Text
         selectable
         style={StyleSheet.flatten([
@@ -62,6 +68,7 @@ export function Badge({ label, tone = "default" }: BadgeProps) {
         {label}
       </Text>
     </PanelBadge>
+    </View>
   );
 }
 

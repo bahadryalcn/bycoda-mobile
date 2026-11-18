@@ -97,6 +97,7 @@ vi.mock("@/ui/primitives", () => {
       createElement("section", null, createElement("h2", null, title), children),
     MutationState: ({ mutation }: { mutation: { error: unknown } }) =>
       mutation.error instanceof Error ? createElement("p", null, mutation.error.message) : null,
+    ValueRow: ({ label, trailing }: { label: string; trailing?: ReactNode }) => createElement("div", { "data-value-row": label }, label, trailing),
     Badge: ({ label }: { label: string }) => createElement("span", { "data-badge": true }, label),
     NavigationRow: ({
       label,

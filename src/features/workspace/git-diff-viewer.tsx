@@ -15,7 +15,7 @@ const MARKER = { add: "+ ", remove: "− ", context: "  " } as const;
  * and long diffs only mount the visible rows.
  */
 export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
-  const { colors, semanticColors } = useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const { height } = useWindowDimensions();
   const [viewport, setViewport] = useState(0);
@@ -40,29 +40,40 @@ export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
           height: lineHeight.heading,
           backgroundColor:
             item.kind === "add"
-              ? semanticColors.success.surface
+              ? colors.diffAddBg
               : item.kind === "remove"
-                ? semanticColors.danger.surface
+                ? colors.diffDelBg
                 : item.kind === "context"
                   ? colors.raised
                   : colors.panel,
         }}
       >
         {[item.oldLine, item.newLine].map((value, column) => (
-          <CodeText
+          <View
             key={column}
-            selectable={false}
             style={{
               width: numberWidth,
-              textAlign: "right",
-              paddingEnd: space.sm,
-              fontSize: fontSize.micro,
-              lineHeight: lineHeight.heading,
-              color: colors.subtle,
+              backgroundColor:
+                item.kind === "add"
+                  ? colors.diffAddGutter
+                  : item.kind === "remove"
+                    ? colors.diffDelGutter
+                    : undefined,
             }}
           >
-            {numberLabel(value)}
-          </CodeText>
+            <CodeText
+              selectable={false}
+              style={{
+                textAlign: "right",
+                paddingEnd: space.sm,
+                fontSize: fontSize.micro,
+                lineHeight: lineHeight.heading,
+                color: colors.subtle,
+              }}
+            >
+              {numberLabel(value)}
+            </CodeText>
+          </View>
         ))}
         <CodeText
           numberOfLines={1}
@@ -72,9 +83,9 @@ export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
             paddingEnd: space.md,
             color:
               item.kind === "add"
-                ? semanticColors.success.text
+                ? colors.diffAddText
                 : item.kind === "remove"
-                  ? semanticColors.danger.text
+                  ? colors.diffDelText
                   : item.kind === "context"
                     ? colors.muted
                     : colors.text,
@@ -85,7 +96,7 @@ export function GitDiffViewer({ lines }: { lines: readonly DiffLine[] }) {
       </View>
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- numberLabel closes over digits only
-    [colors, semanticColors, numberWidth, digits],
+    [colors, numberWidth, digits],
   );
   return (
     <View

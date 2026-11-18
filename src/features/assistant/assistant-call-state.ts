@@ -6,10 +6,12 @@ export const useAssistantCall = create<{
   target?: AssistantVoiceTarget;
   thread?: import("../../../../src/shared/model/host-contracts/assistant").AssistantThread;
   muted: boolean;
+  /** Replies are written but not played; the call keeps listening. */
+  speakerMuted: boolean;
   level: number;
   sessionId?: string;
   lastReply?: string;
   utterance?: string;
   replyVersion: number;
   error?: unknown;
-}>(() => ({ phase: "idle", muted: false, level: 0, replyVersion: 0 }));
+}>(() => ({ phase: "idle", muted: false, speakerMuted: false, level: 0, replyVersion: 0 }));

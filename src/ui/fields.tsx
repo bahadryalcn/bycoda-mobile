@@ -35,6 +35,7 @@ export function ToggleField({ label, labelLines, detail, help, value, onChange, 
         gap: gapIcon,
         minHeight: grouped ? metrics.rowHeightProject : metrics.touchTarget,
         paddingHorizontal: grouped ? space.sm : 0,
+        marginHorizontal: grouped ? -space.sm : 0,
         paddingVertical: grouped ? space.row : 0,
         opacity: disabled ? opacity.disabled : 1,
       }}

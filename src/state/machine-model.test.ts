@@ -35,6 +35,11 @@ describe("saved remote computers", () => {
     expect(value.lastConnectedAt).toBe(10);
     expect(value).not.toHaveProperty("token");
   });
+  it("keeps late capabilities from a Host that advertises more than 200", () => {
+    const many = [...Array.from({ length: 260 }, (_, index) => `cap.${index}`), "browser.shared", "dev.servers"];
+    const [value] = restoreMachines([{ ...machine, capabilities: many }]);
+    expect(value.capabilities).toEqual(many);
+  });
   it("rejects insecure remote URLs and embedded credentials", () => {
     expect(
       restoreMachines([

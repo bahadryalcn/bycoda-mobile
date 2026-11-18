@@ -17,10 +17,13 @@ vi.mock("react-native", () => ({ AppState: { addEventListener: (_event: string, 
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/info-hint", () => ({ HintSection: ({ children }: PropsWithChildren) => createElement("section", null, children) }));
 vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
+vi.mock("lucide-react-native/icons/bell-ring", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/sliders-horizontal", () => ({ default: () => null }));
 vi.mock("@/ui/primitives", () => ({
   Stack: ({ children }: PropsWithChildren) => createElement("div", null, children),
   NavigationGroup: ({ children }: PropsWithChildren) => createElement("div", null, children),
-  NavigationRow: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
+  SettingIcon: () => null,
+  NavigationRow: ({ label, onPress, disabled, intent }: { label: string; onPress: () => void; disabled?: boolean; intent?: string }) => { if (intent === "command") fixture.press = onPress; return createElement("button", { onClick: onPress, disabled }, label); },
   Notice: ({ message }: { message: string }) => createElement("p", null, message),
   Button: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => { fixture.press = onPress; return createElement("button", { onClick: onPress, disabled }, label); },
 }));

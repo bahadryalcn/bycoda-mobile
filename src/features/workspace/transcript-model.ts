@@ -241,9 +241,15 @@ export function completeResponseText(blocks: readonly Block[], id: string) {
   return text.join("\n\n");
 }
 
+/** "mcp__t3-code__delegate_task" reads as "delegate task": drop the server prefix and underscores. */
+export function readableToolName(name: string) {
+  const tool = /^mcp__.+?__(.+)$/.exec(name)?.[1];
+  return tool ? tool.replace(/_+/g, " ").trim() || name : name;
+}
+
 export function activityTitle(block: Block) {
   const title = block.agentRun?.name || block.tool?.title || block.text || block.tool?.detail || "";
-  return title.replace(/\s+/g, " ").trim();
+  return readableToolName(title.replace(/\s+/g, " ").trim());
 }
 
 /** Some providers keep the command in text and its result in separate fields. */

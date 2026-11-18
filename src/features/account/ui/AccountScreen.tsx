@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
 import { View } from "react-native";
 import { Avatar } from "panelui-native/components/avatar";
-import { Body, Button, ErrorNotice, Heading, Loading, Screen, Section, Stack, StateView, Skeleton } from "@/ui/primitives";
+import { Body, ErrorNotice, Heading, Loading, NavigationGroup, NavigationRow, Screen, Section, SettingIcon, Stack, StateView, Skeleton } from "@/ui/primitives";
+import LogOut from "lucide-react-native/icons/log-out";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import { confirmAction } from "@/ui/confirm";
@@ -14,16 +14,12 @@ import { ManageAccountSection } from "./ManageAccountSection";
 import { PushSection } from "./PushSection";
 import { AccountWelcome } from "./AccountWelcome";
 import { useAccount } from "./account-context";
+import { useAccountMe } from "./use-account-me";
 
 function Profile() {
   const copy = useCopy();
   const { uiStyles } = useMobileTheme();
-  const { runtime, device } = useAccount();
-  const me = useQuery({
-    queryKey: ["account", "me"],
-    queryFn: () => runtime!.client.getMe(),
-    enabled: !!runtime && !!device,
-  });
+  const me = useAccountMe();
   const user = me.data?.user;
   const name = user?.displayName || user?.email || "";
   return (
@@ -77,9 +73,12 @@ export function AccountScreen() {
         <PushSection />
         <ManageAccountSection />
         <ErrorNotice error={signOut.error} message={copy("Çıkış yapılamadı.", "Could not sign out.")} />
-        <Button
-          label={copy("Çıkış yap", "Sign out")}
+        <NavigationGroup>
+        <NavigationRow
+          intent="command"
           tone="danger"
+          icon={<SettingIcon glyph={LogOut} tone="danger" />}
+          label={copy("Çıkış yap", "Sign out")}
           busy={signOut.isPending}
           disabled={signOut.isPending}
           onPress={() =>
@@ -94,6 +93,7 @@ export function AccountScreen() {
             )
           }
         />
+        </NavigationGroup>
       </Stack>
     </Screen>
   );

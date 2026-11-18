@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { Badge, Body, ErrorNotice, FormActions, Input, Sheet, Stack } from "@/ui/primitives";
+import { Body, ErrorNotice, FormActions, Input, Sheet, Stack } from "@/ui/primitives";
+import { PullRequestStateBadge } from "./pull-request-state-badge";
 import { useCopy } from "@/ui/copy";
 import { useActiveMachine } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
@@ -9,7 +10,6 @@ import {
   parsePullRequestInput,
   pickLinkSession,
   pullRequestStateLabel,
-  pullRequestTone,
   type LinkedPullRequest,
 } from "./git-link-pr-model";
 
@@ -121,9 +121,9 @@ export function GitLinkPullRequestSheet({
         {current ? (
           <Stack>
             <Body>{`#${current.number}`}</Body>
-            <Badge
+            <PullRequestStateBadge
+              state={current.state}
               label={pullRequestStateLabel(current.state, copy)}
-              tone={pullRequestTone(current.state)}
             />
             <FormActions
               submitLabel={copy("Bağlantıyı kaldır", "Unlink")}

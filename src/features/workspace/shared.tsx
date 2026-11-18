@@ -53,7 +53,7 @@ export function sessionStatus(
     case "retrying":
       return { label: copy("Yeniden deneniyor", "Retrying"), color: colors.warning };
     case "interrupted":
-      return { label: copy("Durduruldu", "Interrupted"), color: colors.muted };
+      return { label: copy("Durduruldu", "Interrupted"), color: colors.warning };
     case "input":
       return { label: copy("Girdi gerekiyor", "Needs input"), color: colors.warning };
     case "working":

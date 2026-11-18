@@ -134,7 +134,7 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
         {available && notice ? <Notice tone="success" message={notice} /> : null}
         {view.kind === "browse" && !connectionsOpen ? accessFeedback : null}
         {available ? <>
-          {machine?.capabilities?.includes("inbox.jiraBoard.v1") ? <Button tone="quiet"
+          {machine?.capabilities?.includes("inbox.jiraBoard.v1") ? <Button tone="quiet" flush
             label={origin.projectId ? copy("Jira panoları", "Jira boards") : copy("Jira için proje seçin", "Select a project for Jira")}
             disabled={!origin.projectId} onPress={() => { if (canBrowse() && origin.projectId) setJiraBoards(true); }} /> : null}
           <SearchToolbar search={<SearchField label={copy("Ara", "Search")} value={search}

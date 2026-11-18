@@ -45,26 +45,26 @@ it.each([{ capabilities: [] }, { capabilities: ["runtime.logs"] }])("identifies 
   state.capabilities = capabilities;
   const html = renderToStaticMarkup(createElement(HostToolScreen, { tool: "unknown", projectId: "project" }));
   expect(html).toContain("Tool not found");
-  expect(html).not.toContain("Update bycoda");
+  expect(html).not.toContain("bycoda may be outdated");
   expect(html).toContain("Back to projects");
 });
 it("retains host-update guidance for a recognized unsupported tool", () => {
   state.capabilities = [];
   const html = renderToStaticMarkup(createElement(HostToolScreen, { tool: "logs", projectId: "project" }));
-  expect(html).toContain("Update bycoda on your computer");
+  expect(html).toContain("bycoda may be outdated");
   expect(html).not.toContain("Tool not found");
 });
 it("opens diagnostics only when the host advertises resource diagnostics", () => {
   state.capabilities = ["resources.diagnostics"];
   expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "diagnostics", projectId: "project" }))).toContain("Host resources");
   state.capabilities = ["runtime.logs"];
-  expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "diagnostics", projectId: "project" }))).toContain("Update bycoda on your computer");
+  expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "diagnostics", projectId: "project" }))).toContain("bycoda may be outdated");
 });
 it("opens usage only with its specific read capability", () => {
   state.capabilities = ["usage.sessions.read"];
   expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "usage", projectId: "project" }))).toContain("Host session usage");
   state.capabilities = ["resources.diagnostics"];
-  expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "usage", projectId: "project" }))).toContain("Update bycoda on your computer");
+  expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "usage", projectId: "project" }))).toContain("bycoda may be outdated");
 });
 it("opens the global provider center without requiring a selected project", () => {
   state.capabilities = [];
@@ -80,7 +80,7 @@ it.each(["loading", "error", "sync-required"])("does not replace %s project veri
     error: readiness === "error" ? new Error("Connection unavailable") : undefined });
   const html = renderToStaticMarkup(createElement(HostToolScreen, { tool: "diagnostics", projectId: "project" }));
   expect(html).not.toContain("Choose a project");
-  expect(html).not.toContain("Update bycoda");
+  expect(html).not.toContain("bycoda may be outdated");
   expect(html).toContain(readiness === "loading" ? "Verifying project…" : readiness === "error" ? "Connection unavailable" : "sync the project directory");
 });
 

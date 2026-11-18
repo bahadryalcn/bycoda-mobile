@@ -8,12 +8,15 @@ const state = vi.hoisted(() => ({ signOut: vi.fn(), name: "👩🏽‍💻 Priya
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
 vi.mock("panelui-native/components/avatar", () => ({ Avatar: ({ fallback }: { fallback: string }) => h("span", { "data-avatar": fallback }) }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: {} }) }));
+vi.mock("lucide-react-native/icons/log-out", () => ({ default: () => null }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: (_title: string, _body: string, _label: string, action: () => void) => action() }));
 vi.mock("@/ui/primitives", () => ({
   Body: ({ children }: PropsWithChildren) => h("p", null, children), Heading: ({ children }: PropsWithChildren) => h("h1", null, children),
   Screen: ({ children }: PropsWithChildren) => h("main", null, children), Stack: ({ children }: PropsWithChildren) => h("div", null, children), Section: () => null, StateView: () => null, Loading: () => null, Skeleton: () => null,
   Button: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => h("button", { onClick: onPress, disabled }, label),
+  NavigationGroup: ({ children }: PropsWithChildren) => h("div", null, children), SettingIcon: () => null,
+  NavigationRow: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => h("button", { onClick: onPress, disabled }, label),
   ErrorNotice: ({ error }: { error?: Error }) => error ? h("p", { role: "alert" }, error.message) : null,
 }));
 vi.mock("./ActivitySection", () => ({ ActivitySection: () => null }));

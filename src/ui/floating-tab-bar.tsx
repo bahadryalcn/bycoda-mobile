@@ -24,6 +24,47 @@ export type FloatingTabBarProps = TabBarProps & {
   quickAction?: { label: string; optionsLabel: string; onPress(): void; onLongPress(): void };
 };
 
+/** Badge value that draws an unread dot (desktop's rail dot) instead of a count pill. */
+export const TAB_BADGE_DOT = "dot";
+
+/** Count pill, or a dot for `TAB_BADGE_DOT`, pinned to the corner of a destination icon. */
+export function TabBadge({ badge, top, end }: { badge: string | number; top: number; end: number }) {
+  const { colors } = useMobileTheme();
+  if (badge === TAB_BADGE_DOT)
+    return (
+      <View
+        accessible={false}
+        style={{
+          position: "absolute",
+          top,
+          end,
+          width: space.row,
+          height: space.row,
+          borderRadius: radii.pill,
+          backgroundColor: colors.accentSolid,
+        }}
+      />
+    );
+  return (
+    <Text
+      accessible={false}
+      style={{
+        position: "absolute",
+        top,
+        end,
+        paddingHorizontal: space.xxs,
+        borderRadius: radii.badge,
+        backgroundColor: colors.accentSolid,
+        color: colors.primaryText,
+        fontSize: fontSize.caption,
+        fontVariant: ["tabular-nums"],
+      }}
+    >
+      {badge}
+    </Text>
+  );
+}
+
 /** Material 3 navigation bar destination: icon in an active-indicator pill, label below. */
 function BarItem({
   label,
@@ -79,24 +120,7 @@ function BarItem({
         }}
       >
         {icon}
-        {badge ? (
-          <Text
-            accessible={false}
-            style={{
-              position: "absolute",
-              top: 0,
-              end: space.xs,
-              paddingHorizontal: space.xxs,
-              borderRadius: radii.badge,
-              backgroundColor: colors.accentSolid,
-              color: colors.primaryText,
-              fontSize: fontSize.caption,
-              fontVariant: ["tabular-nums"],
-            }}
-          >
-            {badge}
-          </Text>
-        ) : null}
+        {badge ? <TabBadge badge={badge} top={0} end={space.xs} /> : null}
       </View>
       <Text
         accessible={false}
@@ -255,9 +279,10 @@ export function FloatingTabBar({
   const hiddenBadges = hidden.filter((route) => descriptors[route.key]!.options.tabBarBadge);
   const moreLabel = copy("Diğer", "More");
   const overflowLabel = [moreLabel, ...hiddenBadges.map(badgeLabel)].join(". ");
-  const overflowBadge =
-    hiddenBadges.map((route) => String(descriptors[route.key]!.options.tabBarBadge)).join(", ") ||
-    undefined;
+  const hiddenCounts = hiddenBadges
+    .map((route) => String(descriptors[route.key]!.options.tabBarBadge))
+    .filter((value) => value !== TAB_BADGE_DOT);
+  const overflowBadge = hiddenCounts.join(", ") || (hiddenBadges.length ? TAB_BADGE_DOT : undefined);
   const navigate = (route: (typeof state.routes)[number]) => {
     const event = emitter.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
     if (event.defaultPrevented) return;
@@ -413,14 +438,15 @@ export function FloatingTabBar({
               label={String(label(route))}
               accessibilityLabel={String(badgeLabel(route))}
               trailing={
-                descriptors[route.key]!.options.tabBarBadge ? (
+                descriptors[route.key]!.options.tabBarBadge === TAB_BADGE_DOT ? (
+                  <View
+                    accessible={false}
+                    style={{ width: space.row, height: space.row, borderRadius: radii.pill, backgroundColor: colors.accentSolid }}
+                  />
+                ) : descriptors[route.key]!.options.tabBarBadge ? (
                   <Text
                     accessible={false}
-                    style={{
-                      color: colors.text,
-                      fontSize: fontSize.caption,
-                      fontVariant: ["tabular-nums"],
-                    }}
+                    style={{ color: colors.text, fontSize: fontSize.caption, fontVariant: ["tabular-nums"] }}
                   >
                     {String(descriptors[route.key]!.options.tabBarBadge)}
                   </Text>

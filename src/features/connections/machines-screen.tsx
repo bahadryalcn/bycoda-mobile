@@ -16,7 +16,7 @@ import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
 import { useMachines } from "@/state/machines";
 import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { assertAppAccess } from "@/state/security";
-import { Badge, Body, Button, Disclosure, FormActions, HeaderBackButton, IconButton, NavigationGroup, NavigationRow, Notice, QueryState, Screen, SearchField, Sheet, StateView, Skeleton } from "@/ui/primitives";
+import { Body, Button, Disclosure, FormActions, HeaderBackButton, IconButton, NavigationGroup, NavigationRow, Notice, QueryState, Screen, SearchField, Sheet, StateView, Skeleton } from "@/ui/primitives";
 import { confirmAction } from "@/ui/confirm";
 import { metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
@@ -24,6 +24,7 @@ import { errorMessage } from "@/ui/error-message";
 import { LegalLinks } from "@/ui/brand";
 import { flushWorkspaceDrafts } from "../workspace/draft-guard";
 import { AccountComputersSection } from "./account-computers-section";
+import { ActiveComputerStatus, RetryConnectionRow } from "./active-computer-status";
 import { PairingEntry } from "./pairing-entry";
 import { PairingScanner } from "./pairing-scanner";
 import { matchesSavedComputer, removeSavedComputer, reloadSavedConnections, selectSavedComputer } from "./recovery";
@@ -135,7 +136,7 @@ export function MachinesScreen() {
           return <NavigationRow
             key={machine.id} label={machine.name} detail={machine.endpoint} selected={active} intent="navigate"
             icon={<IconTile color={colors.muted}><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
-            supporting={active ? <Badge label={copy("Etkin", "Active")} tone="active" /> : undefined}
+            supporting={active ? <ActiveComputerStatus /> : undefined}
             disabled={unavailable || busy} onPress={() => setManaging(machine.id)}
           />;
       }}
@@ -174,6 +175,7 @@ export function MachinesScreen() {
             navigate: () => { setManaging(null); router.replace("/"); },
           }), copy("Bilgisayar seçildi.", "Computer selected."));
         }} />}
+        {selected.id === activeId ? <RetryConnectionRow onRetried={() => setManaging(null)} /> : null}
         <NavigationRow label={copy("Bağlantıyı düzenle", "Edit connection")} disabled={unavailable || busy} onPress={() => { setManaging(null); controller.edit(selected); }} />
         <NavigationRow label={copy("Kaldır", "Remove")} tone="danger" disabled={unavailable || busy} onPress={() => { retiredRemoval.current = false; operation.reset(); setRemoval({ ...reviewedMachine(selected)!, name: selected.name }); }} />
       </NavigationGroup>

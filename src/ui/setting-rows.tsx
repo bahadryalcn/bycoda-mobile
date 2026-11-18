@@ -30,6 +30,7 @@ function SettingRowFrame({ children }: { children: ReactNode }) {
         style={{
           minHeight: metrics.rowHeightProject,
           paddingHorizontal: grouped ? space.sm : 0,
+          marginHorizontal: grouped ? -space.sm : 0,
           paddingVertical: space.row,
           gap: space.sm,
         }}
@@ -96,12 +97,18 @@ export function ValueRow({ label, value, icon, trailing }: { label: string; valu
   );
 }
 
-/** Neutral 32dp icon well for a settings row's leading slot; pass a lucide glyph component. */
-export function SettingIcon({ glyph: Glyph }: { glyph: ComponentType<{ size?: number; strokeWidth?: number; color?: string }> }) {
-  const { colors } = useMobileTheme();
+/**
+ * 32dp icon well for a settings row's leading slot; pass a lucide glyph component. Neutral by default;
+ * `tone="danger"` matches a destructive row's label so the glyph does not read as a safe action.
+ */
+export function SettingIcon({ glyph: Glyph, tone }: {
+  glyph: ComponentType<{ size?: number; strokeWidth?: number; color?: string }>; tone?: "danger";
+}) {
+  const { colors, semanticColors } = useMobileTheme();
+  const color = tone ? semanticColors[tone].text : colors.muted;
   return (
-    <IconTile color={colors.muted}>
-      <Glyph size={18} strokeWidth={2} color={colors.muted} />
+    <IconTile color={color}>
+      <Glyph size={18} strokeWidth={2} color={color} />
     </IconTile>
   );
 }

@@ -97,7 +97,9 @@ export function DiagnosticsDetails({ sample }: { sample: ResourceSample }) {
           showValueLabel
           valueLabel={memoryLabel(process.heapUsedBytes)}
         />}
-        <MetricRow label={copy("İşlem CPU", "Process CPU")} value={process.cpuPercent === null ? "—" : `${process.cpuPercent.toFixed(1)}%`} />
+        <Row>
+          <Stat label={copy("İşlem CPU", "Process CPU")} value={process.cpuPercent === null ? "—" : `${process.cpuPercent.toFixed(1)}%`} />
+        </Row>
       </Stack></Section>
       <Disclosure label={copy("Ayrıntılar", "Details")}>
         <MetricRow label="PID" value={process.pid} />

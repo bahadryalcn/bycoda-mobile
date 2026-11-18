@@ -449,6 +449,7 @@ export function ProjectsScreen() {
             <Button
               label={copy("Tümünü aç", "Expand all")}
               tone="quiet"
+              flush
               onPress={() =>
                 updatePreferences({
                   collapsed: Object.fromEntries([

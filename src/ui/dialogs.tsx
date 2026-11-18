@@ -287,7 +287,7 @@ export function Sheet({
                 <ScrollView style={{ flexGrow: 0, flexShrink: 1, maxHeight: headerMaximum }}
                   keyboardShouldPersistTaps="handled" nestedScrollEnabled
                   contentContainerStyle={{ minHeight: metrics.touchTarget, justifyContent: "center" }}>
-                  <Heading style={[uiStyles.title, { fontWeight: "700" }]}>
+                  <Heading numberOfLines={3} style={[uiStyles.title, { fontWeight: "700" }]}>
                     {title}
                   </Heading>
                 </ScrollView>

@@ -22,6 +22,7 @@ import { IconTile } from "./icon-tile";
 import HardDrive from "lucide-react-native/icons/hard-drive";
 import { useCopy } from "./copy";
 import { connectionPhase } from "./connection-presentation";
+import { connectionNeedsPairing, connectionReason } from "./connection-reason";
 import { Menu } from "panelui-native/components/menu";
 import { BusyIndicator as Spinner } from "./busy-indicator";
 import { decorativeSvgProps } from "./accessibility";
@@ -30,7 +31,7 @@ import { machineSuccessStore } from "./machine-success-store";
 import { refetchRecoveredReads } from "../state/query-retry";
 
 /** Connection state for the active computer; mounting it also keeps the descriptor fresh. */
-function useMachineStatus() {
+export function useMachineStatus() {
   const { colors, semanticColors } = useMobileTheme();
   const machine = useActiveMachine();
   const copy = useCopy();
@@ -85,6 +86,9 @@ function useMachineStatus() {
     disconnected: copy("Bağlantı kesildi", "Disconnected"),
   };
   const status = statuses[phase];
+  const errorKind = remoteErrorKind(health.error);
+  const reason = connectionReason(phase, errorKind, machine?.name ?? "", copy);
+  const needsPairing = connectionNeedsPairing(phase, errorKind);
   const statusColor =
     phase === "connected"
       ? semanticColors.success.text
@@ -95,7 +99,7 @@ function useMachineStatus() {
           : phase === "permission" || phase === "access" || phase === "locked" || phase === "storage"
             ? semanticColors.warning.text
             : colors.muted;
-  return { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError };
+  return { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError, reason, needsPairing };
 }
 
 /** Headless owner of the periodic connection check while the tab shell is mounted. */
@@ -125,7 +129,7 @@ export function MachineConnectionStatus() {
 
 export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?: string } = {}) {
   const { colors, uiStyles, pressedFill } = useMobileTheme();
-  const { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError } = useMachineStatus();
+  const { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError, reason, needsPairing } = useMachineStatus();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const [menuMachineId, setMenuMachineId] = useState(machine?.id);
@@ -206,7 +210,7 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
           </Menu.Item> : null}
           <Menu.Item
             key="computer"
-            accessibilityLabel={[machine?.name, status, copy("Bilgisayar seç", "Choose computer")]
+            accessibilityLabel={[machine?.name, status, reason, copy("Bilgisayar seç", "Choose computer")]
               .filter(Boolean)
               .join(". ")}
             onPress={() => {
@@ -234,12 +238,12 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
                       }}
                     />
                   )}
-                  <Text style={[uiStyles.caption, { flex: 1, color: statusColor }]}>{status}</Text>
+                  <Text style={[uiStyles.caption, { flex: 1, color: statusColor }]}>{reason ? `${status}. ${reason}` : status}</Text>
                 </View>
               ) : null}
             </View>
           </Menu.Item>
-          {machine && health.error ? (
+          {machine && health.error && !needsPairing ? (
             <Menu.Item
               key="retry"
               accessibilityLabel={copy("Bağlantıyı yeniden dene", "Retry connection")}
@@ -277,13 +281,14 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
                 intent="navigate"
                 icon={<IconTile><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
                 label={machine?.name ?? copy("Bilgisayar bağla", "Connect a computer")}
-                detail={machine ? status : undefined}
+                detail={machine ? (reason ? `${status}. ${reason}` : status) : undefined}
+                detailLines={0}
                 detailSelectable={false}
-                accessibilityLabel={[machine?.name, status, copy("Bilgisayar seç", "Choose computer")].filter(Boolean).join(". ")}
-                separator={!!(machine && health.error)}
+                accessibilityLabel={[machine?.name, status, reason, copy("Bilgisayar seç", "Choose computer")].filter(Boolean).join(". ")}
+                separator={!!(machine && health.error && !needsPairing)}
                 onPress={() => { closeMenu(); router.navigate("/machines"); }}
               />
-              {machine && health.error ? (
+              {machine && health.error && !needsPairing ? (
                 <NavigationRow
                   intent="command"
                   separator={false}

@@ -2,13 +2,17 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   MATERIAL_YOU_MIN_API,
+  contrastRatio,
   PALETTE_IDS,
   PALETTES,
   derivePaletteColors,
   hslToHex,
   materialYouAvailable,
   materialYouColors,
+  STATUS_HUES,
+  mixHex,
   normalizePalette,
+  statusInk,
   uniwindThemeName,
   type MaterialYouSwatches,
 } from "./palettes";
@@ -99,16 +103,14 @@ describe("palette resolution", () => {
     expect(darkColors.background).toBe("#0B0B0C");
     expect(lightColors.accentSolid).toBe("#0066CC");
   });
-  it("derives distinct, cached colours for the desktop palettes and keeps status colours", () => {
+  it("derives distinct, cached colours for the desktop palettes and keeps the desktop status hues", () => {
     for (const id of HUE_IDS)
       for (const mode of ["light", "dark"] as const) {
         const { colors } = resolveMobilePalette(id, mode);
         const base = mode === "dark" ? darkColors : lightColors;
         expect(colors).toBe(resolveMobilePalette(id, mode).colors);
         expect(colors.background).not.toBe(base.background);
-        expect(colors.success).toBe(base.success);
-        expect(colors.danger).toBe(base.danger);
-        expect(colors.warning).toBe(base.warning);
+        expect(colors.success).toBe(statusInk(mode, "success", colors.text, PALETTES.find((item) => item.id === id)!.lightness));
       }
   });
   it("uses the preset accent in dark mode", () => {
@@ -126,5 +128,40 @@ describe("palette resolution", () => {
       for (const mode of ["light", "dark"] as const)
         expect(metro).toContain(`"${uniwindThemeName(id, mode)}"`);
     expect(uniwindThemeName("classic", "dark")).toBe("dark");
+  });
+});
+
+describe("desktop colour parity", () => {
+  it("classic status text is the desktop hue with the desktop ink mix", () => {
+    expect(STATUS_HUES.dark.success).toBe("#4ADE80");
+    expect(STATUS_HUES.light.danger).toBe("#B91C1C");
+    for (const mode of ["light", "dark"] as const) {
+      const colors = mode === "dark" ? darkColors : lightColors;
+      for (const name of ["success", "warning", "danger"] as const)
+        expect(colors[name]).toBe(statusInk(mode, name, colors.text, 5));
+    }
+  });
+  it("tints status tones over the panel at 16% dark and 8% light", () => {
+    expect(semanticPalettes.dark.success.surface).toBe(mixHex(darkColors.success, darkColors.panel, 16));
+    expect(semanticPalettes.light.danger.surface).toBe(mixHex(lightColors.danger, lightColors.panel, 8));
+  });
+  it("diff and merged tokens follow the desktop emerald, rose and feature purple", () => {
+    expect(darkColors.diffAdd).toBe("#10B981");
+    expect(darkColors.diffDel).toBe("#F43F5E");
+    expect(darkColors.diffAddBg).toBe(mixHex("#10B981", darkColors.panel, 15));
+    expect(darkColors.diffAddGutter).toBe(mixHex("#10B981", darkColors.panel, 25));
+    expect(lightColors.diffAddText).toBe("#047857");
+    expect(darkColors.merged).toBe("#C084FC");
+    expect(lightColors.merged).toBe("#7E22CE");
+  });
+});
+
+describe("solid status ink", () => {
+  it("reads on every classic status fill in both modes", () => {
+    for (const mode of ["light", "dark"] as const) {
+      const colors = mode === "dark" ? darkColors : lightColors;
+      for (const name of ["success", "warning", "danger"] as const)
+        expect(contrastRatio(colors.statusOnSolid, colors[name])).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

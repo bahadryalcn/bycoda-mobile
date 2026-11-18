@@ -10,7 +10,7 @@ import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import { Badge, Body, Button, CodeText, Disclosure, IconButton, NavigationRow, QueryState, Row, ScreenList, SearchField, SegmentedControl } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { gitFilePresentation } from "./git-file-presentation";
+import { gitChangeLabel, gitFilePresentation } from "./git-file-presentation";
 import { relativeTime } from "./shared";
 import { space } from "@/ui/tokens";
 import type { GitScope } from "./git-types";
@@ -108,8 +108,7 @@ function CommitFileRow({ file, onSelect }: { file: GitChangedFile; onSelect: () 
   const copy = useCopy();
   const numbers = new Intl.NumberFormat(useLocale());
   const status = gitFilePresentation(file.status);
-  const label = status.kind === "added" ? copy("Eklendi", "Added") : status.kind === "deleted" ? copy("Silindi", "Deleted")
-    : status.kind === "renamed" ? copy("Yeniden adlandırıldı", "Renamed") : copy("Değiştirildi", "Modified");
+  const label = gitChangeLabel(status.kind, copy);
   const path = file.relative.replaceAll("\\", "/");
   const cut = path.lastIndexOf("/");
   return <NavigationRow label={path.slice(cut + 1)} labelLines={2}

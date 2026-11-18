@@ -18,13 +18,14 @@ import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { deviceAvailabilityIssues } from "./device-availability";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import { DeviceViewer } from "./device-viewer";
+import { deviceSystemLabel } from "./device-system";
 import { DeviceRuntime } from "./device-runtime";
 import type { DeviceHostStatus, DeviceSummary } from "./types";
 
 type DeviceScope = { machineId: string | undefined; projectId: string; reviewed: ReviewedMachine | undefined; connection: ConnectionScope };
 
 export function DevicesScreen({ project }: { project: HostProject }) {
-  const { colors } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const machine = useActiveMachine();
@@ -98,7 +99,7 @@ export function DevicesScreen({ project }: { project: HostProject }) {
       renderItem={({ item: device }) => {
         const kind = device.physical ? copy("Fiziksel cihaz", "Physical device") : copy("Simülatör", "Simulator");
         const state = device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off");
-        const system = [device.platform, device.version].filter(Boolean).join(" ");
+        const system = deviceSystemLabel(device);
         // Identity on the first lines, state as a badge that wraps with the type so large text never clips.
         return <NavigationRow
           label={device.name}
@@ -107,7 +108,7 @@ export function DevicesScreen({ project }: { project: HostProject }) {
           detailLines={2}
           supporting={<Row>
             <Badge label={state} tone={device.booted ? "success" : "default"} />
-            <Body muted style={{ flexShrink: 1 }}>{kind}</Body>
+            <Body muted style={[uiStyles.caption, { flexShrink: 1 }]}>{kind}</Body>
           </Row>}
           accessibilityLabel={[device.name, system, kind, state].filter(Boolean).join(". ")}
           icon={<Smartphone size={21} color={device.booted ? colors.live : colors.muted} />}

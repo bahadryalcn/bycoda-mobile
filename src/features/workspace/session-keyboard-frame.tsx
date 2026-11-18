@@ -19,7 +19,13 @@ export function SessionKeyboardFrame({
   children,
   composer,
   style,
-}: PropsWithChildren<{ composer: ReactNode; style?: StyleProp<ViewStyle> }>) {
+  transparent = false,
+}: PropsWithChildren<{
+  composer: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  /** Let a full-screen stage behind the frame show through the composer band (voice call). */
+  transparent?: boolean;
+}>) {
   const { colors } = useMobileTheme();
   const insets = useSafeAreaInsets();
   const { height, progress } = useReanimatedKeyboardAnimation();
@@ -46,7 +52,7 @@ export function SessionKeyboardFrame({
     [insets.bottom],
   );
   const composerBlock = (
-    <Animated.View style={[{ backgroundColor: colors.background, paddingTop: space.sm, paddingBottom: 0 }, safeBottomStyle]}>
+    <Animated.View style={[{ backgroundColor: transparent ? "transparent" : colors.background, paddingTop: space.sm, paddingBottom: 0 }, safeBottomStyle]}>
       <SessionKeyboardSpace.Provider value={availableHeight}>
         <View style={{ paddingBottom: space.sm }}>{composer}</View>
       </SessionKeyboardSpace.Provider>

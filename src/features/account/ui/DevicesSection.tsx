@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { Badge, Button, ErrorNotice, FormActions, Field, NavigationGroup, NavigationRow, Section, Sheet, Skeleton, Stack } from "@/ui/primitives";
+import { Badge, Button, ErrorNotice, FormActions, Field, NavigationGroup, NavigationRow, Section, SettingIcon, Sheet, Skeleton, Stack } from "@/ui/primitives";
+import Globe from "lucide-react-native/icons/globe";
+import Laptop from "lucide-react-native/icons/laptop";
+import Smartphone from "lucide-react-native/icons/smartphone";
+import Tablet from "lucide-react-native/icons/tablet";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
 import { useSheetGuard } from "@/ui/sheet-guard";
@@ -67,6 +71,7 @@ export function DevicesSection() {
             <NavigationRow
               key={item.id}
               label={item.name}
+              icon={<SettingIcon glyph={item.kind === "mobile" ? (item.platform === "ios" && /ipad/i.test(item.name) ? Tablet : Smartphone) : item.platform === "web" ? Globe : Laptop} />}
               detail={`${item.osVersion} · ${item.appVersion}`}
               trailing={isSelf(item) ? <Badge label={copy("Bu cihaz", "This device")} /> : undefined}
               disabled={busy}

@@ -47,8 +47,9 @@ export function AssistantCompanion({ children }: PropsWithChildren) {
   }, [transport, connection]);
   const matches = machine?.id === state.machineId && machine?.environmentId === state.environmentId;
   // Lock, lost computer identity, background and consent unmount must release native capture.
+  // A running call outlives the app lock; its chrome reappears after unlocking.
   useEffect(() => {
-    if (security.status !== "unlocked" || !matches) closeAssistantCompanion();
+    if (!matches || (security.status !== "unlocked" && !assistantCallInBackground())) closeAssistantCompanion();
     else if ((security.appState !== "active" || !security.windowFocused) && !assistantCallInBackground()) interruptAssistantVoice();
   }, [security.status, security.appState, security.windowFocused, matches]);
   // Route Back keeps the same Room thread available through the floating window.

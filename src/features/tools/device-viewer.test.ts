@@ -111,7 +111,7 @@ vi.mock("@/ui/primitives", () => {
 let root: ReturnType<typeof createRoot> | undefined;
 let container: HTMLDivElement;
 const onDevice = vi.fn();
-async function render(booted: boolean) {
+async function render(booted: boolean, extra: { canControl?: boolean; viewOnly?: boolean } = {}) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   root = createRoot(container);
@@ -128,6 +128,7 @@ async function render(booted: boolean) {
           physical: false,
         },
         canControl: true,
+        ...extra,
         onDevice,
         onClose: vi.fn(),
       }),
@@ -189,4 +190,14 @@ it("keeps newer device text when an earlier Type text request completes", async 
     deviceId: "device",
     action: { type: "type", text: "First text" },
   });
+});
+it("view-only mode shows the screen without control, tools, boot or the enable-control prompt", async () => {
+  await render(true, { canControl: false, viewOnly: true });
+  const labels = [...container.querySelectorAll("button")].map((button) => button.textContent);
+  expect(labels).toContain("Refresh screen");
+  expect(labels).toContain("Live view");
+  for (const hidden of ["Control device", "Home", "Open app", "Type text", "Press element"]) expect(labels).not.toContain(hidden);
+  await act(async () => root!.unmount());
+  await render(false, { canControl: false, viewOnly: true });
+  expect([...container.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Boot device");
 });

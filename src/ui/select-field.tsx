@@ -230,6 +230,7 @@ function SelectionField<T extends string>({
             alignItems: "center",
             gap: gapIcon,
             paddingHorizontal: grouped ? space.sm : 0,
+            marginHorizontal: grouped ? -space.sm : 0,
             paddingVertical: space.row,
             backgroundColor: "transparent",
             ...(!available ? { opacity: opacity.disabled } : {}),

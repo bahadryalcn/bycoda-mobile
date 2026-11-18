@@ -131,7 +131,7 @@
         {
           "photosPermission": "Choose photos to attach to your Bycoda messages.",
           "cameraPermission": "Allow Bycoda to scan the pairing QR code on your computer.",
-          "microphonePermission": false
+          "microphonePermission": "Speak to your Bycoda assistant. Audio is processed on your connected computer."
         }
       ],
       [

@@ -8,7 +8,9 @@ import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { Body, Button, Empty, ErrorText, Loading, MutationState } from "@/ui/primitives";
 import { ChatCommandReceipt } from "@/ui/chat-command-receipt";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
+import { useAdaptiveLayout } from "@/ui/adaptive-layout";
+import { QUICK_PANEL_MARGIN } from "./tablet-quick-panel-model";
 import { useCopy } from "@/ui/copy";
 import { useHostClient } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
@@ -74,6 +76,8 @@ export function SessionTranscript({
   bottomInset = 0,
 }: SessionTranscriptProps & { header?: ReactNode }) {
   const { uiStyles } = useMobileTheme();
+  // The tablet quick-panel button floats over the transcript end; leave room so the last lines can scroll clear of it.
+  const quickPanelClearance = useAdaptiveLayout().tablet ? metrics.touchTarget + space.sm + QUICK_PANEL_MARGIN : 0;
   const copy = useCopy();
   const client = useHostClient();
   const listRef = useRef<LegendListRef>(null);
@@ -495,7 +499,7 @@ export function SessionTranscript({
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={scrollKeyboardDismissMode()}
           contentInsetAdjustmentBehavior="never"
-          contentContainerStyle={{ ...readableColumn, paddingTop: space.sm, paddingBottom: bottomInset + space.sm }}
+          contentContainerStyle={{ ...readableColumn, paddingTop: space.sm, paddingBottom: bottomInset + space.sm + quickPanelClearance }}
           scrollEventThrottle={16}
           onScroll={onScroll}
           onScrollBeginDrag={onScrollBeginDrag}

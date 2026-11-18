@@ -31,6 +31,7 @@ export function Button({
   tone = "default",
   density = "regular",
   fullWidth,
+  flush,
   style,
   children,
 }: ButtonProps) {
@@ -85,6 +86,7 @@ export function Button({
         { alignSelf: fullWidth ? "stretch" : "flex-start", maxWidth: "100%", flexShrink: 1,
           borderRadius: radii.control, opacity: disabled && !busy ? opacity.disabled : 1 },
         fullWidth && { width: "100%" },
+        flush && { marginStart: -(density === "compact" ? space.sm : space.md) },
         style,
         disabled && !busy && tone === "primary" && { backgroundColor: colors.accentSolid },
       ]}

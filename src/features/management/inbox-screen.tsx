@@ -1,7 +1,9 @@
 import { ScreenList } from "@/ui/screen-list";
 import type { HostAttentionInbox, MobileInboxItem } from "@/domain/types";
 import { router, useLocalSearchParams, type Href } from "expo-router";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useIsFocused } from "expo-router/react-navigation";
+import { useInboxSeen } from "../inbox/inbox-seen-store";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActionMenu, Body, Button, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, Sheet, StateView } from "@/ui/primitives";
 import { CollectionToolbar } from "@/ui/search-field";
 import { useCopy } from "@/ui/copy";
@@ -36,7 +38,7 @@ export function InboxScreen() {
   return (
     <InboxBrowseMemoryProvider><Screen scroll={false} title={copy("Gelen kutusu", "Inbox")}>
       <ScreenHeader>
-        <Button label={copy("Pull request’ler", "Pull requests")} tone="quiet" onPress={() => router.push("/pull-requests" as Href)} />
+        <Button label={copy("Pull request’ler", "Pull requests")} tone="quiet" flush onPress={() => router.push("/pull-requests" as Href)} />
         <SegmentedControl
           hideLabel
           label={copy("Gelen kutusu", "Inbox")}
@@ -74,6 +76,11 @@ function AttentionInboxScreen() {
   const data = readable ? query.data : undefined;
   const groups = useMemo(() => groupAttention((data?.items ?? []).filter(item => item.kind !== "social")), [data]);
   const rows = groups.ordered;
+  const focused = useIsFocused();
+  // Effect reason: items shown on the focused Inbox are seen, which clears the tab dot.
+  useEffect(() => {
+    if (focused && readable && machine && data) void useInboxSeen.getState().markSeen(machine.id, data.items.filter((item) => item.kind !== "social"));
+  }, [focused, readable, machine, data]);
   const lease = useMemo(() => ({ active: false }), [readable, origin.machineId, origin.projectId]);
   useLayoutEffect(() => { lease.active = true; return () => { lease.active = false; }; }, [lease]);
   const [help, setHelp] = useState<typeof lease | null>(null);

@@ -47,8 +47,8 @@ export function ApprovalCard({
       : approval.status === "denied"
         ? ([copy("Reddedildi", "Denied"), "danger"] as const)
         : expired
-          ? ([copy("Süresi doldu", "Expired"), "warning"] as const)
-          : ([copy("Bekliyor", "Waiting"), "active"] as const);
+          ? ([copy("Süresi doldu", "Expired"), "default"] as const)
+          : ([copy("Bekliyor", "Waiting"), "warning"] as const);
   const decidedBy =
     approval.decidedBy === "desktop"
       ? copy("Bilgisayarda yanıtlandı.", "Answered on the computer.")

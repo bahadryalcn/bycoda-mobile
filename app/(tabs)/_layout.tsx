@@ -8,10 +8,11 @@ import { useMachines } from "../../src/state/machines";
 import { ScreenChromeProvider, type HeaderIdentityProps } from "../../src/ui/layout";
 import { NewSessionSheet } from "../../src/features/workspace/new-session-sheet";
 import { DockIcon, type DockIconName } from "../../src/ui/dock-icon";
-import { FloatingTabBar, type FloatingTabBarProps } from "../../src/ui/floating-tab-bar";
+import { FloatingTabBar, TAB_BADGE_DOT, type FloatingTabBarProps } from "../../src/ui/floating-tab-bar";
 import { useMobileTheme } from "../../src/ui/theme";
 import {
   TabActivityBridge,
+  useInboxUnseenBadge,
   useRunningSessionBadge,
 } from "../../src/features/workspace/tab-activity-bridge";
 import { useAppPreferences } from "../../src/features/navigation-prefs/app-preferences";
@@ -55,19 +56,20 @@ function DockProxy({
   return null;
 }
 
-/** Only this small bar subscribes to the running count, not the navigator. */
+/** Only this small bar subscribes to the running count and inbox dot, not the navigator. */
 function BadgedDock({ ...dockProps }: FloatingTabBarProps) {
   const copy = useCopy();
   const running = useRunningSessionBadge((s) => s.count);
+  const inboxUnseen = useInboxUnseenBadge((s) => s.unseen);
   const { preferences } = useAppPreferences();
   // Hidden tabs keep their routes (deep links) but get no dock button.
   const props = { ...dockProps, state: dockTabState(dockProps.state, preferences.tabs) } as FloatingTabBarProps;
   const chats = props.state.routes.find((route) => route.name === "chats");
-  if (!chats || !running) return <FloatingTabBar {...props} />;
-  const descriptor = props.descriptors[chats.key]!;
-  const descriptors = {
-    ...props.descriptors,
-    [chats.key]: {
+  const inbox = props.state.routes.find((route) => route.name === "inbox");
+  const descriptors = { ...props.descriptors };
+  if (chats && running) {
+    const descriptor = descriptors[chats.key]!;
+    descriptors[chats.key] = {
       ...descriptor,
       options: {
         ...descriptor.options,
@@ -78,8 +80,19 @@ function BadgedDock({ ...dockProps }: FloatingTabBarProps) {
           { p0: running > 99 ? "99+" : running },
         ),
       },
-    },
-  };
+    };
+  }
+  if (inbox && inboxUnseen) {
+    const descriptor = descriptors[inbox.key]!;
+    descriptors[inbox.key] = {
+      ...descriptor,
+      options: {
+        ...descriptor.options,
+        tabBarBadge: TAB_BADGE_DOT,
+        tabBarAccessibilityLabel: copy("Gelen kutusu, yeni öğeler", "Inbox, new items"),
+      },
+    };
+  }
   return <FloatingTabBar {...props} descriptors={descriptors} />;
 }
 

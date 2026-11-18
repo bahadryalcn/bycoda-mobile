@@ -1,12 +1,6 @@
 import { useEffect } from "react";
 import { Image, StyleSheet, View } from "react-native";
-import MaskedViewNative from "@react-native-masked-view/masked-view";
-import type { ComponentType, ReactElement } from "react";
-import type { ImageSourcePropType, ViewProps } from "react-native";
-
-// The package types its class from a React Native type that 0.88 removed; type it by its props.
-const MaskedView = MaskedViewNative as unknown as ComponentType<ViewProps & { maskElement: ReactElement }>;
-import { LinearGradient } from "expo-linear-gradient";
+import type { ImageSourcePropType } from "react-native";
 import Animated, {
   Easing,
   cancelAnimation,
@@ -18,12 +12,11 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import { useMobileTheme } from "./theme";
+import { SpriteFrames, range, useSpriteFrame, type SpriteLoop } from "./sprite-player";
 
 type Mask = { source: ImageSourcePropType; aspect: number };
-/** Frames drawn by the website's rig; `sequence` lists frame indices played at `fps`, frame 0 is the rest pose. */
-type Sprite = { frames: ImageSourcePropType[]; sequence: number[]; fps: number; aspect: number };
-
-const range = (count: number) => Array.from({ length: count }, (_, index) => index);
+/** Frames drawn by the website's rig, played by the shared sprite player. */
+type Sprite = SpriteLoop & { aspect: number };
 
 /**
  * The website's figures. Masks are its dot-matrix voice face and code-glyph crew as white alpha, drawn in the active
@@ -91,16 +84,6 @@ function Block({ index, size, progress, color }: { index: number; size: number; 
   return <Animated.View style={[{ width: size, height: size, backgroundColor: color }, style]} />;
 }
 
-/** One stacked frame, shown while the clock is on a step that plays it; swapping opacity never reloads an image. */
-function Frame({ source, frame, sequence, clock, width, height }: {
-  source: ImageSourcePropType; frame: number; sequence: number[]; clock: SharedValue<number>; width: number; height: number;
-}) {
-  const style = useAnimatedStyle(() => ({
-    opacity: sequence[Math.min(sequence.length - 1, Math.floor(clock.value))] === frame ? 1 : 0,
-  }));
-  return <Animated.Image source={source} resizeMode="contain" style={[StyleSheet.absoluteFill, { width, height }, style]} />;
-}
-
 /**
  * Decorative website figure. While `active` it resolves through a pixel dissolve; a band of light
  * keeps travelling down the glyphs and the pixel guide plays his loop. Off-page and under reduced
@@ -115,21 +98,19 @@ export function CodeArt({ name, width, active }: { name: CodeArtName; width: num
   const height = width / figure.aspect;
   const reveal = useSharedValue(reduced ? 1 : 0);
   const light = useSharedValue(0);
-  const clock = useSharedValue(0);
-  const steps = sprite?.sequence.length ?? 0;
-  const stepMs = sprite ? 1000 / sprite.fps : 0;
+  const current = useSpriteFrame(sprite, active && !reduced);
   useEffect(() => {
     // Each activation replays the dissolve and restarts the light and the guide's loop; leaving the page covers it again.
     if (reduced) { reveal.value = 1; return; }
-    if (!active) { cancelAnimation(light); cancelAnimation(clock); reveal.value = 0; clock.value = 0; return; }
+    if (!active) { cancelAnimation(light); reveal.value = 0; return; }
     reveal.value = 0;
     reveal.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) });
     light.value = 0;
     light.value = withRepeat(withTiming(1, { duration: 3600, easing: Easing.inOut(Easing.quad) }), -1);
-    clock.value = 0;
-    if (steps) clock.value = withRepeat(withTiming(steps, { duration: steps * stepMs, easing: Easing.linear }), -1);
-  }, [active, reduced, reveal, light, clock, steps, stepMs]);
+  }, [active, reduced, reveal, light]);
   const band = useAnimatedStyle(() => ({ transform: [{ translateY: -height * 0.4 + light.value * height * 1.4 }] }));
+  // Counter-moves the band's copy so the art inside the moving window stays aligned with the figure.
+  const bandArt = useAnimatedStyle(() => ({ transform: [{ translateY: height * 0.4 - light.value * height * 1.4 }] }));
   const size = Math.ceil(width / COLUMNS);
   const rows = Math.ceil(height / size);
   return (
@@ -138,20 +119,21 @@ export function CodeArt({ name, width, active }: { name: CodeArtName; width: num
       {sprite ? (
         // Only the visible page stacks every frame; the others hold one image in memory.
         active && !reduced
-          ? sprite.frames.map((source, frame) => (
-            <Frame key={frame} source={source} frame={frame} sequence={sprite.sequence} clock={clock} width={width} height={height} />
-          ))
+          ? <SpriteFrames frames={sprite.frames} current={current} width={width} height={height} />
           : <Image source={sprite.frames[0]} resizeMode="contain" style={{ width, height }} />
       ) : mask ? (
-        <MaskedView style={StyleSheet.absoluteFill}
-          maskElement={<Image source={mask.source} resizeMode="contain" style={{ width, height }} />}>
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.text, opacity: reduced ? 0.95 : 0.78 }]} />
+        // The art is white alpha, so tinting draws it in the palette ink; a masked view rendered nothing on Android.
+        <>
+          <Image source={mask.source} resizeMode="contain" tintColor={colors.text}
+            style={{ width, height, opacity: reduced ? 0.95 : 0.78 }} />
           {reduced ? null : (
-            <Animated.View style={[{ position: "absolute", left: 0, right: 0, height: height * 0.4 }, band]}>
-              <LinearGradient colors={[`${colors.text}00`, colors.text, `${colors.text}00`]} style={StyleSheet.absoluteFill} />
+            // The band is a clipped window that moves down while its full-strength copy of the art stays put.
+            <Animated.View style={[{ position: "absolute", left: 0, right: 0, top: 0, height: height * 0.4, overflow: "hidden" }, band]}>
+              <Animated.Image source={mask.source} resizeMode="contain" tintColor={colors.text}
+                style={[{ position: "absolute", left: 0, top: 0, width, height }, bandArt]} />
             </Animated.View>
           )}
-        </MaskedView>
+        </>
       ) : null}
       {reduced ? null : (
         <View style={[StyleSheet.absoluteFill, { flexDirection: "row", flexWrap: "wrap" }]}>

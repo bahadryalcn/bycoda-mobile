@@ -26,12 +26,10 @@ export function PullRequestsScreen() {
   const current = () => !!machine && useMachines.getState().activeId === machine.id && scopeCurrent && (!projectId || projects.isProjectVisible(projectId));
   const refresh = () => { if (current() && access.canRead) return query.refetch(); };
   return <Screen title={copy("Pull request’ler", "Pull requests")} scroll={false}>
-    <ScreenList data={items} query={query} refresh={refresh} keyExtractor={item => `${item.projectPath}:${item.repo}:${item.number}`}
+    <ScreenList data={items} query={query} refresh={refresh} actions={bounds.button}
+      subtitle={machine && scopeCurrent ? `${machine.name} · ${projectId ? projects.data?.find(project => project.id === projectId)?.name : copy("Tüm projeler", "All projects")}` : undefined}
+      keyExtractor={item => `${item.projectPath}:${item.repo}:${item.number}`}
       header={<Stack>
-        {machine && scopeCurrent ? <Row style={{ flexWrap: "nowrap", alignItems: "center", justifyContent: "space-between" }}>
-          <Body muted style={{ flexShrink: 1 }}>{machine.name} · {projectId ? projects.data?.find(project => project.id === projectId)?.name : copy("Tüm projeler", "All projects")}</Body>
-          {bounds.button}
-        </Row> : null}
         {bounds.panel}
         {visible ? <>
         <SegmentedControl label={copy("Durum", "State")} value={filters.state} onChange={state => setFilters(current => ({ ...current, state: state as PrFilters["state"] }))}

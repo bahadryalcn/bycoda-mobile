@@ -65,7 +65,8 @@ export function TaskCard({
   const moving = move.isPending && move.variables?.taskId === task.id;
   const admissionWait =
     task.status === "queued" && !task.needsInput ? task.modelRoutingWait : undefined;
-  const presentedStatus = admissionWait?.reason ? "waiting" : task.status;
+  // Desktop names a task that reached review "Completed" (success), never an open warning.
+  const presentedStatus = admissionWait?.reason ? "waiting" : task.status === "review" ? "finished" : task.status;
   const starting = start.isPending && start.variables?.taskId === task.id;
   const orderedHere = useRef(false);
   useEffect(() => {

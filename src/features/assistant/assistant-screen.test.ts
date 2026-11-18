@@ -9,6 +9,12 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { muted: "muted" }, uiStyles: { grow: {}, caption: {}, heading: {} } }) }));
 vi.mock("./assistant-call-controls", () => ({ AssistantCallButton: () => createElement("button", { "data-call": true }, "Voice call") }));
 vi.mock("./assistant-call-session", () => ({ endAssistantCall: vi.fn() }));
+vi.mock("./assistant-home-hero", () => ({
+  AssistantContextBadges: ({ machineName, scope }: { machineName: string; scope: string }) => createElement("span", null, `${machineName} ${scope}`),
+  AssistantHomeHero: ({ name, machineName, onOpen, onVoice, openDisabled, voiceDisabled }: { name: string; machineName: string; onOpen(): void; onVoice(): void; openDisabled: boolean; voiceDisabled: boolean }) => createElement("section", { "data-hero": name }, machineName,
+    createElement("button", { onClick: onOpen, disabled: openDisabled }, "Open conversation"),
+    createElement("button", { onClick: onVoice, disabled: voiceDisabled }, "Voice call")),
+}));
 vi.mock("./assistant-voice-screen", () => ({ AssistantVoiceScreen: ({ children, composer, feedback }: PropsWithChildren<{ composer: React.ReactNode; feedback?: React.ReactNode }>) => createElement("div", null, children, composer, createElement("aside", null, feedback)) }));
 vi.mock("./use-assistant-transcript", () => ({ useAssistantTranscript: () => ({ visible: false, toggle: vi.fn() }) }));
 vi.mock("./use-assistant-voice-entry", () => ({ useAssistantVoiceEntry: () => ({ pending: false, start: vi.fn(), cancel: vi.fn() }) }));

@@ -95,7 +95,7 @@ export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
           !canRead ? <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")} description={copy("Jira panolarına erişilemiyor. Bilgisayar ve proje bağlantısını kontrol edin.", "Jira board access is unavailable. Check the computer and project connection.")} /> : null}
         {readable ? <QueryState query={boards} empty={boards.isSuccess && !boards.data?.length} emptyIllustration="no-projects"
           emptyTitle={copy("Bilgisayarda etkin Jira panosu yok.", "No Jira boards are enabled on the computer.")} /> : null}
-        <CollectionToolbar field={<SelectField compact hideLabel={!!boardId} label={copy("Jira panosu", "Jira board")}
+        {readable ? <CollectionToolbar field={<SelectField compact hideLabel={!!boardId} label={copy("Jira panosu", "Jira board")}
           value={contentAvailable ? boardId : ""} disabled={!contentAvailable}
           onChange={(value) => {
             if (!canBrowse()) return;
@@ -112,9 +112,9 @@ export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
                   onPress: () => { void refresh(); } },
                 { key: "help", label: copy("Yardım", "Help"), onPress: () => setHelpOpen(true) },
               ]} />
-          </>} />
+          </>} /> : null}
         {boardId && contentAvailable ? <AppliedFilters result={[computerName, projectName, scope === "board" ? scopeLabel : null, pageSummary].filter(Boolean).join(" · ")}
-          filters={[scope !== "board" ? scopeLabel : false, selectedColumn?.name]} /> : <Body muted>{computerName}</Body>}
+          filters={[scope !== "board" ? scopeLabel : false, selectedColumn?.name]} /> : readable ? <Body muted>{computerName}</Body> : null}
         {boardId && contentAvailable && (scope !== "board" || column) ? <Button tone="quiet"
           label={copy("Filtreleri temizle", "Clear filters")} onPress={() => {
             if (!canBrowse()) return;

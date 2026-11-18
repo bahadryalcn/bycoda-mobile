@@ -1,5 +1,5 @@
 import { expect,it } from "vitest";
-import { toolPreviewPage,toolPreviewSource } from "./tool-preview-source";
+import { toolPreviewPage,toolPreviewRows,toolPreviewSource } from "./tool-preview-source";
 it("preserves all numbered diff lines beyond 300 and the complete original output",()=>{
  const source=toolPreviewSource({kind:"write",lines:Array.from({length:350},(_,i)=>({kind:i%2?"add":"del",number:i,text:"line "+i})),output:"\n\t output  \n"});
  expect(source.text).toContain("0 − line 0");expect(source.text).toContain("349 + line 349");expect(source.text.endsWith("\n\t output  \n")).toBe(true);
@@ -15,4 +15,10 @@ it("reconstructs Unicode and long partial lines exactly across every character p
 it("does not interpret output prefixes as diff colors or strip its source",()=>{
  const source=toolPreviewSource({kind:"shell",output:"+ plain output\n− still output\n"});expect(toolPreviewPage(source,0,12000)).toEqual([{kind:"output",text:source.text}]);
  expect(toolPreviewSource({kind:"read"})).toEqual({text:"",runs:[]});
+});
+it("splits pages into one row per line without a phantom row at kind boundaries",()=>{
+ const source=toolPreviewSource({kind:"write",lines:[{kind:"del",number:1,text:"a"},{kind:"add",number:1,text:"b"},{kind:"add",number:2,text:"c"}],output:"out"});
+ expect(toolPreviewRows(toolPreviewPage(source,0,12000))).toEqual([
+  {kind:"del",text:"1 − a"},{kind:"add",text:"1 + b"},{kind:"add",text:"2 + c"},{kind:"output",text:"out"},
+ ]);
 });

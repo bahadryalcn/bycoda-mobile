@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppState } from "react-native";
 import { router, type Href } from "expo-router";
-import { Button, NavigationGroup, NavigationRow, Notice, Stack } from "@/ui/primitives";
+import { NavigationGroup, NavigationRow, Notice, SettingIcon, Stack } from "@/ui/primitives";
+import BellRing from "lucide-react-native/icons/bell-ring";
+import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import { useCopy } from "@/ui/copy";
 import { HintSection } from "@/ui/info-hint";
 import { readDevicePermission } from "../../permissions/device-permissions";
@@ -75,18 +77,23 @@ export function PushSection() {
               <Notice tone="danger" message={copy("Bildirimler açılamadı. Yeniden dene.", "Notifications could not be turned on. Try again.")} />
             ) : null}
             {state === "read-error" ? <Notice tone="danger" message={copy("Bildirim izni okunamadı. Yeniden dene.", "Notification permission could not be read. Try again.")} /> : null}
-            <Button
+          </>
+        ) : null}
+        <NavigationGroup>
+          {available && device && state !== "on" ? (
+            // A command row keeps the page's list rhythm; a floating text button sat inset from the rows.
+            <NavigationRow
+              intent="command"
+              icon={<SettingIcon glyph={BellRing} />}
               label={state === "read-error" ? copy("Yenile", "Refresh") : state === "blocked" ? copy("Telefon ayarlarını aç", "Open phone settings") : copy("Bu telefonda bildirimleri aç", "Turn on notifications on this phone")}
-              tone="secondary"
               busy={state === "checking"}
               disabled={state === "checking"}
               onPress={() => void update(state !== "read-error")}
             />
-          </>
-        ) : null}
-        <NavigationGroup>
+          ) : null}
           <NavigationRow
             label={copy("Bildirim ayarları", "Notification settings")}
+            icon={<SettingIcon glyph={SlidersHorizontal} />}
             onPress={() => router.navigate("/account-notifications" as Href)}
           />
         </NavigationGroup>

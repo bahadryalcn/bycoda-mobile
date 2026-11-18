@@ -82,7 +82,7 @@ export function RecordCard({
     </Pressable>
   );
   return (
-    <Card style={{ gap: 0, paddingVertical: space.md, paddingHorizontal: 0,
+    <Card style={{ gap: 0, paddingVertical: space.md, paddingHorizontal: 0, borderWidth: 0,
       borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: space.xs }}>
         <RecordIdentity hint={hint} style={{ flexGrow: 1, flexShrink: 1, flexBasis: 160 * Math.max(1, fontScale), minWidth: "auto", maxWidth: "100%" }}>

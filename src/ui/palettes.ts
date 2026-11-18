@@ -252,3 +252,65 @@ export function deriveInfoTone(colors: MobileColors, mode: MobileThemeMode, defi
  */
 export const uniwindThemeName = (palette: PaletteId, mode: MobileThemeMode) =>
   palette === "classic" || palette === "material" ? mode : mode === "dark" ? `${palette}-dark` : palette;
+
+/** Desktop status hues (`src/shared/theme/palette.ts` danger/warning/success/info, Dark and Light). */
+export const STATUS_HUES = {
+  dark: { success: "#4ADE80", warning: "#FBBF24", danger: "#F87171", info: "#60A5FA" },
+  light: { success: "#15803D", warning: "#92400E", danger: "#B91C1C", info: "#1D4ED8" },
+} as const;
+export type StatusName = "success" | "warning" | "danger";
+
+/** `top` over `bottom` at `percent` (0-100) of `top`, as an opaque #RRGGBB string. */
+export function mixHex(top: string, bottom: string, percent: number): string {
+  const channel = (hex: string, offset: number) => parseInt(hex.slice(offset, offset + 2), 16);
+  const weight = clamp(percent, 0, 100) / 100;
+  return "#" + [1, 3, 5]
+    .map((offset) => Math.round(channel(top, offset) * weight + channel(bottom, offset) * (1 - weight)).toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
+}
+
+/**
+ * Desktop status ink (`--ui-tone-<tone>-fg`): the status hue mixed towards the content ink, 10% in light and
+ * `(darkLightness - 4) * 2.5` percent in dark so brighter canvases keep readable status text.
+ */
+export function statusInk(mode: MobileThemeMode, name: StatusName | "info", content: string, darkLightness: number) {
+  const strength = mode === "light" ? 10 : clamp((darkLightness - 4) * 2.5, 0, 50);
+  return mixHex(content, STATUS_HUES[mode][name], strength);
+}
+
+/** Chip tint and border of a status ink over opaque surfaces (desktop: 16% dark / 8% light fill, 60% border mix). */
+export function statusTone(ink: string, mode: MobileThemeMode, panel: string, border: string) {
+  return { text: ink, surface: mixHex(ink, panel, mode === "dark" ? 16 : 8), border: mixHex(ink, border, 60) };
+}
+
+/**
+ * Diff and merged tokens per mode, mirroring desktop `--color-diff-*` (emerald/rose markers, row tint 15%,
+ * gutter 25%, readable text) and the `feature` purple used for merged pull requests.
+ */
+export function diffColors(mode: MobileThemeMode, panel: string) {
+  const dark = mode === "dark";
+  const add = "#10B981";
+  const del = "#F43F5E";
+  const merged = dark ? "#C084FC" : "#7E22CE";
+  return {
+    diffAdd: add,
+    diffAddText: dark ? "#6EE7B7" : "#047857",
+    diffAddBg: mixHex(add, panel, 15),
+    diffAddGutter: mixHex(add, panel, 25),
+    diffDel: del,
+    diffDelText: dark ? "#FDA4AF" : "#BE123C",
+    diffDelBg: mixHex(del, panel, 15),
+    diffDelGutter: mixHex(del, panel, 25),
+    merged,
+    mergedSurface: mixHex(merged, panel, dark ? 16 : 8),
+  };
+}
+
+/** Status text and diff/merged tokens for a resolved palette, plus the matching tinted tones. */
+export function withDesktopStatus(colors: MobileColors, mode: MobileThemeMode, darkLightness: number) {
+  const ink = (name: StatusName) => statusInk(mode, name, colors.text, darkLightness);
+  const next = { ...colors, success: ink("success"), warning: ink("warning"), danger: ink("danger"), ...diffColors(mode, colors.panel) };
+  const tone = (name: StatusName) => statusTone(next[name], mode, colors.panel, colors.border);
+  return { colors: next, tones: { success: tone("success"), warning: tone("warning"), danger: tone("danger") } };
+}

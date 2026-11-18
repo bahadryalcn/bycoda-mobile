@@ -1,6 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useMemo, useState } from "react";
-import { ScrollView, Text } from "react-native";
+import { ScrollView, View } from "react-native";
 import { Body, Button, CodePanel, CodeText, ErrorText, Row, Sheet } from "@/ui/primitives";
 import { ScopedFilePreview } from "@/ui/message-text";
 import { mediaQueryKey, type MessageContext } from "@/ui/media-policy";
@@ -15,7 +15,7 @@ import { useChatAppearance } from "@/state/chat-appearance";
 import type { Block } from "./wire";
 import File from "lucide-react-native/icons/file";
 import { ChatSummary } from "@/ui/chat-controls";
-import { toolPreviewPage, toolPreviewSource } from "./tool-preview-source";
+import { toolPreviewPage, toolPreviewRows, toolPreviewSource } from "./tool-preview-source";
 
 type PreviewProps = { preview: NonNullable<Block["tool"]>["preview"]; status?: string; context?: MessageContext };
 type RecordedPreview = PreviewProps & { preview: NonNullable<PreviewProps["preview"]> };
@@ -55,7 +55,7 @@ function PreviewReader({ preview, status, context, name, onClose }: RecordedPrev
   const [file, setFile] = useState<{ path: string; context: MessageContext } | null>(null);
   const source = useMemo(() => toolPreviewSource(preview), [preview.lines, preview.output]);
   const pagination = useSourcePages(source.text);
-  const runs = useMemo(() => toolPreviewPage(source, pagination.page * SOURCE_PAGE_SIZE, (pagination.page + 1) * SOURCE_PAGE_SIZE), [source, pagination.page]);
+  const rows = useMemo(() => toolPreviewRows(toolPreviewPage(source, pagination.page * SOURCE_PAGE_SIZE, (pagination.page + 1) * SOURCE_PAGE_SIZE)), [source, pagination.page]);
   const flight = useSingleFlight<void>();
   const clipboard = useClipboardFeedback(source.text, !!source.text, flight);
   const pathCopy = useClipboardFeedback(preview.path ?? "", !!preview.path, flight);
@@ -74,7 +74,7 @@ function PreviewReader({ preview, status, context, name, onClose }: RecordedPrev
   </>}>
     <ScrollView key={pagination.page} contentContainerStyle={{ padding: space.sm, gap: space.sm }}>
     {preview.contentOnly ? <Body muted>{copy("Önceki sürüm kaydedilmemiş; yeni içerik gösteriliyor.", "The previous version was not recorded; showing new content.")}</Body> : null}
-      {source.text ? <CodePanel><CodeText style={text.code}>{runs.map((run, index) => <Text key={index} style={{ color: run.kind === "add" ? colors.success : run.kind === "del" ? colors.danger : colors.text }}>{run.text}</Text>)}</CodeText></CodePanel> : <Body muted>{copy("Henüz içerik yok", "No content yet")}</Body>}
+      {source.text ? <CodePanel>{rows.map((row, index) => <View key={index} style={{ backgroundColor: row.kind === "add" ? colors.diffAddBg : row.kind === "del" ? colors.diffDelBg : undefined, paddingHorizontal: space.sm }}><CodeText style={[text.code, { color: row.kind === "add" ? colors.diffAddText : row.kind === "del" ? colors.diffDelText : colors.text }]}>{row.text || " "}</CodeText></View>)}</CodePanel> : <Body muted>{copy("Henüz içerik yok", "No content yet")}</Body>}
     </ScrollView>
     {file ? <ScopedFilePreview path={file.path} context={file.context} onClose={() => setFile(null)} /> : null}
   </Sheet>;
