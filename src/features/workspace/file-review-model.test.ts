@@ -4,6 +4,8 @@ import {
   MAX_REVIEW_CHARACTERS,
   readPreservedFileDraft,
   reviewSource,
+  SELECTION_WINDOW_LINES,
+  selectionWindow,
 } from "./file-review-model";
 
 describe("read-only file inspection", () => {
@@ -119,5 +121,24 @@ describe("read-only file inspection", () => {
     expect(many.lines).toHaveLength(2000);
     expect(many.truncated).toBe(true);
     expect(text.length).toBe(MAX_REVIEW_CHARACTERS + 1);
+  });
+
+  it("counts columns per code point without splitting a surrogate pair", () => {
+    expect(reviewSource("😀😀").columns).toBe(4);
+    expect(reviewSource("a\tb").columns).toBe(10);
+    expect(reviewSource("").columns).toBe(1);
+  });
+
+  it("bounds the select-text window and pages through the whole reviewed source", () => {
+    const lines = reviewSource(Array.from({ length: 450 }, (_, index) => `l${index + 1}`).join("\n")).lines;
+    const first = selectionWindow(lines, 0);
+    expect(first).toMatchObject({ start: 0, end: SELECTION_WINDOW_LINES, previousStart: undefined, nextStart: SELECTION_WINDOW_LINES, firstNumber: 1, lastNumber: SELECTION_WINDOW_LINES });
+    expect(first.text.split("\n")).toHaveLength(SELECTION_WINDOW_LINES);
+    const last = selectionWindow(lines, 400);
+    expect(last).toMatchObject({ start: 400, end: 450, previousStart: 200, nextStart: undefined, lastNumber: 450 });
+    expect(selectionWindow(lines, 9999).start).toBe(449);
+    expect(selectionWindow(lines, -5).start).toBe(0);
+    expect(selectionWindow(lines, Number.NaN).start).toBe(0);
+    expect(selectionWindow([], 3)).toMatchObject({ start: 0, end: 0, text: "", firstNumber: undefined });
   });
 });

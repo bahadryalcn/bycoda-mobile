@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { FileReview } from "./file-review";
 
-const state = vi.hoisted(() => ({ machine: { id: "machine-a" }, text: "const answer = 42;\n", draft: { expected: "before", content: "preserved local work" } as { expected: string; content: string } | null, active: true, methods: [] as string[] }));
+const state = vi.hoisted(() => ({ machine: { id: "machine-a" }, text: "const answer = 42;\n", draft: { expected: "before", content: "preserved local work" } as { expected: string; content: string } | null, active: true, methods: [] as string[], lists: [] as { initialScrollIndex?: number; onScroll?: (event: unknown) => void }[] }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => state.machine }));
 vi.mock("@/state/queries", () => ({
   useHostClient: () => ({ request: vi.fn() }), useHostReadActive: () => state.active,
@@ -18,11 +18,12 @@ vi.mock("react-native", () => ({
   BackHandler: {}, useWindowDimensions: () => ({ width: 320 }),
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
   ScrollView: ({ children }: PropsWithChildren) => createElement("div", null, children),
-  FlatList: ({ data, renderItem }: { data: { number: number; text: string }[]; renderItem: (value: { item: { number: number; text: string } }) => unknown }) => createElement("div", null, data.map((item) => createElement("div", { key: item.number }, renderItem({ item }) as import("react").ReactNode))),
+  FlatList: ({ data, renderItem, initialScrollIndex, onScroll }: { data: { number: number; text: string }[]; renderItem: (value: { item: { number: number; text: string } }) => unknown; initialScrollIndex?: number; onScroll?: (event: unknown) => void }) => { state.lists.push({ initialScrollIndex, onScroll }); return createElement("div", { "data-list": true }, data.map((item) => createElement("div", { key: item.number }, renderItem({ item }) as import("react").ReactNode))); },
 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: { mono: { fontSize: 13, lineHeight: 20 } } }) }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, space: { screen: 16 } }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { mono: { fontSize: 13, lineHeight: 20 } } }));
+vi.mock("@/i18n", () => ({ useLocale: () => "de" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, params?: Record<string, string | number>) => en.replace(/\{(\w+)\}/g, (match, key: string) => String(params?.[key] ?? match)) }));
 vi.mock("@/ui/document-preview", () => ({
   DocumentPreview: ({ text }: { text: string }) => createElement("article", null, text),
@@ -44,7 +45,7 @@ async function render(path = "src/example.ts", initialLine?: number) {
   root ??= createRoot(container);
   await act(async () => root.render(createElement(FileReview, { projectId: "project", cwd: "/checkout", path, onBack, initialLine })));
 }
-afterEach(async () => { await act(async () => root?.unmount()); state.machine = { id: "machine-a" }; state.text = "const answer = 42;\n"; state.draft = { expected: "before", content: "preserved local work" }; state.active = true; state.methods = []; vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root?.unmount()); state.machine = { id: "machine-a" }; state.text = "const answer = 42;\n"; state.draft = { expected: "before", content: "preserved local work" }; state.active = true; state.methods = []; state.lists = []; vi.unstubAllGlobals(); });
 
 it("opens computer source read-only while preserving a separately labeled local draft", async () => {
   root = createRoot(container); await render();
@@ -115,6 +116,22 @@ it("offers one selectable multiline source without numbers and keeps drafts read
 });
 
 
+it("formats the search line number in the locale and keeps Line view selection across window changes", async () => {
+  root = createRoot(container);
+  state.draft = null;
+  state.text = Array.from({ length: 1300 }, (_, index) => `line-${index + 1}`).join("\n");
+  await render("src/example.ts", 1200);
+  expect(container.textContent).toContain("Search result: line 1.200.");
+  const click = async (label: string) => act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === label)!.click();
+  });
+  await click("Select text");
+  expect(container.textContent).toContain("Line view");
+  await click("Show file beginning");
+  expect(container.textContent).toContain("Line view");
+  expect(container.querySelector('[data-code][data-selectable="true"]')).not.toBeNull();
+});
+
 it("distinguishes search context from a real preview limit through both source windows", async () => {
   root = createRoot(container);
   state.draft = null;
@@ -135,4 +152,30 @@ it("distinguishes search context from a real preview limit through both source w
   await render("src/example.ts", 6);
   expect(container.textContent).toContain("Preview limit reached.");
   expect(state.methods.every((method) => method === "files.read")).toBe(true);
+});
+
+it("mounts only the active source presentation and resumes the line list where selection began", async () => {
+  root = createRoot(container);
+  state.draft = null;
+  state.text = Array.from({ length: 500 }, (_, index) => `line-${index + 1}`).join("\n");
+  await render();
+  const click = async (label: string) => act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === label)!.click();
+  });
+  expect(container.querySelector("[data-list]")).not.toBeNull();
+  expect(container.querySelector('[data-code][data-selectable="true"]')).toBeNull();
+  // Scroll 20 rows (mock row height 20) before switching presentation.
+  await act(async () => state.lists.at(-1)!.onScroll!({ nativeEvent: { contentOffset: { y: 400 } } }));
+  await click("Select text");
+  expect(container.querySelector("[data-list]")).toBeNull();
+  const selectable = () => container.querySelector('[data-code][data-selectable="true"]')!;
+  expect(selectable().textContent!.split("\n")).toHaveLength(200);
+  expect(selectable().textContent!.startsWith("line-21\n")).toBe(true);
+  expect(container.textContent).toContain("Lines 21–220");
+  await click("Next lines");
+  expect(selectable().textContent!.startsWith("line-221\n")).toBe(true);
+  await click("Line view");
+  expect(container.querySelector('[data-code][data-selectable="true"]')).toBeNull();
+  expect(container.querySelector("[data-list]")).not.toBeNull();
+  expect(state.lists.at(-1)!.initialScrollIndex).toBe(220);
 });

@@ -1,4 +1,7 @@
 {
+  "Lines {p0}–{p1}": "第 {p0}–{p1} 行",
+  "Next lines": "下一组行",
+  "Previous lines": "上一组行",
   "Shared content will be added to the draft ({p0} files).": "共享内容将添加到草稿（{p0} 个文件）。",
   "Create \"{p0}\" and switch to it?": "创建“{p0}”并切换到该分支？",
   "{p0} commits and {p1} files will be merged into {p2}.": "将把 {p0} 个提交和 {p1} 个文件合并到 {p2}。",

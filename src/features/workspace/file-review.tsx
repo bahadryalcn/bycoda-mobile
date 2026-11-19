@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FlatList, ScrollView, View, useWindowDimensions } from "react-native";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import { useIsFocused } from "expo-router/react-navigation";
@@ -23,6 +23,7 @@ import {
 } from "@/ui/primitives";
 import { DocumentPreview, ProjectMedia } from "@/ui/document-preview";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import type { FileEditorProps } from "./file-editor-types";
@@ -32,6 +33,7 @@ import {
   MAX_REVIEW_CHARACTERS,
   readPreservedFileDraft,
   reviewSource,
+  selectionWindow,
 } from "./file-review-model";
 
 /** Normal mobile file navigation is an inspector. Legacy editor/draft owners remain intact. */
@@ -200,13 +202,38 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
 export function FileSource({ text, initialLine }: { text: string; initialLine?: number }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const numbers = new Intl.NumberFormat(useLocale());
   const { width } = useWindowDimensions();
   const [atResult, setAtResult] = useState(true);
   const [selecting, setSelecting] = useState(false);
+  // Line index the selection window starts at, and the row the line list resumes from.
+  const [selectionStart, setSelectionStart] = useState(0);
+  const [resumeIndex, setResumeIndex] = useState(0);
+  // Updated from list scroll events without re-rendering; read when switching presentation.
+  const topIndex = useRef(0);
   const source = useMemo(
     () => reviewSource(text, atResult ? initialLine : undefined),
     [text, initialLine, atResult],
   );
+  const selection = selectionWindow(source.lines, selectionStart);
+  const lineHeight = uiStyles.mono.lineHeight;
+  const toggleSelecting = () => {
+    if (selecting) {
+      // Resume the line list where the selection window began (it was unmounted meanwhile).
+      topIndex.current = selection.start;
+      setResumeIndex(selection.start);
+    } else {
+      setSelectionStart(topIndex.current);
+    }
+    setSelecting(!selecting);
+  };
+  const toggleResult = () => {
+    // A different source window renumbers rows: restart both presentations at its top.
+    topIndex.current = 0;
+    setSelectionStart(0);
+    setResumeIndex(0);
+    setAtResult(!atResult);
+  };
   const contentWidth = Math.max(
     width - space.screen * 2,
     source.columns * uiStyles.mono.fontSize * 0.65 + 64,
@@ -218,7 +245,7 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
           {copy(
             "Arama sonucu: {p0}. satır. Dosya içeriği değişmiş olabilir.",
             "Search result: line {p0}. File contents may have changed.",
-            { p0: source.targetLine },
+            { p0: numbers.format(source.targetLine) },
           )}
         </Body>
       ) : null}
@@ -240,14 +267,28 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
                 ? copy("Dosyanın başını göster", "Show file beginning")
                 : copy("Arama sonucuna dön", "Back to search result")
             }
-            onPress={() => setAtResult(!atResult)}
+            onPress={toggleResult}
           />
         ) : null}
         <Button
           tone="quiet" flush
           label={selecting ? copy("Satır görünümü", "Line view") : copy("Metin seç", "Select text")}
-          onPress={() => setSelecting(!selecting)}
+          onPress={toggleSelecting}
         />
+        {selecting && selection.previousStart !== undefined ? (
+          <Button
+            tone="quiet" flush
+            label={copy("Önceki satırlar", "Previous lines")}
+            onPress={() => setSelectionStart(selection.previousStart!)}
+          />
+        ) : null}
+        {selecting && selection.nextStart !== undefined ? (
+          <Button
+            tone="quiet" flush
+            label={copy("Sonraki satırlar", "Next lines")}
+            onPress={() => setSelectionStart(selection.nextStart!)}
+          />
+        ) : null}
       </Row>
       {source.truncated ? (
         <Body muted style={{ paddingHorizontal: space.screen }}>
@@ -258,15 +299,25 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
         </Body>
       ) : null}
       {selecting ? (
-        <ScrollView key={atResult ? "selection-result" : "selection-beginning"} style={{ flex: 1 }}>
-          {/* One native text owner lets selection handles cross newlines. Keep line
-              numbers out of copied text and retain the same bounded source window. */}
-          <CodeText selectable style={{ paddingHorizontal: space.screen }}>
-            {source.lines.map((line) => line.text).join("\n")}
-          </CodeText>
-        </ScrollView>
-      ) : null}
-      <ScrollView horizontal style={{ flex: 1, display: selecting ? "none" : "flex" }} contentContainerStyle={{ flexGrow: 1 }}>
+        <>
+          {selection.firstNumber !== undefined ? (
+            <Body muted style={{ paddingHorizontal: space.screen }}>
+              {copy("Satır {p0}–{p1}", "Lines {p0}–{p1}", {
+                p0: numbers.format(selection.firstNumber),
+                p1: numbers.format(selection.lastNumber!),
+              })}
+            </Body>
+          ) : null}
+          <ScrollView key={`${atResult ? "selection-result" : "selection-beginning"}:${selection.start}`} style={{ flex: 1 }}>
+            {/* One native text owner lets selection handles cross newlines. Keep line
+                numbers out of copied text; only one bounded window is mounted. */}
+            <CodeText selectable style={{ paddingHorizontal: space.screen }}>
+              {selection.text}
+            </CodeText>
+          </ScrollView>
+        </>
+      ) : (
+      <ScrollView horizontal style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
         <FlatList
           key={atResult ? "result" : "beginning"}
           data={source.lines}
@@ -275,6 +326,14 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
           initialNumToRender={30}
           maxToRenderPerBatch={30}
           windowSize={7}
+          // Rows are single-line with a fixed height, so offsets are exact and the list
+          // can resume at the row the selection window left off.
+          getItemLayout={(_, index) => ({ length: lineHeight, offset: lineHeight * index, index })}
+          initialScrollIndex={Math.min(resumeIndex, Math.max(0, source.lines.length - 1))}
+          scrollEventThrottle={100}
+          onScroll={(event) => {
+            topIndex.current = Math.max(0, Math.floor(event.nativeEvent.contentOffset.y / lineHeight));
+          }}
           renderItem={({ item }) => (
             <View
               style={{
@@ -294,11 +353,14 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
               >
                 {item.number}
               </CodeText>
-              <CodeText style={{ flexShrink: 0 }}>{item.text || " "}</CodeText>
+              <CodeText selectable={false} style={{ flexShrink: 0 }}>
+                {item.text || " "}
+              </CodeText>
             </View>
           )}
         />
       </ScrollView>
+      )}
     </View>
   );
 }

@@ -1,4 +1,7 @@
 {
+  "Lines {p0}–{p1}": "Lines {p0}–{p1}",
+  "Next lines": "Next lines",
+  "Previous lines": "Previous lines",
   "Shared content will be added to the draft ({p0} files).": "Shared content will be added to the draft ({p0} files).",
   "Create \"{p0}\" and switch to it?": "Create \"{p0}\" and switch to it?",
   "{p0} commits and {p1} files will be merged into {p2}.": "{p0} commits and {p1} files will be merged into {p2}.",

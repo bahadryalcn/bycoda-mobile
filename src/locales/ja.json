@@ -1,4 +1,7 @@
 {
+  "Lines {p0}–{p1}": "{p0}～{p1} 行",
+  "Next lines": "次の行",
+  "Previous lines": "前の行",
   "Shared content will be added to the draft ({p0} files).": "共有内容を下書きに追加します（{p0}ファイル）。",
   "Create \"{p0}\" and switch to it?": "「{p0}」を作成して切り替えますか？",
   "{p0} commits and {p1} files will be merged into {p2}.": "{p0}件のコミットと{p1}個のファイルを{p2}にマージします。",

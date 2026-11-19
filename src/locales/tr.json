@@ -1,4 +1,7 @@
 {
+  "Lines {p0}–{p1}": "Satır {p0}–{p1}",
+  "Next lines": "Sonraki satırlar",
+  "Previous lines": "Önceki satırlar",
   "Shared content will be added to the draft ({p0} files).": "Paylaşılan içerik taslağa eklenecek ({p0} dosya).",
   "Create \"{p0}\" and switch to it?": "\"{p0}\" dalı oluşturulup bu dala geçilsin mi?",
   "{p0} commits and {p1} files will be merged into {p2}.": "{p0} commit, {p1} dosya {p2} dalına birleştirilecek.",

@@ -46,15 +46,41 @@ export function reviewSource(text: string, requestedLine?: number) {
     characters: text.length,
     targetLine: targetAvailable ? requestedLine : undefined,
     locationUnavailable: requestedLine !== undefined && !targetAvailable,
-    columns: Math.max(
-      1,
-      ...lines.map((line) =>
-        Array.from(line.text).reduce(
-          (count, character) =>
-            count + (character === "\t" ? 8 : character.codePointAt(0)! > 0xff ? 2 : 1),
-          0,
-        ),
-      ),
-    ),
+    columns: Math.max(1, ...lines.map((line) => lineColumns(line.text))),
+  };
+}
+
+/** Tab = 8, wide code point = 2, other = 1; scans code units so a huge file allocates no per-character arrays. */
+function lineColumns(text: string) {
+  let count = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const unit = text.charCodeAt(index);
+    // A low surrogate completes a code point the preceding high surrogate already counted.
+    if (unit >= 0xdc00 && unit <= 0xdfff && index > 0) {
+      const previous = text.charCodeAt(index - 1);
+      if (previous >= 0xd800 && previous <= 0xdbff) continue;
+    }
+    count += unit === 9 ? 8 : unit > 0xff ? 2 : 1;
+  }
+  return count;
+}
+
+export const SELECTION_WINDOW_LINES = 200;
+
+/** Select-text view renders one bounded window of the reviewed lines, never the whole preview. */
+export function selectionWindow(lines: { number: number; text: string }[], requestedStart: number) {
+  const start = Math.min(
+    Math.max(0, Number.isSafeInteger(requestedStart) ? requestedStart : 0),
+    Math.max(0, lines.length - 1),
+  );
+  const end = Math.min(lines.length, start + SELECTION_WINDOW_LINES);
+  return {
+    start,
+    end,
+    previousStart: start > 0 ? Math.max(0, start - SELECTION_WINDOW_LINES) : undefined,
+    nextStart: end < lines.length ? end : undefined,
+    firstNumber: lines[start]?.number,
+    lastNumber: lines[end - 1]?.number,
+    text: lines.slice(start, end).map((line) => line.text).join("\n"),
   };
 }
