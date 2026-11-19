@@ -45,12 +45,19 @@ export function SessionActivityBar({ activity, device, browser, onAgents, onDevi
     <View style={{ flexDirection: "row", alignItems: "center", minHeight: metrics.touchTarget, flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0,
       borderRadius: radii.card, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.separator, paddingLeft: space.md, gap: space.row }}>
       {label ? (
-        <View accessible accessibilityLabel={[label, elapsed].filter(Boolean).join(" ")} accessibilityLiveRegion="polite"
-          style={{ flexDirection: "row", alignItems: "center", gap: space.row, flexShrink: 0, maxWidth: "55%" }}>
-          {busy ? <Spinner size="sm" color={colors.info} trackColor={colors.tertiary} /> : <View style={{ width: 8, height: 8, borderRadius: radii.pill, backgroundColor: dot }} />}
-          <Body style={{ flexShrink: 1, fontSize: fontSize.control, lineHeight: lineHeight.control, fontVariant: ["tabular-nums"] }}>
-            {[label, elapsed].filter(Boolean).join(" ")}
-          </Body>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.row, flexShrink: 0, maxWidth: "55%" }}>
+          {/* Only the state is a live region: the timer changes every second and must not be re-announced. */}
+          <View accessible accessibilityLabel={label} accessibilityLiveRegion="polite"
+            style={{ flexDirection: "row", alignItems: "center", gap: space.row, flexShrink: 1 }}>
+            {busy ? <Spinner size="sm" color={colors.info} trackColor={colors.tertiary} /> : <View style={{ width: 8, height: 8, borderRadius: radii.pill, backgroundColor: dot }} />}
+            <Body style={{ flexShrink: 1, fontSize: fontSize.control, lineHeight: lineHeight.control }}>{label}</Body>
+          </View>
+          {/* Read on demand when focused; never announced on its own. */}
+          {elapsed ? (
+            <View accessible accessibilityRole="timer" accessibilityLabel={elapsed} accessibilityLiveRegion="none" style={{ flexShrink: 0 }}>
+              <Body style={{ fontSize: fontSize.control, lineHeight: lineHeight.control, fontVariant: ["tabular-nums"] }}>{elapsed}</Body>
+            </View>
+          ) : null}
         </View>
       ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}
