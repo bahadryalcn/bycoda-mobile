@@ -27,6 +27,11 @@ export function movePaletteSelection(index: number, count: number, direction: -1
   return (index + direction + count) % count;
 }
 
+/** "No matches" only once the activity read has settled without an error; loading and failure own the empty state otherwise. */
+export function showsNoMatches(state: { pending: boolean; error: unknown }): boolean {
+  return !state.pending && !state.error;
+}
+
 export type ShortcutId = "palette" | "search" | "new" | "back" | "tabs" | "settings" | "shortcuts" | "close";
 export const SHORTCUTS: readonly { id: ShortcutId; keys: string }[] = [
   { id: "palette", keys: "⌘K" },

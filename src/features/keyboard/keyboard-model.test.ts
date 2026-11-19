@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { activeCommands } from "../../../modules/bycoda-key-commands/src/commands";
-import { movePaletteSelection, searchPalette, SHORTCUTS, TAB_ROUTES, type PaletteEntry } from "./keyboard-model";
+import { movePaletteSelection, searchPalette, showsNoMatches, SHORTCUTS, TAB_ROUTES, type PaletteEntry } from "./keyboard-model";
 
 const entries: PaletteEntry[] = [
   { id: "a", label: "Project Apollo", detail: "Work computer", kind: "project", destination: { pathname: "/project/[id]", params: { id: "a", machineId: "host" } } },
@@ -35,6 +35,17 @@ it("modal chords override editors; Shift and primary remain separate; disabled r
   expect(activeCommands([base, modal, primary, shifted, { ...base, id: "off", priority: 200, enabled: false }])).toEqual([modal, primary, shifted]);
   expect(activeCommands([modal, base])[0]).toEqual(modal);
   expect(activeCommands([base, { ...base, id: "latest" }])[0]?.id).toBe("latest");
+});
+
+describe("palette empty state (#430)", () => {
+  it("never shows 'No matches' alongside loading or a failed read", () => {
+    expect(showsNoMatches({ pending: true, error: undefined })).toBe(false);
+    expect(showsNoMatches({ pending: false, error: new Error("offline") })).toBe(false);
+    expect(showsNoMatches({ pending: true, error: new Error("offline") })).toBe(false);
+  });
+  it("shows 'No matches' only once the read settled cleanly", () => {
+    expect(showsNoMatches({ pending: false, error: undefined })).toBe(true);
+  });
 });
 
 describe("SHORTCUTS", () => {

@@ -11,7 +11,7 @@ import { useProjectActivity } from "@/features/workspace/use-project-activity";
 import { listedSession } from "@/features/workspace/session-collection";
 import { useKeyCommand } from "../../../modules/bycoda-key-commands";
 import { appCommands } from "./command-model";
-import { movePaletteSelection, searchPalette, type PaletteEntry } from "./keyboard-model";
+import { movePaletteSelection, searchPalette, showsNoMatches, type PaletteEntry } from "./keyboard-model";
 
 export function CommandPalette({ onClose }: { onClose(): void }) {
   const copy = useCopy();
@@ -65,7 +65,7 @@ export function CommandPalette({ onClose }: { onClose(): void }) {
           <ErrorText error={activity.error} />
           {activity.error ? <Button label={copy("Yeniden dene", "Retry")} onPress={() => { void activity.refetch().catch(() => {}); }} /> : null}
         </>}
-        ListEmptyComponent={<Body muted>{copy("Eşleşme yok", "No matches")}</Body>}
+        ListEmptyComponent={showsNoMatches(activity) ? <Body muted>{copy("Eşleşme yok", "No matches")}</Body> : undefined}
         onScrollToIndexFailed={({ index, averageItemLength }) => list.current?.scrollToOffset({ offset: index * averageItemLength, animated: false })}
         renderItem={({ item, index }) => <NavigationRow label={item.label} detail={item.detail} selected={index === current} onPress={() => choose(item)} />} />
     </View>
