@@ -8,10 +8,11 @@ import { materialYouAvailable } from "@/ui/palettes";
 
 const RING = 2;
 const STRIP_HEIGHT = 20;
+const COLUMNS = 3;
 const layout = {
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
   card: {
-    // Each row owns exactly three equal columns, including narrow sheets.
+    // Each row owns exactly COLUMNS equal columns, including narrow sheets.
     flex: 1,
     minWidth: 0,
     minHeight: metrics.touchTarget,
@@ -25,6 +26,8 @@ const layout = {
   },
   strip: { flexDirection: "row", height: STRIP_HEIGHT, borderRadius: radii.badge, overflow: "hidden", borderCurve: "continuous" },
   swatch: { flex: 1 },
+  // Invisible filler for a short last row, so its card keeps the same column width as the rest.
+  spacer: { flex: 1, minWidth: 0 },
 } satisfies Record<string, ViewStyle>;
 
 type Props = {
@@ -41,7 +44,7 @@ const SYSTEM_SWATCHES = [
   "@android:color/system_accent1_500",
 ];
 
-/** Palette cards in rows of three equal-width choices; Material You appears only on Android 12+. */
+/** Palette cards in rows of three equal-width columns; Material You appears only on Android 12+. */
 export function PalettePicker({ value, disabled, onChange }: Props) {
   const copy = useCopy();
   const { mode, colors } = useMobileTheme();
@@ -50,7 +53,7 @@ export function PalettePicker({ value, disabled, onChange }: Props) {
   // An unavailable Material You choice (synced from another device) shows the classic card as selected.
   const selectedId = value === "material" && !materialAvailable ? DEFAULT_PALETTE : value;
   const rows: (typeof options)[] = [];
-  for (let start = 0; start < options.length; start += 3) rows.push(options.slice(start, start + 3));
+  for (let start = 0; start < options.length; start += COLUMNS) rows.push(options.slice(start, start + COLUMNS));
   return (
     <Stack>
     <View accessibilityRole="radiogroup" accessibilityLabel={copy("Renk paleti", "Color palette")} style={layout.grid}>
@@ -81,6 +84,9 @@ export function PalettePicker({ value, disabled, onChange }: Props) {
           </PressableCard>
         );
       })}
+        {Array.from({ length: COLUMNS - row.length }, (_, index) => (
+          <View key={`spacer-${index}`} testID="palette-picker-spacer" style={layout.spacer} />
+        ))}
       </View>)}
     </View>
     </Stack>
