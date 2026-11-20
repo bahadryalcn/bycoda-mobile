@@ -3,6 +3,8 @@ import { matchesSearch } from "./search-matching";
 export type SelectionOption<T extends string = string> = {
   value: T;
   label: string;
+  /** Consecutive options with this label share a visible heading. */
+  group?: string;
   detail?: string;
   disabled?: boolean;
 };
@@ -18,7 +20,7 @@ export function filterSelection<T extends SelectionOption>(
   locale?: string,
 ) {
   return options.filter((option) =>
-    matchesSearch(`${option.label} ${option.detail ?? ""}`, search, locale),
+    matchesSearch(`${option.group ?? ""} ${option.label} ${option.detail ?? ""}`, search, locale),
   );
 }
 

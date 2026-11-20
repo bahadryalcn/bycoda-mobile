@@ -1,4 +1,12 @@
 {
+  "End this call to change the conversation scope.": "结束此次通话后即可更改对话范围。",
+  "Could not save the model. Refresh and try again.": "无法保存模型。请刷新后重试。",
+  "Could not save voice settings.": "无法保存语音设置。",
+  "ElevenLabs voice ID": "ElevenLabs 音色 ID",
+  "Needs setup on the computer": "需要在电脑上设置",
+  "On the computer": "在电脑上",
+  "Reply model": "回复模型",
+  "Transcription model": "转写模型",
   "Preview on this phone": "在此手机上预览",
   "Open in Host Browser": "在主机浏览器中打开",
   "Forward": "前进",

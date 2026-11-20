@@ -27,10 +27,13 @@ export function sessionCatalog(catalog: HostModelCatalog | undefined, providers:
 /** Human-readable queue identity; original model targets remain untouched. */
 export function sessionModelLabel(target?: { harness: RemoteProvider; model: string }): string {
   if (!target) return "";
+  return [providerName(target.harness), sessionModelName(target)].filter(Boolean).join(" · ");
+}
+
+export function sessionModelName(target: { harness: RemoteProvider; model: string }): string {
   const model = sessionModel(sessionCatalog(undefined, [target.harness]), target.harness, target.model);
   const prefix = `${target.harness}:`;
-  const name = model?.name ?? (target.model.startsWith(prefix) ? target.model.slice(prefix.length) : target.model);
-  return [providerName(target.harness), name].filter(Boolean).join(" · ");
+  return model?.name ?? (target.model.startsWith(prefix) ? target.model.slice(prefix.length) : target.model);
 }
 
 /** Custom IDs must never inherit another model's settings. */

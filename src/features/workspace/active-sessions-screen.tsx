@@ -129,7 +129,7 @@ export function ActiveSessionsScreen({
   );
   const visible = filterProjectSessionDirectory(activity.projects.data ?? [], filtered, search);
   // Desktop Last sessions shows the last seven days; archive, search and a Time filter reach older sessions.
-  const windowed = overview && !snoozed && !archived && !search.trim() && listFilters.time === "all";
+  const windowed = overview && !snoozed && !archived && !search.trim() && listFilters.time === "recent";
   const rows: GlobalSessionRow[] = overview
     ? (urgency ? urgencyGlobalSessionRows : recentGlobalSessionRows)(visible, windowed ? now : undefined)
     : globalSessionRows(visible, folderCollapse, collapsed, !!search.trim(), false, settledIds, { doneIds, now });
@@ -144,6 +144,7 @@ export function ActiveSessionsScreen({
   ];
   const statusLabel = statusOptions.find((option) => option.value === filter)?.label;
   const timeLabels: Record<SessionTimeFilter, string> = {
+    recent: copy("Son oturumlar", "Recent sessions"),
     all: copy("Tüm zamanlar", "All time"),
     today: copy("Bugün", "Today"),
     "7d": copy("Son 7 gün", "Last 7 days"),
@@ -162,7 +163,7 @@ export function ActiveSessionsScreen({
     listFilters.hiddenProviders.length > 0 &&
       `${copy("Sağlayıcı", "Provider")}: ${shownProviders.map(providerName).join(", ") || "–"}`,
     listFilters.managed && managedLabel,
-    listFilters.time !== "all" && `${copy("Zaman", "Time")}: ${timeLabels[listFilters.time]}`,
+    listFilters.time !== "recent" && `${copy("Zaman", "Time")}: ${timeLabels[listFilters.time]}`,
   ];
   const waitingForConnection = !visible.length && !activity.error && (activity.privacyUnavailable || activity.readiness === "waiting");
   if (!hydrated || storageError || (!machine && connectionPending))
@@ -211,6 +212,7 @@ export function ActiveSessionsScreen({
   };
   const showEmpty = activity.directoryReady && !rows.length;
   const canCreate = overview && !!projectOptions.length && !activity.privacyPending;
+  const olderSessions = windowed && visible.length > 0;
   const emptyState = waitingForConnection ? (
     <ProjectDirectoryFeedback query={listQuery} readiness={activity.readiness} privacyUnavailable={activity.privacyUnavailable} />
   ) : queryOwnsRegion(listQuery) ? (
@@ -231,11 +233,14 @@ export function ActiveSessionsScreen({
         illustration="no-sessions"
         title={!overview
           ? copy("Aktif oturum yok", "No active sessions")
-          : visible.length
+            : olderSessions
             ? copy("Son 7 günde oturum yok", "No sessions in the last 7 days")
             : copy("Henüz oturum yok.", "No sessions yet.")}
-        description={canCreate ? copy("Bir proje seçip ilk oturumunu başlat.", "Pick a project and start your first session.") : undefined}
-        action={canCreate ? { label: copy("Yeni oturum", "New session"), onPress: () => setCreating(true) } : undefined}
+        description={canCreate && !olderSessions ? copy("Bir proje seçip ilk oturumunu başlat.", "Pick a project and start your first session.") : undefined}
+        action={olderSessions ? {
+          label: timeLabels.all,
+          onPress: () => setListFilters({ ...listFilters, time: "all" }),
+        } : canCreate ? { label: copy("Yeni oturum", "New session"), onPress: () => setCreating(true) } : undefined}
       />
     )
   ) : null;

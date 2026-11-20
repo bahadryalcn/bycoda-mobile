@@ -1,4 +1,12 @@
 {
+  "End this call to change the conversation scope.": "End this call to change the conversation scope.",
+  "Could not save the model. Refresh and try again.": "Could not save the model. Refresh and try again.",
+  "Could not save voice settings.": "Could not save voice settings.",
+  "ElevenLabs voice ID": "ElevenLabs voice ID",
+  "Needs setup on the computer": "Needs setup on the computer",
+  "On the computer": "On the computer",
+  "Reply model": "Reply model",
+  "Transcription model": "Transcription model",
   "Preview on this phone": "Preview on this phone",
   "Open in Host Browser": "Open in Host Browser",
   "Forward": "Forward",

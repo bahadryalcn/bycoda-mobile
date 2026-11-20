@@ -53,7 +53,7 @@ export function useProviderAccountDelivery(
         kind: "rename",
         label: context.account.label,
         color: context.account.color,
-        accountKind: context.account.kind ?? null,
+        accountKind: context.account.kind ?? "personal",
       });
   }, [draft.ready]);
   const current = () => {

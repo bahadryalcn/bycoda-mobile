@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import Animated, { FadeIn, FadeInDown, ReduceMotion, useSharedValue } from "react-native-reanimated";
+import { stillMotion } from "./motion";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OnboardingPager, PageDots, type OnboardingPage } from "./onboarding-pager";
@@ -29,6 +30,9 @@ export function OnboardingShell({ pages, hidePages = false, top, children }: {
   const { colors } = useMobileTheme();
   const insets = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();
+  // With Android "Remove animations" a delayed entering animation never ran and left the sign-in panel
+  // invisible, so the first screen had no way in. Reduced motion mounts the views without one.
+  const still = stillMotion;
   const offset = useSharedValue(0);
   const [index, setIndex] = useState(0);
   const [panelHeight, setPanelHeight] = useState(0);
@@ -47,19 +51,19 @@ export function OnboardingShell({ pages, hidePages = false, top, children }: {
   return <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: colors.background }}>
     <DotField offset={offset} pulse={index} />
     {showPages
-      ? <Animated.View entering={FadeIn.duration(700).reduceMotion(ReduceMotion.System)} style={StyleSheet.absoluteFill}>
+      ? <Animated.View entering={still ? undefined : FadeIn.duration(700).reduceMotion(ReduceMotion.System)} style={StyleSheet.absoluteFill}>
         <OnboardingPager pages={pages} index={index} offset={offset} onIndexChange={setIndex}
           top={topHeight + space.lg} bottomClearance={panelHeight + space.xl} />
       </Animated.View>
       : null}
-    <Animated.View entering={FadeInDown.duration(600).delay(150).reduceMotion(ReduceMotion.System)}
+    <Animated.View entering={still ? undefined : FadeInDown.duration(600).delay(150).reduceMotion(ReduceMotion.System)}
       onLayout={({ nativeEvent }) => setTopHeight(nativeEvent.layout.height)}
       pointerEvents="box-none" style={{ paddingTop: insets.top + space.lg, ...sideInsets }}>
       {top}
     </Animated.View>
     <View pointerEvents="none" style={{ flex: 1 }} onLayout={({ nativeEvent }) => setFreeHeight(nativeEvent.layout.height)} />
     <Animated.View
-      entering={FadeInDown.duration(600).delay(300).reduceMotion(ReduceMotion.System)}
+      entering={still ? undefined : FadeInDown.duration(600).delay(300).reduceMotion(ReduceMotion.System)}
       onLayout={({ nativeEvent }) => setPanelHeight(nativeEvent.layout.height)}
       // flexShrink: a tall panel gives way to the keyboard and short screens; a scrolling child inside it owns the overflow.
       style={{ width: "100%", maxWidth: metrics.entryWidth, alignSelf: "center", gap: space.lg, flexShrink: 1,

@@ -179,9 +179,8 @@ export function ProviderAccountEditor({
                 ) : value.kind === "accountKind" ? (
                   <SelectField
                     label={copy("Hesap türü", "Account kind")}
-                    value={value.accountKind ?? "auto"}
+                    value={value.accountKind ?? "personal"}
                     options={[
-                      { value: "auto", label: copy("Otomatik", "Automatic") },
                       { value: "personal", label: copy("Kişisel", "Personal") },
                       { value: "work", label: copy("İş", "Work") },
                     ]}
@@ -189,7 +188,7 @@ export function ProviderAccountEditor({
                     onChange={(kind) =>
                       draft.setValue({
                         ...value,
-                        accountKind: kind === "auto" ? null : (kind as "personal" | "work"),
+                        accountKind: kind === "work" ? "work" : "personal",
                       })
                     }
                   />
@@ -264,7 +263,7 @@ export function ProviderAccountEditor({
                   : value.kind === "color"
                     ? { kind: "color", color: value.color }
                     : value.kind === "accountKind"
-                      ? { kind: "accountKind", accountKind: value.accountKind ?? null }
+                      ? { kind: "accountKind", accountKind: value.accountKind ?? "personal" }
                       : value.kind === "quotaRefresh"
                         ? { kind: "quotaRefresh", confirm: "REFRESH_PROVIDER_QUOTA" }
                         : { kind: "default", confirm: "DEFAULT_FOR_FUTURE_SESSIONS" },

@@ -1,9 +1,10 @@
 import { ProjectDirectoryFeedback } from "../workspace/project-directory-feedback";
 import { router } from "expo-router";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { View } from "react-native";
 import type { HostProject } from "@/domain/types";
 import { useProjectList } from "../workspace/use-project-directory";
+import { ProjectPicker } from "../workspace/project-picker";
 import { useActiveMachine } from "@/state/machines";
 import { Empty, QueryState, Screen } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -28,6 +29,7 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
   const copy = useCopy();
   const machine = useActiveMachine();
   const projects = useProjectList();
+  const [choosingProject, setChoosingProject] = useState(false);
   const visibleProject = projects.directoryReady ? projects.data?.find((entry) => entry.id === projectId) : undefined;
   const retained = useRef<{ machineId: string; projectId: string; project: HostProject } | undefined>(undefined);
   if (machine && visibleProject) retained.current = { machineId: machine.id, projectId: visibleProject.id, project: visibleProject };
@@ -35,6 +37,7 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
   const project = visibleProject ?? (remembered?.machineId === machine?.id && remembered?.projectId === projectId ? remembered?.project : undefined);
   const capability = tool === "servers" ? "dev.servers" : tool === "devices" ? "device.host" : tool === "browser" ? "browser.shared" : tool === "terminals" ? "terminals.v1" : tool === "logs" ? "runtime.logs" : tool === "diagnostics" ? "resources.diagnostics" : tool === "usage" ? "usage.sessions.read" : null;
   const supported = !!capability && machine?.capabilities?.includes(capability);
+  const canChooseProject = supported && !!projects.data?.length;
   const toolName = ({ servers: copy("Geliştirme sunucuları", "Dev servers"), logs: copy("Çalışma günlükleri", "Runtime logs"), devices: copy("Cihazlar", "Devices"), browser: copy("Tarayıcı", "Browser"), terminals: copy("Terminaller", "Terminals"), diagnostics: copy("Tanılama", "Diagnostics"), usage: copy("Oturum kullanımı", "Session usage") } as Record<string, string>)[tool] ?? copy("Araçlar", "Tools");
   if (!capability) return (
     <Screen title={copy("Araçlar", "Tools")} scroll={false}>
@@ -57,8 +60,19 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
         {projects.directoryReady && !visibleProject && !(machine?.capabilities && !supported) ? <Empty compact={false} illustration="no-projects" title={projectId
           ? copy("Bu bilgisayarda proje bulunamadı.", "Project not found on this computer.")
           : copy("Proje seçin", "Choose a project")}
-          action={{ label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} /> : null}
+          action={canChooseProject ? {
+            label: copy("Proje seçin", "Choose a project"),
+            onPress: () => setChoosingProject(true),
+          } : { label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} /> : null}
       </View></Screen> : null}
+      {choosingProject && canChooseProject ? (
+        <ProjectPicker visible onClose={() => setChoosingProject(false)} onSelect={(selected) => {
+          setChoosingProject(false);
+          if (machine && projects.isProjectVisible(selected.id, selected.cwd)) {
+            router.setParams({ projectId: selected.id, machineId: machine.id });
+          }
+        }} />
+      ) : null}
       <PrivateContentBoundary visible={!!visibleProject && !!supported} isAllowed={() => !!project && projects.isProjectVisible(project.id)}>
         {machine && project && supported ? <ProjectToolContent key={`${machine.id}:${project.id}:${tool}`} tool={tool} project={project} /> : null}
       </PrivateContentBoundary>

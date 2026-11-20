@@ -76,7 +76,7 @@ export type AssistantMobilePort = {
   request(
     method: string,
     params: Record<string, unknown>,
-    options: { retry: false; signal?: AbortSignal },
+    options: { retry: false; signal?: AbortSignal; timeoutMs?: number },
   ): Promise<unknown>;
 };
 
@@ -337,7 +337,12 @@ export class AssistantMobileClient {
     signal?.throwIfAborted();
     this.check();
     dispatch?.();
-    const raw = await this.port.request("assistant.request", parsed, { retry: false, signal });
+    // Room startup reads its snapshot while the Host can be busy serving other work.
+    const raw = await this.port.request("assistant.request", parsed, {
+      retry: false,
+      signal,
+      ...(parsed.op === "snapshot" ? { timeoutMs: 30_000 } : {}),
+    });
     this.check();
     const response = AssistantResponseValidationSchema.safeParse(raw);
     if (!response.success) throw new AssistantMobileError("response");

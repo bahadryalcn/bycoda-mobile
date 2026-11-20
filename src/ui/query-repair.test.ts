@@ -36,6 +36,17 @@ import { RemoteHostError } from "../remote/host-error";
 import { recordActiveHostDisconnected, recordActiveHostMachine, recordHostRuntimeState, resetHostRuntimeStates } from "../state/host-runtime-state";
 beforeEach(() => { vi.clearAllMocks(); quiet.on = false; onlineManager.setOnline(true); resetHostRuntimeStates(); });
 
+it("uses custom progress only while the query can load", () => {
+  const query = { status: "pending", fetchStatus: "fetching", failureCount: 1 } as const;
+  const renderLoading = vi.fn((label: string) => createElement("div", { "aria-label": label }));
+  const props = { query, loading: "centered", renderLoading } as const;
+
+  expect(renderQuery(props)?.props["aria-label"]).toBe("The computer is slow to answer; trying again…");
+  onlineManager.setOnline(false);
+  expect(renderQuery(props)?.props.illustration).toBe("offline");
+  expect(renderLoading).toHaveBeenCalledOnce();
+});
+
 it("says a retried slow load is still trying instead of showing a silent placeholder", () => {
   const probe: { lead: Rendered } = { lead: null };
   function Probe() {

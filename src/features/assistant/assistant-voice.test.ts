@@ -164,7 +164,8 @@ it("keeps the Host speech lease alive during long native playback and releases i
 
 it("call-mode VAD finishes sustained speech after silence but dictation remains manual", async () => {
   const call = setup(); await call.voice.record(call.port, target, { endOnSilence: true });
-  call.buffer(new Int16Array(4800).fill(1500)); call.buffer(new Int16Array(16000));
+  call.buffer(Int16Array.from({ length: 4800 }, (_, index) => 2400 * Math.sin(index * Math.PI / 40)));
+  call.buffer(new Int16Array(16000));
   await vi.waitFor(() => expect(call.dependencies.transcript).toHaveBeenCalledWith(target, "Review the current project"));
   const manual = setup(); await manual.voice.record(manual.port, target);
   manual.buffer(new Int16Array(4800).fill(1500)); manual.buffer(new Int16Array(16000));

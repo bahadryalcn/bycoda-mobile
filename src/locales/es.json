@@ -1,4 +1,12 @@
 {
+  "End this call to change the conversation scope.": "Termina esta llamada para cambiar el ámbito de la conversación.",
+  "Could not save the model. Refresh and try again.": "No se pudo guardar el modelo. Actualiza e inténtalo de nuevo.",
+  "Could not save voice settings.": "No se pudieron guardar los ajustes de voz.",
+  "ElevenLabs voice ID": "ID de voz de ElevenLabs",
+  "Needs setup on the computer": "Requiere configuración en el ordenador",
+  "On the computer": "En el ordenador",
+  "Reply model": "Modelo de respuesta",
+  "Transcription model": "Modelo de transcripción",
   "Preview on this phone": "Vista previa en este teléfono",
   "Open in Host Browser": "Abrir en el navegador del Host",
   "Forward": "Adelante",

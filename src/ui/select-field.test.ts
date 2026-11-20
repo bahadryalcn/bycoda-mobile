@@ -6,7 +6,7 @@ import { SelectField, MultiSelectField } from "./select-field";
 import { PrivateContentAccessProvider } from "./private-access";
 import { SheetGuardContext } from "./sheet-guard-context";
 const s = vi.hoisted(() => ({ actions: new Map<string, () => void>(), primitives: new Map<string, any>(), search: undefined as undefined | ((value: string) => void),
-  locale: "en", options: [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }] as { value: string; label: string; disabled?: boolean }[],
+  locale: "en", options: [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }] as { value: string; label: string; disabled?: boolean; group?: string }[],
   values: [] as string[], multiple: false, max: undefined as number | undefined, disabled: false, allowed: true, changes: [] as string[][] }));
 vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: { info: {}, danger: {} }, uiStyles: {} }) }));
 vi.mock("./use-reduced-motion", () => ({ useReducedMotionPreference: () => true }));
@@ -36,8 +36,9 @@ vi.mock("react-native", () => ({
     return h("button", { onClick: onPress, disabled, "data-role": accessibilityRole }, children);
   },
   FlatList: ({ data, renderItem, ListHeaderComponent, ListEmptyComponent }: any) => h("main", null, ListHeaderComponent,
-    data.length ? data.map((item: any) => h("div", { key: item.value }, renderItem({ item }))) : ListEmptyComponent),
+    data.length ? data.map((item: any, index: number) => h("div", { key: item.value }, renderItem({ item, index }))) : ListEmptyComponent),
 }));
+vi.mock("./layout", () => ({ SectionHeader: ({ title }: { title: string }) => h("h2", null, title) }));
 vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => h("p", null, children) }));
 vi.mock("./buttons", () => ({ Button: ({ label, onPress, disabled }: any) => { s.actions.set(label, onPress); return h("button", { onClick: onPress, disabled }, label); } }));
 const Search = ({ value, onChangeText }: any) => { s.search = onChangeText; return h("input", { value, onChange: (e: any) => onChangeText(e.target.value) }); };
@@ -82,6 +83,22 @@ it("retires row events after close and a later reopening", async () => {
 it("retires row events when filtering hides the option", async () => {
   await render(); await call("Open"); const old = s.actions.get("Alpha")!; await act(async () => s.search!("Beta"));
   await act(async () => old()); expect(s.changes).toEqual([]);
+});
+it("labels contiguous groups and keeps only matching groups while searching", async () => {
+  s.options = [
+    { value: "a", label: "Alpha", group: "Codex" },
+    { value: "b", label: "Beta", group: "Codex" },
+    { value: "s", label: "Sonnet", group: "Claude" },
+  ];
+  await render();
+  await call("Open");
+  const headings = () => [...container.querySelectorAll("h2")].map(node => node.textContent);
+  expect(headings()).toEqual(["Codex", "Claude"]);
+  await act(async () => s.search!("codex beta"));
+  expect(headings()).toEqual(["Codex"]);
+  expect(container.textContent).not.toContain("Alpha");
+  await call("Beta. Codex");
+  expect(s.changes).toEqual([["b"]]);
 });
 it.each(["removed", "disabled"])("retires an option that becomes %s", async kind => {
   await render(); await call("Open"); const old = s.actions.get("Alpha")!;

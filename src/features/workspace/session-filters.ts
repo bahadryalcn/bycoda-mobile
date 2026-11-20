@@ -1,7 +1,7 @@
-import type { SessionTimeFilter } from "../../../../src/features/sessions/model/sessionFilters";
+import type { SessionTimeFilter as DesktopSessionTimeFilter } from "../../../../src/features/sessions/model/sessionFilters";
 import type { HostSessionSummary } from "@/domain/types";
 
-export type { SessionTimeFilter };
+export type SessionTimeFilter = DesktopSessionTimeFilter | "recent";
 
 /** Desktop sidebar filters (Provider, Managed, Time) with the same semantics; status stays mobile's own. */
 export type SessionListFilters = {
@@ -12,9 +12,9 @@ export type SessionListFilters = {
   time: SessionTimeFilter;
 };
 
-export const defaultSessionListFilters: SessionListFilters = { hiddenProviders: [], managed: false, time: "all" };
+export const defaultSessionListFilters: SessionListFilters = { hiddenProviders: [], managed: false, time: "recent" };
 
-export const SESSION_TIME_FILTERS: readonly SessionTimeFilter[] = ["all", "today", "7d", "30d"];
+export const SESSION_TIME_FILTERS: readonly SessionTimeFilter[] = ["recent", "all", "today", "7d", "30d"];
 
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -36,7 +36,7 @@ export function sessionProviders(sessions: readonly Pick<HostSessionSummary, "ha
 }
 
 export function activeSessionFilterCount(filters: SessionListFilters): number {
-  return Number(filters.hiddenProviders.length > 0) + Number(filters.managed) + Number(filters.time !== "all");
+  return Number(filters.hiddenProviders.length > 0) + Number(filters.managed) + Number(filters.time !== "recent");
 }
 
 type FilterableSession = Pick<HostSessionSummary, "harness" | "managedBy" | "lastActivityAt" | "updatedAt">;
@@ -45,6 +45,7 @@ type FilterableSession = Pick<HostSessionSummary, "harness" | "managedBy" | "las
 export function matchesSessionListFilters(session: FilterableSession, filters: SessionListFilters, now: number): boolean {
   if (filters.hiddenProviders.includes(session.harness)) return false;
   if (filters.managed && session.managedBy?.assistant !== true) return false;
-  if (filters.time !== "all" && (session.lastActivityAt ?? session.updatedAt) < sessionTimeStart(filters.time, now)) return false;
+  if (filters.time !== "recent" && filters.time !== "all" &&
+      (session.lastActivityAt ?? session.updatedAt) < sessionTimeStart(filters.time, now)) return false;
   return true;
 }

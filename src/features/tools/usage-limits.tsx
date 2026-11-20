@@ -107,7 +107,7 @@ export function UsageLimits() {
           <SectionHeader title={PROVIDER_NAMES[provider.provider]} />
           {provider.accounts.filter((account) => account.resetCredits !== null).map((account) => (
             <StatusRow key={account.id} label={account.label}>
-              <ProviderAccountKind kind={account.kind} derivedKind={account.derivedKind} />
+              <ProviderAccountKind kind={account.kind} />
               <Body muted>{copy("Sıfırlama hakkı: {p0}", "Reset credits: {p0}", { p0: account.resetCredits!.toLocaleString(locale) })}</Body>
             </StatusRow>
           ))}
@@ -136,7 +136,7 @@ export function UsageLimits() {
               {card.accounts.length === 1 ? (
                 // One account repeats the headline reading above; show only whose it is.
                 <StatusRow label={card.accounts[0]!.label}>
-                  <ProviderAccountKind kind={card.accounts[0]!.kind} derivedKind={card.accounts[0]!.derivedKind} />
+                  <ProviderAccountKind kind={card.accounts[0]!.kind} />
                 </StatusRow>
               ) : (
               <View style={{ gap: space.sm, marginTop: space.xs }}>
@@ -157,7 +157,7 @@ export function UsageLimits() {
                         />
                         <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
                           <StatusRow label={account.label}>
-                            <ProviderAccountKind kind={account.kind} derivedKind={account.derivedKind} />
+                            <ProviderAccountKind kind={account.kind} />
                             <Body mono>{`${wholePercent(account.reading.leftPercent)}% ${copy("kaldı", "left")}`}</Body>
                             {countdown ? <Body muted>{countdown}</Body> : null}
                           </StatusRow>
@@ -192,7 +192,7 @@ export function UsageLimits() {
                     backgroundColor: account.color,
                   }}
                 />
-                <ProviderAccountKind kind={account.kind} derivedKind={account.derivedKind} />
+                <ProviderAccountKind kind={account.kind} />
                 <Body
                   muted
                   style={{ flex: 1, minWidth: 0 }}

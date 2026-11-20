@@ -8,6 +8,8 @@ import {
   FadeOut,
   LinearTransition,
   ReduceMotion,
+  // Not a hook: Reanimated reads the system setting once at startup and returns that constant.
+  useReducedMotion as readSystemReducedMotion,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import { motion } from "./tokens";
@@ -25,22 +27,29 @@ export const indicatorTiming = {
   easing: Easing.bezier(0.2, 0, 0, 1),
   reduceMotion: ReduceMotion.System,
 };
-export const reveal = FadeIn.duration(motion.reveal).reduceMotion(ReduceMotion.System);
-export const dismiss = FadeOut.duration(motion.press).reduceMotion(ReduceMotion.System);
-export const enterSheet = FadeIn.duration(motion.sheet).reduceMotion(ReduceMotion.System);
+/**
+ * With Android "Remove animations" (reduced motion) a layout animation's skipped entering left views at
+ * opacity 0: the consent screen inside its overlay and the sign-in panel showed blank. Reduced motion
+ * therefore gets no layout animation at all; views mount in their final state.
+ */
+export const stillMotion = readSystemReducedMotion();
+const unlessStill = <T,>(animation: T): T | undefined => (stillMotion ? undefined : animation);
+export const reveal = unlessStill(FadeIn.duration(motion.reveal).reduceMotion(ReduceMotion.System));
+export const dismiss = unlessStill(FadeOut.duration(motion.press).reduceMotion(ReduceMotion.System));
+export const enterSheet = unlessStill(FadeIn.duration(motion.sheet).reduceMotion(ReduceMotion.System));
 /** Layout changes ease into place; a spring here made content bounce up and down. */
-export const resize = LinearTransition.duration(motion.reveal)
+export const resize = unlessStill(LinearTransition.duration(motion.reveal)
   .easing(Easing.bezier(0.2, 0, 0, 1))
-  .reduceMotion(ReduceMotion.System);
+  .reduceMotion(ReduceMotion.System));
 
 /** Staggered fade-in for short, non-virtualized lists and screen sections. */
 export function enterItem(index = 0) {
   // Custom web entering keyframes restore an absolute snapshot after cleanup.
   // A built-in fade keeps sections in normal flow when the viewport changes.
   // A quiet fade only: sliding rows in from below read as the list jumping on every refresh.
-  return FadeIn.duration(motion.reveal)
+  return unlessStill(FadeIn.duration(motion.reveal)
     .delay(Math.min(index, 8) * 20)
-    .reduceMotion(ReduceMotion.System);
+    .reduceMotion(ReduceMotion.System));
 }
 
 export const motionTiming = {

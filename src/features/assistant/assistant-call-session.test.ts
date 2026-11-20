@@ -3,7 +3,7 @@ const f = vi.hoisted(() => ({
   machine: { id: "computer", environmentId: "env", providers: [] as string[] }, id: 0, listeners: [] as any[], loops: [] as any[], retireHooks: [] as (() => void)[],
   release: vi.fn(), removeEvent: vi.fn(), unsubscribe: vi.fn(), read: vi.fn(async () => null as unknown),
   end: vi.fn(), request: vi.fn(async (method: string) => method === "voice.local.start" ? { lease: "call-hold" } : undefined), cancel: vi.fn(), nativeMuted: false, loopMuteStates: [] as boolean[], consentAllowed: true, consentHooks: [] as (() => void)[],
-  signedIn: true, accountHooks: [] as (() => void)[], appAccess: true, interrupt: vi.fn(() => true), speaker: vi.fn(), finish: vi.fn(async () => {}),
+  signedIn: true, accountHooks: [] as (() => void)[], appAccess: true, interrupt: vi.fn(() => true), speaker: vi.fn(), finish: vi.fn(async () => {}), speak: vi.fn(async () => {}),
 }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "id" }));
@@ -17,7 +17,7 @@ vi.mock("@/state/reviewed-machine", () => ({ reviewedMachine: (machine: unknown)
 vi.mock("../privacy/consent-access", () => ({ hasProviderPermission: (machine: { providers?: string[] }) => f.consentAllowed && !machine.providers?.includes("requires-new-consent"), useProviderPermission: { subscribe: (listener: () => void) => { f.consentHooks.push(listener); return f.unsubscribe; } } }));
 vi.mock("./assistant-send", () => ({ assistantSendKey: () => "send", readStoredSend: f.read, isAssistantSendPending: () => false, sendRoomMessage: vi.fn() }));
 vi.mock("./assistant-voice-native", () => ({ nativeVoiceDependencies: (value: unknown) => value }));
-vi.mock("./assistant-voice", () => ({ AssistantVoice: class { cancel = f.cancel; finish = f.finish; } }));
+vi.mock("./assistant-voice", () => ({ AssistantVoice: class { cancel = f.cancel; finish = f.finish; speak = f.speak; } }));
 vi.mock("./assistant-client", () => ({ AssistantMobileClient: class {} }));
 vi.mock("./assistant-companion-state", () => ({ useAssistantCompanion: { getState: () => ({ thread: { id: "thread", projectId: "project" } }) }, retainAssistantSpeech: vi.fn() }));
 vi.mock("./assistant-call-loop", () => ({ AssistantCallLoop: class {
@@ -30,6 +30,7 @@ vi.mock("./assistant-call-loop", () => ({ AssistantCallLoop: class {
 } }));
 import { startAssistantCall, endAssistantCall, muteAssistantCall, silenceAssistantCall, setAssistantCallSpeakerMuted, finishAssistantCallTurn } from "./assistant-call-session";
 import { useAssistantCall } from "./assistant-call-state";
+import { defaultVoicePreferences, voicePreferences } from "../voice-settings/voice-preferences";
 const target = { machineId: "computer", environmentId: "env", threadId: "thread" };
 afterEach(() => { endAssistantCall(); f.id = 0; f.listeners = []; f.loops = []; f.retireHooks = []; f.consentHooks = []; f.consentAllowed = true; f.accountHooks = []; f.signedIn = true; f.appAccess = true; f.machine = { ...f.machine, providers: [] }; f.nativeMuted = false; f.loopMuteStates = []; vi.clearAllMocks(); f.read.mockReset().mockResolvedValue(null); useAssistantCall.setState({ error: undefined }); });
 it("retires native call access directly when provider consent is withdrawn", async () => {
@@ -83,6 +84,19 @@ it("holds one speech lease for the whole call and releases it when the call ends
   expect(f.request.mock.calls.some(([method]) => method === "voice.local.release")).toBe(false);
   endAssistantCall();
   expect(f.request).toHaveBeenCalledWith("voice.local.release", { lease: "call-hold" }, expect.anything());
+});
+it("switches the held voice before the next reply without starting an overlapping runtime", async () => {
+  await startAssistantCall(target, () => true);
+  voicePreferences.setState({ preferences: { ...defaultVoicePreferences, speaker: "F2" } });
+  try {
+    await f.loops[0].speak("Reply", target, () => true);
+    const requests = f.request.mock.calls.map(([method]) => method);
+    expect(requests).toEqual(["voice.local.start", "voice.local.release", "voice.local.start"]);
+    expect(f.request).toHaveBeenLastCalledWith("voice.local.start", { config: { natural: true, voiceId: "F2" } }, expect.anything());
+    expect(f.speak).toHaveBeenCalledOnce();
+  } finally {
+    voicePreferences.setState({ preferences: defaultVoicePreferences });
+  }
 });
 it("keeps a started call through the app lock and background, but retires it on sign-out", async () => {
   await startAssistantCall(target, () => true);

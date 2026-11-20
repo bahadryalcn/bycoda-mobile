@@ -1,4 +1,12 @@
 {
+  "End this call to change the conversation scope.": "Kapsamı değiştirmek için bu görüşmeyi bitir.",
+  "Could not save the model. Refresh and try again.": "Model kaydedilemedi. Yenileyip tekrar dene.",
+  "Could not save voice settings.": "Ses ayarları kaydedilemedi.",
+  "ElevenLabs voice ID": "ElevenLabs ses kimliği",
+  "Needs setup on the computer": "Bilgisayarda kurulum gerekiyor",
+  "On the computer": "Bilgisayarda",
+  "Reply model": "Yanıt modeli",
+  "Transcription model": "Yazıya dökme modeli",
   "Preview on this phone": "Telefonda önizleme",
   "Open in Host Browser": "Host Tarayıcısında aç",
   "Forward": "İleri",

@@ -20,6 +20,12 @@ describe("session list filters", () => {
     expect(activeSessionFilterCount(defaultSessionListFilters)).toBe(0);
   });
 
+  it("distinguishes the recent view from explicitly requesting all time", () => {
+    expect(defaultSessionListFilters.time).toBe("recent");
+    expect(activeSessionFilterCount(filters({ time: "all" }))).toBe(1);
+    expect(matchesSessionListFilters(session({ updatedAt: now - 50 * day }), filters({ time: "all" }), now)).toBe(true);
+  });
+
   it("hides turned-off providers and keeps the rest", () => {
     const hidden = filters({ hiddenProviders: ["codex"] });
     expect(matchesSessionListFilters(session({ harness: "codex" }), hidden, now)).toBe(false);

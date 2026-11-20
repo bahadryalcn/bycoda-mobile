@@ -4,17 +4,14 @@ import { Body, Row } from "./primitives";
 import { useCopy } from "./copy";
 import { useMobileTheme } from "./theme";
 
-export type AccountKindMetadata = { kind?: "personal" | "work"; derivedKind?: "personal" | "work" };
-export function ProviderAccountKind({ kind, derivedKind }: AccountKindMetadata) {
+export function ProviderAccountKind({ kind = "personal" }: { kind?: "personal" | "work" }) {
   const copy = useCopy();
   const { colors } = useMobileTheme();
-  const effective = kind ?? derivedKind;
-  if (!effective) return null;
-  const Icon = effective === "work" ? Briefcase : UserRound;
+  const Icon = kind === "work" ? Briefcase : UserRound;
   return (
     <Row>
       <Icon size={14} color={colors.muted} />
-      <Body muted>{effective === "work" ? copy("İş", "Work") : copy("Kişisel", "Personal")}</Body>
+      <Body muted>{kind === "work" ? copy("İş", "Work") : copy("Kişisel", "Personal")}</Body>
     </Row>
   );
 }

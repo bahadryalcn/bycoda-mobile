@@ -1,10 +1,12 @@
 # Assistant presence and conversations
 
+While the Assistant opens, its orb and **Loading…** label show that the computer is loading the room.
+
 Open **Tools → Communication → Assistant** on a paired computer that supports the assistant. The screen always identifies the selected computer. Unlock mobile access and keep the existing provider/privacy consent; changing computers changes the destination rather than moving conversation data.
 
 **Here**, **Away** and **Do not disturb** save the owner's manual presence on that computer. They do not enable microphone capture or grant computer-input authority. Automatic computer activity/lock checks and quiet-hour policies remain separate. A failed write is not resent automatically. If its result is uncertain, read the current state before choosing another manual state; a current-state read does not prove delivery of an earlier request.
 
-Expand **Conversations**, choose **Global** or a visible project, then **Open conversation** to read its canonical assistant thread. Recent conversations also link directly to their existing threads. Collapsing these controls keeps local preference edits and the message draft. Messages retain their voice/text labels. Earlier history includes messages recorded at the same instant and retains canonical page identity/version checks. A deleted or changed page source requires reloading the same conversation; a failed page read keeps your loaded history visible. A changed history version invalidates retained older pages; refresh and load them again. No local plaintext history database or arbitrary local session ID is substituted.
+Open **Settings** to choose **Global** or a visible project. Close settings and tap **Open conversation** to read the canonical thread, or select an existing thread under **Recent conversations** in settings. Assistant preferences and presence are in the same panel. Closing the panel keeps the message draft and asks before discarding unsaved assistant preferences. Messages retain their voice/text labels. Earlier history includes messages recorded at the same instant and retains canonical page identity/version checks. A deleted or changed page source requires reloading the same conversation; a failed page read keeps your loaded history visible. A changed history version invalidates retained older pages; refresh and load them again. No local plaintext history database or arbitrary local session ID is substituted.
 
 Only messages whose complete project scope is verified and currently visible are shown. An unknown scope or one hidden participant conceals the whole message. A summary is shown only with the Host's verified artifact and all contributors visible. Access loss or a changed paired connection prevents stale results from becoming the current conversation. Hidden material is not used to infer that a thread is empty or globally scoped.
 
@@ -15,6 +17,10 @@ Messages sent from the assistant conversation, including an explicitly started v
 For Telegram delivery, use **Load Telegram conversations**, then select a permitted account/conversation by its labels. The destination is read and revalidated on the original computer before a changed destination is saved. No account or conversation IDs need to be typed. An unavailable saved destination is retained without choosing a replacement; choose another allowed destination or **Do not send to Telegram** to clear it explicitly. These preferences configure existing Host delivery; they do not connect an account, send a message or grant native authority.
 
 ## Dictation and hands-free calling
+
+The reply model picker groups results by provider and sorts models by name within each group. Search accepts model and provider names. Expand **Voice settings** to load speech-engine availability and choose the assistant's voice.
+
+Open **Settings** next to the chat button in the call header. Choose **Global** or a visible project for the conversation, and choose the reply model from that scope's Host catalog. Changing scope during a call asks you to end the call before switching. Choose the transcription engine, installed Whisper model or available OpenRouter model, and the assistant's voice on the paired computer. Voice changes apply between utterances. Short noises that fail speech detection do not send a message.
 
 **Dictate message** captures at most 30 seconds, recognizes speech on the paired computer and inserts text into the original conversation's draft. Review it and press **Send** yourself. **Read reply aloud** is a separate foreground action. Both stop when the app backgrounds, locks or loses access. Pending dictation recovery keeps its original speech identity and cannot be overwritten by another recording.
 

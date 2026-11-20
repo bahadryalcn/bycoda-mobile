@@ -1,21 +1,22 @@
 import { useEffect, useId } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
-import Animated, { cancelAnimation, Easing, FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withRepeat, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { ThinkingOrb, type ThinkingOrbState } from "panelui-native/components/thinking-orb";
 import { useMobileTheme } from "@/ui/theme";
 import { useReducedMotionPreference } from "@/ui/use-reduced-motion";
+import { useRouteFocus } from "@/ui/use-route-focus";
 import type { MobileColors } from "@/ui/tokens";
 import type { AssistantOrbState } from "./assistant-voice-presentation";
 
 /** Stage light per call state: listening is blue, thinking violet, speaking teal; muted and idle stay calm. */
-export function assistantStageTones(state: AssistantOrbState, colors: MobileColors): { key: string; primary: string; glow: string; strength: number } {
-  if (state === "listening") return { key: state, primary: colors.voiceListen, glow: colors.voiceListenGlow, strength: 0.6 };
-  if (state === "thinking") return { key: state, primary: colors.voiceThink, glow: colors.voiceThinkGlow, strength: 0.55 };
-  if (state === "speaking") return { key: state, primary: colors.voiceSpeak, glow: colors.voiceSpeakGlow, strength: 0.6 };
-  if (state === "error") return { key: state, primary: colors.danger, glow: colors.voiceThink, strength: 0.26 };
-  if (state === "muted") return { key: state, primary: colors.tertiary, glow: colors.voiceListen, strength: 0.25 };
-  return { key: state, primary: colors.voiceListen, glow: colors.voiceThink, strength: 0.32 };
+function assistantStageTones(state: AssistantOrbState, colors: MobileColors) {
+  if (state === "listening") return { primary: colors.voiceListen, glow: colors.voiceListenGlow, strength: 0.6 };
+  if (state === "thinking") return { primary: colors.voiceThink, glow: colors.voiceThinkGlow, strength: 0.55 };
+  if (state === "speaking") return { primary: colors.voiceSpeak, glow: colors.voiceSpeakGlow, strength: 0.6 };
+  if (state === "error") return { primary: colors.danger, glow: colors.voiceThink, strength: 0.26 };
+  if (state === "muted") return { primary: colors.tertiary, glow: colors.voiceListen, strength: 0.25 };
+  return { primary: colors.voiceListen, glow: colors.voiceThink, strength: 0.32 };
 }
 
 /**
@@ -31,7 +32,9 @@ export function assistantStageOrb(state: AssistantOrbState): { shape: ThinkingOr
 
 /** Smoothed microphone energy; speaking breathes on its own because playback has no meter. */
 function useStageEnergy(state: AssistantOrbState, level: number) {
-  const reduced = useReducedMotionPreference();
+  const reducedMotion = useReducedMotionPreference();
+  const focused = useRouteFocus();
+  const reduced = reducedMotion || !focused;
   const energy = useSharedValue(0), breath = useSharedValue(0);
   const input = state === "listening" && Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : 0;
   // The meter arrives as React state; ease each sample on the UI thread instead of re-rendering the stage.
@@ -49,61 +52,38 @@ function useStageEnergy(state: AssistantOrbState, level: number) {
   return { energy, breath, reduced };
 }
 
-function Glow({ color, strength, size, left, top, energy, breath, drift, period }: {
-  color: string; strength: number; size: number; left: number; top: number;
-  energy: SharedValue<number>; breath: SharedValue<number>; drift: SharedValue<number>; period: number;
-}) {
-  const gradient = useId().replace(/:/g, "");
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: Math.sin(drift.value * Math.PI * 2 / period) * size * 0.08 },
-      { translateY: Math.cos(drift.value * Math.PI * 2 / (period * 1.3)) * size * 0.06 },
-      { scale: 1 + Math.max(energy.value, breath.value * 0.35) * 0.35 },
-    ],
-  }));
-  return <Animated.View style={[{ position: "absolute", left: left - size / 2, top: top - size / 2, width: size, height: size }, style]}>
-    <Svg width={size} height={size} viewBox="0 0 100 100">
-      <Defs><RadialGradient id={gradient} cx="50%" cy="50%" r="50%">
-        <Stop offset="0" stopColor={color} stopOpacity={strength} />
-        <Stop offset="0.45" stopColor={color} stopOpacity={strength * 0.45} />
-        <Stop offset="1" stopColor={color} stopOpacity={0} />
-      </RadialGradient></Defs>
-      <Circle cx="50" cy="50" r="50" fill={`url(#${gradient})`} />
-    </Svg>
-  </Animated.View>;
-}
-
 /**
- * Full-bleed call backdrop: two soft light pools in the state's colours that drift slowly, swell with
- * the owner's voice and cross-fade when the call changes state. Decorative and hidden from assistive tech.
+ * The three pools share a viewport-sized drawing. Oversized, animated SVG views would each
+ * allocate and composite a separate surface while the owner interacts with the screen.
  */
-export function AssistantVoiceBackdrop({ state, level }: { state: AssistantOrbState; level: number }) {
-  const { colors } = useMobileTheme(), viewport = useWindowDimensions();
-  const { energy, breath, reduced } = useStageEnergy(state, level);
-  const drift = useSharedValue(0);
-  // One endless clock drives every pool's drift; reduced motion keeps them still.
-  useEffect(() => {
-    cancelAnimation(drift);
-    // Ping-pong keeps the drift continuous; a restarting clock would jump every lap.
-    if (!reduced) drift.value = withRepeat(withTiming(60, { duration: 60000, easing: Easing.linear }), -1, true);
-    return () => cancelAnimation(drift);
-  }, [reduced, drift]);
+export function AssistantVoiceBackdrop({ state }: { state: AssistantOrbState }) {
+  const { colors } = useMobileTheme(), { width, height } = useWindowDimensions();
+  const gradient = useId().replace(/:/g, "");
   const tones = assistantStageTones(state, colors);
-  const size = Math.max(viewport.width, viewport.height) * 0.95;
-  return <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, overflow: "hidden" }]}>
-    <Animated.View key={tones.key} entering={reduced ? undefined : FadeIn.duration(700)} exiting={reduced ? undefined : FadeOut.duration(700)} style={StyleSheet.absoluteFill}>
-      <Glow color={tones.primary} strength={tones.strength} size={size} left={viewport.width * 0.2} top={viewport.height * 0.32} energy={energy} breath={breath} drift={drift} period={9} />
-      <Glow color={tones.glow} strength={tones.strength * 0.8} size={size * 0.85} left={viewport.width * 0.85} top={viewport.height * 0.62} energy={energy} breath={breath} drift={drift} period={13} />
-      {/* The dock sits on the bottom edge; without light there the stage read as half colour, half black. */}
-      <Glow color={tones.primary} strength={tones.strength * 0.6} size={size * 0.8} left={viewport.width * 0.3} top={viewport.height * 0.98} energy={energy} breath={breath} drift={drift} period={11} />
-    </Animated.View>
+  const radius = Math.max(width, height) * 0.475;
+  const pools = [
+    { id: `${gradient}-main`, color: tones.primary, opacity: tones.strength, x: width * 0.2, y: height * 0.32, r: radius },
+    { id: `${gradient}-side`, color: tones.glow, opacity: tones.strength * 0.8, x: width * 0.85, y: height * 0.62, r: radius * 0.85 },
+    { id: `${gradient}-dock`, color: tones.primary, opacity: tones.strength * 0.6, x: width * 0.3, y: height * 0.98, r: radius * 0.8 },
+  ];
+  return <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]}>
+    <Svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+      <Defs>{pools.map(({ id, color, opacity }) => (
+        <RadialGradient key={id} id={id} cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor={color} stopOpacity={opacity} />
+          <Stop offset="0.45" stopColor={color} stopOpacity={opacity * 0.45} />
+          <Stop offset="1" stopColor={color} stopOpacity={0} />
+        </RadialGradient>
+      ))}</Defs>
+      {pools.map(({ id, x, y, r }) => <Circle key={id} cx={x} cy={y} r={r} fill={`url(#${id})`} />)}
+    </Svg>
   </View>;
 }
 
 /** The call's centrepiece: PanelUI's dotted orb at full size, over a halo that follows the voice. */
 export function AssistantVoiceOrb({ state, level, size, label }: { state: AssistantOrbState; level: number; size: number; label: string }) {
   const { colors } = useMobileTheme();
-  const { energy, breath } = useStageEnergy(state, level);
+  const { energy, breath, reduced } = useStageEnergy(state, level);
   const gradient = useId().replace(/:/g, "");
   const tones = assistantStageTones(state, colors), orb = assistantStageOrb(state);
   const pulse = useAnimatedStyle(() => ({ transform: [{ scale: 1 + energy.value * 0.14 + breath.value * (state === "speaking" ? 0.04 : 0.015) }] }));
@@ -120,7 +100,7 @@ export function AssistantVoiceOrb({ state, level, size, label }: { state: Assist
       </Svg>
     </Animated.View>
     <Animated.View style={pulse}>
-      <ThinkingOrb state={orb.shape} paused={orb.paused} speed={orb.speed} size={Math.round(size * 0.82)}
+      <ThinkingOrb state={orb.shape} paused={reduced || orb.paused} speed={orb.speed} size={Math.round(size * 0.82)}
         color={state === "muted" ? colors.muted : state === "error" ? colors.danger : colors.text} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
     </Animated.View>
   </View>;

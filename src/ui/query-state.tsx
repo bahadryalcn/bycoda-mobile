@@ -64,6 +64,7 @@ function useQueryStatePresentation({
   onManageConnections,
   loading = "list",
   loadingLabel,
+  renderLoading,
 }: QueryStateProps): { node: ReactNode; skeleton: boolean; label?: string; lead?: ReactNode } {
   const copy = useCopy();
   const sheet = useContext(SheetGuardContext);
@@ -97,6 +98,12 @@ function useQueryStatePresentation({
     }),
   } : undefined;
   const placeholder = loading === "list" || loading === "content";
+  const renderProgress = (label?: string) =>
+    loading === "inline" || loading === "centered"
+      ? renderLoading
+        ? renderLoading(label ?? copy("Yükleniyor…", "Loading…"))
+        : <Loading label={label} centered={loading === "centered"} />
+      : null;
   if (presentation === "loading" && !showOffline && !waitingForLink) {
     // A failed attempt that is being retried can take several request deadlines on a busy
     // computer; without a word the placeholder looks frozen.
@@ -107,11 +114,7 @@ function useQueryStatePresentation({
       skeleton: placeholder,
       label: slow,
       lead: slow && placeholder ? <Notice message={slow} /> : undefined,
-      node: loading === "inline" ? (
-        <Loading label={slow ?? loadingLabel} />
-      ) : loading === "centered" ? (
-        <Loading label={slow ?? loadingLabel} centered />
-      ) : null,
+      node: renderProgress(slow ?? loadingLabel),
     };
   }
   // Shown data stays as it is while a refresh fails or waits: the computer pill carries the
@@ -147,7 +150,7 @@ function useQueryStatePresentation({
       label,
       // The placeholder alone would look like a first load that never ends.
       lead: placeholder ? <Notice message={label} /> : undefined,
-      node: loading === "inline" || loading === "centered" ? <Loading label={label} centered={loading === "centered"} /> : null,
+      node: renderProgress(label),
     };
   }
   if (presentation === "paused" || waitingForLink)

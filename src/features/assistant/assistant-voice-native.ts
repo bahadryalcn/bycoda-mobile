@@ -37,6 +37,7 @@ export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependenci
   return {
     ...callbacks,
     engine: () => voicePreferences.getState().preferences.engine,
+    cloudModel: () => voicePreferences.getState().preferences.cloudModel,
     speech: () => speechConfig(voicePreferences.getState().preferences),
     async capture(onBuffer: (data: Int16Array, rate: number) => void, onEnded?: (reason: string, error?: string) => void) {
       await requireMicrophonePermission();

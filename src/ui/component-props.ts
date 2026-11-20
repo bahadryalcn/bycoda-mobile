@@ -205,6 +205,8 @@ export type QueryStateProps = {
   /** "list"/"content" draw a skeleton of that shape; "centered" a spinner in the region. */
   loading?: "list" | "content" | "inline" | "centered" | "none";
   loadingLabel?: string;
+  /** Replaces the spinner in inline or centered mode while keeping recovery feedback. */
+  renderLoading?: (label: string) => ReactNode;
 };
 
 export type MutationStateProps = {

@@ -1,4 +1,12 @@
 {
+  "End this call to change the conversation scope.": "会話の範囲を変更するには、この通話を終了してください。",
+  "Could not save the model. Refresh and try again.": "モデルを保存できませんでした。更新してもう一度お試しください。",
+  "Could not save voice settings.": "音声設定を保存できませんでした。",
+  "ElevenLabs voice ID": "ElevenLabs 音声 ID",
+  "Needs setup on the computer": "コンピューターでの設定が必要",
+  "On the computer": "コンピューター上",
+  "Reply model": "応答モデル",
+  "Transcription model": "文字起こしモデル",
   "Preview on this phone": "このスマートフォンでプレビュー",
   "Open in Host Browser": "ホストのブラウザーで開く",
   "Forward": "進む",

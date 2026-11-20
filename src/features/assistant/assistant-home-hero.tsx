@@ -11,6 +11,21 @@ import { space } from "@/ui/tokens";
 import { AssistantAvatar } from "./assistant-avatar";
 import { AssistantVoiceOrb } from "./assistant-voice-stage";
 
+/** The same stage and orb introduce the assistant while its Host profile loads. */
+export function AssistantHomeLoading({ label }: { label: string }) {
+  const { width, height } = useWindowDimensions();
+  const { uiStyles } = useMobileTheme();
+  const size = Math.min(200, width * 0.48, height * 0.38);
+  return <View accessible accessibilityRole="progressbar" accessibilityLabel={label}
+    accessibilityState={{ busy: true }} aria-busy
+    style={{ flex: 1, minHeight: size, alignItems: "center", justifyContent: "center", gap: space.xs }}>
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <AssistantVoiceOrb state="thinking" level={0} size={size} label={label} />
+    </View>
+    <Body muted selectable={false} style={uiStyles.caption}>{label}</Body>
+  </View>;
+}
+
 /** Which computer and scope the assistant works in, as two labelled pills. */
 export function AssistantContextBadges({ machineName, scope, project }: { machineName: string; scope: string; project: boolean }) {
   return <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: space.xs }}>

@@ -1,6 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { ScrollView, View, useWindowDimensions } from "react-native";
 import Animated, { FadeIn, FadeInDown, ReduceMotion } from "react-native-reanimated";
+import { stillMotion } from "@/ui/motion";
 import { router, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCopy } from "@/ui/copy";
@@ -21,6 +22,8 @@ export function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const bottomInset = useBottomInset();
   const { width, height } = useWindowDimensions();
+  // "Remove animations" left the delayed section (heading and Scan QR code) invisible; mount it still.
+  const still = stillMotion;
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen options={{ title: copy("Projeler", "Projects") }} />
@@ -39,11 +42,11 @@ export function WelcomeScreen() {
           gap: space.xl,
         }}
       >
-        <Animated.View entering={FadeIn.duration(700).reduceMotion(ReduceMotion.System)}
+        <Animated.View entering={still ? undefined : FadeIn.duration(700).reduceMotion(ReduceMotion.System)}
           style={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
           <CodeArt name="guideTip" active width={codeArtWidth("guideTip", { width: Math.min(width * 0.8, metrics.entryWidth - 2 * space.screen), height: height * 0.5 })} />
         </Animated.View>
-        <Animated.View entering={FadeInDown.duration(600).delay(300).reduceMotion(ReduceMotion.System)}>
+        <Animated.View entering={still ? undefined : FadeInDown.duration(600).delay(300).reduceMotion(ReduceMotion.System)}>
           <AccountComputersSection others={
             <View style={{ gap: space.lg }}>
               <View style={{ gap: space.sm }}>

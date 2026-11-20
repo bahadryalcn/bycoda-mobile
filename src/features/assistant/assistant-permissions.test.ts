@@ -6,6 +6,8 @@ import { assistantProfileDefaults } from "../../../../host/assistant/profile-def
 import type { AssistantProfile } from "../../../../src/shared/model/host-contracts/assistant";
 import type { AssistantMobileClient } from "./assistant-client";
 
+const sheetGuard = vi.hoisted(() => vi.fn());
+vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: sheetGuard }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
@@ -187,10 +189,12 @@ it("keeps new policies local until explicit Save, using defaults and the opening
   } as unknown as AssistantProfile);
   expect(input("Urgent notification repeats").value).toBe("2");
   expect(input("Urgent notification repeat interval (minutes)").value).toBe("30");
+  expect(sheetGuard).toHaveBeenLastCalledWith({ dirty: false, pending: false });
   await click("Keep computer awake while away");
   await edit("Urgent notification repeats", "0");
   await edit("Urgent notification repeat interval (minutes)", "1440");
   expect(f.updateProfile).not.toHaveBeenCalled();
+  expect(sheetGuard).toHaveBeenLastCalledWith({ dirty: true, pending: false });
   await click("Save preferences");
   expect(f.updateProfile).toHaveBeenCalledWith(
     7,

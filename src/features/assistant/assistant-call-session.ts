@@ -113,14 +113,40 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
     // keeps them loaded until it ends.
     // An unreviewed message blocks the call; say so before waiting for the computer to load its voice.
     if (isAssistantSendPending(key) || await readStoredSend(AsyncStorage, key)) throw new AssistantCallError("send-unreviewed");
-    // The lease uses the same voice as every turn, or the Host would see two configurations and refuse.
     await voicePreferences.getState().hydrate();
-    const hold = await port.request<{ lease?: string }>("voice.local.start", { config: speechConfig(voicePreferences.getState().preferences) }, { timeoutMs: 60000 });
-    if (typeof hold?.lease !== "string" || !hold.lease) throw new Error("Invalid voice connection.");
-    const holdLease = hold.lease;
-    const holdAlive = setInterval(() => { void port.request("voice.local.keepAlive", { lease: holdLease }, { timeoutMs: 5000 }).catch(() => {}); }, 30000);
-    cleanups.push(() => { clearInterval(holdAlive); void port.request("voice.local.release", { lease: holdLease }, { timeoutMs: 5000 }).catch(() => {}); });
-    if (!current()) throw new AssistantCallError("connection-changed");
+    let turnPreferences = voicePreferences.getState().preferences;
+    let held: { lease: string; key: string } | undefined;
+    const releaseLease = (lease: string) => port.request("voice.local.release", { lease }, { timeoutMs: 5000 });
+    const prepareVoice = async (valid: () => boolean) => {
+      const preferences = voicePreferences.getState().preferences;
+      const config = speechConfig(preferences);
+      const configKey = JSON.stringify(config);
+      if (held?.key !== configKey) {
+        if (held) {
+          const previous = held;
+          await releaseLease(previous.lease);
+          if (held === previous) held = undefined;
+        }
+        if (!valid()) throw new AssistantCallError("stopped");
+        const hold = await port.request<{ lease?: string }>("voice.local.start", { config }, { timeoutMs: 60000 });
+        if (typeof hold?.lease !== "string" || !hold.lease) throw new Error("Invalid voice connection.");
+        if (!valid()) {
+          await releaseLease(hold.lease).catch(() => {});
+          throw new AssistantCallError("stopped");
+        }
+        held = { lease: hold.lease, key: configKey };
+      }
+      turnPreferences = preferences;
+    };
+    const holdAlive = setInterval(() => {
+      if (held) void port.request("voice.local.keepAlive", { lease: held.lease }, { timeoutMs: 5000 }).catch(() => {});
+    }, 30000);
+    cleanups.push(() => {
+      clearInterval(holdAlive);
+      if (held) void releaseLease(held.lease).catch(() => {});
+      held = undefined;
+    });
+    await prepareVoice(current);
     if (!current()) throw new AssistantCallError("connection-changed");
     const client = new AssistantMobileClient({ environmentId: target.environmentId, current, request: (method, params, options) => port.request(method, params, { ...options, timeoutMs: 120000 }) });
     const access = async (required: readonly string[]) => {
@@ -134,7 +160,7 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
     let pending: { resolve(text: string): void; reject(error: unknown): void; text?: string } | undefined;
     let audioError: unknown;
     let lastUtterance = "", needsRecovery = false;
-    const engine = new AssistantVoice(nativeVoiceDependencies({
+    const engine = new AssistantVoice({ ...nativeVoiceDependencies({
       level: level => {
         if (!retired && version === generation && useAssistantCall.getState().phase === "listening" && !useAssistantCall.getState().muted)
           useAssistantCall.setState({ level });
@@ -150,16 +176,20 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
       transcript: (_target, text) => { if (pending) pending.text = text; },
       stage,
       error: error => { audioError = error; const failed = pending; pending = undefined; failed?.reject(error); },
-    }));
+    }), engine: () => turnPreferences.engine,
+      cloudModel: () => turnPreferences.cloudModel, speech: () => speechConfig(turnPreferences) });
     cleanups.push(() => engine.cancel());
     const loop = new AssistantCallLoop({
       current,
-      capture: (_target, valid) => new Promise<string>((resolve, reject) => {
+      capture: async (_target, valid) => {
+        await prepareVoice(valid);
+        return new Promise<string>((resolve, reject) => {
         if (!valid()) { reject(new AssistantCallError("stopped")); return; }
         // Silence returns to listening, so a later "no speech" stop belongs to the microphone, not transcription.
         pending = { resolve: text => { if (!text.trim()) stage("microphone"); resolve(text); }, reject }; audioError = undefined;
         void engine.record({ current: () => current() && valid(), request: port.request.bind(port) } as VoicePort, target, { endOnSilence: true, natural: true }).catch(reject);
-      }),
+        });
+      },
       send: async text => {
         useAssistantCall.setState({ utterance: text, stage: "reply" });
         lastUtterance = text; needsRecovery = true;
@@ -176,7 +206,12 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
         useAssistantCall.setState(state => ({ lastReply: reply, replyVersion: state.replyVersion + 1 }));
         return reply;
       },
-      speak: async (text, _target, valid) => { audioError = undefined; await engine.speak({ current: () => current() && valid(), request: port.request.bind(port) } as VoicePort, target, text); if (audioError) throw audioError; },
+      speak: async (text, _target, valid) => {
+        await prepareVoice(valid);
+        audioError = undefined;
+        await engine.speak({ current: () => current() && valid(), request: port.request.bind(port) } as VoicePort, target, text);
+        if (audioError) throw audioError;
+      },
       cancelAudio: () => { const stopped = pending; pending = undefined; stopped?.reject(new AssistantCallError("stopped")); engine.cancel(); },
       state: phase => {
         if (retired || version !== generation) return;

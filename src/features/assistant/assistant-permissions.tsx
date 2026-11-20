@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useSheetGuard } from "@/ui/sheet-guard";
 import type {
   AssistantProfile,
   AssistantNotificationTarget,
@@ -69,6 +70,20 @@ export function AssistantPermissions({
   const validRepeats = integerInRange(repeats, 0, 10),
     validInterval = integerInRange(interval, 1, 1440);
   const changedTarget = telegram !== targetKey(opening.notificationTelegram);
+  const originalProjects = opening.permissionProjectIds ?? [];
+  const originalExclusions: readonly string[] = opening.criticalExclusions ?? exclusions;
+  useSheetGuard({
+    pending: busy,
+    dirty: level !== (opening.permissionLevel ?? "legacy") ||
+      projectIds.length !== originalProjects.length ||
+      projectIds.some(id => !originalProjects.includes(id)) ||
+      critical.length !== originalExclusions.length ||
+      critical.some(value => !originalExclusions.includes(value)) ||
+      keepAwake !== (opening.keepAwakeWhileAway ?? true) ||
+      repeats !== String(opening.urgentNotificationRepeats ?? 2) ||
+      interval !== String(opening.urgentNotificationIntervalMinutes ?? 30) ||
+      changedTarget,
+  });
   const selectedTarget = targets.find((target) => targetKey(target) === telegram);
   const targetUnavailable = !!telegram && targetsLoaded && !selectedTarget;
   const loadTargets = async () => {

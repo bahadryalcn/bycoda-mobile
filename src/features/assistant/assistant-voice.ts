@@ -58,6 +58,7 @@ export type AssistantVoiceDependencies = {
   level?(value: number): void;
   /** Transcription engine chosen in Settings → Voice; absent means this computer. */
   engine?(): "local" | "cloud";
+  cloudModel?(): string | undefined;
   /** The assistant's voice chosen in Settings → Voice; absent means the Host default. */
   speech?(): Record<string, unknown>;
   /** Reports the chain step about to run, before its first await, so a failure is attributed to it. */
@@ -152,11 +153,14 @@ export class AssistantVoice {
     clearTimeout(this.timer);
     if (!this.current(epoch)) { this.cancel(); return; }
     // Native stop can synchronously report onEnded; this is an intentional transcription boundary.
-    this.dependencies.stage?.("transcription");
-    this.update("transcribing");
+    const hasSpeech = !this.utterance || this.utterance.hasSpeech;
+    if (hasSpeech) {
+      this.dependencies.stage?.("transcription");
+      this.update("transcribing");
+    } else this.phase = "transcribing";
     this.capture?.stop(); this.capture = undefined;
     try {
-      if (this.utterance && !this.utterance.hasSpeech) {
+      if (!hasSpeech) {
         this.frames = []; this.samples = 0;
         await this.dependencies.transcript(target, "");
         return;
@@ -167,8 +171,9 @@ export class AssistantVoice {
       for (const frame of this.frames) { pcm.set(frame, offset); offset += frame.length; }
       this.frames = []; this.samples = 0;
       const audio = pcmBase64(pcm);
+      const model = this.dependencies.cloudModel?.();
       const result = lease.id === CLOUD_LEASE
-        ? await lease.port.request<{ text: string }>("voice.cloud.transcribe", { provider: "openrouter", audio }, { retry: false, timeoutMs: 40000 })
+        ? await lease.port.request<{ text: string }>("voice.cloud.transcribe", { provider: "openrouter", audio, ...(model ? { model } : {}) }, { retry: false, timeoutMs: 40000 })
         : await lease.port.request<{ text: string }>("voice.local.transcribe", { lease: lease.id, audio }, { retry: false, timeoutMs: 40000 });
       if (!this.current(epoch)) return;
       if (typeof result?.text !== "string" || result.text.length > 16000) throw new Error("Speech could not be recognized. Try again.");

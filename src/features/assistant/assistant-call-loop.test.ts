@@ -55,10 +55,24 @@ it("does not resume capture while a muted send is still settling", async () => {
 });
 it("VAD requires sustained speech followed by silence and never calls silence speech", () => {
   const vad = new AssistantUtteranceVad(); const frame = (value: number, ms: number) => new Int16Array(ms * 16).fill(value);
+  const voiced = (ms: number) => Int16Array.from({ length: ms * 16 }, (_, i) => 2400 * Math.sin(i * Math.PI / 40));
   expect(vad.push(frame(0, 8000))).toBe(true); expect(vad.hasSpeech).toBe(false);
-  const speech = new AssistantUtteranceVad(); expect(speech.push(frame(1500, 100))).toBe(false); expect(speech.hasSpeech).toBe(false);
-  expect(speech.push(frame(1500, 200))).toBe(false); expect(speech.hasSpeech).toBe(true);
+  const speech = new AssistantUtteranceVad(); expect(speech.push(voiced(100))).toBe(false); expect(speech.hasSpeech).toBe(false);
+  expect(speech.push(voiced(200))).toBe(false); expect(speech.hasSpeech).toBe(true);
   expect(speech.push(frame(50, 500))).toBe(false); expect(speech.push(frame(50, 500))).toBe(true);
+});
+it("rejects microphone crackle and DC offset despite their high amplitude", () => {
+  const vad = new AssistantUtteranceVad();
+  let seed = 3;
+  const crackle = Int16Array.from({ length: 16000 }, () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return 6000 * (seed / 2 ** 31 - 1);
+  });
+  expect(vad.push(crackle)).toBe(false);
+  expect(vad.push(new Int16Array(16000).fill(3000))).toBe(false);
+  expect(vad.hasSpeech).toBe(false);
+  expect(vad.push(new Int16Array(96000))).toBe(true);
+  expect(vad.hasSpeech).toBe(false);
 });
 
 it("unknown send still stops the call when mute invalidated its audio epoch", async () => {

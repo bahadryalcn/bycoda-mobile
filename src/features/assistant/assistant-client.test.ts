@@ -27,6 +27,18 @@ it("refuses runtime attempts to turn the finite reader into arbitrary assistant 
 afterEach(async () => {
   for (const close of cleanups.splice(0).reverse()) await close();
 });
+it("gives the Room snapshot time to finish on a busy Host", async () => {
+  const f = await fixture();
+  const signal = new AbortController().signal;
+
+  await f.client.read({ op: "snapshot", limit: 100 }, signal);
+
+  expect(f.request).toHaveBeenLastCalledWith(
+    "assistant.request",
+    { op: "snapshot", limit: 100 },
+    { retry: false, signal, timeoutMs: 30_000 },
+  );
+});
 async function fixture(now?: () => number) {
   const folder = mkdtempSync(join(tmpdir(), "mobile-assistant-")),
     store = new HostStore(join(folder, "host.db"));

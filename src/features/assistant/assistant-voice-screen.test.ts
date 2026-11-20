@@ -16,7 +16,7 @@ vi.mock("@/ui/primitives", () => {
   return { Body, Button, IconButton: Button, Disclosure: ({ children, label }: PropsWithChildren<{ label: string }>) => h("details", null, h("summary", null, label), children) };
 });
 vi.mock("@/ui/busy-indicator", () => ({ BusyIndicator: () => h("i", { "data-busy": true }) }));
-vi.mock("../voice-settings/call-voice-button", () => ({ CallVoiceButton: ({ inCall }: { inCall: boolean }) => h("button", { "data-in-call": String(inCall), "aria-label": "Voice settings" }) }));
+vi.mock("../voice-settings/call-voice-button", () => ({ CallVoiceButton: () => h("button", { "aria-label": "Voice settings" }) }));
 vi.mock("@/ui/call-control",() => ({ CallControl: ({ label, accessibilityLabel, onPress, disabled, selected }: PropsWithChildren<any>) =>
   h("button", { "aria-label": accessibilityLabel ?? label, "aria-pressed": !!selected, disabled, onClick: onPress }, label) }));
 vi.mock("./assistant-call-session", () => ({ muteAssistantCall: f.mute, silenceAssistantCall: f.silence, setAssistantCallSpeakerMuted: f.speaker, finishAssistantCallTurn: f.finish }));
@@ -94,9 +94,13 @@ it("exposes the desktop call controls, the owner's turn and measured stage state
   const container = mount(); useAssistantCall.setState({ phase: "listening", capture: "recording", level: 0.7 });
   await act(async () => root.render(h(Screen)));
   expect([...container.querySelectorAll("button")].map(button => button.getAttribute("aria-label"))).toEqual([
-    "Minimize assistant", "Show chat", "Send now", "Voice settings", "Mute microphone", "Stop the reply and listen again", "Mute speaker", "End voice call"]);
+    "Minimize assistant", "Voice settings", "Show chat", "Send now", "Mute microphone", "Stop the reply and listen again", "Mute speaker", "End voice call"]);
   expect(f.orb).toHaveBeenLastCalledWith(expect.objectContaining({ state: "listening", level: 0.7 }));
-  expect(f.backdrop).toHaveBeenLastCalledWith(expect.objectContaining({ state: "listening", level: 0.7 }));
+  expect(f.backdrop).toHaveBeenLastCalledWith({ state: "listening" });
+  f.backdrop.mockClear();
+  await act(async () => useAssistantCall.setState({ level: 0.4 }));
+  expect(f.orb).toHaveBeenLastCalledWith(expect.objectContaining({ state: "listening", level: 0.4 }));
+  expect(f.backdrop).not.toHaveBeenCalled();
   expect(container.querySelector("[data-owner]")).not.toBeNull(); expect(container.querySelector('[data-avatar="🦊"]')).not.toBeNull();
   expect(container.querySelector<HTMLButtonElement>('[aria-label="Stop the reply and listen again"]')!.disabled).toBe(true);
   await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Send now"]')!.click()); expect(f.finish).toHaveBeenCalledOnce();
@@ -129,7 +133,7 @@ it("puts the home on the call's calm stage before any call", async () => {
   const container = mount(); useAssistantCall.setState({ phase: "idle" });
   await act(async () => root.render(h(AssistantVoiceScreen, { active: false, stage: true, name: "Ada", computer: "Office PC", scope: "", transcriptVisible: false, pending: false, ready: true,
     onToggleTranscript: vi.fn(), onStart: vi.fn(), onMinimize: vi.fn(), onEnd: vi.fn(), composer: null })));
-  expect(f.backdrop).toHaveBeenLastCalledWith(expect.objectContaining({ state: "idle", level: 0 }));
+  expect(f.backdrop).toHaveBeenLastCalledWith({ state: "idle" });
   // The home draws its own bar over the light; no call controls before a call.
   expect([...container.querySelectorAll("button")].map(button => button.getAttribute("aria-label"))).toEqual(["Back", "Minimize assistant"]);
 });
@@ -155,13 +159,13 @@ it("opens the conversation from a failure that asks to check the previous messag
   expect(container.querySelector('[aria-label="Hide chat"]')).not.toBeNull();
 });
 // The owner could not tell what "Transcription" meant nor change the assistant's voice from the call.
-it("offers the voice settings during a call and marks a running call so the voice waits for the next one", async () => {
+it("keeps settings beside the chat toggle throughout the call", async () => {
   const container = mount();
   await act(async () => root.render(h(Screen)));
   await act(async () => useAssistantCall.setState({ phase: "listening", error: undefined }));
-  expect(container.querySelector('[aria-label="Voice settings"]')?.getAttribute("data-in-call")).toBe("true");
+  expect(container.querySelector('[aria-label="Voice settings"]')?.nextElementSibling?.getAttribute("aria-label")).toBe("Show chat");
   await act(async () => useAssistantCall.setState({ phase: "idle", error: new Error("stopped") }));
-  expect(container.querySelector('[aria-label="Voice settings"]')?.getAttribute("data-in-call")).toBe("false");
+  expect(container.querySelector('[aria-label="Voice settings"]')).not.toBeNull();
   await act(async () => root.render(h(Screen, { active: false })));
   expect(container.querySelector('[aria-label="Voice settings"]')).toBeNull();
 });

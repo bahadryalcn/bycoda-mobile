@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { router } from "expo-router";
 import { HostToolScreen } from "./index";
 
 const state = vi.hoisted(() => ({ capabilities: [] as string[], directory: {
@@ -10,18 +11,22 @@ const state = vi.hoisted(() => ({ capabilities: [] as string[], directory: {
   directoryReady: true, privacyUnavailable: false, isPending: false, error: undefined as Error | undefined,
   isProjectVisible: () => state.directory.directoryReady,
 } }));
-vi.mock("expo-router", () => ({ router: { replace: vi.fn() } }));
+vi.mock("expo-router", () => ({ router: { replace: vi.fn(), setParams: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/machine-bar", () => ({ useMachineStatus: () => ({ phase: "disconnected" }) }));
 vi.mock("react-native", () => ({ View: "div" }));
 vi.mock("@/ui/private-content", () => ({ PrivateContentBoundary: ({ visible, children }: { visible: boolean; children: ReactNode }) => createElement("div", { hidden: !visible }, children) }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "machine", capabilities: state.capabilities }) }));
 vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => state.directory }));
+vi.mock("../workspace/project-picker", () => ({
+  ProjectPicker: ({ onSelect }: { onSelect(project: { id: string; cwd: string }): void }) =>
+    createElement("button", { onClick: () => onSelect({ id: "project", cwd: "/project" }) }, "Project"),
+}));
 vi.mock("@/ui/primitives", () => ({
   Screen: "section", QueryState: ({ query, loadingLabel }: { query: { isPending?: boolean; error?: Error }; loadingLabel?: string }) =>
     query.error ? createElement("p", null, query.error.message) : query.isPending ? createElement("p", null, loadingLabel) : null,
-  Empty: ({ title, detail, action }: { title: string; detail?: string; action?: { label: string } }) =>
-    createElement("p", null, title, detail, action?.label),
+  Empty: ({ title, detail, action }: { title: string; detail?: string; action?: { label: string; onPress(): void } }) =>
+    createElement("div", null, title, detail, action ? createElement("button", { onClick: action.onPress }, action.label) : null),
   StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: { message: string }) => createElement("p", null, message),
   Button: ({ label }: { label: string }) => createElement("button", null, label),
 }));
@@ -73,6 +78,23 @@ it("opens the global provider center without requiring a selected project", () =
 });
 it("opens host access without requiring a selected project", () => {
   expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "access" }))).toContain("Global host access center");
+});
+
+it("opens the supported tool for a project chosen from its empty state", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  state.capabilities = ["resources.diagnostics"];
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(HostToolScreen, { tool: "diagnostics" })));
+    expect(container.textContent).not.toContain("Back to projects");
+    await act(async () => container.querySelector("button")!.click());
+    expect(container.querySelectorAll("button")[1]?.textContent).toBe("Project");
+    await act(async () => container.querySelectorAll("button")[1]!.click());
+    expect(router.setParams).toHaveBeenCalledWith({ projectId: "project", machineId: "machine" });
+  } finally {
+    await act(async () => root.unmount());
+  }
 });
 
 it.each(["loading", "error", "sync-required"])("does not replace %s project verification with a project chooser or host upgrade", (readiness) => {

@@ -12,6 +12,7 @@ const READ_METHODS = new Set([
   "voice.local.modelStatus",
   "voice.local.setupStatus",
   "voice.cloud.status",
+  "voice.cloud.models",
   "models.list",
   "sessions.list",
   "sessions.get",

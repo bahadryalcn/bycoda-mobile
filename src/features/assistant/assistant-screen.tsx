@@ -13,7 +13,6 @@ import {
   Row,
   Screen,
   ScreenList,
-  Section,
   SelectField,
 } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
@@ -33,7 +32,9 @@ import { AssistantCallButton, AssistantCallError } from "./assistant-call-contro
 import { endAssistantCall } from "./assistant-call-session";
 import { useAssistantCall } from "./assistant-call-state";
 import { AssistantVoiceScreen } from "./assistant-voice-screen";
-import { AssistantContextBadges, AssistantHomeHero } from "./assistant-home-hero";
+import { CallVoiceButton } from "../voice-settings/call-voice-button";
+import { AssistantReplyModel } from "./assistant-reply-model";
+import { AssistantContextBadges, AssistantHomeHero, AssistantHomeLoading } from "./assistant-home-hero";
 import { useAssistantTranscript } from "./use-assistant-transcript";
 import { useAssistantVoiceEntry } from "./use-assistant-voice-entry";
 import { AssistantPermissions } from "./assistant-permissions";
@@ -147,7 +148,8 @@ function AssistantWorkspace({
   const { uiStyles } = useMobileTheme();
   const voiceMode = useAssistantCompanion(state => state.surface === "voice");
   const transcript = useAssistantTranscript();
-  const callActive = useAssistantCall(state => state.phase !== "idle");
+  const callPhase = useAssistantCall(state => state.phase);
+  const callActive = callPhase !== "idle";
   const replyVersion = useAssistantCall(state => state.replyVersion);
   const saved = useAssistantCompanion.getState();
   const sameCompanion = saved.machineId === machineId && saved.environmentId === environmentId;
@@ -357,18 +359,18 @@ function AssistantWorkspace({
       }));
       setMore((old) => ({ ...old, [selected]: (response.messages?.length ?? 0) === 100 }));
     });
+  const operationIssue = issue && !presenceUnknown ? (
+    <Notice tone="warning" message={copy(
+      "İşlem tamamlanamadı. Bilgisayar bağlantısını ve erişimi kontrol edin.",
+      "The operation could not be completed. Check this computer connection and access.",
+    )} />
+  ) : null;
   const controls = (
     <>
-      <Disclosure label={copy("Asistan ayarları", "Assistant settings")}>
-      <AssistantActivitySection activity={state?.activity} access={access} loading={snapshot.isPending} />
-      {state ? <>
-        <Button label={copy("Room'u durdur", "Stop Room")} disabled={!writable || busy} busy={busyKind === "stop"}
-          onPress={() => confirmAction(copy("Room'u durdur", "Stop Room"), copy("Room çalışmaları duraklatılacak. Devam etmek için masaüstünden tekrar başlatın.", "Room work will pause. Resume it from desktop when ready."), copy("Durdur", "Stop"),
-            () => { void perform("stop", async () => { await client.pauseAll(); await refreshAll(); }); })} />
+      {state ? (
         <AssistantPermissions key={sourceKey} profile={state.profile} client={client}
           projects={projects.directoryReady ? projects.data ?? [] : []} enabled={writable && !busy} current={current} onChanged={refreshAll} />
-      </> : null}
-      </Disclosure>
+      ) : null}
       {state ? (
         <Disclosure label={copy("Durumum", "My presence")}>
           <Row>
@@ -429,40 +431,25 @@ function AssistantWorkspace({
           onChanged={refreshAll}
         />
       ) : null}
-      {issue && !presenceUnknown ? (
-        <Notice
-          tone="warning"
-          message={copy(
-            "İşlem tamamlanamadı. Bilgisayar bağlantısını ve erişimi kontrol edin.",
-            "The operation could not be completed. Check this computer connection and access.",
-          )}
-        />
+      <AssistantActivitySection activity={state?.activity} access={access} loading={snapshot.isPending} />
+      {state ? (
+        <Button label={copy("Room'u durdur", "Stop Room")} disabled={!writable || busy} busy={busyKind === "stop"}
+          onPress={() => confirmAction(copy("Room'u durdur", "Stop Room"), copy("Room çalışmaları duraklatılacak. Devam etmek için masaüstünden tekrar başlatın.", "Room work will pause. Resume it from desktop when ready."), copy("Durdur", "Stop"),
+            () => { void perform("stop", async () => { await client.pauseAll(); await refreshAll(); }); })} />
       ) : null}
-      <Section title={copy("Konuşmalar", "Conversations")}>
-        <SelectField
-          label={copy("Konuşma kapsamı", "Conversation scope")}
-          value={projectId}
-          disabled={busy || callActive}
-          options={[
-            { value: "", label: copy("Genel", "Global") },
-            ...(projects.directoryReady ? (projects.data ?? []) : []).map((project) => ({
-              value: project.id,
-              label: project.name,
-            })),
-          ]}
-          onChange={(value) => {
-            if (useAssistantCall.getState().phase !== "idle") return;
-            selection.current++;
-            setProjectId(value);
-            setThread(null);
-          }}
-        />
+      {operationIssue}
+    </>
+  );
+  const recentConversations = !inCall ? (
+    <>
+      {visibleThread?.purpose === "job-planning" ? (
         <Button
           label={copy("Konuşmayı aç", "Open conversation")}
           onPress={() => void open()}
           busy={busyKind === "open"}
           disabled={busy || callActive || !state || (!!projectId && !projects.isProjectVisible(projectId))}
         />
+      ) : null}
         {threads.length ? (
           <SelectField
             label={copy("Son konuşmalar", "Recent conversations")}
@@ -476,7 +463,7 @@ function AssistantWorkspace({
                 : copy("Genel", "Global")} · ${row.purpose === "job-planning" ? copy("Planlama", "Planning") : copy("Konuşma", "Conversation")}`,
             }))}
             onChange={(id) => {
-              if (useAssistantCall.getState().phase !== "idle") return;
+              if (!current() || pending.current || useAssistantCall.getState().phase !== "idle") return;
               const selected = threads.find((row) => row.id === id);
               if (selected && assistantThreadVisible(selected, access)) {
                 selection.current++;
@@ -486,15 +473,56 @@ function AssistantWorkspace({
             }}
           />
         ) : null}
-      </Section>
     </>
-  );
+  ) : null;
   const approvalAction = pendingApprovals ? <Button
     label={copy("Onaylar ({p0} bekliyor)", "Approvals ({p0} waiting)", { p0: pendingApprovals })}
     tone="primary" onPress={() => router.push("/approvals")} /> : null;
   const title = state?.profile.name || copy("Asistan", "Assistant");
   const scopeName = (projects.data ?? []).find(project => project.id === projectId)?.name || copy("Genel", "Global");
   const scopeHidden = !!projectId && !projects.isProjectVisible(projectId);
+  const settings = state ? <>
+    <SelectField label={copy("Konuşma kapsamı", "Conversation scope")} value={projectId}
+      disabled={busy || (callActive && callPhase !== "listening" && callPhase !== "muted")} options={[
+        { value: "", label: copy("Genel", "Global") },
+        ...(projects.directoryReady ? (projects.data ?? []) : []).filter(project => projects.isProjectVisible(project.id)).map(project => ({
+          value: project.id, label: project.name,
+        })),
+      ]} onChange={(value) => {
+        if (value === projectId || !current() || busy || (value && !projects.isProjectVisible(value))) return;
+        const sessionId = useAssistantCall.getState().sessionId;
+        const select = () => {
+          const { phase, sessionId: liveId } = useAssistantCall.getState();
+          if (!current() || (value && !projects.isProjectVisible(value)) ||
+            (phase !== "idle" && (liveId !== sessionId || (phase !== "listening" && phase !== "muted")))) return;
+          if (phase !== "idle") {
+            endAssistantCall();
+            voiceEntry.cancel();
+            useAssistantCompanion.setState({ surface: "chat" });
+          }
+          selection.current++;
+          setProjectId(value);
+          setThread(null);
+        };
+        if (!callActive) select();
+        else confirmAction(copy("Konuşma kapsamı", "Conversation scope"),
+          copy("Kapsamı değiştirmek için bu görüşmeyi bitir.", "End this call to change the conversation scope."),
+          copy("Görüşmeyi bitir", "End voice call"), select);
+      }} />
+    <AssistantReplyModel client={client} profile={state.profile} projectId={projectId}
+      disabled={!writable || busy} onSaved={(profile) => {
+        if (!current()) return;
+        const key = hostKey(machineId, ["assistant", sourceKey, "snapshot"]);
+        cache.setQueryData<AssistantResponse>(key, previous => previous?.snapshot &&
+          previous.snapshot.profile.version < profile.version
+          ? { ...previous, snapshot: { ...previous.snapshot, profile } } : previous);
+        void cache.invalidateQueries({ queryKey: key }).catch(() => {});
+      }} />
+    {recentConversations}
+  </> : null;
+  const settingsButton = settings ? (
+    <CallVoiceButton details={!inCall ? controls : undefined}>{settings}</CallVoiceButton>
+  ) : null;
   const header = (
     <>
       {!voiceMode && visibleThread ? <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
@@ -503,11 +531,12 @@ function AssistantWorkspace({
         </View>
         <AssistantCallButton target={{ machineId, environmentId, threadId: visibleThread.id }} onStart={voiceEntry.start}
           enabled={writable && configured} current={() => current() && (!visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId))} />
+        {settingsButton}
       </View> : null}
       {!voiceMode && visibleThread ? <AssistantCallError /> : null}
-      {approvalAction}
+      {state || inCall ? approvalAction : null}
       {/* The call screen shows the connection state once; its chat pane stays on the transcript. */}
-      {inCall ? null : <QueryState query={snapshot} loading={state ? "inline" : "content"} />}
+      {!inCall && state ? <QueryState query={snapshot} loading="inline" /> : null}
       {inCall && !visibleThread ? <Empty compact illustration="chat-empty"
         title={copy("Gösterilebilen mesaj yok", "No messages are available to display")} /> : null}
       {home ? <AssistantHomeHero name={title} avatar={state.profile.avatar}
@@ -516,10 +545,7 @@ function AssistantWorkspace({
         voiceDisabled={busy || callActive || !writable || !configured || scopeHidden} openDisabled={busy || !state || scopeHidden}
         setupNeeded={!configured}
         onVoice={voiceEntry.start} onOpen={() => void open()} /> : null}
-      {inCall ? null : <Disclosure label={copy("Konuşmalar", "Conversations")}>{controls}</Disclosure>}
-      {!inCall && !state &&!snapshot.isPending && assistantNeedsUpdate(snapshot.error) ? <Empty compact illustration="permission"
-        title={copy("Bilgisayarındaki Bycoda'yı güncelle", "Update bycoda on your computer")}
-        detail={copy("Bu bilgisayar henüz asistanı sunmuyor. Güncelledikten sonra sohbet ve sesli görüşme burada açılır.", "This computer does not offer the assistant yet. After updating, chat and voice calls appear here.")} /> : null}
+      {!inCall ? operationIssue : null}
       {visibleThread ? (
         <>
           <QueryState query={history} loading="inline" />
@@ -543,14 +569,6 @@ function AssistantWorkspace({
               compact
               illustration="chat-empty"
               title={copy("Gösterilebilen mesaj yok", "No messages are available to display")}
-            />
-          ) : null}
-          {raw.length > messages.length ? (
-            <Notice
-              message={copy(
-                "Erişimi doğrulanamayan mesajlar gizlendi.",
-                "Messages whose access could not be verified are hidden.",
-              )}
             />
           ) : null}
         </>
@@ -581,6 +599,15 @@ function AssistantWorkspace({
       style={stage || voiceMode ? { backgroundColor: "transparent" } : undefined}
       header={header}
       data={messages}
+      ListEmptyComponent={!inCall && !state ? (
+        <>
+          <QueryState query={snapshot} loading="centered"
+            renderLoading={(label) => <AssistantHomeLoading label={label} />} />
+          {!snapshot.isPending && assistantNeedsUpdate(snapshot.error) ? <Empty compact illustration="permission"
+            title={copy("Bilgisayarındaki Bycoda'yı güncelle", "Update bycoda on your computer")}
+            detail={copy("Bu bilgisayar henüz asistanı sunmuyor. Güncelledikten sonra sohbet ve sesli görüşme burada açılır.", "This computer does not offer the assistant yet. After updating, chat and voice calls appear here.")} /> : null}
+        </>
+      ) : undefined}
       keyExtractor={(message) => message.id}
       renderItem={({ item }) => (
         <AssistantMessageRow message={item} voiceLabel={copy("Sesle", "By voice")} />
@@ -598,6 +625,7 @@ function AssistantWorkspace({
     <>
     <Stack.Screen options={{ title, headerShown: !voiceMode && !voiceRequested && !stage }} />
     <AssistantVoiceScreen active={voiceMode || voiceRequested} stage={stage} name={title} computer={machineName}
+      settings={settingsButton}
       onBack={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }}
       composer={composer} feedback={<>{approvalAction}<QueryState query={snapshot} loading="none" />{issue ? <Notice message={copy("İşlem tamamlanamadı. Bilgisayar bağlantısını ve erişimi kontrol edin.", "The operation could not be completed. Check this computer connection and access.")} /> : null}</>}
       scope={[machineName, scopeName].join(" · ")}

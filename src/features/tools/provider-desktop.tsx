@@ -236,10 +236,7 @@ export function ProviderDesktop({
               metadata={providerName(item.account.provider)}
               details={
                 <>
-                  <ProviderAccountKind
-                    kind={item.account.kind}
-                    derivedKind={item.account.derivedKind}
-                  />
+                  <ProviderAccountKind kind={item.account.kind} />
                   {limitsLinked ? (
                     <NavigationRow
                       label={copy("Hesap limitleri", "Account limits")}

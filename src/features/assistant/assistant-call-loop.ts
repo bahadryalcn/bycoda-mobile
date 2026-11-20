@@ -1,5 +1,6 @@
 import { AssistantCallError } from "./assistant-call-error";
 import type { AssistantVoiceTarget } from "./assistant-voice";
+import { VoiceVad } from "../../../../src/features/voice/model/voiceVad";
 
 export type AssistantCallPhase = "idle" | "listening" | "sending" | "speaking" | "muted";
 export type AssistantCallDependencies = {
@@ -119,25 +120,30 @@ export class AssistantCallLoop {
   }
 }
 
-/** RMS gate over 16kHz PCM, with an adaptive quiet floor and a bounded no-speech wait. */
+/** Use the desktop speech detector with steady 64 ms frames, regardless of native event size. */
 export class AssistantUtteranceVad {
-  private noise = 100;
-  private elapsed = 0;
-  private speech = 0;
-  private silence = 0;
-  get hasSpeech() { return this.speech >= 240; }
+  private frame = new Int16Array(1024);
+  private filled = 0;
+  private samples = 0;
+  private ended = false;
+  private speech = false;
+  private vad = new VoiceVad(16000, () => { this.speech = true; },
+    () => { this.ended = true; }, () => { this.speech = false; }, { endSilence: 0.9 });
+  get hasSpeech() { return this.speech; }
   push(pcm: Int16Array): boolean {
-    if (!pcm.length) return false;
-    let squares = 0;
-    for (const value of pcm) squares += value * value;
-    const rms = Math.sqrt(squares / pcm.length), duration = pcm.length / 16;
-    this.elapsed += duration;
-    if (rms >= Math.max(300, this.noise * 3)) { this.speech += duration; this.silence = 0; }
-    else {
-      this.noise = this.noise * 0.9 + rms * 0.1;
-      this.silence += duration;
-      if (!this.hasSpeech) this.speech = 0;
+    for (let offset = 0; offset < pcm.length && !this.ended;) {
+      const length = Math.min(pcm.length - offset, this.frame.length - this.filled);
+      this.frame.set(pcm.subarray(offset, offset + length), this.filled);
+      offset += length;
+      this.filled += length;
+      this.samples += length;
+      if (this.filled === this.frame.length) {
+        this.vad.push(this.frame);
+        this.frame = new Int16Array(1024);
+        this.filled = 0;
+      }
+      if (!this.speech && this.samples >= 128000) this.ended = true;
     }
-    return this.hasSpeech ? this.silence >= 900 : this.elapsed >= 8000;
+    return this.ended;
   }
 }

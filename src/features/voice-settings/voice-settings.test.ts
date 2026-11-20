@@ -40,6 +40,7 @@ vi.mock("@/ui/primitives", () => {
     Button, IconButton: Group, Stack: Group, NavigationGroup: Group, SectionHeader: ({ title }: { title: string }) => h("h2", null, title),
     Notice: ({ message }: { message: string }) => h("p", null, message), ErrorNotice: () => null, QueryState: () => null,
     SettingIcon: () => null, SegmentedRow: () => null,
+    SelectField: ({ label }: { label: string }) => h("p", null, label),
     SelectRow: ({ label, detail }: { label: string; detail?: string }) => h("p", null, label, detail),
     ChoiceChip: ({ label }: { label: string }) => h("span", null, label),
     NavigationRow: ({ label, detail, onPress }: { label: string; detail: string; onPress(): void }) => h("button", { onClick: onPress }, label, detail),

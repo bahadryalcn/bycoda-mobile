@@ -22,6 +22,7 @@ import { useCopy } from "./copy";
 import { useReducedMotionPreference } from "./use-reduced-motion";
 import { HintLabel, UnitHint, isUnitHint } from "./info-hint";
 import { useInNavigationGroup } from "./navigation-row";
+import { SectionHeader } from "./layout";
 import { metrics, opacity, radii, space, gapIcon } from "./tokens";
 import { filterSelection, selectionLabels, toggleSelection, type SelectionOption } from "./selection-model";
 
@@ -96,7 +97,9 @@ function SelectionField<T extends string>({
   const open = !!opening;
   const [search, setSearch] = useState("");
   const optionLabels = useMemo(
-    () => new Map(options.map((option) => [option.value, option.label])),
+    () => new Map(options.map((option) => [
+      option.value, option.group ? `${option.group} · ${option.label}` : option.label,
+    ])),
     [options],
   );
   const labels = selectionLabels(values, optionLabels);
@@ -112,7 +115,7 @@ function SelectionField<T extends string>({
   const available = !disabled && access.allowed && access.check() && (!opening || opening.access.allowed && opening.access.check());
   const searchKey = normalizeSearch(search, locale);
   // Only an open panel needs option identity to retire stale events; a closed trigger must not serialise every option on each render.
-  const signature = open ? JSON.stringify([searchKey, locale, values, options.map(option => [option.value, option.label, option.detail, option.disabled])]) : "";
+  const signature = open ? JSON.stringify([searchKey, locale, values, options.map(option => [option.value, option.label, option.detail, option.disabled, option.group])]) : "";
   const view = useMemo(() => ({}), [opening, available, signature, multiple, max]);
   const input = useMemo(() => ({}), [opening, available]);
   const live = useRef({ opening, view, input, available, access, values, onChange, filtered });
@@ -177,7 +180,7 @@ function SelectionField<T extends string>({
         pressScale={1}
         pressOpacity={reducedMotion ? 1 : opacity.pressed}
         accessibilityRole={multiple ? "checkbox" : "radio"}
-        accessibilityLabel={[item.label, item.detail].filter(Boolean).join(". ")}
+        accessibilityLabel={[item.label, item.group, item.detail].filter(Boolean).join(". ")}
         accessibilityState={{ checked: selected, disabled: off }}
         aria-checked={selected}
         aria-disabled={off}
@@ -208,6 +211,12 @@ function SelectionField<T extends string>({
       </AnimatedPressable>
     );
   };
+  const groupHeading = (item: SelectionFieldOption<T>, index: number) =>
+    item.group && item.group !== filtered[index - 1]?.group ? (
+      <View style={{ paddingHorizontal: space.md }}>
+        <SectionHeader title={item.group} />
+      </View>
+    ) : null;
   const shown = filtered.slice(0, INLINE_LIMIT);
   return (
     <View style={row ? undefined : [uiStyles.field, (error || isUnitHint(hint)) && { paddingBottom: space.xs }]}>
@@ -308,7 +317,10 @@ function SelectionField<T extends string>({
           {controls}
           {shown.length ? shown.map((item, index) => (
             <View key={item.value}>
-              {index ? <View accessible={false} style={[uiStyles.separator, { marginHorizontal: space.sm }]} /> : null}
+              {index && item.group === shown[index - 1]?.group ? (
+                <View accessible={false} style={[uiStyles.separator, { marginHorizontal: space.sm }]} />
+              ) : null}
+              {groupHeading(item, index)}
               {renderOption(item)}
             </View>
           )) : empty}
@@ -353,7 +365,7 @@ function SelectionField<T extends string>({
               <View style={[uiStyles.separator, { marginHorizontal: space.sm }]} />
             )}
             ListEmptyComponent={empty}
-            renderItem={({ item }) => renderOption(item)}
+            renderItem={({ item, index }) => <>{groupHeading(item, index)}{renderOption(item)}</>}
           />
         </View>
       </Sheet> : null}

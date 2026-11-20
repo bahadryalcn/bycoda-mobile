@@ -16,18 +16,21 @@ export type SupertonicSpeaker = (typeof SUPERTONIC_SPEAKERS)[number];
  * Phone-local voice preferences; the Host decides whether each engine is actually available.
  * `engine` is where the owner's speech is recognized; `speech` and `speaker` are how the assistant sounds.
  */
-export type VoicePreferences = { engine: TranscriptionEngine; micOrder: MicKind[]; speech: SpeechEngine; speaker: SupertonicSpeaker };
+export type VoicePreferences = { engine: TranscriptionEngine; micOrder: MicKind[]; speech: SpeechEngine; speaker: SupertonicSpeaker;
+  whisperModel?: "small" | "turbo"; cloudModel?: string; elevenVoice?: string };
 export const defaultVoicePreferences: VoicePreferences = { engine: "local", micOrder: ["wired", "bluetooth", "builtin", "carplay"], speech: "supertonic", speaker: "M1" };
 
 /**
  * The speech configuration a call sends to the Host. Built like the desktop's: defaults are omitted, so the
  * same choice on both devices yields the same Host runtime key and they share the loaded models.
  */
-export function speechConfig(preferences: Pick<VoicePreferences, "speech" | "speaker">): { natural: true; engine?: SpeechEngine; voiceId?: string } {
+export function speechConfig(preferences: Pick<VoicePreferences, "speech" | "speaker" | "whisperModel" | "elevenVoice">) {
   return {
-    natural: true,
+    natural: true as const,
+    ...(preferences.whisperModel ? { whisperModel: preferences.whisperModel } : {}),
     ...(preferences.speech !== "supertonic" ? { engine: preferences.speech } : {}),
     ...(preferences.speech === "supertonic" && preferences.speaker !== "M1" ? { voiceId: preferences.speaker } : {}),
+    ...(preferences.speech === "elevenlabs" && preferences.elevenVoice ? { voiceId: preferences.elevenVoice } : {}),
   };
 }
 const storageKey = "bycoda.mobile.voice-preferences.v1";
@@ -46,6 +49,9 @@ export function normalizeVoicePreferences(value: unknown): VoicePreferences {
     micOrder: normalizeMicOrder(data.micOrder),
     speech: (SPEECH_ENGINES as readonly unknown[]).includes(data.speech) ? (data.speech as SpeechEngine) : "supertonic",
     speaker: (SUPERTONIC_SPEAKERS as readonly unknown[]).includes(data.speaker) ? (data.speaker as SupertonicSpeaker) : "M1",
+    ...(data.whisperModel === "small" || data.whisperModel === "turbo" ? { whisperModel: data.whisperModel } : {}),
+    ...(typeof data.cloudModel === "string" && /^[\w./:-]{1,200}$/.test(data.cloudModel) ? { cloudModel: data.cloudModel } : {}),
+    ...(typeof data.elevenVoice === "string" && /^[A-Za-z0-9]{1,64}$/.test(data.elevenVoice) ? { elevenVoice: data.elevenVoice } : {}),
   };
 }
 /** CarPlay is an iOS car route; Android never reports it, so it is not offered there. */

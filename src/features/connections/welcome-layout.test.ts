@@ -8,9 +8,10 @@ const passThrough = vi.hoisted(() => ({ children }: { children?: unknown }) => c
 vi.mock("react-native", () => ({ useWindowDimensions: () => ({ width: 390, height: 844 }), View: passThrough, ScrollView: ({ children, contentContainerStyle }: PropsWithChildren<{ contentContainerStyle: Record<string, number> }>) => { layout.content = contentContainerStyle; return h("main", null, children); } }));
 vi.mock("react-native-reanimated", () => {
   const animation = { duration: () => animation, delay: () => animation, reduceMotion: () => animation };
-  return { default: { View: passThrough }, FadeIn: animation, FadeInDown: animation, ReduceMotion: { System: "system" } };
+  return { default: { View: passThrough }, FadeIn: animation, FadeInDown: animation, ReduceMotion: { System: "system" }, useReducedMotion: () => false };
 });
 vi.mock("expo-router", () => ({ router: { navigate: vi.fn() }, Stack: { Screen: () => null } }));
+vi.mock("@/ui/motion", () => ({ stillMotion: false }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 44 }) }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));

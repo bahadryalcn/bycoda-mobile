@@ -167,21 +167,6 @@ export function SettingsScreen() {
             onChange={setLanguage}
           />
           <SegmentedRow
-            icon={tile(MessageSquare)}
-            label={copy("Ajan çalışırken gönder", "Send while agent is running")}
-            help={copy(
-              "Yönlendir: mesaj çalışan ajana hemen iletilir. Sıraya al: ajan bitince gönderilir.",
-              "Steer sends the message to the running agent now. Queue sends it after the agent finishes.",
-            )}
-            value={busySend}
-            disabled={!busySendHydrated}
-            options={[
-              { value: "steer" as const, label: copy("Yönlendir", "Steer") },
-              { value: "queue" as const, label: copy("Sıraya al", "Queue") },
-            ]}
-            onChange={(value) => { void busySendStore.getState().setMode(value); }}
-          />
-          <SegmentedRow
             icon={tile(Gauge)}
             label={copy("Veri tasarrufu", "Data saver")}
             help={copy(
@@ -198,9 +183,7 @@ export function SettingsScreen() {
             onChange={(value) => { void dataSaverStore.getState().setDataSaver(value); }}
           />
           {dataSaverError ? <Notice tone="warning" message={copy("Veri tasarrufu tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The data saver preference could not be read or saved. Select it again to retry.")} /> : null}
-          {busySendError ? <Notice tone="warning" message={copy("Gönderim tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The send preference could not be read or saved. Select it again to retry.")} /> : null}
           <KeyboardSettings />
-          <VoiceSettings />
           <NavigationRow label={titles.widgets} icon={tile(LayoutGrid)} onPress={() => setPanel("widgets")} />
         </NavigationGroup>
         {appearanceError ? (
@@ -217,6 +200,27 @@ export function SettingsScreen() {
             <AppearanceSettings />
           </Sheet>
         ) : null}
+      </Section>
+      <Section title={copy("Sohbet", "Chat")}>
+        <NavigationGroup>
+          <SegmentedRow
+            icon={tile(MessageSquare)}
+            label={copy("Ajan çalışırken gönder", "Send while agent is running")}
+            help={copy(
+              "Yönlendir: mesaj çalışan ajana hemen iletilir. Sıraya al: ajan bitince gönderilir.",
+              "Steer sends the message to the running agent now. Queue sends it after the agent finishes.",
+            )}
+            value={busySend}
+            disabled={!busySendHydrated}
+            options={[
+              { value: "steer" as const, label: copy("Yönlendir", "Steer") },
+              { value: "queue" as const, label: copy("Sıraya al", "Queue") },
+            ]}
+            onChange={(value) => { void busySendStore.getState().setMode(value); }}
+          />
+          <VoiceSettings />
+        </NavigationGroup>
+        {busySendError ? <Notice tone="warning" message={copy("Gönderim tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The send preference could not be read or saved. Select it again to retry.")} /> : null}
       </Section>
       <Section title={copy("Gezinme", "Navigation")}>
         <NavigationSettings />
