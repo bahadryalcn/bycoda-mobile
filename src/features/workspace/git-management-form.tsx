@@ -1,7 +1,27 @@
 import { useCopy } from "@/ui/copy";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { Body, Field, FormActions, Notice, SelectField, Stack, ToggleField } from "@/ui/primitives";
-import type { GitManagementAction, GitManagementDraft } from "./git-management-model";
+import type { GitManagementAction, GitManagementDraft, GitManagementIssue } from "./git-management-model";
+
+export function useGitManagementIssueText(): Record<GitManagementIssue, string> {
+  const copy = useCopy();
+  return {
+    branchNames: copy("Dal adları farklı ve geçerli olmalı.", "Choose distinct valid branch names."),
+    chooseBranch: copy("Bir dal seçin.", "Choose a branch."),
+    remoteBranch: copy("Bir uzak depo ve dal seçin.", "Choose a remote and branch."),
+    tagSha: copy("Etiket adı ve tam commit SHA’sı girin.", "Enter a tag and full commit SHA."),
+    chooseTag: copy("Bir etiket seçin.", "Choose a tag."),
+    remoteUrl: copy("Uzak depo adı ve URL’si girin.", "Enter a remote name and URL."),
+    chooseRemote: copy("Bir uzak depo seçin.", "Choose a remote."),
+    sourceBranch: copy("Bir kaynak dal seçin.", "Choose a source branch."),
+    commitSha: copy("Commit geçmişindeki tam commit SHA’sını girin.", "Enter the full commit SHA from commit history."),
+    resetMode: copy("Bir sıfırlama modu seçin.", "Choose a reset mode."),
+    pullRequest: copy("Başlık, hedef dal (base) ve kaynak dal (head) girin.", "Enter a title, base and head branch."),
+    snapshotInvalid: copy("Git anlık görüntüsü geçersiz. Yenileyin.", "Invalid Git snapshot. Refresh first."),
+    targetChanged: copy("Hedef referans değişti. Devam etmeden yeniden yükleyin.", "Target reference changed. Reload before continuing."),
+    rootUnavailable: copy("Checkout kökü kullanılamıyor.", "The checkout root is unavailable."),
+  };
+}
 
 export function useGitManagementLabels(): Record<GitManagementAction, string> {
   const copy = useCopy();
@@ -16,8 +36,8 @@ export function useGitManagementLabels(): Record<GitManagementAction, string> {
   };
 }
 
-export function GitManagementForm({ value, onChange, busy, disabled, error, branchOptions, onSubmit, onCancel, feedback }: {
-  value: GitManagementDraft; onChange: (value: GitManagementDraft) => void; busy: boolean; disabled: boolean; error?: string;
+export function GitManagementForm({ value, onChange, busy, disabled, blocked, error, branchOptions, onSubmit, onCancel, feedback }: {
+  value: GitManagementDraft; onChange: (value: GitManagementDraft) => void; busy: boolean; disabled: boolean; blocked: boolean; error?: string;
   branchOptions: { value: string; label: string }[]; onSubmit: () => void; onCancel: () => void; feedback: React.ReactNode;
 }) {
   const copy = useCopy();
@@ -47,7 +67,7 @@ export function GitManagementForm({ value, onChange, busy, disabled, error, bran
       <Field label={copy("Kaynak dal (head)", "Head branch")} value={value.head} editable={!locked} onChangeText={(head) => patch({ head })} />
     </>}
     {error ? <Notice tone="warning" message={error} /> : null}
-    <FormActions submitLabel={labels[action]} disabled={locked || !!error} busy={busy} onSubmit={onSubmit} onCancel={requestClose}
+    <FormActions submitLabel={labels[action]} disabled={locked || blocked} busy={busy} onSubmit={onSubmit} onCancel={requestClose}
       cancelDisabled={busy} cancelLabel={copy("Vazgeç", "Cancel")} feedback={feedback} />
   </Stack>;
 }

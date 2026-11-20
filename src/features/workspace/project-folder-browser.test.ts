@@ -96,10 +96,11 @@ vi.mock("@/ui/primitives", () => {
         ref,
         onChange: (e: any) => onChangeText(e.target.value),
       }),
-    IdentifierField: ({ label, value, onChangeText }: any) =>
+    IdentifierField: ({ label, value, onChangeText, editable }: any) =>
       createElement("input", {
         "aria-label": label,
         value,
+        disabled: editable === false,
         onChange: (event: any) => onChangeText(event.target.value),
       }),
     QueryState: ({ query, empty, emptyTitle, emptyAction, onManageConnections }: any) =>
@@ -171,7 +172,7 @@ it("retains an entered folder path until discard is confirmed without opening it
 });
 it("restores the same folder collection without opening or navigating when clearing an empty search", async () => {
   await render();
-  const input = container.querySelector("input")!;
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Find a folder"]')!;
   await act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
       input,
@@ -222,7 +223,7 @@ it("matches Turkish folder names without opening a project or changing the path"
   ];
   try {
     await render();
-    const input = container.querySelector("input")!;
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Find a folder"]')!;
     for (const [query, expected] of [
       ["istanbul", "İSTANBUL"],
       ["ığdır", "IĞDIR"],
@@ -247,7 +248,7 @@ it("retains an active folder search when refreshed collection becomes short", as
   const original = fixture.data.entries;
   try {
     await render();
-    const input = container.querySelector("input")!;
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Find a folder"]')!;
     await act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
         input,
@@ -257,9 +258,60 @@ it("retains an active folder search when refreshed collection becomes short", as
     });
     fixture.data.entries = [];
     await render();
-    expect(container.querySelector<HTMLInputElement>("input")?.value).toBe("missing");
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Find a folder"]')?.value).toBe("missing");
     expect(fixture.open).not.toHaveBeenCalled();
   } finally {
     fixture.data.entries = original;
+  }
+});
+
+const setInput = async (input: HTMLInputElement, value: string) => {
+  await act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+};
+const button = (label: string) =>
+  [...container.querySelectorAll("button")].find((b) => b.textContent === label)!;
+
+it("offers clone and path entry in the header above a long folder listing", async () => {
+  await render();
+  const header = container.querySelector("header")!;
+  expect(header.textContent).toContain("Clone repository");
+  expect(header.querySelector('input[aria-label="Folder path"]')).toBeTruthy();
+  expect(container.querySelector("main > section")!.contains(button("Clone repository"))).toBe(
+    false,
+  );
+  expect(container.textContent).toContain("Folder 12");
+});
+
+it("disables clone and path entry while an open is pending", async () => {
+  fixture.pending = true;
+  await render();
+  expect(button("Clone repository").disabled).toBe(true);
+  expect(button("Browse this path").disabled).toBe(true);
+  expect(
+    container.querySelector<HTMLInputElement>('input[aria-label="Folder path"]')!.disabled,
+  ).toBe(true);
+});
+
+it("keeps a typed path after a rejected navigation and clears it once the browser lands on it", async () => {
+  await render();
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Folder path"]')!;
+  await setInput(input, "/work/missing");
+  await click("Browse this path");
+  expect(fixture.query).toHaveBeenLastCalledWith(["folders", "/work/missing"], "projects.browse", {
+    path: "/work/missing",
+  });
+  await render();
+  expect(input.value).toBe("/work/missing");
+
+  fixture.data.path = "/work/missing";
+  try {
+    await render();
+    expect(input.value).toBe("");
+    expect(fixture.open).not.toHaveBeenCalled();
+  } finally {
+    fixture.data.path = "/work";
   }
 });

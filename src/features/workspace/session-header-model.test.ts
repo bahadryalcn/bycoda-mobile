@@ -20,3 +20,9 @@ it("marks a stale or paused snapshot in the header instead of a transcript banne
   expect(sessionHeaderStatus(session("running"), true, copy)).toEqual({ label: "Offline", tone: "warning" });
   expect(sessionHeaderStatus(session("idle"), false, copy, true)).toEqual({ label: "Offline", tone: "warning" });
 });
+it("shows a run blocked on an undecided approval as waiting for the owner", () => {
+  const blocked = session("running", { blocks: [{ id: "a", approval: { decided: false } }] });
+  expect(sessionHeaderStatus(blocked, false, copy)).toEqual({ label: "Waiting for your approval", tone: "warning" });
+  const decided = session("running", { blocks: [{ id: "a", approval: { decided: true } }] });
+  expect(sessionHeaderStatus(decided, false, copy)).toEqual({ label: "Running", tone: "live" });
+});

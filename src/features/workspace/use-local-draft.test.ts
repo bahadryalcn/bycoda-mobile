@@ -13,12 +13,14 @@ import {
 const storage = vi.hoisted(() => ({
   values: new Map<string, string>(),
   writeGate: null as Promise<void> | null,
+  writes: 0,
 }));
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getItem: async (key: string) => storage.values.get(key) ?? null,
     setItem: async (key: string, value: string) => {
       await storage.writeGate;
+      storage.writes++;
       storage.values.set(key, value);
     },
     removeItem: async (key: string) => { storage.values.delete(key); },
@@ -44,6 +46,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   storage.values.clear();
   storage.writeGate = null;
+  storage.writes = 0;
 });
 afterEach(async () => {
   storage.writeGate = null;
@@ -109,4 +112,28 @@ it("drops mounted debounce/unmount writers and stale callbacks after an explicit
   expect(draft.value).toBeNull(); expect(() => old.setValue({ ...emptyComposerDraft(), text: "old callback" })).toThrow("saved draft was cleared");
   await expect(old.persist()).rejects.toThrow("saved draft was cleared");
   await act(async () => { await vi.advanceTimersByTimeAsync(280); }); await leave(); expect(storage.values.has(key)).toBe(false);
+});
+
+it("writes a file edit once for autosave and unmount, stores only the compact record and reports it stored", async () => {
+  const { encodeFileDraft, parseFileDraft } = await import("./draft-store");
+  type Stored = ReturnType<typeof parseFileDraft>;
+  const key = "bycoda.mobile.file-draft.v1:machine:file";
+  let file!: ReturnType<typeof useLocalDraft<Stored>>;
+  function FileHarness() {
+    file = useLocalDraft(key, parseFileDraft, encodeFileDraft);
+    return null;
+  }
+  root = createRoot(document.createElement("div"));
+  await act(async () => root!.render(createElement(FileHarness)));
+  const baseline = `${"unchanged line\n".repeat(200)}end`;
+  const edit = { expected: baseline, content: baseline.replace("end", "finish") };
+  await act(async () => file.setValue(edit));
+  expect(file.isStored).toBe(false);
+  await act(async () => vi.advanceTimersByTimeAsync(250));
+  expect(storage.writes).toBe(1);
+  expect(file.isStored).toBe(true);
+  expect(storage.values.get(key)).toBe(encodeFileDraft(edit));
+  expect(parseFileDraft(storage.values.get(key)!)).toEqual(edit);
+  await leave();
+  expect(storage.writes).toBe(1);
 });

@@ -1,12 +1,14 @@
-import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
+import { backoffDelayMs } from "./backoff";
+import { BulkBase64Error, bulkDigestHex, decodeBase64Into, parseBulkJson } from "./bulk-transfer";
+import {
+  InboundRpcResponseSchema,
+  InboundSubscriptionEventSchema,
+  utf8WithinLimit,
+} from "./ws-frames";
 import {
   BulkResultSchema,
   ConnectionHelloResultSchema,
-  JsonValueSchema,
-  RpcResponseSchema,
   RPC_ERROR_CODES,
-  SubscriptionEventSchema,
   SubscriptionOpenResultSchema,
   WS_LIMITS,
   getHostRpcMethod,
@@ -16,6 +18,7 @@ import {
   parseHostRpcParams,
   type BulkDescriptor,
   type JsonObject,
+  type JsonValue,
   type SubscriptionEvent,
 } from "../../../src/shared/model/host-contracts";
 import type {
@@ -56,10 +59,23 @@ const failureMessages: Record<HostWsFailure, string> = {
 const IN_FLIGHT_LIMIT = 48;
 /**
  * Below the Host's 8 concurrent control requests per socket (stream open/ack/close). Thirty-two
- * project streams opening at once otherwise get "busy", and a refused ack drops the socket.
+ * project streams opening at once otherwise get "busy", and every refused ack then needs a retry.
  */
 const CONTROL_IN_FLIGHT_LIMIT = 6;
 const QUEUE_LIMIT = 512;
+/** Host replies to one ack that say "later", not "broken": retried with backoff before the stream restarts. */
+const ACK_RETRYABLE = new Set<HostWsFailure>(["overload", "deadline", "unavailable"]);
+/** Ack failures that concern only the acknowledged stream; every other category is a socket failure. */
+const ACK_STREAM_LOCAL = new Set<HostWsFailure>([
+  ...ACK_RETRYABLE,
+  "cancelled",
+  "validation",
+  "unsupported",
+  "internal",
+]);
+const ACK_RETRY_LIMIT = 3;
+const ACK_RETRY_BASE_MS = 250;
+const ACK_RETRY_CAP_MS = 2_000;
 /** A rejected RPC is not evidence of malformed wire data or a broken socket. */
 function rpcFailure(code: number, category?: string): HostWsFailure {
   if (category && Object.hasOwn(failureMessages, category)) return category as HostWsFailure;
@@ -93,13 +109,16 @@ export class HostWsError extends Error {
     readonly category: HostWsFailure,
     readonly uncertain = false,
     readonly commandId?: string,
+    /** Set only for a structured deadline the Host sent back; a local timer expiry leaves it false. */
+    readonly hostDeadline = false,
+    /** The Host's stable refusal code, e.g. CONTEXT_CHANGED after a Host restart. */
+    readonly code?: string,
   ) {
     super(
       uncertain
         ? "Connection interrupted. Check this command's result before trying again."
         : failureMessages[category],
-    );
-  }
+    );  }
 }
 export type HostWsRequestOptions = { signal?: AbortSignal; timeoutMs?: number };
 type Pending = {
@@ -179,7 +198,16 @@ export class MobileHostWsConnection {
   private pendingInvalidations = new Set<string>();
   /** Malformed frames dropped on this connection. */
   droppedFrames = 0;
-  private acks = new Map<string, { inflight: boolean; latest?: StreamCursor }>();
+  private acks = new Map<
+    string,
+    {
+      inflight: boolean;
+      latest?: StreamCursor;
+      /** Consecutive retryable failures of the current ack; reset by any accepted ack. */
+      attempts: number;
+      retry?: ReturnType<typeof setTimeout>;
+    }
+  >();
   constructor(
     private readonly native: Pick<HostSocketNative, "open" | "send" | "close" | "addListener" | "acknowledge" | "readBulk">,
     readonly binding: CredentialBinding,
@@ -345,7 +373,7 @@ export class MobileHostWsConnection {
     const definition = getHostRpcMethod(method)!;
     const id = `mobile:${this.generation}:${++this.nextId}`;
     const encoded = JSON.stringify({ jsonrpc: "2.0", id, method, params: parsed });
-    if (utf8ToBytes(encoded).byteLength > WS_LIMITS.maxMessageBytes)
+    if (!utf8WithinLimit(encoded, WS_LIMITS.maxMessageBytes))
       return Promise.reject(new HostWsError("overload"));
     const requested = options.timeoutMs ?? definition.responseTimeoutMs;
     const timeout = Number.isFinite(requested)
@@ -386,11 +414,14 @@ export class MobileHostWsConnection {
       });
     });
   }
-  private pendingError(pending: Pending, category: HostWsFailure): HostWsError {
+  private pendingError(pending: Pending, category: HostWsFailure, fromHost = false, data?: { delivery?: string; code?: string }): HostWsError {
     return new HostWsError(
       category,
-      pending.sent && getHostRpcMethod(pending.method)?.retry !== "safe-query",
+      // A Host refusal that says nothing ran is a known outcome, not "check the result".
+      pending.sent && getHostRpcMethod(pending.method)?.retry !== "safe-query" && !(fromHost && data?.delivery === "not-sent"),
       pending.commandId,
+      fromHost && category === "deadline",
+      fromHost ? data?.code : undefined,
     );
   }
   private take(id: string): Pending | undefined {
@@ -424,14 +455,12 @@ export class MobileHostWsConnection {
       this.fail(new HostWsError(category));
       return;
     }
-    if (
-      typeof event.text !== "string" ||
-      utf8ToBytes(event.text).length > WS_LIMITS.maxMessageBytes
-    )
+    // The 1 MiB byte limit stays exact; the check allocates no encoded copy of the frame.
+    if (typeof event.text !== "string" || !utf8WithinLimit(event.text, WS_LIMITS.maxMessageBytes))
       throw new HostWsError("overload");
     const message: unknown = JSON.parse(event.text);
     if (message && typeof message === "object" && "method" in message) {
-      const notification = SubscriptionEventSchema.parse(message);
+      const notification = InboundSubscriptionEventSchema.parse(message);
       const id = notification.params.subscriptionId;
       const key = JSON.stringify([id, notification.params.streamId]);
       if (["closed", "resync-required"].includes(notification.params.kind)) {
@@ -488,15 +517,10 @@ export class MobileHostWsConnection {
             ...notification,
             params: {
               ...notification.params,
-              // Inline data was validated with the frame; only hydrated bulk bytes are new input.
-              ...(data === undefined
-                ? {}
-                : {
-                    data:
-                      data === notification.params.data
-                        ? notification.params.data
-                        : JsonValueSchema.parse(data),
-                  }),
+              // Hydrated bulk bytes are digest-checked and `JSON.parse`d, so they are JSON by
+              // construction; the subscriber's domain schema is their one validation, as for
+              // inline data.
+              ...(data === undefined ? {} : { data: data as JsonValue }),
             },
           },
           assertDeliveryCurrent,
@@ -520,7 +544,7 @@ export class MobileHostWsConnection {
       }
       return;
     }
-    const response = RpcResponseSchema.parse(message);
+    const response = InboundRpcResponseSchema.parse(message);
     if (response.id === null) throw new HostWsError("schema");
     const pending = this.pending.get(response.id);
     if (!pending) return;
@@ -529,7 +553,7 @@ export class MobileHostWsConnection {
     if ("error" in response) {
       const rejected = this.take(response.id)!;
       rejected.reject(
-        this.pendingError(rejected, rpcFailure(response.error.code, response.error.data?.category)),
+        this.pendingError(rejected, rpcFailure(response.error.code, response.error.data?.category), true, response.error.data),
       );
       return;
     }
@@ -567,13 +591,24 @@ export class MobileHostWsConnection {
         );
     }
   }
-  /** At most one ack in flight per subscription; newer cursors replace queued ones (cursors only advance). */
+  /**
+   * At most one ack in flight per subscription; newer cursors replace queued ones (cursors only
+   * advance). A rejected ack is that one stream's problem: busy/slow/not-ready replies are retried
+   * with backoff, and when they persist (or the Host refuses the ack for a stream-local reason) only
+   * that stream is restarted. Authentication, identity, schema, TLS and transport failures still
+   * close the whole socket.
+   */
   private queueAck(subscriptionId: string, streamId: string, cursor: StreamCursor): void {
-    const state = this.acks.get(subscriptionId) ?? { inflight: false };
+    const state = this.acks.get(subscriptionId) ?? { inflight: false, attempts: 0 };
     state.latest = cursor;
     this.acks.set(subscriptionId, state);
     if (state.inflight) return;
+    const current = () =>
+      !this.closed &&
+      this.acks.get(subscriptionId) === state &&
+      this.streamIdentities.get(subscriptionId) === streamId;
     const pump = () => {
+      state.retry = undefined;
       const next = state.latest;
       if (!next || this.closed) {
         if (!state.inflight) this.acks.delete(subscriptionId);
@@ -581,20 +616,62 @@ export class MobileHostWsConnection {
       }
       state.latest = undefined;
       state.inflight = true;
-      this.request("subscriptions.ack", { subscriptionId, cursor: next }).then(
+      let sent: Promise<unknown>;
+      try {
+        sent = this.request("subscriptions.ack", { subscriptionId, cursor: next });
+      } catch (error) {
+        sent = Promise.reject(error);
+      }
+      sent.then(
         () => {
           state.inflight = false;
+          state.attempts = 0;
           pump();
         },
         (error) => {
           state.inflight = false;
+          if (!current()) {
+            if (this.acks.get(subscriptionId) === state) this.acks.delete(subscriptionId);
+            return;
+          }
+          const failure = error instanceof HostWsError ? error : new HostWsError("network");
+          if (!ACK_STREAM_LOCAL.has(failure.category)) {
+            this.acks.delete(subscriptionId);
+            this.fail(failure);
+            return;
+          }
+          // The failed cursor is only re-sent when nothing newer arrived meanwhile.
+          state.latest ??= next;
+          if (ACK_RETRYABLE.has(failure.category) && state.attempts < ACK_RETRY_LIMIT) {
+            state.inflight = true;
+            state.retry = setTimeout(
+              () => {
+                state.inflight = false;
+                if (current()) pump();
+                else if (this.acks.get(subscriptionId) === state) this.acks.delete(subscriptionId);
+              },
+              backoffDelayMs(state.attempts++, Math.random, ACK_RETRY_BASE_MS, ACK_RETRY_CAP_MS),
+            );
+            return;
+          }
           this.acks.delete(subscriptionId);
-          if (this.closed || this.streamIdentities.get(subscriptionId) !== streamId) return;
-          this.fail(error instanceof HostWsError ? error : new HostWsError("network"));
+          this.restartStream(subscriptionId, streamId, next);
         },
       );
     };
     pump();
+  }
+  /** Ask the stream's owner to resynchronize this one subscription, as a Host resync-required would. */
+  private restartStream(subscriptionId: string, streamId: string, cursor: StreamCursor): void {
+    this.invalidateStream(subscriptionId, streamId);
+    void this.applyEvent(
+      {
+        jsonrpc: "2.0",
+        method: "subscription.event",
+        params: { subscriptionId, streamId, cursor, kind: "resync-required" },
+      },
+      () => this.assertCurrent(),
+    ).catch((error) => this.fail(error instanceof HostWsError ? error : new HostWsError("network")));
   }
   private invalidateStream(subscriptionId: string, streamId: string): void {
     const guard = this.eventGuards.get(JSON.stringify([subscriptionId, streamId]));
@@ -620,7 +697,10 @@ export class MobileHostWsConnection {
     this.bulkBytes += descriptor.totalBytes;
     try {
       const bytes = new Uint8Array(descriptor.totalBytes);
-      const hash = sha256.create();
+      const assertNeeded = () => {
+        this.assertCurrent();
+        if (!needed()) throw new HostWsError("cancelled");
+      };
       for (let offset = 0; offset < bytes.length;) {
         this.assertCurrent();
         if (!needed()) throw new HostWsError("cancelled");
@@ -634,19 +714,25 @@ export class MobileHostWsConnection {
         if (!needed()) throw new HostWsError("cancelled");
         if (
           typeof chunk.dataBase64 !== "string" ||
-          chunk.dataBase64.length > Math.ceil(descriptor.chunkBytes / 3) * 4 ||
-          !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(chunk.dataBase64)
+          chunk.dataBase64.length > Math.ceil(descriptor.chunkBytes / 3) * 4
         )
           throw new HostWsError("schema");
-        const decoded = Uint8Array.from(atob(chunk.dataBase64), (char) => char.charCodeAt(0));
         const expected = Math.min(descriptor.chunkBytes, bytes.length - offset);
-        if (decoded.length !== expected) throw new HostWsError("schema");
-        bytes.set(decoded, offset);
-        hash.update(decoded);
-        offset += decoded.length;
+        try {
+          decodeBase64Into(chunk.dataBase64, expected, bytes, offset);
+        } catch (error) {
+          if (error instanceof BulkBase64Error) throw new HostWsError("schema");
+          throw error;
+        }
+        offset += expected;
       }
-      if (bytesToHex(hash.digest()) !== descriptor.sha256) throw new HostWsError("schema");
-      return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      assertNeeded();
+      const digest = await bulkDigestHex(bytes).catch(() => {
+        throw new HostWsError("internal");
+      });
+      assertNeeded();
+      if (digest !== descriptor.sha256) throw new HostWsError("schema");
+      return await parseBulkJson(bytes, { assertCurrent: assertNeeded });
     } finally {
       this.bulkJobs--;
       this.bulkBytes -= descriptor.totalBytes;
@@ -668,6 +754,7 @@ export class MobileHostWsConnection {
     this.eventGuards.clear();
     this.streamIdentities.clear();
     this.pendingInvalidations.clear();
+    for (const ack of this.acks.values()) clearTimeout(ack.retry);
     this.acks.clear();
     this.listener?.remove();
     this.listener = undefined;

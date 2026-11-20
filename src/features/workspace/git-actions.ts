@@ -46,7 +46,11 @@ export function useGitActions({ projectId, cwd, root }: GitScope) {
     void refreshProject();
   };
 
-  const executeConfirmation = async (confirmation: GitConfirmation, message: string) => {
+  const executeConfirmation = async (
+    confirmation: GitConfirmation,
+    message: string,
+    stageAll = false,
+  ) => {
     switch (confirmation.kind) {
       case "operation":
         await extended.mutateAsync({
@@ -76,13 +80,12 @@ export function useGitActions({ projectId, cwd, root }: GitScope) {
         await extended.mutateAsync({ command: "git_pull", args: { cwd: root } });
         break;
       case "commit":
+        // Smart commit: stage everything first, only after the owner reviewed the file list.
+        if (stageAll) await action.mutateAsync({ projectId, cwd, action: "stageAll" });
+        await action.mutateAsync({ projectId, cwd, action: "commit", message: message.trim() });
+        break;
       case "push":
-        await action.mutateAsync({
-          projectId,
-          cwd,
-          action: confirmation.kind,
-          message: confirmation.kind === "commit" ? message.trim() : undefined,
-        });
+        await action.mutateAsync({ projectId, cwd, action: "push" });
         break;
     }
     void refreshProject();
@@ -97,7 +100,9 @@ export function useGitActions({ projectId, cwd, root }: GitScope) {
     runFileAction,
     createNamedBranch: (branch: string) => exclusive(() => createNamedBranch(branch)),
     fetch: () => exclusive(fetch),
-    executeConfirmation: (confirmation: GitConfirmation, message: string) =>
-      exclusive(() => executeConfirmation(confirmation, confirmation.context?.message ?? message)),
+    executeConfirmation: (confirmation: GitConfirmation, message: string, stageAll = false) =>
+      exclusive(() =>
+        executeConfirmation(confirmation, confirmation.context?.message ?? message, stageAll),
+      ),
   };
 }

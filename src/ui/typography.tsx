@@ -3,12 +3,13 @@ import { Typography } from "panelui-native/components/typography";
 import { bodyClasses } from "./design-system";
 import { StyleSheet } from "react-native";
 import type { BodyProps, TextContentProps } from "./component-props";
-import { selectableByDefault } from "./text-selection";
+import { useDefaultTextSelection } from "./text-selection";
 export function Body({ children, muted, mono, style, ...props }: BodyProps) {
   const { uiStyles } = useMobileTheme();
+  const selectable = useDefaultTextSelection(props.numberOfLines);
   return (
     <Typography
-      selectable={selectableByDefault(props.numberOfLines)}
+      selectable={selectable}
       {...props}
       className={bodyClasses}
       style={StyleSheet.flatten([
@@ -24,9 +25,10 @@ export function Body({ children, muted, mono, style, ...props }: BodyProps) {
 }
 export function Heading({ children, style, ...props }: TextContentProps) {
   const { uiStyles } = useMobileTheme();
+  const selectable = useDefaultTextSelection(props.numberOfLines);
   return (
     <Typography.Heading
-      selectable={selectableByDefault(props.numberOfLines)}
+      selectable={selectable}
       accessibilityRole="header"
       {...props}
       className="text-xl font-semibold text-foreground"
@@ -38,9 +40,10 @@ export function Heading({ children, style, ...props }: TextContentProps) {
 }
 export function CodeText({ children, style, ...props }: TextContentProps) {
   const { uiStyles } = useMobileTheme();
+  const selectable = useDefaultTextSelection(props.numberOfLines);
   return (
     <Typography
-      selectable={selectableByDefault(props.numberOfLines)}
+      selectable={selectable}
       {...props}
       className="font-mono text-sm text-foreground"
       style={StyleSheet.flatten([uiStyles.mono, style])}

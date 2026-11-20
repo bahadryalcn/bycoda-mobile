@@ -15,6 +15,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.UUID
@@ -71,8 +72,16 @@ class BycodaVoiceCompanionModule : Module() {
     Function("setPreferredInput") { uid: String? -> VoiceCompanionRuntime.preferredInputId = uid?.toIntOrNull() }
     AsyncFunction("beginSession") Coroutine { -> beginSession(true) }
     AsyncFunction("beginPlaybackSession") Coroutine { -> beginSession(false) }
+    // Reserve on main, open the microphone on a worker, commit on main. The last two steps are NonCancellable so a
+    // canceled call can never leave an opened microphone behind: commit/abandon always close or adopt it.
     AsyncFunction("startCapture") Coroutine { id: String, captureId: String ->
-      withContext(Dispatchers.Main) { val service = VoiceCompanionRuntime.service ?: error("Voice session is unavailable."); service.startCapture(id, captureId) }
+      val service = VoiceCompanionRuntime.service ?: error("Voice session is unavailable.")
+      val start = withContext(Dispatchers.Main) { service.prepareCapture(id, captureId) }
+      withContext(NonCancellable) {
+        val opened = try { withContext(Dispatchers.IO) { service.openRecorder() } }
+        catch (error: Exception) { withContext(Dispatchers.Main) { service.abandonCapture(start) }; throw error }
+        withContext(Dispatchers.Main) { service.commitCapture(start, opened) }
+      }
     }
     Function("stopCapture") { id: String, captureId: String -> main { VoiceCompanionRuntime.service?.stopCapture(id, expectedCapture = captureId) } }
     Function("setMuted") { id: String, muted: Boolean -> main { VoiceCompanionRuntime.service?.setMuted(id, muted) } }

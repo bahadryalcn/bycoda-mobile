@@ -3,12 +3,14 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
 import { ActionMenu, Body, Disclosure, ErrorText, FormActions, NavigationRow, Notice, QueryState, ScreenList, Sheet, Stack } from "@/ui/primitives";
 import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import { RemoteHostError } from "@/remote/transport";
 import { UncertainCommand } from "./commands";
 import { GitDiffViewer } from "./git-diff-viewer";
+import { gitChangeLabel, gitFilePresentation } from "./git-file-presentation";
 import { useDiffPreview } from "./use-diff-preview";
 import { SessionCheckpointReview, type CheckpointReview } from "./session-checkpoint-review";
 import type { HostSession } from "./wire";
@@ -21,6 +23,7 @@ export function SessionCheckpoints({ scope, session, blocked, onCommand, onRefre
   scope: SessionScope; session: HostSession; blocked: boolean; onCommand: SessionCommand; onRefresh: () => void; onClose: () => void;
 }) {
   const copy = useCopy(), machine = useActiveMachine(), connection = useConnectionScope(), access = usePrivateContentAccess();
+  const numbers = new Intl.NumberFormat(useLocale());
   const cwd = session.session.worktreeCwd || session.session.cwd || "";
   const [opening] = useState(() => ({ target: { ...scope, cwd }, connection, machineName: machine?.name ?? machine?.id ?? "" }));
   const target = opening.target;
@@ -115,7 +118,13 @@ export function SessionCheckpoints({ scope, session, blocked, onCommand, onRefre
         {kind === "auth" || kind === "identity" ? <QueryState query={{...query,data:undefined,refetch:refresh}} /> : <RecordAccessUnavailable />}
         <FormActions submitLabel={copy("Yenile", "Refresh")} disabled={!available || query.isEnabled===false || busy} onSubmit={refresh} onCancel={close} cancelLabel={copy("Kapat", "Close")} />
       </>}
-    </Stack>} renderItem={({item})=>item.kind==="file" ? <NavigationRow label={item.file.relative} detail={`${item.file.status} · +${item.file.additions} −${item.file.deletions}`} disabled={busy || blocked || !supported || !item.file.exact}
+    </Stack>} renderItem={({item})=>item.kind==="file" ? <NavigationRow label={item.file.relative}
+      detail={[
+        gitChangeLabel(gitFilePresentation(item.file.status).kind, copy),
+        `+${numbers.format(item.file.additions)} −${numbers.format(item.file.deletions)}`,
+        !item.file.exact && copy("Tam olarak incelenemiyor", "Cannot be reviewed exactly"),
+      ].filter(Boolean).join(" · ")}
+      detailLines={2} disabled={busy || blocked || !supported || !item.file.exact}
       onPress={()=>{const status=query.data;if(!status || !supported || !item.file.exact || busy || blocked || !current() || !lease.active || !status.files.includes(item.file))return;void run(async()=>{const result=await mutation.mutateAsync(checkpointRead(target,item.file.relative));if(current() && !live.current.blocked)setSelected({status,diff:validateCheckpointDiff(result,item.file.relative)});});}} /> : item.kind==="heading" ? <Stack>
         <Body>{copy("Konuşmayı geri sar", "Rewind conversation")}</Body><Body muted>{copy("Seçilen mesaj ve sonrasını konuşmadan kaldırır; dosyaları değiştirmez. Mesaj taslağa geri döner.", "Removes the selected message and later messages from the conversation; files stay unchanged. The prompt returns to the draft.")}</Body>
       </Stack> : <NavigationRow label={item.block.text || copy("Ekli mesaj", "Message with attachments")} disabled={disabled || !rewindSupported} onPress={()=>{if(!current() || !lease.active || disabled || !rewindSupported)return;try{const review=reviewRewind(session,item.block.id);const ids=new Set(review.affectedIds);open({kind:"rewind",review,blocks:session.session.blocks.filter(block=>ids.has(block.id))});}catch(cause){setError(cause);}}} />} />

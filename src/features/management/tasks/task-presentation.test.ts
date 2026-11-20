@@ -63,6 +63,10 @@ vi.mock("@/ui/primitives", () => {
       fixture.select = props;
       return null;
     },
+    NumberField: (props: { label: string; value: string; onChangeText(value: string): void }) => {
+      fixture.fields.set(props.label, props);
+      return null;
+    },
     Field: (props: { label: string; value: string; onChangeText(value: string): void }) => {
       fixture.fields.set(props.label, props);
       return null;

@@ -9,12 +9,14 @@ const fixture = vi.hoisted(() => ({
   epoch: "epoch-a",
   decide: vi.fn(),
   refetch: vi.fn(),
+  approvals: [] as ApprovalView[],
 }));
 const approval: ApprovalView = {
   id: "request-1", title: "Publish review", message: "Review this exact change",
   confirmLabel: "Publish", cancelLabel: "Cancel", deadline: 10_000,
   remote: true, signature: "signed", status: "pending",
 };
+const second: ApprovalView = { ...approval, id: "request-2", title: "Install package", confirmLabel: "Install" };
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -28,7 +30,7 @@ vi.mock("./approval-details", () => ({ ApprovalDetails: () => null }));
 vi.mock("./use-approvals", () => ({
   useNow: () => 0,
   useApprovals: () => ({
-    client: { decide: fixture.decide }, supported: true, approvals: [approval],
+    client: { decide: fixture.decide }, supported: true, approvals: fixture.approvals,
     query: { isSuccess: true, refetch: fixture.refetch },
   }),
 }));
@@ -60,6 +62,7 @@ const render = () => act(async () => root.render(createElement(ApprovalsScreen))
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks(); fixture.machine = { id: "host-a", name: "Computer A" }; fixture.epoch = "epoch-a";
+  fixture.approvals = [approval];
   fixture.refetch.mockResolvedValue({ isSuccess: true, isError: false });
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
@@ -125,4 +128,25 @@ it("isolates pending local feedback across Host epochs even for the same request
   expect(button("Check status")).toBeUndefined();
   expect(button("Publish")?.disabled).toBe(false);
   expect(fixture.refetch).not.toHaveBeenCalled();
+});
+
+it("holds other cards with a visible reason while one answer is in flight, then frees them without resending", async () => {
+  fixture.approvals = [approval, second];
+  const response = deferred<unknown>(); fixture.decide.mockReturnValue(response.promise);
+  await render(); await click("Publish");
+  expect(button("Install")?.disabled).toBe(true);
+  expect(container.textContent).toContain("Waiting for the previous answer to be sent");
+  await act(async () => response.resolve({}));
+  expect(container.textContent).not.toContain("Waiting for the previous answer to be sent");
+  expect(button("Install")?.disabled).toBe(false);
+  expect(fixture.decide).toHaveBeenCalledExactlyOnceWith(approval, true);
+});
+
+it("keeps a failed answer's own retry state while the other card is released", async () => {
+  fixture.approvals = [approval, second];
+  fixture.decide.mockRejectedValue(new Error("Reply lost"));
+  await render(); await click("Publish");
+  expect(button("Check status")).toBeDefined();
+  expect(button("Install")?.disabled).toBe(false);
+  expect(fixture.decide).toHaveBeenCalledTimes(1);
 });

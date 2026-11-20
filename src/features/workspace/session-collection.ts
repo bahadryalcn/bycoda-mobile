@@ -5,9 +5,6 @@ import { isRunningSession } from "./activity-model";
 import { filterSessionDirectory } from "./session-directory";
 
 type DirectoryProject = HostProjectDirectory["projects"][number];
-/** Desktop orders and stamps sessions by their last turn activity, not by metadata saves. */
-export const sessionActivityAt = (session: Pick<ActiveSession["session"], "lastActivityAt" | "updatedAt">) =>
-  session.lastActivityAt ?? session.updatedAt;
 
 /**
  * Desktop parity: internal orchestration workers never appear in a session list; they show

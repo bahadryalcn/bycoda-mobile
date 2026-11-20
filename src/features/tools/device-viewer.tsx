@@ -1,5 +1,6 @@
 import { deviceSystemLabel } from "./device-system";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { liveFrameInterval, paceFrame, type FramePace } from "./device-frame-pace";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
@@ -79,20 +80,32 @@ export function DeviceViewer({
     projectId,
     device.id,
   ]);
+  // Static screens back off; any change, action, refresh or toggle returns to the base rate.
+  const pace = useRef<FramePace | undefined>(undefined);
   const frame = useHostQuery<DeviceFrame>(
     ["devices", "capture", projectId, device.id],
     "devices.capture",
     { projectId, deviceId: device.id },
     {
       enabled: current() && device.booted && !action.isPending,
-      interval: live ? 3_000 : undefined,
+      interval: live
+        ? (data) => {
+            if (data) pace.current = paceFrame(pace.current, data);
+            return liveFrameInterval(pace.current);
+          }
+        : undefined,
     },
+  );
+  const frameUri = useMemo(
+    () => (frame.data ? `data:${frame.data.mime};base64,${frame.data.base64}` : undefined),
+    [frame.data?.mime, frame.data?.base64],
   );
   const busy = boot.isPending || action.isPending;
   const enabled = current() && control && canControl && device.booted && !busy;
   const send = (input: DeviceAction) => {
     if (!current() || !enabled || pending.current) return;
     pending.current = true;
+    pace.current = undefined;
     void action
       .mutateAsync({ projectId, deviceId: device.id, action: input })
       .then(() => {
@@ -169,9 +182,9 @@ export function DeviceViewer({
       {device.booted ? (
         <>
           <QueryState query={frame} />
-          {current() && frame.data ? (
+          {current() && frameUri ? (
             <RemoteFrame
-              uri={`data:${frame.data.mime};base64,${frame.data.base64}`}
+              uri={frameUri}
               label={copy("Cihaz ekranı", "Device screen")}
               disabled={!enabled}
               onPress={device.platform === "android" ? (point) => send({ type: "press", ...point }) : undefined}
@@ -195,7 +208,9 @@ export function DeviceViewer({
               busy={frame.isFetching}
               disabled={!current() || busy}
               onPress={() => {
-                if (current()) void frame.refetch();
+                if (!current()) return;
+                pace.current = undefined;
+                void frame.refetch();
               }}
             />
           </Row>
@@ -203,7 +218,10 @@ export function DeviceViewer({
             <ToggleField
               label={copy("Canlı görüntü", "Live view")}
               value={live}
-              onChange={setLive}
+              onChange={(value) => {
+                pace.current = undefined;
+                setLive(value);
+              }}
             />
             {!viewOnly ? (
             <ToggleField

@@ -84,3 +84,16 @@ it("does not start status/upload if its durable host claim fails", async () => {
   await expect(uploadAttachment(client, file, "s", new AbortController().signal, () => {})).rejects.toThrow("claim refused");
   expect(request).toHaveBeenCalledOnce(); expect(fixture.close).not.toHaveBeenCalled();
 });
+it("sends uploads in 512 KiB Host-compatible chunks with per-chunk offset acknowledgements", async () => {
+  const size = 1024 * 1024;
+  fixture.bytes = new Uint8Array(size).fill(97);
+  const request = vi.fn(async (method: string, params: { offset: number }) => method === "attachments.status"
+    ? { offset: 0 }
+    : { offset: params.offset + Math.min(3 * Math.floor((512 * 1024) / 3), size - params.offset) });
+  const client = { machine: { id: "m" }, request } as unknown as HostTransport;
+  await uploadAttachment(client, { ...file, size }, "s", new AbortController().signal, () => {});
+  const uploads = request.mock.calls.filter(([method]) => method === "attachments.upload").map(([, params]) => params as { offset: number });
+  expect(uploads.map((params) => params.offset)).toEqual([0, 524286, 1048572]);
+  expect(fixture.reads).toEqual([524286, 524286, 4]);
+  expect(fixture.close).toHaveBeenCalledOnce();
+});

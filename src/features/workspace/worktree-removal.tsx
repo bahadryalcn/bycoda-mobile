@@ -8,6 +8,7 @@ import { reviewedOperationStore } from "@/state/reviewed-operation-store";
 import { useReviewedOperation } from "@/state/use-reviewed-operation";
 import { reviewedMachine, isReviewedMachine } from "@/state/reviewed-machine";
 import { useCopy } from "@/ui/copy";
+import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { ActionReviewSheet } from "@/ui/action-review-sheet";
 import { ActionMenu, Body, Disclosure, ErrorText, FormActions, Notice, QueryState, SelectField, Sheet, Stack } from "@/ui/primitives";
 import { CollectionToolbar } from "@/ui/search-field";
@@ -110,10 +111,10 @@ export function WorktreeRemoval({ scope, projectId, onClose }: { scope: SessionS
   };
   const unavailableMessage = !client || !machine ? copy("Bilgisayar bağlantısını yeniden kurun ve bu oturumu tekrar açın.", "Reconnect the computer and reopen this session.")
     : !scopeCurrent ? copy("Bu işlemin bilgisayarını ve kaynak oturumunu yeniden açın. Mevcut seçim korunur.", "Reopen this operation's computer and source session. The current selection is retained.")
-      : !supported ? copy("Bu bilgisayar güvenli çalışma klasörü kaldırmayı desteklemiyor. Bilgisayardaki bycoda uygulamasını güncelleyin.", "This computer does not support reviewed worktree removal. Update bycoda on the computer.")
-        : copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.");
+      : !supported ? copy("Bu bilgisayar güvenli çalışma ağacı kaldırmayı desteklemiyor. Bilgisayardaki bycoda uygulamasını güncelleyin.", "This computer does not support reviewed worktree removal. Update bycoda on the computer.")
+        : copy(...RECORD_ACCESS_UNAVAILABLE);
   const feedback = <ErrorText error={error} />;
-  return <><Sheet visible title={copy("Çalışma klasörü kaldırma", "Worktree removal")} size="form" onClose={close} dismissible={!busy}>
+  return <><Sheet visible title={copy("Çalışma ağacı kaldırma", "Worktree removal")} size="form" onClose={close} dismissible={!busy}>
     {readable ? <>
       <CollectionToolbar field={<Body selectable>{opening.machineName}</Body>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
         !attempt && {key:"refresh",label:copy("Yenile", "Refresh"),disabled:busy || trees.isEnabled===false,onPress:refresh},
@@ -121,7 +122,7 @@ export function WorktreeRemoval({ scope, projectId, onClose }: { scope: SessionS
         !!error && {key:"error",label:copy("Hatayı temizle", "Clear error"),disabled:busy,onPress:clearError},
       ]} />} />
       {attempt ? <Stack>
-        <Notice message={copy("Kaydedilmiş istek tekrar gönderilmez. Sonuç bilinmiyorsa bilgisayardaki çalışma klasörünü inceleyin.", "The saved request is never resent. If its result is unknown, inspect the worktree on the computer.")} />
+        <Notice message={copy("Kaydedilmiş istek tekrar gönderilmez. Sonuç bilinmiyorsa bilgisayardaki çalışma ağacını inceleyin.", "The saved request is never resent. If its result is unknown, inspect the worktree on the computer.")} />
         <Body>{receipt?.state === "applied" ? copy("Tamamlandı", "Completed") : receipt?.state === "failed" ? copy("Tamamlanmadı", "Not completed") : receipt?.state === "pending" ? copy("Bilgisayarda onay bekleniyor", "Awaiting approval on the computer") : copy("Sonuç bilinmiyor", "Result unknown")}</Body>
         {receipt?.path ? <Body mono selectable>{receipt.path}</Body> : null}{receipt?.message ? <Body selectable>{receipt.message}</Body> : null}
         <Disclosure label={copy("Ayrıntılar", "Details")}><Body mono selectable>{attempt.operationId}</Body></Disclosure>

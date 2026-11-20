@@ -19,6 +19,29 @@ describe("quickPanelActions", () => {
   it("works without recents", () => {
     expect(quickPanelActions(appCommands(copy), [], copy).some((a) => a.kind === "session")).toBe(false);
   });
+  it("names the voice action like the rail", () => {
+    expect(quickPanelActions(appCommands(copy), [], copy).find((a) => a.id === "voice")?.label).toBe("Voice assistant");
+  });
+});
+
+describe("quickPanelActions beside the rail", () => {
+  it("drops New session, Voice and Settings while the rail offers them", () => {
+    const actions = quickPanelActions(appCommands(copy), [recent(1)], copy, { session: true });
+    expect(actions.map((a) => a.id)).toEqual(["palette", "session:s1", "tool:terminals"]);
+  });
+  it("keeps New session and Voice when the rail hides them without an active computer, but not Settings", () => {
+    const actions = quickPanelActions(appCommands(copy), [], copy, { session: false });
+    expect(actions.map((a) => a.id)).toEqual(["new", "voice", "palette", "tool:terminals"]);
+  });
+  it("keeps every action when no rail is shown", () => {
+    expect(quickPanelActions(appCommands(copy), [], copy).map((a) => a.id)).toEqual([
+      "new",
+      "voice",
+      "palette",
+      "tool:terminals",
+      "settings",
+    ]);
+  });
 });
 
 describe("quickPanelVisible", () => {

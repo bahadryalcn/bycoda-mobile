@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({ capabilities: [] as string[], directory: {
 } }));
 vi.mock("expo-router", () => ({ router: { replace: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/machine-bar", () => ({ useMachineStatus: () => ({ phase: "disconnected" }) }));
 vi.mock("react-native", () => ({ View: "div" }));
 vi.mock("@/ui/private-content", () => ({ PrivateContentBoundary: ({ visible, children }: { visible: boolean; children: ReactNode }) => createElement("div", { hidden: !visible }, children) }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "machine", capabilities: state.capabilities }) }));

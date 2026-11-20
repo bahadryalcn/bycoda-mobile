@@ -10,7 +10,7 @@ import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { HostProject } from "@/domain/types";
-import { ActionMenu, Badge, Body, Disclosure, Row, IconButton, NavigationRow, QueryState, ScreenList, SearchField } from "@/ui/primitives";
+import { Badge, Body, Disclosure, Row, IconButton, NavigationRow, QueryState, ScreenList, SearchField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { IssueSummary } from "@/ui/issue-summary";
@@ -44,12 +44,17 @@ export function DevicesScreen({ project }: { project: HostProject }) {
   const isCurrentScope = (scope: DeviceScope) => scope.connection.isCurrent() && scope.projectId === project.id &&
     isReviewedMachine(scope.reviewed, { activeId: machine?.id ?? null, machines: machine ? [machine] : [] });
   useEffect(() => { setSelected(undefined); setRuntime(undefined); }, [connection.token, machine?.id, machine?.endpoint, machine?.environmentId, machine?.lanKey, project.id]);
-  const status = useHostQuery<DeviceHostStatus>(["devices", "status"], "devices.status", { projectId: project.id }, { interval: 15_000 });
-  const list = useHostQuery<{ devices: DeviceSummary[]; errors: string[] }>(["devices", "list"], "devices.list", { projectId: project.id }, { interval: 15_000 });
+  const listingInterval = selected || runtime ? undefined : 15_000;
+  const status = useHostQuery<DeviceHostStatus>(["devices", "status"], "devices.status", { projectId: project.id }, { interval: listingInterval });
+  const list = useHostQuery<{ devices: DeviceSummary[]; errors: string[] }>(["devices", "list"], "devices.list", { projectId: project.id }, { interval: listingInterval });
+  const refetchListing = () => { void Promise.all([status.refetch(), list.refetch()]).catch(() => undefined); };
   const visible = (list.data?.devices ?? []).filter((device) => matchesSearch([device.name, device.platform, device.version].filter(Boolean).join(" "), search, locale));
   const refresh = usePullRefresh(() => Promise.all([status.refetch(), list.refetch()]));
   const partialErrors = (list.data?.errors ?? []).filter((error) => error.trim());
-  const unavailablePlatforms = status.data?.platforms.filter((platform) => !platform.available) ?? [];
+  const platforms = status.data?.platforms ?? [];
+  const unavailablePlatforms = platforms.filter((platform) => !platform.available);
+  const noPlatformAvailable = platforms.length > 0 && unavailablePlatforms.length === platforms.length;
+  const filtering = !!search.trim() && (list.data?.devices.length ?? 0) > 0;
   const availabilityIssues = deviceAvailabilityIssues(partialErrors, unavailablePlatforms, copy("Kullanılamıyor", "Unavailable"));
   const availabilityDetails = availabilityIssues.map((issue) => <Body key={issue} muted selectable>{issue}</Body>);
   return (
@@ -66,9 +71,9 @@ export function DevicesScreen({ project }: { project: HostProject }) {
           disabled={status.isFetching || list.isFetching} onPress={() => { void refresh.onRefresh(); }}>
           <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
         </IconButton>
-        <ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
-          { key: "service", label: copy("Cihaz servisi", "Device service"), icon: <Wrench size={20} color={colors.accent} />, onPress: () => setRuntime(currentScope) },
-        ]} />
+        <IconButton label={copy("Cihaz servisi", "Device service")} onPress={() => setRuntime(currentScope)}>
+          <Wrench size={20} color={colors.muted} />
+        </IconButton>
       </>}
       header={
         <>
@@ -79,11 +84,15 @@ export function DevicesScreen({ project }: { project: HostProject }) {
             query={list}
             empty={!visible.length && !partialErrors.length}
             emptyTitle={
-              search.trim() && list.data?.devices.length
+              filtering
                 ? copy("Eşleşen sonuç yok", "No matching results")
-                : copy("Cihaz bulunamadı.", "No devices found.")
+                : noPlatformAvailable
+                  ? copy("Bu bilgisayarda cihazlar listelenemiyor.", "Devices can't be listed on this computer.")
+                  : copy("Cihaz bulunamadı.", "No devices found.")
             }
-            emptyAction={search.trim() && list.data?.devices.length ? {
+            emptyDetail={filtering || noPlatformAvailable ? undefined
+              : copy("Bilgisayarda bir simülatör başlatın veya cihaz bağlayın, sonra yenileyin.", "Start a simulator or connect a device on this computer, then refresh.")}
+            emptyAction={filtering ? {
               label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
             } : { label: copy("Cihaz servisi", "Device service"), onPress: () => setRuntime(currentScope) }}
           />
@@ -118,11 +127,11 @@ export function DevicesScreen({ project }: { project: HostProject }) {
     />
     <PrivateContentAccessProvider value={windowAccess}>
     {runtime && isCurrentScope(runtime) ? <DeviceRuntime key={`${runtime.machineId}:${runtime.projectId}`} projectId={runtime.projectId}
-      onClose={() => setRuntime((current) => current === runtime ? undefined : current)} /> : null}
+      onClose={() => { setRuntime((current) => current === runtime ? undefined : current); refetchListing(); }} /> : null}
     {selected && isCurrentScope(selected) ? <DeviceViewer key={`${selected.machineId}:${selected.projectId}:${selected.device.id}`} projectId={selected.projectId} device={selected.device}
       canControl={status.data?.agentInstalled ?? false}
       onDevice={(device) => setSelected((current) => current === selected ? { ...current, device } : current)}
-      onClose={() => setSelected((current) => current === selected ? undefined : current)} /> : null}
+      onClose={() => { setSelected((current) => current === selected ? undefined : current); refetchListing(); }} /> : null}
     </PrivateContentAccessProvider>
     </>
   );

@@ -29,7 +29,7 @@ import { AssistantComposer } from "./assistant-composer";
 import { minimizeAssistantCompanion, openAssistantCompanion, useAssistantCompanion } from "./assistant-companion-state";
 import { assistantNeedsUpdate } from "./assistant-unavailable";
 import { AssistantReadAloud } from "./assistant-voice-controls";
-import { AssistantCallButton } from "./assistant-call-controls";
+import { AssistantCallButton, AssistantCallError } from "./assistant-call-controls";
 import { endAssistantCall } from "./assistant-call-session";
 import { useAssistantCall } from "./assistant-call-state";
 import { AssistantVoiceScreen } from "./assistant-voice-screen";
@@ -185,6 +185,9 @@ function AssistantWorkspace({
   const threads = (state?.threads ?? []).filter((row) => assistantThreadVisible(row, access));
   const visibleThread = state && thread && assistantThreadVisible(thread, access) ? thread : null;
   const home = !voiceMode && !visibleThread && !!state;
+  // The home stage holds while its read loads or fails, so the screen never switches chrome under the owner.
+  const stage = !voiceMode && !visibleThread;
+  const inCall = voiceMode || voiceRequested;
   // A job a tapped push pointed at is listed first.
   const jobs = (state?.jobs ?? [])
     .filter((job) => jobNeedsAttention(job) && jobVisible(job, access))
@@ -236,6 +239,10 @@ function AssistantWorkspace({
     if (visibleThread) await history.refetch();
   };
   const writable = current() && active && !!state;
+  // The Host refuses messages until the assistant is set up and switched on; say so instead of failing a send.
+  const configured = !!state && state.profile.enabled && state.profile.setupComplete !== false &&
+    // The Host also needs a reply model: the reply role's own choice or the saved worker choice.
+    (!("execution" in state.profile) || (state.profile.replyExecution ?? state.profile.execution ?? null) !== null);
   const perform = async (kind: NonNullable<typeof busyKind>, action: () => Promise<void>) => {
     if (pending.current || !current() || !active) return;
     pending.current = true;
@@ -277,7 +284,7 @@ function AssistantWorkspace({
   const voiceEntry = useAssistantVoiceEntry({
     requested: voiceRequested,
     consume: () => router.setParams({ voice: undefined }),
-    ready: writable && !busy && (!projectId || projects.isProjectVisible(projectId)),
+    ready: writable && configured && !busy && (!projectId || projects.isProjectVisible(projectId)),
     machineId, environmentId, thread: visibleThread, open,
     current: () => current() && (!projectId || projects.isProjectVisible(projectId)),
   });
@@ -495,17 +502,22 @@ function AssistantWorkspace({
           <AssistantContextBadges machineName={machineName} scope={scopeName} project={!!projectId} />
         </View>
         <AssistantCallButton target={{ machineId, environmentId, threadId: visibleThread.id }} onStart={voiceEntry.start}
-          enabled={writable} current={() => current() && (!visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId))} />
+          enabled={writable && configured} current={() => current() && (!visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId))} />
       </View> : null}
+      {!voiceMode && visibleThread ? <AssistantCallError /> : null}
       {approvalAction}
-      <QueryState query={snapshot} loading={state ? "inline" : "content"} />
+      {/* The call screen shows the connection state once; its chat pane stays on the transcript. */}
+      {inCall ? null : <QueryState query={snapshot} loading={state ? "inline" : "content"} />}
+      {inCall && !visibleThread ? <Empty compact illustration="chat-empty"
+        title={copy("Gösterilebilen mesaj yok", "No messages are available to display")} /> : null}
       {home ? <AssistantHomeHero name={title} avatar={state.profile.avatar}
         machineName={machineName} scope={scopeName} project={!!projectId}
         voiceBusy={voiceEntry.pending} openBusy={busyKind === "open"}
-        voiceDisabled={busy || callActive || !writable || scopeHidden} openDisabled={busy || !state || scopeHidden}
+        voiceDisabled={busy || callActive || !writable || !configured || scopeHidden} openDisabled={busy || !state || scopeHidden}
+        setupNeeded={!configured}
         onVoice={voiceEntry.start} onOpen={() => void open()} /> : null}
-      <Disclosure label={copy("Konuşmalar", "Conversations")}>{controls}</Disclosure>
-      {!state && !snapshot.isPending && assistantNeedsUpdate(snapshot.error) ? <Empty compact illustration="permission"
+      {inCall ? null : <Disclosure label={copy("Konuşmalar", "Conversations")}>{controls}</Disclosure>}
+      {!inCall && !state &&!snapshot.isPending && assistantNeedsUpdate(snapshot.error) ? <Empty compact illustration="permission"
         title={copy("Bilgisayarındaki Bycoda'yı güncelle", "Update bycoda on your computer")}
         detail={copy("Bu bilgisayar henüz asistanı sunmuyor. Güncelledikten sonra sohbet ve sesli görüşme burada açılır.", "This computer does not offer the assistant yet. After updating, chat and voice calls appear here.")} /> : null}
       {visibleThread ? (
@@ -546,7 +558,8 @@ function AssistantWorkspace({
     </>
   );
   const composer = (
-        visibleThread && writable ? (
+        visibleThread && writable ? (<>
+          {configured ? null : <Notice tone="warning" message={copy("Asistan {p0} üzerinde kapalı. Bilgisayardaki bycoda’dan kurulumu bitirip açın.", "The assistant is off on {p0}. Finish its setup in bycoda on that computer.", { p0: machineName })} />}
           <AssistantComposer
             key={visibleThread.id}
             client={client}
@@ -556,14 +569,16 @@ function AssistantWorkspace({
             current={() => current() && (!visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId))}
             voiceCurrent={() => !visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId)}
             enabled={writable}
+            sendable={configured}
             onSettled={refreshAll}
           />
-        ) : null
+        </>) : null
   );
   const conversation = (
     <ScreenList
       title={voiceMode ? undefined : title}
-      style={home ? { backgroundColor: "transparent" } : undefined}
+      // On the home and call stages the backdrop runs behind the whole transcript, not only its top strip.
+      style={stage || voiceMode ? { backgroundColor: "transparent" } : undefined}
       header={header}
       data={messages}
       keyExtractor={(message) => message.id}
@@ -581,12 +596,13 @@ function AssistantWorkspace({
   );
   return (
     <>
-    <Stack.Screen options={{ title, headerShown: !voiceMode && !voiceRequested }} />
-    <AssistantVoiceScreen active={voiceMode || voiceRequested} stage={home} name={title}
-      composer={composer} feedback={<>{approvalAction}<QueryState query={snapshot} loading="inline" />{issue ? <Notice message={copy("İşlem tamamlanamadı. Bilgisayar bağlantısını ve erişimi kontrol edin.", "The operation could not be completed. Check this computer connection and access.")} /> : null}</>}
+    <Stack.Screen options={{ title, headerShown: !voiceMode && !voiceRequested && !stage }} />
+    <AssistantVoiceScreen active={voiceMode || voiceRequested} stage={stage} name={title} computer={machineName}
+      onBack={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }}
+      composer={composer} feedback={<>{approvalAction}<QueryState query={snapshot} loading="none" />{issue ? <Notice message={copy("İşlem tamamlanamadı. Bilgisayar bağlantısını ve erişimi kontrol edin.", "The operation could not be completed. Check this computer connection and access.")} /> : null}</>}
       scope={[machineName, scopeName].join(" · ")}
       avatar={state?.profile.avatar} transcriptVisible={transcript.visible}
-      pending={voiceEntry.pending} ready={writable && !busy}
+      pending={voiceEntry.pending} ready={writable && configured && !busy}
       onToggleTranscript={transcript.toggle} onStart={voiceEntry.start}
       onMinimize={() => { minimizeAssistantCompanion(); if (router.canGoBack()) router.back(); else router.replace("/"); }}
       onEnd={() => { voiceEntry.cancel(); endAssistantCall(); useAssistantCompanion.setState({ surface: "chat" }); }}>

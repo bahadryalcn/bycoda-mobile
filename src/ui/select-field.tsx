@@ -111,7 +111,8 @@ function SelectionField<T extends string>({
   const searchEnabled = (searchable ?? options.length > 6) || !!search;
   const available = !disabled && access.allowed && access.check() && (!opening || opening.access.allowed && opening.access.check());
   const searchKey = normalizeSearch(search, locale);
-  const signature = JSON.stringify([searchKey, locale, values, options.map(option => [option.value, option.label, option.detail, option.disabled])]);
+  // Only an open panel needs option identity to retire stale events; a closed trigger must not serialise every option on each render.
+  const signature = open ? JSON.stringify([searchKey, locale, values, options.map(option => [option.value, option.label, option.detail, option.disabled])]) : "";
   const view = useMemo(() => ({}), [opening, available, signature, multiple, max]);
   const input = useMemo(() => ({}), [opening, available]);
   const live = useRef({ opening, view, input, available, access, values, onChange, filtered });

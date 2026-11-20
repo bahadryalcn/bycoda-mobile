@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { SessionCheckpoints } from "./session-checkpoints";
 import type { HostSession } from "./wire";
 import { RemoteHostError } from "@/remote/transport";
+vi.mock("@/i18n", () => ({ useLocale: () => "en-US" }));
 
 const state=vi.hoisted(()=>({allowed:true,epoch:true,enabled:true,paused:false,error:null as Error|null,activeId:"machine",capabilities:["workspace.run","sessions.checkpoint-review","sessions.rewind"],data:{expectedCheckpoint:"a".repeat(64),files:[{relative:"src/long-file.ts",status:"modified",additions:1,deletions:1,exact:true,undoable:true}]},commands:new Map<string,()=>void>(),confirm:undefined as undefined|(()=>void),cancel:undefined as undefined|(()=>void),mutate:vi.fn(),command:vi.fn(async(_request:Record<string,unknown>)=>({})),refresh:vi.fn(),refetch:vi.fn(async()=>undefined),close:vi.fn()}));
 vi.mock("@/state/machines",()=>({useActiveMachine:()=>({id:"machine",name:"Original computer",capabilities:state.capabilities}),useMachines:{getState:()=>({activeId:state.activeId})}}));
@@ -20,7 +21,8 @@ vi.mock("@/ui/primitives",()=>{
  const wrapper=({children}:any)=>createElement("div",null,children);
  const button=({label,onPress,disabled}:any)=>{state.commands.set(label,onPress);return createElement("button",{onClick:onPress,disabled},label);};
  return {Stack:wrapper,Body:wrapper,Disclosure:wrapper,Sheet:wrapper,Notice:({message}:any)=>createElement("p",null,message), StateView: ({ title }:any) => createElement("p",null,title),ErrorText:({error}:any)=>error?createElement("p",null,error.message):null,
- QueryState:({query}:any)=>query.error?createElement("p",null,query.error.message):null,NavigationRow:button,
+ QueryState:({query}:any)=>query.error?createElement("p",null,query.error.message):null,
+ NavigationRow:({detail,supporting,...props}:any)=>createElement("div",null,button(props),detail,supporting),
  FormActions:({submitLabel,onSubmit,disabled,feedback}:any)=>createElement("footer",null,feedback,button({label:submitLabel,onPress:onSubmit,disabled})),
  ActionMenu:({actions}:any)=>createElement("nav",null,...actions.filter(Boolean).map((a:any)=>button(a))),
  ScreenList:({data,header,renderItem}:any)=>createElement("main",null,header,...data.map((item:any,index:number)=>createElement("section",{key:index},renderItem({item})))),};
@@ -69,3 +71,12 @@ it("ignores an accepted completion after unmount",async()=>{await mount();await 
 it("renders an empty source without invoking a disabled query validator",async()=>{session={...session,session:{...session.session,cwd:"",worktreeCwd:""}};await mount();expect(container.textContent).toContain("Original computer");});
 
 it("rejects a queued read for a file whose checkpoint is not exact",async()=>{state.data={...state.data,files:[{...state.data.files[0]!,exact:false}]};await mount();await press("src/long-file.ts");expect(state.mutate).not.toHaveBeenCalled();});
+
+it("labels the file change, formats counts, and explains why an inexact file is disabled", async () => {
+  state.data.files = [{ ...state.data.files[0]!, status: "R", additions: 1234, deletions: 56, exact: false }];
+  await mount();
+  const row = [...container.querySelectorAll("button")].find((button) => button.textContent === "src/long-file.ts")!;
+  expect(row.disabled).toBe(true);
+  expect(row.parentElement?.textContent).toContain("Renamed · +1,234 −56");
+  expect(row.parentElement?.textContent).toContain("Cannot be reviewed exactly");
+});

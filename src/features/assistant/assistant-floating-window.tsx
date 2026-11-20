@@ -11,6 +11,7 @@ import PictureInPicture2 from "lucide-react-native/icons/picture-in-picture-2";
 import Mic from "lucide-react-native/icons/mic";
 import MicOff from "lucide-react-native/icons/mic-off";
 import PhoneOff from "lucide-react-native/icons/phone-off";
+import X from "lucide-react-native/icons/x";
 import { Body, IconButton, PressableCard } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
@@ -18,6 +19,7 @@ import { metrics, radii, space } from "@/ui/tokens";
 import { useReducedMotionPreference } from "@/ui/use-reduced-motion";
 import { assistantWindowBounds, normalizeAssistantWindow, readAssistantWindowPosition, restoreAssistantWindow, type AssistantWindowPoint } from "./assistant-window-geometry";
 import { AssistantOrb } from "./assistant-orb";
+import { assistantWindowReserve, useAssistantWindowReserve } from "./assistant-window-reserve";
 import type { AssistantOrbState } from "./assistant-voice-presentation";
 
 const POSITION_KEY = "bycoda.assistantWindow.position.v1";
@@ -40,6 +42,11 @@ export function AssistantFloatingWindow({ title, status, active, muted, orbState
   const [position, setPosition] = useState<AssistantWindowPoint>({ x: 1, y: 1 });
   const interacted = useRef(false);
   const bounds = assistantWindowBounds({ ...viewport, ...insets, windowWidth: width, windowHeight: height, bottomInset, keyboardHeight });
+  // Reason: screens size their bottom inset from this; publish while mounted and withdraw on unmount.
+  useEffect(() => {
+    useAssistantWindowReserve.setState({ reserve: assistantWindowReserve(true, position.y, height, space.sm) });
+    return () => useAssistantWindowReserve.setState({ reserve: 0 });
+  }, [position.y, height]);
   const x = useSharedValue(bounds.right), y = useSharedValue(bounds.bottom);
   const originX = useSharedValue(0), originY = useSharedValue(0);
   // A late storage read must not replace a position the owner already chose in this mount.
@@ -76,7 +83,7 @@ export function AssistantFloatingWindow({ title, status, active, muted, orbState
     <View style={{ width: metrics.touchTarget, minHeight: metrics.touchTarget, alignItems: "center", justifyContent: "center" }}><IconButton label={copy("Asistana dön", "Return to assistant")} onPress={onExpand}><Maximize2 size={20} color={colors.text} /></IconButton></View>
     {onMute ? <View style={{ width: metrics.touchTarget, minHeight: metrics.touchTarget, alignItems: "center", justifyContent: "center" }}><IconButton label={muted ? copy("Mikrofonu aç", "Unmute microphone") : copy("Mikrofonu kapat", "Mute microphone")} onPress={onMute}>{muted ? <MicOff size={20} color={colors.warning} /> : <Mic size={20} color={active ? colors.accent : colors.muted} />}</IconButton></View> : null}
     {onPip ? <View style={{ width: metrics.touchTarget, minHeight: metrics.touchTarget, alignItems: "center", justifyContent: "center" }}><IconButton label={copy("Resim içinde resim", "Picture in picture")} onPress={onPip}><PictureInPicture2 size={20} color={colors.text} /></IconButton></View> : null}
-    <View style={{ width: metrics.touchTarget, minHeight: metrics.touchTarget, alignItems: "center", justifyContent: "center" }}><IconButton label={onMute ? copy("Görüşmeyi bitir", "End voice call") : copy("Asistanı kapat", "Close assistant")} tone="danger" onPress={onClose}><PhoneOff size={20} color={colors.danger} /></IconButton></View>
+    <View style={{ width: metrics.touchTarget, minHeight: metrics.touchTarget, alignItems: "center", justifyContent: "center" }}><IconButton label={onMute ? copy("Görüşmeyi bitir", "End voice call") : copy("Asistanı kapat", "Close assistant")} tone={onMute ? "danger" : undefined} onPress={onClose}>{onMute ? <PhoneOff size={20} color={colors.danger} /> : <X size={20} color={colors.muted} />}</IconButton></View>
   </View>;
   return <Animated.View onLayout={({ nativeEvent }) => setHeight(nativeEvent.layout.height)} style={[{ position: "absolute", top: 0, left: 0, width, backgroundColor: colors.raised, borderRadius: radii.bubble, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.separator, padding: space.xs }, style]}>
     <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>

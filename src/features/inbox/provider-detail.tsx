@@ -29,6 +29,7 @@ import {
 import { PullRequestMetadata } from "../pull-requests/ui/metadata";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
+import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { MessageText } from "@/ui/message-text";
 import { providerActionLabel } from "./provider-labels";
@@ -180,7 +181,7 @@ export function ProviderInboxDetail({
 
   const desktopUnavailable = scopeCurrent && availability.data?.available === false && getQueryPresentation(availability) === "ready";
   const accessMessage = !scopeCurrent
-    ? copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")
+    ? copy(...RECORD_ACCESS_UNAVAILABLE)
     : desktopUnavailable ? copy("Bilgisayardaki Bycoda bağlantısı bekleniyor. Yeni gönderimler durduruldu; mevcut işlemin sonucu korunuyor.",
       "Waiting for desktop Bycoda. New sends are disabled; the current operation result is retained.") : undefined;
   const operationMessage = !contentAvailable ? uncertain

@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 const f = vi.hoisted(() => ({
   machine: { id: "computer", environmentId: "env", providers: [] as string[] }, id: 0, listeners: [] as any[], loops: [] as any[], retireHooks: [] as (() => void)[],
   release: vi.fn(), removeEvent: vi.fn(), unsubscribe: vi.fn(), read: vi.fn(async () => null as unknown),
-  end: vi.fn(), request: vi.fn(), cancel: vi.fn(), nativeMuted: false, loopMuteStates: [] as boolean[], consentAllowed: true, consentHooks: [] as (() => void)[],
+  end: vi.fn(), request: vi.fn(async (method: string) => method === "voice.local.start" ? { lease: "call-hold" } : undefined), cancel: vi.fn(), nativeMuted: false, loopMuteStates: [] as boolean[], consentAllowed: true, consentHooks: [] as (() => void)[],
   signedIn: true, accountHooks: [] as (() => void)[], appAccess: true, interrupt: vi.fn(() => true), speaker: vi.fn(), finish: vi.fn(async () => {}),
 }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
@@ -75,6 +75,14 @@ it("keeps the current loop failure visible while releasing its native call", asy
   expect(useAssistantCall.getState().phase).toBe("idle");
   expect((useAssistantCall.getState().error as Error).message).toBe("provider unavailable");
   expect(f.release).toHaveBeenCalledOnce(); expect(f.end).toHaveBeenCalledWith("session-1");
+});
+// Each turn's own leases let the Host unload Whisper and the voice; the reply then waited 9-14 s for both to load.
+it("holds one speech lease for the whole call and releases it when the call ends", async () => {
+  await startAssistantCall(target, () => true);
+  expect(f.request).toHaveBeenCalledWith("voice.local.start", { config: { natural: true } }, expect.anything());
+  expect(f.request.mock.calls.some(([method]) => method === "voice.local.release")).toBe(false);
+  endAssistantCall();
+  expect(f.request).toHaveBeenCalledWith("voice.local.release", { lease: "call-hold" }, expect.anything());
 });
 it("keeps a started call through the app lock and background, but retires it on sign-out", async () => {
   await startAssistantCall(target, () => true);

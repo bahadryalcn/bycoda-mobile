@@ -10,7 +10,7 @@ import { useMobileTheme } from "@/ui/theme";
 import { enterItem } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { MOBILE_PAIRING_MAX_BYTES } from "../../../../src/integrations/mobile-pairing";
-import { parseMobilePairingCode } from "./pairing-code";
+import { parseDesktopPairingCode } from "./pairing-code";
 import type { PairingPasteProps } from "./connection-types";
 
 /** The copied text when it is a valid, unexpired pairing code; anything else stays on the clipboard. */
@@ -19,7 +19,7 @@ export async function copiedPairingCode(): Promise<string | undefined> {
   const value = (await Clipboard.getStringAsync()).trim();
   if (!value || value.length > MOBILE_PAIRING_MAX_BYTES) return undefined;
   try {
-    parseMobilePairingCode(value);
+    parseDesktopPairingCode(value);
     return value;
   } catch {
     return undefined;

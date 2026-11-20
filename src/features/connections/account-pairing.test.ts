@@ -138,7 +138,28 @@ describe("account pairing", () => {
       },
     });
     await expect(promise).rejects.toMatchObject({ kind: "expired" });
-    expect(vi.mocked(client.getPairRequest).mock.calls.length).toBe(120);
+    expect(time).toBe(now + 120_000);
+    expect(vi.mocked(client.getPairRequest).mock.calls.length).toBeLessThan(35);
+  });
+
+  it("backs off pending polls and caps the final wait at the service expiry", async () => {
+    let time = now;
+    const waits: number[] = [];
+    const client = harness(Array.from({ length: 10 }, () => () => ({ state: "pending" })));
+    vi.mocked(client.createPairRequest).mockResolvedValueOnce({
+      id: "req-1", expiresAt: new Date(now + 8_000).toISOString(),
+    });
+    await expect(run(client, {
+      now: () => time,
+      sleep: async (ms: number) => { waits.push(ms); time += ms; },
+    }).promise).rejects.toMatchObject({ kind: "expired" });
+    expect(waits).toEqual([1000, 1000, 1000, 2000, 3000]);
+  });
+
+  it("asks the service before expiring a request when the phone clock is ahead", async () => {
+    const client = harness([() => ({ state: "denied" })]);
+    await expect(run(client, { now: () => now + 180_000 }).promise).rejects.toMatchObject({ kind: "denied" });
+    expect(client.getPairRequest).toHaveBeenCalledOnce();
   });
 
   it("stops on cancel without polling again", async () => {

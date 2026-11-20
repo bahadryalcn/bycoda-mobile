@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { createContext, useCallback, useRef, useState, type PropsWithChildren, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useRef, useState, type PropsWithChildren, type ReactNode } from "react";
 import { View, type HostInstance, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { useKeyboardState, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
@@ -9,6 +9,27 @@ import { useAdaptiveLayout } from "@/ui/adaptive-layout";
 import { tabletopFrameSplit } from "@/ui/fold-tabletop-model";
 
 export const SessionKeyboardSpace = createContext<number | null>(null);
+
+/** Receives the measured composer band height (safe-area bottom included while the IME is closed). */
+export const SessionComposerHeight = createContext<((height: number) => void) | null>(null);
+
+/**
+ * Owns the measured composer height so a sibling overlay (the tablet quick panel) can clear it.
+ * Height changes re-render only this provider, not the children element it was given.
+ */
+export function SessionComposerHeightProvider({
+  children,
+  fallback,
+  overlay,
+}: PropsWithChildren<{ fallback: number; overlay: (bottomInset: number) => ReactNode }>) {
+  const [height, setHeight] = useState<number | null>(null);
+  return (
+    <SessionComposerHeight.Provider value={setHeight}>
+      {children}
+      {overlay(height ?? fallback)}
+    </SessionComposerHeight.Provider>
+  );
+}
 
 /**
  * Transcript above, composer below, in one column. The keyboard's native animation drives a single
@@ -51,8 +72,15 @@ export function SessionKeyboardFrame({
     }),
     [insets.bottom],
   );
+  const reportComposerHeight = useContext(SessionComposerHeight);
   const composerBlock = (
-    <Animated.View style={[{ backgroundColor: transparent ? "transparent" : colors.background, paddingTop: space.sm, paddingBottom: 0 }, safeBottomStyle]}>
+    <Animated.View
+      onLayout={(event) => {
+        const next = event.nativeEvent.layout.height;
+        if (Number.isFinite(next) && next > 0) reportComposerHeight?.(next);
+      }}
+      style={[{ backgroundColor: transparent ? "transparent" : colors.background, paddingTop: space.sm, paddingBottom: 0 }, safeBottomStyle]}
+    >
       <SessionKeyboardSpace.Provider value={availableHeight}>
         <View style={{ paddingBottom: space.sm }}>{composer}</View>
       </SessionKeyboardSpace.Provider>

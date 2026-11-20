@@ -21,9 +21,10 @@ it("hydrates, updates and persists", async () => {
   expect(JSON.parse(storage.data.get("bycoda.mobile.app-preferences.v1")!)).toMatchObject({ groupByRepository: true, newSessionUsesLastProject: true });
 });
 
-it("does not overwrite storage that failed to read", async () => {
+it("keeps a choice made while storage is unreadable, reports it and never writes over unknown values", async () => {
   const storage = { getItem: async () => { throw new Error("x"); }, setItem: async () => { throw new Error("must not write"); } };
   const store = createAppPreferenceStore(storage);
   await store.getState().update({ groupByRepository: true });
-  expect(store.getState().preferences.groupByRepository).toBe(false);
+  expect(store.getState().preferences.groupByRepository).toBe(true);
+  expect(store.getState().storageError?.operation).toBe("read");
 });

@@ -2,12 +2,39 @@ import { describe, expect, it } from "vitest";
 import {
   pairingClaimId,
   pairingErrorMessage,
+  parseDesktopPairingCode,
   parseMobilePairingCode,
   PairingFailure,
 } from "./pairing-code";
 import { MobilePairingCodeError } from "../../../../src/integrations/mobile-pairing";
 
+const payload = (expiresAt: string) =>
+  JSON.stringify({
+    kind: "bycoda.mobile-pairing",
+    version: 1,
+    endpoint: "https://pc.example",
+    environmentId: "pc-environment",
+    name: "Work PC",
+    ticket: "t".repeat(43),
+    expiresAt,
+  });
+
 describe("mobile pairing code adapters", () => {
+  it("accepts a desktop-stamped expiry regardless of the phone clock", () => {
+    const now = Date.now();
+    // Desktop 10 minutes behind the phone: the fresh ticket reads as long expired on the phone clock.
+    expect(parseDesktopPairingCode(payload(new Date(now - 480_000).toISOString())).ticket).toBe("t".repeat(43));
+    // Desktop 10 minutes ahead: the fresh ticket reads as beyond the TTL window on the phone clock.
+    expect(parseDesktopPairingCode(payload(new Date(now + 720_000).toISOString())).ticket).toBe("t".repeat(43));
+    // The shared parser still rejects the same skewed payloads when judged against the phone clock.
+    expect(() => parseMobilePairingCode(payload(new Date(now + 720_000).toISOString()))).toThrow(MobilePairingCodeError);
+  });
+
+  it("still rejects a malformed or unreadable expiry", () => {
+    expect(() => parseDesktopPairingCode(payload("not-a-date"))).toThrow(MobilePairingCodeError);
+    expect(() => parseDesktopPairingCode("not json")).toThrow(MobilePairingCodeError);
+  });
+
   it("encodes all 32 random bytes as an unpadded base64url claim", () => {
     const bytes = Uint8Array.from({ length: 32 }, (_, index) => index * 7);
     expect(pairingClaimId(bytes)).toBe(Buffer.from(bytes).toString("base64url"));

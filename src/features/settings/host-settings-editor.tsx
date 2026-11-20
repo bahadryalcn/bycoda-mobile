@@ -17,6 +17,8 @@ import { useCopy } from "../../ui/copy";
 import { useLocale } from "@/i18n";
 import {
   acknowledgeSettingsDraft,
+  confirmsEditedLimits,
+  editedLimits,
   readHostSettingsState,
   settingsFields,
   validSettingsFields,
@@ -61,36 +63,33 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
   const [observed, setObserved] = useState<HostSettingsState>();
   const readFlight = useRef(false);
   const draft = useFormDraft<SettingsDraft>({ override: null });
-  const fields =
-    draft.values.override ??
-    (snapshot ? settingsFields(snapshot) : { maxRunning: "", dailyMinutes: "" });
+  const fields = {
+    ...(snapshot ? settingsFields(snapshot) : { maxRunning: "", dailyMinutes: "" }),
+    ...draft.values.override,
+  };
   const dirty = draft.values.override !== null;
   const { requestCloseThen } = useSheetGuard({ dirty, pending: action.isPending || save.isPending || reading });
   const writable = supported && getQueryPresentation(settings) === "ready" && !uncertain;
   const validMax = /^\d+$/.test(fields.maxRunning) && Number(fields.maxRunning) >= 1 && Number.isSafeInteger(Number(fields.maxRunning));
   const validMinutes = /^\d+$/.test(fields.dailyMinutes) && Number.isSafeInteger(Number(fields.dailyMinutes));
   const update = (key: keyof typeof fields, value: string) =>
-    draft.patch((current) => ({ override: { ...(current.override ?? fields), [key]: value } }));
+    draft.patch((current) => ({ override: { ...current.override, [key]: value } }));
   const submit = () => {
     const submitted = draft.values.override;
-    if (!submitted || !validSettingsFields(submitted) || !writable || !current()) return;
+    if (!submitted || !validSettingsFields(fields) || !writable || !current()) return;
+    const sent = editedLimits(submitted);
     setObserved(undefined);
     void action.run(async () => {
       if (!current() || !useMachines.getState().machines.find(value => value.id === opening.machineId)?.capabilities?.includes("host.settings")) throw new Error("This computer connection changed. Reopen its current route.");
       let result: HostSettingsState;
-      try { result = await save.mutateAsync({
-        settings: {
-          maxRunningTasks: Number(submitted.maxRunning),
-          dailyAgentMinutes: Number(submitted.dailyMinutes),
-        },
-      }); } catch (cause) {
+      try { result = await save.mutateAsync({ settings: sent }); } catch (cause) {
         if (current() && (cause as { uncertain?: boolean })?.uncertain) setUncertain(true);
         throw cause;
       }
       if (!current()) return result;
       try {
         result = readHostSettingsState(result);
-        if (result.maxRunningTasks !== Number(submitted.maxRunning) || result.dailyAgentMinutes !== Number(submitted.dailyMinutes)) throw new Error("The host did not confirm the submitted task settings.");
+        if (!confirmsEditedLimits(result, sent)) throw new Error("The host did not confirm the submitted task settings.");
       } catch (cause) { setUncertain(true); throw cause; }
       cache.setQueriesData<HostSettingsState>(
         { queryKey: hostKey(opening.machineId, ["settings"]) },

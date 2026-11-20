@@ -10,7 +10,6 @@ import {
   ErrorText,
   FormActions,
   Empty,
-  StateView,
   IconButton,
   Row,
   ScreenList,
@@ -19,6 +18,7 @@ import {
   Sheet,
 } from "@/ui/primitives";
 import { ChatAction } from "@/ui/chat-controls";
+import { RecordAccessUnavailable } from "./unavailable-state";
 import { useHostClient, useHostReadActive } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
@@ -36,7 +36,7 @@ import { useEarlierSession } from "./session-queries";
 import {
   defaultSessionFileFilters,
   filterSessionFiles,
-  sessionFileIndex,
+  sessionFileIndexWhileOpen,
   type SessionFile,
   type SessionFileFilters,
 } from "./session-file-model";
@@ -71,7 +71,8 @@ function SessionFilesScope({ scope, session, connection }: { scope: SessionScope
   if (kind === "auth" || kind === "identity") denied.current = true;
   else if (earlier.isSuccess && !earlier.error && !earlier.isPending) denied.current = false;
   const readable = open && available && !denied.current;
-  const files = useMemo(() => sessionFileIndex(session.session.blocks), [session.session.blocks]);
+  // Indexing is deferred until the sheet opens; reopening re-reads the current blocks.
+  const files = useMemo(() => sessionFileIndexWhileOpen(open, session.session.blocks), [open, session.session.blocks]);
   const filtered = useMemo(
     () => filterSessionFiles(files, search, filters, locale),
     [files, search, filters, locale],
@@ -117,7 +118,7 @@ function SessionFilesScope({ scope, session, connection }: { scope: SessionScope
         footer={<FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />}
       >
         {open && !readable ? <ScrollView contentContainerStyle={{ padding: space.screen, gap: space.sm, flexGrow: 1, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}>
-          <StateView illustration="locked" title={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />
+          <RecordAccessUnavailable />
           {available && denied.current ? <><ErrorText error={earlier.error} /><Button label={copy("Önceki mesajları yükle", "Load earlier messages")} busy={earlier.isPending} onPress={loadEarlier} /></> : null}
         </ScrollView> : null}
         <PrivateContentBoundary visible={readable} isAllowed={canRead}><PrivateContentAccessProvider value={scopedAccess}>

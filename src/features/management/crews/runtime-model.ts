@@ -25,6 +25,34 @@ export function canDeleteCrewRun(run: CrewRunView): boolean {
     && !run.tasks.some((task) => task.status === "queued");
 }
 
+const CREW_LIVE_POLL_MS = 5000;
+const CREW_IDLE_POLL_MS = 15_000;
+
+/** A run can change without owner input while it is active, working, queued, unknown or awaiting an answer. */
+function crewRunLive(run: CrewRunView & { pendingInputs?: readonly unknown[] }): boolean {
+  return run.status === "active" || crewHasRunningWork(run) || !crewActivityKnown(run)
+    || run.tasks.some((task) => task.status === "queued") || !!run.pendingInputs?.length;
+}
+
+/** Fast only while the run can change by itself; finished runs stop polling (writes still invalidate). */
+export function crewRunPollInterval(run: (CrewRunView & { pendingInputs?: readonly unknown[] }) | undefined): number | false {
+  if (!run) return CREW_LIVE_POLL_MS;
+  if (crewRunLive(run)) return CREW_LIVE_POLL_MS;
+  return run.status === "finished" ? false : CREW_IDLE_POLL_MS;
+}
+
+/**
+ * Directory polling exists only for the Work list: fast while a run is live, slow otherwise.
+ * Definitions, the member library and an open editor never poll (writes and tab entry refetch).
+ */
+export function crewDirectoryPollInterval(
+  directory: { runs: readonly CrewRunView[] } | undefined,
+  runsVisible: boolean,
+): number | false {
+  if (!runsVisible) return false;
+  return directory?.runs.some(crewRunLive) ? CREW_LIVE_POLL_MS : CREW_IDLE_POLL_MS;
+}
+
 export function crewTaskSessions(task: CrewRunView["tasks"][number]) {
   const available = (id: string | undefined) => id?.trim() ? id : undefined;
   const attempts = [...(task.attemptHistory ?? [])].reverse();

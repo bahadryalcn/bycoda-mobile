@@ -6,12 +6,46 @@ export function updatesSupported(env: { dev: boolean; enabled: boolean; web: boo
   return !env.dev && env.enabled && !env.web;
 }
 
-/** What the single Settings row shows and does in each phase; restart is always explicit. */
+type Copy = (tr: string, en: string) => string;
+
+/** Localized, actionable failure text per step; raw expo-updates messages are English-only. */
+export function updateFailureMessage(action: UpdateAction, copy: Copy): string {
+  switch (action) {
+    case "restart":
+      return copy(
+        "Uygulama yeniden başlatılamadı. İndirilen güncelleme duruyor; yeniden başlatmayı tekrar dene.",
+        "The app could not restart. The downloaded update is kept; try restarting again.",
+      );
+    case "download":
+      return copy("Güncelleme indirilemedi. Bağlantını kontrol edip tekrar dene.", "The update could not be downloaded. Check your connection and try again.");
+    default:
+      return copy("Güncellemeler denetlenemedi. Bağlantını kontrol edip tekrar dene.", "Could not check for updates. Check your connection and try again.");
+  }
+}
+
+/**
+ * What the single Settings row shows and does in each phase; restart is always explicit.
+ * In the `error` phase `failed` is the step that failed: the row retries exactly that step, so a
+ * failed restart keeps offering the already downloaded update instead of re-checking.
+ */
 export function updateRow(
   phase: UpdatePhase,
-  copy: (tr: string, en: string) => string,
+  copy: Copy,
+  failed: UpdateAction | null = null,
 ): { label: string; detail?: string; busy: boolean; action: UpdateAction | null } {
   switch (phase) {
+    case "error": {
+      const action = failed ?? "check";
+      return {
+        label:
+          action === "restart"
+            ? copy("Yeniden başlatmayı tekrar dene", "Try restarting again")
+            : copy("Tekrar dene", "Try again"),
+        detail: action === "restart" ? copy("Güncelleme indirildi.", "The update is downloaded.") : undefined,
+        busy: false,
+        action,
+      };
+    }
     case "checking":
       return { label: copy("Güncelleme aranıyor…", "Checking for updates…"), busy: true, action: null };
     case "available":

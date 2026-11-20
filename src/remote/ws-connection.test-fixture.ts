@@ -31,7 +31,7 @@ export function fakeNative(hello: { methods?: string[]; capabilities?: string[] 
     open: vi.fn(async (_handle, id, generation) => {
       route = { id, generation };
     }),
-    send: vi.fn(async (_id, _generation, text) => {
+    send: vi.fn(async (connectionId, generation, text) => {
       const request = JSON.parse(text) as (typeof sent)[number];
       sent.push(request);
       const result =
@@ -63,7 +63,15 @@ export function fakeNative(hello: { methods?: string[]; capabilities?: string[] 
             ? { accepted: true }
             : response(request);
       if (result !== undefined)
-        queueMicrotask(() => emit({ jsonrpc: "2.0", id: request.id, result }));
+        // Answer on the connection that asked, so several sockets can be open at once.
+        queueMicrotask(() =>
+          event("message", {
+            connectionId,
+            generation,
+            text: JSON.stringify({ jsonrpc: "2.0", id: request.id, result }),
+            sequence: sent.length,
+          }),
+        );
     }),
     acknowledge: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),

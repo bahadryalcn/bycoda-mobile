@@ -63,7 +63,7 @@ vi.mock("@/ui/record-card", () => ({
     menu,
     metadata,
   }: PropsWithChildren<Record<string, any>>) =>
-    createElement("div", null, metadata, children, footer, details, menu),
+    createElement("div", null, metadata, children, footer, typeof details === "function" ? details(true) : details, menu),
 }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);

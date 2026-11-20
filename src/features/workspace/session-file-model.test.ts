@@ -3,6 +3,7 @@ import {
   defaultSessionFileFilters,
   filterSessionFiles,
   sessionFileIndex,
+  sessionFileIndexWhileOpen,
 } from "./session-file-model";
 import type { Block } from "./wire";
 
@@ -76,4 +77,18 @@ it("matches Turkish dotted and dotless letters without changing all-term search"
   expect(filterSessionFiles(files, "ışık iletişim", defaultSessionFileFilters, "tr")).toHaveLength(1);
   expect(filterSessionFiles(files, "iletisim", defaultSessionFileFilters, "tr")).toHaveLength(0);
   expect(filterSessionFiles(files, "iletişim absent", defaultSessionFileFilters, "tr")).toHaveLength(0);
+});
+
+it("walks the transcript only while the files sheet is open and reads current blocks on open", () => {
+  // A closed sheet must never touch the transcript: a throwing walk proves no indexing ran.
+  const unwalked = { flatMap: () => { throw new Error("transcript walked while closed"); } } as unknown as Block[];
+  expect(sessionFileIndexWhileOpen(false, unwalked)).toEqual([]);
+
+  const first: Block[] = [{ id: "u1", role: "user", text: "", attachments: [attachment] }];
+  expect(sessionFileIndexWhileOpen(false, first)).toEqual([]);
+  expect(sessionFileIndexWhileOpen(true, first).map((file) => file.id)).toEqual(["file-1"]);
+
+  // Blocks that streamed in while closed are indexed when the sheet opens.
+  const streamed: Block[] = [...first, { id: "a1", role: "assistant", text: "", image: { name: "Chart.png", path: "out/Chart.png", mimeType: "image/png", size: 64 } }];
+  expect(sessionFileIndexWhileOpen(true, streamed).map((file) => file.name)).toEqual(["Design.pdf", "Chart.png"]);
 });

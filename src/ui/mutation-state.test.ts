@@ -9,8 +9,7 @@ vi.mock("./feedback", () => ({
   Loading: ({ label }: { label: string }) => createElement("p", null, label),
   Empty: () => null, Notice: ({ message }: { message: string }) => createElement("p", null, message), Skeleton: () => null,
 }));
-vi.mock("./state-view", () => ({ StateView: () => null }));
-vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("p", null, children) }));
+vi.mock("./state-view", () => ({ StateView: () => null }));vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("p", null, children) }));
 const toast = vi.hoisted(() => ({ available: false, show: vi.fn() }));
 vi.mock("./toast", () => ({ showToast: toast.show, useToastAvailable: () => toast.available }));
 import { MutationState } from "./query-state";

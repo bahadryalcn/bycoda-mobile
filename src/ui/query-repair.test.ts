@@ -8,7 +8,6 @@ vi.mock("./feedback", () => ({ Empty: "Empty", ErrorNotice: "ErrorNotice", Loadi
 vi.mock("./typography", () => ({ Body: "Body" }));
 vi.mock("./state-view", () => ({ StateView: "StateView" }));
 vi.mock("./toast", () => ({ showToast: vi.fn(), useToastAvailable: () => false }));
-
 const quiet = vi.hoisted(() => ({ on: false }));
 vi.mock("../state/query-retry", async (original) => {
   const actual = await original<typeof import("../state/query-retry")>();
@@ -21,7 +20,7 @@ type Rendered = { type: unknown; props: any } | null;
 function unwrap(tree: ReturnType<typeof QueryState>): Rendered {
   const children = (tree?.props as { children: Rendered | Rendered[] }).children;
   if (!Array.isArray(children)) return children;
-  const [skeleton, node = null] = children;
+  const [, skeleton, node = null] = children;
   return skeleton?.props.loading ? skeleton : node;
 }
 function renderQuery(props: ComponentProps<typeof QueryState>, scope?: ContextType<typeof SheetGuardContext>) {
@@ -34,7 +33,46 @@ function renderQuery(props: ComponentProps<typeof QueryState>, scope?: ContextTy
 import { router } from "expo-router";
 import { onlineManager } from "@tanstack/react-query";
 import { RemoteHostError } from "../remote/host-error";
-beforeEach(() => { vi.clearAllMocks(); quiet.on = false; onlineManager.setOnline(true); });
+import { recordActiveHostDisconnected, recordActiveHostMachine, recordHostRuntimeState, resetHostRuntimeStates } from "../state/host-runtime-state";
+beforeEach(() => { vi.clearAllMocks(); quiet.on = false; onlineManager.setOnline(true); resetHostRuntimeStates(); });
+
+it("says a retried slow load is still trying instead of showing a silent placeholder", () => {
+  const probe: { lead: Rendered } = { lead: null };
+  function Probe() {
+    const tree = QueryState({ query: { status: "pending", fetchStatus: "fetching", isLoading: true, failureCount: 1 } });
+    probe.lead = ((tree?.props as { children: Rendered[] }).children)[0] ?? null;
+    return null;
+  }
+  renderToStaticMarkup(createElement(Probe));
+  expect(probe.lead?.props.message).toBe("The computer is slow to answer; trying again…");
+  expect(renderQuery({ query: { status: "pending", fetchStatus: "fetching", isLoading: true, failureCount: 1 } })?.props.label)
+    .toBe("The computer is slow to answer; trying again…");
+});
+
+it("says the computer is unreachable instead of loading while its socket waits to reconnect", () => {
+  expect(renderQuery({ query: { status: "pending", fetchStatus: "fetching", isLoading: true } })?.type).toBe("Skeleton");
+  recordHostRuntimeState("machine", "backoff");
+  // Another computer's dropped link says nothing about the selected one.
+  recordActiveHostMachine("other");
+  expect(renderQuery({ query: { status: "pending", fetchStatus: "fetching", isLoading: true } })?.type).toBe("Skeleton");
+  recordActiveHostMachine("machine");
+  const waiting = renderQuery({ query: { status: "pending", fetchStatus: "fetching", isLoading: true } });
+  expect(waiting?.props.title).toBe("Waiting for a connection");
+  expect(waiting?.props.action.label).toBe("Manage connections");
+  // Without a live socket, the pill's Disconnected verdict is the same signal.
+  resetHostRuntimeStates();
+  recordActiveHostDisconnected(true);
+  expect(renderQuery({ query: { status: "pending", fetchStatus: "fetching", isLoading: true } })?.props.title).toBe("Waiting for a connection");
+  // Loaded data stays on screen; the pill reports the link.
+  expect(renderQuery({ query: { data: [1], status: "success" } })).toBeNull();
+});
+
+it("shows offline immediately during an initial fetch and retains an explicit repair error", () => {
+  onlineManager.setOnline(false);
+  expect(renderQuery({ query: { status: "pending", fetchStatus: "fetching" } })?.props.illustration).toBe("offline");
+  const repair = renderQuery({ query: { error: new RemoteHostError("machine", "auth", "Pairing") } });
+  expect(repair?.props.action.label).toBe("Manage connections");
+});
 
 it("shows one centered offline state instead of reconnecting while the device has no network", () => {
   onlineManager.setOnline(false);
@@ -140,4 +178,16 @@ it("shows a calm reconnecting state instead of Retry while a dropped link recove
   expect(cached).toBeNull();
   const auth = renderQuery({ query: { error: new RemoteHostError("machine", "auth", "x"), refetch } })!;
   expect(auth.type).toBe("StateView");
+});
+
+it("marks shown data as not current when a refresh fails for a reason other than the link", () => {
+  const refetch = vi.fn();
+  // A rejected reply while connected: without a sign the list kept showing an old "Running".
+  const rejected = renderQuery({ query: { data: [1], error: new RemoteHostError("computer", "protocol", "Invalid reply"), refetch } });
+  expect(rejected?.type).toBe("Notice");
+  expect(rejected?.props.message).toBe("Showing the last loaded version; it could not be refreshed.");
+  rejected?.props.action.onPress();
+  expect(refetch).toHaveBeenCalledOnce();
+  // Link problems stay with the computer pill.
+  expect(renderQuery({ query: { data: [1], error: new RemoteHostError("computer", "network", "down"), refetch } })).toBeNull();
 });

@@ -33,6 +33,13 @@ describe("bounded inline raster media", () => {
     expect(inlineRaster(uri("image/webp", webp))?.bytes).toBe(30);
     expect(inlineRaster(uri("image/png", jpeg))).toBeNull();
   });
+  it("returns the parsed dimensions so callers can reserve layout before decoding", () => {
+    expect(inlineRaster(`data:image/png;base64,${png}`)).toMatchObject({ width: 1, height: 1 });
+    const wide = Uint8Array.from(Buffer.from(png, "base64"));
+    wide.set([0, 0, 0, 8], 16);
+    wide.set([0, 0, 0, 2], 20);
+    expect(inlineRaster(uri("image/png", wide))).toMatchObject({ width: 8, height: 2 });
+  });
   it("rejects active formats, forged headers, malformed base64 and byte/dimension bombs", () => {
     for (const source of [
       "data:image/svg+xml;base64,PHN2Zy8+",

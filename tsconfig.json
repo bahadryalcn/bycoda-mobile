@@ -9,6 +9,7 @@
       "@bycoda/core": ["../packages/core/src/index.ts"],
       "@bycoda/core/json-text": ["../packages/core/src/jsonText.ts"],
       "@bycoda/core/concurrent": ["../packages/core/src/concurrent.ts"],
+      "@bycoda/core/text": ["../packages/core/src/text.ts"],
       "@bycoda/core/session-title": ["../packages/core/src/sessionTitle.ts"]
     }
   },

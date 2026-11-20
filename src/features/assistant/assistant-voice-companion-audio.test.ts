@@ -1,8 +1,9 @@
 import { expect, it, vi } from "vitest";
 import type { NativeVoiceCompanion, NativeVoiceEvent } from "../../../modules/bycoda-voice-companion";
-const file = vi.hoisted(() => ({ write: vi.fn(), delete: vi.fn() }));
+// expo-file-system 58: write() resolves later, writeSync() finishes before it returns.
+const file = vi.hoisted(() => ({ write: vi.fn(async () => {}), writeSync: vi.fn(), delete: vi.fn() }));
 vi.mock("expo-file-system", () => ({ Paths: { cache: "file:///cache" }, File: class {
-  uri = "file:///cache/bycoda-voice-fixture.wav"; exists = true; write = file.write; delete = file.delete;
+  uri = "file:///cache/bycoda-voice-fixture.wav"; exists = true; write = file.write; writeSync = file.writeSync; delete = file.delete;
 } }));
 import { companionVoiceCapture, companionVoicePlayback } from "./assistant-voice-companion-audio";
 import { pcmBase64 } from "../../../../src/features/voice/model/voiceVad";
@@ -66,6 +67,25 @@ it("settles native playback on notification stop and removes its temporary WAV",
   await expect(pending).rejects.toThrow("Voice session stopped.");
   expect(f.native.stopPlayback).toHaveBeenCalledWith("original", expect.any(String)); expect(file.delete).toHaveBeenCalledOnce();
 });
+// A long reply was handed to native playback while the async write was still running: "Invalid cached voice audio."
+it("finishes writing the WAV before native playback opens it", async () => {
+  const f = fixture(); file.write.mockClear(); file.writeSync.mockClear();
+  const wav = new Uint8Array(1_247_276), playback = companionVoicePlayback(f.native);
+  const pending = playback.play(wav, () => true);
+  expect(file.writeSync).toHaveBeenCalledWith(wav);
+  expect(file.write).not.toHaveBeenCalled();
+  expect(file.writeSync.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(f.native.playWav).mock.invocationCallOrder.at(-1)!);
+  playback.stop(); await pending;
+});
+it("ignores a capture-scoped focus-loss end during playback but still ends on a session-wide end", async () => {
+  const f = fixture(), playback = companionVoicePlayback(f.native);
+  const pending = playback.play(new Uint8Array(44), () => true);
+  let settled = false; void pending.then(() => { settled = true; }, () => { settled = true; });
+  f.emit({ type: "ended", reason: "focus-lost", captureId: "stale-capture" });
+  await Promise.resolve(); expect(settled).toBe(false);
+  f.emit({ type: "ended", reason: "audio-interrupted" });
+  await expect(pending).rejects.toThrow("Voice session stopped.");
+});
 it("keeps playback cancellation scoped to its own utterance inside a shared call session", async () => {
   const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
   const f = fixture(), first = companionVoicePlayback(f.native), second = companionVoicePlayback(f.native);
@@ -82,7 +102,7 @@ it("keeps playback cancellation scoped to its own utterance inside a shared call
 it("cleans up standalone playback authority when writing its cache file fails", async () => {
   const f = fixture();
   vi.spyOn(f.native, "getState").mockReturnValue({ active: false, sessionId: "", phase: "idle", muted: false, pip: false });
-  file.write.mockImplementationOnce(() => { throw new Error("disk full"); });
+  file.writeSync.mockImplementationOnce(() => { throw new Error("disk full"); });
   await expect(companionVoicePlayback(f.native).play(new Uint8Array(44), () => true)).rejects.toThrow("disk full");
   expect(f.native.beginPlaybackSession).toHaveBeenCalledOnce();
   expect(f.native.endSession).toHaveBeenCalledWith("standalone");

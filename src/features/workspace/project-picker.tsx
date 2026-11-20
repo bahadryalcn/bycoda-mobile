@@ -5,13 +5,14 @@ import type { HostProject } from "@/domain/types";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
-import { Body, FormActions, NavigationRow, ScreenList, SearchField, Sheet, StateView } from "@/ui/primitives";
+import { Body, FormActions, NavigationRow, ScreenList, SearchField, Sheet } from "@/ui/primitives";
 import { usePrivateContentAccess } from "@/ui/private-access";
 import { ScreenChromeProvider } from "@/ui/layout";
 import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
 import { matchesSearch, normalizeSearch } from "@/ui/search-matching";
 import { useLocale } from "@/i18n";
 import { ProjectDirectorySlot } from "./project-directory-feedback";
+import { RecordAccessUnavailable } from "./unavailable-state";
 import { useCopy } from "@/ui/copy";
 import { useProjectList } from "./use-project-directory";
 import { useProjectDirectoryPreferences } from "@/state/project-directory-preferences";
@@ -86,7 +87,7 @@ function ProjectPickerOpening({ onClose, onSelect }: Omit<Props, "visible">) {
   };
   return <Sheet visible title={copy("Proje seçin", "Choose a project")} size="full" scroll={false} onClose={close}
     footer={<FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />}>
-    {!available ? <StateView illustration="locked" title={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} /> : <>
+    {!available ? <RecordAccessUnavailable /> : <>
       <View style={{ paddingHorizontal: space.screen, paddingVertical: space.sm }}>
         <SearchField label={copy("Projelerinde ara", "Search projects")} value={readable ? search : ""} editable={readable} onChangeText={changeSearch} />
       </View>

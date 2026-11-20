@@ -250,7 +250,12 @@ export function TaskCard({
             "The task record will be deleted. The host prevents deletion if unmerged work remains.",
           ),
           copy("Sil", "Delete"),
-          () => remove.mutate({ taskId: task.id, discard: false }),
+          () =>
+            remove.mutate({
+              taskId: task.id,
+              discard: false,
+              expectedUpdatedAt: task.updatedAt,
+            }),
         ),
     },
   ];

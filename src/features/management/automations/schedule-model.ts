@@ -47,6 +47,21 @@ export function scheduleSentence(
     default: return item.scheduleKind;
   }
 }
+export type AutomationEvent = "task.finished" | "task.blocked" | "session.waiting" | "automation.failed";
+
+/** The event trigger as a human phrase; the identifier stays the stored value. */
+export function automationEventLabel(
+  event: AutomationEvent,
+  copy: (tr: string, en: string) => string,
+) {
+  switch (event) {
+    case "task.finished": return copy("Görev bittiğinde", "When a task finishes");
+    case "task.blocked": return copy("Görev engellendiğinde", "When a task is blocked");
+    case "session.waiting": return copy("Oturum yanıt beklediğinde", "When a session waits for input");
+    case "automation.failed": return copy("Otomasyon başarısız olduğunda", "When an automation fails");
+  }
+}
+
 /** Trigger-specific validation never makes hidden scheduled fields block other triggers. */
 export function automationTriggerValid(kind: "scheduled" | "continuous" | "event", gap: string, scheduledValid: boolean): boolean {
   return kind === "continuous" ? integerInRange(gap, 1, 10080) : kind === "event" || scheduledValid;

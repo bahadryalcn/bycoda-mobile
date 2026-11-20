@@ -1,5 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 const platform = vi.hoisted(() => ({ OS: "ios" }));
+vi.mock("@react-native-async-storage/async-storage", () => ({
+  default: { getItem: async () => JSON.stringify({ engine: "cloud" }) },
+}));
 vi.mock("react-native", () => ({ Platform: platform }));
 const bridge = vi.hoisted(() => ({ active: false, beginSession: vi.fn(async () => { bridge.active = true; return "native-session"; }), endSession: vi.fn(), getState: vi.fn(() => ({ active: bridge.active, sessionId: "native-session" })), startCapture: vi.fn(async () => {}), stopCapture: vi.fn(), addListener: vi.fn(() => ({ remove: vi.fn() })) }));
 vi.mock("../../../modules/bycoda-voice-companion", () => ({ nativeVoiceCompanion: () => bridge }));
@@ -8,6 +11,16 @@ const native = vi.hoisted(() => ({ permission: vi.fn(async () => ({ granted: tru
 vi.mock("expo-audio", () => ({ getRecordingPermissionsAsync: native.permission, requestRecordingPermissionsAsync: native.requestPermission, setAudioModeAsync: async () => {},
   AudioModule: { AudioStream: class { start = native.start; stop = native.stop; release = native.release; addListener() { return { remove: native.remove }; } } } }));
 vi.mock("expo-file-system", () => ({}));
+
+it("loads the saved engine before the first capture without opening settings", async () => {
+  const dependencies = nativeVoiceDependencies({ state: vi.fn(), transcript: vi.fn(), error: vi.fn() });
+  const capture = await dependencies.capture(vi.fn());
+  try {
+    expect(dependencies.engine?.()).toBe("cloud");
+  } finally {
+    capture.stop();
+  }
+});
 import { nativeVoiceDependencies, speechWav } from "./assistant-voice-native";
 import { pcmBase64 } from "../../../../src/features/voice/model/voiceVad";
 

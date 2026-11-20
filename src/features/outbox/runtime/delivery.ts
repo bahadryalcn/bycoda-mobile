@@ -7,7 +7,7 @@ import { queueAttachmentOwner } from "../../workspace/queue-attachment-ownership
 import { appendMobileQueue } from "../../workspace/queue-delivery";
 import type { SharedQueue } from "../../../../../src/features/connections/model/sharedQueue";
 import type { QueuedMessage } from "../../../../../src/features/sessions/model/session";
-import { matchesOutboxModel, offlineSendFailure, OUTBOX_CAPABILITY, type OutboxRow } from "../model/outbox";
+import { matchesOutboxModel, offlineSendFailure, OUTBOX_CAPABILITY, outboxExpired, type OutboxRow } from "../model/outbox";
 import { sendOutbox } from "./store";
 import { finishOutbox } from "./custody";
 
@@ -43,16 +43,32 @@ export async function flushOutboxSession(client: HostTransport, sessionId: strin
   const unlock = lockOutbox({ machineId: client.machine.id, sessionId });
   if (!unlock) return;
   try {
+    // An explicit Retry is the owner's decision for the first pending row only; later old rows stay held.
+    let explicitRow = force;
     for (const row of await sendOutbox.read(client.machine.id, sessionId)) {
       if (row.status === "dropped" || row.status === "delivered") continue;
       if (row.status === "blocked" && !force) break;
+      const review = explicitRow;
+      explicitRow = false;
       const identityCurrent = () => sameAccount() && row.accountId === accountId && client.machine.environmentId === row.environmentId;
       const allowed = () => current() && identityCurrent();
       const check = () => { if (!allowed()) throw new Error("Outbox account changed."); client.assertCurrentAccess?.(); };
-      if (!identityCurrent() || Date.now() - row.createdAt > 24 * 60 * 60 * 1000) {
+      // Another account or computer never replays; its content stays stored for Delete.
+      if (!identityCurrent()) {
         row.status = "dropped";
         await sendOutbox.update(row);
         continue;
+      }
+      // Age is wall-clock and unreliable (offline phone, clock change): keep the content and ask the owner.
+      if (!review && outboxExpired(row)) {
+        row.status = "blocked";
+        row.blockedReason = "expired";
+        await sendOutbox.update(row);
+        break;
+      }
+      if (review && row.blockedReason) {
+        delete row.blockedReason;
+        await sendOutbox.update(row);
       }
       if (!current()) break;
       try {

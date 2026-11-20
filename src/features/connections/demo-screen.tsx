@@ -33,10 +33,14 @@ export function DemoScreen() {
           </View>
         }
         pages={[
-          { key: "projects", art: "wave", title: copy("Tüm projelerin elinin altında", "Every project at hand") },
-          { key: "live", art: "think", title: copy("Agentı canlı izle", "Watch your agent work live") },
-          { key: "voice", art: "serene", lightArt: "child", title: copy("Sesinle yönet", "Steer it with your voice") },
-          { key: "widgets", art: "adult", title: copy("Ana ekranından takip et", "Follow it from your home screen") },
+          { key: "projects", art: "wave", title: copy("Tüm projelerin elinin altında", "Every project at hand"),
+            body: copy("Bilgisayarındaki projeler ve oturumlar tek listede.", "Your computer's projects and sessions in one list.") },
+          { key: "live", art: "think", title: copy("Agentı canlı izle", "Watch your agent work live"),
+            body: copy("Her adımı, aracı ve onayı geldiği anda gör.", "See each step, tool and approval as it happens.") },
+          { key: "voice", art: "serene", lightArt: "child", title: copy("Sesinle yönet", "Steer it with your voice"),
+            body: copy("Konuş; sesin bilgisayarında yazıya dökülür.", "Speak; your computer turns it into text.") },
+          { key: "widgets", art: "adult", title: copy("Ana ekranından takip et", "Follow it from your home screen"),
+            body: copy("Çalışan ve bekleyen işleri uygulamayı açmadan gör.", "See running and waiting work without opening the app.") },
         ]}
       >
         <View style={{ gap: space.xs }}>

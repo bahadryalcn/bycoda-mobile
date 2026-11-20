@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const fixture=vi.hoisted(()=>({code:vi.fn(),cancel:vi.fn(),submit:null as null|(()=>void),clipboard:""}));
 vi.mock("expo-clipboard",()=>({hasStringAsync:async()=>!!fixture.clipboard,getStringAsync:async()=>fixture.clipboard}));
-vi.mock("./pairing-code",()=>({parseMobilePairingCode:(value:string)=>{if(!value.startsWith("valid-"))throw new Error("invalid");return {};}}));
+vi.mock("./pairing-code",()=>({parseDesktopPairingCode:(value:string)=>{if(!value.startsWith("valid-"))throw new Error("invalid");return {};}}));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
 vi.mock("@/ui/info-hint", () => ({ HintLabel: ({label}: {label: string}) => createElement("h2", null, label) }));

@@ -153,10 +153,14 @@
       [
         "expo-splash-screen",
         {
-          "image": "../public/brand/bycoda/mark-white.png",
+          "image": "../public/brand/bycoda/mark-black.png",
           "imageWidth": 160,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#FCFCFD",
+          "dark": {
+            "image": "../public/brand/bycoda/mark-white.png",
+            "backgroundColor": "#0B0B0C"
+          }
         }
       ],
       [
@@ -303,6 +307,15 @@
       "expo-status-bar",
       "expo-web-browser"
     ],
+    "locales": {
+      "tr": "./locales/tr.json",
+      "de": "./locales/de.json",
+      "fr": "./locales/fr.json",
+      "es": "./locales/es.json",
+      "pt": "./locales/pt.json",
+      "zh-CN": "./locales/zh-CN.json",
+      "ja": "./locales/ja.json"
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

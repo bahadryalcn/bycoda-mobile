@@ -13,21 +13,17 @@ vi.mock("./use-reduced-motion", () => {
   return { useReducedMotionPreference: () => preference((state) => state.reduced), preference };
 });
 vi.mock("react-native", () => ({
-  View: ({ children, accessibilityRole, accessibilityLabel, accessibilityState }: PropsWithChildren<{
+  View: ({ children, accessibilityRole, accessibilityLabel, accessibilityState, onLayout }: PropsWithChildren<{
     accessibilityRole?: string; accessibilityLabel?: string; accessibilityState?: { busy?: boolean };
-  }>) => createElement("div", { role: accessibilityRole, "aria-label": accessibilityLabel, "aria-busy": accessibilityState?.busy }, children),
+    onLayout?: (event: any) => void;
+  }>) => {
+    if (accessibilityRole === "progressbar") layout.onLayout = onLayout;
+    return createElement("div", { role: accessibilityRole, "aria-label": accessibilityLabel, "aria-busy": accessibilityState?.busy }, children);
+  },
   Text: ({ children }: PropsWithChildren) => createElement("span", null, children),
   StyleSheet: { flatten: (style: unknown) => style },
 }));
 const layout = vi.hoisted(() => ({ onLayout: undefined as undefined | ((event: any) => void) }));
-vi.mock("react-native-reanimated", () => ({
-  default: { View: ({ children, accessibilityRole, onLayout }: PropsWithChildren<any>) => {
-    if (accessibilityRole === "progressbar") layout.onLayout = onLayout;
-    return createElement("div", null, children);
-  } },
-  useAnimatedStyle: () => ({}),
-}));
-vi.mock("panelui-native/hooks/use-skeleton-handoff", () => ({ useSkeletonHandoff: () => ({ mounted: true, opacity: { value: 1 } }) }));
 vi.mock("./theme", () => ({ useMobileTheme: vi.fn(() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })) }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./motion", () => ({ reveal: undefined }));

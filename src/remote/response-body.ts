@@ -14,8 +14,12 @@ export function boundedResponse(body: string, status: number): Response {
   return markBounded(new Response(body, { status, headers: { "Content-Type": "application/json" } }));
 }
 
-/** Bound streamed bytes before decoding; native Expo fetch provides a reader. */
-export async function boundedResponseText(response: Response, limit: number, tooLarge: () => Error): Promise<string> {
+/**
+ * Bound streamed bytes before decoding; native Expo fetch provides a reader. Returns the decoded
+ * chunks in order without joining them, so a large JSON body can be decoded cooperatively.
+ * Each chunk ends on a complete code point (TextDecoder streams partial sequences).
+ */
+export async function boundedResponseParts(response: Response, limit: number, tooLarge: () => Error): Promise<string[]> {
   if (Number(response.headers.get("content-length")) > limit) {
     const error = tooLarge();
     void response.body?.cancel().catch(() => {});
@@ -24,12 +28,12 @@ export async function boundedResponseText(response: Response, limit: number, too
   if (inMemory.has(response) && !response.body?.getReader) {
     const text = await response.text();
     if (new TextEncoder().encode(text).byteLength > limit) throw tooLarge();
-    return text;
+    return [text];
   }
   const reader = response.body?.getReader?.();
   // Never fall back to text(): that would allocate an unbounded native response.
   if (!reader) throw new Error("Streaming host responses are unavailable.");
-  let text = "";
+  const parts: string[] = [];
   let size = 0;
   const decoder = new TextDecoder();
   try {
@@ -42,8 +46,14 @@ export async function boundedResponseText(response: Response, limit: number, too
         void reader.cancel().catch(() => {});
         throw error;
       }
-      text += decoder.decode(part.value, { stream: true });
+      parts.push(decoder.decode(part.value, { stream: true }));
     }
-    return text + decoder.decode();
+    parts.push(decoder.decode());
+    return parts;
   } finally { reader.releaseLock(); }
+}
+
+/** Bound streamed bytes before decoding and return the whole body as one string. */
+export async function boundedResponseText(response: Response, limit: number, tooLarge: () => Error): Promise<string> {
+  return (await boundedResponseParts(response, limit, tooLarge)).join("");
 }

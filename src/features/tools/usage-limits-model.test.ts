@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compactMoney, readCostReport, readLimitsReport, resetCountdown, wholePercent } from "./usage-limits-model";
+import { compactMoney, isPartialScan, omittedCost, readCostReport, readLimitsReport, resetCountdown, wholePercent } from "./usage-limits-model";
 
 const NOW = Date.parse("2026-11-09T12:00:00Z");
 const reading = { usedPercent: 63, leftPercent: 37, regainPercent: 63, windowMinutes: 10080, resetsAt: NOW + 4.5 * 86_400_000, timeLeftPercent: 64.3, pace: "ahead" };
@@ -64,5 +64,22 @@ describe("usage limits model", () => {
     expect(readCostReport(report, "env").totals.costUsd).toBe(1);
     expect(() => readCostReport({ ...report, daily: [{ ...line, date: "yesterday" }] }, "env")).toThrow();
     expect(() => readCostReport({ ...report, window: { days: 400 } }, "env")).toThrow();
+  });
+
+  it("labels what the capped lists and the file cap leave out of a cost report", () => {
+    const row = (costUsd: number, tokens: number) => ({ costUsd, tokens });
+    const report = (overrides: Record<string, unknown>) => ({
+      totals: { ...row(10, 1000), activeDays: 3 },
+      models: [row(4, 400)], projects: [row(6, 600), row(1, 100)],
+      coverage: { truncated: false, filesScanned: 12, unpricedModels: [] },
+      ...overrides,
+    }) as unknown as Parameters<typeof omittedCost>[0];
+    // Models list 400 of 1000 tokens; the 600-token / $6 tail is the folded "other" row.
+    expect(omittedCost(report({}), "models")).toEqual({ costUsd: 6, tokens: 600 });
+    expect(omittedCost(report({}), "projects")).toEqual({ costUsd: 3, tokens: 300 });
+    // A complete list leaves nothing to show.
+    expect(omittedCost(report({ models: [row(10, 1000)] }), "models")).toBeNull();
+    expect(isPartialScan(report({}))).toBe(false);
+    expect(isPartialScan(report({ coverage: { truncated: true, filesScanned: 20000, unpricedModels: [] } }))).toBe(true);
   });
 });

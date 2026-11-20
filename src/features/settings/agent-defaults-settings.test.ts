@@ -14,6 +14,11 @@ describe("computer agent defaults", () => {
     expect(() => confirmAgentDefaults({ agentDefaults: defaults }, defaults)).toThrow();
     expect(() => confirmAgentDefaults({ agentDefaults: { ...defaults, version: 3, resumeAtReset: false } }, defaults)).toThrow();
   });
+  it("keeps Host-only behavior out of the mobile write payload", () => {
+    const record = readAgentDefaults({ agentDefaults: { ...defaults, usageLimitFailover: "order" } });
+    expect(record).toEqual(defaults);
+    expect(withoutArchive(record)).not.toHaveProperty("usageLimitFailover");
+  });
   it("omits archive fields without the archive capability and still confirms", () => {
     const sent = withoutArchive(defaults);
     expect(sent).not.toHaveProperty("archiveMergedSessions");

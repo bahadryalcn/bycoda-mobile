@@ -6,7 +6,6 @@ export const managementSections = {
   crews: ["Ekipler", "Crews"],
   automations: ["Otomasyonlar", "Automations"],
   notes: ["Notlar", "Notes"],
-  social: ["Sosyal medya", "Social media"],
   stewards: ["Proje sorumluları", "Project stewards"],
 } as const;
 

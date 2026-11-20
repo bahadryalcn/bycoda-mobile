@@ -15,6 +15,7 @@ import { useCopy } from "./copy";
 import type { FormActionsProps, ConfirmationCardProps, SheetProps } from "./component-props";
 import { ScreenOverlay, useOverlayProgress } from "./overlays";
 import { ConnectionFeedbackScope } from "./connection-feedback-scope";
+import { ScreenFrameInsets } from "./screen-content-insets";
 import { SheetGuardContext, useSheetDismissal, useSheetGuards } from "./sheet-guard";
 import { useNativeSheetFocus } from "./use-native-sheet-focus";
 import { createSheetActionsStore } from "./sheet-actions-store";
@@ -187,9 +188,10 @@ export function Sheet({
   const sheetHeight = card
     ? sheetCardMaxHeight(height, frameHeight, space.lg)
     : Math.min(frameHeight, !full && size === "form" ? height * 0.9 : frameHeight);
-  const topChrome = full ? insets.top : card ? space.xs : space.sm + 5 + space.xs;
+  const topChrome = full ? insets.top : card ? space.xs : space.sm;
   // Long identities remain readable in their own viewport instead of consuming
-  // the body. Keep the close/action target at the top, even at large text sizes.
+  // the body. The title scrolls in full (no line clamp) and the close/action
+  // target stays outside that scroller at the top, even at large text sizes.
   const headerMaximum = Math.max(metrics.touchTarget, Math.min(metrics.touchTarget * 2, Math.max(0, sheetHeight - topChrome) / 3));
   const usableHeight = Math.max(0, sheetHeight - topChrome - headerHeight);
   const bodyMinimum = Math.min(usableHeight / 2, metrics.inputHeight * Math.max(1, fontScale) + space.sm + space.lg);
@@ -247,19 +249,8 @@ export function Sheet({
             alignSelf: "center",
           }}
         >
-          {presentation === "bottom" ? (
-            <View
-              accessible={false}
-              style={{
-                height: 5,
-                width: 36,
-                borderRadius: radii.pill,
-                backgroundColor: colors.tertiary,
-                alignSelf: "center",
-                marginBottom: space.xs,
-              }}
-            />
-          ) : null}
+          {/* A sheet is not inside the page frame that pads the home indicator, even when opened from it. */}
+          <ScreenFrameInsets value={false}>
           <SheetActionsContext.Provider value={actionsStore}>
           <SheetGuardContext.Provider value={guardContext}>
           {/* Sections of one sheet share a single connection-level message. */}
@@ -287,7 +278,7 @@ export function Sheet({
                 <ScrollView style={{ flexGrow: 0, flexShrink: 1, maxHeight: headerMaximum }}
                   keyboardShouldPersistTaps="handled" nestedScrollEnabled
                   contentContainerStyle={{ minHeight: metrics.touchTarget, justifyContent: "center" }}>
-                  <Heading numberOfLines={3} style={[uiStyles.title, { fontWeight: "700" }]}>
+                  <Heading style={[uiStyles.title, { fontWeight: "700" }]}>
                     {title}
                   </Heading>
                 </ScrollView>
@@ -343,6 +334,7 @@ export function Sheet({
           </ConnectionFeedbackScope>
           </SheetGuardContext.Provider>
           </SheetActionsContext.Provider>
+          </ScreenFrameInsets>
         </SheetSurface>
         </View>
       </KeyboardAvoidingView>

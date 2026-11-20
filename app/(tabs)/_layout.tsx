@@ -20,6 +20,7 @@ import { dockTabState } from "../../src/features/navigation-prefs/tab-preference
 import { useAdaptiveLayout } from "../../src/ui/adaptive-layout";
 import { TabletRail } from "../../src/features/workspace/tablet-rail";
 import { TabletQuickPanel } from "@/features/workspace/tablet-quick-panel";
+import { useAssistantWindowReserve } from "@/features/assistant/assistant-window-reserve";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 
 type IconProps = { color: ColorValue; focused: boolean };
@@ -117,6 +118,8 @@ export default function TabsLayout() {
   const [dockHeight, setDockHeight] = useState(0);
   const [newSessionOpen, setNewSessionOpen] = useState(false);
   const bottomInset = dockVisible ? dockHeight : 0;
+  // The minimized assistant window rests above the dock; tab content clears both.
+  const assistantReserve = useAssistantWindowReserve((state) => state.reserve);
   const renderTabBar = useCallback(
     (props: TabBarProps) => <DockProxy props={props} latest={latestBar} onState={setBarState} />,
     [],
@@ -129,7 +132,7 @@ export default function TabsLayout() {
   return (
     <ScreenChromeProvider
       bottomSafeArea={false}
-      bottomInset={bottomInset}
+      bottomInset={bottomInset + assistantReserve}
       headerIdentity={!isWelcome && machineId ? ComputerPageIdentity : undefined}
     >
       {machineId ? <MachineHealthMonitor /> : null}

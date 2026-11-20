@@ -19,6 +19,7 @@ import { dismiss, haptic, reveal, resize } from "@/ui/motion";
 import { NavigationGroup, NavigationRow } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
 import { metrics, opacity, radii, space } from "@/ui/tokens";
+import { useMachines } from "@/state/machines";
 import { isAppContentVisible } from "@/state/security";
 import { useCommandPalette } from "../keyboard/keyboard-context";
 import { appCommands } from "../keyboard/command-model";
@@ -46,7 +47,7 @@ const icons: Record<QuickPanelAction["icon"], (color: string) => ReactNode> = {
 
 /**
  * Tablet quick actions docked bottom-right: a round button that opens a short labeled list
- * (new session, voice, search, recent sessions, terminals, settings). `bottomInset` is the
+ * (search, recent sessions, terminals; new session, voice and settings only where the rail lacks them). `bottomInset` is the
  * height of whatever the screen keeps at the bottom (dock or composer) that it must clear.
  */
 export function TabletQuickPanel({ bottomInset }: { bottomInset: number }) {
@@ -56,6 +57,7 @@ export function TabletQuickPanel({ bottomInset }: { bottomInset: number }) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { tablet, hinge, tabletop } = useAdaptiveLayout();
+  const machineId = useMachines((state) => state.activeId);
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const feed = useWidgetFeedStore((state) => state.feed);
   const [open, setOpen] = useState(quickPanelMemory.read);
@@ -77,7 +79,14 @@ export function TabletQuickPanel({ bottomInset }: { bottomInset: number }) {
     hinge,
     tabletop,
   });
-  const actions = quickPanelActions(appCommands(copy), recentQuickActionSessions(feed, true, QUICK_PANEL_RECENTS), copy);
+  // The rail is mounted with the panel on every tablet layout and already owns Settings, plus New session and
+  // Voice assistant while a computer is active, so the panel keeps only what the rail cannot reach.
+  const actions = quickPanelActions(
+    appCommands(copy),
+    recentQuickActionSessions(feed, true, QUICK_PANEL_RECENTS),
+    copy,
+    { session: Boolean(machineId) },
+  );
   const run = (action: QuickPanelAction) => {
     change(false);
     if (!isAppContentVisible()) return;

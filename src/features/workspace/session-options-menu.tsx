@@ -223,7 +223,7 @@ export function SessionOptionsMenu({
                 <NavigationGroup>
                   <NavigationRow
                     icon={icon(Trash2)}
-                    label={copy("Çalışma klasörü kaldırma", "Worktree removal")}
+                    label={copy("Çalışma ağacı kaldırma", "Worktree removal")}
                     tone="danger"
                     disabled={blocked}
                     onPress={go(actions.worktreeRemoval)}

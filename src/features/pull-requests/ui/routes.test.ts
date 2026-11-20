@@ -5,8 +5,12 @@ import { afterEach, expect, it, vi } from "vitest";
 import { PullRequestsScreen } from "./list-screen";
 import { PullRequestDetailScreen } from "./detail-screen";
 import { useInboxLocalScope } from "../../inbox/inbox-local-scope";
-const state = vi.hoisted(() => ({ params: {} as Record<string, string>, machine: "machine", visible: true, request: null as unknown, push: vi.fn() }));
+const state = vi.hoisted(() => ({ params: {} as Record<string, string>, machine: "machine", visible: true, request: null as unknown, push: vi.fn(), cached: [] as unknown[] }));
 const item = { provider: "github", kind: "pr", number: 7, repo: "owner/repo", projectPath: "/repo", title: "Source PR", state: "open", draft: false, updatedAt: "2026-11-17", url: "https://github.com/owner/repo/pull/7", labels: [], assignees: [] };
+/** Cache keys mirror useInboxRead: ["machine", id, "provider-inbox", "list", input]. */
+const listEntry = (projectId: string | undefined, items: unknown[]) => [["machine", "machine", "provider-inbox", "list", projectId ? { projectId, query: {} } : { query: {} }], { items, errors: {} }];
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ getQueriesData: () => state.cached, getQueryCache: () => ({ subscribe: () => () => {} }) }) }));
+vi.mock("@/state/queries", () => ({ hostKey: (machineId: string | null, key: readonly unknown[]) => ["machine", machineId, ...key] }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => state.params, router: { push: state.push, back: vi.fn() }, Stack: { Screen: () => null } }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: state.machine, name: "Computer" }), useMachines: { getState: () => ({ activeId: state.machine, selectedProjectId: "unrelated-project" }) } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -27,22 +31,42 @@ vi.mock("@/ui/primitives", () => {
 let root: ReturnType<typeof createRoot> | undefined, container: HTMLDivElement;
 async function render(Component = PullRequestDetailScreen) { await act(async () => root!.render(createElement(Component))); }
 async function mount(Component = PullRequestDetailScreen) { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); document.body.append(container); root = createRoot(container); await render(Component); }
-afterEach(async () => { await act(async () => root?.unmount()); container?.remove(); root = undefined; state.params = {}; state.machine = "machine"; state.visible = true; state.request = null; vi.clearAllMocks(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root?.unmount()); container?.remove(); root = undefined; state.params = {}; state.machine = "machine"; state.visible = true; state.request = null; state.cached = []; vi.clearAllMocks(); vi.unstubAllGlobals(); });
 it("keeps route project identity independent of unrelated workspace selection", async () => {
-  state.params = { id: "7", item: JSON.stringify(item), machineId: "machine", projectId: "project" };
+  state.cached = [listEntry("project", [item])];
+  state.params = { id: "7", repo: "owner/repo", projectPath: "/repo", machineId: "machine", projectId: "project" };
   await mount(); expect(container.textContent).toContain("authorized:project");
   state.visible = false; await render(); expect(container.textContent).toContain("Pull request access unavailable");
   state.visible = true; state.machine = "other"; await render(); expect(container.textContent).not.toContain("authorized");
 });
 it("opens an all-project Inbox PR without adopting workspace's selected project", async () => {
-  state.params = { id: "7", item: JSON.stringify(item), machineId: "machine", projectId: "" };
+  state.cached = [listEntry(undefined, [item])];
+  state.params = { id: "7", repo: "owner/repo", projectPath: "/repo", machineId: "machine", projectId: "" };
   await mount(); expect(container.textContent).toContain("authorized:null");
-  state.params = { ...state.params, id: "8" }; await render(); expect(container.textContent).toContain("Pull request access unavailable");
+  state.params = { ...state.params, id: "8" }; await render(); expect(container.textContent).toContain("Could not open pull request");
 });
 it("queries the explicit project and carries its exact scope into detail navigation", async () => {
   state.params = { projectId: "project", machineId: "machine" };
   await mount(PullRequestsScreen);
   expect(state.request).toMatchObject({ action: "list", input: { projectId: "project", query: { providers: ["github"], githubKinds: ["pr"] } } });
   await act(async () => container.querySelector("button")!.click());
-  expect(state.push).toHaveBeenCalledWith({ pathname: "/pull-requests/[id]", params: { id: "7", item: JSON.stringify(item), machineId: "machine", projectId: "project" } });
+  expect(state.push).toHaveBeenCalledWith({ pathname: "/pull-requests/[id]", params: { id: "7", repo: "owner/repo", projectPath: "/repo", machineId: "machine", projectId: "project" } });
+});
+it("opens a large PR from its cached list row, not from a serialised route snapshot", async () => {
+  const large = { ...item, labels: Array.from({ length: 400 }, (_, index) => ({ name: `label-${index}-${"x".repeat(80)}`, color: "ffffff" })) };
+  state.cached = [listEntry("project", [large])];
+  state.params = { id: "7", repo: "owner/repo", projectPath: "/repo", machineId: "machine", projectId: "project" };
+  await mount(); expect(container.textContent).toContain("authorized:project");
+});
+it("reports malformed or uncached routes as unopenable, not as an access problem", async () => {
+  state.cached = [listEntry("project", [item])];
+  state.params = { id: "07", repo: "owner/repo", projectPath: "/repo", machineId: "machine", projectId: "project" };
+  await mount(); expect(container.textContent).toContain("Could not open pull request");
+  state.params = { id: "7", repo: "owner/repo", projectPath: "/other", machineId: "machine", projectId: "project" }; await render();
+  expect(container.textContent).toContain("Could not open pull request");
+});
+it("does not match a cached PR from another project scope", async () => {
+  state.cached = [listEntry(undefined, [item])];
+  state.params = { id: "7", repo: "owner/repo", projectPath: "/repo", machineId: "machine", projectId: "project" };
+  await mount(); expect(container.textContent).toContain("Could not open pull request");
 });

@@ -1,0 +1,91 @@
+import { errorMessage } from "@/ui/error-message";
+import { HostWsError } from "@/remote/ws-connection";
+import { RemoteHostError } from "@/remote/host-error";
+import type { AssistantVoiceStage } from "./assistant-voice-presentation";
+
+/** Why a voice call stopped or could not start. Screens translate the code; the English message is for logs and tests. */
+export type AssistantCallFailure =
+  | "unlock" | "message-pending" | "native-unavailable" | "connection-changed" | "send-unreviewed"
+  | "project-unverified" | "project-unavailable" | "result-unknown" | "reply-hidden" | "stopped" | "no-speech" | "not-started"
+  | "audio-taken" | "idle-timeout" | "microphone-failed" | "app-closed";
+
+/**
+ * Why the phone's voice service ended a call on its own. The owner's own Stop needs no explanation;
+ * every other end used to close the call with no word about what happened.
+ */
+export function companionEndFailure(reason: string | undefined): AssistantCallFailure | undefined {
+  switch (reason) {
+    case "audio-interrupted": return "audio-taken";
+    case "timeout": return "idle-timeout";
+    case "capture-error": return "microphone-failed";
+    case "task-removed": case "destroyed": return "app-closed";
+    case "unavailable": return "not-started";
+    default: return undefined;
+  }
+}
+
+const english: Record<AssistantCallFailure, string> = {
+  unlock: "Open and unlock this assistant conversation before starting a call.",
+  "message-pending": "Wait for the current conversation message before starting a call.",
+  "native-unavailable": "Voice calls require a native Bycoda build with background voice support.",
+  "connection-changed": "The assistant connection changed.",
+  "send-unreviewed": "Review the previous assistant message result before starting a call.",
+  "project-unverified": "Project access must be verified on your computer before continuing this call.",
+  "project-unavailable": "The assistant project is no longer available.",
+  "result-unknown": "The message result is unknown. Review it in the conversation before speaking again.",
+  "reply-hidden": "The reply cannot be read with the current project access.",
+  stopped: "Call stopped.",
+  "no-speech": "No speech was detected. Start the call again when ready.",
+  "not-started": "The voice call could not start.",
+  "audio-taken": "Another app took the phone's audio, so the call stopped.",
+  "idle-timeout": "The call closed after three minutes without speech.",
+  "microphone-failed": "The phone's microphone stopped working during the call.",
+  "app-closed": "The call ended because bycoda was closed.",
+};
+
+/** A call failure the app itself raised, identified by `reason` instead of by its wording. */
+export class AssistantCallError extends Error {
+  /** `detail` is the underlying failure, shown under the reason so the owner can tell what went wrong. */
+  constructor(readonly reason: AssistantCallFailure, readonly detail?: unknown) { super(english[reason]); this.name = "AssistantCallError"; }
+}
+
+type Copy = (turkish: string, english: string, values?: Record<string, string | number>) => string;
+
+function reasonMessage(reason: AssistantCallFailure, copy: Copy): string {
+  switch (reason) {
+    case "unlock": return copy("Görüşmeyi başlatmadan önce bu asistan konuşmasını aç ve kilidini çöz.", english[reason]);
+    case "message-pending": return copy("Görüşmeyi başlatmadan önce konuşmadaki mevcut mesajın bitmesini bekle.", english[reason]);
+    case "native-unavailable": return copy("Sesli görüşme için arka planda ses desteği olan yerel bir Bycoda sürümü gerekir.", english[reason]);
+    case "connection-changed": return copy("Asistan bağlantısı değişti.", english[reason]);
+    case "send-unreviewed": return copy("Görüşmeyi başlatmadan önce önceki asistan mesajının sonucunu kontrol et.", english[reason]);
+    case "project-unverified": return copy("Bu görüşmeye devam etmeden önce proje erişimi bilgisayarında doğrulanmalı.", english[reason]);
+    case "project-unavailable": return copy("Asistan projesi artık kullanılamıyor.", english[reason]);
+    case "result-unknown": return copy("Mesajın sonucu bilinmiyor. Tekrar konuşmadan önce konuşmada kontrol et.", english[reason]);
+    case "reply-hidden": return copy("Yanıt, mevcut proje erişimiyle okunamıyor.", english[reason]);
+    case "stopped": return copy("Görüşme durduruldu.", english[reason]);
+    case "no-speech": return copy("Konuşma algılanmadı. Hazır olduğunda görüşmeyi yeniden başlat.", english[reason]);
+    case "not-started": return copy("Sesli görüşme başlatılamadı.", english[reason]);
+    case "audio-taken": return copy("Başka bir uygulama telefonun sesini aldı; görüşme durdu.", english[reason]);
+    case "idle-timeout": return copy("Üç dakika konuşma olmadığı için görüşme kapandı.", english[reason]);
+    case "microphone-failed": return copy("Görüşme sırasında telefonun mikrofonu çalışmayı bıraktı.", english[reason]);
+    case "app-closed": return copy("bycoda kapatıldığı için görüşme bitti.", english[reason]);
+  }
+}
+
+/**
+ * The text under a voice-call failure heading. The app's own failures are translated by reason; every
+ * other error (Host-vetted, already redacted details included) goes through the shared presenter unchanged.
+ */
+export function assistantCallErrorMessage(error: unknown, copy: Copy, where?: { stage?: AssistantVoiceStage; computer: string }): string {
+  // Listening, transcription and speech change nothing on the computer: a dropped voice line there needs the
+  // link or the computer checked, not a command's result. Only the sent message can be unknown. The heading
+  // already names the step, so the line does not repeat it, and it does not guess Wi-Fi over the computer.
+  const dropped = error instanceof HostWsError ? error.uncertain || error.category === "network"
+    : error instanceof RemoteHostError && (error.uncertain || error.kind === "network");
+  if (where?.stage && where.stage !== "reply" && dropped)
+    return copy("Bağlantı koptu. {p0} açık ve telefonla aynı ağda mı kontrol edip yeniden dene.",
+      "The connection dropped. Check that {p0} is on and on the same network as this phone, then try again.", { p0: where.computer });
+  if (!(error instanceof AssistantCallError)) return errorMessage(error, copy);
+  const reason = reasonMessage(error.reason, copy);
+  return error.detail === undefined ? reason : `${reason}\n${errorMessage(error.detail, copy)}`;
+}

@@ -8,6 +8,9 @@ import { assistantDomain } from "../../../../host/domains/assistant/service";
 import { AssistantMobileClient, type AssistantMobilePort } from "./assistant-client";
 import { assistantHistoryPage } from "./assistant-history";
 const cleanups: Array<() => Promise<void>> = [];
+// Every test boots a real HostStore and assistant domain on disk: about a second alone, well past
+// the 5 s default when the full suite runs ~700 files in parallel.
+vi.setConfig({ testTimeout: 60_000 });
 it("refuses runtime attempts to turn the finite reader into arbitrary assistant writes", async () => {
   const f = await fixture();
   await expect(f.client.read({ op: "pauseAll" } as never)).rejects.toMatchObject({

@@ -1,15 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
-import { Body, Button, ErrorNotice, Screen, Section, Stack, StateView, ToggleField, Skeleton } from "@/ui/primitives";
+import { Body, ErrorNotice, Notice, Screen, Section, Stack, StateView, ToggleField, Skeleton } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { TimeField } from "@/ui/time-field";
 import { HoursOverview } from "@/ui/week-hours";
 import { windowBlocks } from "@/ui/week-hours-model";
-import { ClockTime, NOTIFICATION_EVENTS, type NotificationChannel, type NotificationEventKey, type NotificationSettings } from "../contracts";
+import { ClockTime, NOTIFICATION_EVENTS, type NotificationChannel, type NotificationEventKey, type NotificationSettings, type QuietHours } from "../contracts";
 import { channelEnabled, setChannel, withQuietHours } from "../model/notification-settings";
+import type { SaveControl } from "../model/notification-saves";
 import { useAccount } from "./account-context";
+import { useNotificationSaves } from "./use-notification-saves";
 
 const KEY = ["account", "notification-settings"] as const;
 const CHANNELS: { channel: Extract<NotificationChannel, "push" | "in_app">; tr: string; en: string }[] = [
@@ -17,15 +19,47 @@ const CHANNELS: { channel: Extract<NotificationChannel, "push" | "in_app">; tr: 
   { channel: "in_app", tr: "Uygulama içi", en: "In app" },
 ];
 
+/** Each saved control has its own id, so its pending and failed state never leaks to another row. */
+function preferenceControl(event: NotificationEventKey, channel: (typeof CHANNELS)[number]["channel"]): SaveControl<boolean> {
+  return {
+    id: `${channel}:${event}`,
+    read: (settings) => channelEnabled(settings, event, channel),
+    write: (settings, value) => setChannel(settings, event, channel, value),
+  };
+}
+const PUSH_DETAILS: SaveControl<boolean> = {
+  id: "pushShowDetails",
+  read: (settings) => settings.pushShowDetails,
+  write: (settings, value) => ({ ...settings, pushShowDetails: value }),
+};
+const QUIET: SaveControl<QuietHours | null> = { id: "quietHours", read: (settings) => settings.quietHours ?? null, write: withQuietHours };
+
+type QuietDraft = { on: boolean; start: string; end: string };
+
+function quietValid(draft: QuietDraft) {
+  return ClockTime.safeParse(draft.start).success && ClockTime.safeParse(draft.end).success;
+}
+
+function sameQuiet(a: QuietHours | null, b: QuietHours | null) {
+  if (!a || !b) return !a === !b;
+  return a.start === b.start && a.end === b.end;
+}
+
 /** Event x channel toggles that matter on a phone (push, in app), quiet hours and push detail text. */
 export function NotificationSettingsScreen() {
   const copy = useCopy();
   const { runtime, device } = useAccount();
-  const queries = useQueryClient();
-  const settings = useQuery({ queryKey: KEY, queryFn: () => runtime!.client.getNotificationSettings(), enabled: !!runtime && !!device });
-  const save = useMutation({
-    mutationFn: (next: NotificationSettings) => runtime!.client.putNotificationSettings({ body: next }),
-    onSuccess: (saved) => queries.setQueryData(KEY, saved),
+  const saves = useNotificationSaves(KEY);
+  // The client is captured per change, so a response from a previous account cannot be applied here.
+  const put = (body: NotificationSettings) => runtime!.client.putNotificationSettings({ body });
+  const settings = useQuery({
+    queryKey: KEY,
+    queryFn: async () => {
+      const loaded = await runtime!.client.getNotificationSettings();
+      saves.adopt(loaded);
+      return loaded;
+    },
+    enabled: !!runtime && !!device,
   });
   const labels: Record<NotificationEventKey, string> = {
     "account.new_device_sign_in": copy("Yeni cihazdan giriş", "Sign-in from a new device"),
@@ -40,11 +74,27 @@ export function NotificationSettingsScreen() {
   const title = copy("Bildirim ayarları", "Notification settings");
   const data = settings.data;
   const hasQuiet = !!data?.quietHours;
-  const [quiet, setQuiet] = useState({ on: false, start: "22:00", end: "07:00" });
+  const [quiet, setQuiet] = useState<QuietDraft>({ on: false, start: "22:00", end: "07:00" });
   useEffect(() => {
     if (data) setQuiet({ on: !!data.quietHours, start: data.quietHours?.start ?? "22:00", end: data.quietHours?.end ?? "07:00" });
   }, [data?.quietHours?.start, data?.quietHours?.end, hasQuiet]); // eslint-disable-line react-hooks/exhaustive-deps -- re-sync only when saved quiet hours change
-  const quietValid = ClockTime.safeParse(quiet.start).success && ClockTime.safeParse(quiet.end).success;
+
+  const busy = (id: string) => (saves.pending[id] ?? 0) > 0;
+  const failedText = (id: string) => (saves.failures[id] ? copy("Kaydedilemedi", "Not saved") : undefined);
+  const failedCount = Object.keys(saves.failures).length;
+  const anyBusy = Object.keys(saves.pending).length > 0;
+  const retryFailed = () => Object.values(saves.failures).forEach((retry) => retry());
+
+  function commitQuiet(next: QuietHours | null) {
+    if (!data || sameQuiet(data.quietHours ?? null, next)) return;
+    saves.save(QUIET, next, put);
+  }
+  // A time field is saved as soon as both times are valid; a partial entry stays on screen only.
+  function editQuiet(next: QuietDraft) {
+    setQuiet(next);
+    if (!next.on) commitQuiet(null);
+    else if (quietValid(next)) commitQuiet({ start: next.start, end: next.end, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+  }
 
   if (!runtime || !device)
     return (
@@ -61,7 +111,15 @@ export function NotificationSettingsScreen() {
     <Screen title={title}>
       <Stack>
         <ErrorNotice error={settings.error} onRetry={() => void settings.refetch()} message={copy("Ayarlar alınamadı.", "Settings could not be loaded.")} />
-        <ErrorNotice error={save.error} message={copy("Ayarlar kaydedilemedi.", "Settings could not be saved.")} />
+        {failedCount > 0 ? (
+          <Notice
+            tone="danger"
+            message={copy("Bazı ayarlar kaydedilemedi.", "Some settings could not be saved.")}
+            onRetry={retryFailed}
+            retryLabel={copy("Yeniden dene", "Retry")}
+            retrying={anyBusy}
+          />
+        ) : null}
         {!data ? (
           settings.isPending ? <Skeleton /> : null
         ) : (
@@ -69,16 +127,19 @@ export function NotificationSettingsScreen() {
             {CHANNELS.map(({ channel, tr, en }) => (
               <Section key={channel} title={copy(tr, en)}>
                 <Stack>
-                  {NOTIFICATION_EVENTS.map((event) => (
-                    <ToggleField
-                      key={event.key}
-                      label={labels[event.key]}
-                      detail={event.mandatory ? copy("Güvenlik için zorunlu; kapatılamaz.", "Required for security; it cannot be turned off.") : undefined}
-                      value={event.mandatory ? true : channelEnabled(data, event.key, channel)}
-                      disabled={event.mandatory || save.isPending}
-                      onChange={(value) => save.mutate(setChannel(data, event.key, channel, value))}
-                    />
-                  ))}
+                  {NOTIFICATION_EVENTS.map((event) => {
+                    const control = preferenceControl(event.key, channel);
+                    return (
+                      <ToggleField
+                        key={event.key}
+                        label={labels[event.key]}
+                        detail={event.mandatory ? copy("Güvenlik için zorunlu; kapatılamaz.", "Required for security; it cannot be turned off.") : failedText(control.id)}
+                        value={event.mandatory ? true : control.read(data)}
+                        disabled={event.mandatory || busy(control.id)}
+                        onChange={(value) => saves.save(control, value, put)}
+                      />
+                    );
+                  })}
                 </Stack>
               </Section>
             ))}
@@ -86,34 +147,26 @@ export function NotificationSettingsScreen() {
               <ToggleField
                 label={copy("Bildirimde ayrıntıları göster", "Show details in push text")}
                 help={copy("Kapalıyken bildirimler genel bir metin içerir.", "When off, notifications carry generic text.")}
+                detail={failedText(PUSH_DETAILS.id)}
                 value={data.pushShowDetails}
-                disabled={save.isPending}
-                onChange={(value) => save.mutate({ ...data, pushShowDetails: value })}
+                disabled={busy(PUSH_DETAILS.id)}
+                onChange={(value) => saves.save(PUSH_DETAILS, value, put)}
               />
             </Section>
             <Section title={copy("Sessiz saatler", "Quiet hours")}>
               <Stack>
                 <ToggleField
                   label={copy("Sessiz saatleri kullan", "Use quiet hours")}
+                  detail={failedText(QUIET.id)}
                   value={quiet.on}
-                  disabled={save.isPending}
-                  onChange={(on) => {
-                    setQuiet({ ...quiet, on });
-                    if (!on && data.quietHours) save.mutate(withQuietHours(data, null));
-                  }}
+                  disabled={busy(QUIET.id)}
+                  onChange={(on) => editQuiet({ ...quiet, on })}
                 />
                 {quiet.on ? (
                   <>
-                    <TimeField label={copy("Başlangıç (SS:DD)", "Start (HH:MM)")} value={quiet.start} onChange={(start) => setQuiet({ ...quiet, start })} disabled={save.isPending} />
-                    <TimeField label={copy("Bitiş (SS:DD)", "End (HH:MM)")} value={quiet.end} onChange={(end) => setQuiet({ ...quiet, end })} disabled={save.isPending} />
+                    <TimeField label={copy("Başlangıç (SS:DD)", "Start (HH:MM)")} value={quiet.start} onChange={(start) => editQuiet({ ...quiet, start })} disabled={busy(QUIET.id)} />
+                    <TimeField label={copy("Bitiş (SS:DD)", "End (HH:MM)")} value={quiet.end} onChange={(end) => editQuiet({ ...quiet, end })} disabled={busy(QUIET.id)} />
                     <HoursOverview tone="muted" rows={[{ key: "daily", label: copy("Her gün", "Daily"), blocks: windowBlocks(quiet.start, quiet.end) }]} />
-                    <Button
-                      label={copy("Sessiz saatleri kaydet", "Save quiet hours")}
-                      tone="secondary"
-                      disabled={!quietValid || save.isPending}
-                      busy={save.isPending}
-                      onPress={() => save.mutate(withQuietHours(data, { start: quiet.start, end: quiet.end, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }))}
-                    />
                   </>
                 ) : null}
               </Stack>

@@ -14,4 +14,8 @@ export const useAssistantCall = create<{
   utterance?: string;
   replyVersion: number;
   error?: unknown;
+  /** The microphone engine's own phase: the computer may still be loading its model while the call listens. */
+  capture?: import("./assistant-voice").AssistantVoiceState;
+  /** The chain step in flight; after a failure, the step that failed. */
+  stage?: import("./assistant-voice-presentation").AssistantVoiceStage;
 }>(() => ({ phase: "idle", muted: false, speakerMuted: false, level: 0, replyVersion: 0 }));

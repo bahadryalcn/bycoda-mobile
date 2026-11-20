@@ -5,8 +5,7 @@ import { router, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCopy } from "@/ui/copy";
 import { AccountComputersSection } from "./account-computers-section";
-import { Button, Heading, Row } from "@/ui/primitives";
-import { useInfoHint } from "@/ui/info-hint";
+import { Body, Button, Heading } from "@/ui/primitives";
 import { CodeArt, codeArtWidth } from "@/ui/code-art";
 import { DotField } from "@/ui/dot-field";
 import { fontSize, lineHeight, metrics, space } from "@/ui/tokens";
@@ -22,8 +21,6 @@ export function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const bottomInset = useBottomInset();
   const { width, height } = useWindowDimensions();
-  const help = useInfoHint(copy("Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
-    "In bycoda on your computer, choose “Connect your phone” and scan the QR code."));
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen options={{ title: copy("Projeler", "Projects") }} />
@@ -50,13 +47,13 @@ export function WelcomeScreen() {
           <AccountComputersSection others={
             <View style={{ gap: space.lg }}>
               <View style={{ gap: space.sm }}>
-                <Row style={{ justifyContent: "center", flexWrap: "nowrap" }}>
-                <Heading style={[uiStyles.largeTitle, { flexShrink: 1, textAlign: "center", fontSize: fontSize.display, lineHeight: lineHeight.display }]}>
+                <Heading style={[uiStyles.largeTitle, { textAlign: "center", fontSize: fontSize.display, lineHeight: lineHeight.display }]}>
                   {copy("Bilgisayarını bağla", "Connect your computer")}
                 </Heading>
-                {help.button}
-                </Row>
-                {help.panel}
+                <Body muted style={{ textAlign: "center" }}>
+                  {copy("Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
+                    "In bycoda on your computer, choose “Connect your phone” and scan the QR code.")}
+                </Body>
               </View>
               <View style={{ gap: space.xs }}>
                 <Button label={copy("QR kodu tara", "Scan QR code")} tone="primary" fullWidth

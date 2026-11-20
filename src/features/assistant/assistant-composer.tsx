@@ -4,6 +4,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { randomUUID } from "expo-crypto";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import { useCopy } from "@/ui/copy";
+import { HostWsError } from "@/remote/ws-connection";
+import { RemoteHostError } from "@/remote/host-error";
 import { useAssistantCall } from "./assistant-call-state";
 import { Button, ErrorNotice, Notice, Row } from "@/ui/primitives";
 import { ChatComposer } from "@/ui/chat-composer";
@@ -40,6 +42,7 @@ export function AssistantComposer({
   current,
   voiceCurrent,
   enabled,
+  sendable = true,
   onSettled,
 }: {
   client: AssistantMobileClient;
@@ -50,6 +53,8 @@ export function AssistantComposer({
   /** Project proof reads current stores and remains valid independently of the route subscription. */
   voiceCurrent(): boolean;
   enabled: boolean;
+  /** New messages are accepted; recovery of an unconfirmed send stays available either way. */
+  sendable?: boolean;
   onSettled(): Promise<unknown>;
 }) {
   const copy = useCopy();
@@ -62,7 +67,7 @@ export function AssistantComposer({
   const [recordReady, setRecordReady] = useState(false);
   const [busy, setBusy] = useState<"send" | "check" | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const [notice, setNotice] = useState<"refused" | "unknown" | null>(null);
+  const [notice, setNotice] = useState<"refused" | "unknown" | "restarted" | null>(null);
   useEffect(() => {
     let live = true;
     setRecordReady(false);
@@ -128,7 +133,10 @@ export function AssistantComposer({
       const { outcome, sent } = await action();
       await apply(outcome, sent);
     } catch (cause) {
-      if (current()) {
+      // The Host restarted since the send: its receipt can no longer be read, which is not a failure to show.
+      if (current() && kind === "check" && (cause instanceof RemoteHostError || cause instanceof HostWsError) && cause.code === "CONTEXT_CHANGED") {
+        setNotice("restarted");
+      } else if (current()) {
         setError(cause);
         setRecorded(await readStoredSend(AsyncStorage, storageKey).catch(() => null));
       }
@@ -163,7 +171,7 @@ export function AssistantComposer({
     setNotice(null);
   };
   const unconfirmed = recorded !== null;
-  const canSend = !callActive && enabled && draft.ready && recordReady && !unconfirmed && !matchingSpeech && busy === null && !!text.trim();
+  const canSend = !callActive && enabled && sendable && draft.ready && recordReady && !unconfirmed && !matchingSpeech && busy === null && !!text.trim();
   return (
     <View style={{ gap: space.xs, paddingHorizontal: space.screen }}>
       {unconfirmed ? (
@@ -210,6 +218,15 @@ export function AssistantComposer({
           )}
         />
       ) : null}
+      {notice === "restarted" && unconfirmed ? (
+        <Notice
+          tone="info"
+          message={copy(
+            "Bilgisayar yeniden başladığı için bu mesajın sonucu artık doğrulanamıyor. Konuşmada görünüyorsa iletildi; görünmüyorsa beklemeyi bırakıp yeniden yaz.",
+            "The computer restarted, so this message's result can no longer be confirmed. If it shows in the conversation it arrived; if not, stop waiting and write it again.",
+          )}
+        />
+      ) : null}
       {error ? <ErrorNotice error={error} /> : null}
       {matchingSpeech && error ? <Button label={copy("Kaydet", "Save")} onPress={() => { void importSpeech(); }} /> : null}
       <AssistantVoiceFeedback />
@@ -222,7 +239,7 @@ export function AssistantComposer({
           accessibilityLabel: copy("Asistana mesaj", "Message to the assistant"),
           maxLength: 16000,
         }}
-        leading={<AssistantMicrophone target={{ machineId, environmentId, threadId }} enabled={enabled && draft.ready && !unconfirmed && !busy} current={voiceCurrent} />}
+        leading={<AssistantMicrophone target={{ machineId, environmentId, threadId }} enabled={enabled && sendable && draft.ready && !unconfirmed && !busy} current={voiceCurrent} />}
         submit={
           <ChatCircleAction
             label={copy("Gönder", "Send")}

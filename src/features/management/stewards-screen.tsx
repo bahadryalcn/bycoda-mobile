@@ -157,7 +157,10 @@ export function StewardsScreen() {
                 />
               ) : null}
               {!rows.some((item) => item.id === run.variables?.stewardId) ? (
-                <MutationState mutation={run} />
+                <MutationState
+                  mutation={run}
+                  success={copy("Çalıştırma istendi.", "Run requested.")}
+                />
               ) : null}
               {!rows.some((item) => item.id === remove.variables?.stewardId) ? (
                 <MutationState mutation={remove} />
@@ -204,6 +207,7 @@ export function StewardsScreen() {
               <StewardEditor
                 key={editor.id}
                 initial={editor}
+                save={save}
                 onClose={() => setEditor(null)}
               />
             </Sheet>

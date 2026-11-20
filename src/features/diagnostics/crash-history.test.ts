@@ -4,7 +4,7 @@ import { CRASH_MARKER, type DiagnosticFiles } from "./diagnostic-files";
 
 function memoryFiles(initial: Record<string, string> = {}): DiagnosticFiles & { data: Record<string, string> } {
   const data = { ...initial };
-  return { data, read: (name) => data[name] ?? null, write: (name, text) => { data[name] = text; }, remove: (name) => { delete data[name]; } };
+  return { data, read: (name) => data[name] ?? null, write: (name, text) => { data[name] = text; }, append: (name, text) => { data[name] = (data[name] ?? "") + text; }, remove: (name) => { delete data[name]; } };
 }
 const marker = (n: number) => JSON.stringify({ message: `boom ${n}`, stack: "at x", occurredAt: new Date(1_700_000_000_000 + n * 1000).toISOString(), appVersion: "1.0.0" });
 

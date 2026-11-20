@@ -10,7 +10,6 @@ import { createSessionsApi } from "./services/sessions-api";
 import { createWorkApi } from "./services/work-api";
 import { createCrewsApi } from "./services/crews-api";
 import { createContentApi } from "./services/content-api";
-import { createSocialApi } from "./services/social-api";
 import { createTerminalApi } from "./services/terminal-api";
 export { resolveSessionSync } from "./session-sync";
 
@@ -28,7 +27,6 @@ export function createRemoteApi(transport: HostTransport) {
     ...createWorkApi(request),
     ...createCrewsApi(request),
     ...createContentApi(request),
-    ...createSocialApi(transport, request),
     ...createTerminalApi(request),
   };
 }

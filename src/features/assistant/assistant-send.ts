@@ -17,7 +17,7 @@ export const isAssistantSendPending = (key: string) => pendingSends.has(key);
 export type StoredSend = AssistantSendIntent & { status: "sending" | "unknown" };
 export type SendOutcome =
   | { kind: "settled"; messages: AssistantMessage[] }
-  | { kind: "unknown" }
+  | { kind: "unknown"; cause?: unknown }
   | { kind: "refused" };
 
 /** Receipts are operation state, not a draft, so draft cleanup must not remove them. */
@@ -82,7 +82,7 @@ export async function sendRoomMessage(input: {
       await input.storage
         .setItem(input.storageKey, JSON.stringify({ ...record, status: "unknown" }))
         .catch(() => {});
-      return { kind: "unknown" };
+      return { kind: "unknown", cause: error.reason };
     }
     await input.storage.removeItem(input.storageKey).catch(() => {});
     throw error;

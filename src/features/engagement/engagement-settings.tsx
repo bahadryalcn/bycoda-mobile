@@ -8,9 +8,9 @@ import Star from "lucide-react-native/icons/star";
 import Share2 from "lucide-react-native/icons/share-2";
 import Globe from "lucide-react-native/icons/globe";
 import MessageSquare from "lucide-react-native/icons/message-square";
-import Flag from "lucide-react-native/icons/flag";
+import Smartphone from "lucide-react-native/icons/smartphone";
 import { router, type Href } from "expo-router";
-import { Body, Notice, Stack, Disclosure, NavigationGroup, NavigationRow } from "../../ui/primitives";
+import { Body, Notice, Stack, NavigationGroup, NavigationRow } from "../../ui/primitives";
 import { IconTile } from "../../ui/icon-tile";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
@@ -28,8 +28,11 @@ function tile(Glyph: typeof Star, color: string) {
   );
 }
 
-/** User initiated public actions. This does not publish through connected social accounts. */
-export function EngagementSettings() {
+/**
+ * User initiated public actions. This does not publish through connected social accounts.
+ * `leaveSheet` closes the hosting sheet before running a navigation.
+ */
+export function EngagementSettings({ leaveSheet }: { leaveSheet: (go: () => void) => void }) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
   const platform = process.env.EXPO_OS ?? "unknown";
@@ -104,19 +107,14 @@ export function EngagementSettings() {
     }
   }
 
-  const feedback = (action: NonNullable<typeof busy>) => feedbackFor === action ? <Stack style={{ gap: space.sm }}>
-    {notice ? <Body accessibilityLiveRegion="polite" muted>{notice}</Body> : null}
-    {error ? <Notice tone="warning" message={error} /> : null}
-  </Stack> : null;
-
   return (
     <Stack style={{ gap: space.lg }}>
       <BrandLogo compact />
       <Stack>
-        <Body>{copy("Sürüm: ", "Version: ")}{identity.version ?? copy("Bilinmiyor", "Unknown")}</Body>
+        <Body>{copy("Sürüm: {p0}", "Version: {p0}", { p0: identity.version ?? copy("Bilinmiyor", "Unknown") })}</Body>
         <Body muted>{identity.preview
           ? copy("Önizleme — mağaza derlemesi değil.", "Preview — a store build is not running.")
-          : `${copy("Derleme: ", "Build: ")}${identity.nativeBuild ?? copy("Bilinmiyor", "Unknown")}`}</Body>
+          : copy("Derleme: {p0}", "Build: {p0}", { p0: identity.nativeBuild ?? copy("Bilinmiyor", "Unknown") })}</Body>
       </Stack>
       <Animated.View entering={enterItem(0)}>
         <NavigationGroup>
@@ -128,7 +126,6 @@ export function EngagementSettings() {
             busy={busy === "website"}
             onPress={() => { void perform("website"); }}
           />
-          {feedback("website")}
           <NavigationRow
             label={copy("Uygulamayı değerlendir", "Rate the app")}
             disabled={!!busy || !links.reviewUrl}
@@ -138,7 +135,6 @@ export function EngagementSettings() {
             busy={busy === "review"}
             onPress={() => { void perform("review"); }}
           />
-          {feedback("review")}
           <View ref={shareAnchor} collapsable={false}>
             <NavigationRow
               label={copy("Uygulamayı paylaş", "Share the app")}
@@ -149,36 +145,26 @@ export function EngagementSettings() {
               onPress={() => { void perform("share"); }}
             />
           </View>
-          {feedback("share")}
           {links.appPageUrl ? <>
             <NavigationRow
               label={copy("Uygulama sayfası", "App page")}
               disabled={!!busy}
-              icon={tile(Globe, colors.muted)}
+              icon={tile(Smartphone, colors.muted)}
               busy={busy === "public"}
               onPress={() => { void perform("public"); }}
             />
-            {feedback("public")}
           </> : null}
           <NavigationRow
             label={copy("Geri bildirim gönder", "Send feedback")}
             disabled={!!busy}
             icon={tile(MessageSquare, colors.muted)}
-            onPress={() => router.push("/feedback" as Href)}
-          />
-          <NavigationRow
-            label={copy("İçerik bildir", "Report content")}
-            disabled={!!busy}
-            icon={tile(Flag, colors.muted)}
-            onPress={() => router.push("/report")}
+            onPress={() => leaveSheet(() => router.push("/feedback" as Href))}
           />
         </NavigationGroup>
+        {notice ? <Body accessibilityLiveRegion="polite" muted>{notice}</Body> : null}
+        {error ? <Notice tone="warning" message={error} /> : null}
+        {error && feedbackFor === "share" ? <Body muted selectable>{links.shareUrl}</Body> : null}
       </Animated.View>
-      <NavigationGroup>
-        <Disclosure label={copy("Bağlantılar", "Links")}>
-          <Body muted selectable>{links.shareUrl}</Body>
-        </Disclosure>
-      </NavigationGroup>
     </Stack>
   );
 }

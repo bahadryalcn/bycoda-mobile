@@ -7,8 +7,8 @@ import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { ApprovalCard, type LocalDecision } from "./approval-card";
 import { ApprovalDecisionError } from "./approvals-client";
-import { approvalOpen, sortApprovals, type ApprovalView } from "./approvals-model";
-import { useApprovals, useNow } from "./use-approvals";
+import { sortApprovals, type ApprovalView } from "./approvals-model";
+import { useApprovals } from "./use-approvals";
 
 /** Owner approvals the computer mirrors to this phone; the computer settles each one, this screen only sends the answer. */
 export function ApprovalsScreen({ focusId }: { focusId?: string }) {
@@ -25,10 +25,11 @@ function ApprovalsWorkspace({ machine, current, focusId }: {
 }) {
   const copy = useCopy();
   const { query, client, supported, approvals } = useApprovals();
-  const now = useNow();
   const [local, setLocal] = useState<Record<string, { state: LocalDecision; approved: boolean }>>({});
   const [checking, setChecking] = useState(false);
+  // The ref is the synchronous one-at-a-time guard; the state mirrors it so other cards can show why they wait.
   const sending = useRef(false);
+  const [sendingId, setSendingId] = useState<string | null>(null);
   const title = copy("Onaylar", "Approvals");
   if (!machine)
     return (
@@ -60,6 +61,7 @@ function ApprovalsWorkspace({ machine, current, focusId }: {
   const decide = async (approval: ApprovalView, approved: boolean) => {
     if (!client || sending.current || !current()) return;
     sending.current = true;
+    setSendingId(approval.id);
     mark(approval.id, "sending", approved);
     try {
       await client.decide(approval, approved);
@@ -69,6 +71,7 @@ function ApprovalsWorkspace({ machine, current, focusId }: {
       if (current()) mark(approval.id, refused ? "rejected" : "uncertain", approved);
     } finally {
       sending.current = false;
+      if (current()) setSendingId(null);
       // The computer settles its own dialog; the list poll picks up the final status.
       if (current()) void query.refetch();
     }
@@ -94,7 +97,8 @@ function ApprovalsWorkspace({ machine, current, focusId }: {
       subtitle={machine.name}
       header={
         <>
-          <QueryState query={query} />
+          {/* With nothing listed the empty slot owns the page, so a failed load is centered there instead. */}
+          {sorted.length ? <QueryState query={query} /> : null}
           {missingFocus ? (
             <Notice
               message={copy(
@@ -108,22 +112,30 @@ function ApprovalsWorkspace({ machine, current, focusId }: {
       data={sorted}
       keyExtractor={(approval) => approval.id}
       refresh={async () => void (await query.refetch())}
-      ListEmptyComponent={query.isSuccess ? (
-        <Empty
-          compact
-          illustration="chat-empty"
-          title={copy("Bekleyen onay yok", "Nothing waiting for approval")}
-        />) : undefined}
+      ListEmptyComponent={
+        <>
+          <QueryState query={query} />
+          {/* A loaded empty list stays an empty page even while a later refresh fails. */}
+          {query.data !== undefined ? (
+            <Empty
+              compact={false}
+              illustration="success"
+              title={copy("Bekleyen onay yok", "Nothing waiting for approval")}
+              detail={copy("Bir ajan izin istediğinde burada görünür.", "When an agent asks for permission, it shows up here.")}
+            />
+          ) : null}
+        </>
+      }
       renderItem={({ item }) => (
         <ApprovalCard
           approval={item}
-          now={now}
-          local={approvalOpen(item, now) ? local[item.id]?.state : undefined}
+          local={local[item.id]?.state}
           sentApproved={local[item.id]?.approved}
           canDecide={!!client}
           onDecide={(approval, approved) => void decide(approval, approved)}
           onCheck={() => void check()}
           checking={checking}
+          waitingForOther={sendingId !== null && sendingId !== item.id}
         />
       )}
     />

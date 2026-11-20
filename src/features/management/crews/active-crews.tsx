@@ -1,13 +1,15 @@
+import { useState } from "react";
 import { router } from "expo-router";
 import type { ActiveCrewList, ActiveCrewMember } from "@/remote/contracts/crews";
 import { useActiveMachine } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { Body, Heading, NavigationGroup, NavigationRow, Stack } from "@/ui/primitives";
+import { Button, Heading, NavigationGroup, NavigationRow, Stack } from "@/ui/primitives";
 import { activeFocus, activeKey, activePollInterval, handleLabel, sortActive, CREW_ACTIVE_CAPABILITY } from "./identity-model";
 import { MemberAvatar } from "./member-avatar";
 
 const SHOWN = 8;
+const EXPANDED_LIMIT = 200;
 
 /**
  * Read-only list of crew members working right now, across projects. Polls through the
@@ -17,13 +19,18 @@ export function ActiveCrews() {
   const copy = useCopy();
   const machine = useActiveMachine();
   const supported = machine?.capabilities?.includes(CREW_ACTIVE_CAPABILITY) === true;
-  const query = useHostQuery<ActiveCrewList>(["crews", "active"], "crews.active.list", { limit: 200 }, {
+  const [expanded, setExpanded] = useState(false);
+  const query = useHostQuery<ActiveCrewList>(["crews", "active"], "crews.active.list", {
+    limit: expanded ? EXPANDED_LIMIT : SHOWN,
+  }, {
     enabled: supported,
     interval: (data) => activePollInterval(data?.items),
+    keepPrevious: true,
   });
   const items = query.data?.items;
   if (!supported || !items?.length || !machine) return null;
   const sorted = sortActive(items);
+  const rows = expanded ? sorted : sorted.slice(0, SHOWN);
   const open = (item: ActiveCrewMember) => {
     if (item.sessionId)
       router.navigate({ pathname: "/session/[id]", params: { id: item.sessionId, machineId: machine.id, projectId: item.projectId } });
@@ -36,7 +43,7 @@ export function ActiveCrews() {
     <Stack>
       <Heading>{copy("Şu an çalışanlar", "Working now")}</Heading>
       <NavigationGroup>
-        {sorted.slice(0, SHOWN).map((item) => (
+        {rows.map((item) => (
           <NavigationRow
             key={activeKey(item)}
             icon={<MemberAvatar member={{ id: item.memberId, name: item.memberName, avatar: item.avatar, source: item.memberSource }} />}
@@ -50,8 +57,14 @@ export function ActiveCrews() {
           />
         ))}
       </NavigationGroup>
-      {sorted.length > SHOWN ? (
-        <Body muted>{copy("+{p0} üye daha", "+{p0} more", { p0: sorted.length - SHOWN })}</Body>
+      {expanded || query.data?.truncated || sorted.length > SHOWN ? (
+        <Button
+          tone="quiet"
+          label={expanded
+            ? copy("Daha az göster", "Show less")
+            : copy("Daha fazla göster", "Show more")}
+          onPress={() => setExpanded((value) => !value)}
+        />
       ) : null}
     </Stack>
   );

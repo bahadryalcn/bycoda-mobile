@@ -129,9 +129,9 @@ export function GoalEditor({ projectId, projects, providers, create, busy, onClo
         <SelectField label={copy("Çalışan türü", "Worker type")}
           hint={copy("Crew yalnızca tek projeli epic için kullanılabilir.", "Crews are available for single-project epics.")} value={draft.crewDefinitionId ? "crew" : "agent"}
           disabled={busy || !crewsSupported || !crews.isSuccess || !crewDirectory?.definitions.length}
-          options={[{ value: "agent", label: copy("Ajan", "Agent") }, { value: "crew", label: "Crew" }]}
+          options={[{ value: "agent", label: copy("Ajan", "Agent") }, { value: "crew", label: copy("Ekip", "Crew") }]}
           onChange={value => update({ crewDefinitionId: value === "crew" ? crewDirectory?.definitions[0]?.id : undefined })} />
-        {draft.crewDefinitionId ? <SelectField label="Crew" value={draft.crewDefinitionId} disabled={busy || !crewsSupported || !crews.isSuccess}
+        {draft.crewDefinitionId ? <SelectField label={copy("Ekip", "Crew")} value={draft.crewDefinitionId} disabled={busy || !crewsSupported || !crews.isSuccess}
           options={(crewDirectory?.definitions ?? []).map(crew => ({ value: crew.id, label: crew.name }))}
           onChange={crewDefinitionId => update({ crewDefinitionId })} /> : null}
         {crewsSupported && crews.isSuccess && crewDirectory?.definitions.length === 0 && <Body muted>{copy("Henüz ekip yok", "No crews yet")}</Body>}

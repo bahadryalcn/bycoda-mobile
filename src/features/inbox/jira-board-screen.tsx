@@ -77,7 +77,7 @@ export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
     if (!available()) return;
     return Promise.all([boards.refetch(), ...(boardId && (scope !== "sprint" || sprintId) ? [board.refetch()] : [])]);
   };
-  const scopeLabel = scope === "board" ? copy("Pano", "Board") : scope === "backlog" ? "Backlog" :
+  const scopeLabel = scope === "board" ? copy("Pano", "Board") : scope === "backlog" ? copy("Backlog", "Backlog") :
     `${copy("Sprint", "Sprint")} · ${sprints.find((sprint) => String(sprint.id) === sprintId)?.name ?? `#${sprintId}`}`;
   const projectName = snapshot?.projectCwd.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || snapshot?.projectCwd;
   const pageSummary = snapshot ? column

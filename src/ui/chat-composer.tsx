@@ -62,7 +62,7 @@ export function ChatComposer({
     >
       {top}
       <AIInput.Field
-        placeholderTextColor={colors.tertiary}
+        placeholderTextColor={colors.muted}
         selectionColor={colors.accent}
         cursorColor={colors.accent}
         {...rest}

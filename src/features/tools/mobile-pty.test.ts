@@ -21,7 +21,12 @@ vi.mock("react-native", () => ({
 vi.mock("react-native-keyboard-controller", () => ({
   KeyboardAvoidingView: ({ children }: PropsWithChildren) => createElement("div", null, children),
   KeyboardController: { dismiss: async () => {} },
+  useReanimatedKeyboardAnimation: () => ({ progress: { value: 0 } }),
   useKeyboardState: (select: (state: { isVisible: boolean }) => unknown) => select({ isVisible: false }),
+}));
+vi.mock("react-native-reanimated", () => ({
+  default: { View: ({ children }: PropsWithChildren) => createElement("div", null, children) },
+  useAnimatedStyle: () => ({}),
 }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 vi.mock("@/ui/tokens", () => ({ metrics: { touchTarget: 48 }, space: { xs: 4, sm: 6, screen: 16 } }));
@@ -261,6 +266,13 @@ it("same-id changed endpoint cannot create, and privacy hides an already opened 
   f.private = true;
   await act(async () => root.render(createElement(MobilePty, props)));
   expect(container.querySelector("[data-viewport]")).toBeNull();
+});
+it("renders no native terminal modal while the app is locked", async () => {
+  await mount();
+  expect(container.textContent).not.toBe("");
+  f.security.status = "locked";
+  await act(async () => root.render(createElement(MobilePty, props)));
+  expect(container.textContent).toBe("");
 });
 it("background state forbids mutation even before a rerender", async () => {
   await mount();

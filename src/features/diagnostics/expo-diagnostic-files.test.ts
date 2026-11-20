@@ -36,3 +36,8 @@ it("lazily reuses the same native diagnostics directory for file operations", ()
   expect(state.write).toHaveBeenCalledWith("marker");
   expect(state.remove).toHaveBeenCalledOnce();
 });
+it("appends through the native append option without replacing the file", () => {
+  const files = expoDiagnosticFiles();
+  files.append("current.log", "\nnext line");
+  expect(state.write).toHaveBeenCalledWith("\nnext line", { append: true });
+});

@@ -14,6 +14,11 @@ export type MobileInbox = {
   items: MobileInboxItem[];
   scope: "host-attention";
   externalProviderInboxAvailable: false;
+  /**
+   * Projects whose sessions did not answer before the Host's deadline. Their items are absent,
+   * not empty. Omitted when the read was complete and by Hosts that predate this field.
+   */
+  unavailableProjectIds?: string[];
 };
 
 /** Wire compatibility with paired hosts that still support pull-request watches. */

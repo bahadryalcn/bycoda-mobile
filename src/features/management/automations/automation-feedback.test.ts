@@ -16,7 +16,7 @@ vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "computer" }
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: { caption: {} } }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { caption: {} } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("lucide-react-native/icons/play", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/power", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/pause", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/history", () => ({ default: () => null }));

@@ -109,13 +109,6 @@ export function ActionMenu({
           <Menu.Item
             key={item.key}
             className="min-h-touch web:focus-visible:outline-2 web:focus-visible:outline-ring"
-            accessibilityLabel={[
-              item.label,
-              item.detail,
-              typeof item.selected === "boolean"
-                ? item.selected ? copy("Seçili", "Selected") : copy("Seçili değil", "Not selected")
-                : undefined,
-            ].filter(Boolean).join(". ")}
             accessibilityState={{ disabled: !!item.disabled, selected: item.selected }}
             disabled={item.disabled}
             variant={item.destructive ? "destructive" : undefined}
@@ -148,7 +141,6 @@ export function groupMenuActions<T extends { destructive?: boolean }>(items: rea
 
 function ActionRows({ items, onSelect }: { items: readonly MenuAction[]; onSelect(item: MenuAction): void }) {
   const { colors, semanticColors } = useMobileTheme();
-  const copy = useCopy();
   return (
     <View style={{ gap: space.sm }}>
       {groupMenuActions(items).map((group, groupIndex) => (
@@ -164,13 +156,8 @@ function ActionRows({ items, onSelect }: { items: readonly MenuAction[]; onSelec
               tone={item.destructive ? "danger" : undefined}
               disabled={item.disabled}
               separator={index < group.length - 1}
-              accessibilityLabel={[
-                item.label,
-                item.detail,
-                typeof item.selected === "boolean"
-                  ? item.selected ? copy("Seçili", "Selected") : copy("Seçili değil", "Not selected")
-                  : undefined,
-              ].filter(Boolean).join(". ")}
+              selected={item.selected}
+              tintSelected={false}
               icon={isValidElement(item.icon) ? (
                 <IconTile>
                   {cloneElement(item.icon as ReactElement<{ size?: number; strokeWidth?: number; color?: string }>, {

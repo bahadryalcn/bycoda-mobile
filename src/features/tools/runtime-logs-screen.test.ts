@@ -6,7 +6,7 @@ vi.mock("@/ui/message-code", () => ({ MessageCode: ({ code }: { code: string }) 
 const fixture = vi.hoisted(() => ({
   entries: [] as any[], sources: [] as any[], sourceError: null as Error | null, hideHeader: false,
   projectId: "project", endpoint: "https://synthetic.invalid", params: {} as any,
-  logsRead: vi.fn(), sourcesRead: vi.fn(), refresh: undefined as any,
+  logsRead: vi.fn(), sourcesRead: vi.fn(), refresh: undefined as any, rowRenders: 0,
 }));
 vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
 vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
@@ -48,7 +48,7 @@ vi.mock("@/ui/primitives", async () => {
   return { QueryState, Body: Group, Row: Group, CodePanel: Group, CodeText: Group, NavigationGroup: Group,
     ActionMenu: ({actions}:any) => createElement("div",null,actions.map((action:any)=>createElement("button",{key:action.key,onClick:action.onPress},action.label))),
     Badge: () => null, StatusText: () => null, Notice: () => null, Empty: () => null, ErrorText: () => null,
-    IconButton: button, NavigationRow: button,
+    IconButton: button, NavigationRow: (props: any) => { fixture.rowRenders++; return button(props); },
     Sheet: ({ visible, children }: any) => visible ? createElement("aside", { "data-log-detail": true }, children) : null,
     SearchToolbar: ({ search, actions }: any) => createElement("div", null, search, actions),
     SearchField: ({ label, value, onChangeText, ref }: any) => createElement("input", { ref, "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) }),
@@ -64,7 +64,7 @@ const render = () => act(() => root.render(createElement(RuntimeLogsScreen, { pr
 const click = async (label: string) => { const b = [...node.querySelectorAll("button")].find(e => e.textContent === label); expect(b).toBeTruthy(); await act(() => b!.click()); };
 const input = async (label: string, value: string) => { const e = node.querySelector(`input[aria-label="${label}"]`)!; await act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(e, value); e.dispatchEvent(new Event("input", { bubbles: true })); }); };
 beforeEach(() => {
-  vi.clearAllMocks(); fixture.entries = []; fixture.sources = []; fixture.sourceError = null; fixture.hideHeader = false; fixture.projectId = "project"; fixture.endpoint = "https://synthetic.invalid";
+  vi.clearAllMocks(); fixture.rowRenders = 0; fixture.entries = []; fixture.sources = []; fixture.sourceError = null; fixture.hideHeader = false; fixture.projectId = "project"; fixture.endpoint = "https://synthetic.invalid";
   node = document.createElement("div"); document.body.append(node); root = createRoot(node);
 });
 afterEach(() => { act(() => root.unmount()); node.remove(); vi.useRealTimers(); });
@@ -116,6 +116,29 @@ it("keeps the monitor draft and log detail outside the disappearing list header"
   fixture.hideHeader = true; await render(); expect((node.querySelector('input[aria-label="Monitor draft"]') as HTMLInputElement).value).toBe("4000"); expect(node.querySelector("[data-log-detail]")).not.toBeNull();
   fixture.endpoint = "https://repaired.synthetic.invalid"; await render(); expect(node.querySelector("[data-log-detail]")).toBeNull();
   fixture.endpoint = "https://synthetic.invalid"; await render(); expect(node.querySelector("[data-log-detail]")).toBeNull();
+});
+it("re-renders only new log rows on keystrokes and polls, keeping the search draft and filters", async () => {
+  const log = (id: string) => ({ id, projectId: "project", message: id, timestamp: 1, level: "info", sourceId: "source", source: "server" });
+  const [a, b] = [log("a"), log("b")]; fixture.entries = [a, b];
+  await render(); expect(fixture.rowRenders).toBe(2);
+  await input("Search logs", "e"); await input("Search logs", "er");
+  expect((node.querySelector('input[aria-label="Search logs"]') as HTMLInputElement).value).toBe("er");
+  expect(fixture.rowRenders).toBe(2);
+  fixture.entries = [a, b]; await render(); expect(fixture.rowRenders).toBe(2);
+  fixture.entries = [a, b, log("c")]; await render(); expect(fixture.rowRenders).toBe(3);
+  expect([...node.querySelectorAll("main > div button")].map(row => row.textContent).filter(text => ["a", "b", "c"].includes(text!))).toEqual(["c", "b", "a"]);
+});
+it("re-renders only new log rows on keystrokes and polls, keeping the search draft and filters", async () => {
+  const log = (id: string) => ({ id, projectId: "project", message: id, timestamp: 1, level: "info", sourceId: "source", source: "server" });
+  const [a, b] = [log("a"), log("b")]; fixture.entries = [a, b];
+  const rows = () => [...node.querySelectorAll("main > div > button")].map(row => row.textContent).filter(text => ["a", "b", "c"].includes(text!));
+  await render(); expect(fixture.rowRenders).toBe(2);
+  await input("Search logs", "e"); await input("Search logs", "er");
+  expect((node.querySelector('input[aria-label="Search logs"]') as HTMLInputElement).value).toBe("er");
+  expect(fixture.rowRenders).toBe(2);
+  fixture.entries = [a, b]; await render(); expect(fixture.rowRenders).toBe(2);
+  fixture.entries = [a, b, log("c")]; await render(); expect(fixture.rowRenders).toBe(3);
+  expect(rows()).toEqual(["c", "b", "a"]);
 });
 it("debounces search and suppresses log reads for an oversized draft during manual refresh", async () => {
   vi.useFakeTimers(); await render(); await input("Search logs", "  query  "); expect(fixture.params.search).toBeUndefined();

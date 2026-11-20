@@ -2,7 +2,7 @@ import { ScreenList } from "@/ui/screen-list";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "./shared/search";
 import { useProjectList } from "../workspace/use-project-directory";
-import { useReducer, useRef, useState, type ComponentRef } from "react";
+import { useEffect, useReducer, useRef, useState, type ComponentRef } from "react";
 import Plus from "lucide-react-native/icons/plus";
 import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 
@@ -31,6 +31,7 @@ import { goalFlowReducer } from "./goals/flow";
 import { GoalEditor } from "./goals/goal-editor";
 import { ReplanEditor } from "./goals/replan-editor";
 import { GoalCard } from "./goals/goal-card";
+import { goalTaskScope, goalTaskViews, goalTasksStamp } from "./goals/goal-tasks";
 import { GoalSettingsEditor } from "./goals/settings-editor";
 import { useMobileTheme } from "@/ui/theme";
 
@@ -68,8 +69,6 @@ export function GoalsScreen() {
   const { providers, query: providerQuery } = useAgentProviders(projectId);
   const query = useHostQuery<HostGoal[]>(["goals"], "goals.list", {}, { interval: goalsPollInterval });
   const projects = useProjectList();
-  const taskQuery = useHostQuery<HostTask[]>(["tasks", null], "tasks.list", {}, { interval: 15_000 });
-  const doneTaskIds = new Set(taskQuery.data?.filter((task) => task.status === "done").map((task) => task.id));
   const create = useHostMutation<HostGoal>("goals.create", ["goals"]);
   const approve = useHostMutation<HostGoal>("goals.approve", ["goals"]);
   const cancel = useHostMutation<HostGoal>("goals.cancel", ["goals"]);
@@ -85,6 +84,22 @@ export function GoalsScreen() {
     replan.isPending;
   const scoped = query.data?.filter((goal) => !projectId || goal.projectIds.includes(projectId));
   const visible = scoped?.filter((goal) => goalFilterMatches(goal.status, filter) && matchesSearch(goal.title + " " + goal.prompt, search, locale));
+  // Same key as the Tasks screen, so the cached list is shared; it only loads for epics that own tasks.
+  const taskScope = goalTaskScope(visible);
+  const taskQuery = useHostQuery<HostTask[]>(["tasks", null], "tasks.list", {}, {
+    enabled: taskScope.enabled,
+    interval: () => taskScope.interval,
+  });
+  const refetchTasks = taskQuery.refetch;
+  const tasksStamp = goalTasksStamp(query.data);
+  const stampRef = useRef(tasksStamp);
+  useEffect(() => {
+    // An epic changed (e.g. finished) since the last task read, which may now be up to a poll old.
+    if (stampRef.current === tasksStamp) return;
+    stampRef.current = tasksStamp;
+    if (taskScope.enabled) void refetchTasks().catch(() => undefined);
+  }, [tasksStamp, taskScope.enabled, refetchTasks]);
+  const taskViews = taskQuery.data ? goalTaskViews(visible ?? [], taskQuery.data) : undefined;
   const replanGoal =
     flow.kind === "replan" ? query.data?.find((goal) => goal.id === flow.goalId) : undefined;
   const projectReady = projects.directoryReady && (!projectId || projects.isProjectVisible(projectId));
@@ -187,6 +202,8 @@ export function GoalsScreen() {
         query={query}
         empty={visible?.length === 0}
         emptyTitle={(search.trim() || filter !== "all") && scoped?.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz epic yok", "No epics yet")}
+        emptyDetail={(search.trim() || filter !== "all") && scoped?.length ? undefined
+          : copy("Epic, büyük bir hedefi görevlere bölüp ilerlemesini izler.", "An epic splits a larger goal into tasks and tracks its progress.")}
         emptyAction={
           scoped?.length && (search.trim() || filter !== "all")
             ? search.trim()
@@ -202,8 +219,8 @@ export function GoalsScreen() {
         <GoalCard
           goal={goal}
           projects={projects.data ?? []}
-          progress={taskQuery.data ? { done: goal.taskIds.filter((id) => doneTaskIds.has(id)).length, total: goal.taskIds.length } : undefined}
-          tasks={taskQuery.data?.filter((task) => goal.taskIds.includes(task.id))}
+          progress={taskViews?.get(goal.id)?.progress}
+          tasks={taskViews?.get(goal.id)?.tasks}
           busy={busy}
           editorOpen={flow.kind !== "closed"}
           approve={approve}

@@ -12,9 +12,10 @@ import { useProjectList } from "./use-project-directory";
 import { ProjectDirectoryFeedback } from "./project-directory-feedback";
 import { BrowserScreen } from "../tools/browser-screen";
 import type { SessionScope } from "./session-types";
+import { RecordAccessUnavailable } from "./unavailable-state";
 
 /** The browser keeps drafts during temporary concealment; its opening target never changes. */
-export function SessionBrowser({ scope, projectId, onClose }: { scope: SessionScope; projectId: string; onClose: () => void }) {
+export function SessionBrowser({ scope, projectId, initialUrl, onClose }: { scope: SessionScope; projectId: string; initialUrl?: string; onClose: () => void }) {
   const copy = useCopy(), machine = useActiveMachine(), connection = useConnectionScope(), access = usePrivateContentAccess(), projects = useProjectList();
   const [opening] = useState(() => ({ ...scope, projectId, connection }));
   const [retained, setRetained] = useState<HostProject>();
@@ -43,7 +44,7 @@ export function SessionBrowser({ scope, projectId, onClose }: { scope: SessionSc
   const retry = async () => { if (lease.active && originalCurrent() && live.current.supported && !retired.current && live.current.projects.isEnabled !== false && !live.current.projects.isFetching) await live.current.projects.refetch(); };
   const close = () => { if (mounted.current) onClose(); };
   const feedbackQuery = { ...projects, data: usable ? projects.data : undefined, refetch: retry };
-  const unavailable = <StateView illustration="locked" title={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />;
+  const unavailable = <RecordAccessUnavailable />;
   return <Sheet visible title={copy("Tarayıcı", "Browser")} size="full" scroll={false} onClose={close}
     footer={!usable ? <FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} /> : undefined}>
     {!usable ? <ScrollView contentContainerStyle={{ flexGrow: 1, gap: space.sm, paddingHorizontal: space.screen, paddingVertical: space.sm, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}>
@@ -55,7 +56,7 @@ export function SessionBrowser({ scope, projectId, onClose }: { scope: SessionSc
           empty={projects.directoryReady && projects.isSuccess && !projects.isFetching && !candidate} emptyTitle={copy("Proje bulunamadı.", "Project not found.")} />}
     </ScrollView> : null}
     {scopeCurrent && !retired.current && project ? <PrivateContentBoundary visible={usable} isAllowed={canUse}>
-      <ScreenChromeProvider nativeTitle bottomSafeArea={false}><BrowserScreen project={usable ? candidate : project} sessionId={opening.sessionId} embedded /></ScreenChromeProvider>
+      <ScreenChromeProvider nativeTitle bottomSafeArea={false}><BrowserScreen project={usable ? candidate : project} sessionId={opening.sessionId} initialUrl={initialUrl} embedded /></ScreenChromeProvider>
     </PrivateContentBoundary> : null}
   </Sheet>;
 }

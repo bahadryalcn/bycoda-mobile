@@ -41,6 +41,16 @@ export function orderFromSections(sections: readonly DirectorySection[], grouped
 
 export type ProjectOrderMove = { scope: "groups" | "flat" | { group: string }; from: number; to: number };
 
+/**
+ * The one-slot move a Move up/down action issues, in the same shape a drag reports. Null at either
+ * end of the list (or for a stale index) so the boundary is enforced in one place.
+ */
+export function neighbourMove(scope: ProjectOrderMove["scope"], index: number, length: number, delta: -1 | 1): ProjectOrderMove | null {
+  const to = index + delta;
+  if (index < 0 || index >= length || to < 0 || to >= length) return null;
+  return { scope, from: index, to };
+}
+
 /** Applies one drag to a snapshot of the visible order; everything not dragged keeps its place. */
 export function moveInOrder(current: ProjectOrder, move: ProjectOrderMove): ProjectOrder {
   if (move.scope === "groups") return { ...current, groups: moveId(current.groups, move.from, move.to) };

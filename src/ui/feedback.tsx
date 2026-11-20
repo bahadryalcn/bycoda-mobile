@@ -6,9 +6,6 @@ import { Badge as PanelBadge } from "panelui-native/components/badge";
 import { Spinner } from "panelui-native/components/spinner";
 import { Alert } from "panelui-native/components/alert";
 import { Skeleton as PanelSkeleton } from "panelui-native/components/skeleton";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { useSkeletonHandoff } from "panelui-native/hooks/use-skeleton-handoff";
-import { reveal } from "./motion";
 import Info from "lucide-react-native/icons/info";
 import CircleCheck from "lucide-react-native/icons/circle-check";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
@@ -53,7 +50,6 @@ export function Badge({ label, tone = "default", icon: Icon }: BadgeProps) {
     >
       {Icon ? <Icon {...decorativeSvgProps} size={12} strokeWidth={2} color={semantic?.text ?? colors.muted} /> : null}
       <Text
-        selectable
         style={StyleSheet.flatten([
           {
             fontSize: uiStyles.badge.fontSize,
@@ -87,7 +83,11 @@ export function StatusText({ label, tone = "default", dot = true }: {
   );
 }
 
-/** Thin wrapper over StateView. `compact` (default) is the inline icon row for sub-sections. */
+/**
+ * Thin wrapper over StateView. `compact` (default) is the inline icon row for a sub-section among
+ * other content. When the empty state is all a page, list or sheet shows, pass `compact={false}`
+ * with an `illustration` so it fills the region centered instead of leaving a blank page.
+ */
 export function Empty({ title, detail, compact = true, action, secondaryAction, illustration }: EmptyProps) {
   return (
     <StateView
@@ -101,12 +101,12 @@ export function Empty({ title, detail, compact = true, action, secondaryAction, 
   );
 }
 
-export function Loading({ label, centered = false, showLabel = !!label || centered }: LoadingProps) {
+export function Loading({ label, centered = false, showLabel = !!label || centered, immediate = false }: LoadingProps) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const animate = useFeedbackAnimation();
   // A full-region spinner waits like a skeleton, so a fast load never flashes it.
-  const visible = useDelayedVisible(centered ? undefined : 0);
+  const visible = useDelayedVisible(centered && !immediate ? undefined : 0);
   const content = (
     <>
       {animate ? <Spinner size={centered ? "md" : "sm"} color={colors.accent} /> : (
@@ -144,45 +144,33 @@ const LINE_WIDTHS = ["92%", "86%", "95%", "64%"] as const;
 /**
  * Region placeholder shaped like the content it replaces, so nothing jumps when data arrives:
  * `list` draws rows (leading tile, title, meta) at the session-row height; `content` draws a
- * heading and paragraph lines. It appears only after a short delay, so cached or fast loads never
- * flash it. `label` is announced to screen readers only; never put loading text above it.
- *
- * `loading` (default true) drives the hand-off: when it turns false a placeholder that was visible
- * stays a beat and dissolves as a zero-height overlay on top of whatever now sits in its place, so
- * the content never waits for it and nothing jumps. Keep it mounted across the change (QueryState
- * does) rather than unmounting it when data arrives.
+ * heading and paragraph lines. Static shapes fill the first loading frame. Shimmer starts
+ * only on longer reads. The resolved state immediately owns the region.
  */
 export function Skeleton({ variant = "list", label, rows, loading = true }: { variant?: "list" | "content"; label?: string; rows?: number; loading?: boolean }) {
   const [regionHeight, setRegionHeight] = useState(0);
   const { colors } = useMobileTheme();
   const copy = useCopy();
   const animate = useFeedbackAnimation();
-  const revealed = useDelayedVisible(undefined, loading);
-  const { mounted, opacity } = useSkeletonHandoff(revealed);
-  const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  // Never flashed while loading (delay not elapsed), so there is nothing to dissolve either.
-  const visible = loading ? revealed : mounted;
+  const shimmer = useDelayedVisible(undefined, loading);
   const rowCount = rows ?? (regionHeight > 0 ? Math.max(1, Math.floor(regionHeight / metrics.rowHeightSession)) : 6);
-  if (!loading && !visible) return null;
+  if (!loading) return null;
   // Upstream has no pause prop. Unmount its loops and preserve the same shapes.
-  const Placeholder = animate ? PanelSkeleton : View;
+  const Placeholder = animate && shimmer ? PanelSkeleton : View;
   const bar = (height: number, width: string, fill = colors.raised) => (
     <Placeholder style={{ height, width: width as `${number}%`, backgroundColor: fill, borderRadius: 4 }} />
   );
   return (
-    <Animated.View
-      pointerEvents={loading ? "auto" : "none"}
-      accessible={loading}
-      accessibilityRole={loading ? "progressbar" : undefined}
-      accessibilityLabel={loading ? (label ?? copy("Yükleniyor…", "Loading…")) : undefined}
-      accessibilityState={{ busy: loading }}
-      aria-busy={loading}
-      importantForAccessibility={loading ? "auto" : "no-hide-descendants"}
-      onLayout={loading && variant === "list" && rows === undefined ? (event) => setRegionHeight(event.nativeEvent.layout.height) : undefined}
-      style={loading ? (variant === "list" && rows === undefined ? { flexGrow: 1 } : undefined) : [handoffOverlay, fade]}
+    <View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={label ?? copy("Yükleniyor…", "Loading…")}
+      accessibilityState={{ busy: true }}
+      aria-busy
+      onLayout={variant === "list" && rows === undefined ? (event) => setRegionHeight(event.nativeEvent.layout.height) : undefined}
+      style={variant === "list" && rows === undefined ? { flexGrow: 1 } : undefined}
     >
-      {visible ? (
-        <Animated.View entering={reveal} importantForAccessibility="no-hide-descendants">
+        <View importantForAccessibility="no-hide-descendants">
           {variant === "list"
             ? Array.from({ length: rowCount }, (_, index) => (
                 <View
@@ -212,14 +200,12 @@ export function Skeleton({ variant = "list", label, rows, loading = true }: { va
                   ))}
                 </View>
               )}
-        </Animated.View>
-      ) : null}
-    </Animated.View>
+        </View>
+    </View>
   );
 }
 
 /** Zero-height anchor: the dissolving placeholder paints over the content that replaced it. */
-const handoffOverlay = { height: 0, overflow: "visible", zIndex: 1 } as const;
 
 /** Field-level validation: 13/17 danger text with a 14px alert icon. */
 export function FieldError({ message }: FieldErrorProps) {

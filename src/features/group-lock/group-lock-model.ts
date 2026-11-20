@@ -119,5 +119,12 @@ export function cacheHoldsProject(
   });
 }
 
+/** True only when the Host confirmed the lock; a rejection counts as not locked. */
+export const lockConfirmed = (run: () => Promise<boolean>): Promise<boolean> =>
+  run().then(
+    (ok) => ok === true,
+    () => false,
+  );
+
 /** Seconds to show for a wait, rounded up so "try again" never arrives early. */
 export const retrySeconds = (ms: number): number => Math.max(1, Math.ceil(ms / 1000));

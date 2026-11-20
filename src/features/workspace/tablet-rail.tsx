@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
@@ -159,41 +159,55 @@ export function TabletRail() {
         borderEndColor: colors.separator,
       }}
     >
-      <View accessibilityRole="tablist" style={{ gap: space.xs }}>
-        {items.map(tab)}
-      </View>
-      {machineId ? (
-        <View style={{ marginTop: space.md, gap: space.xs }}>
-          <RailButton
-            role="button"
-            accent
-            label={copy("Yeni oturum", "New session")}
-            caption={copy("Yeni", "New")}
-            hint={copy("Sesli asistan", "Voice assistant")}
-            icon={<DockIcon name="new-session" color={colors.primaryText} />}
-            onPress={() => setNewSessionOpen(true)}
-            // Holding the new-session button is the fastest way into a voice call, as on the phone dock.
-            onLongPress={openVoice}
-          />
-          <RailButton
-            role="button"
-            label={copy("Sesli asistan", "Voice assistant")}
-            caption={copy("Sesli", "Voice")}
-            icon={<Mic size={24} color={colors.muted} />}
-            onPress={openVoice}
-          />
+      {/*
+        One scroll owner for every rail button. In a tall window the flexible spacer keeps Settings at the
+        bottom; in a short one (split screen, small landscape) the column scrolls so nothing is unreachable.
+        The safe-area padding stays on the frame outside, so the last button scrolls clear of it.
+      */}
+      <ScrollView
+        style={{ alignSelf: "stretch" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center" }}
+        showsVerticalScrollIndicator
+        persistentScrollbar
+        alwaysBounceVertical={false}
+        overScrollMode="auto"
+      >
+        <View accessibilityRole="tablist" style={{ gap: space.xs }}>
+          {items.map(tab)}
         </View>
-      ) : null}
-      <View style={{ flex: 1 }} />
-      <RailButton
-        role="tab"
-        label={copy("Ayarlar", "Settings")}
-        selected={pathname === "/settings"}
-        icon={
-          <DockIcon name="settings" color={pathname === "/settings" ? colors.text : colors.muted} />
-        }
-        onPress={() => go("/settings")}
-      />
+        {machineId ? (
+          <View style={{ marginTop: space.md, gap: space.xs }}>
+            <RailButton
+              role="button"
+              accent
+              label={copy("Yeni oturum", "New session")}
+              caption={copy("Yeni", "New")}
+              hint={copy("Sesli asistan için basılı tutun", "Hold for voice assistant")}
+              icon={<DockIcon name="new-session" color={colors.primaryText} />}
+              onPress={() => setNewSessionOpen(true)}
+              // Holding the new-session button is the fastest way into a voice call, as on the phone dock.
+              onLongPress={openVoice}
+            />
+            <RailButton
+              role="button"
+              label={copy("Sesli asistan", "Voice assistant")}
+              caption={copy("Sesli", "Voice")}
+              icon={<Mic size={24} color={colors.muted} />}
+              onPress={openVoice}
+            />
+          </View>
+        ) : null}
+        <View style={{ flex: 1, minHeight: space.md }} />
+        <RailButton
+          role="tab"
+          label={copy("Ayarlar", "Settings")}
+          selected={pathname === "/settings"}
+          icon={
+            <DockIcon name="settings" color={pathname === "/settings" ? colors.text : colors.muted} />
+          }
+          onPress={() => go("/settings")}
+        />
+      </ScrollView>
       {machineId ? (
         <NewSessionSheet visible={newSessionOpen} onClose={() => setNewSessionOpen(false)} />
       ) : null}

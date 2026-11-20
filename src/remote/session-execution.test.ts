@@ -193,7 +193,8 @@ it("preserves list cursors and real page/sync history behavior over native authe
     revision: 4,
     waitMs: 12_000,
     partial: true,
-    loadedBlockIds: ["first", "tail"],
+    // The Host resolves the window from the first loaded block, so only that id is sent.
+    loadedBlockIds: ["first"],
   });
   expect(f.fetcher).not.toHaveBeenCalled();
 });

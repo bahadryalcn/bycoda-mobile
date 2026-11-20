@@ -17,6 +17,10 @@ const state = vi.hoisted(() => ({
   refetch: vi.fn(async () => ({ isError: false })),
 }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("react-native", () => ({
+  View: ({ children }: PropsWithChildren) => createElement("div", null, children),
+}));
+vi.mock("@/ui/tokens", () => ({ space: { xxs: 2, sm: 6 } }));
 vi.mock("@/ui/theme", () => ({
   useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }),
 }));
@@ -92,22 +96,21 @@ vi.mock("@/ui/primitives", () => {
     Notice: ({ message }: { message: string }) => createElement("p", null, message),
     Button: ({
       label,
+      accessibilityLabel,
       onPress,
       disabled,
     }: {
       label: string;
+      accessibilityLabel?: string;
       onPress: () => void;
       disabled?: boolean;
-    }) => createElement("button", { onClick: onPress, disabled }, label),
-    NavigationRow: ({
-      label,
-      onPress,
-      disabled,
-    }: {
-      label: string;
-      onPress: () => void;
-      disabled?: boolean;
-    }) => createElement("button", { onClick: onPress, disabled }, label),
+    }) =>
+      createElement(
+        "button",
+        { onClick: onPress, disabled, "aria-label": accessibilityLabel },
+        label,
+      ),
+    Separator: () => null,
     Field: ({ value, onChangeText, error, editable }: any) =>
       createElement(
         "label",
@@ -143,9 +146,12 @@ async function render(projectId = "project") {
     root!.render(createElement(RuntimeMonitors, { projectId, onClose: vi.fn() })),
   );
 }
+// Row Stop buttons carry an aria-label naming the monitor; the confirmation's Stop does not.
 async function click(label: string) {
-  const button = [...container.querySelectorAll("button")].find(
-    (item) => item.textContent === label,
+  const button = [...container.querySelectorAll("button")].find((item) =>
+    item.hasAttribute("aria-label")
+      ? item.getAttribute("aria-label") === label
+      : item.textContent === label,
   )!;
   await act(async () => button.click());
 }
@@ -165,12 +171,23 @@ it("lists without starting capture; stop requires explicit confirmation and exac
   await render();
   expect(state.requests).toEqual([]);
   expect(state.methods).toEqual(["runtimeLogs.monitors.list"]);
-  await click("http://localhost:3000/");
+  await click("Stop monitor http://localhost:3000/");
   expect(state.requests).toEqual([]);
   await click("Stop");
   expect(state.requests).toEqual([
     { method: "runtimeLogs.monitors.stop", params: { projectId: "project", id: "monitor" } },
   ]);
+});
+
+it("does not make the monitor row itself a stop control; only its Stop action asks for confirmation", async () => {
+  await render();
+  expect(container.textContent).toContain("http://localhost:3000/");
+  expect(
+    [...container.querySelectorAll("button")].some((b) => b.textContent === "http://localhost:3000/"),
+  ).toBe(false);
+  await click("Stop monitor http://localhost:3000/");
+  expect(container.textContent).toContain("Stop this log monitor?");
+  expect(state.requests).toEqual([]);
 });
 
 it("explains the eight-monitor capacity using the actual list without starting another monitor", async () => {
@@ -193,16 +210,16 @@ it("blocks writes after uncertain delivery until an explicit successful refresh"
   state.error = { uncertain: true };
   await render();
   expect(container.textContent).toContain("outcome is unknown");
-  await click("http://localhost:3000/");
+  await click("Stop monitor http://localhost:3000/");
   expect(state.requests).toEqual([]);
   await click("Refresh");
-  await click("http://localhost:3000/");
+  await click("Stop monitor http://localhost:3000/");
   await click("Stop");
   expect(state.requests).toHaveLength(1);
 });
 it("does not retarget a confirmation after the active machine changes", async () => {
   await render();
-  await click("http://localhost:3000/");
+  await click("Stop monitor http://localhost:3000/");
   state.machineId = "machine-b";
   await click("Stop");
   expect(state.requests).toEqual([]);
@@ -265,14 +282,16 @@ it("coalesces refresh and blocks writes until the list reconciles", async () => 
       }),
   );
   await render();
-  await click("http://localhost:3000/");
+  await click("Stop monitor http://localhost:3000/");
   await click("Refresh");
   await click("Refresh");
   await click("Stop");
   expect(state.refetch).toHaveBeenCalledOnce();
   expect(state.requests).toEqual([]);
   await act(async () => finish({ isError: false }));
-  expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Stop")).toBe(
-    false,
-  );
+  expect(
+    [...container.querySelectorAll("button")].some(
+      (b) => !b.hasAttribute("aria-label") && b.textContent === "Stop",
+    ),
+  ).toBe(false);
 });

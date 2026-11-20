@@ -196,6 +196,14 @@ it("does not offer per-item stop for a provider without the real hook", async ()
   expect(state.command).not.toHaveBeenCalled();
 });
 
+it("does not offer direct stop for a synthetic Workflow child", async () => {
+  await mount();
+  state.commands.clear();
+  await render({ block: { ...block, agentRun: { ...block.agentRun!, workflow: { callId: "workflow-call", phase: "review" } } } });
+  expect(container.querySelector("button")).toBeNull();
+  expect(state.command).not.toHaveBeenCalled();
+});
+
 it("reviews full original computer/name/parent identity and cancels without a write", async () => {
   await mount();
   await press("Stop this subagent");

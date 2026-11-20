@@ -21,7 +21,15 @@ vi.mock("../remote/transport", () => ({
 }));
 vi.mock("./machines", () => ({
   useActiveMachine: () => fixture.machine,
-  useMachines: create(() => ({ hydrated: true, storageError: null, connectionPending: false })),
+  useMachines: create(() => ({
+    hydrated: true,
+    storageError: null,
+    connectionPending: false,
+    accountPending: false,
+    pendingMachineIds: [] as string[],
+  })),
+  isMachinePending: (state: { accountPending: boolean; pendingMachineIds: string[] }, id: string) =>
+    state.accountPending || state.pendingMachineIds.includes(id),
   credentials: { get: vi.fn() },
 }));
 vi.mock("./security", () => ({
@@ -38,6 +46,7 @@ vi.mock("../features/privacy/consent-store", () => ({ consentScope: () => "scope
 vi.mock("../features/workspace/attachment-ownership", () => ({ attachmentReleases: { flush: vi.fn() } }));
 
 import { useSecurity } from "./security";
+import { useMachines } from "./machines";
 import { hostKey, useHostClient, useHostQuery } from "./queries";
 import { PrivateContentAccessProvider } from "../ui/private-access";
 import { useModelCatalog } from "./model-catalog";
@@ -60,8 +69,9 @@ beforeEach(() => {
   enabled = true;
   visibleData = undefined;
   fixture.guard = undefined;
+  useMachines.setState({ connectionPending: false, accountPending: false, pendingMachineIds: [] });
   fixture.request.mockReset().mockResolvedValue(["saved"]);
-  useSecurity.setState({ status: "unlocked", appState: "active", windowFocused: true });
+  useSecurity.setState({ status: "unlocked", appState: "active", windowFocused: true, enabled: false });
   focusManager.setFocused(true);
   onlineManager.setOnline(true);
   cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
@@ -96,7 +106,50 @@ it("keeps cached content but stops hidden-route polling and invalidation refetch
   expect(fixture.request).toHaveBeenCalledTimes(3);
 });
 
-for (const state of [{ appState: "background" }, { appState: "inactive" }, { status: "locked" }] as const) {
+it("keeps this computer's reads and access when another computer is being paired or removed", async () => {
+  await act(async () => { render(); await vi.advanceTimersByTimeAsync(1); });
+  expect(fixture.request).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    useMachines.setState({ connectionPending: true, pendingMachineIds: ["other"] });
+    await vi.advanceTimersByTimeAsync(1000);
+  });
+  expect(() => fixture.guard!()).not.toThrow();
+  expect(visibleData).toEqual(["saved"]);
+  expect(fixture.request).toHaveBeenCalledTimes(2);
+});
+
+it("pauses reads and refuses access for the computer whose own connection is changing", async () => {
+  await act(async () => { render(); await vi.advanceTimersByTimeAsync(1); });
+  await act(async () => {
+    useMachines.setState({ connectionPending: true, pendingMachineIds: ["pc"] });
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  expect(() => fixture.guard!()).toThrow(/connection changed/);
+  expect(fixture.request).toHaveBeenCalledTimes(1);
+});
+
+it("pauses every computer's reads while an account-wide connection change runs", async () => {
+  await act(async () => { render(); await vi.advanceTimersByTimeAsync(1); });
+  await act(async () => {
+    useMachines.setState({ connectionPending: true, accountPending: true });
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  expect(() => fixture.guard!()).toThrow(/connection changed/);
+  expect(fixture.request).toHaveBeenCalledTimes(1);
+});
+
+it("keeps host reads running through a transient iOS inactive state when the lock is off", async () => {
+  await act(async () => { useSecurity.setState({ enabled: false, appState: "inactive" }); render(); await vi.advanceTimersByTimeAsync(1); });
+  expect(fixture.request).toHaveBeenCalledTimes(1);
+  await act(async () => { useSecurity.setState({ appState: "active" }); await vi.advanceTimersByTimeAsync(1); });
+  expect(fixture.request).toHaveBeenCalledTimes(1);
+});
+it("keeps host reads suspended through inactive while the app lock is on", async () => {
+  await act(async () => { useSecurity.setState({ enabled: true, appState: "inactive" }); render(); await vi.advanceTimersByTimeAsync(10_000); });
+  expect(fixture.request).not.toHaveBeenCalled();
+});
+
+for (const state of [{ appState: "background" }, { status: "locked" }] as const) {
   it(`suspends automatic host reads for ${JSON.stringify(state)} and recovers once active`, async () => {
     await act(async () => { useSecurity.setState(state); render(); await vi.advanceTimersByTimeAsync(10_000); });
     expect(fixture.request).not.toHaveBeenCalled();

@@ -8,6 +8,8 @@ export type QueryLike = {
   isSuccess?: boolean;
   isEnabled?: boolean;
   error?: unknown;
+  /** Failed attempts of the current fetch, counted while automatic retries are still running. */
+  failureCount?: number;
   refetch?: () => unknown;
 };
 

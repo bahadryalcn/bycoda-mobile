@@ -13,6 +13,7 @@ vi.mock("expo-router", () => ({ router: { push: () => fixture.events.push("route
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/tokens", () => ({ space: {} }));
+vi.mock("@/ui/machine-bar", () => ({ useMachineStatus: () => ({ phase: "disconnected" }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/i18n", () => ({ useLocale: () => fixture.locale }));
 vi.mock("@/ui/use-list-scroll-memory", () => ({ useFilteredListScrollMemory: () => ({ listProps: {} }) }));

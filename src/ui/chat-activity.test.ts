@@ -82,10 +82,17 @@ vi.mock("panelui-native/components/shimmer", () => ({
     enabled,
     children,
     textStyle,
-  }: PropsWithChildren<{ enabled: boolean; textStyle?: object }>) =>
+    as,
+    style,
+  }: PropsWithChildren<{ enabled: boolean; textStyle?: object; as?: string; style?: object }>) =>
     createElement(
       "span",
-      { "data-animating": String(enabled), "data-text-style": JSON.stringify(textStyle) },
+      {
+        "data-animating": String(enabled),
+        "data-text-style": JSON.stringify(textStyle),
+        "data-shimmer": as ?? "text",
+        "data-frame": JSON.stringify(style),
+      },
       children,
     ),
 }));
@@ -233,6 +240,54 @@ describe("chat continuous animation lifecycle", () => {
     expect(render()).toContain('data-animating="false"');
     fixture.reduced = false;
     expect(render()).toContain('data-animating="true"');
+  });
+});
+
+describe("chat activity one-line contract across running and settled", () => {
+  const command = "pnpm vitest run --config vitest.config.ts src/features/chat/very/long/path/to/file.test.ts";
+  const lines = (html: string) => [...html.matchAll(/data-lines="(\d+)"/g)].map((m) => m[1]);
+
+  it("keeps the running title on one monospace line like the settled one", () => {
+    fixture.active = true;
+    fixture.reduced = false;
+    const running = renderToStaticMarkup(createElement(ChatActivity, { title: command, status: "running", onInspect: vi.fn() }));
+    fixture.reduced = true;
+    const settled = renderToStaticMarkup(createElement(ChatActivity, { title: command, status: "complete", onInspect: vi.fn() }));
+    // Shimmer masks a one-line Body instead of rendering its own unbounded Text.
+    expect(running).toContain('data-shimmer="view"');
+    expect(running).not.toContain('data-shimmer="text"');
+    expect(lines(running)).toEqual(["1"]);
+    expect(running).toContain('data-lines="1" data-mono="true"');
+    expect(lines(settled)).toEqual(["1"]);
+    // Full command and status stay in the accessible name in both states.
+    expect(running).toContain(`aria-label="${command}. Working"`);
+    expect(settled).toContain(`aria-label="${command}. Completed"`);
+  });
+
+  it("gives the running and idle step verb the same flex frame and one line", () => {
+    fixture.active = true;
+    const render = (state: "running" | "done", reduced: boolean) => {
+      fixture.reduced = reduced;
+      return renderToStaticMarkup(
+        createElement(ChatActivity, {
+          title: "Ran 1 command",
+          status: "complete",
+          defaultOpen: true,
+          onInspect: vi.fn(),
+          steps: [{ id: "a", label: "Running tests with a very long verb", code: "pnpm test", state }],
+        }),
+      );
+    };
+    const running = render("running", false);
+    const idle = render("done", true);
+    const frame = '{"flexShrink":0,"maxWidth":"60%"}';
+    expect(running).toContain(`data-frame="${frame.replaceAll('"', "&quot;")}"`);
+    expect(idle).toContain("&quot;flexShrink&quot;:0,&quot;maxWidth&quot;:&quot;60%&quot;");
+    // title + verb + code, each a single line in both states.
+    expect(lines(running)).toEqual(["1", "1", "1"]);
+    expect(lines(idle)).toEqual(["1", "1", "1"]);
+    expect(running).toContain('aria-label="Running tests with a very long verb pnpm test"');
+    expect(idle).toContain('aria-label="Running tests with a very long verb pnpm test"');
   });
 });
 

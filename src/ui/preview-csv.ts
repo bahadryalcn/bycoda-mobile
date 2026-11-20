@@ -56,5 +56,26 @@ export function parseCsvPreview(text: string, delimiter = ","): CsvPreview {
   return { header, rows: rows.slice(0, CSV_PREVIEW_MAX_ROWS), truncated, columns };
 }
 
+/** Columns mounted left and right of the viewport so a fast sideways drag does not show blanks. */
+export const CSV_COLUMN_OVERSCAN = 2;
+
+/** Half-open column range `[start, end)` that intersects the horizontal viewport, widened by `overscan`. */
+export function csvVisibleColumns(
+  offsetX: number,
+  viewportWidth: number,
+  columns: number,
+  columnWidth: number,
+  overscan = CSV_COLUMN_OVERSCAN,
+): { start: number; end: number } {
+  if (columns <= 0 || columnWidth <= 0) return { start: 0, end: 0 };
+  const left = Number.isFinite(offsetX) ? Math.max(0, offsetX) : 0;
+  const width = Number.isFinite(viewportWidth) ? Math.max(0, viewportWidth) : 0;
+  const first = Math.floor(left / columnWidth);
+  const last = Math.ceil((left + width) / columnWidth);
+  const start = Math.min(columns - 1, Math.max(0, first - overscan));
+  const end = Math.min(columns, Math.max(start + 1, last + overscan));
+  return { start, end };
+}
+
 /** Tab-separated files use the same reader with a tab. */
 export const csvDelimiterFor = (name: string) => (/\.tsv(?:$|[?#])/i.test(name) ? "\t" : ",");

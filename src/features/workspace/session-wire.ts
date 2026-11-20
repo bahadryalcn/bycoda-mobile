@@ -1,4 +1,7 @@
-import { applySessionSync } from "../../../../src/features/connections/model/protocol";
+import {
+  applySessionSync,
+  requestPartialSync,
+} from "../../../../src/features/connections/model/protocol";
 import { assertDecodeCurrent, parseJsonParts } from "@/state/cooperative-json";
 import { retainSessionAuthority } from "@/domain/session-authority";
 import type {
@@ -79,20 +82,24 @@ export async function readSession(
 ): Promise<HostSession> {
   const { waitMs, ...requestOptions } = options;
   if (!known) return readTail(client, sessionId, requestOptions);
-  const response = await client.request<SessionSyncResponse>(
-    "sessions.sync",
-    {
+  const send = async (loadedBlockIds?: string[]) =>
+    resolveSync(
+      client,
       sessionId,
-      revision: known.revision,
-      preview: true,
-      ...(waitMs ? { waitMs } : {}),
-      ...(known.history
-        ? { partial: true, loadedBlockIds: known.session.blocks.map((block) => block.id) }
-        : {}),
-    },
-    requestOptions,
-  );
-  const sync = await resolveSync(client, sessionId, response, requestOptions);
+      await client.request<SessionSyncResponse>(
+        "sessions.sync",
+        {
+          sessionId,
+          revision: known.revision,
+          preview: true,
+          ...(waitMs ? { waitMs } : {}),
+          ...(loadedBlockIds ? { partial: true, loadedBlockIds } : {}),
+        },
+        requestOptions,
+      ),
+      requestOptions,
+    );
+  const sync = known.history ? await requestPartialSync(known, send) : await send();
   if (sync.kind !== "unchanged" && sync.value.session.id !== sessionId)
     throw new Error("Transcript identity changed.");
   try {

@@ -517,6 +517,57 @@ describe("mobile host transport", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("classifies identity by the structured Host code, whatever the message says", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "Wrong computer.", code: "HOST_IDENTITY_MISMATCH" }), {
+          status: 400,
+        }),
+      );
+    await expect(
+      new HostTransport(machine, async () => credential, fetcher).request("projects.list"),
+    ).rejects.toMatchObject({ kind: "identity" });
+  });
+
+  it.each([
+    { error: "Room project identity changed during the operation." },
+    { error: "Host identity changed; reconnect.", code: "HOST_CONTROL_RECEIPT_UNCONFIRMED" },
+    { error: "Host identity changed; reconnect.", code: "HOST_IDENTITY_MISMATCH_X" },
+  ])("keeps %j an ordinary Host error", async (body) => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(body), { status: 400 }));
+    await expect(
+      new HostTransport(machine, async () => credential, fetcher).request("projects.list"),
+    ).rejects.toMatchObject({ kind: "host" });
+  });
+
+  it("holds a command whose result was too large to send as an unknown outcome", async () => {
+    const body = {
+      error: "Result too large to send.",
+      code: "HOST_RESULT_TOO_LARGE",
+      delivery: "unknown",
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify(body), { status: 400 }));
+    await expect(
+      new HostTransport(machine, async () => credential, fetcher).request("commands.dispatch"),
+    ).rejects.toMatchObject({ kind: "host", uncertain: true });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an oversized query result an ordinary, certain Host error", async () => {
+    const body = { error: "Result too large to send.", code: "HOST_RESULT_TOO_LARGE" };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify(body), { status: 400 }));
+    await expect(
+      new HostTransport(machine, async () => credential, fetcher).request("projects.list"),
+    ).rejects.toMatchObject({ kind: "host", uncertain: false });
+  });
+
   it("does not retry revoked credentials and stops before sending missing credentials", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
@@ -568,6 +619,32 @@ describe("mobile host transport", () => {
       expect(String(error)).not.toContain(credential);
     }
     expect(echo).toHaveBeenCalledTimes(1);
+  });
+
+  it("decodes a large host body exactly, including escapes and astral characters", async () => {
+    // Above the cooperative decoding threshold, so the body is parsed in slices.
+    const value = {
+      items: Array.from({ length: 6000 }, (_, index) => ({
+        id: index,
+        text: `línea ${index} \u{1F600} "quoted"\n\\ \u0007`,
+      })),
+    };
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => result(value));
+    await expect(
+      new HostTransport(machine, async () => credential, fetcher).request("projects.list"),
+    ).resolves.toEqual(value);
+  });
+
+  it("reports a large malformed host body as an invalid response, not a raw parse error", async () => {
+    const broken = `{"result":"${"x".repeat(300_000)}"`;
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response(broken, { status: 200 }));
+    const error = await new HostTransport(machine, async () => credential, fetcher)
+      .request("projects.list")
+      .catch((reason: unknown) => reason);
+    expect(error).toMatchObject({ kind: "protocol" });
+    expect(String(error)).toContain("The computer returned an invalid host response.");
   });
 
   it("marks a malformed write response uncertain and does not replay it", async () => {

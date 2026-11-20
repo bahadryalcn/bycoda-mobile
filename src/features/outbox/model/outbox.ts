@@ -19,8 +19,14 @@ export type OutboxRow = {
   command: Record<string, unknown>;
   model: Pick<HostSession["session"], "harness" | "model" | "modelSettings" | "providerAccountId">;
   status: "waiting" | "blocked" | "dropped" | "delivered";
+  /** Why a blocked row stopped: it waited past the automatic-replay window and needs an explicit owner decision. */
+  blockedReason?: "expired";
   attempted: boolean;
 };
+/** Older waiting messages are never replayed automatically; they wait for Retry or Edit. */
+export const OUTBOX_AUTO_REPLAY_MS = 24 * 60 * 60 * 1000;
+/** A future `createdAt` (clock corrected backwards) is never expired. */
+export const outboxExpired = (row: Pick<OutboxRow, "createdAt">, now = Date.now()) => now - row.createdAt > OUTBOX_AUTO_REPLAY_MS;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** The existing draft codec preserves extension fields, including across explicit Edit. */
@@ -44,6 +50,7 @@ export function decodeOutbox(raw: string | null): OutboxRow[] {
       !Number.isSafeInteger(row.createdAt) || row.createdAt < 0 ||
       !["send", "queue", "steer"].includes(row.mode) ||
       !["waiting", "blocked", "dropped", "delivered"].includes(row.status) || typeof row.attempted !== "boolean" ||
+      (row.blockedReason !== undefined && row.blockedReason !== "expired") ||
       !row.command || row.command.sessionId !== row.sessionId || row.command.clientMessageId !== row.id ||
       !row.model || typeof row.model.model !== "string" || typeof row.model.harness !== "string")
       throw new Error("Saved outbox could not be read.");
@@ -52,6 +59,17 @@ export function decodeOutbox(raw: string | null): OutboxRow[] {
     if (encodeComposerDraft(row.draft) === null) throw new Error("Saved outbox could not be read.");
   }
   return rows;
+}
+
+/** Only the account and computer that captured a message may move it back into a composer. */
+export const outboxOwned = (row: Pick<OutboxRow, "accountId" | "environmentId">, accountId: string | undefined, environmentId: string | undefined) =>
+  !!accountId && row.accountId === accountId && row.environmentId === environmentId;
+
+/** One visible reason per stopped row, so the footer never lumps separate causes together. */
+export function outboxNoticeKind(row: Pick<OutboxRow, "status" | "blockedReason">, owned: boolean): "foreign" | "unavailable" | "expired" | "blocked" | "waiting" {
+  if (row.status === "dropped") return owned ? "unavailable" : "foreign";
+  if (row.status === "blocked") return row.blockedReason === "expired" ? "expired" : "blocked";
+  return "waiting";
 }
 
 /** Only transport failures enter automatic replay, and only on idempotent Hosts. */

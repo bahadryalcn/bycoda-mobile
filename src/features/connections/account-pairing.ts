@@ -6,7 +6,7 @@ import {
 } from "../../../../src/integrations/account-pair-crypto";
 import { nativeRandomBytes } from "@/remote/native-random";
 import { MobilePairingCodeError } from "../../../../src/integrations/mobile-pairing";
-import { parseMobilePairingCode } from "./pairing-code";
+import { parseDesktopPairingCode } from "./pairing-code";
 import type { MobilePairingCode } from "./pairing-code";
 import type { MobileMachine } from "@/remote/types";
 import type { PairingCopy } from "./connection-types";
@@ -14,6 +14,7 @@ import type { PairingCopy } from "./connection-types";
 export const ACCOUNT_PAIR_POLL_MS = 1_000;
 export const ACCOUNT_PAIR_TIMEOUT_MS = 120_000;
 const MAX_POLL_FAILURES = 5;
+const MAX_POLL_INTERVAL_MS = 5_000;
 
 export type AccountPairingFailureKind =
   | "denied"
@@ -101,11 +102,13 @@ export async function requestAccountPairingCode(
 ): Promise<MobilePairingCode> {
   const { client, computer, signal } = deps;
   const now = deps.now ?? Date.now;
+  const elapsedClock = deps.now ?? (() => performance.now());
   const sleep = deps.sleep ?? abortableSleep;
   const keypair = await generatePairKeypair(deps.randomBytes ?? nativeRandomBytes);
   try {
     if (signal.aborted) throw new AccountPairingError("cancelled");
     let created: { id: string; expiresAt: string };
+    const localDeadline = elapsedClock() + (deps.timeoutMs ?? ACCOUNT_PAIR_TIMEOUT_MS);
     try {
       created = await client.createPairRequest({
         params: { deviceId: computer.deviceId },
@@ -115,11 +118,17 @@ export async function requestAccountPairingCode(
       throw signal.aborted ? new AccountPairingError("cancelled") : requestFailure(error);
     }
     deps.onCode(pairSasCode(created.id, keypair.publicKey));
-    const deadline = now() + (deps.timeoutMs ?? ACCOUNT_PAIR_TIMEOUT_MS);
+    const serviceRemaining = Date.parse(created.expiresAt) - now();
+    // A phone clock ahead of the service can see an already-expired date on a new request.
+    // Keep polling under the local cap in that case so the service can report the actual state.
+    const deadline = serviceRemaining > 0
+      ? Math.min(localDeadline, elapsedClock() + serviceRemaining)
+      : localDeadline;
     let failures = 0;
+    let polls = 0;
     while (true) {
       if (signal.aborted) throw new AccountPairingError("cancelled");
-      if (now() >= deadline) throw new AccountPairingError("expired");
+      if (elapsedClock() >= deadline) throw new AccountPairingError("expired");
       let status: PairRequestStatus | null = null;
       try {
         status = await client.getPairRequest({ params: { id: created.id } });
@@ -139,7 +148,12 @@ export async function requestAccountPairingCode(
           return openCode(status, keypair.privateKey, deps, created.id);
         }
       }
-      await sleep(deps.pollMs ?? ACCOUNT_PAIR_POLL_MS, signal);
+      const interval = deps.pollMs ?? Math.min(
+        MAX_POLL_INTERVAL_MS,
+        ACCOUNT_PAIR_POLL_MS * 2 ** Math.min(3, Math.max(0, polls - 2)),
+      );
+      polls++;
+      await sleep(Math.min(interval, Math.max(0, deadline - elapsedClock())), signal);
     }
   } finally {
     keypair.privateKey.fill(0);
@@ -158,7 +172,7 @@ function openCode(
       privateKey,
       accountPairAad(requestId, deps.phoneDeviceId, deps.computer),
     );
-    const code = parseMobilePairingCode(plain, (deps.now ?? Date.now)());
+    const code = parseDesktopPairingCode(plain);
     if (code.environmentId !== deps.computer.environmentId) throw new AccountPairingError("invalid");
     return code;
   } catch (error) {

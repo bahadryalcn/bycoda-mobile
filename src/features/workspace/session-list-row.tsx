@@ -1,4 +1,5 @@
 import { sessionIsSnoozed } from "./session-attention-model";
+import { useClockLabel } from "./session-clock";
 import { stamp as dateStamp } from "../management/shared/format";
 import { useSessionDraftPresence } from "./use-session-draft-presence";
 import { memo, useEffect } from "react";
@@ -21,7 +22,7 @@ import type { HostProject } from "@/domain/types";
 import type { HostSessionSummary } from "./wire";
 import { relativeTime, sessionStatus } from "./shared";
 import { SessionRowActions } from "./session-row-actions";
-import { sessionActivityAt } from "./session-collection";
+import { sessionActivityAt } from "./session-directory";
 import { sessionDisplayTitle } from "./session-title";
 import { providerName } from "./provider-choices";
 import { sessionModelLabel } from "./catalog";
@@ -84,6 +85,9 @@ export const SessionListRow = memo(function SessionListRow({
   const kind = sessionRowKind(session, done);
   const status = sessionStatus({ ...session, pinned: false }, copy, colors, done);
   const badge = sessionRowBadge(kind, hasDraft);
+  const activityAt = sessionActivityAt(session);
+  // Only this row re-renders when its own label changes; the shared beat never touches siblings.
+  const age = useClockLabel((now) => relativeTime(activityAt, copy, now));
   const stamp = badge ? (
     <SessionRowStatus
       label={kind === "idle" ? draftLabel : status.label}
@@ -92,7 +96,7 @@ export const SessionListRow = memo(function SessionListRow({
     />
   ) : (
     <Body selectable={false} muted style={uiStyles.caption}>
-      {relativeTime(sessionActivityAt(session), copy)}
+      {age}
     </Body>
   );
   const optionsLabel = copy("Oturum seçenekleri", "Session options");
@@ -122,7 +126,7 @@ export const SessionListRow = memo(function SessionListRow({
     ancestors?.join(" / "),
     session.model ? sessionModelLabel({ harness: session.harness, model: session.model }) : providerName(session.harness),
     session.branch
-      ? `${worktree ? copy("Ayrı çalışma klasörü", "Worktree") : copy("Dal", "Branch")}: ${session.branch}`
+      ? `${worktree ? copy("Çalışma ağacı", "Worktree") : copy("Dal", "Branch")}: ${session.branch}`
       : undefined,
     workItemLabel,
   ]

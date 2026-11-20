@@ -1,0 +1,28 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "Özel ağınızdaki Bycoda bilgisayarınıza bağlanın.",
+    "NSMicrophoneUsageDescription": "Bycoda asistanınızla konuşun. Ses, bağlı bilgisayarınızda işlenir.",
+    "NSCameraUsageDescription": "Bycoda'nın bilgisayarınızdaki eşleştirme QR kodunu taramasına izin verin.",
+    "NSFaceIDUsageDescription": "Bycoda bilgisayarlarınıza güvenle erişmek için Face ID kullanın.",
+    "NSPhotoLibraryUsageDescription": "Mesajlarınıza fotoğraf eklemek için fotoğraflarınıza erişmesine izin verin.",
+    "NSPhotoLibraryAddUsageDescription": "Görselleri fotoğraflarınıza kaydetmek için izin verin.",
+    "Localizable.strings": {
+      "Active sessions": "Aktif oturumlar",
+      "Needs attention": "Dikkat gerekiyor",
+      "Usage limits": "Kullanım limitleri",
+      "Session activity": "Oturum etkinliği",
+      "Running and waiting agent sessions.": "Çalışan ve bekleyen oturumlar.",
+      "Sessions waiting for you or failed.": "Sizi bekleyen veya başarısız olan oturumlar.",
+      "Codex and Claude session and weekly limit usage.": "Codex ve Claude için oturum ve haftalık limit kullanımı.",
+      "Live status of running sessions.": "Çalışan oturumların canlı durumu."
+    }
+  },
+  "android": {
+    "active_sessions_display_name": "Aktif oturumlar",
+    "active_sessions_description": "Çalışan ve bekleyen oturumlar.",
+    "needs_attention_display_name": "Dikkat gerekiyor",
+    "needs_attention_description": "Sizi bekleyen veya başarısız olan oturumlar.",
+    "usage_limits_display_name": "Kullanım limitleri",
+    "usage_limits_description": "Codex ve Claude için oturum ve haftalık limit kullanımı."
+  }
+}

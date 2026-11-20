@@ -1,4 +1,4 @@
-import { parseMobilePairingCode, PairingFailure } from "./pairing-code";
+import { parseDesktopPairingCode, PairingFailure } from "./pairing-code";
 import { utf8Bytes } from "@/remote/transport-validation";
 import { nativeHostFetch } from "@/remote/native-fetch";
 import { encryptedLanFetch } from "@/remote/lan-fetch";
@@ -51,7 +51,7 @@ export async function redeemMobilePairingCode(
   deviceName: string,
   options: PairingRedeemOptions,
 ): Promise<PairingRedeemResult> {
-  const code = parseMobilePairingCode(JSON.stringify(input), options.now?.() ?? Date.now());
+  const code = parseDesktopPairingCode(JSON.stringify(input));
   if (!validKey(claimId) || !deviceName.trim() || deviceName.length > 120)
     throw new PairingFailure("invalid-response");
   const controller = new AbortController();

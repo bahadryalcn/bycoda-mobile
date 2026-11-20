@@ -1,14 +1,13 @@
 import { agentPresentation } from "../shared/agent-presentation";
 import { RecordCard } from "@/ui/record-card";
-import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
-import Play from "lucide-react-native/icons/play";
+import Power from "lucide-react-native/icons/power";
 import Pause from "lucide-react-native/icons/pause";
 import Pencil from "lucide-react-native/icons/pencil";
 import History from "lucide-react-native/icons/history";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import Trash2 from "lucide-react-native/icons/trash-2";
-import { ActionMenu, Body, ErrorNotice, IconButton, MutationState } from "@/ui/primitives";
+import { ActionMenu, Body, Button, ErrorNotice, MutationState } from "@/ui/primitives";
 import { HoursOverview } from "@/ui/week-hours";
 import { WEEK_ORDER, weekRunBlocks } from "@/ui/week-hours-model";
 import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
@@ -18,7 +17,7 @@ import { useActiveMachine } from "@/state/machines";
 import { Status } from "../shared/status";
 import { AutomationHistory } from "./automation-history";
 import type { AutomationCardProps } from "./types";
-import { scheduleSentence } from "./schedule-model";
+import { automationEventLabel, scheduleSentence } from "./schedule-model";
 import { savedAutomationId } from "./automation-feedback";
 
 export function AutomationCard({
@@ -32,7 +31,6 @@ export function AutomationCard({
   run,
   remove,
 }: AutomationCardProps) {
-  const { colors } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const glyph = useMenuGlyph();
@@ -49,7 +47,7 @@ export function AutomationCard({
   // Edit, history, last session and delete are secondary; they live in the overflow menu.
   const menu = [
     {
-      key: "toggle", icon: glyph(item.enabled ? Pause : Play),
+      key: "toggle", icon: glyph(item.enabled ? Pause : Power),
       label: item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable"),
       disabled: busy || editorOpen,
       onPress: () =>
@@ -107,15 +105,14 @@ export function AutomationCard({
       metadata={joinMeta([
         item.template?.kind === "project-scan" ? copy("Proje taraması", "Project scan") : undefined,
         !item.projectId ? "Room" : undefined,
-        item.trigger?.kind === "continuous" ? copy("Sürekli · en az {p0} dk", "Continuous · minimum {p0} min", { p0: item.trigger.minimumGapMinutes }) : item.trigger?.kind === "event" ? item.trigger.event : scheduleSentence(item, copy),
+        item.trigger?.kind === "continuous" ? copy("Sürekli · en az {p0} dk", "Continuous · minimum {p0} min", { p0: item.trigger.minimumGapMinutes }) : item.trigger?.kind === "event" ? automationEventLabel(item.trigger.event, copy) : scheduleSentence(item, copy),
         item.enabled && !!relative(item.nextRunAt) && copy("Sonraki {p0}", "Next {p0}", { p0: relative(item.nextRunAt) }),
         !!relative(item.lastRunAt) && copy("Son çalışma {p0}", "Last run {p0}", { p0: relative(item.lastRunAt) }),
       ])}
       preview={item.prompt ? <Body muted numberOfLines={2}>{item.prompt}</Body> : null}
+      footer={<Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running}
+        disabled={busy || editorOpen} onPress={runNow} />}
       menu={<RecordTrailing>
-        <IconButton label={copy("Şimdi çalıştır", "Run now")} busy={running} disabled={busy} onPress={runNow}>
-          <Play size={18} color={colors.accent} />
-        </IconButton>
         <ActionMenu label={copy("Otomasyon işlemleri", "Automation actions")}
           busy={(save.isPending && (save.variables?.automation as { id?: string } | undefined)?.id === item.id) || (remove.isPending && remove.variables?.automationId === item.id)} actions={menu} />
       </RecordTrailing>}

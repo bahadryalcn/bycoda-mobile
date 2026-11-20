@@ -39,6 +39,14 @@ export function decodeQuestionAttachments(raw: string | null): Saved {
 export const questionDraftFiles = (entry: QuestionAttachmentDraft): StagedAttachment[] =>
   Object.values(entry.draft.attachments ?? {}).flat();
 
+/** Trailing delay for free-text edits; the in-memory entry is published on every keystroke regardless. */
+export const QUESTION_DRAFT_DEBOUNCE_MS = 400;
+type Batch = { promise: Promise<void>; resolve(): void; reject(error: unknown): void; timer?: ReturnType<typeof setTimeout> };
+function deferred(): Batch {
+  let resolve!: () => void, reject!: (error: unknown) => void;
+  const promise = new Promise<void>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
 const stores = new WeakMap<object, Map<string, QuestionAttachmentDraftStore>>();
 /** Custody survives navigation and failed disk writes. It is not a disposable text draft:
  * queued/unknown answers remain held even when ordinary saved drafts are cleared. */
@@ -50,6 +58,7 @@ export class QuestionAttachmentDraftStore {
   private listeners = new Set<() => void>();
   private revision = 0;
   private flights = new Set<string>();
+  private batch?: Batch;
   private authoritative?: { revision: number; identities: ReadonlySet<string> };
   constructor(private readonly storage: Storage, readonly key: string) {
     this.owner = createDraftStorageOwner(storage, key);
@@ -80,7 +89,31 @@ export class QuestionAttachmentDraftStore {
   }
   /** Publish memory before disk: failure retains the only available copy and blocks dispatch. */
   save(identity: string, entry: QuestionAttachmentDraft): Promise<void> {
+    this.publish(identity, entry);
+    return this.flush();
+  }
+  /** Typing path: memory is exact and immediate, disk is coalesced to one trailing write. Every
+   * coalesced caller shares the batch result, so a failed write still reaches each caller's handler. */
+  saveLater(identity: string, entry: QuestionAttachmentDraft, delay = QUESTION_DRAFT_DEBOUNCE_MS): Promise<void> {
+    this.publish(identity, entry);
+    const batch = this.batch ??= deferred();
+    clearTimeout(batch.timer);
+    batch.timer = setTimeout(() => { void this.flush().catch(() => {}); }, delay);
+    return batch.promise;
+  }
+  /** Writes every unwritten occurrence now (submit, blur, unmount, background). A failed write keeps
+   * the entries dirty, so the next flush retries and nothing is dropped. */
+  flush(): Promise<void> {
+    const batch = this.batch; this.batch = undefined; clearTimeout(batch?.timer);
+    if (!batch && !this.dirty.size) return Promise.resolve();
+    const written = this.persist();
+    if (batch) written.then(batch.resolve, batch.reject);
+    return written;
+  }
+  private publish(identity: string, entry: QuestionAttachmentDraft) {
     this.entries = { ...this.entries, [identity]: entry }; this.dirty.add(identity); this.notify();
+  }
+  private persist(): Promise<void> {
     return this.owner.run(async () => {
       const saved = decodeQuestionAttachments(await this.storage.getItem(this.key));
       const writing = new Map([...this.dirty].map(id => [id, this.entries[id]]));
@@ -127,6 +160,10 @@ export function questionAttachmentStore(storage: Storage, machineId: string, ses
   let store = keys.get(key);
   if (!store) { store = new QuestionAttachmentDraftStore(storage, key); keys.set(key, store); }
   return store;
+}
+/** Background/lock: write every session's pending text before the process can be suspended or killed. */
+export function flushQuestionAttachmentDrafts(storage: Storage): Promise<unknown> {
+  return Promise.allSettled([...(stores.get(storage)?.values() ?? [])].map(store => store.flush()));
 }
 export function retainedQuestionFiles(storage: Storage, machineId: string, sessionId: string): StagedAttachment[] {
   return stores.get(storage)?.get(questionAttachmentKey(machineId, sessionId))?.files() ?? [];

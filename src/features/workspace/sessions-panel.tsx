@@ -1,5 +1,5 @@
 import { sessionIsSnoozed } from "./session-attention-model";
-import { useElapsedNow } from "./use-elapsed-now";
+import { useSnoozeNow } from "./session-clock";
 import { useHostReadActive } from "@/state/queries";
 import { HierarchyFrame, HierarchyWidthProvider } from "@/ui/hierarchy-frame";
 import { useMobileTheme } from "@/ui/theme";
@@ -15,8 +15,7 @@ import { useFormDraft } from "@/state/form-draft";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostClient, useHostQuery } from "@/state/queries";
 import { useCreateSession } from "./use-create-session";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useScreenChrome } from "@/ui/layout";
+import { useScreenContentInsets } from "@/ui/screen-content-insets";
 import { Body, FormActions, Sheet, SearchField, ScreenList, QueryState } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { PermissionField } from "./agent-option-icons";
@@ -48,8 +47,7 @@ export function ProjectSessions({
   const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
-  const insets = useSafeAreaInsets();
-  const chrome = useScreenChrome();
+  const insets = useScreenContentInsets();
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -119,7 +117,7 @@ export function ProjectSessions({
     },
   );
   const { selectedProvider, selectedAccountId, models, selectedModel, bundled } = selection;
-  const attentionNow = useElapsedNow(useHostReadActive() && (sessions.data ?? []).some(session => !!session.snoozedUntil));
+  const attentionNow = useSnoozeNow(useHostReadActive(), (sessions.data ?? []).map(session => session.snoozedUntil));
   const visible = filterSessionDirectory(
     (sessions.data ?? []).filter(
       (session) => Boolean(session.archived) === archived && listedProjectSession(session),
@@ -196,7 +194,7 @@ export function ProjectSessions({
         data={rows}
         keyExtractor={(row) => row.key}
         query={sessions}
-        contentContainerStyle={{ gap: 0, paddingBottom: chrome.bottomSafeArea ? insets.bottom : 0 }}
+        contentContainerStyle={{ gap: 0, paddingBottom: insets.bottom }}
         ListEmptyComponent={ownsRegion ? listState : undefined}
         ListHeaderComponent={
           <View style={[uiStyles.stack, { gap: space.sm }]}>

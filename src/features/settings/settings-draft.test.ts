@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acknowledgeSettingsDraft, readHostSettingsState, settingsFields, validSettingsFields } from "./settings-draft";
+import { acknowledgeSettingsDraft, confirmsEditedLimits, editedLimits, readHostSettingsState, settingsFields, validSettingsFields } from "./settings-draft";
 
 describe("host settings draft snapshots", () => {
   it("derives a clean form from the current server values", () => {
@@ -21,6 +21,15 @@ describe("host settings draft snapshots", () => {
     expect(acknowledgeSettingsDraft(edited, submitted)).toBe(edited);
     const editedBack = { override: { ...submitted } };
     expect(acknowledgeSettingsDraft(editedBack, submitted)).toBe(editedBack);
+  });
+  it("carries only the edited limits and confirms only those (#1266)", () => {
+    expect(editedLimits({ maxRunning: "3" })).toEqual({ maxRunningTasks: 3 });
+    expect(editedLimits({ dailyMinutes: "0" })).toEqual({ dailyAgentMinutes: 0 });
+    expect(editedLimits({ maxRunning: "3", dailyMinutes: "90" })).toEqual({ maxRunningTasks: 3, dailyAgentMinutes: 90 });
+    const result = { maxRunningTasks: 3, dailyAgentMinutes: 300 };
+    expect(confirmsEditedLimits(result, { maxRunningTasks: 3 })).toBe(true);
+    expect(confirmsEditedLimits(result, { maxRunningTasks: 4 })).toBe(false);
+    expect(confirmsEditedLimits(result, { maxRunningTasks: 3, dailyAgentMinutes: 90 })).toBe(false);
   });
   it("validates task concurrency and whole nonnegative minute limits", () => {
     for (const count of [1, 9, 99, Number.MAX_SAFE_INTEGER])

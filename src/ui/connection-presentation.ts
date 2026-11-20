@@ -8,6 +8,9 @@ export type ConnectionPhase =
   | "checking"
   | "connected"
   | "disconnected";
+/** How long a successful RPC keeps the link "connected" before it must be re-proven. */
+export const CONNECTED_WINDOW_MS = 45_000;
+
 /** A saved computer is not evidence of a live connection. Recent successful RPC is. */
 export function connectionPhase(input: {
   paired: boolean;
@@ -20,14 +23,33 @@ export function connectionPhase(input: {
   successAt: number;
   errorAt: number;
   now: number;
+  /** A health probe has been in flight past the stall limit; the link is unproven until it answers. */
+  probeStalled?: boolean;
+  /**
+   * Live Host socket state of this computer. When it names a live attempt, outcome or refusal it
+   * decides the phase; any other value (or none: legacy HTTP, web, no lease) falls back to the
+   * describe poll below.
+   */
+  runtime?: string | null;
 }): ConnectionPhase {
   if (!input.paired) return "unpaired";
   if (input.networkConnected === false) return "offline";
   if (!input.unlocked) return "locked";
   if (input.storageError) return "storage";
   if (!input.permitted) return "permission";
+  switch (input.runtime) {
+    case "ready":
+      return "connected";
+    case "connecting":
+      return "checking";
+    case "backoff":
+      return "disconnected";
+    case "blocked":
+      return input.accessDenied && input.errorAt >= input.successAt ? "access" : "disconnected";
+  }
   if (input.accessDenied && input.errorAt && input.errorAt >= input.successAt) return "access";
   if (input.errorAt && input.errorAt >= input.successAt) return "disconnected";
-  if (input.successAt > 0 && input.now - input.successAt < 45_000) return "connected";
+  if (input.probeStalled) return "checking";
+  if (input.successAt > 0 && input.now - input.successAt < CONNECTED_WINDOW_MS) return "connected";
   return "checking";
 }

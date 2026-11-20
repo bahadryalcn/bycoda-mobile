@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { updateRow, updatesSupported, type UpdatePhase } from "./update-row";
+import { updateFailureMessage, updateRow, updatesSupported, type UpdatePhase } from "./update-row";
 
 const en = (_tr: string, text: string) => text;
 
@@ -21,6 +21,21 @@ describe("updateRow", () => {
     expect(action("current")).toBe("check");
     expect(action("available")).toBe("download");
     expect(action("ready")).toBe("restart");
+  });
+  it("retries the exact step that failed instead of re-checking", () => {
+    expect(updateRow("error", en, "restart")).toMatchObject({ action: "restart", label: "Try restarting again", detail: "The update is downloaded." });
+    expect(updateRow("error", en, "download")).toMatchObject({ action: "download", label: "Try again" });
+    expect(updateRow("error", en, "check")).toMatchObject({ action: "check", label: "Try again" });
+  });
+  it("never claims the app is current after a failed restart", () => {
+    expect(updateRow("error", en, "restart").detail).not.toBe("You are up to date.");
+  });
+  it("explains each failed step in localized, actionable copy", () => {
+    const tr = (text: string) => text;
+    expect(updateFailureMessage("restart", en)).toContain("downloaded update is kept");
+    expect(updateFailureMessage("download", en)).toContain("could not be downloaded");
+    expect(updateFailureMessage("check", en)).toContain("Could not check");
+    expect(updateFailureMessage("restart", tr)).toContain("yeniden başlatmayı tekrar dene");
   });
   it("is busy and inert while working", () => {
     for (const phase of ["checking", "downloading"] as const)

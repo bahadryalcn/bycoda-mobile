@@ -46,14 +46,16 @@ export function companionVoicePlayback(native: NativeVoiceCompanion) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         file = new File(Paths.cache, `bycoda-voice-${playbackId}.wav`);
-        file.write(wav);
+        // write() is asynchronous in expo-file-system 58; native playback must open a complete file.
+        file.writeSync(wav);
         const uri = file.uri;
         await new Promise<void>((resolve, reject) => {
           const finish = (error?: string) => { if (error) reject(new Error(error)); else resolve(); };
           listener = native.addListener("onVoiceEvent", event => {
             if (event.sessionId !== id) return;
             if (event.type === "playback" && event.playbackId === playbackId) finish(event.error);
-            else if (event.type === "ended" && event.reason !== "limit" && event.reason !== "muted") finish(event.error ?? "Voice session stopped.");
+            // A capture-scoped end (limit, mute, focus loss) belongs to the microphone, not to this playback.
+            else if (event.type === "ended" && !event.captureId && event.reason !== "limit" && event.reason !== "muted") finish(event.error ?? "Voice session stopped.");
           });
           stop = () => { native.stopPlayback(id, playbackId); resolve(); };
           timer = setTimeout(() => { native.stopPlayback(id, playbackId); finish("Speech playback timed out."); }, 120000);

@@ -12,7 +12,10 @@ import type {
   TranscriptPage,
 } from "../types";
 import { HostTransport, RemoteHostError } from "../transport";
-import { applySessionSync } from "../../../../src/features/connections/model/protocol";
+import {
+  applySessionSync,
+  requestPartialSync,
+} from "../../../../src/features/connections/model/protocol";
 import { resolveSessionSync } from "../session-sync";
 import { retainSessionAuthority } from "@/domain/session-authority";
 
@@ -56,19 +59,23 @@ export function createSessionsApi(transport: HostTransport, request: HostRequest
         options?: RemoteRequestOptions,
         waitMs = 0,
       ): Promise<HostSession> => {
-        const response = await request<SessionSyncResponse>(
-          "sessions.sync",
-          {
+        const send = async (loadedBlockIds?: string[]) =>
+          resolveSessionSync(
+            transport,
             sessionId,
-            revision: known?.revision,
-            waitMs,
-            ...(known?.history
-              ? { partial: true, loadedBlockIds: known.session.blocks.map((block) => block.id) }
-              : {}),
-          },
-          options,
-        );
-        const sync = await resolveSessionSync(transport, sessionId, response, options);
+            await request<SessionSyncResponse>(
+              "sessions.sync",
+              {
+                sessionId,
+                revision: known?.revision,
+                waitMs,
+                ...(loadedBlockIds ? { partial: true, loadedBlockIds } : {}),
+              },
+              options,
+            ),
+            options,
+          );
+        const sync = known?.history ? await requestPartialSync(known, send) : await send();
         try {
           return retainSessionAuthority(known, applySessionSync(known, sync));
         } catch {

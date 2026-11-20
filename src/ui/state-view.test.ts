@@ -1,12 +1,10 @@
 import { Children, isValidElement, type ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ View: "View" }));
-vi.mock("react-native-reanimated", () => ({ default: { View: "AnimatedView", createAnimatedComponent: (component: unknown) => component } }));
 vi.mock("panelui-native/components/empty-state", () => ({
   EmptyState: Object.assign(function EmptyState() { return null; }, { Header: "EmptyStateHeader", Content: "EmptyStateContent" }),
 }));
 vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: { info: {}, success: {}, warning: {}, danger: {} }, uiStyles: { title: {}, grow: {}, stateColumn: { maxWidth: 320 } } }) }));
-vi.mock("./motion", () => ({ reveal: "reveal" }));
 vi.mock("./typography", () => ({ Body: "Body", Heading: "Heading" }));
 vi.mock("./buttons", () => ({ Button: "Button" }));
 vi.mock("./illustrations", () => ({ Illustration: "Illustration" }));
@@ -35,9 +33,8 @@ it("centers a full-area state with art, header title and a primary action", () =
   expect(find(tree, "Heading")).toHaveLength(1);
   expect(find(tree, "ActionButton")[0].props).toMatchObject({ action: { label: "Retry" }, tone: "primary" });
 });
-it("uses 112 art when compact with an illustration and an icon row without one", () => {
-  expect(find(StateView({ illustration: "error", title: "x", compact: true }), "Illustration")[0].props.size).toBe(112);
-  const inline = StateView({ title: "x", compact: true });
+it("uses the same compact icon row even when the caller supplies full-page art", () => {
+  const inline = StateView({ illustration: "error", title: "x", compact: true, tone: "danger" });
   expect(find(inline, "Illustration")).toHaveLength(0);
   expect(find(inline, "Icon")).toHaveLength(1);
 });

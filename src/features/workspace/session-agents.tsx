@@ -6,6 +6,7 @@ import { useActiveMachine } from "@/state/machines";
 import type { HostSessionSummary } from "@/domain/types";
 import type { DeviceSummary } from "../tools/types";
 import { childSessions } from "./subagent-sessions-model";
+import { childListInterval, readChildSummaries } from "./session-children-read";
 import { listAgents } from "./agents-model";
 import { AgentsSheet } from "./agents-sheet";
 import { SessionActivityBar } from "./session-activity-bar";
@@ -49,12 +50,16 @@ export function SessionAgents({ session, children: operations, ...props }: Props
     return () => clearTimeout(timer);
   }, [live]);
   const projectId = session?.projectId;
-  const hasAgents = useMemo(() => listAgents(blocks).length > 0, [blocks]);
-  // Child sessions may be created without an inline agent block. Discover them while working,
-  // sharing the sessions-panel cache and its access-aware foreground-only query owner.
-  const siblings = useHostQuery<HostSessionSummary[]>(["sessions", projectId], "sessions.list", { projectId }, {
+  // A delegate's result turn is the only trace a bycoda-delegated child leaves in the transcript; without
+  // it a reopened finished session never read its children and the agents strip disappeared.
+  const hasAgents = useMemo(() => listAgents(blocks).length > 0 || !!blocks?.some((block) => block.author?.kind === "delegation"), [blocks]);
+  // Child sessions may be created without an inline agent block. Discover them while working with a
+  // read scoped to this parent (access-aware, foreground-only query owner) rather than the project
+  // list. The key stays under ["sessions", projectId], so session writes still invalidate it.
+  const siblings = useHostQuery<HostSessionSummary[]>(["sessions", projectId, "children", scope.sessionId], "sessions.list", { projectId, parentSessionId: scope.sessionId }, {
     enabled: !!projectId && (live || sheet === "agents" || hasAgents),
-    interval: live ? 4000 : undefined,
+    interval: live ? (rows) => childListInterval(rows, scope.sessionId) : undefined,
+    queryFn: (client, signal) => readChildSummaries(client, projectId!, scope.sessionId, signal),
   });
   const children = useMemo(() => childSessions(siblings.data, scope.sessionId), [siblings.data, scope.sessionId]);
   const activity = deriveSessionActivity({

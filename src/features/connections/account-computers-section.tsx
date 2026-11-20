@@ -24,7 +24,6 @@ import {
   Sheet,
   Stack,
   StateView,
-  Skeleton,
 } from "@/ui/primitives";
 import { errorMessage } from "@/ui/error-message";
 import type { Computer } from "../account/contracts";
@@ -62,7 +61,9 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
       {others}
     </Stack>
   ) : null;
-  if (state.kind === "hidden" || (state.kind === "ready" && !state.computers.length)) return <>{others}</>;
+  // Most first-run accounts have no computers yet: a loading skeleton that then collapses would shift
+  // the connect actions under the owner's finger, so the list appears only once it has rows.
+  if (state.kind === "hidden" || state.kind === "loading" || (state.kind === "ready" && !state.computers.length)) return <>{others}</>;
   if (state.kind === "signedOut")
     return (
       <>
@@ -84,7 +85,6 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
   return (
     <>
       <Section title={copy("Bilgisayarların", "Your computers")}>
-        {state.kind === "loading" ? <Skeleton rows={2} /> : null}
         {state.kind === "error" ? (
           <StateView
             compact
@@ -174,7 +174,7 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
             )}
             {flow.phase === "error" ? (
               <FormActions
-                submitLabel={copy("Yeniden dene", "Try again")}
+                submitLabel={copy("Yeniden dene", "Retry")}
                 onSubmit={() => void pairing.start(flow.computer)}
                 cancelLabel={copy("Kapat", "Close")}
                 onCancel={pairing.cancel}

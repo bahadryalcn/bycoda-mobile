@@ -18,15 +18,20 @@ export function useApprovals(interval = 3000) {
   return { query, client, supported, approvals };
 }
 
-/** A clock that ticks once a second so deadlines count down. */
-export function useNow(active = true) {
+/** Ticks only while a pending approval has time left. */
+export function useNow(active: boolean, deadline: number) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!active) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [active]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      const current = Date.now();
+      setNow(current);
+      if (current < deadline) timer = setTimeout(tick, Math.min(1000, deadline - current));
+    };
+    tick();
+    return () => clearTimeout(timer);
+  }, [active, deadline]);
   return now;
 }
 

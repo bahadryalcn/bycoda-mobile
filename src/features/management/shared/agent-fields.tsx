@@ -13,6 +13,7 @@ import type { AgentFieldsProps } from "./types";
 import { providerSelectionOption } from "@/ui/provider-identity";
 import { selectAgentModel, selectAgentProvider } from "./agent-model-selection";
 import { AgentModelPicker } from "./agent-model-picker";
+import { validAgentRunMinutes } from "../agent-model";
 
 export function AgentFields({ value, onChange, projectId, disabled, onValidityChange, showRunLimit = true }: AgentFieldsProps) {
   const copy = useCopy();
@@ -21,7 +22,7 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
   const [minutes, setMinutes] = useState(String(value.maxRunMinutes));
 
   const [choosingModel, setChoosingModel] = useState(false);
-  const minutesValid = /^\d+$/.test(minutes) && Number(minutes) <= 10080;
+  const minutesValid = validAgentRunMinutes(minutes);
   const models = useHostQuery<HostModelCatalog>(
     ["models", projectId],
     "models.list",
@@ -98,7 +99,7 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
           value={minutes}
           onChangeText={(text) => {
             setMinutes(text);
-            const valid = /^\d+$/.test(text) && Number(text) <= 10080;
+            const valid = validAgentRunMinutes(text);
             onValidityChange?.(valid);
             if (valid) onChange({ ...value, maxRunMinutes: Number(text) });
           }}

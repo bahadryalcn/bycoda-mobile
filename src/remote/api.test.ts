@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRemoteApi, resolveSessionSync } from "./api";
 import { HostTransport } from "./transport";
-import type { HostSession, MobileMachine, SocialDraft } from "./types";
+import type { HostSession, MobileMachine } from "./types";
 
 const machine: MobileMachine = {
   id: "pc-1",
@@ -106,75 +106,6 @@ describe("typed remote API", () => {
       }),
     ).rejects.toMatchObject({ kind: "auth" });
     expect(calls).toHaveLength(1);
-  });
-
-  it("reads account policy before drafting and honors Unicode character limits", async () => {
-    const { api, calls } = client((_method, params) =>
-      params.action === "policy.get"
-        ? { platform: "x", effective: { maxCommentCharacters: 1 } }
-        : { id: "draft-1", text: "🙂" },
-    );
-    await expect(
-      api.social.draftReply(
-        { accountId: "account-1", projectId: "project-1", threadId: "thread-1", text: "🙂" },
-        "comment",
-      ),
-    ).resolves.toMatchObject({ id: "draft-1" });
-    expect(calls.map((call) => call.params.action)).toEqual(["policy.get", "replies.draft"]);
-    await expect(
-      api.social.draftReply(
-        { accountId: "account-1", projectId: "project-1", threadId: "thread-1", text: "🙂🙂" },
-        "comment",
-      ),
-    ).rejects.toThrow("character limit");
-    expect(calls.map((call) => call.params.action)).toEqual([
-      "policy.get",
-      "replies.draft",
-      "policy.get",
-    ]);
-  });
-
-  it("keeps approval separate from sending and requires an approved draft to send", async () => {
-    const draft = {
-      id: "draft-1",
-      accountId: "account-1",
-      projectId: "project-1",
-      kind: "reply",
-      text: "hello",
-    } as SocialDraft;
-    const { api, calls } = client((_method, params) =>
-      params.action === "drafts.approve" ? { ...draft, approvedAt: 1 } : { id: "job-1" },
-    );
-    expect(() => api.social.sendApprovedDraft(draft, "operation-1")).toThrow("approve");
-    expect(calls).toHaveLength(0);
-    const approved = await api.social.approveDraft(draft.id);
-    expect(calls.map((call) => call.params.action)).toEqual(["drafts.approve"]);
-    await api.social.sendApprovedDraft(approved, "operation-1");
-    expect(calls.map((call) => call.params.action)).toEqual(["drafts.approve", "replies.send"]);
-    expect(calls[1].params.requestId).toBe("operation-1");
-  });
-
-  it("sends the opening draft snapshot after checking policy without authorizing delivery", async () => {
-    const draft = {
-      id: "draft-1",
-      accountId: "account-1",
-      kind: "reply",
-      text: "Original",
-    } as SocialDraft;
-    const { api, calls } = client((_method, params) => {
-      if (params.action === "policy.get") {
-        draft.text = "Changed while policy loads";
-        return { effective: { maxCommentCharacters: 100 } };
-      }
-      return { ...draft, text: "Revised" };
-    });
-    await api.social.updateDraft(draft, "Revised", []);
-    expect(calls.map((call) => call.params.action)).toEqual(["policy.get", "drafts.update"]);
-    expect(calls[1].params.input).toMatchObject({
-      id: "draft-1",
-      text: "Revised",
-      expectedDraft: { text: "Original" },
-    });
   });
 
   it("preserves file optimistic concurrency and nested PR-watch contracts", async () => {

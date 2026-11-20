@@ -7,6 +7,7 @@ import {
   MutationState,
   ErrorNotice,
   NavigationGroup,
+  NumberField,
   Stack,
   SelectField,
   ToggleField,
@@ -16,6 +17,7 @@ import { useSheetGuard } from "@/ui/sheet-guard";
 import { useCopy } from "@/ui/copy";
 import { useFormDraft } from "@/state/form-draft";
 import { taskRunLimitForSave } from "../task-actions";
+import { validAgentRunMinutes } from "../agent-model";
 import { AgentFields } from "../shared/agent-fields";
 import { useEffectiveAgent } from "../shared/agent";
 import type { TaskDraft, TaskEditorProps } from "./types";
@@ -31,7 +33,7 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
   );
   const [agentValid, setAgentValid] = useState(true);
   const [minutes, setMinutes] = useState(String(initial.maxRunMinutes));
-  const minutesValid = /^\d+$/.test(minutes) && Number(minutes) <= 10080;
+  const minutesValid = validAgentRunMinutes(minutes);
   const machine = useActiveMachine();
   const projects = useProjectList();
   const client = useHostClient();
@@ -94,7 +96,7 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
         {machine?.capabilities?.includes("tasks.workspaces") && (
           <>
             <Field
-              label={copy("Çalışma klasörü (isteğe bağlı)", "Checkout folder (optional)")}
+              label={copy("Çalışma klasörü (isteğe bağlı)", "Working folder (optional)")}
               value={draft.workspace?.checkoutCwd ?? ""}
               editable={!busy}
               autoCapitalize="none"
@@ -157,14 +159,14 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
           />
         </NavigationGroup>
         {!draft.inheritMaxRunMinutes && (
-          <Field
+          <NumberField
             editable={!busy}
             label={copy(
               "Çalışma sınırı (dakika, 0 = sınırsız)",
               "Run limit (minutes, 0 = unlimited)",
             )}
+            unit={copy("dk", "min")}
             value={minutes}
-            keyboardType="numeric"
             error={
               !minutesValid
                 ? copy("0 ile 10080 arasında dakika girin.", "Enter minutes from 0 to 10080.")
@@ -172,7 +174,7 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
             }
             onChangeText={(text) => {
               setMinutes(text);
-              if (/^\d+$/.test(text) && Number(text) <= 10080) set({ maxRunMinutes: Number(text) });
+              if (validAgentRunMinutes(text)) set({ maxRunMinutes: Number(text) });
             }}
           />
         )}

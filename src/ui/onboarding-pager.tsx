@@ -8,7 +8,7 @@ import Animated, {
   useAnimatedStyle,
   type SharedValue,
 } from "react-native-reanimated";
-import { Heading } from "./primitives";
+import { Body, Heading } from "./primitives";
 import { CodeArt, codeArtWidth, type CodeArtName } from "./code-art";
 import { useMobileTheme } from "./theme";
 import { useCopy } from "./copy";
@@ -19,7 +19,7 @@ import { fontSize, lineHeight, radii, space } from "./tokens";
  * `lightArt` replaces `art` on a light ground. As on the website, the dot-matrix face belongs to the
  * dark stage; light sections use the code-glyph crew in dark ink.
  */
-export type OnboardingPage = { key: string; art: CodeArtName; lightArt?: CodeArtName; title: string };
+export type OnboardingPage = { key: string; art: CodeArtName; lightArt?: CodeArtName; title: string; /** One short sentence under the title. */ body?: string };
 
 /** A page's figure resolves when its page settles; figure and title drift at different speeds. */
 function Slide({ page, position, offset, width, top, bottomClearance, active }: {
@@ -44,10 +44,11 @@ function Slide({ page, position, offset, width, top, bottomClearance, active }: 
         onLayout={({ nativeEvent }) => setBox({ width: nativeEvent.layout.width, height: nativeEvent.layout.height })}>
         {box.height > 0 ? <CodeArt name={figure} width={codeArtWidth(figure, box)} active={active} /> : null}
       </Animated.View>
-      <Animated.View style={title}>
+      <Animated.View style={[{ gap: space.sm }, title]}>
         <Heading style={[uiStyles.largeTitle, { textAlign: "center", fontSize: fontSize.display, lineHeight: lineHeight.display }]}>
           {page.title}
         </Heading>
+        {page.body ? <Body muted style={{ textAlign: "center" }}>{page.body}</Body> : null}
       </Animated.View>
     </View>
   );

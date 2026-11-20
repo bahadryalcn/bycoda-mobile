@@ -21,6 +21,9 @@ const state = vi.hoisted(() => ({
   command: vi.fn(async (_input: Record<string, unknown>) => ({})),
   onCommand: undefined as undefined | ((input: Record<string, unknown>) => Promise<unknown>),
 }));
+vi.mock("@/ui/machine-bar", () => ({ useMachineStatus: () => ({ phase: "connected" }) }));
+// React Native defines __DEV__ at bundle start; modules read it while being imported.
+vi.hoisted(() => { (globalThis as { __DEV__?: boolean }).__DEV__ = false; });
 vi.mock("react-native", () => ({
   View: ({ children, style, ...props }: PropsWithChildren<Record<string, unknown>>) => {
     const {
@@ -180,6 +183,10 @@ vi.mock("./session-agents", () => ({
     children(null),
 }));
 vi.mock("./session-settings", () => ({ SessionSettings: () => null }));
+// Loopback opening has its own tests; it reaches the native Host socket module and the Expo runtime.
+vi.mock("./session-loopback-browser", () => ({
+  SessionLoopbackBrowser: ({ children }: PropsWithChildren) => children,
+}));
 vi.mock("./session-list-sheet", () => ({ SessionListSheet: () => null }));
 // Read acknowledgement has its own tests; its connection scope needs the Expo runtime.
 vi.mock("./use-session-viewed", () => ({ useSessionViewed: () => {} }));

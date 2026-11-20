@@ -15,10 +15,10 @@ const file = (relative: string, staged: boolean, unstaged: boolean): GitChangedF
 it("keeps the staged and unstaged parts of one file separately actionable", () => {
   const changed = file("src/chat.tsx", true, true);
   expect(gitListRows([changed], "", "all")).toEqual([
-    { kind: "group", key: "unstaged", staged: false, count: 1 },
-    { kind: "file", key: "unstaged:src/chat.tsx", staged: false, file: changed },
     { kind: "group", key: "staged", staged: true, count: 1 },
     { kind: "file", key: "staged:src/chat.tsx", staged: true, file: changed },
+    { kind: "group", key: "unstaged", staged: false, count: 1 },
+    { kind: "file", key: "unstaged:src/chat.tsx", staged: false, file: changed },
   ]);
 });
 

@@ -82,17 +82,37 @@ it("stop during durable admission never repeats the send or reads its late reply
   expect(s.deps.send).toHaveBeenCalledTimes(1); expect(s.deps.speak).not.toHaveBeenCalled(); expect(s.loop.current()).toBe(false);
 });
 
-it("anchors idle safety to the last recognized utterance across mute cycles", async () => {
+it("restarts the idle window at unmute instead of anchoring it to the pre-mute utterance", async () => {
   vi.useFakeTimers(); const s = setup(); s.deps.capture.mockResolvedValue(""); s.loop.start(target);
   await vi.advanceTimersByTimeAsync(120000);
   s.deps.capture.mockResolvedValueOnce("Still here");
   await vi.advanceTimersByTimeAsync(500);
   expect(s.deps.send).toHaveBeenCalledOnce();
   s.loop.setMuted(true); await vi.advanceTimersByTimeAsync(500); s.loop.setMuted(false);
-  await vi.advanceTimersByTimeAsync(179000);
-  expect(s.loop.current()).toBe(true);
+  await vi.advanceTimersByTimeAsync(179500);
+  expect(s.loop.current()).toBe(true); expect(s.deps.error).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(500);
-  expect(s.loop.current()).toBe(false); expect(s.deps.send).toHaveBeenCalledOnce();
+  expect(s.loop.current()).toBe(false); expect(s.deps.send).toHaveBeenCalledOnce(); expect(s.deps.error).toHaveBeenCalledOnce();
+});
+it("a long mute does not end the call at the first quiet capture after unmute", async () => {
+  vi.useFakeTimers(); const s = setup(); s.deps.capture.mockResolvedValue(""); s.loop.start(target);
+  await vi.advanceTimersByTimeAsync(1000);
+  s.loop.setMuted(true); const calls = s.deps.capture.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(10 * 60000);
+  // Muted: no listener runs, nothing is sent and the call stays open.
+  expect(s.deps.capture).toHaveBeenCalledTimes(calls); expect(s.loop.current()).toBe(true); expect(s.deps.error).not.toHaveBeenCalled();
+  s.loop.setMuted(false);
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(s.deps.capture.mock.calls.length).toBeGreaterThan(calls);
+  expect(s.loop.current()).toBe(true); expect(s.deps.error).not.toHaveBeenCalled(); expect(s.deps.send).not.toHaveBeenCalled();
+});
+it("unmute opens one listener only after the explicit unmute and a muted call never captures", async () => {
+  vi.useFakeTimers(); const s = setup(); s.deps.capture.mockResolvedValue(""); s.loop.start(target);
+  s.loop.setMuted(true); await vi.advanceTimersByTimeAsync(0); const muted = s.deps.capture.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(4 * 60000); expect(s.deps.capture).toHaveBeenCalledTimes(muted);
+  s.loop.setMuted(true); expect(s.deps.capture).toHaveBeenCalledTimes(muted);
+  s.loop.setMuted(false); await vi.advanceTimersByTimeAsync(0);
+  expect(s.deps.capture).toHaveBeenCalledTimes(muted + 1); s.loop.stop();
 });
 it("stop during silence backoff clears its timer without another capture", async () => {
   vi.useFakeTimers(); const s = setup(); s.deps.capture.mockResolvedValue(""); s.loop.start(target);

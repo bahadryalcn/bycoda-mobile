@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, View, type ViewStyle } from "react-native";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Sparkles from "lucide-react-native/icons/sparkles";
@@ -135,15 +135,9 @@ export function ChatActivity({
         )}
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        {status === "running" && !reduceMotion ? (
-          <Shimmer enabled={active} textStyle={titleStyle}>
-            {visibleTitle}
-          </Shimmer>
-        ) : (
-          <Body mono={literal} numberOfLines={1} style={titleStyle}>
-            {visibleTitle}
-          </Body>
-        )}
+        <ActivityLine running={status === "running"} mono={literal} style={titleStyle}>
+          {visibleTitle}
+        </ActivityLine>
       </View>
       <Chevron
         size={16}
@@ -243,11 +237,48 @@ export function ChatActivity({
   );
 }
 
+/** The idle and running verb share one flex frame, so the row keeps its geometry when the step settles. */
+const STEP_VERB_FRAME = { flexShrink: 0, maxWidth: "60%" } as const;
+
+/**
+ * One line of activity text in every state. PanelUI `Shimmer` in its default mode renders a bare
+ * `Text` with no `numberOfLines`, so a long command wrapped while streaming and collapsed when done;
+ * here the shimmer masks a one-line `Body`, so running and settled rows measure the same.
+ */
+function ActivityLine({
+  running,
+  mono,
+  style,
+  frame,
+  children,
+}: {
+  running: boolean;
+  mono?: boolean;
+  style: { fontSize: number; lineHeight: number; color: string };
+  /** Flex constraints for the line, applied to the shimmer frame or the text itself. */
+  frame?: ViewStyle;
+  children: string;
+}) {
+  const reduceMotion = useReducedMotionPreference();
+  const active = useHostReadActive();
+  if (running && !reduceMotion)
+    return (
+      <Shimmer as="view" enabled={active} baseColor={style.color} style={frame}>
+        <Body mono={mono} numberOfLines={1} style={style}>
+          {children}
+        </Body>
+      </Shimmer>
+    );
+  return (
+    <Body mono={mono} numberOfLines={1} style={frame ? [style, frame] : style}>
+      {children}
+    </Body>
+  );
+}
+
 /** "Opened [a.ts]": muted verb, then the target a reader scans for. */
 function ChatActivityStepRow({ step, onPress }: { step: ChatActivityStep; onPress?: () => void }) {
   const { colors, pressedFill } = useMobileTheme();
-  const reduceMotion = useReducedMotionPreference();
-  const active = useHostReadActive();
   const failed = step.state === "failed";
   const verbStyle = {
     fontSize: fontSize.control,
@@ -292,15 +323,9 @@ function ChatActivityStepRow({ step, onPress }: { step: ChatActivityStep; onPres
   ) : null;
   const content = (
     <>
-      {step.state === "running" && !reduceMotion ? (
-        <Shimmer enabled={active} textStyle={verbStyle}>
-          {step.label}
-        </Shimmer>
-      ) : (
-        <Body numberOfLines={1} style={[verbStyle, { flexShrink: 0, maxWidth: "60%" }]}>
-          {step.label}
-        </Body>
-      )}
+      <ActivityLine running={step.state === "running"} style={verbStyle} frame={STEP_VERB_FRAME}>
+        {step.label}
+      </ActivityLine>
       {target}
     </>
   );

@@ -10,6 +10,7 @@ const fixture = vi.hoisted(() => ({
   active: "fixture-machine", project: "fixture-project", readError: null as Error | null,
   reads: [] as boolean[], presses: new Map<string,()=>void>(), searchChange: null as null | ((value:string)=>void),
   available: true, success: true, fetching: false, partial: false, empty: false,
+  omittedProjects: [] as { id: string; path: string }[],
   providersRetry: vi.fn(), itemsRetry: vi.fn(), availabilityRetry: vi.fn(),
   request: {} as { assignedToMe?: boolean; state?: string; search?: string },
   list: [] as RemoteInboxItem[],
@@ -34,7 +35,7 @@ vi.mock("./provider-queries", () => ({
     const base = { error:fixture.readError,isSuccess: !fixture.readError, isFetching: fixture.fetching, refetch: action === "providers" ? fixture.providersRetry : fixture.itemsRetry };
     if (action === "providers") return { ...base, data: [{ provider: "github", connected: true, error: fixture.partial ? "Account unavailable" : undefined }] };
     fixture.request = input.query;
-    return { ...base, data: { items: fixture.empty ? [] : fixture.list, errors: fixture.partial ? { jira: "Jira unavailable", gitlab: "GitLab unavailable" } : {} } };
+    return { ...base, data: { items: fixture.empty ? [] : fixture.list, errors: fixture.partial ? { jira: "Jira unavailable", gitlab: "GitLab unavailable" } : {}, omittedProjects: fixture.omittedProjects } };
   },
 }));
 vi.mock("./provider-detail", async () => {
@@ -91,11 +92,19 @@ beforeEach(() => {
   fixture.memory=null;fixture.locale="en";fixture.error = null; fixture.readError=null;fixture.active="fixture-machine";fixture.project="fixture-project";fixture.reads=[];fixture.presses.clear();fixture.searchChange=null;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); vi.useFakeTimers();
   fixture.available = true; fixture.success = true; fixture.fetching = false; fixture.partial = false; fixture.empty = false;
+  fixture.omittedProjects = [];
   fixture.list = Array.from({ length: 85 }, (_, i) => ({ provider: "github", kind: "pr", number: i + 1, repo: "synthetic/repo", title: `Item ${i + 1}`,
     state: "OPEN", url: "https://synthetic.invalid", projectPath: "/synthetic", updatedAt: "", draft: false, labels: [], assignees: [] }));
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.clearAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+it("discloses projects outside the remote Inbox limit while keeping available items visible", async () => {
+  fixture.omittedProjects = [{ id: "other", path: "/other" }, { id: "another", path: "/another" }];
+  await render();
+  expect(container.textContent).toContain("2 projects are not shown in this list. Choose one in the scope to see its items.");
+  expect(container.textContent).toContain("Item 1");
+});
 
 it("passes bounded batches to the virtualized owner and commits search only after debounce", async () => {
   await render(); expect(container.querySelector("main")!.dataset.rowCount).toBe("40");

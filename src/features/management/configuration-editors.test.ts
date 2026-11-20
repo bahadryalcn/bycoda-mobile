@@ -40,7 +40,7 @@ it.each([
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const initial = { id: "record", projectId: "project", title: "Title", name: "Name", prompt: "Original prompt", focus: "Original focus", harness: "codex", model: "codex:old", modelSettings: {}, runtimeMode: "auto", maxRunMinutes: 0, enabled: false, scheduleKind: "daily", minute: 0, time: "09:00", dayOfWeek: 1, maxRunsPerDay: 1, maxProposals: 1, maxOpen: 1, autoStart: false, updatedAt: 1 };
   root = createRoot(container);
-  const Component = Editor as ComponentType<{ initial: typeof initial; save: { mutate: typeof calls.save; isPending: boolean }; busy: boolean; onClose: () => void }>;
+  const Component = Editor as unknown as ComponentType<{ initial: typeof initial; save: { mutate: typeof calls.save; isPending: boolean }; busy: boolean; onClose: () => void }>;
   const render = (record: typeof initial) => root.render(createElement(Component, { initial: record, save: { mutate: calls.save, isPending: false }, busy: false, onClose: vi.fn() }));
   await act(async () => render(initial));
   await act(async () => render({ ...initial, [remoteField]: "Newer remote configuration" }));

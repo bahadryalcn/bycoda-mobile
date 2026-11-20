@@ -1,8 +1,8 @@
 import { ScrollView, View, useWindowDimensions } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useScrollSections } from "panelui-native/hooks/use-scroll-sections";
 import { SectionNavigator } from "@/ui/section-progress";
 import { sectionNavigatorClearance } from "@/ui/section-progress-model";
+import { useScreenContentInsets } from "@/ui/screen-content-insets";
 import { metrics, space } from "@/ui/tokens";
 import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
@@ -16,7 +16,7 @@ import { legalSections } from "./legal-content";
 export function LegalReader({ document }: { document: Exclude<LegalDocumentId, "help"> }) {
   const copy = useCopy();
   const { colors } = useMobileTheme();
-  const insets = useSafeAreaInsets();
+  const content = useScreenContentInsets();
   const { fontScale } = useWindowDimensions();
   const sections = legalSections[document].map((section, index) => ({ id: legalSectionId(index), title: copy(...section.title) }));
   const tracker = useScrollSections({ ids: sections.map((section) => section.id) });
@@ -28,9 +28,10 @@ export function LegalReader({ document }: { document: Exclude<LegalDocumentId, "
           width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center",
           paddingTop: space.md,
           // Safe-area edges are physical even when text and section navigation are RTL.
-          paddingLeft: Math.max(insets.left, space.screen),
-          paddingRight: Math.max(insets.right, space.screen),
-          paddingBottom: insets.bottom + space.lg + sectionNavigatorClearance(fontScale),
+          paddingLeft: content.left,
+          paddingRight: content.right,
+          // The Screen frame already clears the home indicator; the floating section pill sits above it.
+          paddingBottom: content.bottom + space.lg + sectionNavigatorClearance(fontScale),
         }}>
         <LegalDocument document={document} sectionLayout={tracker.measure} />
       </ScrollView>

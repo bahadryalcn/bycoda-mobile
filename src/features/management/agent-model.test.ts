@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HostModelCatalog } from "@/domain/types";
-import { effectiveAgentModel } from "./agent-model";
+import { effectiveAgentModel, validAgentRunMinutes } from "./agent-model";
 
 const catalog = {
   models: { codex: [{ id: "discovered-codex" }], claude: [{ id: "discovered-claude" }] },
@@ -16,4 +16,9 @@ describe("effective agent model", () => {
     expect(effectiveAgentModel("", "claude", catalog)).toBe("discovered-claude");
     expect(effectiveAgentModel("", "codex")).toBe("");
   });
+});
+
+it("accepts unlimited and bounded whole-minute run limits", () => {
+  expect(["0", "1", "10080"].every(validAgentRunMinutes)).toBe(true);
+  expect(["", "-1", "1.5", "10081"].some(validAgentRunMinutes)).toBe(false);
 });

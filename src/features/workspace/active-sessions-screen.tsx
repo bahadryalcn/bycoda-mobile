@@ -1,4 +1,4 @@
-import { useElapsedNow } from "./use-elapsed-now";
+import { useSnoozeNow } from "./session-clock";
 import { useHostReadActive } from "@/state/queries";
 import { sessionIsSnoozed } from "./session-attention-model";
 import { router, Stack } from "expo-router";
@@ -114,7 +114,7 @@ export function ActiveSessionsScreen({
   );
   const directory = overview ? activity.directory : activity.sessions;
   const providers = sessionProviders(directory.map(({ session }) => session));
-  const now = useElapsedNow(useHostReadActive() && directory.some(({ session }) => !!session.snoozedUntil));
+  const now = useSnoozeNow(useHostReadActive(), directory.map(({ session }) => session.snoozedUntil));
   const doneIds = useUnseenDoneIds(machineId ?? "");
   const filtered = directory.filter(
     ({ project, session }) =>

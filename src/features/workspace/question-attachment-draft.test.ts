@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { QuestionAttachmentDraftStore, questionAttachmentKey, type QuestionAttachmentDraft } from "./question-attachment-draft";
+import { QuestionAttachmentDraftStore, flushQuestionAttachmentDrafts, questionAttachmentKey, questionAttachmentStore, type QuestionAttachmentDraft } from "./question-attachment-draft";
 import { reconcileQuestionAttachments } from "./question-attachment-cleanup";
 const file = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", claimId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", name: "proof", kind: "file" as const, mimeType: "text/plain", size: 1, uri: "file:///question-drafts/proof" };
 const entry = (delivery?: QuestionAttachmentDraft["delivery"]): QuestionAttachmentDraft => ({ environmentId: "env", draft: { answers: {}, custom: {}, attachments: { one: [file] } }, delivery });
@@ -59,4 +59,72 @@ it("keeps a concurrent mounted editor's text when durable file removal finishes"
   const restarted = new QuestionAttachmentDraftStore(f.storage, f.key); await restarted.hydrate();
   expect(restarted.read("one")?.draft.custom.one).toBe("Concurrent text");
   expect(restarted.files()).toEqual([]);
+});
+const typed = (text: string, delivery?: QuestionAttachmentDraft["delivery"]): QuestionAttachmentDraft =>
+  ({ ...entry(delivery), draft: { ...entry().draft, custom: { one: text } } });
+const stored = (f: ReturnType<typeof fixture>) => JSON.parse(f.data.get(f.key) ?? "null")?.entries;
+it("coalesces typing into one trailing write while memory stays exact on every keystroke", async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture(); await f.store.hydrate();
+    const writes = f.storage.setItem.mock.calls.length;
+    const saves = ["a", "ab", "abc"].map(text => f.store.saveLater("one", typed(text)));
+    expect(f.store.read("one")?.draft.custom.one).toBe("abc");
+    await vi.advanceTimersByTimeAsync(399);
+    expect(f.storage.setItem.mock.calls.length).toBe(writes);
+    await vi.advanceTimersByTimeAsync(1); await Promise.all(saves);
+    expect(f.storage.setItem.mock.calls.length).toBe(writes + 1);
+    expect(f.storage.getItem.mock.calls.length).toBe(2); // hydrate + the single coalesced read
+    expect(stored(f).one.draft.custom.one).toBe("abc"); expect(stored(f).one.draft.attachments.one).toEqual([file]);
+    // Typing restarts the trailing window instead of writing mid-burst.
+    void f.store.saveLater("one", typed("x")); await vi.advanceTimersByTimeAsync(300);
+    void f.store.saveLater("one", typed("xy")); await vi.advanceTimersByTimeAsync(300);
+    expect(f.storage.setItem.mock.calls.length).toBe(writes + 1);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(stored(f).one.draft.custom.one).toBe("xy");
+  } finally { vi.useRealTimers(); }
+});
+it("flushes pending text immediately for blur, unmount, background and an attachment save, without a timer", async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture(); await f.store.hydrate();
+    const pending = f.store.saveLater("one", typed("held"));
+    await f.store.flush(); await pending;
+    expect(stored(f).one.draft.custom.one).toBe("held");
+    const writes = f.storage.setItem.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1000); expect(f.storage.setItem.mock.calls.length).toBe(writes); // timer was cancelled
+    await f.store.flush(); expect(f.storage.setItem.mock.calls.length).toBe(writes); // nothing dirty: no write
+    // A custody write (attachment change) carries the newest pending text too.
+    void f.store.saveLater("one", typed("held more"));
+    await f.store.save("one", { ...typed("held more"), delivery: "queued" });
+    expect(stored(f).one).toMatchObject({ delivery: "queued", draft: { custom: { one: "held more" } } });
+    await vi.advanceTimersByTimeAsync(1000); expect(f.storage.setItem.mock.calls.length).toBe(writes + 1);
+  } finally { vi.useRealTimers(); }
+});
+it("keeps failed debounced text in memory, rejects every coalesced caller and retries it on the next flush", async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture(); await f.store.hydrate();
+    f.storage.setItem.mockRejectedValueOnce(new Error("disk full"));
+    const first = f.store.saveLater("one", typed("a")); const second = f.store.saveLater("one", typed("ab"));
+    const failures = Promise.allSettled([first, second]);
+    await vi.advanceTimersByTimeAsync(400);
+    expect((await failures).map(result => result.status)).toEqual(["rejected", "rejected"]);
+    expect(f.store.read("one")?.draft.custom.one).toBe("ab"); expect(f.data.has(f.key)).toBe(false);
+    await f.store.flush();
+    expect(stored(f).one.draft.custom.one).toBe("ab");
+  } finally { vi.useRealTimers(); }
+});
+it("flushes every session store of a storage when the app leaves the foreground", async () => {
+  vi.useFakeTimers();
+  try {
+    const data = new Map<string, string>();
+    const storage = { getItem: vi.fn(async (key: string) => data.get(key) ?? null), setItem: vi.fn(async (key: string, value: string) => { data.set(key, value); }) };
+    const one = questionAttachmentStore(storage, "m", "s1"); const two = questionAttachmentStore(storage, "m", "s2");
+    await Promise.all([one.hydrate(), two.hydrate()]);
+    void one.saveLater("a", typed("first")); void two.saveLater("b", typed("second"));
+    await flushQuestionAttachmentDrafts(storage);
+    expect(JSON.parse(data.get(questionAttachmentKey("m", "s1"))!).entries.a.draft.custom.one).toBe("first");
+    expect(JSON.parse(data.get(questionAttachmentKey("m", "s2"))!).entries.b.draft.custom.one).toBe("second");
+  } finally { vi.useRealTimers(); }
 });

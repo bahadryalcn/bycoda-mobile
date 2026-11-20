@@ -1,5 +1,15 @@
 import { expect, it, vi } from "vitest";
-import { boundedResponse, boundedResponseText, markBounded } from "./response-body";
+import { boundedResponse, boundedResponseParts, boundedResponseText, markBounded } from "./response-body";
+it("returns decoded chunks in order, each ending on a whole code point", async () => {
+  const value = String.fromCodePoint(233, 128512, 97);
+  const bytes = new TextEncoder().encode(value);
+  const response = new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(bytes.slice(0, 3)); controller.enqueue(bytes.slice(3)); controller.close();
+  } }));
+  const parts = await boundedResponseParts(response, 100, () => new Error("large"));
+  expect(parts.length).toBeGreaterThan(1);
+  expect(parts.join("")).toBe(value);
+});
 it("counts UTF-8 bytes while retaining split code points", async () => {
   const value = String.fromCodePoint(233, 128512);
   const bytes = new TextEncoder().encode(value);

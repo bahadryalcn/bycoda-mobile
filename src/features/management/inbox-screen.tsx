@@ -4,9 +4,10 @@ import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useInboxSeen } from "../inbox/inbox-seen-store";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActionMenu, Body, Button, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, Sheet, StateView } from "@/ui/primitives";
+import { ActionMenu, Body, Button, Notice, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, Sheet, StateView } from "@/ui/primitives";
 import { CollectionToolbar } from "@/ui/search-field";
 import { useCopy } from "@/ui/copy";
+import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { getLocales } from "expo-localization";
@@ -14,7 +15,8 @@ import { resolveLocale } from "@/localization";
 import { Scope } from "./shared/scope";
 import { useInboxLocalScope } from "../inbox/inbox-local-scope";
 import { AttentionRow } from "../inbox/attention-row";
-import { groupAttention, isUrgentAttention } from "../inbox/attention-groups";
+import { attentionPartial } from "../inbox/attention-partial";
+import { groupAttention, isUrgentAttention, phoneAttentionItems } from "../inbox/attention-groups";
 import { InboxBrowseMemoryProvider, useInboxBrowseMemory } from "../inbox/inbox-browse-memory-provider";
 import { useInboxScrollMemory } from "../inbox/use-inbox-scroll-memory";
 import { ProviderInboxScreen } from "../inbox/provider-inbox-screen";
@@ -74,12 +76,14 @@ function AttentionInboxScreen() {
   );
   const readable = scopeCurrent && query.isEnabled !== false && query.fetchStatus !== "paused" && !isInboxPrivateFailure(query.error);
   const data = readable ? query.data : undefined;
-  const groups = useMemo(() => groupAttention((data?.items ?? []).filter(item => item.kind !== "social")), [data]);
+  // The Host left projects out of this read: the rows are usable but not the whole queue.
+  const partial = attentionPartial(data);
+  const groups = useMemo(() => groupAttention(phoneAttentionItems(data?.items ?? [])), [data]);
   const rows = groups.ordered;
   const focused = useIsFocused();
   // Effect reason: items shown on the focused Inbox are seen, which clears the tab dot.
   useEffect(() => {
-    if (focused && readable && machine && data) void useInboxSeen.getState().markSeen(machine.id, data.items.filter((item) => item.kind !== "social"));
+    if (focused && readable && machine && data) void useInboxSeen.getState().markSeen(machine.id, phoneAttentionItems(data.items));
   }, [focused, readable, machine, data]);
   const lease = useMemo(() => ({ active: false }), [readable, origin.machineId, origin.projectId]);
   useLayoutEffect(() => { lease.active = true; return () => { lease.active = false; }; }, [lease]);
@@ -119,6 +123,10 @@ function AttentionInboxScreen() {
       query={{...query, data, refetch: refresh}}
       refresh={refresh}
       data={rows}
+      header={partial ? <Notice tone="warning" retrying={query.isFetching}
+        message={copy("Bazı projeler zamanında yanıt vermedi; onların bekleyen işleri burada görünmüyor olabilir.",
+          "Some projects did not respond in time, so their attention items may be missing.")}
+        onRetry={() => { void refresh(); }} /> : undefined}
       keyExtractor={(item) => item.id}
       context={<CollectionToolbar field={<Scope allowAll projectId={projectId} onChange={setProjectId} />} actions={readable ? (
         <ActionMenu label={copy("Diğer işlemler", "More actions")} busy={query.isFetching && data !== undefined}
@@ -129,16 +137,16 @@ function AttentionInboxScreen() {
               onPress: () => { if (lease.active && latest.current.readable && current()) setHelp(lease); } },
           ]} />
       ) : null} />}
-      header={
+      ListEmptyComponent={
         <>
-          {!machine ? <StateView illustration="connect-computer" title={copy("Bir bilgisayar seçin", "Choose a computer")} /> : !scopeCurrent || query.isEnabled === false && !query.error ? (
+          {!machine ? <StateView illustration="connect-computer" title={copy("Bir bilgisayar seçin", "Choose a computer")}
+            action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.navigate("/machines") }} /> :!scopeCurrent || query.isEnabled === false && !query.error ? (
             <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
-              description={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
-              "Record access is unavailable. Check the original computer and project connection.")} />
-          ) : <QueryState query={{...query, data, refetch: refresh}} empty={data !== undefined && rows.length === 0}
+              description={copy(...RECORD_ACCESS_UNAVAILABLE)} />
+          ) : <QueryState query={{...query, data: query.error ? undefined : data, refetch: refresh}} empty={data !== undefined && !partial}
             emptyIllustration="inbox-empty"
-            emptyTitle={copy("Her şey yolunda", "You're all caught up")}
-            emptyDetail={copy("Dikkat gerektiren bir şey olduğunda burada görünür.", "Anything that needs your attention will show up here.")} />}
+            emptyTitle={copy("Bekleyen bir iş yok", "Nothing needs your attention")}
+            emptyDetail={copy("Onaylar, sorular ve takılan işler burada görünür.", "Approvals, questions and stuck work show up here.")} />}
         </>
       }
       renderItem={({ item, index }) => {

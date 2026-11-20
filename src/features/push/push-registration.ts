@@ -11,9 +11,61 @@ export function expoProjectId(): string | undefined {
   return typeof id === "string" && id ? id : undefined;
 }
 
-export async function expoPushToken(projectId: string): Promise<string> {
-  const api = await notifications();
-  return (await api.getExpoPushTokenAsync({ projectId })).data;
+/** This installation's token for the last project asked about; only a rotation or `fresh` replaces it. */
+let cachedToken: { projectId: string; token: string } | undefined;
+let pendingToken: { projectId: string; request: Promise<string> } | undefined;
+/** Bumped on every rotation so a fetch that started before it never fills the cache with the old token. */
+let rotations = 0;
+let rotationWatch: Promise<void> | undefined;
+const rotationListeners = new Set<() => void>();
+
+/** Runs `listener` after the OS rotates this phone's push token; returns the unsubscribe. */
+export function onPushTokenRotated(listener: () => void): () => void {
+  rotationListeners.add(listener);
+  return () => { rotationListeners.delete(listener); };
+}
+
+function watchRotation(): Promise<void> {
+  rotationWatch ??= notifications().then((api) => {
+    api.addPushTokenListener(() => {
+      rotations += 1;
+      cachedToken = undefined;
+      pendingToken = undefined;
+      for (const listener of [...rotationListeners]) listener();
+    });
+  }, (error: unknown) => {
+    // Without the native module there is no token either; a later call retries the watch.
+    rotationWatch = undefined;
+    throw error;
+  });
+  return rotationWatch;
+}
+
+/**
+ * The Expo push token. Fetching it contacts Expo, so a resume or a second
+ * caller reuses the one already held; it is fetched again only after the OS
+ * rotates it or when `fresh` asks. A failed fetch is never cached, so the next
+ * call retries.
+ */
+export async function expoPushToken(projectId: string, options?: { fresh?: boolean }): Promise<string> {
+  // Registered before the first fetch, so a rotation always clears the cache before any caller's own listener runs.
+  await watchRotation();
+  if (!options?.fresh) {
+    if (cachedToken?.projectId === projectId) return cachedToken.token;
+    if (pendingToken?.projectId === projectId) return pendingToken.request;
+  }
+  const generation = rotations;
+  const request = notifications()
+    .then(async (api) => (await api.getExpoPushTokenAsync({ projectId })).data)
+    .then((token) => {
+      if (generation === rotations) cachedToken = { projectId, token };
+      return token;
+    })
+    .finally(() => {
+      if (pendingToken?.request === request) pendingToken = undefined;
+    });
+  pendingToken = { projectId, request };
+  return request;
 }
 
 /**

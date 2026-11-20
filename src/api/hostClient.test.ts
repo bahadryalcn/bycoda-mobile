@@ -98,6 +98,23 @@ describe("native host contract", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).method).toBe("environment.describe");
   });
+
+  it("names the side to update when the Host protocol differs from this app", async () => {
+    const descriptor = (protocolVersion: number) => ({
+      protocolVersion,
+      environmentId: "env-a",
+      name: "PC",
+      platform: "win32",
+      providers: [],
+      capabilities: [],
+    });
+    await expect(
+      createHostClient(connection, vi.fn<typeof fetch>().mockResolvedValue(respond(descriptor(2)))).describe(),
+    ).rejects.toThrow("This Host speaks a newer protocol. Update this app to connect.");
+    await expect(
+      createHostClient(connection, vi.fn<typeof fetch>().mockResolvedValue(respond(descriptor(0)))).describe(),
+    ).rejects.toThrow("This Host speaks an older protocol. Update the bycoda Host to connect.");
+  });
   it("scopes requests to paired environment and never leaks auth in the body", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(respond([]));
     await createHostClient(connection, fetcher).sessions.list("project-a");

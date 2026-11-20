@@ -3,12 +3,15 @@ import { useEffect, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 import ListOrdered from "lucide-react-native/icons/list-ordered";
 import { Button, ErrorText, StatusText } from "@/ui/primitives";
-import { useHostClient } from "@/state/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { hostKey, useHostClient } from "@/state/queries";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { moveQueuedMessage, queuedCommand } from "./composer-delivery";
 import { queueDeliveryStage } from "./queue-delivery";
 import { readSession } from "./session-wire";
+import { AUTO_SEND_SAFETY_MS, automaticAttemptCanWait } from "./queue-auto-send";
+import type { HostSession } from "./wire";
 import type { SessionCommand, SessionScope } from "./session-types";
 import type { useSessionQueue } from "./use-session-queue";
 import { composerDeliveryError } from "./composer-delivery-copy";
@@ -31,6 +34,7 @@ export function SessionQueue({
   const { colors } = useMobileTheme();
   const copy = useCopy();
   const client = useHostClient();
+  const cache = useQueryClient();
   const [open, setOpen] = useState(false);
   const { automatic, setAutomatic } = queue;
   const [sending, setSending] = useState(false);
@@ -105,12 +109,29 @@ export function SessionQueue({
       AppState.currentState !== "active"
     )
       return;
+    // The open transcript's stream or snapshot poll already owns this session's status.
+    const snapshotKey = hostKey(scope.machineId, ["session", scope.sessionId]);
+    const known = cache.getQueryData<HostSession>(snapshotKey);
+    if (
+      automaticAttempt &&
+      automaticAttemptCanWait(
+        known,
+        cache.getQueryState(snapshotKey)?.dataUpdatedAt ?? 0,
+        Date.now(),
+      )
+    )
+      return;
     sendingRef.current = true;
     setSending(true);
     setError(null);
     try {
-      // Check live host state at dispatch time, rather than a stale idle poll.
-      const session = await readSession(client, scope.sessionId);
+      // Check live host state at dispatch time, rather than a stale idle snapshot. A known
+      // transcript syncs by revision (usually "unchanged"); without one this is a tail read.
+      const session = await readSession(
+        client,
+        scope.sessionId,
+        known?.session.id === scope.sessionId ? known : undefined,
+      );
       if (!active.current) return;
       if (session.status === "running") {
         if (!automaticAttempt)
@@ -154,14 +175,16 @@ export function SessionQueue({
   };
   const nextRef = useRef(sendNext);
   nextRef.current = sendNext;
+  // Reason: the idle flip in the shared snapshot starts an attempt at once; the slow timer is a
+  // safety net. Both go through sendNext, so single-flight and the live check stay authoritative.
   useEffect(() => {
     if (!automatic) return;
     void nextRef.current(true);
     const timer = setInterval(() => {
       void nextRef.current(true);
-    }, 2500);
+    }, AUTO_SEND_SAFETY_MS);
     return () => clearInterval(timer);
-  }, [automatic]);
+  }, [automatic, running]);
   if (!queue.supported) return null;
   const disabled = blocked || queue.changing || sending;
   const queueState = unconfirmed

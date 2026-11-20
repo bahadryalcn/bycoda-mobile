@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HostTerminal, HostTerminalRead } from "../../../../src/features/host-tools/terminalTypes";
-import { appendTerminalOutput, emptyTerminalOutput, projectTerminals, terminalCommandInput, terminalDisplayOutput, TERMINAL_OUTPUT_LIMIT } from "./terminal-model";
+import { appendTerminalOutput, emptyTerminalOutput, projectTerminals, sameTerminalOutput, terminalCommandInput, terminalDisplayOutput, terminalPollDelay, TERMINAL_OUTPUT_LIMIT } from "./terminal-model";
 
 const terminal: HostTerminal = {
   id: "shell", projectId: "project", name: "Shell", cwd: "/project", shell: "sh",
@@ -39,5 +39,18 @@ describe("mobile terminal safety and bounded output", () => {
   });
   it("renders shell output as plain text without ANSI or OSC controls", () => {
     expect(terminalDisplayOutput("\u001b[31mred\u001b[0m\r\n\u001b]0;title\u0007ok\u0000")).toBe("red\nok");
+  });
+  it("backs off background polls after failures and keeps pagination quick", () => {
+    expect(terminalPollDelay(0, false)).toBe(1500);
+    expect(terminalPollDelay(1, false)).toBe(3000);
+    expect(terminalPollDelay(2, false)).toBe(6000);
+    expect(terminalPollDelay(50, false)).toBe(30_000);
+    expect(terminalPollDelay(3, true)).toBe(100);
+  });
+  it("detects reads that leave the visible buffer unchanged", () => {
+    const first = appendTerminalOutput(emptyTerminalOutput(), read(), "project", "shell");
+    expect(sameTerminalOutput(first, appendTerminalOutput(first, read({ output: "", cursor: 5 }), "project", "shell"))).toBe(true);
+    expect(sameTerminalOutput(first, appendTerminalOutput(first, read({ output: " more", cursor: 10 }), "project", "shell"))).toBe(false);
+    expect(sameTerminalOutput(first, appendTerminalOutput(first, read({ output: "", cursor: 5, hasMore: true }), "project", "shell"))).toBe(false);
   });
 });

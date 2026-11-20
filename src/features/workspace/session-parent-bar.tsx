@@ -27,7 +27,7 @@ export function SessionParentBar({ session, machineId }: { session: HostSession 
     <PressableCard
       label={`${label}. ${copy("Ana oturumu aç", "Open parent")}`}
       onPress={() => router.replace({ pathname: "/session/[id]", params: { id: link.parentSessionId, machineId, projectId } })}
-      style={{ minHeight: metrics.touchTarget, flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: 0, paddingVertical: 0, paddingHorizontal: space.screen, backgroundColor: colors.raised, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.separator }}
+      style={{ minHeight: metrics.touchTarget, flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.screen, marginTop: space.xs, paddingVertical: 0, paddingHorizontal: space.md, backgroundColor: colors.raised, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.separator }}
     >
       <CornerUpLeft size={16} color={colors.tertiary} />
       <View style={{ flex: 1, minWidth: 0 }}>

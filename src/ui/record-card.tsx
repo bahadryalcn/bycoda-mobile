@@ -6,6 +6,7 @@ import { Body } from "./typography";
 import { metrics, opacity, space } from "./tokens";
 import { useMobileTheme } from "./theme";
 import { Hint } from "./hint";
+import { recordSpokenLabel } from "./record-card-label";
 
 function RecordIdentity({ hint, style, children }: { hint?: string; style: ViewStyle; children: ReactElement<any> }) {
   return hint ? <View style={style}><Hint label={hint} stretch>{children}</Hint></View> : children;
@@ -16,16 +17,22 @@ function RecordIdentity({ hint, style, children }: { hint?: string; style: ViewS
  * Pressing the identity opens `details`; commands in `menu`/`footer` stay separate
  * touch targets. `details` is a flat body: never put a Disclosure or another
  * expandable inside it, lay sections out with a plain label instead.
+ * A details render function receives visibility so retained content can pause background work.
+ *
+ * `hint` is the long-press explanation and is announced as the accessibility hint. A `hint` makes
+ * the identity carry an explicit spoken label (title, status, metadata), so pass `statusLabel`
+ * whenever `status` is not a plain string; without a `hint` the visible text is read as is.
  */
 export function RecordCard({
-  title, status, metadata, menu, details, preview, footer, defaultExpanded = false, children, hint,
+  title, status, statusLabel, metadata, menu, details, preview, footer, defaultExpanded = false, children, hint,
 }: PropsWithChildren<{
   title: string;
   hint?: string;
   status?: ReactNode;
+  statusLabel?: string;
   metadata?: string;
   menu?: ReactNode;
-  details?: ReactNode;
+  details?: ReactNode | ((expanded: boolean) => ReactNode);
   preview?: ReactNode;
   footer?: ReactNode;
   defaultExpanded?: boolean;
@@ -49,7 +56,8 @@ export function RecordCard({
       disabled={!details}
       onPress={toggle}
       accessibilityRole={details ? "button" : undefined}
-      accessibilityLabel={hint ? `${title}. ${hint}` : undefined}
+      accessibilityLabel={hint ? recordSpokenLabel({ title, status: statusLabel ?? (typeof status === "string" ? status : undefined), metadata }) : undefined}
+      accessibilityHint={hint}
       accessibilityState={details ? { expanded } : undefined}
       style={({ pressed }) => ({
         minHeight: metrics.rowHeightSession,
@@ -94,7 +102,7 @@ export function RecordCard({
       {children ? <View style={{ gap: space.md, paddingTop: space.sm }}>{children}</View> : null}
       {visited && details ? (
         <View style={{ display: expanded ? "flex" : "none", gap: space.sm, paddingTop: space.sm }}>
-          {details}
+          {typeof details === "function" ? details(expanded) : details}
         </View>
       ) : null}
       {footer ? <View style={{ gap: space.sm, paddingTop: space.sm }}>{footer}</View> : null}

@@ -5,9 +5,21 @@ import {
 } from "../../../src/features/connections/model/protocol";
 import type { HostDescriptor } from "./types";
 import { isLanAddress, isLanKey } from "../../../src/integrations/mobile-lan";
+import {
+  HOST_HTTP_MAX_RESPONSE_BYTES,
+  HOST_RESULT_TOO_LARGE_CODE,
+} from "../../../src/shared/model/host-contracts/response-limit";
 
 /** Address, identity, payload and error-text validation for the host transport. */
-export const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+export const MAX_RESPONSE_BYTES = HOST_HTTP_MAX_RESPONSE_BYTES;
+
+/**
+ * Whether a Host error envelope says the command ran but its result did not fit one response.
+ * The outcome is unknown to the phone: recover through the receipt, never send it again.
+ */
+export function isUndeliveredResult(envelope: { code?: unknown; delivery?: unknown }): boolean {
+  return envelope.code === HOST_RESULT_TOO_LARGE_CODE && envelope.delivery === "unknown";
+}
 
 export function normalizeHostEndpoint(input: string, lanKey?: string): string {
   let url: URL;
@@ -64,6 +76,20 @@ export function safeHostMessage(value: string, credential: string): string {
     .replace(/([?&](?:access_token|token|key|secret|password)=)[^&#\s]*/gi, "$1…")
     .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1…@")
     .slice(0, 400);
+}
+
+/** Structured marker the Host sends when a request names another environment. */
+export const HOST_IDENTITY_MISMATCH_CODE = "HOST_IDENTITY_MISMATCH";
+
+/**
+ * Whether a Host error envelope reports an environment identity mismatch. The explicit code is
+ * authoritative. Only an envelope without any code falls back to the exact text older Hosts sent;
+ * a different code, or unrelated messages that merely mention "identity changed", stay ordinary
+ * Host errors so they never force a re-pair.
+ */
+export function isHostIdentityMismatch(envelope: { code?: unknown }, message: string): boolean {
+  if (typeof envelope.code === "string") return envelope.code === HOST_IDENTITY_MISMATCH_CODE;
+  return /^Host identity changed\b/.test(message);
 }
 
 export function requireMobileHostDescriptor(value: unknown): HostDescriptor {

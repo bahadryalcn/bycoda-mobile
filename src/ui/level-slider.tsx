@@ -3,7 +3,7 @@ import { View, type GestureResponderEvent } from "react-native";
 import { Body } from "./typography";
 import { useMobileTheme } from "./theme";
 import { metrics, radii, space } from "./tokens";
-import { barRatio, stepAt } from "./level-slider-model";
+import { barRatio, nudgeStep, shownStep, stepAt } from "./level-slider-model";
 
 export type LevelOption<T extends string> = { value: T; label: string };
 
@@ -30,18 +30,30 @@ export function LevelSlider<T extends string>({ label, value, options, onChange,
   // The step under the finger; cleared when the gesture ends so the committed value shows again.
   const [dragging, setDragging] = useState<number | undefined>(undefined);
   const latest = useRef<number | undefined>(undefined);
+  // The last step we asked the owner to store. State drives rendering; the ref lets back-to-back
+  // accessibility actions in one tick build on each other before React re-renders.
+  const [accepted, setAccepted] = useState<{ from: string; step: number } | undefined>(undefined);
+  const acceptedRef = useRef<{ from: string; step: number } | undefined>(undefined);
   if (options.length < 2) return null;
   const count = options.length;
-  const shown = dragging ?? index;
+  const base = shownStep(accepted, value, index);
+  const shown = dragging ?? base;
   const at = (event: GestureResponderEvent) => stepAt(event.nativeEvent.locationX, width.current, count);
   const move = (step: number) => { latest.current = step; setDragging(step); };
-  const commit = (step: number) => {
+  const commit = (step: number, from: number = base) => {
     latest.current = undefined;
     setDragging(undefined);
     const next = options[step];
-    if (next && next.value !== value) onChange(next.value);
+    if (!next || step === from) return;
+    const requested = { from: value, step };
+    acceptedRef.current = requested;
+    setAccepted(requested);
+    onChange(next.value);
   };
-  const nudge = (delta: number) => commit(Math.min(count - 1, Math.max(0, index + delta)));
+  const nudge = (delta: number) => {
+    const from = shownStep(acceptedRef.current, value, index);
+    commit(nudgeStep(from, delta, count), from);
+  };
   return (
     <View style={{ gap: space.xs }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: space.md }}>
@@ -66,7 +78,7 @@ export function LevelSlider<T extends string>({ label, value, options, onChange,
         onResponderGrant={(event) => move(at(event))}
         onResponderMove={(event) => move(at(event))}
         onResponderRelease={(event) => commit(at(event))}
-        onResponderTerminate={() => commit(latest.current ?? index)}
+        onResponderTerminate={() => commit(latest.current ?? base)}
         style={{
           flexDirection: "row",
           alignItems: "flex-end",

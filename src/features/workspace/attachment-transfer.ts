@@ -6,6 +6,9 @@ import { bytesToBase64, validateAttachment, type StagedAttachment } from "./atta
 import { attachmentOwnerId, attachmentReleases, supportsAttachmentOwnership } from "./attachment-ownership";
 import { isScopedStagedFile } from "./attachment-files";
 
+const HASH_READ_BYTES = 192 * 1024;
+const UPLOAD_CHUNK_BYTES = 3 * Math.floor((512 * 1024) / 3);
+
 export async function uploadAttachment(client: HostTransport, file: StagedAttachment, sessionId: string, signal: AbortSignal, progress: (value: number) => void, custody: "composer" | "question" = "composer", assertCurrent: () => void = () => {}) {
   assertCurrent();
   validateAttachment(file);
@@ -31,7 +34,7 @@ export async function uploadAttachment(client: HostTransport, file: StagedAttach
       try {
         while (remaining > 0) {
           if (signal.aborted) throw new Error("Upload cancelled.");
-          const bytes = await handle.readBytes(Math.min(192 * 1024, remaining));
+          const bytes = await handle.readBytes(Math.min(HASH_READ_BYTES, remaining));
           if (!bytes.length) throw new Error("The selected file is incomplete.");
           digest.update(bytes);
           remaining -= bytes.length;
@@ -48,7 +51,7 @@ export async function uploadAttachment(client: HostTransport, file: StagedAttach
       assertCurrent();
       if (signal.aborted) throw new Error("Upload cancelled.");
       handle.offset = offset;
-      const bytes = await handle.readBytes(Math.min(192 * 1024, file.size - offset));
+      const bytes = await handle.readBytes(Math.min(UPLOAD_CHUNK_BYTES, file.size - offset));
       const expected = offset + bytes.length;
       if (expected === offset && offset < file.size) throw new Error("The selected file is incomplete.");
       const acknowledgement = await client.request<{ offset: number }>("attachments.upload", { id: file.id, size: file.size, offset, data: bytesToBase64(bytes), ...ownership }, { signal });

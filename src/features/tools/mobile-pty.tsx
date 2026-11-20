@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Modal, View } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardAvoidingView, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Plus from "lucide-react-native/icons/plus";
 import Trash2 from "lucide-react-native/icons/trash-2";
+import { useSecurity } from "@/state/security";
 import { useMobileTheme } from "@/ui/theme";
 import {
   ActionMenu,
@@ -41,6 +43,13 @@ export function MobilePty({
   const copy = useCopy();
   const insets = useSafeAreaInsets();
   const { colors } = useMobileTheme();
+  const unlocked = useSecurity((state) => state.status === "unlocked");
+  const { progress } = useReanimatedKeyboardAnimation();
+  // The home-indicator inset is replaced by the IME while it is open, as in SessionKeyboardFrame.
+  const safeBottomStyle = useAnimatedStyle(
+    () => ({ paddingBottom: insets.bottom * (1 - Math.min(1, Math.max(0, progress.value))) }),
+    [insets.bottom],
+  );
   const [readyNonce, setReadyNonce] = useState<string | null>(null);
   const session = useMobilePtySession({ scope, projectId });
   const {
@@ -115,10 +124,13 @@ export function MobilePty({
     onClose();
   };
   const terminalOpen = !!(showTerminal && lease);
+  // The native modal owns a separate window outside the security gate.
+  if (!unlocked) return null;
+
   return (
     <Modal visible animationType="slide" statusBarTranslucent onRequestClose={leave}>
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: colors.background }}>
-        <View style={{ flex: 1, paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right, paddingBottom: insets.bottom }}>
+        <Animated.View style={[{ flex: 1, paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }, safeBottomStyle]}>
           <View style={{ flexDirection: "row", alignItems: "center", minHeight: metrics.touchTarget }}>
             <HeaderBackButton onPress={leave} />
             <View style={{ flex: 1 }}>
@@ -205,7 +217,7 @@ export function MobilePty({
           )}
         />
       )}
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );

@@ -101,6 +101,36 @@ describe("mobile session stream revision and identity fences", () => {
       "resync",
     );
   });
+  it("keeps identity and block-field checks on a delta validated once by its sync schema", () => {
+    const { blocks: _blocks, ...metadata } = session(2).session;
+    const delta = (patch: Record<string, unknown>) =>
+      event("delta", {
+        kind: "delta",
+        base: 1,
+        value: { ...session(2), session: metadata },
+        blockIds: ["block-a"],
+        blocks: [{ id: "block-a", role: "assistant", text: "updated" }],
+        ...patch,
+      });
+    const known = session(1);
+    expect(() => sessionStreamValue(delta({}), known, "session-b", "project-a")).toThrow();
+    expect(() => sessionStreamValue(delta({}), known, "session-a", "project-b")).toThrow();
+    // Required block fields missing, and a payload that is not a block object at all.
+    expect(() =>
+      sessionStreamValue(delta({ blocks: [{ id: "block-a", role: "assistant" }] }), known, "session-a", "project-a"),
+    ).toThrow("Transcript stream identity or read fields changed.");
+    expect(() =>
+      sessionStreamValue(delta({ blocks: [null] }), known, "session-a", "project-a"),
+    ).toThrow();
+    expect(() =>
+      sessionStreamValue(
+        delta({ value: { ...session(2), session: metadata, unexpected: true } }),
+        known,
+        "session-a",
+        "project-a",
+      ),
+    ).toThrow();
+  });
   it("rejects wrong project/session, malformed read fields and envelope revision mismatches", () => {
     expect(() =>
       sessionStreamValue(event("snapshot", session(1)), undefined, "session-b", "project-a"),

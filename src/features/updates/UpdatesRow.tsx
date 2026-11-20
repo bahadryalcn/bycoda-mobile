@@ -6,7 +6,7 @@ import { IconTile } from "../../ui/icon-tile";
 import { useCopy } from "../../ui/copy";
 import { NavigationGroup, NavigationRow, Notice } from "../../ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
-import { updateRow, updatesSupported, type UpdatePhase } from "./model/update-row";
+import { updateFailureMessage, updateRow, updatesSupported, type UpdateAction, type UpdatePhase } from "./model/update-row";
 
 /**
  * Settings → About: check for an over-the-air update, download it, then restart only when the
@@ -17,29 +17,32 @@ export function UpdatesRow() {
   const { colors } = useMobileTheme();
   const [phase, setPhase] = useState<UpdatePhase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState<UpdateAction | null>(null);
   if (!updatesSupported({ dev: __DEV__, enabled: Updates.isEnabled, web: process.env.EXPO_OS === "web" })) return null;
-  const row = updateRow(phase, copy);
+  const row = updateRow(phase, copy, failed);
 
-  const fail = (cause: unknown) => {
-    setError(cause instanceof Error && cause.message ? cause.message : copy("Güncelleme başarısız oldu.", "The update failed."));
-    setPhase("error");
-  };
   const run = async () => {
+    const action = row.action;
+    if (!action) return;
     setError(null);
+    setFailed(null);
     try {
-      if (row.action === "check") {
+      if (action === "check") {
         setPhase("checking");
         const result = await Updates.checkForUpdateAsync();
         setPhase(result.isAvailable ? "available" : "current");
-      } else if (row.action === "download") {
+      } else if (action === "download") {
         setPhase("downloading");
         const result = await Updates.fetchUpdateAsync();
         setPhase(result.isNew ? "ready" : "current");
-      } else if (row.action === "restart") {
+      } else {
         await Updates.reloadAsync();
       }
-    } catch (cause) {
-      fail(cause);
+    } catch {
+      // The raw expo-updates message is English-only; show localized copy for the failed step.
+      setError(updateFailureMessage(action, copy));
+      setFailed(action);
+      setPhase("error");
     }
   };
 

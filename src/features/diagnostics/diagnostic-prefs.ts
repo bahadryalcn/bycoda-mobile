@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 export const DIAGNOSTIC_CONSENT_KEY = "bycoda.mobile.diagnostics-consent.v1";
 export const DIAGNOSTIC_PERIODIC_KEY = "bycoda.mobile.diagnostics-periodic.v1";
+export const DIAGNOSTIC_PERIODIC_RETRY_KEY = "bycoda.mobile.diagnostics-periodic-retry.v1";
 
 export const DIAGNOSTIC_MODES = ["off", "ask", "auto"] as const;
 export type DiagnosticMode = (typeof DIAGNOSTIC_MODES)[number];
@@ -19,6 +20,15 @@ type Storage = {
 export const effectiveMode = (mode: DiagnosticMode | null): DiagnosticMode => mode ?? "ask";
 
 export function createDiagnosticPrefs(storage: Storage, now: () => Date = () => new Date()) {
+  const readDate = async (key: string): Promise<Date | null> => {
+    try {
+      const raw = await storage.getItem(key);
+      const date = raw ? new Date(raw) : null;
+      return date && !Number.isNaN(date.getTime()) ? date : null;
+    } catch {
+      return null;
+    }
+  };
   return {
     async readConsent(): Promise<DiagnosticConsent> {
       try {
@@ -39,16 +49,11 @@ export function createDiagnosticPrefs(storage: Storage, now: () => Date = () => 
       await storage.setItem(DIAGNOSTIC_CONSENT_KEY, JSON.stringify(consent));
       return consent;
     },
-    async readLastPeriodic(): Promise<Date | null> {
-      try {
-        const raw = await storage.getItem(DIAGNOSTIC_PERIODIC_KEY);
-        const date = raw ? new Date(raw) : null;
-        return date && !Number.isNaN(date.getTime()) ? date : null;
-      } catch {
-        return null;
-      }
-    },
+    readLastPeriodic: () => readDate(DIAGNOSTIC_PERIODIC_KEY),
     writeLastPeriodic: (at: Date) => storage.setItem(DIAGNOSTIC_PERIODIC_KEY, at.toISOString()),
+    /** Earliest time the automatic upload may try again after a result that did not send. */
+    readPeriodicRetryAt: () => readDate(DIAGNOSTIC_PERIODIC_RETRY_KEY),
+    writePeriodicRetryAt: (at: Date) => storage.setItem(DIAGNOSTIC_PERIODIC_RETRY_KEY, at.toISOString()),
   };
 }
 

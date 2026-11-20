@@ -5,12 +5,17 @@ import { hostKey, useHostClient, useHostQuery, useHostReadActive } from "@/state
 import { InboxJobError, runInboxJob } from "./provider-jobs";
 import type { InboxJobRequest, InboxJobResults, InboxReadAction } from "./provider-protocol";
 
+/**
+ * Shared by every inbox and pull-request screen (one cache entry per computer). Refreshes on mount,
+ * focus and foreground through the query lifecycle, after provider writes (which invalidate the
+ * `provider-inbox` prefix) and on pull-to-refresh. The timed fallback runs once a minute.
+ */
 export function useProviderInboxAvailability() {
   return useHostQuery<RemoteInboxAvailability>(
     ["provider-inbox", "availability"],
     "inbox.provider.status",
     {},
-    { interval: 5_000 },
+    { interval: 60_000 },
   );
 }
 

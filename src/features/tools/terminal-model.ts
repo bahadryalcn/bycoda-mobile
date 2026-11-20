@@ -7,6 +7,22 @@ export type TerminalOutput = { output: string; cursor: number; truncated: boolea
 
 export const emptyTerminalOutput = (): TerminalOutput => ({ output: "", cursor: 0, truncated: false, hasMore: false });
 
+export const TERMINAL_POLL_MS = 1500;
+export const TERMINAL_POLL_MAX_MS = 30_000;
+
+/** Background poll delay: more pages continue quickly; failures back off exponentially up to the cap. */
+export function terminalPollDelay(failures: number, hasMore: boolean): number {
+  if (hasMore) return 100;
+  if (failures <= 0) return TERMINAL_POLL_MS;
+  return Math.min(TERMINAL_POLL_MS * 2 ** Math.min(failures, 5), TERMINAL_POLL_MAX_MS);
+}
+
+/** True when a read changed nothing a reader can see, so the buffer need not be rebuilt or re-rendered. */
+export function sameTerminalOutput(a: TerminalOutput, b: TerminalOutput): boolean {
+  return a.cursor === b.cursor && a.output === b.output && a.truncated === b.truncated && a.hasMore === b.hasMore &&
+    JSON.stringify(a.terminal) === JSON.stringify(b.terminal);
+}
+
 export function projectTerminals(terminals: readonly HostTerminal[], projectId: string): HostTerminal[] {
   return terminals.filter((terminal) => terminal.projectId === projectId && typeof terminal.id === "string" && terminal.id.length > 0);
 }

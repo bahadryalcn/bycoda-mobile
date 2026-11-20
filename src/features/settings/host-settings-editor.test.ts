@@ -48,9 +48,22 @@ const save = () => click("Save computer settings");
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; node?.remove(); cache?.clear(); state.endpoint = "https://original.example"; state.supported = true; state.settings = { maxRunningTasks: 2, dailyAgentMinutes: 120, usedMinutes: 42.5, limitReached: false }; state.error = undefined; state.reads = []; vi.resetAllMocks(); vi.unstubAllGlobals(); });
 it("saves only the explicit draft and preserves newer edits during acknowledgement", async () => {
   let resolve!: (result: unknown) => void; state.write.mockImplementation(() => new Promise(reply => { resolve = reply; }));
-  await render(); await edit("3"); await save(); expect(state.write).toHaveBeenCalledWith({ settings: { maxRunningTasks: 3, dailyAgentMinutes: 120 } });
+  await render(); await edit("3"); await save(); expect(state.write).toHaveBeenCalledWith({ settings: { maxRunningTasks: 3 } });
   await edit("4"); await act(async () => { resolve({ ...state.settings, maxRunningTasks: 3 }); await new Promise(done => setTimeout(done, 0)); });
   expect(node.querySelector("input")!.value).toBe("4"); expect(node.textContent).toContain("newer edits are not saved yet");
+});
+it("sends only the edited limit and keeps a limit changed elsewhere after the sheet opened (#1266)", async () => {
+  await render(); await edit("3");
+  state.settings = { ...state.settings, dailyAgentMinutes: 300 }; await render();
+  const [, minutes] = [...node.querySelectorAll("input")]; expect(minutes.value).toBe("300");
+  state.write.mockResolvedValue({ ...state.settings, maxRunningTasks: 3 }); await save();
+  expect(state.write).toHaveBeenCalledOnce(); expect(state.write).toHaveBeenCalledWith({ settings: { maxRunningTasks: 3 } });
+  expect(node.textContent).toContain("Computer settings saved."); expect(node.textContent).not.toContain("outcome is unknown");
+});
+it("sends only the daily minutes when only that field was edited", async () => {
+  state.write.mockResolvedValue({ ...state.settings, dailyAgentMinutes: 90 });
+  await render(); await act(async () => { const input = node.querySelectorAll("input")[1]; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "90"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+  await save(); expect(state.write).toHaveBeenCalledWith({ settings: { dailyAgentMinutes: 90 } });
 });
 it("retains the original draft and never revives it on a replacement connection", async () => {
   await render(); await edit("3"); state.endpoint = "https://replacement.example"; state.settings = { ...state.settings, maxRunningTasks: 8 }; await render();

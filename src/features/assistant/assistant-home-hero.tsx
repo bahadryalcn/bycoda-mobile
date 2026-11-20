@@ -20,8 +20,10 @@ export function AssistantContextBadges({ machineName, scope, project }: { machin
 }
 
 /** The assistant's front door before a conversation is open: who it is, where it works, and how to start. */
-export function AssistantHomeHero({ name, avatar, machineName, scope, project, voiceBusy, openBusy, voiceDisabled, openDisabled, onVoice, onOpen }: {
+export function AssistantHomeHero({ name, avatar, machineName, scope, project, voiceBusy, openBusy, voiceDisabled, openDisabled, setupNeeded = false, onVoice, onOpen }: {
   name: string; avatar?: string; machineName: string; scope: string; project: boolean;
+  /** The assistant is not set up or is switched off on the computer: calls and messages wait for it. */
+  setupNeeded?: boolean;
   voiceBusy: boolean; openBusy: boolean; voiceDisabled: boolean; openDisabled: boolean;
   onVoice(): void; onOpen(): void;
 }) {
@@ -36,7 +38,9 @@ export function AssistantHomeHero({ name, avatar, machineName, scope, project, v
     <View style={{ alignItems: "center", gap: space.sm }}>
       <Heading style={[uiStyles.title, { textAlign: "center" }]}>{name}</Heading>
       <AssistantContextBadges machineName={machineName} scope={scope} project={project} />
-      <Body muted style={{ textAlign: "center" }}>{copy("Sesli görüşme başlatın ya da yazarak sorun.", "Start a voice call or write a message.")}</Body>
+      <Body muted style={{ textAlign: "center" }}>{setupNeeded
+        ? copy("Asistan {p0} üzerinde kapalı. Bilgisayardaki bycoda’dan kurulumu bitirip açın.", "The assistant is off on {p0}. Finish its setup in bycoda on that computer.", { p0: machineName })
+        : copy("Sesli görüşme başlatın ya da yazarak sorun.", "Start a voice call or write a message.")}</Body>
     </View>
     <View style={{ alignSelf: "stretch", gap: space.sm }}>
       <Button label={copy("Sesli görüşme", "Voice call")} tone="primary" fullWidth busy={voiceBusy} disabled={voiceDisabled} onPress={onVoice}>

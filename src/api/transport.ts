@@ -21,6 +21,7 @@ export class HostError extends Error {
     message: string,
     public readonly machineId: string,
     public readonly uncertain = false,
+    public readonly hostDeadline = false,
   ) {
     super(message);
     this.name = "HostError";
@@ -167,7 +168,7 @@ export class HostTransport {
         unsupported: "host",
         host: "host",
       } as const;
-      throw new HostError(kinds[error.kind], error.message, id, error.uncertain);
+      throw new HostError(kinds[error.kind], error.message, id, error.uncertain, error.hostDeadline);
     } finally {
       options.signal?.removeEventListener("abort", cancel);
       this.active.delete(controller);

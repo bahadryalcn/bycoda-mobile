@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActiveSession } from "./activity-model";
-import { tabletOverviewModel } from "./tablet-overview-model";
+import { tabletDirectoryIsEmpty, tabletOverviewModel, tabletOverviewWakes } from "./tablet-overview-model";
 
 function row(id: string, fields: Partial<ActiveSession["session"]> = {}): ActiveSession {
   return {
@@ -51,5 +51,24 @@ describe("tablet overview", () => {
     expect(tabletOverviewModel([], [], new Set(), 100)).toEqual({
       running: 0, attentionCount: 0, connected: 0, total: 0, attention: [], recent: [],
     });
+  });
+
+  it("shows the empty state only for a ready directory with no list-owned state", () => {
+    const ready = { ready: true, pending: false, waiting: false, privacyPending: false, listOwnsRegion: false };
+    expect(tabletDirectoryIsEmpty(ready)).toBe(true);
+    expect(tabletDirectoryIsEmpty({ ...ready, ready: false })).toBe(false);
+    expect(tabletDirectoryIsEmpty({ ...ready, pending: true })).toBe(false);
+    expect(tabletDirectoryIsEmpty({ ...ready, waiting: true })).toBe(false);
+    expect(tabletDirectoryIsEmpty({ ...ready, privacyPending: true })).toBe(false);
+    expect(tabletDirectoryIsEmpty({ ...ready, listOwnsRegion: true })).toBe(false);
+  });
+
+  // Regression: the overview must not run a per-second clock. Idle screens yield no wake-ups at all,
+  // and the only wake-ups are snooze ends and the close of each computer's connected window.
+  it("wakes only at snooze ends and connected-window closes, never on a fixed tick", () => {
+    expect(tabletOverviewWakes([row("idle")], [0])).toEqual([undefined, null]);
+    expect(tabletOverviewWakes([row("snoozed", { snoozedUntil: 5_000 })], [10_000, 0])).toEqual([
+      5_000, 10_000 + 45_000, null,
+    ]);
   });
 });

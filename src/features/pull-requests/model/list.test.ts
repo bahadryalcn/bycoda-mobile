@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultPrFilters, isBotActivity, isTestFile, prListItems, prListQuery, readPrRoute } from "./list";
+import { defaultPrFilters, isBotActivity, isTestFile, matchPrItem, prListItems, prListQuery, readPrRoute } from "./list";
 import { readPrChecks, readPrLabels, readPrReviewers } from "./results";
 import type { RemoteInboxItem } from "../../../../../src/features/inbox/model/remoteInbox";
 const item: RemoteInboxItem = { provider: "github", kind: "pr", number: 1, repo: "owner/repo", projectPath: "C:/repo", title: "PR", url: "https://github.com/owner/repo/pull/1", state: "open", draft: false, labels: [], assignees: [], updatedAt: "2026-11-17", createdAt: "2026-11-10" };
@@ -21,13 +21,20 @@ describe("PR list and local display", () => {
     expect(isBotActivity("alice")).toBe(false);
   });
   it("rejects malformed route identity", () => {
-    expect(readPrRoute(JSON.stringify(item), "1")?.repo).toBe(item.repo);
-    expect(readPrRoute(JSON.stringify(item), "2")).toBeNull();
-    expect(readPrRoute("{", "1")).toBeNull();
-    expect(readPrRoute(JSON.stringify({ ...item, provider: "linear" }), "1")).toBeNull();
-    expect(readPrRoute(JSON.stringify({ ...item, assignees: [{ login: "alice" }] }), "1")?.assignees).toEqual([{ login: "alice" }]);
-    expect(readPrRoute(JSON.stringify({ ...item, assignees: [{}] }), "1")).toBeNull();
-    expect(readPrRoute(JSON.stringify({ ...item, labels: [null] }), "1")).toBeNull();
+    const params = { id: "1", repo: item.repo, projectPath: item.projectPath };
+    expect(readPrRoute(params)).toEqual({ number: 1, repo: item.repo, projectPath: item.projectPath });
+    for (const id of ["0", "01", "1.5", "-1", "abc", "9007199254740993"]) expect(readPrRoute({ ...params, id })).toBeNull();
+    for (const repo of ["owner", "owner/repo/extra", "owner/re po", ""]) expect(readPrRoute({ ...params, repo })).toBeNull();
+    expect(readPrRoute({ ...params, projectPath: "x".repeat(1_025) })).toBeNull();
+    expect(readPrRoute({ ...params, projectPath: undefined })).toBeNull();
+    expect(readPrRoute({ ...params, id: ["1"] })).toBeNull();
+  });
+  it("matches a route to a cached item by identity only", () => {
+    const target = { number: 1, repo: item.repo, projectPath: item.projectPath };
+    expect(matchPrItem([item], target)).toBe(item);
+    expect(matchPrItem([item], { ...target, projectPath: "C:/other" })).toBeNull();
+    expect(matchPrItem([{ ...item, provider: "gitlab" }], target)).toBeNull();
+    expect(matchPrItem(undefined, target)).toBeNull();
   });
 });
 describe("PR result trust boundary", () => {

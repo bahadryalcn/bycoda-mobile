@@ -7,7 +7,7 @@ vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => crea
 vi.mock("expo-router", () => ({ router: { push: vi.fn() }, Stack: { Screen: () => null } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { muted: "muted" }, uiStyles: { grow: {}, caption: {}, heading: {} } }) }));
-vi.mock("./assistant-call-controls", () => ({ AssistantCallButton: () => createElement("button", { "data-call": true }, "Voice call") }));
+vi.mock("./assistant-call-controls", () => ({ AssistantCallButton: () => createElement("button", { "data-call": true }, "Voice call"), AssistantCallError: () => null }));
 vi.mock("./assistant-call-session", () => ({ endAssistantCall: vi.fn() }));
 vi.mock("./assistant-home-hero", () => ({
   AssistantContextBadges: ({ machineName, scope }: { machineName: string; scope: string }) => createElement("span", null, `${machineName} ${scope}`),

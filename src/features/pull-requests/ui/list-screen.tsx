@@ -24,7 +24,11 @@ export function PullRequestsScreen() {
   const visible = !!machine && scopeCurrent && access.canRead && !isInboxPrivateFailure(query.error);
   const items = visible ? prListItems(query.data?.items ?? [], filters) : [];
   const current = () => !!machine && useMachines.getState().activeId === machine.id && scopeCurrent && (!projectId || projects.isProjectVisible(projectId));
-  const refresh = () => { if (current() && access.canRead) return query.refetch(); };
+  const refresh = () => {
+    if (!current()) return;
+    void availability.refetch();
+    if (access.canRead) return query.refetch();
+  };
   return <Screen title={copy("Pull request’ler", "Pull requests")} scroll={false}>
     <ScreenList data={items} query={query} refresh={refresh} actions={bounds.button}
       subtitle={machine && scopeCurrent ? `${machine.name} · ${projectId ? projects.data?.find(project => project.id === projectId)?.name : copy("Tüm projeler", "All projects")}` : undefined}
@@ -41,14 +45,19 @@ export function PullRequestsScreen() {
           <ChoiceChip label={copy("İncelemem istendi", "Review requested from me")} selected={filters.reviewRequested} onPress={() => setFilters(current => ({ ...current, reviewRequested: !current.reviewRequested }))} />
         </Row>
         </> : null}
-        {!machine ? <StateView illustration="connect-computer" title={copy("Bir bilgisayar seçin", "Choose a computer")} /> : !scopeCurrent ? <StateView illustration="unreachable" title={copy("Pull request erişimi kullanılamıyor", "Pull request access unavailable")} /> : <QueryState query={availability} />}
+        {!machine ? <StateView illustration="connect-computer" title={copy("Bir bilgisayar seçin", "Choose a computer")} /> : !scopeCurrent ? <StateView illustration="unreachable" title={copy("Pull request erişimi kullanılamıyor", "Pull request access unavailable")} /> : <QueryState query={availability}
+          // Without desktop provider access the list would otherwise render nothing at all.
+          empty={availability.data?.available === false} emptyIllustration="connect-computer"
+          emptyTitle={copy("Bilgisayardaki Bycoda açık olmalı", "Open Bycoda on your computer")}
+          emptyDetail={copy("GitHub, GitLab, Azure DevOps, Linear ve Jira erişimi bilgisayardaki oturumundan alınır. Bycoda’yı aç veya güncelle; bağlantı otomatik kontrol edilir.",
+            "Provider access uses your desktop session. Open or update Bycoda on this computer; availability is checked automatically.")} />}
         {visible ? <><QueryState query={query} empty={query.data !== undefined && items.length === 0} />
           {query.data ? <ProviderInboxFeedback result={query.data} onRetry={() => { void refresh(); }} retrying={query.isFetching} /> : null}
 </> : null}
       </Stack>}
       renderItem={({ item }) => <ProviderInboxRow item={item} onOpen={() => {
         if (!visible || !machine || !current()) return;
-        router.push({ pathname: "/pull-requests/[id]", params: { id: String(item.number), item: JSON.stringify(item), machineId: machine.id, projectId: projectId ?? "" } });
+        router.push({ pathname: "/pull-requests/[id]", params: { id: String(item.number), repo: item.repo, projectPath: item.projectPath, machineId: machine.id, projectId: projectId ?? "" } });
       }} />}
     />
   </Screen>;

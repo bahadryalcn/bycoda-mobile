@@ -96,3 +96,26 @@ it("enforces the aggregate 20-file limit across questions before admitting or cl
   expect(f.store.files()).toHaveLength(20); expect(f.deps.removeFile).toHaveBeenCalledExactlyOnceWith(file);
   expect(f.deps.upload).not.toHaveBeenCalled(); expect(f.deps.stage).not.toHaveBeenCalled();
 });
+it("keeps typed text in memory without per-keystroke disk work, then writes the exact text before dispatch", async () => {
+  const f = fixture(); await f.owner.load();
+  const writes = f.storage.setItem.mock.calls.length;
+  const typing = ["h", "he", "hel"].map(text => f.owner.saveDraft({ answers: {}, custom: { one: text, two: "two", typed: "typed" } }));
+  expect(f.owner.draft().custom.one).toBe("hel"); expect(f.storage.setItem.mock.calls.length).toBe(writes);
+  const send = vi.fn(async (_reply: UserQuestionReply) => {});
+  await f.owner.send({ answers: {}, custom: { one: "help", two: "two", typed: "typed" } }, false, send);
+  await Promise.all(typing);
+  const persisted = JSON.parse(f.data.get(questionAttachmentKey("m", "s"))!).entries.occurrence;
+  expect(persisted.draft.custom.one).toBe("help"); expect(persisted.delivery).toBe("sending");
+  expect(f.storage.setItem.mock.calls.length - writes).toBe(2); // pending text + sending latch, not one per keystroke
+  expect(send).toHaveBeenCalledOnce();
+});
+it("blocks dispatch when the pending text cannot reach disk and flushDraft persists it after recovery", async () => {
+  const f = fixture(); await f.owner.load();
+  void f.owner.saveDraft({ answers: {}, custom: { one: "one", two: "two", typed: "typed" } }).catch(() => {});
+  f.storage.setItem.mockRejectedValueOnce(new Error("disk full"));
+  const send = vi.fn(async (_reply: UserQuestionReply) => {});
+  await expect(f.owner.send({ answers: {}, custom: { one: "one", two: "two", typed: "typed" } }, false, send)).rejects.toThrow("disk full");
+  expect(send).not.toHaveBeenCalled(); expect(f.owner.draft().custom.one).toBe("one");
+  await f.owner.flushDraft();
+  expect(JSON.parse(f.data.get(questionAttachmentKey("m", "s"))!).entries.occurrence.draft.custom.one).toBe("one");
+});

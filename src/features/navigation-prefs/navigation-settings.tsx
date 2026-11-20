@@ -7,6 +7,7 @@ import { Button, NavigationGroup, NavigationRow, SettingIcon, Sheet, ToggleField
 import Rows3 from "lucide-react-native/icons/rows-3";
 import FolderClock from "lucide-react-native/icons/folder-clock";
 import { useCopy } from "@/ui/copy";
+import { PreferenceStorageNotice } from "@/ui/preference-storage-notice";
 import { useMobileTheme } from "@/ui/theme";
 import { gapIcon, metrics, radii, space } from "@/ui/tokens";
 import { appPreferences, useAppPreferences, type AppPreferences } from "./app-preferences";
@@ -15,7 +16,7 @@ import { defaultTabPreferences, moveTab, setTabHidden, type DockTabId } from "./
 /** Settings → Navigation: dock tab order and visibility, and the new-session default. */
 export function NavigationSettings() {
   const copy = useCopy();
-  const { preferences, hydrated } = useAppPreferences();
+  const { preferences, hydrated, storageError, retry } = useAppPreferences();
   const [editing, setEditing] = useState(false);
   const label = (id: DockTabId) =>
     ({
@@ -24,10 +25,10 @@ export function NavigationSettings() {
       inbox: copy("Gelen kutusu", "Inbox"),
       manage: copy("Araçlar", "Tools"),
     })[id];
-  const update = (patch: Partial<AppPreferences>) =>
-    void appPreferences.getState().update(patch).catch(() => undefined);
+  const update = (patch: Partial<AppPreferences>) => void appPreferences.getState().update(patch);
   return (
     <>
+      <PreferenceStorageNotice error={storageError} retry={retry} />
       <NavigationGroup>
         <NavigationRow
           label={copy("Sekmeleri düzenle", "Customize tabs")}
@@ -56,10 +57,10 @@ export function NavigationSettings() {
 function TabOrderSheet({ onClose, label }: { onClose: () => void; label: (id: DockTabId) => string }) {
   const copy = useCopy();
   const { colors } = useMobileTheme();
-  const { preferences } = useAppPreferences();
+  const { preferences, storageError, retry } = useAppPreferences();
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const tabs = preferences.tabs;
-  const save = (next: typeof tabs) => void appPreferences.getState().update({ tabs: next }).catch(() => undefined);
+  const save = (next: typeof tabs) => void appPreferences.getState().update({ tabs: next });
   return (
     <Sheet visible title={copy("Sekmeleri düzenle", "Customize tabs")} size="full" scroll={false} onClose={onClose}>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -68,6 +69,7 @@ function TabOrderSheet({ onClose, label }: { onClose: () => void; label: (id: Do
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ padding: space.screen, gap: space.sm, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
         >
+          <PreferenceStorageNotice error={storageError} retry={retry} />
           <Sortable
             value={[...tabs.order]}
             gap={space.xs}

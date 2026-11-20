@@ -12,7 +12,7 @@ import { useMobileTheme } from "@/ui/theme";
 import { fontSize, lineHeight, metrics, radii, space } from "@/ui/tokens";
 import type { Block } from "@/domain/types";
 import { agentStateLabel } from "./agent-state";
-import type { AgentEntry } from "./agents-model";
+import { groupAgents, type AgentEntry, type AgentListItem } from "./agents-model";
 import { agentCountText, countAgents, sessionAgentEntries } from "./session-activity-model";
 import { formatElapsed } from "./run-status-model";
 import { SubagentDetails } from "./subagent-details";
@@ -32,19 +32,9 @@ type Props = Pick<TranscriptBlockProps, "scope" | "runId" | "disabled" | "onComm
 const badgeTone = (state: AgentEntry["state"]) =>
   state === "running" ? "info" : state === "failed" ? "danger" : state === "stopped" ? "warning" : "success";
 
-type ListItem = { kind: "heading"; id: string; label: string } | { kind: "agent"; id: string; entry: AgentEntry };
-
-/** Running agents first, then finished ones, each group under its own heading. */
-function groupAgents(entries: readonly AgentEntry[], running: string, finished: string): ListItem[] {
-  const active = entries.filter((entry) => entry.state === "running");
-  const rest = entries.filter((entry) => entry.state !== "running");
-  const out: ListItem[] = [];
-  if (active.length && rest.length) out.push({ kind: "heading", id: "h:running", label: running });
-  out.push(...active.map((entry): ListItem => ({ kind: "agent", id: entry.id, entry })));
-  if (active.length && rest.length) out.push({ kind: "heading", id: "h:finished", label: finished });
-  out.push(...rest.map((entry): ListItem => ({ kind: "agent", id: entry.id, entry })));
-  return out;
-}
+type ListItem =
+  | AgentListItem
+  | { kind: "child"; id: string; child: ChildSessionEntry };
 
 /** Every subagent of the session; tapping one opens its steps and report with a way back to the list. */
 export function AgentsSheet({ blocks, childRuns: children = [], live = false, onClose, ...props }: Props) {
@@ -56,16 +46,29 @@ export function AgentsSheet({ blocks, childRuns: children = [], live = false, on
   const running = entries.some((entry) => entry.state === "running");
   const now = useElapsedNow(running && !selectedId);
   const selected = selectedId ? blocks?.find((block) => block.id === selectedId) : undefined;
-  const items = groupAgents(entries, copy("Çalışıyor", "Running"), copy("Tamamlananlar", "Finished"));
+  const items: ListItem[] = groupAgents(entries, copy("Çalışıyor", "Running"), copy("Tamamlananlar", "Finished"));
+  if (children.length) {
+    items.unshift(
+      { kind: "heading", id: "h:children", label: copy("Kendi başına çalışır", "Runs on its own") },
+      ...children.map((child): ListItem => ({ kind: "child", id: `child:${child.sessionId}`, child })),
+    );
+  }
   return (
     <Sheet visible size="full" scroll={false} onClose={onClose}
       title={selected?.agentRun?.name || (selected ? copy("Alt ajan ayrıntıları", "Subagent details") : copy("Ajanlar", "Agents"))}
       headerAction={selected ? <ChatToolbarAction label={copy("Ajanlar", "Agents")} onPress={() => setSelectedId(undefined)} /> : undefined}>
       {selected ? <SubagentDetails key={selected.id} block={selected} {...props} /> : (
         <FlatList data={items}
-          ListHeaderComponent={summary || children.length ? <View style={{ gap: space.sm, marginBottom: space.sm }}>{summary ? <Body muted accessibilityLabel={agentCountText(counts, copy, true)} style={{ fontVariant: ["tabular-nums"] }}>{summary}</Body> : null}{children.map((child) => <ChildRow key={child.sessionId} child={child} machineId={props.scope.machineId} provider={props.parentProvider} onOpen={onClose} />)}</View> : undefined} keyExtractor={(item) => item.id} style={{ flex: 1 }} contentContainerStyle={{ gap: space.sm, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
-          renderItem={({ item }) => item.kind === "heading" ? <SectionHeader title={item.label} /> : <AgentRow entry={item.entry} now={now} provider={props.parentProvider} onPress={() => setSelectedId(item.id)} />}
-          ListEmptyComponent={children.length ? undefined : <Empty title={copy("Alt ajan yok", "No subagents")} detail={copy("Bu oturumda alt ajan çalışmadı. Ajan başlatıldığında burada görünür.", "No subagents have run in this session. They appear here when one starts.")} />} />
+          ListHeaderComponent={summary ? <Body muted accessibilityLabel={agentCountText(counts, copy, true)} style={{ fontVariant: ["tabular-nums"] }}>{summary}</Body> : undefined}
+          keyExtractor={(item) => item.id}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ gap: space.sm, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center", paddingHorizontal: space.screen, paddingBottom: space.lg, flexGrow: 1 }}
+          renderItem={({ item }) => {
+            if (item.kind === "heading") return <SectionHeader title={item.label} />;
+            if (item.kind === "child") return <ChildRow child={item.child} machineId={props.scope.machineId} provider={props.parentProvider} onOpen={onClose} />;
+            return <AgentRow entry={item.entry} now={now} provider={props.parentProvider} onPress={() => setSelectedId(item.id)} />;
+          }}
+          ListEmptyComponent={<Empty compact={false} illustration="no-sessions" title={copy("Alt ajan yok", "No subagents")} detail={copy("Bu oturumda alt ajan çalışmadı. Ajan başlatıldığında burada görünür.", "No subagents have run in this session. They appear here when one starts.")} />} />
       )}
     </Sheet>
   );
@@ -76,7 +79,7 @@ function ChildRow({ child, machineId, provider, onOpen }: { child: ChildSessionE
   const copy = useCopy();
   const label = agentStateLabel(child.state, copy);
   return (
-    <PressableCard label={[child.title, label, child.meta, copy("Kendi başına çalışır", "Runs on its own")].filter(Boolean).join(". ")}
+    <PressableCard label={[child.title, label, child.meta].filter(Boolean).join(". ")}
       onPress={() => { onOpen(); router.push({ pathname: "/session/[id]", params: { id: child.sessionId, machineId, projectId: child.projectId } }); }}
       style={{ minHeight: metrics.touchTarget, gap: space.xs, paddingVertical: space.md, paddingHorizontal: space.md, marginHorizontal: 0, borderRadius: radii.card, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.separator }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.row }}>
@@ -85,7 +88,7 @@ function ChildRow({ child, machineId, provider, onOpen }: { child: ChildSessionE
         <Badge label={label} tone={badgeTone(child.state)} />
         <ChevronRight size={16} color={colors.tertiary} />
       </View>
-      <Body muted numberOfLines={2} style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption }}>{[child.meta, copy("Kendi başına çalışır", "Runs on its own")].filter(Boolean).join(" · ")}</Body>
+      {child.meta ? <Body muted numberOfLines={2} style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption }}>{child.meta}</Body> : undefined}
     </PressableCard>
   );
 }

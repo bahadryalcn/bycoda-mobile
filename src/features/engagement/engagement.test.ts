@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { repositoryUrl } from "../legal/legal-content";
 import {
   appIdentity,
@@ -7,6 +8,14 @@ import {
   publicAppUrl,
 } from "./engagement-model";
 import { openPublicLink, sharePublicApp } from "./engagement-actions";
+
+it("keeps the About version locale-controlled and uses distinct website and store rows", () => {
+  const source = readFileSync(new URL("./engagement-settings.tsx", import.meta.url), "utf8");
+  expect(source).toContain('copy("Sürüm: {p0}", "Version: {p0}",');
+  expect(source.match(/icon=\{tile\(Globe,/g)).toHaveLength(1);
+  expect(source).toMatch(/"App page"\)\}[\s\S]*?icon=\{tile\(Smartphone,/);
+  expect(source).not.toContain('copy("Bağlantılar", "Links")');
+});
 
 const english = (_tr: string, en: string) => en;
 const turkish = (tr: string, _en: string) => tr;

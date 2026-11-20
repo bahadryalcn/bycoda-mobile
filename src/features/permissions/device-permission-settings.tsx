@@ -5,7 +5,7 @@ import Camera from "lucide-react-native/icons/camera";
 import Mic from "lucide-react-native/icons/mic";
 import ImageIcon from "lucide-react-native/icons/image";
 import { useAsyncAction } from "@/state/actions";
-import { Badge, Button, FormActions, MutationState, NavigationGroup, NavigationRow, Row, SectionHeader, Stack, StateView, ValueRow } from "@/ui/primitives";
+import { Badge, Body, Button, FormActions, MutationState, NavigationGroup, NavigationRow, Row, SectionHeader, Stack, StateView, ValueRow } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { useCopy } from "@/ui/copy";
 import { useInfoHint } from "@/ui/info-hint";
@@ -22,11 +22,12 @@ export function DevicePermissionSettings() {
   const copy = useCopy();
   const { colors } = useMobileTheme();
   const action = useAsyncAction();
+  const retry = useAsyncAction();
   const [reads, setReads] = useState<PermissionReads>(pendingPermissionReads);
   const mounted = useRef(true);
-  const [operationTarget, setOperationTarget] = useState<DevicePermissionKind | "refresh" | "test" | "settings">("refresh");
+  const [operationTarget, setOperationTarget] = useState<DevicePermissionKind | "test" | "settings">();
   // A rejected concurrent request must not steal the active operation's feedback.
-  const runFor = useCallback((target: typeof operationTarget, work: () => Promise<unknown>) => action.run(async () => {
+  const runFor = useCallback((target: NonNullable<typeof operationTarget>, work: () => Promise<unknown>) => action.run(async () => {
     if (mounted.current) setOperationTarget(target);
     return work();
   }), [action.run]);
@@ -38,14 +39,15 @@ export function DevicePermissionSettings() {
       if (mounted.current) setReads((current) => ({ ...current, [kind]: outcome }));
     });
   }, []);
+  // Passive status reads bypass the user-action flight: otherwise a mount or foreground read would disable every row.
   useEffect(() => {
     if (process.env.EXPO_OS === "web") return;
-    void runFor("refresh", () => refresh());
+    void refresh();
     const listener = AppState.addEventListener("change", (state) => {
-      if (state === "active") void runFor("refresh", () => refresh());
+      if (state === "active") void refresh();
     });
     return () => listener.remove();
-  }, [refresh, runFor]);
+  }, [refresh]);
   if (process.env.EXPO_OS === "web") return <StateView compact={false} tone="info" title={copy("Telefon izinlerini mobil uygulamada yönet.", "Manage phone permissions in the mobile app.")} />;
   // Unknown (pending or failed) reads show no badge; the issue summary explains failures.
   const badge = (read: PermissionRead) => {
@@ -88,6 +90,11 @@ ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`);
       }); }} />{operationTarget === kind ? <MutationState mutation={action} /> : null}</>;
   };
   const notificationsGranted = reads.notifications.status === "ready" && reads.notifications.permission.granted;
+  // Names the blocking permission state so a dimmed test button is never unexplained.
+  const testBlockedReason = notificationsGranted ? null
+    : reads.notifications.status === "pending" ? copy("Bildirim izni kontrol ediliyor.", "Checking notification permission.")
+      : reads.notifications.status === "error" ? copy("Bildirim izni okunamadı. Yukarıdan yenile.", "Notification permission could not be read. Refresh above.")
+        : copy("Önce bildirimlere izin ver.", "Allow notifications first.");
   const pushTest = usePushTestFromComputer();
   return (
     <>
@@ -103,12 +110,12 @@ ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`);
             icon={<IconTile color={colors.muted}><ImageIcon size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
             trailing={<Badge label={copy("Sistem seçicisi", "System picker")} />} />
         </NavigationGroup>
-        <IssueSummary issues={issues} retrying={action.isPending} onRetry={() => { void runFor("refresh", () => refresh(failed)); }} />
+        <IssueSummary issues={issues} retrying={retry.isPending} onRetry={() => { void retry.run(() => refresh(failed)); }} />
         <Row style={{ justifyContent: "flex-end" }}>
           <Button label={copy("Telefon ayarlarını aç", "Open phone settings")} tone="secondary" disabled={action.isPending} busy={action.isPending && operationTarget === "settings"}
             onPress={() => { void runFor("settings", () => Linking.openSettings()); }} />
         </Row>
-        {operationTarget === "settings" || operationTarget === "refresh" ? <MutationState mutation={action} /> : null}
+        {operationTarget === "settings" ? <MutationState mutation={action} /> : null}
       </View>
       <PushSettings />
       <View style={{ gap: space.sm }}>
@@ -122,6 +129,7 @@ ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`);
             <Button label={copy("Bilgisayardan dene", "Test from computer")} tone="secondary" disabled={pushTest.disabled} busy={pushTest.busy}
               onPress={pushTest.run} />
           </Row>
+          {testBlockedReason && !action.isPending ? <Body muted selectable={false}>{testBlockedReason}</Body> : null}
           {operationTarget === "test" ? <MutationState mutation={action} /> : null}
           <MutationState mutation={pushTest.action} />
         </Stack>

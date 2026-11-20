@@ -21,7 +21,9 @@ import { CRASH_MARKER } from "./diagnostic-files";
 import { archiveCrashMarker, formatCrashLog, readCrashHistory } from "./crash-history";
 import { expoDiagnosticFiles } from "./expo-diagnostic-files";
 import { createDiagnosticPrefs, createDiagnosticPreferenceStore } from "./diagnostic-prefs";
-import { buildDiagnosticReport, sendDiagnosticReport, type DiagnosticSendResult } from "./diagnostic-report";
+import type { DiagnosticSendResult } from "./diagnostic-report";
+import { createPeriodicDiagnostics } from "./diagnostic-periodic";
+import { resolveWithin, runDiagnosticSend, SIGNED_IN_EMAIL_DEADLINE_MS } from "./diagnostic-send";
 
 const files = expoDiagnosticFiles();
 export const diagnosticPrefs = createDiagnosticPrefs(AsyncStorage);
@@ -111,13 +113,21 @@ export function lastCrashLog(): string | null {
 
 export const useDiagnosticPrefs = createDiagnosticPreferenceStore(diagnosticPrefs);
 
+/** One automatic upload at a time for the whole app, whichever coordinator effect triggers it. */
+export const periodicDiagnostics = createPeriodicDiagnostics({
+  mode: () => useDiagnosticPrefs.getState().consent.mode,
+  readLastSent: diagnosticPrefs.readLastPeriodic,
+  writeLastSent: diagnosticPrefs.writeLastPeriodic,
+  readRetryAt: diagnosticPrefs.readPeriodicRetryAt,
+  writeRetryAt: diagnosticPrefs.writePeriodicRetryAt,
+  now: () => new Date(),
+});
+
 async function signedInEmail(account: AccountState): Promise<string | null> {
   if (account.status !== "signedIn" || !account.runtime) return null;
-  try {
-    return (await account.runtime.client.getMe()).user.email;
-  } catch {
-    return null;
-  }
+  const { client } = account.runtime;
+  const me = await resolveWithin(() => client.getMe(), SIGNED_IN_EMAIL_DEADLINE_MS);
+  return me?.user.email ?? null;
 }
 
 /** Client for auth-"none" routes: the contract client sends no token when none is needed. */
@@ -145,41 +155,45 @@ export async function sendDiagnostics(
   trigger: DiagnosticTrigger,
   options: { includeCrash?: boolean; note?: string; feedbackId?: string } = {},
 ): Promise<DiagnosticSendResult> {
-  try {
+  const clients = (() => {
+    try {
+      return {
+        signedIn: account.status === "signedIn" && account.runtime ? account.runtime.client : null,
+        // The anonymous route is auth "none": the contract client sends no token when none is needed.
+        anonymous: anonymousAccountClient(),
+      };
+    } catch {
+      return null;
+    }
+  })();
+  if (!clients) {
     capture?.flush();
-    const crash = options.includeCrash ? readCrashMarker(files) : null;
-    const hosts = await collectConnectedHostLogs();
-    const info = readDeviceInfo();
-    const report = buildDiagnosticReport({
-      trigger,
-      log: capture?.readLog() ?? "",
-      crash,
-      environment: environmentText(account, hosts.hostVersions),
-      hostSections: hosts.sections,
-      email: await signedInEmail(account),
-      note: options.note,
-      feedbackId: options.feedbackId,
-      context: {
-        appVersion: info.appVersion,
-        platform: info.platform,
-        osVersion: info.osVersion,
-        channel: info.channel,
-      },
-      now: new Date(),
-    });
-    const signedIn =
-      account.status === "signedIn" && account.runtime ? account.runtime.client : null;
-    // The anonymous route is auth "none": the contract client sends no token when none is needed.
-    const anonymousClient = anonymousAccountClient();
-    return await sendDiagnosticReport(report, {
-      signedIn: signedIn
-        ? (body: DiagnosticReportCreate) => signedIn.sendDiagnosticReport({ body })
-        : null,
-      anonymous: anonymousClient
-        ? (body: DiagnosticReportCreate) => anonymousClient.sendAnonymousDiagnosticReport({ body })
-        : null,
-    });
-  } catch {
     return "failed";
   }
+  const { signedIn, anonymous: anonymousClient } = clients;
+  return runDiagnosticSend(
+    {
+      flush: () => capture?.flush(),
+      readLog: () => capture?.readLog() ?? "",
+      readCrash: () => readCrashMarker(files),
+      collectHostLogs: collectConnectedHostLogs,
+      environment: (hostVersions) => environmentText(account, hostVersions),
+      email: () => signedInEmail(account),
+      context: () => {
+        const info = readDeviceInfo();
+        return { appVersion: info.appVersion, platform: info.platform, osVersion: info.osVersion, channel: info.channel };
+      },
+      transport: {
+        signedIn: signedIn
+          ? (body: DiagnosticReportCreate) => signedIn.sendDiagnosticReport({ body })
+          : null,
+        anonymous: anonymousClient
+          ? (body: DiagnosticReportCreate) => anonymousClient.sendAnonymousDiagnosticReport({ body })
+          : null,
+      },
+      now: () => new Date(),
+    },
+    trigger,
+    options,
+  );
 }

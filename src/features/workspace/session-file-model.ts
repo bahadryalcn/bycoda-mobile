@@ -53,6 +53,11 @@ export function sessionFileIndex(blocks: readonly Block[]): SessionFile[] {
   });
 }
 
+/** The transcript walk runs only while the Session files sheet is open; a closed sheet keeps no index. */
+export function sessionFileIndexWhileOpen(open: boolean, blocks: readonly Block[]): SessionFile[] {
+  return open ? sessionFileIndex(blocks) : [];
+}
+
 export function filterSessionFiles(
   files: readonly SessionFile[],
   search: string,

@@ -16,6 +16,7 @@ import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/priv
 import { usePrivateMediaData } from "@/ui/use-private-media-data";
 import { useReaderContentAccess, useReaderRetry, useReaderScope } from "@/ui/use-reader-scope";
 import { space } from "@/ui/tokens";
+import { loopbackScopeKey } from "@/ui/loopback-link";
 import type { Block } from "./wire";
 import { ReaderContext } from "@/ui/reader-context";
 import { RecordAccessUnavailable } from "./unavailable-state";
@@ -233,7 +234,7 @@ export function TranscriptAttachments({
         </View>
       ) : null}
       {files.filter((file) => !tiles.includes(file)).map(attach)}
-      {links.length ? <ComposerLinks links={links} /> : null}
+      {links.length ? <ComposerLinks links={links} ownerScope={loopbackScopeKey(context)} /> : null}
     </View>
   );
 }

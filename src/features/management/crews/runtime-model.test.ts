@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { CrewRunView } from "@/remote/contracts/crews";
-import { canAcceptCrewTask, canDeleteCrewRun, canFinishCrewRun, canStopCrewRun, crewActivityKnown, crewHasRunningWork, crewInputDefinitelyRejected, crewTaskSessions } from "./runtime-model";
+import { canAcceptCrewTask, canDeleteCrewRun, canFinishCrewRun, canStopCrewRun, crewActivityKnown, crewDirectoryPollInterval, crewHasRunningWork, crewInputDefinitelyRejected, crewRunPollInterval, crewTaskSessions } from "./runtime-model";
 import { RemoteHostError } from "@/remote/host-error";
 
 const run = (): CrewRunView => ({ id: "run", projectId: "project", status: "active", assignments: [{ taskId: "task" }],
@@ -78,4 +78,30 @@ it("releases a pending input only after definite rejection, retaining uncertain 
   expect(crewInputDefinitelyRejected(new RemoteHostError("pc", "host", "Unknown receipt", true))).toBe(false);
   expect(crewInputDefinitelyRejected(new RemoteHostError("pc", "network", "Disconnected"))).toBe(false);
   expect(crewInputDefinitelyRejected(new Error("Unknown error"))).toBe(false);
+});
+
+it("polls a run fast only while it can change by itself and stops once it is finished", () => {
+  const value = { ...run(), status: "paused", coordinatorStatus: "idle", tasks: [] } as CrewRunView;
+  expect(crewRunPollInterval(value)).toBe(15_000);
+  expect(crewRunPollInterval({ ...value, status: "active" })).toBe(5000);
+  expect(crewRunPollInterval({ ...value, coordinatorStatus: "running" })).toBe(5000);
+  expect(crewRunPollInterval({ ...value, tasks: [{ status: "queued" } as CrewRunView["tasks"][number]] })).toBe(5000);
+  // Unknown activity (older host) is never treated as idle.
+  expect(crewRunPollInterval({ ...value, coordinatorSessionId: "lead", coordinatorStatus: undefined })).toBe(5000);
+  // A pending answer or approval keeps the expanded run responsive even when paused.
+  expect(crewRunPollInterval({ ...value, pendingInputs: [{ taskId: "task" }] } as CrewRunView)).toBe(5000);
+  expect(crewRunPollInterval({ ...value, status: "finished" })).toBe(false);
+  expect(crewRunPollInterval({ ...value, status: "finished", coordinatorStatus: "running" })).toBe(5000);
+  expect(crewRunPollInterval(undefined)).toBe(5000);
+});
+
+it("polls the crew directory only for the Work list and slows down when nothing is live", () => {
+  const idle = { ...run(), status: "finished", coordinatorStatus: "idle", tasks: [] } as CrewRunView;
+  const live = { ...idle, id: "live", status: "active" } as CrewRunView;
+  expect(crewDirectoryPollInterval({ runs: [idle, live] }, true)).toBe(5000);
+  expect(crewDirectoryPollInterval({ runs: [idle] }, true)).toBe(15_000);
+  expect(crewDirectoryPollInterval({ runs: [] }, true)).toBe(15_000);
+  // Definitions, member library and an open editor pass runsVisible=false: no polling even with live runs.
+  expect(crewDirectoryPollInterval({ runs: [live] }, false)).toBe(false);
+  expect(crewDirectoryPollInterval(undefined, false)).toBe(false);
 });

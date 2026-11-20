@@ -14,6 +14,7 @@ import {
   SessionsListResultSchema,
   SessionProviderSchema,
   SessionRuntimeModeSchema,
+  type SessionView,
   type SubscriptionEvent,
 } from "../../../src/shared/model/host-contracts";
 import { applySessionSync } from "../../../src/features/connections/model/protocol";
@@ -29,7 +30,17 @@ function requireSessionRead(
   projectId: string,
   aliasIds?: readonly string[],
 ): HostSession {
-  const parsed = foldSessionProject(SessionViewSchema.parse(value), projectId, aliasIds);
+  return requireSessionFields(SessionViewSchema.parse(value), sessionId, projectId, aliasIds);
+}
+
+/** Identity and required-field checks for a view that already passed `SessionViewSchema` or `SessionSyncSchema`. */
+function requireSessionFields(
+  view: SessionView,
+  sessionId: string,
+  projectId: string,
+  aliasIds?: readonly string[],
+): HostSession {
+  const parsed = foldSessionProject(view, projectId, aliasIds);
   const session = parsed.session;
   const settings = session.modelSettings;
   if (session.id === sessionId && parsed.projectId !== projectId)
@@ -93,7 +104,9 @@ export function sessionStreamValue(
     if (sync.kind !== "delta" || !known || sync.base !== known.revision) return "resync";
     if (event.params.baseRevision !== undefined && event.params.baseRevision !== sync.base)
       throw new Error("Transcript delta base changed.");
-    requireSessionRead(
+    // `SessionSyncSchema` above already validated every field of this composite (same metadata,
+    // JSON session and JSON blocks as `SessionViewSchema`), so only the identity checks run here.
+    requireSessionFields(
       { ...sync.value, session: { ...sync.value.session, blocks: sync.blocks } },
       sessionId,
       projectId,

@@ -26,8 +26,6 @@ describe("mobile media retry policy", () => {
   it("never automatically replays uploads, commands or arbitrary workspace actions", () => {
     for (const method of ["attachments.upload", "commands.dispatch", "workspace.run"])
       expect(readonlyRequest(method, {})).toBe(false);
-    expect(readonlyRequest("social.request", { action: "messages.send" })).toBe(false);
-    expect(readonlyRequest("social.request", { action: "policy.saveReviewed" })).toBe(false);
   });
 
   it("retries host tool reads but never replays process control", () => {

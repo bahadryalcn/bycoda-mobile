@@ -6,7 +6,7 @@ import type { useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { RecordCard } from "@/ui/record-card";
-import Play from "lucide-react-native/icons/play";
+import Power from "lucide-react-native/icons/power";
 import Pause from "lucide-react-native/icons/pause";
 import Pencil from "lucide-react-native/icons/pencil";
 import MessageSquare from "lucide-react-native/icons/message-square";
@@ -102,7 +102,7 @@ export function StewardCard({
           actions={[
             {
               key: "toggle",
-              icon: glyph(item.enabled ? Pause : Play),
+              icon: glyph(item.enabled ? Pause : Power),
               label: item.enabled
                 ? copy("Duraklat", "Pause")
                 : copy("Etkinleştir", "Enable"),
@@ -173,7 +173,10 @@ export function StewardCard({
         />
       ) : null}
       {run.variables?.stewardId === item.id ? (
-        <MutationState mutation={run} />
+        <MutationState
+          mutation={run}
+          success={copy("Çalıştırma istendi.", "Run requested.")}
+        />
       ) : null}
       {remove.variables?.stewardId === item.id ? (
         <MutationState mutation={remove} />

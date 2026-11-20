@@ -4,16 +4,19 @@ import { expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({ status: "loading" }));
 vi.mock("./account-context", () => ({ useAccount: () => state }));
 vi.mock("./AccountScreen", () => ({ AccountScreen: "AccountScreen" }));
+vi.mock("./AccountLoading", () => ({ AccountLoading: "AccountLoading" }));
 vi.mock("react-native-safe-area-context", () => ({ SafeAreaView: "SafeAreaView" }));
 import { AccountGate } from "./AccountGate";
 
-it("keeps the top inset while the account is loading", () => {
+it("keeps the top inset while the account is loading and never mounts the workspace", () => {
   state.status = "loading";
-  const result = AccountGate({ children: h("workspace") });
+  const workspace = h("workspace");
+  const result = AccountGate({ children: workspace });
   if (!isValidElement<{ edges: string[]; children: { type: unknown } }>(result)) throw new Error("Missing account entry");
   expect(result.type).toBe("SafeAreaView");
   expect(result.props.edges).toEqual(["top"]);
-  expect(result.props.children.type).toBe("AccountScreen");
+  expect(result.props.children.type).toBe("AccountLoading");
+  expect(result).not.toBe(workspace);
 });
 
 it.each(["unavailable", "signedOut"])("shows the full-bleed account entry instead of the workspace while %s", status => {

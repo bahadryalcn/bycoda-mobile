@@ -40,6 +40,10 @@ class VoiceCompanionService : Service() {
   private val playbackOperations = VoiceOperationFence()
   private var player: MediaPlayer? = null
   private var playbackId: String? = null
+  /** The current player finished prepareAsync; only then may it be started or paused. */
+  private var playerPrepared = false
+  /** Playback paused by a transient focus loss; the same playback resumes on gain, nothing else does. */
+  private var suspendedPlayback: String? = null
   private var focusRequest: AudioFocusRequest? = null
   private var focusHeld = false
   private val audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
@@ -47,7 +51,30 @@ class VoiceCompanionService : Service() {
   private val idleStop = Runnable { end("timeout") }
   private val captureLimit = Runnable { stopCapture(id, "limit") }
   private val playbackLimit = Runnable { stopPlayback(id, "Speech playback timed out.") }
-  private val focusListener = AudioManager.OnAudioFocusChangeListener { change -> if (change < 0) handler.post { end("audio-interrupted") } }
+  private val focusListener = AudioManager.OnAudioFocusChangeListener { change -> handler.post { onFocusChange(change) } }
+  private fun onFocusChange(change: Int) {
+    if (ended) return
+    when (VoiceFocusPolicy.action(change, suspendedPlayback, playbackId)) {
+      FocusAction.END -> end("audio-interrupted")
+      FocusAction.SUSPEND -> suspendForFocus()
+      FocusAction.RESUME -> resumeAfterFocus()
+      FocusAction.IGNORE -> Unit
+    }
+  }
+  /** A capture is stopped (never silently resumed); a playback pauses and keeps focus so gain can resume it. */
+  private fun suspendForFocus() {
+    if (captureId != null) stopCapture(id, "focus-lost")
+    val playing = playbackId ?: return
+    val current = player ?: return
+    suspendedPlayback = playing
+    if (playerPrepared) try { current.pause() } catch (_: Exception) { }
+  }
+  private fun resumeAfterFocus() {
+    val current = player ?: return
+    suspendedPlayback = null
+    if (!playerPrepared) return
+    try { current.start(); armIdle() } catch (_: Exception) { stopPlayback(id, "Speech playback failed.") }
+  }
   private fun acquireFocus() {
     if (focusHeld) return
     val manager = getSystemService(AUDIO_SERVICE) as AudioManager
@@ -71,7 +98,8 @@ class VoiceCompanionService : Service() {
   fun allowsSession(supplied: String) = !ended && VoiceSessionPolicy.matches(id, supplied)
   fun snapshot(): Map<String, Any?> = mapOf("active" to (!ended && id.isNotEmpty()), "sessionId" to id, "phase" to phase, "muted" to muted, "pip" to pip)
   internal fun publish() { VoiceCompanionRuntime.emit(mapOf("type" to "state", "sessionId" to id, "state" to snapshot())) }
-  private fun armIdle() { handler.removeCallbacks(idleStop); handler.postDelayed(idleStop, VoiceSessionPolicy.IDLE_TIMEOUT_MS) }
+  /** Muted time is not idle time: the idle window only runs while unmuted and restarts on unmute. */
+  private fun armIdle() { handler.removeCallbacks(idleStop); if (VoiceSessionPolicy.idleRuns(muted)) handler.postDelayed(idleStop, VoiceSessionPolicy.IDLE_TIMEOUT_MS) }
   override fun onCreate() {
     super.onCreate()
     if (Build.VERSION.SDK_INT >= 26) (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.bycoda_voice_channel), NotificationManager.IMPORTANCE_LOW))
@@ -116,13 +144,22 @@ class VoiceCompanionService : Service() {
     return builder.build()
   }
   private fun updated() { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION, notification()); publish() }
-  fun startCapture(supplied: String, captureToken: String) {
+  /** A capture start reserved on the main thread; the microphone opens off it and must still match to go live. */
+  internal class CaptureStart(val sessionId: String, val token: String, val generation: Int)
+  /** Main thread, step 1 of 3: validate, take focus and reserve the capture so mute, stop or end can cancel it. */
+  internal fun prepareCapture(supplied: String, captureToken: String): CaptureStart {
     check(allowsSession(supplied)) { "Voice session is unavailable." }
     check(microphone) { "This voice session is playback-only." }
     check(captureOperations.allows(captureToken)) { "This recording operation was canceled." }
     check(checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { "Microphone permission is required." }
-    check(!muted && !capturing.get()) { "Microphone is muted or already recording." }
+    check(!muted && !capturing.get() && captureId == null) { "Microphone is muted or already recording." }
     stopPlayback(supplied)
+    acquireFocus()
+    captureId = captureToken
+    return CaptureStart(supplied, captureToken, captureGeneration.incrementAndGet())
+  }
+  /** Any thread, step 2 of 3: the blocking AudioRecord construction and start. Touches no service state. */
+  internal fun openRecorder(): AudioRecord {
     val size = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
     check(size > 0) { "Microphone configuration is unavailable." }
     val next = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(size, 6400))
@@ -131,22 +168,40 @@ class VoiceCompanionService : Service() {
     VoiceCompanionRuntime.preferredInputId?.let { wanted ->
       (getSystemService(Context.AUDIO_SERVICE) as AudioManager).getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { it.id == wanted }?.let { runCatching { next.setPreferredDevice(it) } }
     }
-    try { acquireFocus(); next.startRecording() } catch (error: Exception) { next.release(); releaseFocus(); throw error }
-    val version = captureGeneration.incrementAndGet()
-    recorder = next; captureId = captureToken; capturing.set(true); phase = "recording"; armIdle(); updated()
+    try { next.startRecording() } catch (error: Exception) { next.release(); throw error }
+    return next
+  }
+  private fun releaseFocusIfIdle() { if (phase == "idle" && !capturing.get() && player == null) releaseFocus() }
+  /** Main thread, step 3 of 3 when opening failed: drop the reservation and any focus nothing else needs. */
+  internal fun abandonCapture(start: CaptureStart) {
+    if (captureId == start.token && captureGeneration.get() == start.generation) captureId = null
+    releaseFocusIfIdle()
+  }
+  /** Main thread, step 3 of 3: go live only if the reservation is untouched; otherwise close the microphone again. */
+  internal fun commitCapture(start: CaptureStart, next: AudioRecord) {
+    if (!VoiceSessionPolicy.captureStillCurrent(allowsSession(start.sessionId), captureGeneration.get(), start.generation, captureId, start.token, captureOperations.allows(start.token), muted)) {
+      try { next.stop() } catch (_: Exception) { }
+      next.release()
+      releaseFocusIfIdle()
+      error("This recording operation was canceled.")
+    }
+    val version = start.generation
+    val captureToken = start.token
+    recorder = next; capturing.set(true); phase = "recording"; armIdle(); updated()
     handler.postDelayed(captureLimit, 30000)
     val capturedId = id
     Thread({
-      val bytes = ByteArray(3200)
-      var samples = 0
+      // 300 ms batches (9600 bytes at 16 kHz PCM16): one bridge event per batch instead of one per 100 ms read.
+      val batcher = VoicePcmBatcher(VoiceSessionPolicy.PCM_BATCH_BYTES, VoiceSessionPolicy.CAPTURE_SAMPLES) { audio, size ->
+        VoiceCompanionRuntime.emit(mapOf("type" to "pcm", "sessionId" to capturedId, "captureId" to captureToken, "audio" to Base64.encodeToString(audio, 0, size, Base64.NO_WRAP), "sampleRate" to 16000))
+      }
       try {
         while (capturing.get() && captureGeneration.get() == version && allowsSession(capturedId)) {
-          val count = next.read(bytes, 0, minOf(bytes.size, (VoiceSessionPolicy.CAPTURE_SAMPLES - samples) * 2))
+          val count = next.read(batcher.buffer, batcher.offset, batcher.space())
           if (count <= 0) { if (capturing.get()) throw IllegalStateException("Microphone read failed."); break }
           if (!capturing.get() || captureGeneration.get() != version || !allowsSession(capturedId)) break
-          samples += count / 2
-          VoiceCompanionRuntime.emit(mapOf("type" to "pcm", "sessionId" to capturedId, "captureId" to captureToken, "audio" to Base64.encodeToString(bytes, 0, count, Base64.NO_WRAP), "sampleRate" to 16000))
-          if (samples >= VoiceSessionPolicy.CAPTURE_SAMPLES) { handler.post { if (captureGeneration.get() == version) stopCapture(capturedId, "limit") }; break }
+          batcher.accepted(count)
+          if (batcher.finished) { handler.post { if (captureGeneration.get() == version) stopCapture(capturedId, "limit") }; break }
         }
       } catch (error: Exception) { if (capturing.get() && captureGeneration.get() == version) handler.post { if (captureGeneration.get() == version) end("capture-error", error.message) } }
     }, "BycodaVoiceCapture").start()
@@ -172,6 +227,8 @@ class VoiceCompanionService : Service() {
     if (!allowsSession(supplied)) return
     muted = value
     if (value) stopCapture(supplied, "muted")
+    // Re-evaluate after stopCapture (which re-arms): mute disarms the timer, unmute starts a fresh window. Never opens the microphone.
+    if (!ended) armIdle()
     updated()
   }
   fun playWav(supplied: String, playingId: String, uri: String) {
@@ -186,9 +243,23 @@ class VoiceCompanionService : Service() {
       next.setDataSource(file.path)
       next.setOnCompletionListener { if (player === next) stopPlayback(supplied) }
       next.setOnErrorListener { _, what, _ -> if (player === next) stopPlayback(supplied, "Speech playback failed ($what)."); true }
-      next.prepare(); player = next; playbackId = playingId; phase = "speaking"; next.start(); armIdle(); updated()
+      // Prepared off the main thread: a failure or cancel arrives as a playback event / stopPlayback, never as a stall.
+      next.setOnPreparedListener {
+        when (VoiceSessionPolicy.preparedPlayback(allowsSession(supplied), player === next, playbackOperations.allows(playingId), suspendedPlayback == playingId)) {
+          PreparedPlayback.START -> try { playerPrepared = true; next.start(); armIdle() } catch (_: Exception) { stopPlayback(supplied, "Speech playback failed.") }
+          PreparedPlayback.HOLD -> playerPrepared = true
+          PreparedPlayback.DISCARD -> Unit
+        }
+      }
+      player = next; playbackId = playingId; playerPrepared = false; suspendedPlayback = null; phase = "speaking"
       handler.postDelayed(playbackLimit, 120000)
-    } catch (error: Exception) { next.release(); releaseFocus(); throw error }
+      next.prepareAsync()
+      armIdle(); updated()
+    } catch (error: Exception) {
+      handler.removeCallbacks(playbackLimit)
+      if (player === next) { player = null; playbackId = null; playerPrepared = false; suspendedPlayback = null; if (phase == "speaking") phase = "idle" }
+      next.release(); releaseFocus(); throw error
+    }
   }
   fun stopPlayback(supplied: String, error: String? = null, expectedPlayback: String? = null) {
     if (!VoiceSessionPolicy.matches(id, supplied)) return
@@ -197,6 +268,7 @@ class VoiceCompanionService : Service() {
     handler.removeCallbacks(playbackLimit)
     val previous = player; player = null
     val previousId = playbackId; playbackId = null
+    playerPrepared = false; suspendedPlayback = null
     previousId?.let { playbackOperations.cancel(it) }
     try { previous?.stop() } catch (_: Exception) { }
     previous?.release()
@@ -208,6 +280,8 @@ class VoiceCompanionService : Service() {
   internal fun end(reason: String, error: String? = null) {
     if (ended) return
     ended = true
+    // A call that ends on its own otherwise leaves no trace of why (focus loss, capture error, timeout).
+    android.util.Log.w("BycodaVoice", "session ended: $reason${if (error != null) " (${error.take(160)})" else ""}")
     handler.removeCallbacksAndMessages(null)
     stopCapture(id); stopPlayback(id)
     if (VoiceCompanionRuntime.service === this) VoiceCompanionRuntime.service = null

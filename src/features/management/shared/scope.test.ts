@@ -12,7 +12,7 @@ vi.mock("../../workspace/use-project-directory", () => ({
 }));
 vi.mock("../../workspace/activity-model", () => ({ deduplicateProjects: () => [] }));
 vi.mock("@/ui/primitives", () => ({
-  SelectField: ({ onChange }: { onChange: (value: string) => void }) => createElement("button", { onClick: () => onChange("p") }, "select"),
+  SelectField: ({ onChange, placeholder }: { onChange: (value: string) => void; placeholder: string }) => createElement("button", { onClick: () => onChange("p"), "data-placeholder": placeholder }, "select"),
   ErrorNotice: ({ error }: { error: Error }) => createElement("p", { "data-notice": true }, error.message),
   Loading: () => createElement("i"),
   StateView: () => createElement("section", { "data-state-view": true }),
@@ -24,6 +24,8 @@ it("keeps a failed project directory to one compact notice, never a full state v
   act(() => root.render(createElement(Scope, { allowAll: true, projectId: null, onChange: vi.fn() })));
   expect(host.querySelector("[data-state-view]")).toBeNull();
   expect(host.querySelectorAll("[data-notice]")).toHaveLength(1);
+  // A disabled field while the directory is not ready never asks the owner to choose.
+  expect(host.querySelector("button")!.getAttribute("data-placeholder")).toBe("Loading projects…");
   act(() => root.unmount());
 });
 

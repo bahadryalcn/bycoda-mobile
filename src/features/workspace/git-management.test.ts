@@ -179,6 +179,17 @@ it("shows complete long PR content and sanitized remotes while sending the exact
   expect(state.write.mock.calls[0]![0]).toMatchObject({ command: "git_pr_create", args: { title: "Original title", body, base: "main", head: "feature", repository: "example.invalid/private/repo", expectedSnapshot: "f".repeat(64) } });
 });
 
+it("keeps an untouched invalid draft silent and blocked, then reports the typed issue after an edit", async () => {
+  root = createRoot(container);
+  await act(async () => root.render(createElement(GitManagement, { scope: { projectId: "project", root: "/reviewed/worktree" }, onClose: vi.fn(), onBusyChange: vi.fn(), registerExit: vi.fn() })));
+  act(() => [...container.querySelectorAll("button")].find((button) => button.textContent === "feature")!.click());
+  expect(state.form).toMatchObject({ blocked: true, error: undefined });
+  await act(async () => state.form!.onChange({ ...state.form!.value, target: "feature" }));
+  expect(state.form).toMatchObject({ blocked: true, error: "Choose distinct valid branch names." });
+  await act(async () => state.form!.onChange({ ...state.form!.value, target: "renamed" }));
+  expect(state.form).toMatchObject({ blocked: false, error: undefined });
+});
+
 it("uses selected app locale for Git management branch filters without mutations", async () => {
   const lower = String.prototype.toLocaleLowerCase;
   vi.spyOn(String.prototype, "toLocaleLowerCase").mockImplementation(function (this: string, locale) { return lower.call(this, locale ?? "en"); });

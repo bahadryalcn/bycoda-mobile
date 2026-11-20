@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { askSideQuestion } from "./side-chat-client";
-import { canAskSideQuestion, parseSideAnswer, sideChatHistory, type SideChatMessage } from "./side-chat-model";
+import { isUserDraftKey } from "@/state/local-draft-storage";
+import {
+  canAskSideQuestion,
+  decodeSideChatThread,
+  encodeSideChatThread,
+  parseSideAnswer,
+  sideChatKey,
+  sideChatHistory,
+  sideChatOutOfContextCount,
+  type SideChatMessage,
+} from "./side-chat-model";
 
 const message = (index: number): SideChatMessage => ({ id: String(index), role: index % 2 ? "assistant" : "user", text: `m${index}` });
 
@@ -22,6 +32,32 @@ describe("side chat model", () => {
     expect(parseSideAnswer({ answer: "ok" })).toBe("ok");
     expect(parseSideAnswer({ answer: " " })).toBeNull();
     expect(parseSideAnswer(null)).toBeNull();
+  });
+});
+
+describe("side chat thread persistence", () => {
+  it("scopes a thread by computer and session and is owned by the saved-draft cleanup", () => {
+    const key = sideChatKey("machine-a", "session-1");
+    expect(key).not.toBe(sideChatKey("machine-b", "session-1"));
+    expect(key).not.toBe(sideChatKey("machine-a", "session-2"));
+    expect(isUserDraftKey(key)).toBe(true);
+  });
+
+  it("round-trips messages and the unsent draft, and keeps an empty thread out of storage", () => {
+    const thread = { messages: [message(0), message(1)], draft: "next" };
+    expect(decodeSideChatThread(encodeSideChatThread(thread)!)).toEqual(thread);
+    expect(encodeSideChatThread({ messages: [], draft: "" })).toBeNull();
+    expect(encodeSideChatThread(null)).toBeNull();
+  });
+
+  it("rejects an unreadable stored thread instead of treating it as empty", () => {
+    expect(() => decodeSideChatThread("not a thread")).toThrow();
+    expect(() => decodeSideChatThread(`bycoda-side-chat-v1:\n${JSON.stringify({ messages: [{ id: 1 }], draft: "" })}`)).toThrow();
+  });
+
+  it("counts the earlier messages the next question no longer sends", () => {
+    expect(sideChatOutOfContextCount(Array.from({ length: 20 }, (_, index) => message(index)))).toBe(0);
+    expect(sideChatOutOfContextCount(Array.from({ length: 23 }, (_, index) => message(index)))).toBe(3);
   });
 });
 

@@ -1,6 +1,5 @@
 export type { AgentDraft } from "./shared/types";
 export { identifier, stamp } from "./shared/format";
-export { socialRequest } from "./social/request";
 export { confirmAction } from "@/ui/confirm";
 export { ErrorNotice as ErrorMessage } from "@/ui/primitives";
 export { useSubmission } from "./shared/use-submission";

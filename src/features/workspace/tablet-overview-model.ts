@@ -1,6 +1,36 @@
+import { CONNECTED_WINDOW_MS } from "@/ui/connection-presentation";
 import type { ActiveSession } from "./activity-model";
-import { listedSession, sessionActivityAt } from "./session-collection";
+import { listedSession } from "./session-collection";
+import { sessionActivityAt } from "./session-directory";
 import { sessionIsSnoozed } from "./session-attention-model";
+
+/**
+ * The only instants the overview's counts can change without new data: a snooze ending or a
+ * computer's connected window closing. Feed these to `useSnoozeNow` so no per-second clock runs.
+ */
+export function tabletOverviewWakes(
+  directory: readonly ActiveSession[],
+  successAts: readonly number[],
+): (number | null | undefined)[] {
+  return [
+    ...directory.map(({ session }) => session.snoozedUntil),
+    ...successAts.map((successAt) => (successAt > 0 ? successAt + CONNECTED_WINDOW_MS : null)),
+  ];
+}
+
+/**
+ * True only for a ready directory with no sessions and no loading, waiting, privacy or error state.
+ * Those other states stay with the list beside the overview, so the detail pane stays blank for them.
+ */
+export function tabletDirectoryIsEmpty({ ready, pending, waiting, privacyPending, listOwnsRegion }: {
+  ready: boolean;
+  pending: boolean;
+  waiting: boolean;
+  privacyPending: boolean;
+  listOwnsRegion: boolean;
+}) {
+  return ready && !pending && !waiting && !privacyPending && !listOwnsRegion;
+}
 
 /** Overview previews share the session list's visibility and turn-activity rules. */
 export function tabletOverviewModel(

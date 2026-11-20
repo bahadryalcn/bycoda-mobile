@@ -4,8 +4,7 @@ import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { Button, Disclosure, FormActions, Notice, NumberField, QueryState, SegmentedControl, SelectField, Stack, ToggleField } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
-import type { AgentDefaultsRecord } from "../../../../src/features/tasks/model/hostSettings";
-import { AUTO_ARCHIVE_CAPABILITY, confirmAgentDefaults, inactiveDays, readAgentDefaults, withoutArchive } from "./settings-draft";
+import { AUTO_ARCHIVE_CAPABILITY, confirmAgentDefaults, inactiveDays, readAgentDefaults, withoutArchive, type AgentDefaultsRecord } from "./settings-draft";
 
 const CAPABILITY = "host.settings.behavior.v1";
 export function AgentDefaultsSettings({ current, enabled }: { current(): boolean; enabled: boolean }) {

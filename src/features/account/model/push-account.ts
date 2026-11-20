@@ -22,13 +22,17 @@ export function accountPushAvailable(): boolean {
 }
 
 /** Fetches the Expo token and sends it to the account service when it changed. Never prompts. */
-export async function syncAccountPush(runtime: AccountRuntime, device: Device): Promise<PushSyncResult> {
+export async function syncAccountPush(
+  runtime: AccountRuntime,
+  device: Device,
+  options?: { fresh?: boolean },
+): Promise<PushSyncResult> {
   const projectId = expoProjectId();
   if (!projectId) throw new Error("EAS project id is missing.");
   return syncPushToken({
     client: runtime.client,
     deviceId: device.id,
-    token: await expoPushToken(projectId),
+    token: await expoPushToken(projectId, options),
     marks: securePushMarkStore,
   });
 }
@@ -50,8 +54,8 @@ export function useAccountPushSync(runtime: AccountRuntime | null, device: Devic
     if (!runtime || !device || !accountPushAvailable()) return;
     let cancelled = false;
     let subscription: { remove(): void } | undefined;
-    const sync = () =>
-      syncAccountPush(runtime, device).catch((error: unknown) => {
+    const sync = (options?: { fresh?: boolean }) =>
+      syncAccountPush(runtime, device, options).catch((error: unknown) => {
         console.warn("[account] Push token sync failed.", error instanceof Error ? error.message : error);
       });
     void (async () => {
@@ -60,7 +64,8 @@ export function useAccountPushSync(runtime: AccountRuntime | null, device: Devic
       await sync();
       const api = await notifications();
       if (cancelled) return;
-      subscription = api.addPushTokenListener(() => void sync());
+      // A rotation asks for the new token explicitly instead of relying on listener order.
+      subscription = api.addPushTokenListener(() => void sync({ fresh: true }));
     })();
     return () => {
       cancelled = true;

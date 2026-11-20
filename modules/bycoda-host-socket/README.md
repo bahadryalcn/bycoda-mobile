@@ -89,6 +89,18 @@ Android heap limits; Android/iOS background/lock/revocation; physical-device
 pairing and multi-device sessions. No package build, installation or publication
 is performed by this implementation.
 
+## Phone tunnel
+
+`tunnelSupported()` is true only on a native build whose platform can scope a proxy
+to the tunnel alias (iOS 17+, Android WebView proxy override); it is false in Expo
+Go and on the web. `startTunnel({credential, endpoint, target})` takes a handle from
+`acquireCredential` and the Host's `wss://<host>/ws-tunnel` endpoint, and returns
+`{tunnelId, proxyPort, alias}`; `stopTunnel` ends it and `onTunnelEvent` reports
+`error`/`closed`. The native view `BycodaTunnelWebView` (`tunnelWebViewComponent()`)
+loads `http://<alias>:<port>/...` through that local SOCKS5 proxy; the alias is a
+per-tunnel secret and is shown to users only as `localhost`. The Host contract is in
+`temp/local/chat-cross-device/tunnel-contract.md`.
+
 References: [Expo local modules](https://docs.expo.dev/modules/get-started/),
 [Expo autolinking](https://docs.expo.dev/modules/autolinking/),
 [CryptoKit P256 public key](https://developer.apple.com/documentation/cryptokit/p256/signing/publickey).

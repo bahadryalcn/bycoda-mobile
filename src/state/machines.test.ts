@@ -10,8 +10,7 @@ const access = vi.hoisted(() => ({ assertAppAccess: vi.fn() }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: storage }));
 vi.mock("expo-secure-store", () => secrets);
 vi.mock("./security", () => access);
-import { credentials, useMachines, withDisconnectedComputers } from "./machines";
-import { useConnectionStore } from "./connection-store";
+import { credentials, isMachinePending, useMachines, withDisconnectedComputers } from "./machines";
 import { LANGUAGES } from "../../../src/shared/i18n/languages";
 const machine = {
   id: "computer-a",
@@ -265,8 +264,7 @@ describe("connection persistence", () => {
     };
     await useMachines.getState().saveMachine(imported, token);
     expect(useMachines.getState().machines[0]).not.toHaveProperty("token");
-    expect(useConnectionStore.getState().tokens).toEqual({});
-    expect(useConnectionStore.getState().machines[0].providers).toEqual(["cursor"]);
+    expect(useMachines.getState().machines[0].providers).toEqual(["cursor"]);
     expect(String(storage.setItem.mock.calls[0][1])).not.toContain(token);
     expect(String(storage.setItem.mock.calls[0][1])).not.toContain(replacement);
   });
@@ -428,6 +426,35 @@ it("checks the absence of computers inside the cleanup queue before touching dra
   const pairing = useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
   const cleanup = withDisconnectedComputers(operation).catch(error => error as Error);
   await pairing; expect(await cleanup).toMatchObject({ message: "Disconnect computers before deleting saved drafts." }); expect(operation).not.toHaveBeenCalled();
+  expect(useMachines.getState().connectionPending).toBe(false);
+});
+it("marks only the computer being changed as pending, and every computer for an account-wide change", async () => {
+  await useMachines.getState().hydrate();
+  useMachines.setState({ machines: [], activeId: null, projects: {}, storageError: null });
+  await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
+  let release!: () => void;
+  const removing = useMachines.getState().removeMachine(machine.id);
+  const { pendingMachineIds, accountPending, connectionPending } = useMachines.getState();
+  expect(pendingMachineIds).toEqual([machine.id]);
+  expect(accountPending).toBe(false);
+  expect(connectionPending).toBe(true);
+  expect(isMachinePending(useMachines.getState(), machine.id)).toBe(true);
+  expect(isMachinePending(useMachines.getState(), "computer-b")).toBe(false);
+  await removing;
+  expect(useMachines.getState().pendingMachineIds).toEqual([]);
+  expect(isMachinePending(useMachines.getState(), machine.id)).toBe(false);
+
+  const started = new Promise<void>((resolve) => {
+    void withDisconnectedComputers(async () => {
+      resolve();
+      await new Promise<void>((done) => { release = done; });
+    });
+  });
+  await started;
+  expect(useMachines.getState().accountPending).toBe(true);
+  expect(isMachinePending(useMachines.getState(), "computer-b")).toBe(true);
+  release();
+  await vi.waitFor(() => expect(useMachines.getState().accountPending).toBe(false));
   expect(useMachines.getState().connectionPending).toBe(false);
 });
 describe("multiple routes to one computer", () => {

@@ -9,6 +9,8 @@ export interface HostWsConsumer {
     options?: HostWsRequestOptions,
   ): Promise<T>;
   subscribe(handler: AppliedHostEvent): () => void;
+  /** Native credential handle and `/ws-tunnel` endpoint for the phone tunnel; absent until connected. */
+  tunnelCredential?(): { credential: string; endpoint: string } | undefined;
   state(): string;
   onState(handler: (state: string) => void): () => void;
   release(): void;

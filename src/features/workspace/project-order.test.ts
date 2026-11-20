@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 import type { DirectorySection } from "./project-directory";
-import { applyCustomOrder, applySavedOrder, moveId, moveInOrder, normalizeProjectOrder, orderFromSections } from "./project-order";
+import { applyCustomOrder, applySavedOrder, moveId, moveInOrder, neighbourMove, normalizeProjectOrder, orderFromSections } from "./project-order";
 
 const project = (id: string) => ({ id, name: id, cwd: `/${id}` }) as DirectorySection["data"][number];
 const section = (key: string, ids: string[]): DirectorySection =>
@@ -21,6 +21,22 @@ describe("project custom order", () => {
   it("moves one item", () => {
     expect(moveId(["a", "b", "c"], 0, 2)).toEqual(["b", "c", "a"]);
     expect(moveId(["a", "b"], 0, 5)).toEqual(["a", "b"]);
+  });
+  it("builds one-slot moves and refuses them past either end", () => {
+    expect(neighbourMove("flat", 1, 3, -1)).toEqual({ scope: "flat", from: 1, to: 0 });
+    expect(neighbourMove({ group: "g" }, 1, 3, 1)).toEqual({ scope: { group: "g" }, from: 1, to: 2 });
+    expect(neighbourMove("groups", 0, 3, -1)).toBeNull();
+    expect(neighbourMove("groups", 2, 3, 1)).toBeNull();
+    expect(neighbourMove("flat", 5, 3, -1)).toBeNull();
+    expect(neighbourMove("flat", 0, 1, 1)).toBeNull();
+  });
+  it("applies a one-slot move like a drag and keeps the other order intact", () => {
+    const snapshot = orderFromSections([section("g1", ["a", "b", "c"]), section("g2", ["d"])], true);
+    const move = neighbourMove({ group: "g1" }, 2, 3, -1)!;
+    const next = moveInOrder(snapshot, move);
+    expect(next.projects.g1).toEqual(["a", "c", "b"]);
+    expect(next.projects.g2).toEqual(["d"]);
+    expect(next.groups).toEqual(snapshot.groups);
   });
   it("orders groups and their projects, and flat lists", () => {
     const sections = [section("g1", ["a", "b"]), section("", ["c"])];

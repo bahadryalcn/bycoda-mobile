@@ -5,6 +5,16 @@ import Foundation
 import Security
 import CryptoKit
 
+/**
+ * For a `URLSessionWebSocketTask` `timeoutIntervalForRequest` is also the idle timer: the time without any incoming frame,
+ * pings included. The Host sends a liveness ping every `heartbeatIntervalMs` (25 s) and waits `heartbeatResponseTimeoutMs`
+ * (10 s) for the pong (`src/shared/model/host-contracts/policy.ts`), so a quiet healthy socket is silent for up to 25 s and
+ * a delayed ping can arrive at 35 s. The idle window must outlast that plus slack, or iOS drops a healthy connection.
+ * It still ends a dead link, which the Host ping stops reaching. The connect/upgrade budget is a separate, shorter
+ * deadline armed in `openPeer`; it is not derived from this value.
+ */
+private let hostSocketIdleTimeout: TimeInterval = 40
+
 /** A background voice peer cannot browse, navigate, execute tools or address another Room. */
 enum VoiceRpcPolicy {
   private static let voiceMethods: Set<String> = ["voice.local.start", "voice.local.transcribe", "voice.cloud.transcribe", "voice.local.release", "voice.local.speak", "voice.local.speechNext", "voice.local.keepAlive"]
@@ -44,6 +54,19 @@ struct HostBulkDescriptor: Record {
   @Field var sha256: String = ""
   @Field var expiresAt: Double = -1
 }
+struct HostTunnelTarget: Record {
+  @Field var projectId: String = ""
+  @Field var id: String = ""
+  @Field var pid: Int = 0
+  @Field var startedAt: String = ""
+  @Field var port: Int = 0
+  @Field var address: String = ""
+}
+struct HostTunnelStart: Record {
+  @Field var credential: String = ""
+  @Field var endpoint: String = ""
+  @Field var target: HostTunnelTarget = HostTunnelTarget()
+}
 private enum HostSocketFailure: Error { case rejected(String) }
 private func failure(_ code: String) -> Error { HostSocketFailure.rejected(code) }
 private func safe(_ value: Double) -> Bool { value.isFinite && value >= 0 && value <= 9_007_199_254_740_991 && value.rounded() == value }
@@ -76,7 +99,8 @@ enum HostTls {
   }
 }
 
-private class TrustDelegate: NSObject, URLSessionTaskDelegate {
+/** Shared with the tunnel peers (`TunnelSocketDelegate`), which pin the same paired CA. */
+class TrustDelegate: NSObject, URLSessionTaskDelegate {
   let binding: HostBinding
   let anchor: SecCertificate?
   init(binding: HostBinding) throws { self.binding = binding; self.anchor = try HostTls.ca(binding); super.init() }
@@ -149,6 +173,8 @@ public final class BycodaHostSocketModule: Module {
     var deliveries = [Int: Int](); var deliveryBytes = 0; var outgoingBytes = 0
     var sends = [UUID: Promise]()
     var voiceRequests = Set<String>()
+    /** Serial so frames of one connection reach the socket in the order their native calls arrived. */
+    let sendQueue = DispatchQueue(label: "bycoda.host-socket.send")
     init(id: String, generation: Double, credential: Credential, session: URLSession, task: URLSessionWebSocketTask, opening: Promise) { self.id = id; self.generation = generation; self.credential = credential; self.session = session; self.task = task; self.opening = opening }
   }
   private let lock = NSRecursiveLock()
@@ -157,6 +183,7 @@ public final class BycodaHostSocketModule: Module {
   // SDK jobs remain charged after detach/cancellation until their delegate settles.
   private var socketJobs = [String: Connection]()
   private var bulks = [UUID: (String, URLSession)]()
+  private var tunnels = [String: BycodaTunnel]()
   private var foreground = true
   private var accessAllowed = false
   private var accessEpoch: Double = -1
@@ -199,6 +226,8 @@ public final class BycodaHostSocketModule: Module {
       lifecycleEpoch += 1
       let affected = { (binding: HostBinding, voice: VoiceScope?) in (machineId == nil || binding.machineId == machineId) && !(preserveVoice && self.voiceCurrent(voice)) }
       credentials = credentials.filter { !affected($0.value.binding, $0.value.voice) }
+      // Tunnels never belong to a voice call, so every matching tunnel ends here.
+      for tunnel in Array(tunnels.values) where machineId == nil || tunnel.machineId == machineId { tunnel.stop("credentials_invalidated", failed: true) }
       for connection in Array(connections.values) where affected(connection.credential.binding, connection.credential.voice) { ended(connection.id, connection.generation, "credentials_invalidated", true) }
       for value in Array(bulks.values) where machineId == nil || value.0 == machineId { value.1.invalidateAndCancel() }
     }
@@ -208,6 +237,61 @@ public final class BycodaHostSocketModule: Module {
     sync {
       credentials = credentials.filter { $0.value.voice == nil || voiceCurrent($0.value.voice) }
       for connection in Array(connections.values) where connection.credential.voice != nil && !voiceCurrent(connection.credential.voice) { ended(connection.id, connection.generation, "voice_revoked", true) }
+    }
+  }
+  /** Per-CONNECT admission: access still granted, same credential generation, secret unchanged. Runs on the tunnel queue. */
+  private func tunnelToken(_ handle: String, _ tunnelId: String) -> String? {
+    let credential = sync { () -> Credential? in
+      guard tunnels[tunnelId] != nil, foreground, accessAllowed, let credential = credentials[handle], credential.voice == nil, credential.binding.accessEpoch == accessEpoch else { return nil }
+      return credential
+    }
+    guard let credential, let token = try? secret(credential.binding), digest(token) == credential.digest else { return nil }
+    return token
+  }
+  private func tunnelFinished(_ tunnelId: String, _ tunnel: BycodaTunnel) { sync { if tunnels[tunnelId] === tunnel { tunnels.removeValue(forKey: tunnelId) } } }
+  private func tunnelEvent(_ tunnelId: String, _ type: String, _ code: String?, _ message: String?) {
+    var body: [String: Any] = ["tunnelId": tunnelId, "type": type]
+    if let code { body["code"] = code }
+    if let message { body["message"] = message }
+    sendEvent("onTunnelEvent", body)
+  }
+  private func startTunnel(_ input: HostTunnelStart, _ promise: Promise) throws {
+    guard #available(iOS 17.0, *) else { throw failure("tunnel_unsupported") }
+    let target = TunnelTarget(projectId: input.target.projectId, id: input.target.id, pid: input.target.pid, startedAt: input.target.startedAt, port: input.target.port, address: input.target.address)
+    let handle = input.credential
+    let credential = try sync { () throws -> Credential in
+      guard let credential = credentials[handle], credential.voice == nil, foreground, accessAllowed, credential.binding.accessEpoch == accessEpoch, tunnels.count < 4 else { throw failure("unavailable") }
+      return credential
+    }
+    let tunnelId = UUID().uuidString
+    let alias: String, url: URL
+    do {
+      try target.validate()
+      alias = try TunnelEndpoint.makeAlias()
+      url = try TunnelEndpoint.url(endpoint: input.endpoint, binding: credential.binding, target: target, alias: alias)
+    } catch let error as TunnelError { throw failure(error.code) }
+    let token = try secret(credential.binding)
+    guard digest(token) == credential.digest else { invalidate(credential.binding.machineId); throw failure("credential_rotated") }
+    let tunnel = BycodaTunnel(
+      tunnelId: tunnelId, alias: alias, binding: credential.binding, url: url, targetPort: UInt16(target.port),
+      tokenProvider: { [weak self] in self?.tunnelToken(handle, tunnelId) },
+      emit: { [weak self] type, code, message in self?.tunnelEvent(tunnelId, type, code, message) },
+      finished: { [weak self] finished in self?.tunnelFinished(tunnelId, finished) })
+    try sync {
+      guard foreground, accessAllowed, credentials[handle] != nil, tunnels.count < 4 else { throw failure("access_changed") }
+      tunnels[tunnelId] = tunnel
+    }
+    tunnel.start { [weak self] result in
+      switch result {
+      case .success(let port):
+        var live = false
+        if let self { live = self.sync { self.tunnels[tunnelId] === tunnel && self.foreground && self.accessAllowed } }
+        if live { promise.resolve(["tunnelId": tunnelId, "proxyPort": Int(port), "alias": alias]) }
+        else { tunnel.stop("access_changed", failed: true); promise.reject("ERR_HOST_SOCKET", "access_changed") }
+      case .failure(let error):
+        self?.tunnelFinished(tunnelId, tunnel)
+        promise.reject("ERR_HOST_SOCKET", error.code)
+      }
     }
   }
   fileprivate func completedJob(_ id: String, _ generation: Double) { sync { if socketJobs[id]?.generation == generation { socketJobs.removeValue(forKey: id) } } }
@@ -264,7 +348,7 @@ public final class BycodaHostSocketModule: Module {
     let token = try secret(credential.binding)
     guard digest(token) == credential.digest else { invalidate(credential.binding.machineId); throw failure("credential_rotated") }
     let delegate = try SocketDelegate(owner: self, id: id, generation: generation, binding: credential.binding)
-    let config = URLSessionConfiguration.ephemeral; config.httpCookieStorage = nil; config.urlCredentialStorage = nil; config.timeoutIntervalForRequest = 5
+    let config = URLSessionConfiguration.ephemeral; config.httpCookieStorage = nil; config.urlCredentialStorage = nil; config.timeoutIntervalForRequest = hostSocketIdleTimeout
     let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
     var request = URLRequest(url: try HostTls.endpoint(credential.binding)); request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization"); request.setValue("bycoda.rpc.v2", forHTTPHeaderField: "Sec-WebSocket-Protocol")
     let task = session.webSocketTask(with: request); task.maximumMessageSize = 1_048_576
@@ -280,7 +364,7 @@ public final class BycodaHostSocketModule: Module {
   }
   public func definition() -> ModuleDefinition {
     Name("BycodaHostSocket")
-    Events("onSocketEvent")
+    Events("onSocketEvent", "onTunnelEvent")
     OnCreate {
       self.voiceObserver = NotificationCenter.default.addObserver(forName: VoiceCallEngine.changed, object: nil, queue: nil) { [weak self] _ in self?.revokeStaleVoice() }
     }
@@ -317,26 +401,39 @@ public final class BycodaHostSocketModule: Module {
       try self.openPeer(handle, id, generation, sessionId, promise)
     }
     AsyncFunction("send") { (id: String, generation: Double, text: String, promise: Promise) in
-      try self.sync {
-        guard let connection = self.connections[id], self.current(connection), connection.generation == generation, connection.opened else { throw failure("stale_connection") }
+      let connection = try self.sync { () throws -> Connection in
+        guard let live = self.connections[id], self.current(live), live.generation == generation, live.opened else { throw failure("stale_connection") }
+        return live
+      }
+      // The size scan and JSON parse of a large frame run outside the shared lock so reads and lifecycle calls are not
+      // stalled; the connection's serial queue keeps its sends in arrival order, and every check is repeated under the lock.
+      connection.sendQueue.async {
         let count = text.utf8.count
-        guard count <= 1_048_576, connection.outgoingBytes + count <= 8_388_608, connection.sends.count < 64 else { throw failure("overload") }
-        let request = text.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
-        let method = request?["method"] as? String ?? ""
-        if let scope = connection.credential.voice {
-          let params = request?["params"] as? [String: Any]
-          guard request != nil, VoiceRpcPolicy.allowed(method, op: params?["op"] as? String, requestedThread: params?["threadId"] as? String, threadId: scope.threadId,
-                  hasThread: params?["threadId"] != nil, emptyParams: params?.isEmpty == true) else { throw failure("voice_scope_denied") }
-          guard let requestId = request?["id"] as? String, (1...200).contains(requestId.utf8.count), connection.voiceRequests.count < 64,
-                connection.voiceRequests.insert(requestId).inserted else { throw failure("voice_request_invalid") }
-        }
-        if method.hasPrefix("native.") || method.hasPrefix("devServers.bridge") { throw failure("native_profile_required") }
-        let key = UUID(); connection.sends[key] = promise; connection.outgoingBytes += count
-        connection.task.send(.string(text)) { [weak self, weak connection] error in
-          guard let self, let connection else { return }; self.sync {
-            guard let pending = connection.sends.removeValue(forKey: key) else { return }; connection.outgoingBytes -= count
-            if error != nil || !self.current(connection) { pending.reject("ERR_HOST_SOCKET", "send_failed") } else { pending.resolve(nil) }
+        var request: [String: Any]?
+        if count <= 1_048_576 { request = text.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any] }
+        do {
+          try self.sync {
+            guard self.connections[id] === connection, self.current(connection), connection.generation == generation, connection.opened else { throw failure("stale_connection") }
+            guard count <= 1_048_576, connection.outgoingBytes + count <= 8_388_608, connection.sends.count < 64 else { throw failure("overload") }
+            let method = request?["method"] as? String ?? ""
+            if let scope = connection.credential.voice {
+              let params = request?["params"] as? [String: Any]
+              guard request != nil, VoiceRpcPolicy.allowed(method, op: params?["op"] as? String, requestedThread: params?["threadId"] as? String, threadId: scope.threadId,
+                      hasThread: params?["threadId"] != nil, emptyParams: params?.isEmpty == true) else { throw failure("voice_scope_denied") }
+              guard let requestId = request?["id"] as? String, (1...200).contains(requestId.utf8.count), connection.voiceRequests.count < 64,
+                    connection.voiceRequests.insert(requestId).inserted else { throw failure("voice_request_invalid") }
+            }
+            if method.hasPrefix("native.") || method.hasPrefix("devServers.bridge") { throw failure("native_profile_required") }
+            let key = UUID(); connection.sends[key] = promise; connection.outgoingBytes += count
+            connection.task.send(.string(text)) { [weak self, weak connection] error in
+              guard let self, let connection else { return }; self.sync {
+                guard let pending = connection.sends.removeValue(forKey: key) else { return }; connection.outgoingBytes -= count
+                if error != nil || !self.current(connection) { pending.reject("ERR_HOST_SOCKET", "send_failed") } else { pending.resolve(nil) }
+              }
+            }
           }
+        } catch {
+          if case HostSocketFailure.rejected(let code) = error { promise.reject("ERR_HOST_SOCKET", code) } else { promise.reject("ERR_HOST_SOCKET", "send_failed") }
         }
       }
     }
@@ -363,6 +460,28 @@ public final class BycodaHostSocketModule: Module {
       var request = URLRequest(url: url.url!); request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
       try self.sync { guard self.foreground, self.accessAllowed, self.lifecycleEpoch == epoch, self.credentials[handle] != nil, self.bulks.count < 2 else { session.invalidateAndCancel(); throw failure("access_changed") }; self.bulks[key] = (credential.binding.machineId, session) }
       session.dataTask(with: request).resume()
+    }
+    // Phone loopback tunnel: WKWebsiteDataStore.proxyConfigurations needs iOS 17.
+    Function("tunnelSupported") { () -> Bool in
+      if #available(iOS 17.0, *) { return true }
+      return false
+    }
+    AsyncFunction("startTunnel") { (input: HostTunnelStart, promise: Promise) in try self.startTunnel(input, promise) }
+    AsyncFunction("stopTunnel") { (tunnelId: String) in
+      let tunnel = self.sync { self.tunnels[tunnelId] }
+      tunnel?.stop("stopped", failed: false)
+    }
+    View(BycodaTunnelWebView.self) {
+      Events("onNavigationChange", "onLoadError", "onExternalLink")
+      Prop("proxyPort") { (view: BycodaTunnelWebView, value: Int) in view.proxyPort = value }
+      Prop("alias") { (view: BycodaTunnelWebView, value: String) in view.alias = value }
+      Prop("url") { (view: BycodaTunnelWebView, value: String) in view.urlString = value }
+      Prop("dataSaver") { (view: BycodaTunnelWebView, value: Bool) in view.dataSaver = value }
+      OnViewDidUpdateProps { (view: BycodaTunnelWebView) in view.configure() }
+      AsyncFunction("goBack") { (view: BycodaTunnelWebView) in view.goBack() }.runOnQueue(.main)
+      AsyncFunction("goForward") { (view: BycodaTunnelWebView) in view.goForward() }.runOnQueue(.main)
+      AsyncFunction("reload") { (view: BycodaTunnelWebView) in view.reload() }.runOnQueue(.main)
+      AsyncFunction("stopLoading") { (view: BycodaTunnelWebView) in view.stopPage() }.runOnQueue(.main)
     }
     OnAppEntersBackground { self.sync { self.foreground = false; self.accessAllowed = false; self.invalidate(preserveVoice: true) } }
     OnAppBecomesActive { self.sync { self.foreground = true } }

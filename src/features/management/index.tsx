@@ -3,8 +3,8 @@ import { router } from "expo-router";
 import { useState, type ComponentType } from "react";
 import { View } from "react-native";
 import { useCopy } from "@/ui/copy";
-import { Empty, SearchField, Screen } from "@/ui/primitives";
-import { useActiveMachine } from "@/state/machines";
+import { Empty, QueryState, SearchField, Screen, Skeleton } from "@/ui/primitives";
+import { useActiveMachine, useMachines } from "@/state/machines";
 import { Scope } from "./shared/scope";
 import { useLocalProjectScope } from "./shared/local-project-scope";
 import { TasksScreen } from "./tasks-screen";
@@ -18,6 +18,31 @@ import { ToolDirectory } from "./tool-directory";
 import { isManagementSection, managementSections, type ManagementSection } from "./sections";
 import { useProjectList } from "../workspace/use-project-directory";
 
+function ManagementConnectionState() {
+  const copy = useCopy();
+  const ready = useMachines((state) => state.hydrated && !state.connectionPending);
+  const error = useMachines((state) => state.storageError);
+  return (
+    <View style={{ flex: 1 }}>
+      {error ? (
+        <QueryState query={{ error, refetch: () => useMachines.getState().hydrate() }} />
+      ) : !ready ? (
+        <Skeleton />
+      ) : (
+        <Empty
+          compact={false}
+          illustration="connect-computer"
+          title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
+          action={{
+            label: copy("Bilgisayar bağla", "Connect a computer"),
+            onPress: () => router.navigate("/machines"),
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
 export function ManagementHome() {
   const copy = useCopy();
   const machine = useActiveMachine();
@@ -29,18 +54,7 @@ export function ManagementHome() {
   return (
     <Screen title={copy("Araçlar", "Tools")} context={machine ? <Scope allowAll projectId={selectedProjectId} onChange={setProjectId} /> : undefined} scroll={!!machine}>
       {!machine ? (
-        <View style={{ flex: 1 }}>
-        <Empty
-          compact={false}
-          illustration="connect-computer"
-          detail={copy("Araçlar bağlı bilgisayarındaki projelerle çalışır.", "Tools work with the projects on your connected computer.")}
-          title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
-          action={{
-            label: copy("Bilgisayar bağla", "Connect a computer"),
-            onPress: () => router.navigate("/machines"),
-          }}
-        />
-        </View>
+        <ManagementConnectionState />
       ) : (
         <>
           <SearchField
@@ -62,21 +76,9 @@ export function ManagementScreen({ section }: ManagementScreenProps) {
   if (!machine)
     return (
       <Screen title={title} scroll={false}>
-        <View style={{ flex: 1 }}>
-        <Empty
-          compact={false}
-          illustration="connect-computer"
-          detail={copy("Bu bölüm bağlı bilgisayarındaki verileri gösterir.", "This section shows data from your connected computer.")}
-          title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
-          action={{
-            label: copy("Bilgisayar bağla", "Connect a computer"),
-            onPress: () => router.navigate("/machines"),
-          }}
-        />
-        </View>
+        <ManagementConnectionState />
       </Screen>
     );
-  // Social is off on mobile for now: its route falls through to "section not found".
   const screens: Partial<Record<ManagementSection, ComponentType>> = {
     tasks: TasksScreen,
     goals: GoalsScreen,

@@ -1,6 +1,9 @@
 import type { HostProjectDirectory, HostSessionSummary } from "@/domain/types";
 import { isRunningSession } from "./activity-model";
-import { sessionActivityAt } from "./session-collection";
+
+/** Desktop orders and stamps sessions by their last turn activity, not by metadata saves. */
+export const sessionActivityAt = (session: Pick<HostSessionSummary, "lastActivityAt" | "updatedAt">) =>
+  session.lastActivityAt ?? session.updatedAt;
 
 export type SessionLayout = NonNullable<HostProjectDirectory["projects"][number]["sessionLayout"]>;
 export type SessionDirectoryRow =

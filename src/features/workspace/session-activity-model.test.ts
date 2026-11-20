@@ -45,6 +45,7 @@ it("counts every agent once: blocks across turns plus child sessions, child winn
   expect(counts).toEqual({ total: 5, running: 2, done: 2, failed: 1, stopped: 0, interrupted: 0 });
   expect(agentCountText(counts, copy)).toBe("2 running · 2 done · 1 failed");
   expect(agentCountText(counts, copy, true)).toBe("2 agents running, 2 finished, 1 failed");
+  expect(agentCountText({ ...counts, running: 1, done: 0, failed: 0 }, copy, true)).toBe("1 agent running");
 });
 
 it("does not call an unfinished call running once the run is over", () => {

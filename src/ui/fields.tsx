@@ -84,6 +84,7 @@ export function Input({
   onBlur,
   ref,
   suffix,
+  fill,
   ...props
 }: InputProps & { suffix?: string }) {
   const { colors, semanticColors, uiStyles } = useMobileTheme();
@@ -102,7 +103,7 @@ export function Input({
     <View
       style={{
         minWidth: minWidth ?? 0,
-        flex,
+        flex: fill ? 1 : flex,
         flexGrow,
         flexShrink,
         flexBasis,
@@ -124,7 +125,7 @@ export function Input({
         selectionColor={colors.accent}
         cursorColor={colors.accent}
         className="h-auto text-foreground bg-fill rounded-control border-border"
-        containerClassName="gap-0"
+        containerClassName={fill ? "gap-0 flex-1" : "gap-0"}
         onFocus={(event: Parameters<NonNullable<TextInputProps["onFocus"]>>[0]) => {
           setFocused(true);
           onFocus?.(event);
@@ -139,8 +140,10 @@ export function Input({
           // Monospace is a font choice, not a smaller editable text size.
           mono && { fontFamily: uiStyles.mono.fontFamily },
           semantic && { borderColor: semantic.border },
-          focused && { borderWidth: 1, borderColor: semantic?.text ?? colors.accent },
+          // Color only: the border width is constant across states (see uiStyles.input).
+          focused && { borderColor: semantic?.text ?? colors.accent },
           props.editable === false && { color: colors.muted },
+          fill && { flex: 1, minHeight: 0 },
           fieldStyle,
           // Keep focus local to the editable field; never recolor its containing panel.
           process.env.EXPO_OS === "web" && ({ outlineStyle: "none", resize: "none" } as object),

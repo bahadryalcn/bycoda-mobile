@@ -2,7 +2,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { HostWsError, MobileHostWsConnection } from "./ws-connection";
 import { binding, fakeNative } from "./ws-connection.test-fixture";
-import { HOST_RPC_METHODS, RPC_ERROR_CODES } from "../../../src/shared/model/host-contracts";
+import {
+  HOST_RPC_METHODS,
+  RPC_ERROR_CODES,
+  WS_LIMITS,
+} from "../../../src/shared/model/host-contracts";
+vi.mock("expo-crypto", () => ({
+  CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+  digest: async (_algorithm: string, bytes: Uint8Array) => {
+    const out = createHash("sha256").update(bytes).digest();
+    return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+  },
+}));
 const connections: MobileHostWsConnection[] = [];
 async function connected(
   apply?: ConstructorParameters<typeof MobileHostWsConnection>[5],
@@ -75,6 +86,28 @@ describe("mobile single-attempt native WS", () => {
       await expect(f.connection.request("projects.list")).resolves.toEqual([]);
     },
   );
+  it("sizes outbound frames by exact UTF-8 bytes, not UTF-16 length", async () => {
+    const f = await connected();
+    const sentBefore = f.sent.length;
+    // Fits: 262144 × 2 bytes plus envelope is under the 1 MiB frame cap.
+    const fits = f.connection.request("commands.dispatch", {
+      type: "send",
+      commandId: "command-a",
+      sessionId: "session-a",
+      text: "é".repeat(WS_LIMITS.maxMessageBytes / 4),
+    });
+    fits.catch(() => undefined);
+    await vi.waitFor(() => expect(f.sent).toHaveLength(sentBefore + 1));
+    // Over: 524289 UTF-16 units (below the cap by length) encode to over 1 MiB, so nothing is sent.
+    const over = f.connection.request("commands.dispatch", {
+      type: "send",
+      commandId: "command-b",
+      sessionId: "session-a",
+      text: "é".repeat(WS_LIMITS.maxMessageBytes / 2 + 1),
+    });
+    await expect(over).rejects.toMatchObject({ category: "overload" });
+    expect(f.sent).toHaveLength(sentBefore + 1);
+  });
   it("preserves typed temporary failure and unknown command delivery without replay", async () => {
     const f = await connected();
     const result = f.connection.request("commands.dispatch", {
@@ -99,6 +132,19 @@ describe("mobile single-attempt native WS", () => {
     });
     await rejected;
     expect(f.sent.filter((request) => request.method === "commands.dispatch")).toHaveLength(1);
+  });
+  // After a Host restart the phone's status check read "connection interrupted, check the result":
+  // a refusal the Host marks not-sent is a known outcome and keeps its stable code.
+  it("keeps a Host refusal that ran nothing as a known outcome with its code", async () => {
+    const f = await connected();
+    const result = f.connection.request("commands.dispatch", { type: "send", commandId: "command-b", sessionId: "session-a", text: "hello" });
+    const rejected = expect(result).rejects.toMatchObject({ category: "validation", uncertain: false, code: "CONTEXT_CHANGED" });
+    f.emit({
+      jsonrpc: "2.0",
+      id: f.sent.at(-1)!.id,
+      error: { code: RPC_ERROR_CODES.invalidParams, message: "The original Host instance changed.", data: { category: "conflict", retryable: false, delivery: "not-sent", code: "CONTEXT_CHANGED" } },
+    });
+    await rejected;
   });
   it("preserves native TLS failures for in-flight reads", async () => {
     const f = await connected();
@@ -459,6 +505,141 @@ describe("mobile single-attempt native WS", () => {
       });
     await vi.waitFor(() => expect(applied).toEqual([1, 2, 3, 4, 5]));
     expect(acks).toEqual([1]);
+  });
+  describe("stream ack failures", () => {
+    async function ackFixture(replyToAck: (request: { id: string; sequence: number; attempt: number }) => unknown) {
+      const events: { kind: string; subscriptionId: string; streamId: string }[] = [];
+      const failures: HostWsError[] = [];
+      const f = fakeNative();
+      const credential = await f.native.acquireCredential(binding);
+      const connection = new MobileHostWsConnection(
+        f.native,
+        binding,
+        credential,
+        1,
+        "app-a",
+        async (event) => {
+          events.push({
+            kind: event.params.kind,
+            subscriptionId: event.params.subscriptionId,
+            streamId: event.params.streamId,
+          });
+          return event.params.kind !== "resync-required";
+        },
+        (error) => failures.push(error),
+      );
+      connections.push(connection);
+      await connection.start();
+      const attempts = new Map<number, number>();
+      const realSend = vi.mocked(f.native.send).getMockImplementation()!;
+      vi.mocked(f.native.send).mockImplementation(async (id, generation, text) => {
+        const request = JSON.parse(text) as {
+          id: string;
+          method: string;
+          params: { subscriptionId?: string; cursor?: { sequence: number } };
+        };
+        if (request.method === "subscriptions.open") {
+          f.sent.push(request as never);
+          queueMicrotask(() =>
+            f.emit({
+              jsonrpc: "2.0",
+              id: request.id,
+              result: { subscriptionId: request.params.subscriptionId, streamId: "stream-a" },
+            }),
+          );
+          return;
+        }
+        if (request.method !== "subscriptions.ack") return realSend(id, generation, text);
+        f.sent.push(request as never);
+        const sequence = request.params.cursor!.sequence;
+        const attempt = (attempts.get(sequence) ?? 0) + 1;
+        attempts.set(sequence, attempt);
+        const reply = replyToAck({ id: request.id, sequence, attempt });
+        if (reply !== undefined)
+          queueMicrotask(() => f.emit({ jsonrpc: "2.0", id: request.id, ...(reply as object) }));
+      });
+      await connection.request("subscriptions.open", {
+        subscriptionId: "subscription-a",
+        target: { kind: "session", sessionId: "session-a" },
+      });
+      const deliver = (sequence: number) =>
+        f.emit({
+          jsonrpc: "2.0",
+          method: "subscription.event",
+          params: {
+            subscriptionId: "subscription-a",
+            streamId: "stream-a",
+            cursor: { epoch: "epoch-a", sequence },
+            kind: "snapshot",
+            data: { sequence },
+          },
+        });
+      const acks = () => f.sent.filter((request) => request.method === "subscriptions.ack");
+      return { f, connection, events, failures, deliver, acks };
+    }
+    const hostError = (code: number) => ({ error: { code, message: "Host ack failed." } });
+
+    it("retries a busy ack with the newest cursor without closing the socket", async () => {
+      vi.useFakeTimers();
+      const x = await ackFixture(({ sequence, attempt }) =>
+        sequence === 1 && attempt === 1 ? hostError(RPC_ERROR_CODES.overloaded) : { result: { accepted: true } },
+      );
+      x.deliver(1);
+      // Flush only queued work: a fake-timer waitFor advances the clock and can fire the retry early.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(x.acks()).toHaveLength(1);
+      // A newer cursor arrives while the failed ack waits: it replaces the retry, never reorders.
+      x.deliver(2);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(x.acks().map((ack) => (ack.params.cursor as { sequence: number }).sequence)).toEqual([1, 2]);
+      expect(x.failures).toEqual([]);
+      expect(x.f.native.close).not.toHaveBeenCalled();
+      expect(x.events.filter((event) => event.kind === "resync-required")).toEqual([]);
+    });
+    it("restarts only the affected stream when acks keep timing out", async () => {
+      vi.useFakeTimers();
+      const x = await ackFixture(() => hostError(RPC_ERROR_CODES.deadlineExceeded));
+      x.deliver(1);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(x.acks()).toHaveLength(4);
+      expect(x.events.filter((event) => event.kind === "resync-required")).toEqual([
+        { kind: "resync-required", subscriptionId: "subscription-a", streamId: "stream-a" },
+      ]);
+      expect(x.failures).toEqual([]);
+      expect(x.f.native.close).not.toHaveBeenCalled();
+      // The connection stays usable for other requests.
+      x.f.respond(() => []);
+      await expect(x.connection.request("projects.list")).resolves.toEqual([]);
+    });
+    it("restarts the stream, not the socket, when the Host refuses an ack", async () => {
+      const x = await ackFixture(() => hostError(RPC_ERROR_CODES.internalError));
+      x.deliver(1);
+      await vi.waitFor(() =>
+        expect(x.events.map((event) => event.kind)).toContain("resync-required"),
+      );
+      expect(x.acks()).toHaveLength(1);
+      expect(x.failures).toEqual([]);
+      expect(x.f.native.close).not.toHaveBeenCalled();
+    });
+    it.each([
+      [RPC_ERROR_CODES.unauthorized, "authentication"],
+      [RPC_ERROR_CODES.wrongEnvironment, "identity"],
+      [RPC_ERROR_CODES.invalidRequest, "schema"],
+    ] as const)("still closes the socket when an ack is rejected as %s", async (code, category) => {
+      const x = await ackFixture(() => hostError(code));
+      x.deliver(1);
+      await vi.waitFor(() => expect(x.failures).toHaveLength(1));
+      expect(x.failures[0]).toMatchObject({ category });
+      expect(x.f.native.close).toHaveBeenCalled();
+      expect(x.events.map((event) => event.kind)).not.toContain("resync-required");
+    });
+    it("closes the socket when an ack frame cannot cross the transport", async () => {
+      const x = await ackFixture(() => undefined);
+      vi.mocked(x.f.native.send).mockRejectedValueOnce(new Error("bridge down"));
+      x.deliver(1);
+      await vi.waitFor(() => expect(x.failures).toHaveLength(1));
+      expect(x.failures[0]).toMatchObject({ category: "network" });
+    });
   });
   it("drops one malformed frame instead of failing the connection", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);

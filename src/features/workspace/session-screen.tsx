@@ -23,6 +23,7 @@ import { SessionKeyboardFrame } from "./session-keyboard-frame";
 import { useSessionSnapshot } from "./session-queries";
 import { SessionSettings } from "./session-settings";
 import { SessionToolbar } from "./session-toolbar";
+import { SessionLoopbackBrowser } from "./session-loopback-browser";
 import { SessionTranscript } from "./session-transcript";
 import { SessionHeader } from "./session-header";
 import { SessionListSheet } from "./session-list-sheet";
@@ -235,7 +236,7 @@ function SessionWorkspace({
 
   return (
     <ComposerTransferProvider scope={scope}>
-      <Screen scroll={false}>
+      <Screen scroll={false} contentOwnsBottomInset>
         <SessionHeader
           showBack={layout !== "split"}
           onShowSessions={layout === "tablet" ? () => setSessionsOpen(true) : undefined}
@@ -329,6 +330,7 @@ function SessionWorkspace({
           </View>
         ) : null}
         <PrivateContentBoundary visible={visible} isAllowed={canRead}>
+          <SessionLoopbackBrowser scope={scope} projectId={projectId}>
           <SessionKeyboardFrame
             composer={
               <SessionComposer
@@ -372,6 +374,7 @@ function SessionWorkspace({
               </View>
             )}
           </SessionKeyboardFrame>
+          </SessionLoopbackBrowser>
           {settings && session && projectId ? (
             <SessionSettings
               onClose={() => setSettings(false)}

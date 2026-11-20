@@ -114,7 +114,11 @@ export function useLocalDraft<T>(
     setValue,
     ready: state.status === "ready" && store.ready,
     error: state.error,
-    isStored: store.ready && encode(state.value) === encode(state.saved) && !state.error,
+    // Same reference is already stored; comparing encodings on every render would re-serialize large drafts.
+    isStored:
+      store.ready &&
+      !state.error &&
+      (Object.is(state.value, state.saved) || encode(state.value) === encode(state.saved)),
     load,
     persist,
   };

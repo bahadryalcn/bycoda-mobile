@@ -20,21 +20,29 @@ const mobileQueueClient = `mobile:${randomUUID()}`;
 type QueueChange = (queue: SharedQueue) => SharedQueue;
 const ACTIVE_POLL_MS = 2500;
 const IDLE_POLL_MS = 15_000;
+// Nothing can be sent while the turn runs; the idle flip in the session snapshot triggers a read.
+const RUNNING_POLL_MS = 10_000;
 // Keep the fast poll briefly after an enqueue so the drain state shows up quickly.
 const ENQUEUE_FAST_WINDOW_MS = 15_000;
 
-/** Fast polling only while rows are queued or just after the user enqueued one. */
+/**
+ * Fast polling only while rows are queued and sendable, or just after the user enqueued one.
+ * A running turn backs off, except while the Host holds a send claim that must settle quickly.
+ */
 export function queuePollInterval(
-  queue: Pick<SharedQueue, "messages"> | undefined,
+  queue: (Pick<SharedQueue, "messages"> & Partial<Pick<SharedQueue, "claim">>) | undefined,
   lastEnqueueAt: number,
   now: number,
+  running = false,
 ): number {
-  if (queue?.messages.length) return ACTIVE_POLL_MS;
+  if (queue?.messages.length) return running && !queue.claim ? RUNNING_POLL_MS : ACTIVE_POLL_MS;
   return now - lastEnqueueAt < ENQUEUE_FAST_WINDOW_MS ? ACTIVE_POLL_MS : IDLE_POLL_MS;
 }
 
-export function useSessionQueue(scope: SessionScope) {
+export function useSessionQueue(scope: SessionScope, running = false) {
   const client = useHostClient();
+  const runningRef = useRef(running);
+  runningRef.current = running;
   const cache = useQueryClient();
   const supported = !!client?.machine.capabilities?.includes("sessions.queue");
   const leaseAware = !!client?.machine.capabilities?.includes("sessions.queue.lease");
@@ -52,7 +60,7 @@ export function useSessionQueue(scope: SessionScope) {
     params,
     {
       enabled: supported,
-      interval: (data) => queuePollInterval(data, lastEnqueueAt.current, Date.now()),
+      interval: (data) => queuePollInterval(data, lastEnqueueAt.current, Date.now(), runningRef.current),
       queryFn: (target, signal) =>
         queueAttachmentOwner(target, scope.sessionId).request(
           target,

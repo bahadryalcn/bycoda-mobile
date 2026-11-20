@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useHostClient } from "@/state/queries";
 import { isAppContentVisible, useSecurity } from "@/state/security";
-import { subscribeDraftPresence } from "@/state/local-draft-storage";
+import { subscribeDraftPresenceChanges } from "@/state/local-draft-storage";
 import { decodeComposerDraft, encodeComposerDraft } from "../../workspace/composer-draft";
 import { flushWorkspaceDrafts } from "../../workspace/draft-guard";
 import { sendOutbox } from "./store";
@@ -24,51 +24,90 @@ export function draftPresenceChanged(previous: readonly string[] | undefined, ne
   return previous === undefined || JSON.stringify(previous) !== JSON.stringify(next);
 }
 
+/** Unchanged snapshots are renewed slightly inside the Host's 30 s presence lifetime. */
+export const DRAFT_PRESENCE_RENEW_MS = 25_000;
+const DEBOUNCE_MS = 400, BACKOFF_BASE_MS = 2_000, BACKOFF_MAX_MS = 60_000;
+/** Delay before retry number `failures` (1-based) of a failed scan or report. */
+export const draftPresenceBackoff = (failures: number) => Math.min(BACKOFF_BASE_MS * 2 ** (failures - 1), BACKOFF_MAX_MS);
+
+export type DraftPresenceSource = {
+  machineId: string;
+  storage: {
+    getAllKeys(): Promise<readonly string[]>;
+    multiGet(keys: readonly string[]): Promise<ReadonlyArray<readonly [string, string | null]>>;
+  };
+  outbox: { all(): Promise<ReadonlyArray<{ machineId: string; sessionId: string; status: string }>>; subscribe(listener: () => void): () => void };
+  /** Persists unsaved mounted composers so the scan sees them. */
+  flush(): Promise<void>;
+  report(sessionIds: string[]): Promise<unknown>;
+  /** False while locked, backgrounded or hidden; runs then do nothing. */
+  current(): boolean;
+};
+
+/**
+ * Event-driven: a run starts on cold start, a draft presence flip or cleanup, an outbox change, a
+ * host reconnect, or the renewal timer. Idle time costs nothing; failures back off exponentially.
+ */
+export function startDraftPresenceReporting(source: DraftPresenceSource): () => void {
+  const prefix = `bycoda.mobile.draft.v1:${source.machineId}:`;
+  let stopped = false, flight = false, again = false, renewDue = false, failures = 0, retryAt = 0;
+  let previous: string[] | undefined;
+  let debounce: ReturnType<typeof setTimeout> | undefined, renewal: ReturnType<typeof setTimeout> | undefined;
+  const live = () => !stopped && source.current();
+  const run = async () => {
+    if (!live()) return;
+    // A trigger during a run may describe a write the scan already passed; rerun once afterwards.
+    if (flight) { again = true; return; }
+    flight = true;
+    try {
+      await source.flush();
+      const keys = (await source.storage.getAllKeys()).filter(key => key.startsWith(prefix));
+      const entries = keys.length ? await source.storage.multiGet(keys) : [];
+      const sessionIds = draftPresenceSnapshot(source.machineId, entries, await source.outbox.all());
+      if (!live() || (!renewDue && !draftPresenceChanged(previous, sessionIds))) return;
+      await source.report(sessionIds);
+      if (stopped) return;
+      previous = sessionIds; renewDue = false; failures = 0; retryAt = 0;
+      clearTimeout(renewal);
+      renewal = setTimeout(() => { renewDue = true; schedule(); }, DRAFT_PRESENCE_RENEW_MS);
+    } catch {
+      // `previous` and `renewDue` stay as they were, so the retry reports again.
+      failures++; retryAt = Date.now() + draftPresenceBackoff(failures); again = true;
+    } finally {
+      flight = false;
+      if (again && !stopped) { again = false; schedule(); }
+    }
+  };
+  function schedule() {
+    if (stopped) return;
+    clearTimeout(debounce);
+    debounce = setTimeout(() => { void run().catch(() => {}); }, Math.max(DEBOUNCE_MS, retryAt - Date.now()));
+  }
+  const outbox = source.outbox.subscribe(schedule);
+  const changes = subscribeDraftPresenceChanges(source.storage, key => { if (key === null || key.startsWith(prefix)) schedule(); });
+  const onConnected = (machineId: string) => {
+    if (machineId === source.machineId) { previous = undefined; failures = 0; retryAt = 0; schedule(); }
+  };
+  connected.add(onConnected);
+  void run().catch(() => {});
+  return () => {
+    stopped = true; clearTimeout(debounce); clearTimeout(renewal); outbox(); changes();
+    connected.delete(onConnected);
+  };
+}
+
 /** Mounted inside existing security/account providers; never opens a second transport. */
 export function DraftPresenceReporter() {
   const client = useHostClient();
   const unlocked = useSecurity(state => state.status === "unlocked" && state.appState === "active");
-  // Observe persisted edits, reconnects and foreground; flushing includes unsaved mounted composers.
+  // Starts the event-driven reporter for the connected computer; it stops on lock, background or switch.
   useEffect(() => {
     if (!client || !unlocked) return;
-    let stopped = false, flight = false;
-    let previous: string[] | undefined, lastReport = 0;
-    const subscriptions = new Map<string, () => void>();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const current = () => !stopped && useSecurity.getState().status === "unlocked" &&
-      useSecurity.getState().appState === "active" && isAppContentVisible();
-    const run = async () => {
-      if (!current() || flight) return;
-      flight = true;
-      try {
-        await flushWorkspaceDrafts();
-        const prefix = `bycoda.mobile.draft.v1:${client.machine.id}:`;
-        const keys = (await AsyncStorage.getAllKeys()).filter(key => key.startsWith(prefix));
-        for (const key of keys) if (!subscriptions.has(key)) subscriptions.set(key, subscribeDraftPresence(AsyncStorage, key, schedule));
-        const entries = await AsyncStorage.multiGet(keys);
-        const sessionIds = draftPresenceSnapshot(client.machine.id, entries, await sendOutbox.all());
-        if (!current() || (!draftPresenceChanged(previous, sessionIds) && Date.now() - lastReport < 30_000)) return;
-        await client.request("drafts.presence.report", { clientId: "mobile", sessionIds, complete: true }, { retry: false });
-        previous = sessionIds; lastReport = Date.now();
-      } finally { flight = false; }
-    };
-    function schedule() {
-      clearTimeout(timer);
-      timer = setTimeout(() => { void run().catch(() => {}); }, 400);
-    }
-    const outbox = sendOutbox.subscribe(schedule);
-    const onConnected = (machineId: string) => {
-      if (machineId === client.machine.id) { previous = undefined; schedule(); }
-    };
-    connected.add(onConnected);
-    // Discover new persisted keys, retry failures, and renew unchanged snapshots.
-    const heartbeat = setInterval(() => { void run().catch(() => {}); }, 1000);
-    void run().catch(() => {});
-    return () => {
-      stopped = true; clearInterval(heartbeat); clearTimeout(timer); outbox();
-      connected.delete(onConnected);
-      for (const unsubscribe of subscriptions.values()) unsubscribe();
-    };
+    return startDraftPresenceReporting({
+      machineId: client.machine.id, storage: AsyncStorage, outbox: sendOutbox, flush: flushWorkspaceDrafts,
+      report: sessionIds => client.request("drafts.presence.report", { clientId: "mobile", sessionIds, complete: true }, { retry: false }),
+      current: () => useSecurity.getState().status === "unlocked" && useSecurity.getState().appState === "active" && isAppContentVisible(),
+    });
   }, [client, unlocked]);
   return null;
 }

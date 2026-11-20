@@ -1,13 +1,14 @@
 export const LOG_MAX_LINES = 1000;
 export const LOG_MAX_CHARS = 200_000;
-const LINE_MAX_CHARS = 4000;
+export const LINE_MAX_CHARS = 4000;
 
 /** Bounded in-memory ring of log lines: oldest lines drop first when either limit is exceeded. */
 export function createLogBuffer(maxLines = LOG_MAX_LINES, maxChars = LOG_MAX_CHARS) {
   let lines: string[] = [];
   let chars = 0;
   return {
-    push(line: string) {
+    /** Stores the line (clipped, newlines indented) and returns the exact text kept in the ring. */
+    push(line: string): string {
       const clipped = line.length > LINE_MAX_CHARS ? `${line.slice(0, LINE_MAX_CHARS)}...` : line;
       const text = clipped.replace(/\r?\n/g, "\n  ");
       lines.push(text);
@@ -18,6 +19,7 @@ export function createLogBuffer(maxLines = LOG_MAX_LINES, maxChars = LOG_MAX_CHA
         drop += 1;
       }
       if (drop > 0) lines = lines.slice(drop);
+      return text;
     },
     text: () => lines.join("\n"),
     size: () => lines.length,

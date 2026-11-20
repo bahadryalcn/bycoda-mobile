@@ -43,7 +43,7 @@ function getPackageForModule(path: string) {
 }
 
 it.each(["android", "ios"])(
-  "resolves all four portable core exports in Metro and TypeScript without a root node_modules link (%s)",
+  "resolves every portable core export in Metro and TypeScript without a root node_modules link (%s)",
   (platform) => {
     expect(config.resolver.extraNodeModules["@bycoda/core"]).toBe(packageRoot);
     expect(config.resolver.unstable_enablePackageExports).toBe(true);
@@ -54,6 +54,7 @@ it.each(["android", "ios"])(
       ".",
       "./json-text",
       "./concurrent",
+      "./text",
       "./session-title",
     ]);
     for (const [subpath, target] of Object.entries(packageJson.exports)) {

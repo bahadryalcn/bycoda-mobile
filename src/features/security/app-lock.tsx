@@ -74,7 +74,7 @@ export function SecurityGate({ children }: PropsWithChildren) {
   const locked = security.status === "locked";
   const content = (
     <View style={uiStyles.screen}>
-      <DotField />
+      {security.status !== "loading" ? <DotField /> : null}
       <ScrollView
         style={{ flex: 1 }}
         contentInsetAdjustmentBehavior="never"
@@ -88,7 +88,7 @@ export function SecurityGate({ children }: PropsWithChildren) {
         }}
       >
         <Animated.View
-          entering={enterItem(0)}
+          entering={security.status === "loading" ? undefined : enterItem(0)}
           style={{
             width: "100%",
             maxWidth: metrics.entryWidth,
@@ -98,7 +98,7 @@ export function SecurityGate({ children }: PropsWithChildren) {
           }}
         >
           {security.status === "loading" ? (
-            <Loading label={copy("Güvenlik kontrol ediliyor…", "Checking security…")} centered />
+            <Loading centered immediate />
           ) : (
             <>
               <Illustration name="lock-hero" size={Math.min(height * 0.36, 340)} />

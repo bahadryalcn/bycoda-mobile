@@ -1,6 +1,6 @@
 import { formatDiagnosticLine, type DiagnosticLogFields, type DiagnosticLogLevel } from "../account/contracts";
 import { setDiagnosticSink } from "./diagnostic-log";
-import { createLogBuffer, formatLogArguments } from "./log-buffer";
+import { createLogBuffer, formatLogArguments, LINE_MAX_CHARS, LOG_MAX_CHARS, LOG_MAX_LINES } from "./log-buffer";
 import { CRASH_MARKER, CURRENT_LOG, PREVIOUS_LOG, type DiagnosticFiles } from "./diagnostic-files";
 
 export interface CrashMarker {
@@ -12,8 +12,11 @@ export interface CrashMarker {
 
 const STACK_MAX = 20_000;
 const FLUSH_DELAY_MS = 3000;
-// Dev builds log far more and flush less often; the file is rewritten synchronously.
+// Dev builds log far more and flush less often; every flush is a synchronous file write.
 const DEV_FLUSH_DELAY_MS = 10_000;
+// Records in one flush window that count as a burst, and the longest the flush then backs off to.
+const BURST_RECORDS = 50;
+const MAX_FLUSH_DELAY_MS = 30_000;
 
 type ConsoleLike = { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void };
 type ErrorHandler = (error: unknown, isFatal?: boolean) => void;
@@ -76,43 +79,89 @@ export function installDiagnosticCapture(options: CaptureOptions): DiagnosticCap
   }
   const previousText = rotated ?? files.read(PREVIOUS_LOG) ?? "";
   const buffer = createLogBuffer();
-  const flushDelayMs = typeof __DEV__ !== "undefined" && __DEV__ ? DEV_FLUSH_DELAY_MS : FLUSH_DELAY_MS;
+  const baseFlushDelayMs = typeof __DEV__ !== "undefined" && __DEV__ ? DEV_FLUSH_DELAY_MS : FLUSH_DELAY_MS;
+  let flushDelayMs = baseFlushDelayMs;
   let timer: unknown = null;
   let disposed = false;
-  // Set when the buffer changed since the last successful write, so idle flushes skip the rewrite.
+  // Set when the buffer changed since the last successful write, so idle flushes skip the write.
   let dirty = false;
+  // The file still holds the previous run (or the last append failed), so the next flush rewrites it whole.
+  let needsRewrite = true;
+  // Lines kept in the ring since the last flush; appended instead of rewriting the whole file.
+  let pending: string[] = [];
+  let fileHasContent = false;
+  let fileLines = 0;
+  let fileChars = 0;
+  let recordsSinceFlush = 0;
+
+  const store = (line: string) => {
+    const kept = buffer.push(line);
+    pending.push(kept);
+    dirty = true;
+  };
+
+  const pendingChars = () => pending.reduce((sum, line) => sum + line.length + 1, 0);
+  const writeFile = () => {
+    const full = needsRewrite || fileLines + pending.length > LOG_MAX_LINES || fileChars + pendingChars() > LOG_MAX_CHARS;
+    if (full) {
+      const text = buffer.text();
+      files.write(CURRENT_LOG, text);
+      needsRewrite = false;
+      fileHasContent = text.length > 0;
+      fileLines = buffer.size();
+      fileChars = text.length;
+    } else {
+      const text = (fileHasContent ? "\n" : "") + pending.join("\n");
+      try {
+        files.append(CURRENT_LOG, text);
+      } catch (error) {
+        // An append may have been partial: the next flush rewrites the file from the ring.
+        needsRewrite = true;
+        throw error;
+      }
+      fileHasContent = true;
+      fileLines += pending.length;
+      fileChars += text.length;
+    }
+    pending = [];
+  };
 
   const flush = () => {
     if (timer !== null) clearTimer(timer);
     timer = null;
     settleRepeats();
+    // A burst of records backs the periodic flush off; a quiet window returns it to the base delay.
+    flushDelayMs = recordsSinceFlush >= BURST_RECORDS ? Math.min(flushDelayMs * 2, MAX_FLUSH_DELAY_MS) : baseFlushDelayMs;
+    recordsSinceFlush = 0;
     if (!dirty) return;
     dirty = false;
     try {
-      files.write(CURRENT_LOG, buffer.text());
+      writeFile();
     } catch {
       // Logging must never throw into the app; keep the buffer dirty so the next flush retries.
       dirty = true;
     }
   };
   // Identical consecutive events collapse into one line plus "repeated N times".
-  let last: { key: string; level: DiagnosticLogLevel; category: string; message: string; repeats: number } | null = null;
+  let last: { key: string; level: DiagnosticLogLevel; category: string; repeats: number } | null = null;
   const settleRepeats = () => {
     if (last && last.repeats > 0) {
-      buffer.push(formatDiagnosticLine(now(), last.level, last.category, `previous event repeated ${last.repeats} times`));
-      dirty = true;
+      store(formatDiagnosticLine(now(), last.level, last.category, `previous event repeated ${last.repeats} times`));
     }
     if (last) last.repeats = 0;
   };
   const record = (level: DiagnosticLogLevel, category: string, message: string, fields: DiagnosticLogFields = {}) => {
-    const key = JSON.stringify([level, category, message, fields]);
+    // The ring keeps at most LINE_MAX_CHARS of a line, so the text past that never reaches the log:
+    // clip before building the dedupe key and the line instead of walking a huge message twice.
+    const clipped = message.length > LINE_MAX_CHARS ? message.slice(0, LINE_MAX_CHARS) : message;
+    const key = JSON.stringify([level, category, clipped, fields]);
     if (last && last.key === key) last.repeats += 1;
     else {
       settleRepeats();
-      last = { key, level, category, message, repeats: 0 };
-      buffer.push(formatDiagnosticLine(now(), level, category, message, fields));
+      last = { key, level, category, repeats: 0 };
+      store(formatDiagnosticLine(now(), level, category, clipped, fields));
     }
-    dirty = true;
+    recordsSinceFlush += 1;
     if (timer === null && !disposed) timer = setTimer(flush, flushDelayMs);
   };
 

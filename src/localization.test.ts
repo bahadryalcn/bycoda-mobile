@@ -8,6 +8,13 @@ describe("mobile language parity", () => {
     expect(translate("ja", "\"{p0}\" dalı oluşturulup bu dala geçilsin mi?", "Create \"{p0}\" and switch to it?", { p0: "feature" })).toBe("「feature」を作成して切り替えますか？");
     expect(translate("zh-CN", "Paylaşılan içerik taslağa eklenecek ({p0} dosya).", "Shared content will be added to the draft ({p0} files).", { p0: 3 })).toBe("共享内容将添加到草稿（3 个文件）。");
   });
+  it("translates the Jira board backlog scope and goal crew labels through the catalog", () => {
+    expect(translate("ja", "Backlog", "Backlog")).toBe("バックログ");
+    expect(translate("tr", "Backlog", "Backlog")).toBe("Backlog");
+    expect(translate("ja", "Ekip", "Crew")).toBe("クルー");
+    expect(translate("tr", "Ekip", "Crew")).toBe("Ekip");
+    expect(translate("en", "Ekip", "Crew")).toBe("Crew");
+  });
   it("ships a complete offline catalog for every desktop language", () => {
     const keys = Object.keys(catalogs.en).sort();
     for (const { value } of LANGUAGES) {

@@ -37,6 +37,20 @@ export function readCostReport(value: unknown, environmentId: string): CostRepor
   return value as unknown as CostReport;
 }
 
+/**
+ * The cost the Host's capped model/project list leaves out. Totals count every request, so the
+ * remainder after the listed rows is the folded-away tail; null when the list is complete.
+ */
+export function omittedCost(report: CostReport, list: "models" | "projects"): { costUsd: number; tokens: number } | null {
+  const tokens = report.totals.tokens - report[list].reduce((sum, row) => sum + row.tokens, 0);
+  if (tokens <= 0) return null;
+  const costUsd = report.totals.costUsd - report[list].reduce((sum, row) => sum + row.costUsd, 0);
+  return { costUsd: Math.max(0, costUsd), tokens };
+}
+
+/** True when the Host stopped at its log-file cap, so the whole report may miss older logs. */
+export const isPartialScan = (report: CostReport): boolean => report.coverage.truncated === true;
+
 /** "4d 12h", "3h 5m", "12m"; null once the reset time has passed or is unknown. */
 export function resetCountdown(resetsAt: number | null, now: number): string | null {
   if (resetsAt === null) return null;

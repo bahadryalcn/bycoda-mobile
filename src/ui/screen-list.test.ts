@@ -35,3 +35,27 @@ it("lets empty and loading states occupy the remaining list viewport", () => {
   expect(fixture.props.ListEmptyComponent.props.collapsable).toBe(false);
   expect(fixture.props.ListEmptyComponent.props.children).toBe(empty);
 });
+
+it("keeps a caller header and footer alongside screen chrome, mounted once", () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  root = createRoot(document.createElement("div"));
+  const callerHeader = createElement("span", null, "Search");
+  const callerFooter = createElement("span", null, "Banner");
+  act(() => root!.render(createElement(ScreenList, {
+    data: [], renderItem: () => null, header: createElement("span", null, "Chrome"), footer: createElement("span", null, "Totals"),
+    ListHeaderComponent: callerHeader, ListFooterComponent: callerFooter,
+  })));
+  const header = fixture.props.ListHeaderComponent;
+  expect(header.props.children[1].props.children).toBe("Chrome");
+  expect(header.props.children[2]).toBe(callerHeader);
+  const footer = fixture.props.ListFooterComponent;
+  expect(footer.props.children[1]).toBe(callerFooter);
+});
+
+it("passes a caller header through untouched when there is no screen chrome", () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  root = createRoot(document.createElement("div"));
+  const callerHeader = createElement("span", null, "Search");
+  act(() => root!.render(createElement(ScreenList, { data: [], renderItem: () => null, ListHeaderComponent: callerHeader })));
+  expect(fixture.props.ListHeaderComponent).toBe(callerHeader);
+});

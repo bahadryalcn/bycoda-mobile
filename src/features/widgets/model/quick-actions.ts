@@ -68,6 +68,38 @@ export function quickActionItems(
   return items.slice(0, QUICK_ACTION_LIMIT);
 }
 
+/** The computer a quick-action route names (recent sessions carry it); null for routes without one. */
+export function quickActionMachineId(href: string): string | null {
+  const value = /[?&]machineId=([^&]*)/.exec(href)?.[1];
+  if (!value) return null;
+  try {
+    return decodeURIComponent(value) || null;
+  } catch {
+    return null;
+  }
+}
+
+/** What a tapped quick action needs before its route can open on the right computer. */
+export type QuickActionOutcome =
+  | { kind: "open"; selectMachineId: string | null }
+  | { kind: "unpaired" };
+
+/**
+ * A route that names a computer opens on that computer: it is selected first when another one
+ * is active (the route scope would otherwise show its "belongs to another computer" dead end),
+ * and a computer this phone no longer pairs with opens nothing.
+ */
+export function resolveQuickAction(
+  href: string,
+  machines: readonly { id: string }[],
+  activeId: string | null,
+): QuickActionOutcome {
+  const machineId = quickActionMachineId(href);
+  if (!machineId || machineId === activeId) return { kind: "open", selectMachineId: null };
+  if (!machines.some((machine) => machine.id === machineId)) return { kind: "unpaired" };
+  return { kind: "open", selectMachineId: machineId };
+}
+
 /** Only known in-app routes are navigable; anything else is ignored. */
 export function quickActionHref(
   action: { params?: Record<string, unknown> | null } | undefined,

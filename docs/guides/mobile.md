@@ -43,8 +43,7 @@ under Details. Git places branch identity before totals and formats counts using
 app language. Inbox descriptions and comments precede optional labels and assignees.
 
 Management records use flat rows with expandable details. Model choices show readable
-provider/model names. Existing pages reopen without stacking another copy. Sending
-social drafts and campaigns still requires the applicable approval.
+provider/model names. Existing pages reopen without stacking another copy.
 
 Host access keeps the current phone first and offers device search for long paired
 device lists. Filtering does not revoke devices or change connection authority.
@@ -326,22 +325,19 @@ device on the host if you also want to remove its authorization.
 - **Changes:** inspect staged and unstaged diffs, stage/unstage files and work
   with branches. Destructive Git actions and publication have explicit controls
   and confirmations; opening Changes never performs them automatically.
-- **Inbox:** host approvals, questions, task reviews, failed work, social threads
-  and linked PR watches. The provider inbox uses the connected desktop's existing
+- **Inbox:** host approvals, questions, task reviews, failed work
+  and linked PR watches. Social attention items the host sends are not shown on the phone. The provider inbox uses the connected desktop's existing
   GitHub, GitLab, Azure, Linear and Jira integrations for supported lists,
   details and discussions. Provider credentials stay in the desktop's credential
   store. Explicit comment and PR actions run through the active desktop bridge.
   When the desktop is unavailable, the provider view reports that state while
   host attention remains accessible.
-- **Manage:** tasks, goals, automations, social accounts and notes. Notes use the
+- **Manage:** tasks, goals, automations and notes. Social media management stays a
+  desktop feature; the phone only follows the computer. Notes use the
   existing desktop note database and reject saves after concurrent edits. A
   missing desktop database is an error, not an empty notebook.
 - **Settings:** local language and connections, and the selected host's task
   concurrency and daily agent time limits.
-
-Social content reads the selected account's effective policy before creating or
-updating a draft. Per-platform policy fields and Unicode character limits apply.
-Approval, execution permission and sending remain separate owner actions.
 
 Approval replies retain the identity of the request you saw, including delegated
 Crew approvals. A reused request number cannot redirect an old reply. Unsupported
@@ -407,7 +403,9 @@ pnpm --dir mobile export:web
 ```
 
 The additive `notes.*`, `inbox.list` and provider-inbox RPCs require a host built
-from this source. Provider inbox also requires the matching desktop heartbeat.
+from this source. When `inbox.list` names `unavailableProjectIds`, the Attention
+list stays usable, shows a warning with the existing retry and never reports
+itself empty; hosts without the field read as complete. Provider inbox also requires the matching desktop heartbeat.
 The existing local update coordinator owns host installation. Building source
 or exporting a web preview does not install that host, prove physical-device
 behavior, sign an app-store build or verify platform account authorization.
@@ -704,8 +702,10 @@ When a message cannot reach your computer, a compatible Host keeps it in this ph
 send outbox. Retry now reconnects immediately; Edit opens its preserved draft; Delete discards
 the pending delivery. The phone retries in conversation order when the selected computer reconnects
 or the app returns to the foreground. It retains your chosen model and files, and does not replay
-while the app or project is locked. Sign-out, an archived/deleted conversation, or 24 hours of
-waiting stops delivery and leaves a visible notice. Older Hosts keep existing draft recovery.
+while the app or project is locked. After 24 hours of waiting the message is held, not discarded:
+it shows a notice and is sent only after you choose Retry now or Edit. An archived or deleted
+conversation stops delivery, keeps the text, and lets you Edit it; a message from another account
+or computer stays visible for Delete only. Older Hosts keep existing draft recovery.
 
 ## Pull requests
 

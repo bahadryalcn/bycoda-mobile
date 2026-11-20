@@ -50,12 +50,13 @@ vi.mock("./features/account/ui/AccountGate", () => ({ AccountGate: ({ children }
 vi.mock("./features/privacy/provider-consent", () => ({ ProviderConsentGate: ({ children }: PropsWithChildren) => children }));
 vi.mock("./features/security/app-lock", () => ({ SecurityGate: ({ children }: PropsWithChildren) => children }));
 vi.mock("./app-lifecycle", () => ({ AppLifecycle: ({ children }: PropsWithChildren) => children }));
+vi.mock("./app-machines-gate", () => ({ MachinesReadyGate: ({ children }: PropsWithChildren) => children }));
 vi.mock("./state/security", () => ({
   useSecurity: Object.assign((select: (state: { status: string }) => unknown) => select({ status: "unlocked" }), {
     getState: () => ({ status: "unlocked" }),
   }),
 }));
-vi.mock("./state/machines", () => ({ useMachines: { getState: () => ({ machines: [] }) } }));
+vi.mock("./state/machines", () => ({ useMachines: { getState: () => ({ machines: [] }), subscribe: () => () => undefined } }));
 vi.mock("./features/diagnostics/diagnostic-log", () => ({ logDiagnostic: vi.fn() }));
 vi.mock("./features/diagnostics/diagnostic-events", () => ({ transportKind: () => "fixture" }));
 vi.mock("./features/diagnostics/DiagnosticsCoordinator", () => ({ DiagnosticsCoordinator: () => null }));

@@ -100,6 +100,8 @@ export type QuestionCardProps = {
   onAnswer: QuestionAnswer;
   initialDraft?: QuestionDraft;
   onDraftChange?: (draft: QuestionDraft) => void;
+  /** Text field lost focus: persist any coalesced draft now. */
+  onDraftFlush?: () => void;
   attachmentControls?: (questionId: string, held: boolean) => import("react").ReactNode;
   attachments?: Record<string, import("./attachment-model").StagedAttachment[]>;
   attachmentBusy?: boolean;

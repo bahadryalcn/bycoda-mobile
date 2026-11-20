@@ -13,6 +13,12 @@ describe("queue polling interval", () => {
     expect(queuePollInterval({ messages: [row] }, 0, 1_000_000)).toBe(2500);
   });
 
+  it("backs off while the turn runs, but not while the Host holds a send claim", () => {
+    expect(queuePollInterval({ messages: [row] }, 0, 1_000_000, true)).toBe(10_000);
+    const claim = { id: "next", clientId: "c" } as never;
+    expect(queuePollInterval({ messages: [row], claim }, 0, 1_000_000, true)).toBe(2500);
+  });
+
   it("keeps the fast poll for 15 s after an enqueue, then slows down", () => {
     const empty = { messages: [] };
     expect(queuePollInterval(empty, 1_000, 10_000)).toBe(2500);

@@ -23,7 +23,8 @@ export function AgentAvatar({
 }) {
   const { colors } = useMobileTheme();
   const provider = author?.toLowerCase().split(/[\s·/]/)[0];
-  const source = providers[provider as keyof typeof providers] ?? mark;
+  const providerSource = providers[provider as keyof typeof providers];
+  const source = providerSource ?? mark;
   return (
     <View
       accessible={false}
@@ -44,6 +45,7 @@ export function AgentAvatar({
       ) : (
         <Image
           source={source}
+          tintColor={providerSource ? undefined : colors.brand}
           contentFit="contain"
           style={{ width: size * 0.77, height: size * 0.77 }}
         />

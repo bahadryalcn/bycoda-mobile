@@ -4,7 +4,8 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 }));
 vi.mock("expo-constants", () => ({ default: { expoConfig: { extra: {} } } }));
 vi.mock("../permissions/device-permissions", () => ({ notifications: vi.fn() }));
-import { decodePushPreferences, pushTarget } from "./push-model";
+import { readFileSync } from "node:fs";
+import { decodePushPreferences, pushRoute, pushTarget, unmatchedPushNotice } from "./push-model";
 import { isViewingSession, setViewingSession } from "./push-viewing";
 import { expoProjectId, pushRegistration } from "./push-registration";
 
@@ -72,6 +73,39 @@ describe("push targets", () => {
     expect(isViewingSession({ environmentId: "e", sessionId: "other" })).toBe(false);
     setViewingSession(null);
     expect(isViewingSession({ environmentId: "e", sessionId: "s" })).toBe(false);
+  });
+});
+
+describe("push routes", () => {
+  it("opens the tapped conversation on the computer that sent the push", () => {
+    expect(
+      pushRoute({ kind: "session", environmentId: "e", sessionId: "s", projectId: "p" }, "machine-1"),
+    ).toEqual({ pathname: "/session/[id]", params: { id: "s", machineId: "machine-1", projectId: "p" } });
+    expect(pushRoute({ kind: "session", environmentId: "e", sessionId: "s" }, "machine-1").params).not.toHaveProperty("projectId");
+    expect(pushRoute({ kind: "approval", environmentId: "e", approvalId: "a" }, "m")).toEqual({
+      pathname: "/approvals",
+      params: { focus: "a" },
+    });
+    expect(pushRoute({ kind: "assistant", environmentId: "e", jobId: "j", questions: true }, "m")).toEqual({
+      pathname: "/assistant",
+      params: { job: "j", questions: "1" },
+    });
+  });
+
+  it("navigates to push destinations so repeat taps reuse the screen instead of stacking", () => {
+    const source = readFileSync(new URL("./use-push.ts", import.meta.url), "utf8");
+    expect(source).toContain("router.navigate(pushRoute(target, machine.id)");
+    expect(source).not.toMatch(/router\.push\(/);
+  });
+
+  it("explains a tap for a computer that is not paired, and distinguishes unreadable storage", () => {
+    expect(unmatchedPushNotice(null, copy)).toBe("This notification is from a computer that is no longer paired.");
+    expect(unmatchedPushNotice("Saved computers could not be loaded.", copy)).toBe(
+      "Saved computers could not be loaded, so this notification could not be opened.",
+    );
+    const source = readFileSync(new URL("./use-push.ts", import.meta.url), "utf8");
+    expect(source).toContain("showToast({ tone: \"warning\", message: unmatchedPushNotice(machines.storageError, copy) })");
+    expect(source).toContain("if (!machine) {");
   });
 });
 

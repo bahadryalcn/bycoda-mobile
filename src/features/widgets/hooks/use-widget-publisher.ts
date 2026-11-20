@@ -20,6 +20,7 @@ import { syncSessionActivity } from "../platform/live-activity";
 import { publishAndCacheWidget, invalidateWidgetWork } from "../platform/widget-cache";
 import { useAccountAccess } from "../../account/model/account-access";
 import { widgetLabels } from "../model/widget-labels";
+import { nextPublishStep } from "../model/publish-gate";
 
 const DEBOUNCE_MS = 1_000;
 /** Republish unchanged data before the 10 minute snapshot TTL marks it stale. */
@@ -65,7 +66,6 @@ export function useWidgetPublisher() {
   // Publish only privacy-settled state; every changed authority retires queued writes.
   useEffect(() => {
     const now = Date.now();
-    invalidateWidgetWork();
     const input = {
       machine: machineId ? { id: machineId, name: machineName } : null,
       unlocked: unlocked && signedIn,
@@ -81,13 +81,20 @@ export function useWidgetPublisher() {
       palette: widgetPalette,
     };
     const snapshot = buildWidgetSnapshot(input);
+    const identity = snapshot
+      ? `${snapshotIdentity(snapshot)}:${JSON.stringify(feed.projects)}`
+      : null;
+    const step = nextPublishStep(published.current, identity, now, HEARTBEAT_MS);
+    if (step === "skip") return;
+    if (step === "retire") {
+      // Only a visible change retires in-flight writes; the claim goes with them.
+      invalidateWidgetWork();
+      published.current = { identity: "", at: 0 };
+    }
     if (!snapshot) return;
-    const identity = `${snapshotIdentity(snapshot)}:${JSON.stringify(feed.projects)}`;
-    const last = published.current;
-    if (identity === last.identity && now - last.at < HEARTBEAT_MS) return;
     const timer = setTimeout(
       () => {
-        published.current = { identity, at: Date.now() };
+        published.current = { identity: identity ?? "", at: Date.now() };
         void publishAndCacheWidget(input, snapshot, environmentId, !lockEnabled && signedIn).catch(
           () => {
             // A failed write is retried by the next change or heartbeat.
@@ -116,6 +123,9 @@ export function useWidgetPublisher() {
     labelsKey,
     beat,
   ]);
+
+  // Unmount retires writes still queued for the old screen; cleanup must not run on dep changes.
+  useEffect(() => () => invalidateWidgetWork(), []);
 
   // The activity exists only while the app is not in the foreground; returning ends it.
   useEffect(() => {

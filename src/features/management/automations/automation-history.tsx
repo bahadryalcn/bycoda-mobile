@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { Body, Button, ErrorText, QueryState, Row, ScreenList, Sheet, Stack, StateView } from "@/ui/primitives";
 import { ScreenChromeProvider } from "@/ui/layout";
 import { useCopy } from "@/ui/copy";
+import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
@@ -32,7 +33,7 @@ export function AutomationHistory({ automationId, projectId, summary, automation
   const close = () => { if (!mounted.current || retired.current) return; retired.current = true; onClose(); };
   return <Sheet visible title={copy("Geçmiş", "History")} size="full" scroll={false} onClose={close}
     footer={<Button tone="quiet" label={copy("Kapat", "Close")} onPress={close} />}>
-    {!readable ? <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")} description={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} /> :
+    {!readable ? <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")} description={copy(...RECORD_ACCESS_UNAVAILABLE)} /> :
       <ScreenChromeProvider nativeTitle bottomSafeArea={false}>
         <ScreenList data={runs ?? []} keyExtractor={run => run.id}
           header={<>

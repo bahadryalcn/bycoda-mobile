@@ -15,6 +15,7 @@ import { ScreenList } from "@/ui/screen-list";
 import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import { useCopy } from "@/ui/copy";
+import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { MessageText } from "@/ui/message-text";
 import { space } from "@/ui/tokens";
@@ -104,6 +105,7 @@ export function SubagentDetails({
   const canStop =
     readable &&
     running &&
+    !block.agentRun?.workflow &&
     target.runId === runId &&
     !!runId &&
     runId !== "desktop" &&
@@ -300,10 +302,7 @@ export function SubagentDetails({
                         "Seçili alt ajan değişti. Ayrıntıları yeniden açın.",
                         "The selected subagent changed. Reopen its details.",
                       )
-                    : copy(
-                        "Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
-                        "Record access is unavailable. Check the original computer and project connection.",
-                      )
+                    : copy(...RECORD_ACCESS_UNAVAILABLE)
                 }
               />
             )}

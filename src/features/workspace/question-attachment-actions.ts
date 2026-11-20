@@ -50,12 +50,16 @@ export class QuestionAttachmentActions {
   }
   busy() { return this.store.busy(this.identity); }
   cancel() { this.controller?.abort(); }
-  saveDraft(draft: QuestionDraft) {
+  /** Typing: exact text is in memory at once, disk writes coalesce. `immediate` (submit) writes now. */
+  saveDraft(draft: QuestionDraft, immediate = false) {
     this.check();
     const next = { ...draft, attachments: this.draft().attachments };
-    if (JSON.stringify(next) === JSON.stringify(this.draft())) return Promise.resolve();
-    return this.store.save(this.identity, { ...this.entry(), draft: next });
+    if (JSON.stringify(next) === JSON.stringify(this.draft())) return immediate ? this.store.flush() : Promise.resolve();
+    const entry = { ...this.entry(), draft: next };
+    return immediate ? this.store.save(this.identity, entry) : this.store.saveLater(this.identity, entry);
   }
+  /** Blur/unmount: write pending text without waiting for the debounce. */
+  flushDraft() { return this.store.flush(); }
   choose(id: string, kind: "photo" | "document") {
     return this.store.exclusive(this.identity, async () => {
       this.editable(); this.item(id);
@@ -120,7 +124,7 @@ export class QuestionAttachmentActions {
       let markedSending = false;
       try {
         this.editable();
-        await this.saveDraft(draft); this.editable();
+        await this.saveDraft(draft, true); this.editable();
         if (!skipped) {
           if (!this.question.questions.every(item => questionComplete(item, this.draft())))
             throw new Error("Complete the question before sending.");

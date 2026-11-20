@@ -13,14 +13,14 @@ export function ReviewNotes({ task }: ReviewNotesProps) {
   if (!notes.length) return null;
   const resolved = notes.filter((note) => note.resolvedAt !== undefined);
   const visible = notes.filter((note) => showResolved || note.resolvedAt === undefined);
+  const counts = { p0: notes.length - resolved.length, p1: resolved.length };
   return (
-    <Disclosure label={copy("İnceleme notları", "Review notes")} detail={`${notes.length - resolved.length} ${copy("açık", "open")} · ${resolved.length} ${copy("çözüldü", "resolved")}`}>
-      <Row>
-        <Body muted>
-          {notes.length - resolved.length} {copy("açık", "open")} · {resolved.length}{" "}
-          {copy("çözüldü", "resolved")}
-        </Body>
-        {!!resolved.length && (
+    <Disclosure
+      label={copy("İnceleme notları", "Review notes")}
+      detail={copy("{p0} açık · {p1} çözüldü", "{p0} open · {p1} resolved", counts)}
+    >
+      {!!resolved.length && (
+        <Row>
           <Button
             label={
               showResolved
@@ -29,8 +29,8 @@ export function ReviewNotes({ task }: ReviewNotesProps) {
             }
             onPress={() => setShowResolved(!showResolved)}
           />
-        )}
-      </Row>
+        </Row>
+      )}
       {visible.map((note) => (
         <ReviewNote key={note.id} task={task} note={note} />
       ))}

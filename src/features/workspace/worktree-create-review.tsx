@@ -8,7 +8,7 @@ export function WorktreeCreateReview({ request, machineName, sourcePath, default
   onClose: () => void; onConfirm: () => void;
 }) {
   const copy = useCopy();
-  return <ActionReviewSheet title={copy("Worktree oluştur", "Create worktree")} submitLabel={copy("Worktree oluştur", "Create worktree")} onClose={onClose} onConfirm={onConfirm}>
+  return <ActionReviewSheet title={copy("Çalışma ağacı oluştur", "Create worktree")} submitLabel={copy("Çalışma ağacı oluştur", "Create worktree")} onClose={onClose} onConfirm={onConfirm}>
     <Stack>
       <Body selectable>{machineName}</Body><Body mono selectable>{sourcePath}</Body>
       <Body muted>{request.existing ? copy("Mevcut yerel dal", "Existing local branch") : copy("Yeni dal", "New branch")}</Body>

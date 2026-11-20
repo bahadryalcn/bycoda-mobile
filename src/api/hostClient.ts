@@ -1,4 +1,9 @@
 import { parseJsonParts } from "@/state/cooperative-json";
+import {
+  HOST_PROTOCOL_VERSION,
+  protocolMismatchMessage,
+  requestPartialSync,
+} from "../../../src/features/connections/model/protocol";
 import { retainSessionAuthority } from "@/domain/session-authority";
 import type {
   HostConnection,
@@ -28,11 +33,6 @@ import type {
   HostAutomationRun,
   HostSettings,
   HostSettingsState,
-  SocialAccount,
-  SocialThread,
-  SocialPolicy,
-  SocialPlatform,
-  SocialSnapshot,
   PrWatch,
   PrWatchInput,
 } from "../domain/types";
@@ -64,8 +64,9 @@ export class HostClient {
     const value = await this.request<HostDescriptor>("environment.describe", {
       supportedProviders: REMOTE_PROVIDERS,
     });
+    const mismatch = protocolMismatchMessage(value?.protocolVersion, HOST_PROTOCOL_VERSION);
+    if (mismatch) throw new HostError("protocol", mismatch, this.transport.connection.id);
     if (
-      value?.protocolVersion !== 1 ||
       !value.environmentId ||
       !Array.isArray(value.capabilities) ||
       !Array.isArray(value.providers)
@@ -115,21 +116,24 @@ export class HostClient {
       known?: HostSession,
       signal?: AbortSignal,
     ): Promise<HostSession> => {
-      const reply = await this.request<SessionSyncResponse>(
-        "sessions.sync",
-        {
+      const send = async (loadedBlockIds?: string[]) =>
+        this.resolveSync(
           sessionId,
-          revision: known?.revision,
-          partial: Boolean(known?.history),
-          loadedBlockIds: known?.session.blocks.map((block) => block.id),
-          waitMs: known ? 20_000 : 0,
-        },
-        { signal, timeoutMs: 30_000 },
-      );
-      return retainSessionAuthority(
-        known,
-        applySessionSync(known, await this.resolveSync(sessionId, reply, signal)),
-      );
+          await this.request<SessionSyncResponse>(
+            "sessions.sync",
+            {
+              sessionId,
+              revision: known?.revision,
+              partial: loadedBlockIds !== undefined,
+              loadedBlockIds,
+              waitMs: known ? 20_000 : 0,
+            },
+            { signal, timeoutMs: 30_000 },
+          ),
+          signal,
+        );
+      const sync = known?.history ? await requestPartialSync(known, send) : await send();
+      return retainSessionAuthority(known, applySessionSync(known, sync));
     },
     block: async (sessionId: string, blockId: string, revision: number) =>
       this.resolveSync(
@@ -272,7 +276,8 @@ export class HostClient {
     save: (task: HostTaskInput) => this.request<HostTask>("tasks.save", { task }),
     move: (taskId: string, to: TaskStatus) =>
       this.request<HostTask>("tasks.move", { taskId, to }, { timeoutMs: 120_000 }),
-    delete: (taskId: string, discard = false) => this.request("tasks.delete", { taskId, discard }),
+    delete: (taskId: string, discard = false, expectedUpdatedAt?: number) =>
+      this.request("tasks.delete", { taskId, discard, expectedUpdatedAt }),
     notesRead: (taskId: string, noteIds?: string[]) =>
       this.request("tasks.notes.read", { taskId, noteIds }),
     notesResolve: (taskId: string, noteId: string, resolved: boolean) =>
@@ -301,20 +306,6 @@ export class HostClient {
       this.request<Note>("notes.upsert", { projectId, note }),
     delete: (id: string, expectedUpdatedAt?: number) =>
       this.request("notes.delete", { id, expectedUpdatedAt }),
-  };
-  social = {
-    request: <T>(action: string, input: object = {}, requestId?: string) =>
-      this.request<T>("social.request", { action, input, requestId }),
-    accounts: () => this.social.request<SocialAccount[]>("accounts.list"),
-    inbox: () => this.social.request<SocialThread[]>("inbox.list"),
-    snapshot: () => this.social.request<SocialSnapshot>("snapshot"),
-    policy: (accountId: string) =>
-      this.social.request<{
-        platform: SocialPlatform;
-        effective: SocialPolicy;
-      }>("policy.get", {
-        accountId,
-      }),
   };
   inbox = {
     list: (projectId: string) => this.request<PrWatch[]>("delivery.pr.list", { projectId }),

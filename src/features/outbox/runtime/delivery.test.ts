@@ -137,3 +137,70 @@ it("replays attempted queue append with the same identity without needing local 
   expect(state.upload).not.toHaveBeenCalled();
   expect(state.rows).toEqual([]);
 });
+const stale = () => Date.now() - 25 * 60 * 60 * 1000;
+it("holds a message older than 24 hours for review instead of dropping or replaying it", async () => {
+  const target = client();
+  state.rows[0]!.createdAt = stale();
+  state.rows[0]!.draft.attachments = [{ id: firstId, claimId: firstId, uri: "file:///draft/photo.png", name: "photo.png", size: 2, mimeType: "image/png", kind: "image" }];
+  await flushOutboxSession(target, "session", "account", () => true);
+  expect(state.rows[0]).toMatchObject({ status: "blocked", blockedReason: "expired", draft: { text: "hello" } });
+  expect(state.rows[0]?.draft.attachments).toHaveLength(1);
+  expect(target.request).not.toHaveBeenCalled();
+  expect(state.readTail).not.toHaveBeenCalled();
+  await flushOutboxSession(target, "session", "account", () => true);
+  expect(target.request).not.toHaveBeenCalled();
+});
+it("never expires a message whose clock moved backwards", async () => {
+  state.rows[0]!.createdAt = Date.now() + 48 * 60 * 60 * 1000;
+  const target = client();
+  await flushOutboxSession(target, "session", "account", () => true);
+  expect(target.request).toHaveBeenCalledWith("commands.dispatch", expect.anything(), { retry: false });
+});
+it("keeps newer messages behind a held old one", async () => {
+  const target = client();
+  state.rows[0]!.createdAt = stale();
+  state.rows.push(row("8ca190f8-9e1b-477d-9565-2fb1283ac579"));
+  await flushOutboxSession(target, "session", "account", () => true);
+  expect(state.rows.map(value => value.status)).toEqual(["blocked", "waiting"]);
+  expect(target.request).not.toHaveBeenCalled();
+});
+it("sends an expired message only after explicit Retry, and only that one", async () => {
+  const target = client();
+  state.rows[0]!.createdAt = stale();
+  state.rows[0]!.status = "blocked";
+  state.rows[0]!.blockedReason = "expired";
+  state.rows.push({ ...row("8ca190f8-9e1b-477d-9565-2fb1283ac579"), createdAt: stale() });
+  target.request.mockImplementation(async (method: string) => method === "commands.status" ? null : { commandId: firstId, sessionId: "session", revision: 2 });
+  await flushOutboxSession(target, "session", "account", () => true, true);
+  const sent = target.request.mock.calls.filter(([method]) => method === "commands.dispatch");
+  expect(sent).toHaveLength(1);
+  expect(sent[0]![1]).toMatchObject({ clientMessageId: firstId });
+  expect(state.rows.map(value => [value.id, value.status])).toEqual([["8ca190f8-9e1b-477d-9565-2fb1283ac579", "blocked"]]);
+});
+it("clears the expiry reason when an explicit retry hits an offline failure", async () => {
+  const target = client();
+  state.rows[0]!.createdAt = stale();
+  state.rows[0]!.status = "blocked";
+  state.rows[0]!.blockedReason = "expired";
+  target.request.mockImplementation(async (method: string) => { if (method === "commands.status") return null; throw { kind: "network", uncertain: true }; });
+  await flushOutboxSession(target, "session", "account", () => true, true);
+  expect(state.rows[0]?.status).toBe("waiting");
+  expect(state.rows[0]?.blockedReason).toBeUndefined();
+  expect(state.rows[0]?.draft.text).toBe("hello");
+});
+it("does not replay an unknown-outcome row after its age expires without owner action", async () => {
+  const target = client();
+  state.rows[0]!.createdAt = stale();
+  state.rows[0]!.attempted = true;
+  await flushOutboxSession(target, "session", "account", () => true);
+  expect(state.rows[0]).toMatchObject({ status: "blocked", blockedReason: "expired", attempted: true });
+  expect(target.request).not.toHaveBeenCalled();
+});
+it("keeps content of another account stored but dropped, never replayed", async () => {
+  const target = client();
+  state.rows[0]!.createdAt = stale();
+  state.rows[0]!.accountId = "other";
+  await flushOutboxSession(target, "session", "account", () => true);
+  expect(state.rows[0]).toMatchObject({ status: "dropped", draft: { text: "hello" } });
+  expect(target.request).not.toHaveBeenCalled();
+});

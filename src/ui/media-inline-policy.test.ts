@@ -22,6 +22,8 @@ describe("inline attachment policy", () => {
     expect(attachmentPlan("pdf", 10)).toBe("download");
     expect(attachmentPlan("video", MAX_MEDIA_BYTES + 1)).toBe("too-large");
     expect(attachmentPlan("image", Number.NaN)).toBe("too-large");
+    expect(attachmentPlan("image", 10, true)).toBe("download");
+    expect(attachmentPlan("image", MAX_MEDIA_BYTES + 1, true)).toBe("too-large");
   });
   it("confirms large or unknown downloads", () => {
     expect(downloadNeedsConfirmation("pdf", 500 * 1024)).toBe(false);

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { HostStewardInput } from "@/remote/types";
 import { useFormDraft } from "@/state/form-draft";
-import { useHostMutation } from "@/state/queries";
+import type { useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { NumberField } from "@/ui/number-field";
 import {
@@ -24,9 +24,11 @@ import { integerInRange, validScheduleTime } from "../automations/schedule-model
 
 export function StewardEditor({
   initial,
+  save,
   onClose,
 }: {
   initial: HostStewardInput & { updatedAt?: number };
+  save: ReturnType<typeof useHostMutation>;
   onClose(): void;
 }) {
   const copy = useCopy();
@@ -39,7 +41,6 @@ export function StewardEditor({
   const [minute, setMinute] = useState(String(initial.minute));
   const [proposals, setProposals] = useState(String(initial.maxProposals));
   const [open, setOpen] = useState(String(initial.maxOpen));
-  const save = useHostMutation("stewards.save", ["stewards"]);
   const normalized = useEffectiveAgent({ ...draft, maxRunMinutes: 0 }, draft.projectId);
   const scheduleValid =
     draft.scheduleKind === "hourly" ? integerInRange(minute, 0, 59) : validScheduleTime(draft.time);

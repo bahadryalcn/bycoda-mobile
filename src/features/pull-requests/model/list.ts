@@ -15,15 +15,18 @@ export function isTestFile(path: string): boolean {
   return /(^|\/)(__tests__|tests?|specs?|fixtures)(\/|$)|[._-](test|spec)\.[^/]+$|(^|\/)(test_|spec_)[^/]+\.[^/]+$/i.test(path);
 }
 export function isBotActivity(author: string): boolean { return /\[bot\]$|^bot$|^github-actions$/i.test(author); }
-/** Navigation snapshots are display data; Host validates every operation's target again. */
-export function readPrRoute(serialized: unknown, id: unknown): RemoteInboxItem | null {
-  if (typeof serialized !== "string" || serialized.length > 20_000) return null;
-  try {
-    const item = JSON.parse(serialized) as RemoteInboxItem;
-    if (item.provider !== "github" || item.kind !== "pr" || !Number.isSafeInteger(item.number) || item.number < 1 || String(item.number) !== id ||
-      !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(item.repo) || typeof item.projectPath !== "string" || typeof item.title !== "string" || typeof item.state !== "string" || typeof item.draft !== "boolean" || typeof item.updatedAt !== "string" || typeof item.url !== "string" || !Array.isArray(item.labels) || !Array.isArray(item.assignees)) return null;
-    if (item.labels.some(label => !label || typeof label.name !== "string" || typeof label.color !== "string") ||
-      item.assignees.some(assignee => !assignee || typeof assignee.login !== "string" || assignee.avatarUrl !== undefined && typeof assignee.avatarUrl !== "string")) return null;
-    return item;
-  } catch { return null; }
+export type PrRouteTarget = { number: number; repo: string; projectPath: string };
+/** Route params carry only identity; display data is read from the machine- and project-scoped list cache. */
+export function readPrRoute(params: { id?: unknown; repo?: unknown; projectPath?: unknown }): PrRouteTarget | null {
+  const { id, repo, projectPath } = params;
+  if (typeof id !== "string" || typeof repo !== "string" || typeof projectPath !== "string" || projectPath.length > 1_024) return null;
+  const number = Number(id);
+  if (!Number.isSafeInteger(number) || number < 1 || String(number) !== id) return null;
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) return null;
+  return { number, repo, projectPath };
+}
+/** Identity match only: the route never supplies title, state, labels or URL. */
+export function matchPrItem(items: RemoteInboxItem[] | undefined, target: PrRouteTarget): RemoteInboxItem | null {
+  return items?.find(item => item.provider === "github" && item.kind === "pr" && item.number === target.number &&
+    item.repo === target.repo && item.projectPath === target.projectPath) ?? null;
 }

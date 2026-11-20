@@ -12,7 +12,7 @@ import { space } from "@/ui/tokens";
 import { DailyBars } from "@/ui/usage-meters";
 import { compactTokens } from "./usage-breakdown";
 import { UsageKpis } from "./usage-charts";
-import { compactMoney, readCostReport, type CostReport } from "./usage-limits-model";
+import { compactMoney, isPartialScan, omittedCost, readCostReport, type CostReport } from "./usage-limits-model";
 
 /** Estimated API-equivalent cost of the provider logs on the Host: totals, breakdowns and a daily trend. */
 export function UsageCost() {
@@ -63,6 +63,9 @@ export function UsageCost() {
               { title: copy("Etkin gün", "Active days"), value: String(report.totals.activeDays) },
             ]}
           />
+          {isPartialScan(report) ? (
+            <Body muted>{copy("Kısmi tarama: Host {p0} günlük dosyasında durdu; toplamlar eksik olabilir.", "Partial scan: the Host stopped after {p0} log files, so totals may be incomplete.", { p0: Number.isFinite(report.coverage.filesScanned) ? report.coverage.filesScanned.toLocaleString(locale) : "?" })}</Body>
+          ) : null}
           <Card variant="surface">
             <Body muted>{copy("Günlük maliyet (USD)", "Daily cost (USD)")}</Body>
             <DailyBars
@@ -72,8 +75,8 @@ export function UsageCost() {
             {peak ? <Body muted>{copy("En yüksek gün: {p0} · {p1}", "Peak day: {p0} · {p1}", { p0: shortDay(peak.date, locale), p1: compactMoney(peak.costUsd) })}</Body> : null}
           </Card>
           <Breakdown title={copy("Sağlayıcıya göre", "By provider")} rows={report.providers.map((row) => ({ key: row.provider, label: providerName(row.provider), ...row }))} />
-          <Breakdown title={copy("Modele göre", "By model")} rows={report.models.map((row) => ({ key: `${row.provider}:${row.model}`, label: row.model, ...row }))} />
-          <Breakdown title={copy("Projeye göre", "By project")} rows={report.projects.map((row) => ({ ...row, key: row.label, label: row.label || copy("Bilinmeyen klasör", "Unknown folder") }))} />
+          <Breakdown title={copy("Modele göre", "By model")} rows={report.models.map((row) => ({ key: `${row.provider}:${row.model}`, label: row.model, ...row }))} other={otherRow(omittedCost(report, "models"), copy("Diğer modeller", "Other models"))} />
+          <Breakdown title={copy("Projeye göre", "By project")} rows={report.projects.map((row) => ({ ...row, key: row.label, label: row.label || copy("Bilinmeyen klasör", "Unknown folder") }))} other={otherRow(omittedCost(report, "projects"), copy("Diğer projeler", "Other projects"))} />
           {report.coverage.unpricedModels.length ? (
             <Body muted>{copy("Fiyatı bilinmeyen modeller yalnızca token olarak sayılır: {p0}", "Models without a price are counted in tokens only: {p0}", { p0: report.coverage.unpricedModels.join(", ") })}</Body>
           ) : null}
@@ -90,12 +93,17 @@ function shortDay(date: string, locale: string) {
   return new Date(year, month - 1, day).toLocaleDateString(locale, { month: "short", day: "numeric" });
 }
 
-function Breakdown({ title, rows }: { title: string; rows: { key: string; label: string; costUsd: number; tokens: number }[] }) {
+type CostRow = { key: string; label: string; costUsd: number; tokens: number };
+
+/** The folded-away tail of a capped list as one row, so listed rows plus it add up to the headline. */
+const otherRow = (omitted: ReturnType<typeof omittedCost>, label: string): CostRow | null => (omitted ? { key: "__other", label, ...omitted } : null);
+
+function Breakdown({ title, rows, other }: { title: string; rows: CostRow[]; other?: CostRow | null }) {
   if (!rows.length) return null;
   return (
     <View style={{ gap: space.sm }}>
       <SectionHeader title={title} count={rows.length} />
-      {rows.map((row) => (
+      {[...rows, ...(other ? [other] : [])].map((row) => (
         <MetricRow key={row.key} label={row.label} value={`${compactMoney(row.costUsd)} · ${compactTokens(row.tokens)}`} />
       ))}
     </View>

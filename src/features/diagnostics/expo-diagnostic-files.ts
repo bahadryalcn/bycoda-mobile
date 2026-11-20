@@ -4,6 +4,13 @@ import type { DiagnosticFiles } from "./diagnostic-files";
 export function expoDiagnosticFiles(): DiagnosticFiles {
   let directory: Directory | undefined;
   const getDirectory = () => directory ??= new Directory(Paths.document, "diagnostics");
+  const writableFile = (name: string) => {
+    const current = getDirectory();
+    current.create({ idempotent: true, intermediates: true });
+    const file = new File(current, name);
+    if (!file.exists) file.create();
+    return file;
+  };
   return {
     read(name) {
       try {
@@ -14,11 +21,10 @@ export function expoDiagnosticFiles(): DiagnosticFiles {
       }
     },
     write(name, text) {
-      const current = getDirectory();
-      current.create({ idempotent: true, intermediates: true });
-      const file = new File(current, name);
-      if (!file.exists) file.create();
-      file.writeSync(text);
+      writableFile(name).writeSync(text);
+    },
+    append(name, text) {
+      writableFile(name).writeSync(text, { append: true });
     },
     remove(name) {
       try {

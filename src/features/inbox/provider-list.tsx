@@ -58,6 +58,15 @@ export function ProviderInboxFeedback({ result, onRetry, retrying }: ProviderInb
       <IssueSummary issues={Object.entries(result.errors).map(([provider, error]) =>
         `${providerName(provider)}: ${error}\n${copy("Bu servisin kayıtları güncel olmayabilir.", "This provider’s items may be out of date.")}`)}
         onRetry={onRetry} retrying={retrying} />
+      {result.omittedProjects?.length ? (
+        <Body muted>
+          {copy(
+            "{p0} proje bu listede gösterilmiyor. Kapsamdan bir proje seçerek kayıtlarını görebilirsin.",
+            "{p0} projects are not shown in this list. Choose one in the scope to see its items.",
+            { p0: String(result.omittedProjects.length) },
+          )}
+        </Body>
+      ) : null}
     </>
   );
 }

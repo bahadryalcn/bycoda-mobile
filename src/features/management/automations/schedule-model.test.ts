@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { automationTriggerValid, integerInRange, scheduleLabel, scheduleSentence, validScheduleTime } from "./schedule-model";
+import { automationEventLabel, automationTriggerValid, integerInRange, scheduleLabel, scheduleSentence, validScheduleTime } from "./schedule-model";
 
 describe("mobile automation schedules", () => {
   it("validates continuous bounds and keeps events independent of hidden schedule input", () => {
@@ -34,5 +34,13 @@ describe("mobile automation schedules", () => {
     expect(scheduleSentence({ ...item, scheduleKind: "daily" }, copy)).toBe("Every day at 09:00");
     expect(scheduleSentence({ ...item, scheduleKind: "weekly" }, copy)).toBe("Every Monday at 09:00");
     expect(scheduleSentence({ ...item, scheduleKind: "hourly" }, copy)).toBe("Every hour at minute 15");
+  });
+
+  it("labels every event trigger with a phrase instead of its identifier", () => {
+    const copy = (tr: string, _en: string) => tr;
+    const labels = (["task.finished", "task.blocked", "session.waiting", "automation.failed"] as const).map((event) => automationEventLabel(event, copy));
+    expect(new Set(labels).size).toBe(4);
+    for (const label of labels) expect(label).not.toMatch(/^[a-z]+\.[a-z]+$/);
+    expect(automationEventLabel("task.finished", copy)).toBe("Görev bittiğinde");
   });
 });

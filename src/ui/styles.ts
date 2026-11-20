@@ -166,7 +166,9 @@ export const uiStyles = createThemedStyles(() => ({
     color: colors.text,
     backgroundColor: colors.fill,
     borderColor: colors.border,
-    borderWidth: StyleSheet.hairlineWidth,
+    // One constant width for every state: focus and error change only the color, so the
+    // content box never resizes on focus. 1dp keeps the focus indicator visible.
+    borderWidth: 1,
     minHeight: metrics.inputHeight,
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
@@ -216,7 +218,6 @@ export const uiStyles = createThemedStyles(() => ({
   /** Centered state: fills the region and centers its single column. */
   stateRegion: { flex: 1, minHeight: 240, alignItems: "center", justifyContent: "center",
     paddingHorizontal: space.xl, paddingVertical: space.xxl },
-  stateRegionCompact: { alignItems: "center", justifyContent: "center", paddingHorizontal: space.xl, paddingVertical: space.lg },
   stateColumn: { width: "100%", maxWidth: 320, alignItems: "center", gap: space.sm },
   stateTitle: { color: colors.text, fontSize: fontSize.heading, lineHeight: lineHeight.heading, fontWeight: "600",
     letterSpacing: -0.2, textAlign: "center" },

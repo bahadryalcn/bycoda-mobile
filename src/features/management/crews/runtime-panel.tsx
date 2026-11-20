@@ -20,9 +20,10 @@ import {
 } from "@/ui/primitives";
 import { QuestionCard } from "../../workspace/question-card";
 import { identifier } from "../shared/format";
-import { canAcceptCrewTask, canFinishCrewRun, crewInputDefinitelyRejected } from "./runtime-model";
+import { canAcceptCrewTask, canFinishCrewRun, crewInputDefinitelyRejected, crewRunPollInterval } from "./runtime-model";
 import { CrewAssignmentEditor } from "./assignment-editor";
 import { CrewMemberInspection } from "./member-inspection";
+import { messageSenderLabel, reviewVerdictLabel } from "./review-labels";
 import { isApprovalOccurrenceId } from "../../../../../src/shared/model/approvalOccurrence";
 
 function PendingInput({
@@ -191,7 +192,7 @@ function PendingInput({
 }
 
 /** One runtime query owns required inputs; task content follows them without entering its data gate. */
-export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: CrewRunView }>) {
+export function CrewRuntimePanel({ run, active, children }: PropsWithChildren<{ run: CrewRunView; active: boolean }>) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const [machineId] = useState(machine?.id);
@@ -206,7 +207,7 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
     ["crews", run.projectId, run.id],
     "crews.get",
     { projectId: run.projectId, runId: run.id },
-    { enabled: supported, interval: 5000 },
+    { enabled: supported && active, interval: (data) => crewRunPollInterval(data ?? run) },
   );
   const detail = supported ? query.data : undefined;
   const accept = useHostMutation("crews.accept", ["crews", run.projectId]);
@@ -215,8 +216,21 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
   const request = useHostMutation("crews.request", ["crews", run.projectId]);
   const [text, setText] = useState("");
   const [requestId, setRequestId] = useState(identifier);
-  const [requestHeld, setRequestHeld] = useState(false);
+  // "uncertain": the send outcome is unknown, so the draft and receipt stay locked until a check settles it.
+  // "absent": the receipt was absent at the time of the check; the original send may still land.
+  const [requestState, setRequestState] = useState<"idle" | "uncertain" | "absent">("idle");
+  // The exact text the current receipt was sent with; the host rejects a receipt reused with other text.
+  const [attemptText, setAttemptText] = useState<string>();
+  // Synchronous double-press guard only; it is cleared on every outcome and never gates rendering.
   const sending = useRef(false);
+  const requestHeld = requestState === "uncertain";
+  const clearRequest = (submitted: string) => {
+    sending.current = false;
+    setRequestState("idle");
+    setAttemptText(undefined);
+    setText((latest) => (latest.trim() === submitted ? "" : latest));
+    setRequestId(identifier());
+  };
   const busy = accept.isPending || finish.isPending || resolve.isPending || request.isPending;
   const available = () =>
     supported && opening.isCurrent() && !busy && useMachines.getState().activeId === machineId;
@@ -293,14 +307,11 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
           )}
           <Disclosure
             label={copy("İnceleme", "Review")}
-            detail={`${detail.tasks.length} ${copy("görev", "tasks")}`}
+            detail={copy("{p0} görev", "{p0} tasks", { p0: detail.tasks.length })}
           >
             {detail.tasks.map((task) => (
               <Disclosure key={task.id} label={task.title}>
-                <Body>
-                  {task.verification?.review?.verdict ??
-                    copy("İnceleme bekleniyor", "Awaiting review")}
-                </Body>
+                <Body>{reviewVerdictLabel(task.verification?.review?.verdict, copy)}</Body>
                 <Body>{task.verification?.review?.note}</Body>
                 <Body muted>
                   {detail.assignments.find((entry) => entry.taskId === task.id)?.files?.join(" · ")}
@@ -336,7 +347,7 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
           {detail.messages.map((message) => (
             <Stack key={message.id}>
               <Body>{message.text}</Body>
-              <Body muted>{message.from}</Body>
+              <Body muted>{messageSenderLabel(message.from, detail.coordinatorSessionId, copy)}</Body>
               {!message.resolvedAt && (
                 <Button
                   tone="quiet"
@@ -368,30 +379,43 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
                 value={text}
                 onChangeText={setText}
                 multiline
-                editable={!busy && !sending.current}
+                editable={!busy && requestState === "idle"}
               />
               <Button
                 tone="quiet"
-                label={copy("İsteği ekle", "Add request")}
-                disabled={!available() || !text.trim() || sending.current}
+                label={requestState === "absent" ? copy("Yeniden dene", "Retry") : copy("İsteği ekle", "Add request")}
+                disabled={!available() || !text.trim() || requestHeld}
                 onPress={() => {
-                  if (!available() || !text.trim() || sending.current) return;
-                  sending.current = true;
+                  if (!available() || !text.trim() || requestHeld || sending.current) return;
                   const submitted = text.trim();
+                  if (requestState === "absent" && attemptText !== submitted) return;
+                  sending.current = true;
+                  // An edited draft may use a new receipt only after a definite rejection.
+                  const id = attemptText === undefined || attemptText === submitted ? requestId : identifier();
+                  setRequestId(id);
+                  setAttemptText(submitted);
                   request.mutate(
-                    { projectId: run.projectId, runId: run.id, requestId, text: submitted },
+                    { projectId: run.projectId, runId: run.id, requestId: id, text: submitted },
                     {
-                      onSuccess: () => {
+                      onSuccess: () => clearRequest(submitted),
+                      onError: (error) => {
                         sending.current = false;
-                        setRequestHeld(false);
-                        setText((latest) => (latest.trim() === submitted ? "" : latest));
-                        setRequestId(identifier());
+                        // A definite rejection keeps draft and receipt unlocked; the mutation error stays visible.
+                        if (!crewInputDefinitelyRejected(error)) setRequestState("uncertain");
                       },
-                      onError: () => setRequestHeld(true),
                     },
                   );
                 }}
               />
+              {requestState === "absent" && (
+                <Notice
+                  tone="info"
+                  message={copy(
+                    "Eşleşen istek bulunamadı. Yeniden denemek aynı metni ve makbuzu kullanır.",
+                    "No matching request was found. Retry uses the same text and receipt.",
+                  )}
+                />
+              )}
               {requestHeld ? (
                 <>
                   <Notice
@@ -416,7 +440,7 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
                         useMachines.getState().activeId !== machineId
                       )
                         return;
-                      const expected = text.trim();
+                      const expected = attemptText ?? text.trim();
                       void query
                         .refetch()
                         .then((result) => {
@@ -424,18 +448,17 @@ export function CrewRuntimePanel({ run, children }: PropsWithChildren<{ run: Cre
                             !opening.isCurrent() ||
                             useMachines.getState().activeId !== machineId ||
                             result.error ||
-                            !result.data?.messages.some(
-                              (message) =>
-                                message.id === requestId &&
-                                message.from === "owner" &&
-                                message.text === expected,
-                            )
+                            !result.data
                           )
                             return;
-                          sending.current = false;
-                          setRequestHeld(false);
-                          setText((latest) => (latest.trim() === expected ? "" : latest));
-                          setRequestId(identifier());
+                          const stored = result.data.messages.find((message) => message.id === requestId);
+                          if (!stored) {
+                            // The host dedupes this receipt even if the original send arrives late.
+                            setRequestState("absent");
+                            return;
+                          }
+                          if (stored.from !== "owner" || stored.text !== expected) return;
+                          clearRequest(expected);
                           request.reset();
                         })
                         .catch(() => {});

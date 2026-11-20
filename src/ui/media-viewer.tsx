@@ -24,6 +24,7 @@ import { ReaderContext } from "./reader-context";
 import { useRotatableScreen } from "./media-orientation";
 import { useSaveToPhotos } from "./media-save";
 import { MediaCropOverlay } from "./media-crop-overlay";
+import { clampPan, panLimits } from "./media-viewer-pan";
 
 type MediaViewerProps = { uri: string; name: string; visible: boolean; onClose: () => void; context?: MessageContext;
   /** Hands the local file to the composer as a reference; omitted when the host screen cannot attach. */
@@ -71,13 +72,15 @@ function MediaViewerBody({ uri: original, name, visible, onClose, context, onUse
   };
   const scale = useSharedValue(1); const saved = useSharedValue(1);
   const x = useSharedValue(0); const y = useSharedValue(0); const originX = useSharedValue(0); const originY = useSharedValue(0);
-  const pinch = Gesture.Pinch().onUpdate((event) => { scale.value = Math.min(5, Math.max(1, saved.value * event.scale)); }).onEnd(() => { saved.value = scale.value; if (scale.value === 1) { x.value = 0; y.value = 0; originX.value = 0; originY.value = 0; } });
-  const pan = Gesture.Pan().onUpdate((event) => { if (scale.value > 1) { x.value = originX.value + event.translationX; y.value = originY.value + event.translationY; } }).onEnd(() => { originX.value = x.value; originY.value = y.value; });
+  // Pan limits keep the scaled image's edges on screen, so a zoomed photo cannot be dragged out of view.
+  const viewport = useSharedValue({ width: 0, height: 0 }); const natural = useSharedValue({ width: 0, height: 0 });
+  const pinch = Gesture.Pinch().onUpdate((event) => { scale.value = Math.min(5, Math.max(1, saved.value * event.scale)); const limit = panLimits(viewport.value, natural.value, scale.value); x.value = clampPan(x.value, limit.x); y.value = clampPan(y.value, limit.y); }).onEnd(() => { saved.value = scale.value; if (scale.value === 1) { x.value = 0; y.value = 0; } originX.value = x.value; originY.value = y.value; });
+  const pan = Gesture.Pan().onUpdate((event) => { if (scale.value > 1) { const limit = panLimits(viewport.value, natural.value, scale.value); x.value = clampPan(originX.value + event.translationX, limit.x); y.value = clampPan(originY.value + event.translationY, limit.y); } }).onEnd(() => { originX.value = x.value; originY.value = y.value; });
   const tap = Gesture.Tap().numberOfTaps(2).onEnd(() => { scale.value = scale.value > 1 ? 1 : 2.5; saved.value = scale.value; x.value = 0; y.value = 0; originX.value = 0; originY.value = 0; });
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }, { translateY: y.value }, { scale: scale.value }] }));
   const icon = (Glyph: typeof X) => <Glyph size={22} color={colors.viewerText} />;
   const applyCrop = (cropped: string) => {
-    scale.value = 1; saved.value = 1; x.value = 0; y.value = 0; originX.value = 0; originY.value = 0;
+    scale.value = 1; saved.value = 1; x.value = 0; y.value = 0; originX.value = 0; originY.value = 0; natural.value = { width: 0, height: 0 };
     setPreviewError(null); setDimensions(null); setUri(cropped); setCropping(false);
   };
   if (cropping && dimensions) return <ScreenOverlay visible={visible} label={name} onClose={() => setCropping(false)}>
@@ -87,7 +90,7 @@ function MediaViewerBody({ uri: original, name, visible, onClose, context, onUse
     <ReaderContext context={context} bounded />
     <View style={{ flex: 1, backgroundColor: colors.viewer }}>
       <View style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-        <GestureDetector gesture={Gesture.Simultaneous(pinch, pan, tap)}><Animated.View style={[{ flex: 1 }, style]}><Image key={attempt} source={{ uri }} accessibilityLabel={name} contentFit="contain" onLoad={(event) => setDimensions({ width: event.source.width, height: event.source.height })} onError={() => { if (imageOwner.current.visible && imageOwner.current.attempt === attempt) setPreviewError(new Error(copy("Önizleme açılamadı.", "Preview could not be opened."))); }} style={{ flex: 1 }} /></Animated.View></GestureDetector>
+        <GestureDetector gesture={Gesture.Simultaneous(pinch, pan, tap)}><Animated.View style={[{ flex: 1 }, style]} onLayout={(event) => { viewport.value = { width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height }; }}><Image key={attempt} source={{ uri }} accessibilityLabel={name} contentFit="contain" onLoad={(event) => { natural.value = { width: event.source.width, height: event.source.height }; setDimensions({ width: event.source.width, height: event.source.height }); }} onError={() => { if (imageOwner.current.visible && imageOwner.current.attempt === attempt) setPreviewError(new Error(copy("Önizleme açılamadı.", "Preview could not be opened."))); }} style={{ flex: 1 }} /></Animated.View></GestureDetector>
       </View>
       <View style={{ position: "absolute", top: 0, left: 0, right: 0, paddingTop: insets.top, paddingHorizontal: Math.max(space.sm, insets.left), flexDirection: "row", alignItems: "center", gap: space.xs, backgroundColor: colors.scrim }}>
         <IconButton label={copy("Kapat", "Close")} onPress={onClose}>{icon(X)}</IconButton>

@@ -20,9 +20,10 @@ export function attachmentKind(name: string, mimeType?: string, image = false): 
 }
 
 /** Unknown sizes never auto-load; the Host read path enforces the hard limit anyway. */
-export function attachmentPlan(kind: AttachmentKind, size?: number): AttachmentPlan {
+/** Data saver keeps images behind a tap like large ones. */
+export function attachmentPlan(kind: AttachmentKind, size?: number, dataSaver = false): AttachmentPlan {
   if (size !== undefined && (!Number.isFinite(size) || size < 0 || size > MAX_MEDIA_BYTES)) return "too-large";
-  if (kind === "image" && size !== undefined && size <= INLINE_AUTO_BYTES) return "inline";
+  if (!dataSaver && kind === "image" && size !== undefined && size <= INLINE_AUTO_BYTES) return "inline";
   return "download";
 }
 

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { quickActionHref, quickActionItems, recentQuickActionSessions } from "./quick-actions";
+import {
+  quickActionHref,
+  quickActionItems,
+  quickActionMachineId,
+  recentQuickActionSessions,
+  resolveQuickAction,
+} from "./quick-actions";
 import { decodeWidgetPreferences } from "./widget-preferences";
 import { emptyFeed, widgetFeedFromActivity, type ActivityLike } from "./widget-feed";
 
@@ -77,6 +83,33 @@ describe("quickActionHref", () => {
     expect(recentQuickActionSessions({ machineId: "m", ready: true, sessions }, false)).toEqual([]);
     expect(recentQuickActionSessions({ machineId: "m", ready: false, sessions }, true)).toEqual([]);
     expect(recentQuickActionSessions({ machineId: null, ready: true, sessions }, true)).toEqual([]);
+  });
+});
+
+describe("resolveQuickAction", () => {
+  const machines = [{ id: "a" }, { id: "b c" }];
+  const href = (machineId: string) => `/session/s?projectId=p&machineId=${encodeURIComponent(machineId)}`;
+
+  it("reads the computer a recent-session route names", () => {
+    expect(quickActionMachineId(href("b c"))).toBe("b c");
+    expect(quickActionMachineId("/sessions?new=1")).toBeNull();
+    expect(quickActionMachineId("/project/p1")).toBeNull();
+    expect(quickActionMachineId("/session/s?machineId=%E0%A4%A")).toBeNull();
+  });
+
+  it("selects the named computer when another one is active", () => {
+    expect(resolveQuickAction(href("b c"), machines, "a")).toEqual({ kind: "open", selectMachineId: "b c" });
+    expect(resolveQuickAction(href("b c"), machines, null)).toEqual({ kind: "open", selectMachineId: "b c" });
+  });
+
+  it("opens without switching when the computer is already active or the route names none", () => {
+    expect(resolveQuickAction(href("a"), machines, "a")).toEqual({ kind: "open", selectMachineId: null });
+    expect(resolveQuickAction("/sessions?new=1", machines, "a")).toEqual({ kind: "open", selectMachineId: null });
+  });
+
+  it("opens nothing for a computer that is no longer paired", () => {
+    expect(resolveQuickAction(href("gone"), machines, "a")).toEqual({ kind: "unpaired" });
+    expect(resolveQuickAction(href("gone"), [], null)).toEqual({ kind: "unpaired" });
   });
 });
 

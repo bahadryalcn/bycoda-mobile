@@ -6,7 +6,8 @@ import { Badge } from "./feedback";
 
 vi.mock("react-native", () => ({
   StyleSheet: { flatten: (style: unknown) => (Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : style) },
-  Text: ({ children }: PropsWithChildren) => createElement("span", null, children),
+  Text: ({ children, selectable }: PropsWithChildren<{ selectable?: boolean }>) =>
+    createElement("span", { "data-selectable": String(selectable === true) }, children),
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
   useWindowDimensions: () => ({ width: 390, height: 844, scale: 3, fontScale: 1 }),
 }));
@@ -60,4 +61,5 @@ it("renders no icon by default", () => {
   const host = render(createElement(Badge, { label: "Idle" }));
   expect(host.querySelector("i")).toBeNull();
   expect(host.textContent).toBe("Idle");
+  expect(host.querySelector("span")?.dataset.selectable).toBe("false");
 });

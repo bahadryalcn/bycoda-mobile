@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Block } from "@/domain/types";
-import { agentCounts, listAgents } from "./agents-model";
+import { agentCounts, groupAgents, listAgents } from "./agents-model";
 
 const agent = (id: string, status: string, extra: Partial<Block> = {}) =>
   ({ id, role: "tool", text: id, tool: { callId: id, status, ...(extra.tool ?? {}) }, agentRun: { name: id, agentType: "explorer", model: "codex:gpt-5", startedAt: 1,
@@ -15,4 +15,16 @@ describe("agents list", () => {
     expect(agentCounts(list)).toEqual({ total: 2, running: 1 });
   });
   it("is empty without blocks", () => expect(listAgents(undefined)).toEqual([]));
+  it("groups workflow calls and phases separately while retaining standalone status groups", () => {
+    const child = (id: string, callId: string, phase?: string) => {
+      const block = agent(id, "running");
+      return { ...block, agentRun: { ...block.agentRun!, workflow: { callId, phase } } };
+    };
+    const entries = listAgents([agent("done", "completed"), agent("active", "running"), child("a", "call-a", "review"), child("b", "call-a", "plan"), child("c", "call-b", "review")]);
+    const items = groupAgents(entries, "Running", "Finished");
+    expect(items.map((item) => item.kind === "heading" ? item.label : item.id)).toEqual([
+      "Running", "active", "Finished", "done", "Workflow 1 · review", "c", "Workflow 2 · plan", "b", "Workflow 2 · review", "a",
+    ]);
+    expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
+  });
 });

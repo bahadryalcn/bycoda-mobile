@@ -20,15 +20,48 @@ import { hitSlopFor, metrics, radii, space } from "./tokens";
 import { Body, NavigationGroup, NavigationRow, Sheet } from "./primitives";
 import { IconTile } from "./icon-tile";
 import HardDrive from "lucide-react-native/icons/hard-drive";
+import Settings2 from "lucide-react-native/icons/settings-2";
+import { ConnectionFeedback } from "../features/connections/connection-feedback";
+import { useSwitchComputer } from "../features/connections/use-switch-computer";
 import { useCopy } from "./copy";
-import { connectionPhase } from "./connection-presentation";
+import { CONNECTED_WINDOW_MS, connectionPhase } from "./connection-presentation";
 import { connectionNeedsPairing, connectionReason } from "./connection-reason";
+import { useLocalNetworkDenied } from "./local-network-permission";
 import { Menu } from "panelui-native/components/menu";
 import { BusyIndicator as Spinner } from "./busy-indicator";
 import { decorativeSvgProps } from "./accessibility";
 import { remoteErrorKind } from "./error-message";
 import { machineSuccessStore } from "./machine-success-store";
 import { refetchRecoveredReads } from "../state/query-retry";
+import { recordActiveHostDisconnected, useHostRuntimeState } from "../state/host-runtime-state";
+
+const PROBE_STALL_MS = 5_000;
+
+/** True once a health probe has been in flight longer than PROBE_STALL_MS. */
+function useProbeStalled(isFetching: boolean) {
+  const [stalled, setStalled] = useState(false);
+  // Timer must follow the probe's in-flight state; a re-render is needed when a slow probe crosses the limit.
+  useEffect(() => {
+    if (!isFetching) return;
+    const id = setTimeout(() => setStalled(true), PROBE_STALL_MS);
+    return () => {
+      clearTimeout(id);
+      setStalled(false);
+    };
+  }, [isFetching]);
+  return stalled;
+}
+
+/** Forces a render at `at` (epoch ms) so time-windowed state is re-read; null means nothing to wait for. */
+function useRerenderAt(at: number | null) {
+  const [, setTick] = useState(0);
+  // Timer must track the window end; a new success moves it, and cleanup prevents stale ticks.
+  useEffect(() => {
+    if (at === null) return;
+    const id = setTimeout(() => setTick((tick) => tick + 1), Math.max(0, at - Date.now()));
+    return () => clearTimeout(id);
+  }, [at]);
+}
 
 /** Connection state for the active computer; mounting it also keeps the descriptor fresh. */
 export function useMachineStatus() {
@@ -63,6 +96,14 @@ export function useMachineStatus() {
   useEffect(() => {
     if (machine && health.isSuccess && health.data) refresh(machine.id, health.data);
   }, [machine?.id, health.isSuccess, health.data, refresh]);
+  // A probe still in flight after PROBE_STALL_MS means the link is unproven now, not when the probe finally fails.
+  const probeStalled = useProbeStalled(health.isFetching);
+  // The live socket state is the primary signal; the describe poll only covers computers without one.
+  const runtime = useHostRuntimeState(machine?.id);
+  // Recent success only counts for CONNECTED_WINDOW_MS; re-render when that window closes so the pill cannot stay green.
+  const now = Date.now();
+  const connectedUntil = successAt + CONNECTED_WINDOW_MS;
+  useRerenderAt(successAt > 0 && now < connectedUntil ? connectedUntil : null);
   const phase = connectionPhase({
     paired: !!machine,
     networkConnected: network.isConnected,
@@ -72,7 +113,9 @@ export function useMachineStatus() {
     accessDenied: ["auth", "identity"].includes(remoteErrorKind(health.error) ?? ""),
     successAt,
     errorAt: health.errorUpdatedAt,
-    now: Date.now(),
+    now,
+    probeStalled,
+    runtime,
   });
   const statuses = {
     unpaired: copy("Bilgisayar bağla", "Connect a computer"),
@@ -87,7 +130,8 @@ export function useMachineStatus() {
   };
   const status = statuses[phase];
   const errorKind = remoteErrorKind(health.error);
-  const reason = connectionReason(phase, errorKind, machine?.name ?? "", copy);
+  const lanDenied = useLocalNetworkDenied();
+  const reason = connectionReason(phase, errorKind, machine?.name ?? "", copy, lanDenied);
   const needsPairing = connectionNeedsPairing(phase, errorKind);
   const statusColor =
     phase === "connected"
@@ -104,8 +148,13 @@ export function useMachineStatus() {
 
 /** Headless owner of the periodic connection check while the tab shell is mounted. */
 export function MachineHealthMonitor() {
-  const { machine, successAt } = useMachineStatus();
+  const { machine, successAt, phase } = useMachineStatus();
   const cache = useQueryClient();
+  // Shared loading states read this verdict so they agree with the pill instead of spinning.
+  useEffect(() => {
+    recordActiveHostDisconnected(phase === "disconnected");
+    return () => recordActiveHostDisconnected(false);
+  }, [phase]);
   useEffect(() => {
     if (machine && successAt) refetchRecoveredReads(cache, machine.id, successAt);
   }, [cache, machine?.id, successAt]);
@@ -138,8 +187,17 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
     if (menuOpen) setMenuOpen(false);
   }
   if (!unlocked && menuOpen) setMenuOpen(false);
+  const machines = useMachines((state) => state.machines);
+  const switcher = useSwitchComputer();
+  // The active computer only closes the menu; another one is switched in place, and the menu stays open on failure.
+  const selectComputer = (id: string) => {
+    if (switcher.busy) return;
+    if (id === machine?.id) { closeMenu(); return; }
+    void switcher.switchTo(id, closeMenu);
+  };
   const name = machine?.name ?? copy("Bilgisayar bağla", "Connect a computer");
   const degraded = phase !== "unpaired" && phase !== "connected" && phase !== "checking" && unlocked;
+  const StatusIcon = phase === "offline" || phase === "disconnected" ? WifiOff : CircleAlert;
   const pill = (
           <PanelButton
             accessibilityRole="button"
@@ -168,21 +226,31 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
               borderRadius: radii.pill,
               backgroundColor: menuOpen && unlocked ? pressedFill : colors.fill,
               flexShrink: 1,
+              maxWidth: "100%",
               minWidth: 64,
             }}
           >
             {machine ? (
               health.isFetching && !successAt ? (
                 <Spinner size="sm" color={statusColor} />
+              ) : degraded ? (
+                // A glyph plus the status text, so the state never rests on color alone.
+                <StatusIcon {...decorativeSvgProps} size={14} color={statusColor} style={{ flexShrink: 0 }} />
               ) : (
                 <View accessible={false} style={{ width: 6, height: 6, borderRadius: radii.pill, backgroundColor: statusColor }} />
               )
             ) : (
               <Laptop size={14} strokeWidth={2} color={colors.muted} />
             )}
+            {/* Only the name yields to a narrow pill; the status below never shrinks or truncates. */}
             <Text numberOfLines={1} style={[uiStyles.caption, { color: colors.text, flexShrink: 1, minWidth: 0 }]}>
-              {degraded ? `${name} · ${status}` : name}
+              {name}
             </Text>
+            {degraded ? (
+              <Text numberOfLines={1} style={[uiStyles.caption, { color: statusColor, flexShrink: 0 }]}>
+                {status}
+              </Text>
+            ) : null}
             <ChevronDown size={12} strokeWidth={2.6} color={colors.muted} style={{ flexShrink: 0 }} />
           </PanelButton>
   );
@@ -208,41 +276,31 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
               <Body>{copy("Depolamayı kurtar", "Recover saved connections")}</Body>
             </View>
           </Menu.Item> : null}
-          <Menu.Item
-            key="computer"
-            accessibilityLabel={[machine?.name, status, reason, copy("Bilgisayar seç", "Choose computer")]
-              .filter(Boolean)
-              .join(". ")}
-            onPress={() => {
-              closeMenu();
-              router.navigate("/machines");
-            }}
-            className="gap-ui-sm"
-            trailing={<ChevronRight size={16} color={colors.muted} />}
-          >
-            <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
-              <Body style={uiStyles.buttonLabel}>
-                {machine?.name ?? copy("Bilgisayar bağla", "Connect a computer")}
-              </Body>
-              {machine ? (
+          {machines.map((saved) => {
+            const active = saved.id === machine?.id;
+            return <Menu.Item
+              key={saved.id}
+              accessibilityLabel={active
+                ? [saved.name, status, reason, copy("Seçili", "Selected")].filter(Boolean).join(". ")
+                : [saved.name, copy("Bu bilgisayara geç", "Switch to this computer")].join(". ")}
+              onPress={() => selectComputer(saved.id)}
+              className="gap-ui-sm"
+            >
+              <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
+                <Body style={uiStyles.buttonLabel}>{saved.name}</Body>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                  {health.isFetching && !successAt ? (
+                  {active ? (health.isFetching && !successAt ? (
                     <Spinner size="sm" color={statusColor} />
                   ) : (
-                    <View
-                      style={{
-                        width: 5,
-                        height: 5,
-                        borderRadius: radii.badge,
-                        backgroundColor: statusColor,
-                      }}
-                    />
-                  )}
-                  <Text style={[uiStyles.caption, { flex: 1, color: statusColor }]}>{reason ? `${status}. ${reason}` : status}</Text>
+                    <View style={{ width: 5, height: 5, borderRadius: radii.badge, backgroundColor: statusColor }} />
+                  )) : null}
+                  <Text style={[uiStyles.caption, { flex: 1, color: active ? statusColor : colors.muted }]}>
+                    {active ? (reason ? `${status}. ${reason}` : status) : saved.endpoint}
+                  </Text>
                 </View>
-              ) : null}
-            </View>
-          </Menu.Item>
+              </View>
+            </Menu.Item>;
+          })}
           {machine && health.error && !needsPairing ? (
             <Menu.Item
               key="retry"
@@ -259,6 +317,15 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
               </Body>
             </Menu.Item>
           ) : null}
+          <Menu.Item
+            key="manage"
+            accessibilityLabel={copy("Bilgisayarları yönet", "Manage computers")}
+            onPress={() => { closeMenu(); router.navigate("/machines"); }}
+            className="gap-ui-sm"
+            trailing={<ChevronRight size={16} color={colors.muted} />}
+          >
+            <Body style={uiStyles.caption}>{copy("Bilgisayarları yönet", "Manage computers")}</Body>
+          </Menu.Item>
         </Menu.Content>
       </Menu>
       ) : (
@@ -277,27 +344,42 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
                   onPress={() => { closeMenu(); router.navigate("/machines"); }}
                 />
               ) : null}
-              <NavigationRow
-                intent="navigate"
-                icon={<IconTile><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
-                label={machine?.name ?? copy("Bilgisayar bağla", "Connect a computer")}
-                detail={machine ? (reason ? `${status}. ${reason}` : status) : undefined}
-                detailLines={0}
-                detailSelectable={false}
-                accessibilityLabel={[machine?.name, status, reason, copy("Bilgisayar seç", "Choose computer")].filter(Boolean).join(". ")}
-                separator={!!(machine && health.error && !needsPairing)}
-                onPress={() => { closeMenu(); router.navigate("/machines"); }}
-              />
+              {machines.map((saved) => {
+                const active = saved.id === machine?.id;
+                return <NavigationRow
+                  key={saved.id}
+                  intent="command"
+                  selected={active}
+                  disabled={switcher.busy}
+                  icon={<IconTile><Laptop size={18} strokeWidth={2} color={active ? statusColor : colors.muted} /></IconTile>}
+                  label={saved.name}
+                  detail={active ? (reason ? `${status}. ${reason}` : status) : saved.endpoint}
+                  detailLines={0}
+                  detailSelectable={false}
+                  accessibilityLabel={active
+                    ? [saved.name, status, reason, copy("Seçili", "Selected")].filter(Boolean).join(". ")
+                    : [saved.name, copy("Bu bilgisayara geç", "Switch to this computer")].join(". ")}
+                  onPress={() => selectComputer(saved.id)}
+                />;
+              })}
               {machine && health.error && !needsPairing ? (
                 <NavigationRow
                   intent="command"
-                  separator={false}
                   icon={<IconTile><RefreshCw size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
                   label={copy("Bağlantıyı yeniden dene", "Retry connection")}
                   onPress={() => { closeMenu(); void health.refetch(); }}
                 />
               ) : null}
+              <NavigationRow
+                intent="navigate"
+                separator={false}
+                icon={<IconTile><Settings2 size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
+                label={copy("Bilgisayarları yönet", "Manage computers")}
+                onPress={() => { closeMenu(); router.navigate("/machines"); }}
+              />
             </NavigationGroup>
+            <ConnectionFeedback operation={switcher.operation} />
+
           </Sheet>
         </>
       )}

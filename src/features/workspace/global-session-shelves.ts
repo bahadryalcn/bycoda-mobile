@@ -1,6 +1,7 @@
 import type { HostProjectDirectory } from "@/domain/types";
 import type { ActiveSession } from "./activity-model";
-import { sessionActivityAt, shelfOf, type SessionShelfId, type SessionShelfRow } from "./session-collection";
+import { shelfOf, type SessionShelfId, type SessionShelfRow } from "./session-collection";
+import { sessionActivityAt } from "./session-directory";
 import { sessionDirectoryRows, type SessionDirectoryRow } from "./session-directory";
 import { orderSessionRuns, type SessionOrderSignals } from "./session-row-state";
 

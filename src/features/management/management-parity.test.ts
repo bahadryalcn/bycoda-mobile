@@ -1,11 +1,13 @@
 // @vitest-environment happy-dom
 import { act, createElement, type PropsWithChildren } from "react";
+import { readFileSync } from "node:fs";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { HostGoal } from "@/domain/types";
 import { GoalSettingsEditor } from "./goals/settings-editor";
 import { SchedulePreview } from "./automations/schedule-preview";
 import { TaskCard } from "./tasks/task-card";
+import { ReviewNotes } from "./tasks/review-notes";
 
 const state = vi.hoisted(() => ({
   machine: { id: "pc", capabilities: ["goals.settings", "automations"] },
@@ -37,17 +39,23 @@ vi.mock("@/ui/hint", () => ({ Hint: ({children}: PropsWithChildren) => children 
 vi.mock("@/ui/provider-identity", () => ({ ProviderIcon: () => null }));
 vi.mock("./shared/record-bits", () => ({ joinMeta: (parts: unknown[]) => parts.filter(Boolean).join(" · "), useRelativeTime: () => () => "" }));
 vi.mock("./shared/status", () => ({ Status: () => null, statusLabel: (value: string) => value }));
-vi.mock("./tasks/review-notes", () => ({ ReviewNotes: () => null }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => state.machine }));
 vi.mock("@/state/queries", () => ({ useHostMutation: () => state.mutation }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/copy", () => ({
+  useCopy: () => (_tr: string, en: string, values?: Record<string, string | number>) =>
+    en.replace(/\{(\w+)\}/g, (token, key: string) => String(values?.[key] ?? token)),
+}));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestClose: vi.fn() }) }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: (_title: string, _message: string, _action: string, run: () => void) => run() }));
 vi.mock("./shared/format", () => ({ stamp: (value: number) => `date:${value}` }));
 vi.mock("@/ui/number-field", async () => ({ NumberField: (await import("@/ui/primitives")).Field }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Section: wrapper, NavigationGroup: wrapper, NumberField: () => null, Disclosure: wrapper, IconButton: wrapper, Stack: wrapper, Row: wrapper, Body: wrapper, ErrorText: () => null, ErrorNotice: () => null, ToggleField: () => null, MutationState: () => null,
+  return { Section: wrapper, NavigationGroup: wrapper, NumberField: () => null,
+    Disclosure: ({ label, detail, children }: PropsWithChildren<{ label: string; detail?: string }>) =>
+      createElement("details", { open: true }, createElement("summary", null, label, detail), children),
+    Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    IconButton: wrapper, Stack: wrapper, Row: wrapper, Body: wrapper, ErrorText: () => null, ErrorNotice: () => null, ToggleField: () => null, MutationState: () => null,
     ActionMenu: ({ actions }: { actions: typeof state.actions }) => { state.actions = actions; return null; },
     Notice: ({ message }: { message: string }) => createElement("div", null, message),
     Button: ({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),
@@ -137,4 +145,41 @@ it("declines only a steward to-do suggestion and never invokes ordinary task del
   props.task = { ...props.task, status: "todo", source: "manual" };
   await act(async () => render());
   expect(action()).toBeUndefined();
+});
+
+it("deletes a task card only against the revision the user confirmed", async () => {
+  const remove = vi.fn();
+  const props = { task: { id: "task-fake", title: "Fake task", harness: "codex", model: "codex:test", prompt: "Fake prompt", source: "manual", status: "queued", updatedAt: 12, dependsOn: [] },
+    busy: false, editorOpen: false, tasks: [], lifecycleReady: true,
+    onEdit: vi.fn(), onDelivery: vi.fn(),
+    move: { ...state.mutation, mutate: vi.fn() }, start: { ...state.mutation, mutate: vi.fn() },
+    finish: { ...state.mutation, mutate: vi.fn() }, recheck: { ...state.mutation, mutate: vi.fn() }, reorder: { ...state.mutation, mutate: vi.fn() },
+    decline: { ...state.mutation, mutate: vi.fn() }, remove: { ...state.mutation, mutate: remove } } as unknown as Parameters<typeof TaskCard>[0];
+  await act(async () => root.render(createElement(TaskCard, props)));
+  const current = state.actions.find((entry) => entry && entry.key === "delete");
+  expect(current).toBeTruthy();
+  if (current) act(() => current.onPress());
+  expect(remove).toHaveBeenCalledExactlyOnceWith({ taskId: "task-fake", discard: false, expectedUpdatedAt: 12 });
+});
+
+it("shows the review note counts only in the disclosure heading", async () => {
+  const task = { id: "task", reviewNotes: [
+    { id: "open", finding: "Open finding" },
+    { id: "resolved", finding: "Resolved finding", resolvedAt: 1 },
+  ] } as Parameters<typeof ReviewNotes>[0]["task"];
+  await act(async () => root.render(createElement(ReviewNotes, { task })));
+  expect(container.querySelector("summary")?.textContent).toContain("1 open · 1 resolved");
+  expect(container.textContent?.match(/1 open · 1 resolved/g)).toHaveLength(1);
+  expect(container.textContent).toContain("Open finding");
+  expect(container.textContent).not.toContain("Resolved finding");
+  await act(async () => container.querySelector("button")!.click());
+  expect(container.textContent).toContain("Resolved finding");
+});
+
+it("places Run now in both management card footers and uses a separate enable icon", () => {
+  for (const path of ["./automations/automation-card.tsx", "./stewards/steward-card.tsx"]) {
+    const card = readFileSync(new URL(path, import.meta.url), "utf8");
+    expect(card).toMatch(/footer=\{<Button tone="primary" label=\{copy\("Şimdi çalıştır", "Run now"\)/);
+    expect(card).toContain("glyph(item.enabled ? Pause : Power)");
+  }
 });

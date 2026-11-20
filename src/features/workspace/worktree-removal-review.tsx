@@ -9,7 +9,7 @@ export function WorktreeRemovalReview({ value, machineName, disabled, busy, feed
   value: WorktreeRemovalSnapshot; machineName: string; disabled: boolean; busy: boolean; feedback: ReactNode; onClose: () => void; onConfirm: () => void;
 }) {
   const copy = useCopy();
-  return <ActionReviewSheet title={copy("Çalışma klasörü kaldırma", "Worktree removal")} submitLabel={copy("Bilgisayar onayı iste", "Request computer approval")}
+  return <ActionReviewSheet title={copy("Çalışma ağacı kaldırma", "Worktree removal")} submitLabel={copy("Bilgisayar onayı iste", "Request computer approval")}
     tone="danger" scroll={false} disabled={disabled} busy={busy} feedback={feedback} onClose={onClose} onConfirm={onConfirm}>
     <ScreenList data={value.effects.detachSessionIds} keyExtractor={id => id} header={<Stack>
       <Body selectable>{machineName}</Body><Body mono selectable>{value.path}</Body>

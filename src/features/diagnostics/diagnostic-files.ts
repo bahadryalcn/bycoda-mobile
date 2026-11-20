@@ -2,6 +2,8 @@
 export interface DiagnosticFiles {
   read(name: string): string | null;
   write(name: string, text: string): void;
+  /** Adds text to the end of the file (creating it) without rewriting what is already there. */
+  append(name: string, text: string): void;
   remove(name: string): void;
 }
 

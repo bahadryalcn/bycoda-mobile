@@ -1,11 +1,17 @@
-/** Reads that fail because the link is briefly down (Host restart, network switch) are retried quietly. */
+/**
+ * Reads that fail because the link is briefly down (Host restart, network switch) are retried quietly.
+ * A deadline the Host itself reported is not: the Host is reachable but too slow, so every automatic
+ * retry (query retries, quiet reconnect refetches, recovered-read refetches) would repeat the whole
+ * wait. The error screen's Retry button stays the way to try again.
+ */
 export function isTransientConnectionError(error: unknown): boolean {
   const failure = error as
-    | { kind?: string; category?: string; uncertain?: boolean; transient?: boolean }
+    | { kind?: string; category?: string; uncertain?: boolean; transient?: boolean; hostDeadline?: boolean }
     | null
     | undefined;
   // An uncertain failure may have applied a write; it is never replayed.
   if (failure?.uncertain) return false;
+  if (failure?.hostDeadline) return false;
   // A raw socket failure (live streams surface it unwrapped) carries a category, not a kind.
   if (["overload", "unavailable", "network", "deadline"].includes(failure?.category ?? ""))
     return true;

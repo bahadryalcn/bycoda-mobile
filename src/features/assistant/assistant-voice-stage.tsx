@@ -94,6 +94,8 @@ export function AssistantVoiceBackdrop({ state, level }: { state: AssistantOrbSt
     <Animated.View key={tones.key} entering={reduced ? undefined : FadeIn.duration(700)} exiting={reduced ? undefined : FadeOut.duration(700)} style={StyleSheet.absoluteFill}>
       <Glow color={tones.primary} strength={tones.strength} size={size} left={viewport.width * 0.2} top={viewport.height * 0.32} energy={energy} breath={breath} drift={drift} period={9} />
       <Glow color={tones.glow} strength={tones.strength * 0.8} size={size * 0.85} left={viewport.width * 0.85} top={viewport.height * 0.62} energy={energy} breath={breath} drift={drift} period={13} />
+      {/* The dock sits on the bottom edge; without light there the stage read as half colour, half black. */}
+      <Glow color={tones.primary} strength={tones.strength * 0.6} size={size * 0.8} left={viewport.width * 0.3} top={viewport.height * 0.98} energy={energy} breath={breath} drift={drift} period={11} />
     </Animated.View>
   </View>;
 }

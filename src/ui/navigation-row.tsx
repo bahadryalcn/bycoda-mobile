@@ -39,6 +39,7 @@ export function NavigationRow({
   disabled,
   busy,
   selected,
+  tintSelected = true,
   tone,
   variant,
   detailLines = 1,
@@ -77,6 +78,8 @@ export function NavigationRow({
   busy?: boolean;
   /** Selection for a visible exclusive choice, independent of disabled state. */
   selected?: boolean;
+  /** Set false when the selection is shown by a trailing mark alone; still reported to assistive tech. */
+  tintSelected?: boolean;
   tone?: SemanticTone;
   variant?: "card" | "plain";
   /** Navigation reveals a destination; choices and commands have no chevron. */
@@ -120,7 +123,7 @@ export function NavigationRow({
           gap: gapIcon,
           opacity: disabled && !busy ? opacity.disabled : 1,
         },
-        selected && { backgroundColor: colors.selected },
+        selected && tintSelected && { backgroundColor: colors.selected },
       ]}
     >
       {icon ? (
@@ -129,7 +132,9 @@ export function NavigationRow({
         </View>
       ) : null}
       <View style={[uiStyles.grow, { gap: space.xxs }]}>
+        {/* The row is the pressable: a selectable label would claim long-press on Android and swallow row presses. */}
         <Body
+          selectable={false}
           numberOfLines={labelLines}
           style={[
             uiStyles.label,

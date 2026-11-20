@@ -18,6 +18,7 @@ import { resolveMediaMime, mediaQueryKey, type MessageContext } from "@/ui/media
 import {
   attachmentPlan, downloadNeedsConfirmation, formatAttachmentSize, type AttachmentKind,
 } from "@/ui/media-inline-policy";
+import { useDataSaverActive } from "@/state/data-saver";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import { InlineVideo } from "@/ui/media-video";
@@ -57,7 +58,8 @@ export function AttachmentPreview({ id, name, size, mimeType, kind, context, onO
   thumbnail?: boolean;
 }) {
   const { colors } = useMobileTheme(), copy = useCopy();
-  const plan = attachmentPlan(kind, size);
+  const dataSaver = useDataSaverActive();
+  const plan = attachmentPlan(kind, size, dataSaver);
   const [requested, setRequested] = useState(false), [viewer, setViewer] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const scope = useReaderScope(context, id);

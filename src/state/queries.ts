@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useIsFocused } from "expo-router/react-navigation";
 import {
   focusManager,
@@ -9,7 +9,7 @@ import {
   type MutateOptions,
 } from "@tanstack/react-query";
 import { HostTransport } from "../remote/transport";
-import { credentials, useActiveMachine, useMachines } from "./machines";
+import { credentials, isMachinePending, useActiveMachine, useMachines } from "./machines";
 import { assertAppAccess, useSecurity } from "./security";
 import {
   assertProviderPermission,
@@ -26,7 +26,9 @@ import {
 } from "./host-request";
 
 import { attachmentReleases } from "../features/workspace/attachment-ownership";
-import { usePrivateContentAccess } from "../ui/private-access";
+import { usePrivateContentAccess, type PrivateContentAccess } from "../ui/private-access";
+import type { MobileMachine } from "../remote/types";
+import { hostClientKey, retainHostClient, sharedHostClient } from "./shared-host-client";
 import { getHostWsRuntimeProvider, observeHostWsRuntimeProvider } from "../remote/ws-runtime-port";
 import { selectMobileHostTransport } from "../remote/lan-ws";
 import { isTransientConnectionError, retryTransientRead, transientRetryDelay } from "./query-retry";
@@ -36,8 +38,12 @@ export { hostKey } from "./host-request";
 export function useHostReadActive() {
   const privateAccess = usePrivateContentAccess();
   const focused = useIsFocused();
+  // A transient iOS "inactive" keeps reads running only while the app lock is off; with the lock on,
+  // inactive still suspends access, so reads stay gated.
   const available = useSecurity(
-    (state) => state.status === "unlocked" && state.appState === "active",
+    (state) =>
+      state.status === "unlocked" &&
+      (state.appState === "active" || (state.appState === "inactive" && !state.enabled)),
   );
   return focused && available && privateAccess.allowed && privateAccess.check();
 }
@@ -60,69 +66,62 @@ export function useHostClient() {
   const privateAccess = usePrivateContentAccess();
   const machine = useActiveMachine();
   const unlocked = useSecurity((s) => s.status === "unlocked");
-  const ready = useMachines((s) => s.hydrated && !s.storageError && !s.connectionPending);
+  // Only this computer's own change (or an account-wide one) pauses it; pairing or removing
+  // another computer must not drop this computer's queries and streams.
+  const ready = useMachines(
+    (s) => s.hydrated && !s.storageError && !isMachinePending(s, machine?.id),
+  );
   const scope = machine ? consentScope(machine.environmentId, machine.providers ?? []) : "";
   const consented = useProviderPermission((state) => isScopePermitted(state.scopes, scope));
-  const client = useMemo(() => {
-    if (
-      !machine ||
-      !unlocked ||
-      !ready ||
-      !consented ||
-      !privateAccess.allowed ||
-      !privateAccess.check()
-    )
-      return null;
-    if (
+  const usable =
+    !!machine &&
+    unlocked &&
+    ready &&
+    consented &&
+    privateAccess.allowed &&
+    privateAccess.check() &&
+    !(
       process.env.EXPO_OS !== "web" &&
       selectMobileHostTransport(machine.capabilities ?? [], true) === "native-wss" &&
       !socketProvider
-    )
-      return null;
-    const assertAccess = () => {
-      assertAppAccess();
-      if (!privateAccess.check()) throw new Error("This private workspace is no longer available.");
-      const state = useMachines.getState();
-      const current = state.machines?.find((value) => value.id === machine.id);
-      if (
-        state.storageError ||
-        !state.hydrated ||
-        state.connectionPending ||
-        (current &&
-          (current.endpoint !== machine.endpoint ||
-            current.environmentId !== machine.environmentId ||
-            current.lanKey !== machine.lanKey))
-      )
-        throw new Error("This computer connection changed. Reopen its current route.");
-      assertProviderPermission(
-        useMachines.getState().machines.find((value) => value.id === machine.id),
-      );
-    };
-    return new HostTransport(
-      machine,
-      () => readPermittedCredential(() => credentials.get(machine.id, machine), assertAccess),
-      undefined,
-      assertAccess,
     );
-  }, [
-    machine?.id,
-    machine?.endpoint,
-    machine?.lanKey,
-    machine?.environmentId,
-    unlocked,
-    ready,
-    consented,
-    scope,
-    privateAccess,
-    machine?.capabilities,
-    socketProvider,
-  ]);
+  // Consumers with the same computer, route, consent and access scope share one transport, so the
+  // project stream hub and the runtime lease are opened once instead of once per hook.
+  const key = machine && usable ? hostClientKey(machine, scope, privateAccess, socketProvider) : null;
+  const client =
+    machine && key ? sharedHostClient(key, () => createHostClient(machine, privateAccess)) : null;
+  // Effect reason: this hook counts as one consumer of the shared transport while it is mounted.
   useEffect(() => {
-    if (!client) return;
-    void client.prepare?.().catch(() => undefined);
-    return () => client.dispose?.();
-  }, [client]);
+    if (!key || !client) return;
+    return retainHostClient(key, client);
+  }, [key, client]);
   return client;
+}
+
+function createHostClient(machine: MobileMachine, privateAccess: PrivateContentAccess) {
+  const assertAccess = () => {
+    assertAppAccess();
+    if (!privateAccess.check()) throw new Error("This private workspace is no longer available.");
+    const state = useMachines.getState();
+    const current = state.machines?.find((value) => value.id === machine.id);
+    if (
+      state.storageError ||
+      !state.hydrated ||
+      isMachinePending(state, machine.id) ||
+      (current &&
+        (current.endpoint !== machine.endpoint ||
+          current.environmentId !== machine.environmentId ||
+          current.lanKey !== machine.lanKey))
+    )
+      throw new Error("This computer connection changed. Reopen its current route.");
+    assertProviderPermission(current);
+  };
+  return new HostTransport(
+    machine,
+    () => readPermittedCredential(() => credentials.get(machine.id, machine), assertAccess),
+    undefined,
+    assertAccess,
+  );
 }
 
 /** One app-level retry subscription; draft claims survive navigation and suspension. */

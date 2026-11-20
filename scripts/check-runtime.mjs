@@ -26,6 +26,8 @@ const pureContracts = new Set([
   "shared/model/host-contracts/task-findings",
   // Work caps share the canonical pure model routing schema; no desktop UI runtime.
   "shared/model/host-contracts/model-routing",
+  // Two constants shared with the desktop and Host: the response byte cap and its error code.
+  "shared/model/host-contracts/response-limit",
   "shared/model/approvalOccurrence",
   "shared/model/productProviderDefaults",
   // Portable session execution policy has no desktop runtime dependencies.
@@ -55,9 +57,6 @@ const pureContracts = new Set([
   "features/crews/model/memberAvatarArt",
   "features/sessions/model/conversationRewind",
   "features/skills/model/cliCommandCatalog",
-  "features/social/model/socialLimits",
-  "features/social/model/social",
-  "features/social/model/socialPolicy",
   "features/source-control/model/selectiveStage",
   "features/notes/noteContext",
   "shared/lib/browserAnnotation",

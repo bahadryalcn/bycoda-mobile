@@ -19,6 +19,7 @@ vi.mock("@/ui/message-text", () => ({ MessageText: () => null }));
 vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
 vi.mock("@/state/queries", () => ({ useHostQuery: vi.fn() }));
+vi.mock("@/state/app-state", () => ({ AppState: { addEventListener: () => ({ remove: vi.fn() }) } }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
@@ -27,7 +28,7 @@ vi.mock("@/ui/primitives", () => {
     Field: (props: { label: string; error?: string; onChangeText: (value: string) => void }) => { fixture.fields.set(props.label, props); return null; },
     SegmentedControl: ({ onChange }: { onChange: typeof fixture.mode }) => { fixture.mode = onChange; return null; },
     FormActions: (props: NonNullable<typeof fixture.actions>) => { fixture.actions = props; return null; },
-    ActionMenu: () => null, Button: () => null, QueryState: () => null, MutationState: () => null,
+    ActionMenu: () => null, Button: () => null, QueryState: () => null, MutationState: () => null, ErrorNotice: () => null,
   };
 });
 
@@ -35,18 +36,20 @@ let root: ReturnType<typeof createRoot>;
 afterEach(async () => {
   await act(async () => root?.unmount());
   fixture.fields.clear();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 it("associates validation with its field, keeps preview alerts, and only saves corrected values", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.useFakeTimers();
   const container = document.createElement("div");
   root = createRoot(container);
   const save = vi.fn();
-  const store = vi.fn();
+  const owner = { save: vi.fn(async () => {}), clearSaved: vi.fn(async () => {}) };
   const initial = { id: "note", title: "x".repeat(201), body: "Preview", tags: "x".repeat(49), expectedUpdatedAt: 7 };
   await act(async () => root.render(createElement(NoteEditor, {
-    initial, save: { mutate: save }, remove: {}, storage: { mutate: store }, onClose: vi.fn(),
+    initial, save: { mutate: save }, remove: {}, draftOwner: owner, onClose: vi.fn(),
   } as unknown as NoteEditorProps)));
   expect(fixture.fields.get("Title")?.error).toContain("200 characters");
   expect(fixture.fields.get("Tags")?.error).toContain("48 characters");
@@ -65,5 +68,8 @@ it("associates validation with its field, keeps preview alerts, and only saves c
   expect(fixture.actions?.disabled).toBe(false);
   act(() => fixture.actions?.onSubmit());
   expect(save.mock.calls[0][0]).toMatchObject({ note: { title: "Fixed title", body: "Preview", tags: ["design"] }, expectedUpdatedAt: 7 });
-  expect(store).toHaveBeenCalledTimes(2);
+  expect(owner.save).not.toHaveBeenCalled();
+  await act(async () => { vi.advanceTimersByTime(500); });
+  expect(owner.save).toHaveBeenCalledTimes(1);
+  expect(owner.save).toHaveBeenCalledWith(expect.objectContaining({ title: "Fixed title", tags: "design", body: "Preview" }));
 });

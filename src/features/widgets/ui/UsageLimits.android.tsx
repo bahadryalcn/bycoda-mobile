@@ -16,6 +16,7 @@ import {
   height,
   paddingAll,
   semantics,
+  weight,
   width,
 } from "@expo/ui/jetpack-compose/modifiers";
 import { createWidget, type WidgetEnvironment } from "expo-widgets";
@@ -72,8 +73,14 @@ export function UsageLimits(
         .filter((row) => row.providerName === name)
         .map((row) => (
           <Column key={row.id} modifiers={[fillMaxWidth(), height(34)]}>
-            <Row verticalAlignment="center">
-              <Text color={muted} maxLines={1} style={{ fontSize: 11 }}>
+            <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
+              <Text
+                color={muted}
+                maxLines={1}
+                overflow="ellipsis"
+                modifiers={[weight(1)]}
+                style={{ fontSize: 11 }}
+              >
                 {row.label}
               </Text>
               <Spacer modifiers={[width(4)]} />

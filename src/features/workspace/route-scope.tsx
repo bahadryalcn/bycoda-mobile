@@ -19,6 +19,8 @@ export function WorkspaceRouteScope({
     return (
       <Screen>
         <Empty
+          compact={false}
+          illustration="unreachable"
           title={copy(
             "Bu çalışma alanı başka bir bilgisayara ait.",
             "This workspace belongs to another computer.",

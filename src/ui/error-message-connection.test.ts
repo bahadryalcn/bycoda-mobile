@@ -39,7 +39,8 @@ it.each(["tr", "de", "es", "fr", "pt", "ja", "zh-CN"] as const)("uses %s catalog
 it("retains the localized uncertainty caution and explicit caller feedback", () => {
   const error = new RemoteHostError("computer", "host", "Connection interrupted. Check this command's result before trying again.", true);
   expect(errorMessage(error, tr)).toContain("Bağlantı kesildi.");
-  expect(errorMessage(error, tr)).toContain("İşlem uygulanmış olabilir.");
+  // The interruption line already asks to check the result; the phone showed both sentences at once.
+  expect(errorMessage(error, tr)).not.toContain("İşlem uygulanmış olabilir.");
   expect(errorMessage(error, tr, "Özel geri bildirim")).toContain("Özel geri bildirim");
   expect(errorMessage(error, tr, "Özel geri bildirim")).toContain("İşlem uygulanmış olabilir.");
 });

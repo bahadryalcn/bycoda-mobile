@@ -43,13 +43,6 @@ export type {
   HostSettings,
   HostSettingsState,
 } from "../../../src/features/tasks/model/hostSettings";
-export type {
-  SocialAccount,
-  SocialThread,
-  SocialPolicy,
-  SocialSnapshot,
-  SocialPlatform,
-} from "../../../src/features/social/model/social";
 export type { PrWatch, PrWatchInput } from "../remote/contracts/inbox";
 export type { Note, NoteUpsert } from "../../../src/features/notes/notes";
 export type { MobileInboxItem, MobileInbox as HostAttentionInbox } from "../remote/types";

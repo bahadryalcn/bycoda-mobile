@@ -10,7 +10,9 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
 import { StyleSheet, View, type HostInstance } from "react-native";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
@@ -26,6 +28,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { useSecurity } from "../state/security";
 import type { OverlayEntry, OverlayRegistry, ScreenOverlayProps } from "./overlay-types";
 import { canRemoveOverlay, closeOverlay, showOverlay, type OverlayState } from "./overlay-state";
+import { createOverlayContentStore, type OverlayContentStore } from "./overlay-content-store";
 import { motionTiming } from "./motion";
 import { motion } from "./tokens";
 import { asWebElement, createOverlayWebFocus } from "./overlay-web-focus";
@@ -47,16 +50,23 @@ function OverlayLayer({
   id,
   entry,
   active,
+  contents,
   onHidden,
   onElement,
 }: {
   id: string;
   entry: OverlayState<OverlayEntry>;
   active: boolean;
+  contents: OverlayContentStore;
   onHidden(id: string, generation: number): void;
   onElement(id: string, value: unknown): void;
 }) {
   useMobileTheme();
+  // Only this layer re-renders when its content changes; the provider's layer list is untouched.
+  const children = useSyncExternalStore(
+    useCallback((listener: () => void) => contents.subscribe(id, listener), [contents, id]),
+    () => contents.get(id),
+  );
   const progress = useSharedValue(0);
   useEffect(() => {
     const generation = entry.generation;
@@ -85,7 +95,7 @@ function OverlayLayer({
     >
       <RouteFocusContext.Provider value={entry.value.routeFocused !== false}>
       <LayerPriority.Provider value={entry.value.priority}>
-        <LayerProgress.Provider value={progress}>{entry.value.privateAccess ? <PrivateContentAccessProvider value={entry.value.privateAccess}>{entry.value.children}</PrivateContentAccessProvider> : entry.value.children}</LayerProgress.Provider>
+        <LayerProgress.Provider value={progress}>{entry.value.privateAccess ? <PrivateContentAccessProvider value={entry.value.privateAccess}>{children}</PrivateContentAccessProvider> : children}</LayerProgress.Provider>
       </LayerPriority.Provider>
       </RouteFocusContext.Provider>
     </Animated.View>
@@ -96,6 +106,7 @@ function OverlayLayer({
 export function OverlayProvider({ children }: PropsWithChildren) {
   const { uiStyles } = useMobileTheme();
   const [entries, setEntries] = useState<Map<string, OverlayState<OverlayEntry>>>(() => new Map());
+  const [contents] = useState(createOverlayContentStore);
   const background = useRef<HostInstance>(null);
   const elements = useRef(new Map<string, HTMLElement>());
   const webFocus = useRef<ReturnType<typeof createOverlayWebFocus> | null>(null);
@@ -116,15 +127,27 @@ export function OverlayProvider({ children }: PropsWithChildren) {
       return new Map(current).set(id, closeOverlay(entry));
     });
   }, []);
+  const drop = useCallback((id: string) => {
+    contents.delete(id);
+    setEntries((current) => {
+      if (!current.has(id)) return current;
+      const next = new Map(current);
+      next.delete(id);
+      return next;
+    });
+  }, [contents]);
+  // Content is written only while visible, so a hidden owner never replaces what a closing sheet is showing.
+  const setContent = useCallback((id: string, children: ReactNode) => contents.set(id, children), [contents]);
   const finishClose = useCallback((id: string, generation: number) => {
     setEntries((current) => {
       if (!canRemoveOverlay(current.get(id), generation)) return current;
       const next = new Map(current);
       next.delete(id);
+      contents.delete(id);
       return next;
     });
-  }, []);
-  const registry = useMemo(() => ({ update, remove }), [update, remove]);
+  }, [contents]);
+  const registry = useMemo(() => ({ update, remove, drop, setContent }), [update, remove, drop, setContent]);
   const menuFocus = useMemo(() => ({ register: (menu: import("./overlay-web-focus").WebMenuLayer) =>
     webFocus.current?.registerMenu(menu) ?? (() => {}) }), []);
   const layers = unlocked
@@ -132,6 +155,8 @@ export function OverlayProvider({ children }: PropsWithChildren) {
     : [];
   const accessibleLayers = layers.filter(([, entry]) => entry.value.routeFocused !== false && (entry.value.privateAccess?.check() ?? true));
   const active = accessibleLayers.at(-1)?.[1];
+  // A closing layer stays mounted until its fade ends; only a visible layer may consume Android back.
+  const backOwner = accessibleLayers.filter(([, entry]) => entry.visible).at(-1)?.[1];
   useLayoutEffect(() => {
     if (process.env.EXPO_OS !== "web" || typeof document === "undefined") return;
     const controller = createOverlayWebFocus(document);
@@ -151,13 +176,13 @@ export function OverlayProvider({ children }: PropsWithChildren) {
       }),
     });
   });
-  useBackHandler(!!active, () => {
+  useBackHandler(!!backOwner, () => {
     if (useSecurity.getState().status !== "unlocked") return;
-    if (active?.visible && KeyboardController.isVisible()) {
+    if (backOwner && KeyboardController.isVisible()) {
       void KeyboardController.dismiss();
       return;
     }
-    if (active?.visible) active.value.onClose();
+    backOwner?.value.onClose();
   });
   return (
     <Context.Provider value={registry}><OverlayWebMenuContext.Provider value={menuFocus}>
@@ -177,6 +202,7 @@ export function OverlayProvider({ children }: PropsWithChildren) {
             id={id}
             entry={entry}
             active={entry === active}
+            contents={contents}
             onHidden={finishClose}
             onElement={captureElement}
           />
@@ -194,11 +220,26 @@ export function ScreenOverlay({ visible, priority, label, onClose, children }: S
   const routeFocused = useRouteFocus();
   const layerPriority = priority ?? Math.max(20, parentPriority + 1);
   const id = useId();
+  const unlocked = useSecurity((state) => state.status === "unlocked");
   if (!registry) throw new Error("ScreenOverlay requires OverlayProvider.");
+  // Inline close handlers change on every owner render; the layer keeps one stable callback that reaches the latest one.
+  const closeRef = useRef(onClose);
+  // Runs after every commit, so the stable callback always targets the most recent owner render.
   useLayoutEffect(() => {
-    if (visible) registry.update(id, { children, onClose, label, priority: layerPriority, privateAccess, routeFocused });
+    closeRef.current = onClose;
+  });
+  const close = useCallback(() => closeRef.current(), []);
+  // Content is published only while visible: a sheet sliding out keeps what it showed, not the owner's fallback.
+  useLayoutEffect(() => {
+    if (unlocked && visible) registry.setContent(id, children);
+  }, [registry, id, unlocked, visible, children]);
+  useLayoutEffect(() => {
+    // A lock drops the layer outright, so protected content is never kept across it.
+    // Only an unlocked close keeps the last title and content, and only until its fade ends.
+    if (!unlocked) registry.drop(id);
+    else if (visible) registry.update(id, { onClose: close, label, priority: layerPriority, privateAccess, routeFocused });
     else registry.remove(id);
-  }, [registry, id, visible, children, label, onClose, layerPriority, privateAccess, routeFocused]);
+  }, [registry, id, unlocked, visible, close, label, layerPriority, privateAccess, routeFocused]);
   useLayoutEffect(() => () => registry.remove(id), [registry, id]);
   return null;
 }

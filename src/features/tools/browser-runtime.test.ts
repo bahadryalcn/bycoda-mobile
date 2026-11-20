@@ -36,6 +36,8 @@ vi.mock("@/state/machines", () => {
 vi.mock("../workspace/composer-transfer", () => ({ useComposerTransfer: () => ({ transfer: state.transfer }) }));
 vi.mock("@/state/queries", () => ({ useHostClient: () => state.available ? state.client : null, useHostReadActive: () => true }));
 vi.mock("@/state/actions", () => ({ useAsyncAction: () => ({ isPending: false, run: async (fn: () => Promise<unknown>) => { try { return await fn(); } catch { return undefined; } } }) }));
+// The real store reaches netinfo, which Vitest cannot parse; frame quality is not under test here.
+vi.mock("@/state/data-saver", () => ({ useDataSaverActive: () => false, DATA_SAVER_FRAME_QUALITY: 35 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);

@@ -3,6 +3,7 @@ import { act, createElement, useState, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { CrewRunDetail } from "@/remote/contracts/crews";
+import { RemoteHostError } from "@/remote/host-error";
 import { CrewRuntimePanel } from "./runtime-panel";
 
 const state = vi.hoisted(() => ({
@@ -16,8 +17,10 @@ const state = vi.hoisted(() => ({
   epoch: "epoch-a",
   receipts: 0,
   requestFails: false,
+  requestError: undefined as unknown,
   refetch: vi.fn(),
   reset: vi.fn(),
+  read: vi.fn(),
 }));
 vi.mock("expo-router", () => ({ router: { navigate: (target: unknown) => state.navigate(target) } }));
 vi.mock("@/state/machines", () => ({
@@ -34,7 +37,10 @@ vi.mock("@/state/connection-scope", () => ({
   },
 }));
 vi.mock("@/state/queries", () => ({
-  useHostQuery: () => ({ data: state.detail, isFetching: false, refetch: state.refetch }),
+  useHostQuery: (...args: unknown[]) => {
+    state.read(...args);
+    return { data: state.detail, isFetching: false, refetch: state.refetch };
+  },
   useHostMutation: (method: string) => ({
     isPending: false,
     reset: state.reset,
@@ -44,7 +50,8 @@ vi.mock("@/state/queries", () => ({
     ) => {
       state.writes(method, input);
       if (method === "crews.request") {
-        if (state.requestFails) callbacks?.onError?.(new Error("Lost acknowledgement"));
+        if (state.requestFails)
+          callbacks?.onError?.(state.requestError ?? new Error("Lost acknowledgement"));
         else callbacks?.onSuccess?.();
       }
     },
@@ -163,12 +170,12 @@ const detail = (): CrewRunDetail =>
   }) as unknown as CrewRunDetail;
 let root: ReturnType<typeof createRoot>;
 const container = document.createElement("div");
-async function render() {
+async function render(active = true) {
   await act(async () =>
     root.render(
       createElement(
         CrewRuntimePanel,
-        { run: detail() },
+        { run: detail(), active },
         createElement("p", null, "Task inventory"),
       ),
     ),
@@ -182,9 +189,20 @@ beforeEach(() => {
   state.epoch = "epoch-a";
   state.receipts = 0;
   state.requestFails = false;
+  state.requestError = undefined;
   state.refetch.mockImplementation(async () => ({ data: state.detail }));
   document.body.append(container);
   root = createRoot(container);
+});
+
+it("disables a collapsed crew detail read without unmounting its contents", async () => {
+  await render();
+  expect(state.read.mock.lastCall?.[3]).toMatchObject({ enabled: true });
+  await render(false);
+  expect(state.read.mock.lastCall?.[3]).toMatchObject({ enabled: false });
+  expect(container.textContent).toContain("Task inventory");
+  await render();
+  expect(state.read.mock.lastCall?.[3]).toMatchObject({ enabled: true });
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -451,4 +469,65 @@ it("checks an uncertain owner request without resending and releases only its ex
   expect(state.reset).toHaveBeenCalledOnce();
   expect(state.writes).toHaveBeenCalledTimes(1);
   expect(state.refetch).toHaveBeenCalledTimes(2);
+});
+
+async function typeRequest(value: string) {
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Request to crew"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  return input;
+}
+
+it("keeps the draft editable and the same receipt after a definite rejection", async () => {
+  state.requestFails = true;
+  state.requestError = new RemoteHostError("pc", "host", "Crew is finished");
+  await render();
+  const input = await typeRequest("Keep this request");
+  await act(async () => state.actions.get("Add request")!.onPress());
+  expect(input.disabled).toBe(false);
+  expect(input.value).toBe("Keep this request");
+  expect(state.actions.get("Add request")?.disabled).toBe(false);
+  expect(state.actions.has("Check request")).toBe(false);
+  state.requestFails = false;
+  await act(async () => state.actions.get("Add request")!.onPress());
+  const [first, second] = state.writes.mock.calls.map((call) => call[1] as { requestId: string });
+  expect(second.requestId).toBe(first.requestId);
+  expect(input.value).toBe("");
+});
+
+it("allows an exact retry after a successful check finds no matching receipt", async () => {
+  state.requestFails = true;
+  await render();
+  const input = await typeRequest("Keep this request");
+  await act(async () => state.actions.get("Add request")!.onPress());
+  expect(input.disabled).toBe(true);
+  state.refetch.mockImplementationOnce(async () => ({ error: new Error("offline"), data: undefined }));
+  await act(async () => state.actions.get("Check request")!.onPress());
+  expect(input.disabled).toBe(true);
+  expect(state.actions.get("Add request")?.disabled).toBe(true);
+  await act(async () => state.actions.get("Check request")!.onPress());
+  expect(container.textContent).toContain("No matching request was found");
+  expect(input.disabled).toBe(true);
+  expect(input.value).toBe("Keep this request");
+  state.requestFails = false;
+  await act(async () => state.actions.get("Retry")!.onPress());
+  const [first, second] = state.writes.mock.calls.map((call) => call[1] as { requestId: string; text: string });
+  expect(second).toEqual(expect.objectContaining({ requestId: first.requestId, text: first.text }));
+  expect(input.value).toBe("");
+});
+
+it("prevents a changed draft from creating a second receipt while the original send may land", async () => {
+  state.requestFails = true;
+  await render();
+  await typeRequest("First wording");
+  await act(async () => state.actions.get("Add request")!.onPress());
+  await act(async () => state.actions.get("Check request")!.onPress());
+  const input = await typeRequest("Second wording");
+  expect(input.disabled).toBe(true);
+  state.requestFails = false;
+  await act(async () => state.actions.get("Retry")!.onPress());
+  expect(state.writes).toHaveBeenCalledTimes(1);
 });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
-import { HOST_RPC_METHODS } from "../../../src/shared/model/host-contracts";
+import { HOST_RPC_METHODS, WS_LIMITS } from "../../../src/shared/model/host-contracts";
 
 const native = vi.hoisted(() => ({
   fetch: vi.fn<typeof fetch>(),
@@ -66,6 +66,76 @@ describe("native transport module boundary", () => {
         expect(prefixes.some((prefix) => method.startsWith(prefix))).toBe(false);
     },
   );
+
+  // Source-level evidence only: this does not compile or run Kotlin/Swift (issue #1406).
+  it.each([
+    [
+      "Android",
+      "android/src/main/java/expo/modules/bycodahostsocket/BycodaHostSocketModule.kt",
+      "synchronized(lock)",
+      "sendLock.withLock",
+      "JSONObject(text)",
+      "text.toByteArray(Charsets.UTF_8)",
+    ],
+    [
+      "iOS",
+      "ios/BycodaHostSocketModule.swift",
+      "try self.sync",
+      "sendQueue.async",
+      "JSONSerialization.jsonObject",
+      "text.utf8.count",
+    ],
+  ])(
+    "parses %s outgoing frames outside the lock shared with incoming messages",
+    async (_platform, path, lock, ordering, parse, sizeScan) => {
+      const source = await readFile(
+        new URL(`../../modules/bycoda-host-socket/${path}`, import.meta.url),
+        "utf8",
+      );
+      const begin = source.indexOf('AsyncFunction("send")');
+      const body = source.slice(begin, source.indexOf('AsyncFunction("acknowledge")', begin));
+      const orderingAt = body.indexOf(ordering);
+      const parseAt = body.indexOf(parse);
+      const commitAt = body.lastIndexOf(lock);
+      // The first lock only admits; per-connection ordering starts before the parse, which precedes the commit lock.
+      expect(orderingAt).toBeGreaterThan(body.indexOf(lock));
+      expect(parseAt).toBeGreaterThan(orderingAt);
+      expect(commitAt).toBeGreaterThan(parseAt);
+      expect(body.split(parse)).toHaveLength(2);
+      expect(body.split(sizeScan)).toHaveLength(2);
+      // Admission, error precedence and the unchanged ordering of checks stay under the commit lock.
+      const commit = body.slice(commitAt);
+      const order = ["stale_connection", '"overload"', "voice_scope_denied", "native_profile_required"];
+      const positions = order.map((code) => commit.indexOf(code));
+      expect(positions.every((position) => position >= 0)).toBe(true);
+      expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    },
+  );
+
+  // Source-level evidence only: this does not compile or run Swift or reach a device (issue #1077).
+  it("keeps the iOS WebSocket idle timer longer than the Host heartbeat without loosening the handshake deadline", async () => {
+    const source = await readFile(
+      new URL("../../modules/bycoda-host-socket/ios/BycodaHostSocketModule.swift", import.meta.url),
+      "utf8",
+    );
+    const idle = /private let hostSocketIdleTimeout: TimeInterval = (\d+)\b/.exec(source);
+    expect(idle).not.toBeNull();
+    // A quiet healthy socket hears from the Host only every heartbeat interval, and a ping can lag by its response window.
+    expect(Number(idle![1]) * 1000).toBeGreaterThanOrEqual(
+      WS_LIMITS.heartbeatIntervalMs + WS_LIMITS.heartbeatResponseTimeoutMs,
+    );
+    const begin = source.indexOf("private func openPeer(");
+    const body = source.slice(begin, source.indexOf("public func definition()", begin));
+    expect(begin).toBeGreaterThanOrEqual(0);
+    // The session's request timeout is the idle window; no literal can shrink it back to the connect budget.
+    expect(body).toMatch(/config\.timeoutIntervalForRequest = hostSocketIdleTimeout\b/);
+    expect(body).not.toMatch(/config\.timeoutIntervalForRequest = \d/);
+    // Connect/upgrade stays bounded by its own deadline, and the pinned delegate, credential and cancellation path are unchanged.
+    expect(body).toMatch(/asyncAfter\(deadline: \.now\(\) \+ \d[\d.]*\)[\s\S]*?self\.ended\(id, generation, "deadline", true\)/);
+    expect(body).toContain("try SocketDelegate(owner: self, id: id, generation: generation, binding: credential.binding)");
+    expect(body).toContain('request.setValue("Bearer \\(token)", forHTTPHeaderField: "Authorization")');
+    expect(body.match(/hostSocketIdleTimeout/g)).toHaveLength(1);
+  });
 
   it("forwards redirect, credential, and cancellation options to Expo without replacing the response", async () => {
     const controller = new AbortController();

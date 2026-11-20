@@ -1,5 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { CSV_PREVIEW_MAX_ROWS, csvDelimiterFor, parseCsvPreview } from "./preview-csv";
+import { readFileSync } from "node:fs";
+import { CSV_PREVIEW_MAX_ROWS, csvDelimiterFor, csvVisibleColumns, parseCsvPreview } from "./preview-csv";
+
+describe("csvVisibleColumns", () => {
+  it("mounts only the columns near the viewport, never all 200", () => {
+    const range = csvVisibleColumns(0, 390, 200, 168);
+    expect(range.start).toBe(0);
+    expect(range.end - range.start).toBeLessThan(10);
+  });
+
+  it("follows the scroll offset with overscan on both sides", () => {
+    expect(csvVisibleColumns(168 * 50, 336, 200, 168, 2)).toEqual({ start: 48, end: 54 });
+  });
+
+  it("clamps at the last column and handles empty or invalid input", () => {
+    expect(csvVisibleColumns(168 * 199, 400, 200, 168, 2).end).toBe(200);
+    expect(csvVisibleColumns(0, 390, 0, 168)).toEqual({ start: 0, end: 0 });
+    expect(csvVisibleColumns(Number.NaN, Number.NaN, 5, 168)).toEqual({ start: 0, end: 2 });
+  });
+});
+
+describe("CsvTable source", () => {
+  const source = readFileSync(new URL("./preview-csv-table.tsx", import.meta.url), "utf8");
+
+  it("virtualizes rows and keeps the table out of a plain row map or sticky ScrollView", () => {
+    expect(source).toContain("<FlatList");
+    expect(source).toContain("windowSize");
+    expect(source).not.toContain("table.rows.map");
+    expect(source).not.toContain("stickyHeaderIndices");
+    expect(source).toContain("csvVisibleColumns");
+  });
+});
 
 describe("parseCsvPreview", () => {
   it("splits header and rows and pads ragged lines", () => {

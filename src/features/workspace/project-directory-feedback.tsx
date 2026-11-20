@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { View } from "react-native";
 import { QueryState, StateView } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { useMachineStatus } from "@/ui/machine-bar";
 import { queryOwnsRegion } from "./query-region";
 import type { QueryStateProps } from "@/ui/component-props";
 
@@ -18,6 +19,7 @@ export function ProjectDirectoryFeedback({
   readiness, privacyUnavailable, ...props
 }: FeedbackProps) {
   const copy = useCopy();
+  const { phase } = useMachineStatus();
   // Auth/identity and other actual query failures keep their precise recovery.
   if (props.query.error) return <QueryState {...props} />;
   if (privacyUnavailable) return <StateView
@@ -33,7 +35,9 @@ export function ProjectDirectoryFeedback({
       onPress: () => { if (!props.query.isFetching) void props.query.refetch?.(); },
     } : undefined}
   />;
-  if (readiness === "waiting") return <StateView
+  // While the link is being checked (cold start, return from background) or is up, the directory is
+  // loading; "waiting for a connection" would contradict the computer pill above it.
+  if (readiness === "waiting" && phase !== "checking" && phase !== "connected") return <StateView
     illustration="unreachable"
     title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
     description={copy(
@@ -42,6 +46,11 @@ export function ProjectDirectoryFeedback({
     )}
     action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: props.onManageConnections ?? (() => router.push("/machines")) }}
   />;
+  // Right after a computer switch the new directory has no data and its read is idle or paused until
+  // the client settles; the generic presentation of that is blank, so show the loading state instead.
+  if (readiness === "waiting") return <QueryState {...props} query={{
+    ...props.query, fetchStatus: "fetching", isEnabled: undefined, isPending: true, isLoading: true, status: "pending",
+  }} />;
   return <QueryState {...props} />;
 }
 

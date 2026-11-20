@@ -2,7 +2,8 @@
 export const MAX_INLINE_RASTER_BYTES = 128 * 1024;
 const MAX_INLINE_PIXELS = 4 * 1024 * 1024;
 const MAX_INLINE_SIDE = 4096;
-export function inlineRaster(raw: string): { uri: string; mimeType: string; bytes: number } | null {
+export type InlineRaster = { uri: string; mimeType: string; bytes: number; width: number; height: number };
+export function inlineRaster(raw: string): InlineRaster | null {
   if (raw.length > Math.ceil(MAX_INLINE_RASTER_BYTES / 3) * 4 + 32) return null;
   const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(raw);
   if (!match || match[2]!.length % 4) return null;
@@ -84,5 +85,5 @@ export function inlineRaster(raw: string): { uri: string; mimeType: string; byte
     width * height > MAX_INLINE_PIXELS
   )
     return null;
-  return { uri: `data:${mimeType};base64,${encoded}`, mimeType, bytes: size };
+  return { uri: `data:${mimeType};base64,${encoded}`, mimeType, bytes: size, width, height };
 }

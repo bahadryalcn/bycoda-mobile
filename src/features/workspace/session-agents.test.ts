@@ -1,14 +1,16 @@
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
 import { beforeEach, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ calls: [] as { key: unknown[]; method: string; enabled?: boolean }[], capabilities: [] as string[], devices: undefined as unknown }));
+type Call = { key: unknown[]; method: string; params: unknown; enabled?: boolean; interval?: unknown };
+const state = vi.hoisted(() => ({ calls: [] as Call[], capabilities: [] as string[], devices: undefined as unknown }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ capabilities: state.capabilities }) }));
 vi.mock("@/state/queries", () => ({
   useHostClient: () => ({}),
-  useHostQuery: (key: unknown[], method: string, _p: unknown, options: { enabled?: boolean }) => {
-    state.calls.push({ key, method, enabled: options.enabled });
+  useHostQuery: (key: unknown[], method: string, params: unknown, options: { enabled?: boolean; interval?: unknown }) => {
+    state.calls.push({ key, method, params, enabled: options.enabled, interval: options.interval });
     return { data: method === "devices.list" ? state.devices : undefined };
   },
 }));
@@ -28,14 +30,38 @@ const props = { scope: { machineId: "m", sessionId: "s" }, disabled: false, onCo
 const render = (s: unknown) => renderToStaticMarkup(createElement(SessionAgents, { ...(props as object), session: s, children: (bar: unknown) => createElement("section", null, bar as never) } as never));
 beforeEach(() => Object.assign(state, { calls: [], capabilities: [], devices: undefined }));
 
-it("shares the sessions-panel list key and only fetches it when the session used subagents or runs", () => {
+it("virtualizes delegated session rows and announces their section label only once", () => {
+  const source = readFileSync(new URL("./agents-sheet.tsx", import.meta.url), "utf8");
+  expect(source.match(/Runs on its own/g)).toHaveLength(1);
+  expect(source).toMatch(/children\.map\(\(child\): ListItem => \(\{ kind: "child"/);
+  expect(source).toMatch(/<FlatList data=\{items\}/);
+  expect(source).toMatch(/item\.kind === "child"\) return <ChildRow/);
+});
+
+it("reads only this session's children, never the whole project list, and only when it used subagents or runs", () => {
   render(session([{ id: "a", role: "assistant", text: "hi" }]));
-  expect(state.calls[0]).toMatchObject({ key: ["sessions", "p"], enabled: false });
+  expect(state.calls[0]).toMatchObject({ key: ["sessions", "p", "children", "s"], params: { projectId: "p", parentSessionId: "s" }, enabled: false });
   render(session([{ id: "a", role: "tool", text: "", agentRun: { name: "x" } }]));
   expect(state.calls.find((c, i) => i >= 3 && c.method === "sessions.list")!.enabled).toBe(true);
   state.calls = [];
   render(session([], "running"));
   expect(state.calls[0]!.enabled).toBe(true);
+  expect(state.calls.every((c) => c.method !== "sessions.list" || (c.params as { parentSessionId?: string }).parentSessionId === "s")).toBe(true);
+  // A finished session that delegated keeps only the delegate's result turn; reopening must still read its children.
+  state.calls = [];
+  render(session([{ id: "d", role: "user", text: "result", author: { kind: "delegation" } }]));
+  expect(state.calls[0]!.enabled).toBe(true);
+});
+
+it("polls the child read only while the session runs, and slows it when the Host ignored the parent filter", () => {
+  render(session([], "idle"));
+  expect(state.calls[0]!.interval).toBeUndefined();
+  state.calls = [];
+  render(session([], "running"));
+  const interval = state.calls[0]!.interval as (rows: unknown) => number;
+  expect(interval(undefined)).toBe(4000);
+  expect(interval([{ id: "c", delegationParent: { parentSessionId: "s" } }])).toBe(4000);
+  expect(interval([{ id: "c", delegationParent: { parentSessionId: "s" } }, { id: "other" }])).toBe(15_000);
 });
 
 it("hands the activity strip to the composer's operating controls", () => {

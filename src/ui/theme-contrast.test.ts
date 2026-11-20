@@ -49,6 +49,9 @@ describe.each(cases)("mobile %s %s reading contrast", (palette, mode) => {
       }
     }
   });
+  it("keeps the composer placeholder (muted on the raised capsule) readable", () => {
+    expect(contrast(colors.muted, colors.raised)).toBeGreaterThanOrEqual(4.5);
+  });
   it("preserves readable primary actions and semantic feedback", () => {
     expect(contrast(colors.primaryText, colors.accentSolid)).toBeGreaterThanOrEqual(4.5);
     for (const tone of Object.values(semanticColors)) {

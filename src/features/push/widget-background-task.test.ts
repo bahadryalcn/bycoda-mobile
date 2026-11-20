@@ -9,7 +9,9 @@ vi.mock("expo-task-manager", () => ({ defineTask: f.define }));
 vi.mock("expo-notifications", () => ({ registerTaskAsync: f.register.mockResolvedValue(null), BackgroundNotificationTaskResult: { NewData: 0, NoData: 1, Failed: 2 } }));
 vi.mock("../widgets/platform/publish", () => ({ publishWidgetSnapshot: f.publish }));
 vi.mock("../widgets/platform/live-activity", () => ({ syncSessionActivity: f.activity }));
-import { receiveWidgetPush, widgetTaskData } from "./widget-background-task";
+import { readFileSync } from "node:fs";
+import { widgetTaskData } from "./widget-background-task";
+import { receiveWidgetPush } from "./widget-push-handler";
 import { buildWidgetSnapshot } from "../widgets/model/snapshot";
 import { widgetPalette } from "../widgets/model/palette";
 import { widgetLabels } from "../widgets/model/widget-labels";
@@ -28,11 +30,20 @@ beforeEach(() => {
   f.values.set("bycoda.mobile.widgets.v1", JSON.stringify({ showTitles: true, showQuestionText: false }));
   push = { kind: "widget", environmentId: "env", widget: JSON.stringify({ v: 1, at: now, complete: true, sessions: [{ id: "s", projectId: "p", kind: "question", status: "running", updatedAt: now }] }) };
 });
+it("keeps the entry-evaluated task shell free of widget publishing imports", () => {
+  // Regression for #1296: index.ts evaluates this module before the router, so its static imports stay minimal.
+  const source = readFileSync(new URL("./widget-background-task.ts", import.meta.url), "utf8");
+  const staticImports = [...source.matchAll(/^import (?!type )[^;]*?from "([^"]+)"/gm)].map(m => m[1]);
+  // The task manager is the only native module it needs synchronously: defineTask must run during evaluation.
+  expect(staticImports).toEqual(["expo", "expo-task-manager"]);
+});
 it("registers a module-scope task and decodes headless envelopes", async () => {
   vi.stubEnv("EXPO_OS", "android");
   vi.resetModules();
-  await (await import("./widget-background-task")).widgetTaskRegistration;
+  const registration = (await import("./widget-background-task")).widgetTaskRegistration;
+  // Defined while the module evaluates, before any await: a headless launch needs it at once.
   expect(f.define).toHaveBeenCalledWith("bycoda-widget-push-v1", expect.any(Function));
+  await registration;
   expect(f.register).toHaveBeenCalledWith("bycoda-widget-push-v1");
   expect(widgetTaskData({ notification: null, data: { dataString: JSON.stringify(push) } })).toEqual(push);
   expect(widgetTaskData({ notification: null, data: { dataString: "{" } })).toBeNull();

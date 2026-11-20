@@ -20,7 +20,7 @@ vi.mock("@/ui/primitives",()=>{
  const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);
  return {Body:Wrapper,NavigationGroup:Wrapper,NavigationRow:()=>null,Disclosure:()=>null,Section:Wrapper,Button:()=>null,ToggleField:()=>null,SelectField:()=>null,useSuccessToast:()=>()=>"",
  Screen:({children,footer}:PropsWithChildren<{footer:import("react").ReactNode}>)=>createElement("main",null,createElement("article",null,children),createElement("footer",null,footer)),
- Field:({label,error}:{label:string;error?:string})=>createElement("section",{"data-field":label},error),
+ Field:({label,error,hint,maxLength,onBlur}:{label:string;error?:string;hint?:string;maxLength?:number;onBlur?:()=>void})=>createElement("section",{"data-field":label,"data-max":maxLength,"data-hint":hint,tabIndex:0,onBlur},error),
  ErrorText:({error,message}:{error:unknown;message:string})=>error?createElement("p",null,message):null,
  Notice:({message}:{message:string})=>createElement("p",null,message),
  Sheet:({visible,children}:PropsWithChildren<{visible:boolean}>)=>visible?createElement("aside",null,children):null,
@@ -47,6 +47,25 @@ it("does not present missing consent as an error for an already received report"
 });
 it("keeps description validation with its field",async()=>{
  await act(async()=>updateContentReport({consent:true}));expect(container.querySelector('[data-field="Description"]')?.textContent).toContain("Write a description");
+});
+it("explains next to Send why it is disabled before consent and keeps the field limits visible",async()=>{
+ fixture.sender=vi.fn(async requestId=>({requestId,reportId:"receipt"}));await render();
+ const footer=()=>container.querySelector("footer")!.textContent;
+ expect(footer()).toContain("Write a description to enable Send.");expect(button("Send").disabled).toBe(true);
+ expect(container.querySelector('[data-field="Description"]')?.textContent).toBe("");
+ await act(async()=>updateContentReport({description:"Spam"}));
+ expect(footer()).toContain("Tick the consent below to enable Send.");expect(button("Send").disabled).toBe(true);
+ const field=container.querySelector('[data-field="Description"]')!;
+ expect(field.getAttribute("data-max")).toBe("2000");expect(field.getAttribute("data-hint")).toBe("4 / 2000");
+ await act(async()=>updateContentReport({consent:true}));
+ expect(footer()).not.toContain("to enable Send.");expect(button("Send").disabled).toBe(false);
+});
+it("flags a blank description beside its field once the user leaves it",async()=>{
+ fixture.sender=vi.fn(async requestId=>({requestId,reportId:"receipt"}));await render();
+ const field=()=>container.querySelector('[data-field="Description"]')!;
+ expect(field().textContent).toBe("");
+ await act(async()=>{field().dispatchEvent(new FocusEvent("focusout",{bubbles:true}));});
+ expect(field().textContent).toContain("Write a description.");
 });
 it("retires discard review after a draft changes and rejects callbacks from an earlier review",async()=>{
  await act(async()=>updateContentReport({description:"First report"}));const original=useContentReport.getState();

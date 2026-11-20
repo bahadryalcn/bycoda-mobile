@@ -57,19 +57,21 @@ export function TasksScreen() {
   const linkedTaskId = linked.machineId === machine?.id ? linked.taskId : undefined;
   const projectId = linkedTaskId && linked.projectId ? linked.projectId : selectedProjectId;
   const { providers, query: providerQuery } = useAgentProviders(projectId);
-  const query = useHostQuery<HostTask[]>(
-    ["tasks", projectId],
+  const lifecycleSupported = !!machine?.capabilities?.includes("tasks.workspaces");
+  // Lifecycle context needs every project's tasks, so a scoped lifecycle host polls the
+  // global list once and filters the project client side (the Host filters by exact
+  // projectId and sorts identically); other hosts poll the scoped list directly.
+  const scoped = lifecycleSupported && !!projectId;
+  const listQuery = useHostQuery<HostTask[]>(
+    ["tasks", scoped ? null : projectId],
     "tasks.list",
-    projectId ? { projectId } : {},
+    projectId && !scoped ? { projectId } : {},
     { interval: 5000 },
   );
-  const lifecycleSupported = !!machine?.capabilities?.includes("tasks.workspaces");
-  const allTasks = useHostQuery<HostTask[]>(
-    ["tasks", null],
-    "tasks.list",
-    {},
-    { enabled: lifecycleSupported && !!projectId, interval: 5000 },
-  );
+  const query = scoped
+    ? { ...listQuery, data: listQuery.data?.filter((task) => task.projectId === projectId) }
+    : listQuery;
+  const lifecycleTasks = scoped || !projectId ? listQuery.data : undefined;
   const save = useHostMutation<HostTask>("tasks.save", ["tasks"]);
   const move = useHostMutation<HostTask>("tasks.move", ["tasks"]);
   const remove = useHostMutation("tasks.delete", ["tasks"]);
@@ -185,7 +187,7 @@ export function TasksScreen() {
           <SearchToolbar search={<SearchField ref={searchInput} label={copy("Görevlerde ara", "Search tasks")} value={search} onChangeText={setSearch} />}
             actions={<FilterButton count={filter !== "active" ? 1 : 0} onPress={() => setFilterDraft(filter)} />} />
           {machine ? <TaskBulkActions key={`${machine.id}:${projectId ?? "all"}`} tasks={visible ?? []} machineId={machine.id} disabled={busy && !bulkBusy || !!editor || !!deliveryTask}
-            context={filterContext} onBusy={setBulkBusy} onComplete={async () => { await query.refetch(); if (projectId) await allTasks.refetch(); }} /> : filterContext}
+            context={filterContext} onBusy={setBulkBusy} onComplete={async () => { await listQuery.refetch(); }} /> : filterContext}
           {!providers.length ? <>{providerQuery.isLoading || providerQuery.error ? <QueryState query={providerQuery} loading="inline" /> : <AgentProviderPrerequisite />}</> : null}
           {!editor && (
             <MutationState mutation={save} success={copy("Görev kaydedildi.", "Task saved.")} />
@@ -196,9 +198,6 @@ export function TasksScreen() {
           {!visible?.some((task) => task.id === decline.variables?.taskId) ? <TaskDeclineFeedback mutation={decline} /> : null}
           {!visible?.some((task) => task.id === manualStart.variables?.taskId) ? <MutationState mutation={manualStart} /> : null}
           <MutationState mutation={reorder} />
-          {lifecycleSupported && projectId &&
-            !(query.error && allTasks.error?.message === query.error.message) &&
-            <QueryState query={allTasks} loading="none" />}
           {editor?.kind === "edit" && !draft && (
             <Card>
               <QueryState query={editQuery} empty={editQuery.data?.length === 0} />
@@ -250,6 +249,8 @@ export function TasksScreen() {
             query={query}
             empty={visible?.length === 0}
             emptyTitle={search.trim() && query.data?.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Bu görünümde görev yok", "No tasks in this view")}
+            emptyDetail={search.trim() && query.data?.length ? undefined
+              : copy("Görevler sırayla bir agent tarafından çalıştırılır; durumları burada görünür.", "Tasks run one after another by an agent; their status shows here.")}
             emptyAction={query.data?.length ? search.trim()
               ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
               : filter !== "all" ? { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") } : undefined
@@ -271,8 +272,8 @@ export function TasksScreen() {
           finish={finish}
           start={manualStart}
           reorder={reorder}
-          tasks={(projectId ? allTasks.data : query.data) ?? []}
-          lifecycleReady={!projectId || !!allTasks.data}
+          tasks={lifecycleTasks ?? []}
+          lifecycleReady={!projectId || !!lifecycleTasks}
           onDelivery={setDeliveryTask}
           onEdit={(task) => {
             save.reset();

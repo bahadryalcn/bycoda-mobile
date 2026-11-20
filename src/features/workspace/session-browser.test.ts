@@ -3,9 +3,13 @@ import { act,createElement,useEffect,useState,type PropsWithChildren } from "rea
 import { createRoot } from "react-dom/client";
 import { afterEach,beforeEach,expect,it,vi } from "vitest";
 import { SessionBrowser } from "./session-browser";
+import { SessionLoopbackBrowser } from "./session-loopback-browser";
+import { useLoopbackLink } from "@/ui/loopback-link";
 import { PrivateContentAccessProvider,usePrivateContentAccess } from "@/ui/private-access";
 const f=vi.hoisted(()=>({id:"machine-a",caps:["browser.shared"],epoch:{token:"a",isCurrent:()=>true},allowed:true,visible:true,ready:true,readable:true,privacy:false,verifying:false,enabled:true,fetching:false,paused:false,error:null as any,path:"/original",hasProject:true,mounts:0,unmounts:0,embedded:false,checks:[] as Array<()=>boolean>,close:vi.fn(),retry:vi.fn(),query:undefined as any}));
 vi.mock("@/state/machines",()=>({useActiveMachine:()=>({id:f.id,capabilities:f.caps}),useMachines:{getState:()=>({activeId:f.id,machines:[{id:f.id,capabilities:f.caps}]})}}));
+vi.mock("../../../modules/bycoda-host-socket",()=>({tunnelSupported:()=>false}));
+vi.mock("./session-tunnel-browser",()=>({SessionTunnelBrowser:()=>null}));
 vi.mock("@/state/connection-scope",()=>({useConnectionScope:()=>f.epoch}));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
 vi.mock("react-native",()=>({View:({children,style}:any)=>createElement("div",{style},children),ScrollView:({children}:PropsWithChildren)=>createElement("main",null,children)}));
@@ -17,6 +21,26 @@ vi.mock("../tools/browser-screen",()=>({BrowserScreen:({embedded,project}:any)=>
 let root:ReturnType<typeof createRoot>,container:HTMLDivElement;let props:any;
 const render=()=>act(async()=>root.render(createElement(PrivateContentAccessProvider,{value:{allowed:f.allowed,check:()=>f.allowed}},createElement(SessionBrowser,props))));
 const input=()=>container.querySelector("input")!;
+
+it("does not reopen a link on another session after its project temporarily disappears", async () => {
+  function Link() {
+    const owner = useLoopbackLink();
+    return createElement("button", { onClick: () => owner?.open("http://localhost:3000/app?x=1#top") }, "Open link");
+  }
+  const renderLink = (sessionId: string, projectId?: string) => act(async () => root.render(
+    createElement(PrivateContentAccessProvider, { value: { allowed: true, check: () => true } },
+      createElement(SessionLoopbackBrowser, { scope: { machineId: "machine-a", sessionId }, projectId, children: createElement(Link) }),
+    ),
+  ));
+
+  await renderLink("session-a", "project-a");
+  await act(async () => container.querySelector("button")!.click());
+  expect(displayed()).toBe(true);
+  await renderLink("session-b");
+  await renderLink("session-b", "project-a");
+  expect(displayed()).toBe(false);
+});
+
 function displayed(){let e:HTMLElement|null=container.querySelector("article");while(e){if(e.style.display==="none")return false;e=e.parentElement;}return !!container.querySelector("article");}
 async function draft(){await act(async()=>{input().value="Unsent URL draft";input().dispatchEvent(new Event("input",{bubbles:true}));});}
 beforeEach(()=>{vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);container=document.createElement("div");root=createRoot(container);props={scope:{machineId:"machine-a",sessionId:"session-a"},projectId:"project-a",onClose:f.close};});

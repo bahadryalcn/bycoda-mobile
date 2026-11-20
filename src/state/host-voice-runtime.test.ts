@@ -54,3 +54,8 @@ it("names an outdated Host instead of failing the first voice request as incompa
   await expect(openScopedVoiceConnection(native(), binding, scope, () => true)).rejects.toMatchObject({ category: "unsupported" });
   expect(f.close).toHaveBeenCalledOnce();
 });
+it("refuses at the start when the Host would not take the spoken message on the voice socket", async () => {
+  f.supports.mockImplementation(method => method !== "assistant.request");
+  await expect(openScopedVoiceConnection(native(), binding, scope, () => true)).rejects.toMatchObject({ category: "unsupported" });
+  expect(f.close).toHaveBeenCalledOnce();
+});

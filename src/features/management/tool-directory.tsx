@@ -135,12 +135,11 @@ export function ToolDirectory({
               const Icon = tool.icon;
               const capability = tool.hostTool ? hostCapabilities[tool.hostTool] : undefined;
               const unsupported = capability && machine?.capabilities && !machine.capabilities.includes(capability);
-              const requiresProject = !projectId && (tool.hostTool || (tool.projectView && tool.id !== "sessions"));
               return (
                 <NavigationRow
                   key={tool.id}
                   label={copy(...tool.label)}
-                  detail={[unsupported ? copy("Güncelleme gerekiyor", "Update needed") : null, requiresProject ? copy("Proje gerekli", "Project required") : null].filter(Boolean).join(" · ") || undefined}
+                  detail={unsupported ? copy("Güncelleme gerekiyor", "Update needed") : undefined}
                   icon={
                     <Icon size={20} strokeWidth={1.8} color={colors.muted} />
                   }

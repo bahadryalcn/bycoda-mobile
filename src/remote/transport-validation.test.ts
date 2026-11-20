@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HOST_PROTOCOL_VERSION } from "../../../src/features/connections/model/protocol";
-import { requireMobileHostDescriptor } from "./transport-validation";
+import { isHostIdentityMismatch, requireMobileHostDescriptor } from "./transport-validation";
 
 const base = {
   protocolVersion: HOST_PROTOCOL_VERSION,
@@ -9,6 +9,13 @@ const base = {
   providers: ["codex", "claude"],
   capabilities: ["transport.ws.v2"],
 };
+
+it("classifies the Host's identity code before interpreting legacy error text", () => {
+  expect(isHostIdentityMismatch({ code: "HOST_IDENTITY_MISMATCH" }, "Re-pair required")).toBe(true);
+  expect(isHostIdentityMismatch({ code: "HOST_ERROR" }, "Host identity changed.")).toBe(false);
+  expect(isHostIdentityMismatch({}, "Host identity changed.")).toBe(true);
+  expect(isHostIdentityMismatch({}, "Provider identity changed.")).toBe(false);
+});
 
 describe("requireMobileHostDescriptor", () => {
   it("accepts a Host that gained providers this build does not know", () => {

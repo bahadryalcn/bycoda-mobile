@@ -8,6 +8,7 @@ import { SearchField, SearchToolbar } from "@/ui/search-field";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ActionMenu, Button, Notice, QueryState, Sheet, StateView, ToggleField, NavigationGroup } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { useLocale } from "@/i18n";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { Scope } from "../management/common";
@@ -102,8 +103,7 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
     const timer = setTimeout(() => dispatch({ type: "commit-search", value: search.trim() }), 350);
     return () => clearTimeout(timer);
   }, [search, dispatch, available, selected]);
-  const accessMessage = copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
-    "Record access is unavailable. Check the original computer and project connection.");
+  const accessMessage = copy(...RECORD_ACCESS_UNAVAILABLE);
   const unavailableWithoutCause = scopeCurrent && !readAllowed && !availability.error && availability.data?.available === true && getQueryPresentation(availability) === "ready";
   const accessFeedback = <>
     {!scopeCurrent || unavailableWithoutCause ? <>
@@ -135,7 +135,7 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
         {view.kind === "browse" && !connectionsOpen ? accessFeedback : null}
         {available ? <>
           {machine?.capabilities?.includes("inbox.jiraBoard.v1") ? <Button tone="quiet" flush
-            label={origin.projectId ? copy("Jira panoları", "Jira boards") : copy("Jira için proje seçin", "Select a project for Jira")}
+            label={origin.projectId ? copy("Jira panoları", "Jira boards") : copy("Jira için proje seç", "Select a project for Jira")}
             disabled={!origin.projectId} onPress={() => { if (canBrowse() && origin.projectId) setJiraBoards(true); }} /> : null}
           <SearchToolbar search={<SearchField label={copy("Ara", "Search")} value={search}
             onChangeText={value => dispatch({type:"search",value})} autoCorrect={false} placeholder={copy("Issue veya PR ara", "Search issues or PRs")} />}

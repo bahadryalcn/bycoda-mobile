@@ -3,7 +3,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { nativeHostFetch } from "../remote/native-fetch";
 import type { MobileRoute } from "../remote/types";
 import type { MobileHostRuntimeState } from "./host-runtime";
-import { useMachines } from "./machines";
+import { isMachinePending, useMachines } from "./machines";
 import {
   createRouteSelector,
   ROUTE_RECHECK_INTERVAL_MS,
@@ -33,8 +33,10 @@ export function startRouteSelection() {
   const selector = createRouteSelector({
     getMachine: () => {
       const state = useMachines.getState();
-      if (!state.hydrated || state.storageError || state.connectionPending) return null;
-      return state.machines.find((machine) => machine.id === state.activeId) ?? null;
+      if (!state.hydrated || state.storageError) return null;
+      const active = state.machines.find((machine) => machine.id === state.activeId) ?? null;
+      // Another computer's pairing or removal must not pause this computer's route checks.
+      return active && !isMachinePending(state, active.id) ? active : null;
     },
     switchRoute: (id, route) => useMachines.getState().switchRoute(id, route),
     probe: probeRoute,

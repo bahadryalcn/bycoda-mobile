@@ -993,6 +993,33 @@ describe("existing mobile facade to native WS consumer", () => {
     expect(f.fetcher).not.toHaveBeenCalled();
     expect(p.consumer.request).not.toHaveBeenCalled();
   });
+  it("keeps the request budget when the wall clock jumps forward mid-request", async () => {
+    vi.useFakeTimers();
+    let monotonic = 0;
+    const perf = vi.spyOn(performance, "now").mockImplementation(() => monotonic);
+    try {
+      const p = provider(),
+        f = transport([deviceCapability]);
+      vi.mocked(p.runtime.acquire).mockImplementationOnce(async () => {
+        // Time sync after the network returns: the wall clock moves an hour ahead.
+        vi.setSystemTime(Date.now() + 3_600_000);
+        return p.consumer;
+      });
+      vi.mocked(p.consumer.request).mockResolvedValueOnce({
+        mime: "image/png",
+        base64: "private-frame",
+        capturedAt: "2026-10-29T00:00:00.000Z",
+      } as never);
+      await f.client.request("devices.capture", { deviceId: "simulator" }, { timeoutMs: 5_000 });
+      expect(p.consumer.request).toHaveBeenCalledWith(
+        "devices.capture",
+        { deviceId: "simulator" },
+        expect.objectContaining({ timeoutMs: 5_000 }),
+      );
+    } finally {
+      perf.mockRestore();
+    }
+  });
   it("retains authenticated HTTP descriptor discovery and publishes only public bootstrap", async () => {
     const p = provider(),
       f = transport();
@@ -1127,5 +1154,67 @@ describe("existing mobile facade to native WS consumer", () => {
       .mock.calls.filter((call) => call[0] === "subscriptions.open");
     expect(opened[1]![1]!.subscriptionId).not.toBe(initial);
     expect(opened[1]![1]).not.toHaveProperty("cursor");
+  });
+});
+
+describe("safe reads during socket reconnect", () => {
+  it("waits through a short reconnect backoff and then completes on the socket", async () => {
+    const p = provider();
+    let state = "backoff";
+    let emit!: (next: string) => void;
+    p.consumer.state = () => state;
+    vi.mocked(p.consumer.onState).mockImplementation((handler) => {
+      emit = handler;
+      return () => undefined;
+    });
+    const f = transport(["transport.ws.read.v2", "transport.ws.sessions.v2"]);
+    const pending = f.client.request("projects.list");
+    await vi.waitFor(() => expect(p.consumer.onState).toHaveBeenCalled());
+    state = "ready";
+    emit("ready");
+    await expect(pending).resolves.toEqual([]);
+    expect(p.consumer.request).toHaveBeenCalledTimes(1);
+    expect(f.fetcher).not.toHaveBeenCalled();
+  });
+
+  it("fails a read whose reconnect backoff outlasts the brief window as a network error", async () => {
+    vi.useFakeTimers();
+    const p = provider();
+    p.consumer.state = () => "backoff";
+    const f = transport(["transport.ws.read.v2", "transport.ws.sessions.v2"]);
+    const pending = f.client.request("projects.list").catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(pending).resolves.toMatchObject({ kind: "network", uncertain: false });
+    expect(p.consumer.request).not.toHaveBeenCalled();
+    expect(f.fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(["blocked", "suspended", "closed"])(
+    "does not wait for a %s socket",
+    async (state) => {
+      const p = provider();
+      p.consumer.state = () => state;
+      const f = transport(["transport.ws.read.v2", "transport.ws.sessions.v2"]);
+      await expect(f.client.request("projects.list")).rejects.toMatchObject({
+        kind: state === "blocked" ? "auth" : "network",
+      });
+      expect(p.consumer.onState).not.toHaveBeenCalled();
+      expect(p.consumer.request).not.toHaveBeenCalled();
+      expect(f.fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not wait through backoff before sending a mutation", async () => {
+    const p = provider();
+    p.consumer.state = () => "backoff";
+    vi.mocked(p.consumer.request).mockRejectedValueOnce(new HostWsError("network", true));
+    const f = transport([deviceCapability]);
+    await expect(f.client.request("devices.stop", { projectId: "project" })).rejects.toMatchObject({
+      kind: "network",
+      uncertain: true,
+    });
+    expect(p.consumer.onState).not.toHaveBeenCalled();
+    expect(p.consumer.request).toHaveBeenCalledTimes(1);
+    expect(f.fetcher).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,8 @@ import {
 import type { HostDescriptor, MobileMachine, RemoteErrorKind, RemoteRequestOptions } from "./types";
 import {
   MAX_RESPONSE_BYTES,
+  isHostIdentityMismatch,
+  isUndeliveredResult,
   normalizeHostEndpoint,
   requireMobileHostDescriptor,
   utf8Bytes,
@@ -16,7 +18,7 @@ import { RemoteHostError } from "./host-error";
 import { nativeHostFetch } from "./native-fetch";
 import { encryptedLanFetch } from "./lan-fetch";
 import { assertApprovalCommand } from "../domain/approval-command";
-import { boundedResponseText } from "./response-body";
+import { boundedResponseParts } from "./response-body";
 import { mobileWsMethodEnabled, selectMobileHostTransport } from "./lan-ws";
 import { getHostWsRuntimeProvider, type HostWsConsumer } from "./ws-runtime-port";
 import { HostWsError } from "./ws-connection";
@@ -37,8 +39,26 @@ import {
   type SubscriptionEvent,
   type StreamCursor,
 } from "../../../src/shared/model/host-contracts";
+import { parseJsonParts, type JsonDecodeOptions } from "@/state/cooperative-json";
 
 const DEFAULT_TIMEOUT_MS = 12_000;
+/**
+ * Bodies from this many UTF-16 units up are decoded cooperatively, yielding to the UI thread.
+ * Smaller bodies keep the single synchronous JSON.parse, which is cheaper at that size.
+ */
+const COOPERATIVE_JSON_MIN_UNITS = 256 * 1024;
+/** Parses a complete host body; cooperative decoding stays exact JSON, with the same errors. */
+async function decodeHostJson(parts: readonly string[], options: JsonDecodeOptions): Promise<unknown> {
+  const units = parts.reduce((sum, part) => sum + part.length, 0);
+  if (units < COOPERATIVE_JSON_MIN_UNITS) return JSON.parse(parts.join(""));
+  return parseJsonParts(parts, options);
+}
+/** Longest wait for a safe read to ride out a socket reconnect backoff (the backoff itself can reach 30 s). */
+// shortcut: fixed brief window, upgrade to the runtime's actual backoff delay when it is exposed.
+const RECONNECT_WAIT_MS = 5_000;
+/** Request deadlines and durations use the monotonic clock: Date.now() jumps when the
+ * phone resyncs its clock after the network returns, which would fail or hang requests. */
+const monotonicNow = (): number => globalThis.performance.now();
 /** Access, identity and capability failures cannot be cured by reconnecting. */
 function terminalStreamError(error: unknown): boolean {
   if (error instanceof HostWsError)
@@ -120,6 +140,10 @@ export class HostTransport {
   assertCurrentAccess(): void {
     this.requireAccess();
   }
+  /** Too many targets were removed to track individually; every later request fails closed. */
+  hasLostTargetScope(): boolean {
+    return this.targetScopeInvalidated;
+  }
   private assertTargetAvailable(params: Record<string, unknown>, uncertain = false): void {
     if (
       this.targetScopeInvalidated ||
@@ -153,7 +177,7 @@ export class HostTransport {
     params: Record<string, unknown> = {},
     options: RemoteRequestOptions = {},
   ): Promise<T> {
-    const started = Date.now();
+    const started = monotonicNow();
     try {
       return await this.dispatchRequest<T>(method, params, options);
     } catch (error) {
@@ -162,7 +186,7 @@ export class HostTransport {
         logDiagnostic("warn", "mobile.rpc", "host request failed", {
           method,
           error: error instanceof RemoteHostError ? error.kind : error instanceof Error ? error.name : "unknown",
-          ms: Date.now() - started,
+          ms: Math.round(monotonicNow() - started),
         });
       throw error;
     }
@@ -253,7 +277,7 @@ export class HostTransport {
     const timeout = Number.isFinite(requestedTimeout)
       ? Math.min(method === "projects.clone" ? 630_000 : 180_000, Math.max(1_000, requestedTimeout))
       : DEFAULT_TIMEOUT_MS;
-    const deadline = Date.now() + timeout;
+    const deadline = monotonicNow() + timeout;
     const attempts = read && options.retry !== false ? 2 : 1;
     for (let attempt = 0; attempt < attempts; attempt++) {
       try {
@@ -287,8 +311,9 @@ export class HostTransport {
           !(error instanceof RemoteHostError) ||
           attempt + 1 >= attempts ||
           !["network", "timeout"].includes(error.kind) ||
+          error.hostDeadline ||
           options.signal?.aborted ||
-          Date.now() >= deadline
+          monotonicNow() >= deadline
         )
           throw error;
       }
@@ -302,6 +327,16 @@ export class HostTransport {
     if (selectMobileHostTransport(this.machine.capabilities ?? [], true) === "legacy-http") return;
     const consumer = await this.acquireWs();
     await this.waitReady(consumer, {});
+  }
+  /** Native credential handle and tunnel endpoint of the ready Host socket; undefined on legacy HTTP. */
+  async tunnelAccess(): Promise<{ credential: string; endpoint: string } | undefined> {
+    if (this.disposed || process.env.EXPO_OS === "web") return undefined;
+    if (selectMobileHostTransport(this.machine.capabilities ?? [], true) === "legacy-http")
+      return undefined;
+    const consumer = await this.acquireWs();
+    await this.waitReady(consumer, {});
+    this.requireAccess();
+    return consumer.tunnelCredential?.();
   }
   connectionState(): string {
     if (this.disposed) return "closed";
@@ -636,7 +671,7 @@ export class HostTransport {
               { supportedProviders: [...REMOTE_PROVIDERS] },
               true,
               { retry: false },
-              Date.now() + DEFAULT_TIMEOUT_MS,
+              monotonicNow() + DEFAULT_TIMEOUT_MS,
             );
             this.requireAccess();
             const descriptor = requireMobileHostDescriptor(raw);
@@ -670,12 +705,16 @@ export class HostTransport {
     const state = consumer.state();
     if (state === "ready") return Promise.resolve();
     if (options.signal?.aborted) return Promise.reject(new HostWsError("cancelled"));
-    if (state !== "connecting" && state !== "idle")
+    // Suspended means access is off (lock or background): waiting there would outlive the
+    // authority that admitted this read, so it fails at once. Blocked and closed never recover here.
+    if (!["connecting", "idle", "backoff"].includes(state))
       return Promise.reject(new HostWsError(state === "blocked" ? "authentication" : "network"));
     return new Promise((resolve, reject) => {
       let unsubscribe: () => void = () => undefined;
+      let reconnectWindow: ReturnType<typeof setTimeout> | undefined;
       const finish = (error?: HostWsError) => {
         clearTimeout(timer);
+        clearTimeout(reconnectWindow);
         unsubscribe();
         options.signal?.removeEventListener("abort", abort);
         error ? reject(error) : resolve();
@@ -685,11 +724,17 @@ export class HostTransport {
         () => finish(new HostWsError("deadline")),
         Math.min(DEFAULT_TIMEOUT_MS, options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
       );
+      // A short reconnect backoff is waited out; a longer one still fails as a network error.
+      if (state === "backoff")
+        reconnectWindow = setTimeout(
+          () => finish(new HostWsError("network")),
+          RECONNECT_WAIT_MS,
+        );
       options.signal?.addEventListener("abort", abort, { once: true });
       try {
         unsubscribe = consumer.onState((next) => {
           if (next === "ready") finish();
-          else if (["blocked", "backoff", "suspended", "closed"].includes(next))
+          else if (["blocked", "suspended", "closed"].includes(next))
             finish(new HostWsError(next === "blocked" ? "authentication" : "network"));
         });
       } catch {
@@ -711,7 +756,7 @@ export class HostTransport {
     const timeout = Number.isFinite(requested)
       ? Math.max(1_000, Math.min(method === "projects.clone" ? 630_000 : 180_000, requested))
       : DEFAULT_TIMEOUT_MS;
-    const deadline = Date.now() + timeout;
+    const deadline = monotonicNow() + timeout;
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -746,7 +791,7 @@ export class HostTransport {
       // when connecting; there is no hidden reconnect command outbox.
       if (definition.retry === "safe-query")
         await this.waitReady(consumer, {
-          timeoutMs: Math.max(1, deadline - Date.now()),
+          timeoutMs: Math.max(1, deadline - monotonicNow()),
           signal: controller.signal,
         });
       if (controller.signal.aborted) throw new HostWsError(timedOut ? "deadline" : "cancelled");
@@ -755,11 +800,11 @@ export class HostTransport {
       if (consumer.state() === "ready" && !consumer.supports(method))
         return await this.requestHttp<T>(legacyMethod, params, {
           ...options,
-          timeoutMs: Math.max(1, deadline - Date.now()),
+          timeoutMs: Math.max(1, deadline - monotonicNow()),
           signal: controller.signal,
         });
       const result = await consumer.request<T>(method, params, {
-        timeoutMs: Math.max(1, deadline - Date.now()),
+        timeoutMs: Math.max(1, deadline - monotonicNow()),
         signal: controller.signal,
       });
       this.requireAccess(definition.retry !== "safe-query");
@@ -788,7 +833,14 @@ export class HostTransport {
                           )
                         ? "host"
                         : "network";
-        const failure = new RemoteHostError(this.machine.id, kind, error.message, error.uncertain);
+        const failure = new RemoteHostError(
+          this.machine.id,
+          kind,
+          error.message,
+          error.uncertain,
+          error.hostDeadline,
+          error.code,
+        );
         // A busy or not-yet-ready Host answers again shortly; reads retry quietly.
         if (error.category === "overload" || error.category === "unavailable")
           Object.assign(failure, { transient: true });
@@ -825,7 +877,7 @@ export class HostTransport {
         timedOut = true;
         controller.abort();
       },
-      Math.max(0, deadline - Date.now()),
+      Math.max(0, deadline - monotonicNow()),
     );
     try {
       if (controller.signal.aborted)
@@ -894,9 +946,9 @@ export class HostTransport {
       });
       const unauthorized = response.status === 401;
       const authMessage = "This device credential is invalid or revoked. Pair the computer again.";
-      let raw: string;
+      let parts: string[];
       try {
-        raw = await boundedResponseText(response, MAX_RESPONSE_BYTES, () => {
+        parts = await boundedResponseParts(response, MAX_RESPONSE_BYTES, () => {
           controller.abort();
           return new RemoteHostError(
             this.machine.id,
@@ -923,8 +975,13 @@ export class HostTransport {
           : "protocol";
       let value: unknown;
       try {
-        value = JSON.parse(raw);
-      } catch {
+        value = await decodeHostJson(parts, {
+          signal: controller.signal,
+          assertCurrent: () => this.requireAccess(!read),
+        });
+      } catch (error) {
+        // Access, timeout and cancellation keep their own classification; only bad JSON is invalid.
+        if (error instanceof RemoteHostError || controller.signal.aborted) throw error;
         throw new RemoteHostError(
           this.machine.id,
           invalidKind,
@@ -965,16 +1022,22 @@ export class HostTransport {
       }
       if (typeof envelope.error === "string") {
         const message = safeHostMessage(envelope.error, credential);
-        const kind: RemoteErrorKind = /identity changed/i.test(message)
+        const kind: RemoteErrorKind = isHostIdentityMismatch(envelope, message)
           ? "identity"
           : /Unsupported host method|incompatible protocol/i.test(message)
             ? "unsupported"
             : "host";
+        // The command ran but its result did not fit one response: only the receipt settles it.
+        const undelivered = !read && isUndeliveredResult(envelope);
         throw new RemoteHostError(
           this.machine.id,
           kind,
-          admittedUnknown ? `${message} ${unknownMessage}` : message,
-          admittedUnknown || (!read && response.status >= 500),
+          admittedUnknown
+            ? `${message} ${unknownMessage}`
+            : undelivered
+              ? `${message} The command ran; its outcome is unknown. Do not repeat it before checking.`
+              : message,
+          admittedUnknown || undelivered || (!read && response.status >= 500),
         );
       }
       if (admittedUnknown) throw new RemoteHostError(this.machine.id, "host", unknownMessage, true);

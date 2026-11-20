@@ -1,0 +1,28 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "连接到你私有网络中的 Bycoda 电脑。",
+    "NSMicrophoneUsageDescription": "与你的 Bycoda 助手对话。语音在已连接的电脑上处理。",
+    "NSCameraUsageDescription": "允许 Bycoda 扫描电脑上的配对二维码。",
+    "NSFaceIDUsageDescription": "使用 Face ID 安全访问你的 Bycoda 电脑。",
+    "NSPhotoLibraryUsageDescription": "允许 Bycoda 访问照片，以便将照片附加到消息中。",
+    "NSPhotoLibraryAddUsageDescription": "允许将图片保存到照片。",
+    "Localizable.strings": {
+      "Active sessions": "活跃会话",
+      "Needs attention": "需要处理",
+      "Usage limits": "用量限制",
+      "Session activity": "会话活动",
+      "Running and waiting agent sessions.": "正在运行和等待中的会话。",
+      "Sessions waiting for you or failed.": "等待你处理或已失败的会话。",
+      "Codex and Claude session and weekly limit usage.": "Codex 和 Claude 的会话及每周用量限制。",
+      "Live status of running sessions.": "正在运行的会话的实时状态。"
+    }
+  },
+  "android": {
+    "active_sessions_display_name": "活跃会话",
+    "active_sessions_description": "正在运行和等待中的会话。",
+    "needs_attention_display_name": "需要处理",
+    "needs_attention_description": "等待你处理或已失败的会话。",
+    "usage_limits_display_name": "用量限制",
+    "usage_limits_description": "Codex 和 Claude 的会话及每周用量限制。"
+  }
+}

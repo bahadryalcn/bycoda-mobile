@@ -104,7 +104,12 @@ type MachineState = {
   language: MobileLanguage;
   hydrated: boolean;
   storageError: string | null;
+  /** Any connection change is running; screens that edit connections gate on this. */
   connectionPending: boolean;
+  /** Computers whose own connection (credential, route or removal) is changing right now. */
+  pendingMachineIds: readonly string[];
+  /** A change that is not tied to one computer is running; it affects every computer. */
+  accountPending: boolean;
   hydrate(): Promise<void>;
   saveMachine(machine: MobileMachine, token: string): Promise<void>;
   /** Makes another saved route of the same computer the active one. */
@@ -119,10 +124,29 @@ let persistence = Promise.resolve();
 let hydration: Promise<void> | null = null;
 let mutations = Promise.resolve();
 let pendingMutations = 0;
+let pendingAccountMutations = 0;
+function publishPending() {
+  useMachines.setState({
+    connectionPending: pendingMutations > 0,
+    accountPending: pendingAccountMutations > 0,
+    pendingMachineIds: [...changingCredentials.keys()],
+  });
+}
+/**
+ * Whether this computer's connection must be treated as changing: its own mutation is running, or
+ * an account-wide one is. A change to another computer never makes this one pending.
+ */
+export function isMachinePending(
+  state: Pick<MachineState, "accountPending" | "pendingMachineIds">,
+  id: string | null | undefined,
+): boolean {
+  return state.accountPending || (id != null && state.pendingMachineIds.includes(id));
+}
 function serializeMutation<T>(id: string | null, operation: () => Promise<T>): Promise<T> {
   if (id !== null) changingCredentials.set(id, (changingCredentials.get(id) ?? 0) + 1);
+  else pendingAccountMutations++;
   pendingMutations++;
-  useMachines.setState({ connectionPending: true });
+  publishPending();
   const task = mutations
     .catch(() => undefined)
     .then(operation)
@@ -131,9 +155,9 @@ function serializeMutation<T>(id: string | null, operation: () => Promise<T>): P
         const remaining = (changingCredentials.get(id) ?? 1) - 1;
         if (remaining) changingCredentials.set(id, remaining);
         else changingCredentials.delete(id);
-      }
+      } else pendingAccountMutations--;
       pendingMutations--;
-      useMachines.setState({ connectionPending: pendingMutations > 0 });
+      publishPending();
     });
   mutations = task.then(
     () => undefined,
@@ -174,6 +198,8 @@ export const useMachines = create<MachineState>((set, get) => ({
   hydrated: false,
   storageError: null,
   connectionPending: false,
+  pendingMachineIds: [],
+  accountPending: false,
   async hydrate() {
     if (pendingMutations) {
       await mutations;

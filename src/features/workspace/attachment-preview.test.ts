@@ -16,6 +16,7 @@ const state = vi.hoisted(() => {
     kind: "success", confirm: vi.fn(), load: vi.fn(async () => ({ uri: "file:///synthetic/report.txt", name: "Report.txt", mimeType: "text/plain" })) };
 });
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
+vi.mock("@/state/data-saver", () => ({ useDataSaverActive: () => false }));
 vi.mock("lucide-react-native/icons/file", () => ({ default: () => null }));
 vi.mock("expo-image", () => ({ Image: ({ contentFit, accessibilityLabel, onError }: any) => { state.imageFail = onError; return h("span", { "data-image-fit": contentFit }, accessibilityLabel); } }));
 vi.mock("lucide-react-native/icons/file-text", () => ({ default: () => null }));

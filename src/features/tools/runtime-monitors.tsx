@@ -1,25 +1,27 @@
 import { useRef, useState } from "react";
+import { View } from "react-native";
 import { useHostMutation, useHostQuery, useHostReadActive } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
 import {
   Badge,
   Body,
-  Disclosure,
+  Button,
   IconButton,
   Row,
   FormActions,
   Field,
   MutationState,
   NavigationGroup,
-  NavigationRow,
   Notice,
   QueryState,
+  Separator,
   Sheet,
   StateView,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
+import { space } from "@/ui/tokens";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import {
   monitorUrl,
@@ -27,6 +29,8 @@ import {
   uncertainMonitorWrite,
   type RuntimeMonitor,
 } from "./runtime-monitor-model";
+
+const MAX_MONITORS = 8;
 
 export function RuntimeMonitors({
   projectId,
@@ -38,7 +42,7 @@ export function RuntimeMonitors({
   onClose: () => void;
 }) {
   const copy = useCopy();
-  const { colors } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const machine = useActiveMachine();
   const [opening] = useState(() => ({
     projectId,
@@ -149,7 +153,7 @@ export function RuntimeMonitors({
     <Sheet
       visible
       title={copy("Günlük izleyicileri", "Log monitors")}
-      size={(query.data?.length ?? 0) > 2 ? "form" : "compact"}
+      size="form"
       dirty={!!url.trim()}
       dismissible={!busy}
       onClose={onClose}
@@ -182,7 +186,11 @@ export function RuntimeMonitors({
       )}
       <Row>
         <Body muted style={{ flex: 1, minWidth: 0 }}>
-          {copy("Etkin izleyiciler", "Active monitors")}
+          {query.data
+            ? copy("Etkin izleyiciler: {p0} / 8", "Active monitors: {p0} / 8", {
+                p0: query.data.length,
+              })
+            : copy("Etkin izleyiciler", "Active monitors")}
         </Body>
         <IconButton
           label={copy("Yenile", "Refresh")}
@@ -195,14 +203,7 @@ export function RuntimeMonitors({
           <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
         </IconButton>
       </Row>
-      {query.data ? (
-        <Body muted>
-          {copy("Etkin izleyiciler: {p0} / 8", "Active monitors: {p0} / 8", {
-            p0: query.data.length,
-          })}
-        </Body>
-      ) : null}
-      {query.data && query.data.length >= 8 ? (
+      {query.data && query.data.length >= MAX_MONITORS ? (
         <Notice
           message={copy(
             "8 izleyici sınırına ulaşıldı. Yeni bir izleyici başlatmak için listeden birini durdur.",
@@ -220,28 +221,40 @@ export function RuntimeMonitors({
         />
       ) : null}
       <NavigationGroup>
-        {(validScope ? (query.data ?? []) : []).map((monitor) => (
-          <NavigationRow
-            key={monitor.id}
-            label={monitor.url}
-            supporting={
-              <Row>
-                <Badge
-                  label={
-                    monitor.sourceId
-                      ? copy("Çalışıyor", "Running")
-                      : copy("Başlatılıyor", "Starting")
-                  }
-                  tone={monitor.sourceId ? "active" : "default"}
-                />
-              </Row>
-            }
-            disabled={disabled}
-            onPress={() => {
-              setError(undefined);
-              setIntent({ monitor });
-            }}
-          />
+        {(validScope ? (query.data ?? []) : []).map((monitor, index, rows) => (
+          // Rows are not pressable: the explicit Stop button is the only path to the stop confirmation.
+          <View key={monitor.id}>
+            <Row style={{ alignItems: "center", gap: space.sm, paddingHorizontal: space.sm, paddingVertical: space.sm }}>
+              <View style={[uiStyles.grow, { gap: space.xxs }]}>
+                <Body selectable style={uiStyles.label}>
+                  {monitor.url}
+                </Body>
+                <Row>
+                  <Badge
+                    label={
+                      monitor.sourceId
+                        ? copy("Çalışıyor", "Running")
+                        : copy("Başlatılıyor", "Starting")
+                    }
+                    tone={monitor.sourceId ? "active" : "default"}
+                  />
+                </Row>
+              </View>
+              <Button
+                label={copy("Durdur", "Stop")}
+                accessibilityLabel={copy("{p0} izleyicisini durdur", "Stop monitor {p0}", {
+                  p0: monitor.url,
+                })}
+                tone="danger"
+                disabled={disabled}
+                onPress={() => {
+                  setError(undefined);
+                  setIntent({ monitor });
+                }}
+              />
+            </Row>
+            {index < rows.length - 1 ? <Separator /> : null}
+          </View>
         ))}
       </NavigationGroup>
       <Field
@@ -259,14 +272,9 @@ export function RuntimeMonitors({
         }}
       />
       {!intent ? (
-        <Disclosure label={copy("Ayrıntılar", "Details")}>
-          <Body muted>{consequence}</Body>
-        </Disclosure>
-      ) : null}
-      {!intent ? (
         <FormActions
           submitLabel={copy("İzleyici başlat", "Start monitor")}
-          disabled={disabled || !url.trim() || (query.data?.length ?? 0) >= 8}
+          disabled={disabled || !url.trim() || (query.data?.length ?? 0) >= MAX_MONITORS}
           onSubmit={() => {
             try {
               setIntent({ url: monitorUrl(url) });

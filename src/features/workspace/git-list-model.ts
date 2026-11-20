@@ -12,7 +12,7 @@ export function gitListRows(
   filter: GitListFilter,
 ): GitListRow[] {
   const search = query.trim().replaceAll("\\", "/").toLocaleLowerCase();
-  return (["unstaged", "staged"] as const).flatMap((group): GitListRow[] => {
+  return (["staged", "unstaged"] as const).flatMap((group): GitListRow[] => {
     if (filter !== "all" && filter !== group) return [];
     const matches = files.filter(
       (file) =>

@@ -1,0 +1,28 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "プライベートネットワーク上の Bycoda コンピュータに接続します。",
+    "NSMicrophoneUsageDescription": "Bycoda アシスタントに話しかけます。音声は接続先のコンピュータで処理されます。",
+    "NSCameraUsageDescription": "ペアリング用の QR コードをコンピュータでスキャンするために Bycoda がカメラを使用します。",
+    "NSFaceIDUsageDescription": "Face ID で Bycoda コンピュータに安全にアクセスするために使用します。",
+    "NSPhotoLibraryUsageDescription": "Bycoda のメッセージに添付する写真にアクセスするために使用します。",
+    "NSPhotoLibraryAddUsageDescription": "画像を写真に保存するために使用します。",
+    "Localizable.strings": {
+      "Active sessions": "アクティブなセッション",
+      "Needs attention": "要対応",
+      "Usage limits": "使用量の上限",
+      "Session activity": "セッションのアクティビティ",
+      "Running and waiting agent sessions.": "実行中と待機中のセッション。",
+      "Sessions waiting for you or failed.": "対応が必要なセッションと失敗したセッション。",
+      "Codex and Claude session and weekly limit usage.": "Codex と Claude のセッションおよび週間上限の使用量。",
+      "Live status of running sessions.": "実行中のセッションのライブ状態。"
+    }
+  },
+  "android": {
+    "active_sessions_display_name": "アクティブなセッション",
+    "active_sessions_description": "実行中と待機中のセッション。",
+    "needs_attention_display_name": "要対応",
+    "needs_attention_description": "対応が必要なセッションと失敗したセッション。",
+    "usage_limits_display_name": "使用量の上限",
+    "usage_limits_description": "Codex と Claude のセッションおよび週間上限の使用量。"
+  }
+}

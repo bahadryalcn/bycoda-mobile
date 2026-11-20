@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { Stack } from "expo-router";
 import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
@@ -6,7 +6,7 @@ import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { HostProject } from "@/domain/types";
-import { ActionMenu, Badge, Body, CodePanel, CodeText, Empty, ErrorText, IconButton, NavigationGroup, NavigationRow, Notice, QueryState, Row, ScreenList, SearchField, SearchToolbar, SelectField, Sheet, StatusText, ToggleField } from "@/ui/primitives";
+import { ActionMenu, Badge, Body, CodePanel, CodeText, Empty, ErrorText, IconButton, NavigationGroup, Notice, QueryState, Row, ScreenList, SearchField, SearchToolbar, SelectField, Sheet, ToggleField } from "@/ui/primitives";
 import { MessageCode } from "@/ui/message-code";
 import { useCopy } from "@/ui/copy";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
@@ -20,7 +20,19 @@ import type {
   RuntimeLogSource,
 } from "./types";
 import { RuntimeMonitors } from "./runtime-monitors";
-import { LOG_SEARCH_LIMIT, logDetails, logSearch } from "./runtime-log-presentation";
+import { RuntimeLogRow } from "./runtime-log-row";
+import {
+  LOG_ENTRY_LIMIT,
+  LOG_SEARCH_LIMIT,
+  advanceLogPoll,
+  initialLogPollState,
+  logDetails,
+  logLevelTone,
+  logLocation,
+  logPollInterval,
+  logSearch,
+  visibleLogEntries,
+} from "./runtime-log-presentation";
 
 export function RuntimeLogsScreen({ project }: { project: HostProject }) {
   const { colors, uiStyles } = useMobileTheme();
@@ -60,24 +72,37 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
     { projectId: project.id },
     { interval: autoRefresh ? 15_000 : undefined },
   );
+  const [poll, setPoll] = useState(initialLogPollState);
   const logs = useHostQuery<RuntimeLogSnapshot>(
     ["runtime-logs", project.id],
     "runtimeLogs.read",
     {
       projectId: project.id,
-      limit: 200,
+      limit: LOG_ENTRY_LIMIT,
       ...(source ? { sourceId: source } : {}),
       ...(level ? { levels: [level] } : {}),
       ...(query ? { search: query } : {}),
     },
-    { interval: autoRefresh ? 5_000 : undefined, enabled: !searchInput.tooLong },
+    { interval: autoRefresh ? logPollInterval(poll) : undefined, enabled: !searchInput.tooLong },
   );
+  // Slow the poll once consecutive reads bring nothing new; any change, filter or key switch resets it.
+  useEffect(() => {
+    setPoll((current) => advanceLogPoll(current, logs.data));
+  }, [logs.dataUpdatedAt, logs.data === undefined]);
   const refresh = usePullRefresh(() => Promise.all([...(searchInput.tooLong ? [] : [logs.refetch()]), sources.refetch()]));
   // Validate host scope before displaying data, including cached or stale responses.
-  const entries = (searchInput.tooLong ? [] : (logs.data?.entries ?? []))
-    .filter((entry) => entry.projectId === project.id)
-    .reverse();
-  const projectSources = (sources.data ?? []).filter((entry) => entry.projectId === project.id);
+  // Keyed on the response so keystrokes and unchanged polls keep the same array and rows.
+  const logEntries = logs.data?.entries;
+  const entries = useMemo(
+    () => (searchInput.tooLong ? visibleLogEntries(undefined, project.id) : visibleLogEntries(logEntries, project.id)),
+    [logEntries, project.id, searchInput.tooLong],
+  );
+  const sourceData = sources.data;
+  const projectSources = useMemo(
+    () => (sourceData ?? []).filter((entry) => entry.projectId === project.id),
+    [sourceData, project.id],
+  );
+  const sourceLabels = useMemo(() => new Map(projectSources.map((entry) => [entry.id, entry.label])), [projectSources]);
   const levelOptions = [
     { value: "", label: copy("Tüm seviyeler", "All levels") },
     { value: "error", label: copy("Hata", "Error") },
@@ -85,6 +110,15 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
     { value: "info", label: copy("Bilgi", "Info") },
     { value: "debug", label: "Debug" },
   ] as const;
+  const levelLabels = new Map<string, string>(levelOptions.map((option) => [option.value, option.label]));
+  const machineRef = useRef(machine);
+  // Keep the latest machine readable by the stable row callback without recreating it per render.
+  useEffect(() => {
+    machineRef.current = machine;
+  });
+  const selectEntry = useCallback((entry: RuntimeLogEntry) => {
+    setSelected({ entry, reviewed: reviewedMachine(machineRef.current) });
+  }, []);
   const unavailableSources = projectSources.filter((entry) => !entry.available);
   const sourceIssues = <IssueSummary issues={unavailableSources.map(entry => [entry.label, entry.reason].filter(Boolean).join(" · "))}
     retrying={sources.isFetching} onRetry={() => { if (!sources.isFetching) void sources.refetch(); }} />;
@@ -125,8 +159,8 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
               onPress={() => setFilterDraft({ source, level, autoRefresh })}
             />} />
             <AppliedFilters filters={[
-              source && `${copy("Kaynak", "Source")}: ${projectSources.find(entry => entry.id === source)?.label ?? source}`,
-              level && `${copy("Seviye", "Level")}: ${levelOptions.find(option => option.value === level)?.label ?? level}`,
+              source && `${copy("Kaynak", "Source")}: ${sourceLabels.get(source) ?? source}`,
+              level && `${copy("Seviye", "Level")}: ${levelLabels.get(level) ?? level}`,
               !autoRefresh && `${copy("Otomatik yenile", "Auto refresh")}: ${copy("Kapalı", "Off")}`,
             ]} />
             {searchInput.tooLong ? <ErrorText error={copy(
@@ -153,27 +187,14 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
 
           </>
         }
-        renderItem={({ item: entry }) => {
-          const sourceLabel = projectSources.find((item) => item.id === entry.sourceId)?.label ?? entry.source;
-          const levelLabel = levelOptions.find((option) => option.value === entry.level)?.label ?? entry.level;
-          const time = stamp(entry.timestamp);
-          return (
-          <NavigationRow
-            label={entry.message}
-            labelLines={2}
-            detail={sourceLabel}
-            metadata={time}
-            accessibilityLabel={[entry.message, levelLabel, time, sourceLabel].filter(Boolean).join(". ")}
-            supporting={<StatusText
-                label={levelLabel}
-                tone={
-                  entry.level === "error" ? "danger" : entry.level === "warn" ? "warning" : "default"
-                }
-              />}
-            onPress={() => setSelected({ entry, reviewed: reviewedMachine(machine) })}
+        renderItem={({ item: entry }) => (
+          <RuntimeLogRow
+            entry={entry}
+            sourceLabel={sourceLabels.get(entry.sourceId) ?? entry.source}
+            levelLabel={levelLabels.get(entry.level) ?? entry.level}
+            onSelect={selectEntry}
           />
-          );
-        }}
+        )}
       />
       {showMonitors ? (
         <RuntimeMonitors projectId={project.id} projectName={project.name} onClose={() => setShowMonitors(false)} />
@@ -234,14 +255,8 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
                 {stamp(selectedEntry.timestamp)}
               </Body>
               <Badge
-                label={levelOptions.find((option) => option.value === selectedEntry.level)?.label ?? selectedEntry.level}
-                tone={
-                  selectedEntry.level === "error"
-                    ? "danger"
-                    : selectedEntry.level === "warn"
-                      ? "warning"
-                      : "default"
-                }
+                label={levelLabels.get(selectedEntry.level) ?? selectedEntry.level}
+                tone={logLevelTone(selectedEntry.level)}
               />
             </Row>
             <CodePanel horizontal={false}>
@@ -265,7 +280,7 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
               <Body
                 mono
                 muted
-              >{`${selectedEntry.location.file}:${selectedEntry.location.line ?? ""}:${selectedEntry.location.column ?? ""}`}</Body>
+              >{logLocation(selectedEntry.location)}</Body>
             ) : null}
           </>
         ) : (

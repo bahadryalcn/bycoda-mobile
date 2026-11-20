@@ -69,7 +69,9 @@ export function SegmentedRow<T extends string>({
     <SettingRowFrame>
       <View style={{ flexDirection: "row", alignItems: "center", gap: gapIcon }}>
         {icon}
-        <Body style={[uiStyles.label, { flexShrink: 1 }]}>{label}</Body>
+        {/* The label takes the free width: shrink-wrapped, Samsung's font measured it one word
+            narrow, wrapped the last word and clipped that second line. */}
+        <Body style={[uiStyles.label, uiStyles.grow]}>{label}</Body>
         {info.button}
       </View>
       {info.panel}

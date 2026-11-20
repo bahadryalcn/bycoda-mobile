@@ -4,7 +4,6 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AutomationsScreen } from "./automations-screen";
 import { StewardsScreen } from "./stewards-screen";
-import { SocialScreen } from "./social-screen";
 import { TasksScreen } from "./tasks-screen";
 import { CrewsScreen } from "./crews-screen";
 
@@ -22,25 +21,11 @@ const state = vi.hoisted(() => ({
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("expo-router", () => ({ router: { navigate: state.navigate }, useLocalSearchParams: () => ({}) }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
-// Screen feedback consumes a workspace snapshot; transport/crypto have their own tests.
-vi.mock("./social/use-workspace-query", () => ({
-  useSocialWorkspace: () => ({
-    query: {
-      data: state.data,
-      isSuccess: true,
-      isFetching: false,
-      error: null,
-    },
-    state: state.data,
-    page: undefined,
-    collection: "threads",
-    missingEnvironment: false,
-  }),
-}));
 vi.mock("react-native", () => ({ View: "div" }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/play", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/power", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/pause", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
@@ -115,16 +100,6 @@ vi.mock("./stewards/steward-editor", () => ({
   StewardEditor: ({ initial }: { initial: { id: string } }) =>
     createElement("span", null, `editing:${initial.id}`),
 }));
-vi.mock("./social/accounts-panel", () => ({ AccountsPanel: () => null }));
-vi.mock("./social/threads-panel", () => ({ ThreadsPanel: () => null }));
-vi.mock("./social/thread-editor", () => ({ ThreadEditor: () => null }));
-vi.mock("./social/draft-editor", () => ({ DraftEditor: () => null }));
-vi.mock("./social/campaign-editor", () => ({ CampaignEditor: () => null }));
-vi.mock("./social/rule-editor", () => ({ RuleEditor: () => null }));
-vi.mock("./social/drafts-panel", () => ({ DraftsPanel: () => null }));
-vi.mock("./social/campaigns-panel", () => ({ CampaignsPanel: () => null }));
-vi.mock("./social/rules-panel", () => ({ RulesPanel: () => null }));
-vi.mock("./social/jobs-panel", () => ({ JobsPanel: () => null }));
 vi.mock("@/ui/record-card", () => ({
   RecordCard: ({ title, children }: { title: string; children?: ReactNode }) =>
     createElement("section", { "data-record": title }, title, children),
@@ -380,56 +355,6 @@ it("opens the existing steward instead of permitting a duplicate", async () => {
   expect(container.textContent).toContain("editing:existing");
   expect(state.mutate).not.toHaveBeenCalled();
 });
-it.each([
-  {
-    hostOnline: true,
-    stopped: false,
-    label: "Computer online",
-    stoppedLabel: false,
-  },
-  {
-    hostOnline: true,
-    stopped: true,
-    label: "Computer online",
-    stoppedLabel: true,
-  },
-  {
-    hostOnline: false,
-    stopped: false,
-    label: "Computer offline",
-    stoppedLabel: false,
-  },
-  {
-    hostOnline: false,
-    stopped: true,
-    label: "Computer offline",
-    stoppedLabel: true,
-  },
-])(
-  "keeps social connectivity, stop state and send authorization independent: $hostOnline/$stopped",
-  async ({ hostOnline, stopped, label, stoppedLabel }) => {
-    state.data = {
-      hostOnline,
-      stopped,
-      sendingEnabled: true,
-      threads: [],
-      drafts: [],
-      accounts: [],
-      campaigns: [],
-      rules: [],
-      jobs: [],
-    };
-    await render(SocialScreen);
-    expect(container.textContent).toContain(label);
-    expect(container.textContent?.includes("Sending stopped")).toBe(
-      stoppedLabel,
-    );
-    expect(container.textContent).toContain("Sending authorized");
-    expect(container.textContent).not.toContain("Running");
-    expect(state.mutate).not.toHaveBeenCalled();
-  },
-);
-
 it.each(["stewards.save", "stewards.runNow", "stewards.delete"])(
   "keeps %s feedback with its visible record and recovers after removal",
   async (method) => {
@@ -504,14 +429,5 @@ it("routes crew deletion feedback by record kind as well as id and keeps recover
   expect(container.textContent?.match(/Member deletion failed/g)).toHaveLength(
     1,
   );
-  expect(state.mutate).not.toHaveBeenCalled();
-});
-
-
-it("retains social operation recovery while the workspace snapshot is unavailable", async () => {
-  state.data = null;
-  state.mutations["social.request"] = { variables: { action: "jobs.retry", input: { id: "missing-job" } }, error: new Error("Job retry failed") };
-  await render(SocialScreen);
-  expect(container.textContent?.match(/Job retry failed/g)).toHaveLength(1);
   expect(state.mutate).not.toHaveBeenCalled();
 });

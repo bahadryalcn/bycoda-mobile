@@ -1,3 +1,4 @@
+import { AssistantCallError } from "./assistant-call-error";
 import type { AssistantVoiceTarget } from "./assistant-voice";
 
 export type AssistantCallPhase = "idle" | "listening" | "sending" | "speaking" | "muted";
@@ -50,7 +51,11 @@ export class AssistantCallLoop {
     this.muted = value; this.epoch++;
     this.wake?.(); this.wake = undefined;
     if (value) { this.dependencies.cancelAudio(); this.dependencies.state("muted", this.selected); }
-    else if (!this.pending) this.launch();
+    else {
+      // Muted time is not listening time: the idle window restarts with the owner's explicit unmute, as the native timer does.
+      this.lastUtteranceAt = Date.now();
+      if (!this.pending) this.launch();
+    }
   }
   /** Stops the reply being spoken and returns to listening; the sent message and its reply stay in the conversation. */
   interrupt(): boolean {
@@ -92,7 +97,7 @@ export class AssistantCallLoop {
         if (!current()) return;
         if (!text) {
           // Match the native idle safety: empty captures do not count as owner speech or reset its wall-clock deadline.
-          if (Date.now() - this.lastUtteranceAt >= 180000) throw new Error("No speech was detected. Start the call again when ready.");
+          if (Date.now() - this.lastUtteranceAt >= 180000) throw new AssistantCallError("no-speech");
           await this.pause();
           continue;
         }

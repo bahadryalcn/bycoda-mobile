@@ -1,0 +1,28 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "Connectez-vous à votre ordinateur Bycoda sur votre réseau privé.",
+    "NSMicrophoneUsageDescription": "Parlez à votre assistant Bycoda. L’audio est traité sur votre ordinateur connecté.",
+    "NSCameraUsageDescription": "Autorisez Bycoda à scanner le QR code d’appairage sur votre ordinateur.",
+    "NSFaceIDUsageDescription": "Utilisez Face ID pour accéder en toute sécurité à vos ordinateurs Bycoda.",
+    "NSPhotoLibraryUsageDescription": "Autorisez Bycoda à accéder à vos photos pour les joindre à vos messages.",
+    "NSPhotoLibraryAddUsageDescription": "Autorisez l’enregistrement d’images dans vos photos.",
+    "Localizable.strings": {
+      "Active sessions": "Séances actives",
+      "Needs attention": "Action requise",
+      "Usage limits": "Limites d’utilisation",
+      "Session activity": "Activité des séances",
+      "Running and waiting agent sessions.": "Séances en cours et en attente.",
+      "Sessions waiting for you or failed.": "Séances qui attendent votre réponse ou ont échoué.",
+      "Codex and Claude session and weekly limit usage.": "Utilisation des limites de séance et hebdomadaires de Codex et Claude.",
+      "Live status of running sessions.": "État en direct des séances en cours."
+    }
+  },
+  "android": {
+    "active_sessions_display_name": "Séances actives",
+    "active_sessions_description": "Séances en cours et en attente.",
+    "needs_attention_display_name": "Action requise",
+    "needs_attention_description": "Séances qui attendent votre réponse ou ont échoué.",
+    "usage_limits_display_name": "Limites d’utilisation",
+    "usage_limits_description": "Utilisation des limites de séance et hebdomadaires de Codex et Claude."
+  }
+}

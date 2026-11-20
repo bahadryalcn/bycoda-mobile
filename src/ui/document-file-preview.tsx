@@ -6,6 +6,7 @@ import { useHostClient } from "@/state/queries";
 import { Body, CodePanel, CodeText, Disclosure, Empty, ErrorText, FormActions, Loading, NavigationRow, ScreenList, SearchField, Sheet } from "./primitives";
 import { space } from "./tokens";
 import { useCopy } from "./copy";
+import { RECORD_ACCESS_UNAVAILABLE } from "./record-access-copy";
 import { isBinaryDocument, mediaQueryKey, projectMediaQueryKey, resolveMediaPath, type MessageContext, type OpenDocument } from "./media-policy";
 import type { HostFileEntry } from "@/remote/types";
 import { DocumentContent } from "./document-content";
@@ -89,7 +90,7 @@ function ScopedFilePreviewBody({ path, context, onClose }: ScopedFilePreviewProp
       feedback={selectedQuery.error ? <ErrorText error={selectedQuery.error} /> : undefined}
       busy={selectedQuery.isFetching} cancelLabel={copy("Kapat", "Close")} onCancel={close} allowCancelWhileBusy />;
   const status = !scope.ready || selectedQuery.isFetching && !selectedQuery.error ? <Loading /> : null;
-  const unavailable = <Empty compact={false} illustration="unreachable" title={copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />;
+  const unavailable = <Empty compact={false} illustration="unreachable" title={copy(...RECORD_ACCESS_UNAVAILABLE)} />;
   return <Sheet visible title={documentDisplayName(path)} size="full" scroll={!folder} onClose={close} footer={footer}>
     {!resolved ? <Body>{copy("Dosya bu projenin dışında.", "This file is outside this project.")}</Body>
       : !scope.available ? !scope.ready ? <Loading /> : unavailable
@@ -100,7 +101,7 @@ function ScopedFilePreviewBody({ path, context, onClose }: ScopedFilePreviewProp
           value={content.access.allowed ? search : ""} editable={content.access.allowed && !currentChild} onChangeText={changeSearch} /></View>
         <PrivateContentAccessProvider value={content.access}><ScopedDirectoryList {...position.listProps} context={context} data={rows}
           header={<View style={{ gap: space.sm }}>{status}{content.access.allowed ? <ReaderContext context={context} path={resolved} /> : null}</View>} onOpenFile={openChild}
-          ListEmptyComponent={content.access.allowed && query.isSuccess ? <Empty compact title={searchKey ? copy("Eşleşen sonuç yok", "No matching results") : copy("Klasör boş", "Folder is empty")}
+          ListEmptyComponent={content.access.allowed && query.isSuccess ? <Empty compact={false} illustration={searchKey ? "search-empty" : "inbox-empty"} title={searchKey ? copy("Eşleşen sonuç yok", "No matching results") : copy("Klasör boş", "Folder is empty")}
             action={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined} /> : undefined} />
         </PrivateContentAccessProvider>
       </View> : <>{status}{data !== undefined ? <PrivateContentAccessProvider value={content.access}><ScopedTextContent path={resolved} text={data} context={context} line={line} onOpenFile={openChild} /></PrivateContentAccessProvider> : null}</>}

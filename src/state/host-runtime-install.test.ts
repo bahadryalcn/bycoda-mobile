@@ -20,6 +20,12 @@ const fixture = vi.hoisted(() => ({
       for (const listener of fixture.appState.listeners) listener(state);
     },
   },
+  network: {
+    listeners: new Set<(state: { isConnected: boolean | null }) => void>(),
+    set(isConnected: boolean | null) {
+      for (const listener of fixture.network.listeners) listener({ isConnected });
+    },
+  },
   securityListeners: new Set<() => void>(),
   machineListeners: new Set<(state: unknown) => void>(),
   state: {
@@ -32,12 +38,23 @@ const fixture = vi.hoisted(() => ({
       },
     ],
     hydrated: true,
-    storageError: null,
+    storageError: null as string | null,
     connectionPending: false,
+    accountPending: false,
+    pendingMachineIds: [] as string[],
   },
 }));
 vi.mock("../../modules/bycoda-host-socket", () => ({ nativeHostSocket: () => fixture.native }));
 vi.mock("react-native", () => ({ AppState: fixture.appState }));
+vi.mock("@react-native-community/netinfo", () => ({
+  default: {
+    addEventListener: (listener: (state: { isConnected: boolean | null }) => void) => {
+      fixture.network.listeners.add(listener);
+      listener({ isConnected: true });
+      return () => fixture.network.listeners.delete(listener);
+    },
+  },
+}));
 vi.mock("./security", () => ({
   useSecurity: {
     subscribe: (listener: () => void) => {
@@ -86,6 +103,83 @@ beforeEach(() => {
 });
 afterEach(() => {
   for (const release of releases.splice(0).reverse()) release();
+});
+describe("per-computer connection teardown", () => {
+  const computer = (id: string) => ({
+    id,
+    name: "Host",
+    environmentId: binding.environmentId,
+    endpoint: "https://host.example",
+    lanKey: undefined as string | undefined,
+    capabilities: descriptor.capabilities,
+  });
+  const emit = (patch: Partial<typeof fixture.state>) => {
+    Object.assign(fixture.state, patch);
+    for (const listener of fixture.machineListeners) listener(fixture.state);
+  };
+  const invalidated = () =>
+    vi.mocked(fixture.native!.invalidateCredentials).mock.calls.map(([machineId]) => machineId);
+  async function connectBoth() {
+    fixture.state.machines = [computer("machine-a"), computer("machine-b")];
+    const installed = await installMobileHostRuntime();
+    releases.push(installed.dispose);
+    const provider = getHostWsRuntimeProvider()!;
+    const [a, b] = await Promise.all(
+      ["machine-a", "machine-b"].map((id) => provider.acquire(computer(id), async () => descriptor, () => undefined)),
+    );
+    releases.push(a!.release, b!.release);
+    await vi.waitFor(() => expect([a!.state(), b!.state()]).toEqual(["ready", "ready"]));
+    return { a: a!, b: b! };
+  }
+  afterEach(() => {
+    fixture.state.machines = [computer("machine-a")];
+    Object.assign(fixture.state, {
+      storageError: null,
+      hydrated: true,
+      connectionPending: false,
+      accountPending: false,
+      pendingMachineIds: [],
+    });
+  });
+  it("closes only the computer being changed, when its change starts and when it ends", async () => {
+    const { a, b } = await connectBoth();
+    emit({ connectionPending: true, pendingMachineIds: ["machine-b"] });
+    expect(b.state()).toBe("closed");
+    expect(a.state()).toBe("ready");
+    await vi.waitFor(() => expect(invalidated()).toEqual(["machine-b"]));
+    emit({ connectionPending: false, pendingMachineIds: [] });
+    expect(a.state()).toBe("ready");
+    await vi.waitFor(() => expect(invalidated()).toEqual(["machine-b", "machine-b"]));
+  });
+  it("leaves other computers connected when a computer is removed", async () => {
+    const { a, b } = await connectBoth();
+    emit({
+      machines: [computer("machine-a")],
+      connectionPending: true,
+      pendingMachineIds: ["machine-b"],
+    });
+    emit({ connectionPending: false, pendingMachineIds: [] });
+    expect(b.state()).toBe("closed");
+    expect(a.state()).toBe("ready");
+    expect(invalidated()).not.toContain("machine-a");
+  });
+  it("closes only the computer whose route changed", async () => {
+    const { a, b } = await connectBoth();
+    emit({
+      machines: [computer("machine-a"), { ...computer("machine-b"), endpoint: "https://other.example" }],
+    });
+    expect(b.state()).toBe("closed");
+    expect(a.state()).toBe("ready");
+  });
+  it.each([
+    ["an account-wide change", { connectionPending: true, accountPending: true }],
+    ["a connection storage failure", { storageError: "Saved computers could not be loaded." }],
+    ["connections that are not loaded", { hydrated: false }],
+  ])("still closes every computer for %s", async (_name, patch) => {
+    const { a, b } = await connectBoth();
+    emit(patch);
+    expect([a.state(), b.state()]).toEqual(["closed", "closed"]);
+  });
 });
 describe("mobile app lifecycle and authenticated trust composition", () => {
   it("closes the live Host socket immediately on account sign-out without waiting for a lock event", async () => {
@@ -150,6 +244,45 @@ describe("mobile app lifecycle and authenticated trust composition", () => {
       await vi.waitFor(() => expect(lease.state()).toBe("ready"));
       expect(fixture.native!.open).toHaveBeenCalledTimes(3);
     } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("retries a waiting computer when the network returns, not while it is still offline", async () => {
+    vi.useFakeTimers();
+    const random = vi.spyOn(Math, "random").mockReturnValue(1);
+    try {
+      const f = fakeNative();
+      fixture.native = f.native;
+      const installed = await installMobileHostRuntime();
+      releases.push(installed.dispose);
+      const provider = getHostWsRuntimeProvider()!;
+      const machine = {
+        id: binding.machineId,
+        name: "Host",
+        environmentId: binding.environmentId,
+        endpoint: "https://host.example",
+        capabilities: descriptor.capabilities,
+      };
+      const lease = await provider.acquire(machine, async () => descriptor, () => undefined);
+      releases.push(lease.release);
+      await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+      const acquire = vi.mocked(f.native.acquireCredential);
+      const before = acquire.mock.calls.length;
+      for (let i = 0; i < 3; i++) acquire.mockRejectedValueOnce(new Error("Host socket: unavailable"));
+      fixture.network.set(false);
+      f.event("error", { code: "network" });
+      await vi.waitFor(() => expect(lease.state()).toBe("backoff"));
+      // Offline: the ladder (250, 500, 1000 ms) keeps running; going offline is not a recovery.
+      await vi.advanceTimersByTimeAsync(1_750);
+      await vi.waitFor(() => expect(acquire).toHaveBeenCalledTimes(before + 3));
+      expect(lease.state()).toBe("backoff");
+      expect(f.native.open).toHaveBeenCalledTimes(1);
+      // Back online: no waiting for the 2 s timer.
+      fixture.network.set(true);
+      await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+      expect(f.native.open).toHaveBeenCalledTimes(2);
+    } finally {
+      random.mockRestore();
       vi.useRealTimers();
     }
   });

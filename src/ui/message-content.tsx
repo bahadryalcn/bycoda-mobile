@@ -1,7 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
 import { Fragment, Suspense, lazy, memo, useMemo, useState, type ReactNode } from "react";
-import { Linking, ScrollView, Text, View } from "react-native";
+import { Linking, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import Square from "lucide-react-native/icons/square";
 import SquareCheck from "lucide-react-native/icons/square-check";
 import { decorativeSvgProps } from "./accessibility";
@@ -12,6 +12,7 @@ import { latexToText } from "./message-math";
 // Lazy: the typesetting engine loads on the first formula, not with every chat screen.
 const MessageMath = lazy(() => import("./message-math-view"));
 import { useCopy } from "./copy";
+import { RECORD_ACCESS_UNAVAILABLE } from "./record-access-copy";
 import { markdownTarget } from "./message-inline";
 import { parseMessage, MESSAGE_RENDER_LIMIT, type MessageNode } from "./message-model";
 import { MessageReader } from "./message-reader";
@@ -26,6 +27,8 @@ import { linkOnlyItem, sourceList } from "./message-link-item";
 import { MessageSource, MessageSources } from "./message-sources";
 import { messageSessionLink, messageSessionRoute } from "./message-session-link";
 import { taskListItem } from "./message-task";
+import { isLoopbackWebUrl, loopbackScopeKey, useLoopbackLink } from "./loopback-link";
+import { messageTableColumnWidths } from "./message-table-model";
 
 /** Width reserved for a list marker ("•", "12.", task box) so item text aligns. */
 const LIST_MARKER_WIDTH = space.xxl;
@@ -78,13 +81,23 @@ export const MessageContent = memo(function MessageContent({
   onOpenFile?: OpenDocument;
 }) {
   const { colors } = useMobileTheme();
+  const { fontScale } = useWindowDimensions();
   const preference = useChatAppearance((state) => state.textSize);
   const typography = useChatTextStyles(textSize ?? preference);
   const bodyStyle = role === "user" ? typography.user : typography.assistant;
   const copy = useCopy();
   const [linkError, setLinkError] = useState<unknown>(null);
+  // A transcript link proves its session by matching the session screen's owner; without context nothing is proven.
+  const loopback = useLoopbackLink();
+  const ownLoopback = context && loopback?.scope === loopbackScopeKey(context) ? loopback : null;
   const openWeb = (href: string) => {
     setLinkError(null);
+    // Without a proven owner a loopback link names nothing on this phone, so it never reaches Linking.
+    if (isLoopbackWebUrl(href)) {
+      if (ownLoopback) ownLoopback.open(href);
+      else setLinkError(copy(...RECORD_ACCESS_UNAVAILABLE));
+      return;
+    }
     void Linking.openURL(href).catch(setLinkError);
   };
   const nodes = useMemo(
@@ -133,10 +146,7 @@ export const MessageContent = memo(function MessageContent({
               key={index}
               accessibilityRole="link"
               style={{ color: colors.accent, textDecorationLine: "underline" }}
-              onPress={() => {
-                setLinkError(null);
-                void Linking.openURL(target.href).catch(setLinkError);
-              }}
+              onPress={() => openWeb(target.href)}
             >
               {child}
             </Text>
@@ -244,8 +254,18 @@ export const MessageContent = memo(function MessageContent({
         );
       if (node.type === "table") {
         const rows = node.children.flatMap((section) => section.children);
+        const widths = messageTableColumnWidths(rows, bodyStyle.fontSize ?? 15, fontScale);
         return (
-          <ScrollView key={key} horizontal contentContainerStyle={{ paddingVertical: space.xs }}>
+          <ScrollView
+            key={key}
+            horizontal
+            accessibilityRole="table"
+            accessibilityLabel={copy("Tablo: {p0} sütun, {p1} satır.", "Table: {p0} columns, {p1} rows.", {
+              p0: widths.length,
+              p1: rows.length,
+            })}
+            contentContainerStyle={{ paddingVertical: space.xs }}
+          >
             <View>
               {rows.map((row, rowIndex) => (
                 <View
@@ -258,7 +278,10 @@ export const MessageContent = memo(function MessageContent({
                   }}
                 >
                   {row.children.map((cell, cellIndex) => (
-                    <View key={cellIndex} style={{ width: 170, padding: space.sm }}>
+                    <View
+                      key={cellIndex}
+                      style={{ width: (widths[cellIndex] ?? 0) + space.sm * 2, padding: space.sm }}
+                    >
                       <Body
                         accessibilityRole={cell.type === "th" ? "header" : undefined}
                         style={[

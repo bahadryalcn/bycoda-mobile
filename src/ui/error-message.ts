@@ -1,5 +1,6 @@
 import { RemoteHostError } from "../remote/host-error";
 import { ApprovalCommandRefused } from "../domain/approval-command";
+import { catalogs } from "../localization";
 
 type ErrorCopy = (turkish: string, english: string) => string;
 
@@ -118,7 +119,7 @@ function knownConnectionMessage(message: string, copy: ErrorCopy): string | unde
 }
 
 /** Presentation only: retain the original error object and any caller-supplied context. */
-export function errorMessage(error: unknown, copy: ErrorCopy, override?: string): string {
+export function errorMessage(error: unknown, copy: ErrorCopy, override?: string, options?: { read?: boolean }): string {
   const fallback = () => copy("İşlem tamamlanamadı.", "Could not complete this action.");
   const text =
     override ??
@@ -140,11 +141,16 @@ export function errorMessage(error: unknown, copy: ErrorCopy, override?: string)
                 "Bilgisayardan gelen veri anlaşılamadı. Bycoda'yı bilgisayarda ve telefonda güncelle.",
                 "The computer sent data this app could not read. Update Bycoda on both devices.",
               )
-            : error.message || fallback()
+            // App and socket errors carry an English message; one the catalogs know is shown translated
+            // instead of as English inside a Turkish screen.
+            : error.message ? copy(catalogs.tr[error.message] ?? error.message, error.message) : fallback()
           : typeof error === "string" && error
             ? error
             : fallback());
-  if (!(error instanceof RemoteHostError) || !error.uncertain) return text;
+  // A read that failed applied nothing; only writes warn that the action may have gone through.
+  if (options?.read || !(error instanceof RemoteHostError) || !error.uncertain) return text;
+  // The transport's interruption message already asks to check the result; a second caution only repeats it.
+  if (override === undefined && error.message === "Connection interrupted. Check this command's result before trying again.") return text;
   const caution = copy(
     "İşlem uygulanmış olabilir. Yeniden denemeden önce sonucu kontrol et.",
     "The action may have been applied. Check the result before trying again.",

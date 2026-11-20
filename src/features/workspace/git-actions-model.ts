@@ -38,7 +38,7 @@ export function gitSheetActions(
         : copy("Uzak depodaki değişiklikleri al", "Bring in remote changes")) },
     { key: "fetch", label: copy("Fetch", "Fetch"), disabled: workspace || !index.remote,
       detail: remoteReason || copy("Uzak depoyu kontrol et, dosyalara dokunma", "Check the remote without touching files") },
-    { key: "branches", label: copy("Dallar ve çalışma klasörleri", "Branches & worktrees"), disabled: opts.busy,
+    { key: "branches", label: copy("Dallar ve çalışma ağaçları", "Branches & worktrees"), disabled: opts.busy,
       detail: copy("Dal değiştir veya yeni dal oluştur", "Switch or create a branch") },
     { key: "history", label: copy("Commit geçmişi", "Commit history"), disabled: workspace,
       detail: copy("Önceki commit’leri incele", "Browse earlier commits") },

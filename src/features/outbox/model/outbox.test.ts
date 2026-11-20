@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyComposerDraft } from "../../workspace/composer-draft";
-import { decodeOutbox, offlineSendFailure, outboxDraftIdentity, outboxKey, SendOutbox, type OutboxRow } from "./outbox";
+import { decodeOutbox, offlineSendFailure, outboxDraftIdentity, outboxExpired, outboxKey, outboxNoticeKind, outboxOwned, SendOutbox, type OutboxRow } from "./outbox";
 
 const row = (id = "8ca190f8-9e1b-477d-9565-2fb1283ac578"): OutboxRow => ({
   id, machineId: "machine", sessionId: "session", projectId: "project", environmentId: "environment", accountId: "account",
@@ -90,5 +90,30 @@ describe("offline send custody", () => {
   });
   it.each(["network", "timeout"])("queues %s errors including unknown acceptance", kind => {
     expect(offlineSendFailure({ kind, uncertain: true })).toBe(true);
+  });
+});
+describe("expired and dropped message recovery", () => {
+  it("expires only past 24 hours and never for a future timestamp", () => {
+    const now = 100 * 60 * 60 * 1000;
+    expect(outboxExpired({ createdAt: now - 24 * 60 * 60 * 1000 }, now)).toBe(false);
+    expect(outboxExpired({ createdAt: now - 24 * 60 * 60 * 1000 - 1 }, now)).toBe(true);
+    expect(outboxExpired({ createdAt: now + 1 }, now)).toBe(false);
+  });
+  it("splits notices by cause and offers Edit only to the capturing account and computer", () => {
+    expect(outboxNoticeKind({ status: "blocked", blockedReason: "expired" }, true)).toBe("expired");
+    expect(outboxNoticeKind({ status: "blocked" }, true)).toBe("blocked");
+    expect(outboxNoticeKind({ status: "dropped" }, true)).toBe("unavailable");
+    expect(outboxNoticeKind({ status: "dropped" }, false)).toBe("foreign");
+    expect(outboxNoticeKind({ status: "waiting" }, true)).toBe("waiting");
+    expect(outboxOwned(row(), "account", "environment")).toBe(true);
+    expect(outboxOwned(row(), "other", "environment")).toBe(false);
+    expect(outboxOwned(row(), "account", "other")).toBe(false);
+    expect(outboxOwned(row(), undefined, "environment")).toBe(false);
+  });
+  it("round-trips the expiry reason and rejects an unknown one", async () => {
+    const { outbox } = fixture();
+    await outbox.put({ ...row(), status: "blocked", blockedReason: "expired" });
+    expect((await outbox.read("machine", "session"))[0]?.blockedReason).toBe("expired");
+    expect(() => decodeOutbox(JSON.stringify([{ ...row(), blockedReason: "other" }]))).toThrow();
   });
 });

@@ -14,6 +14,7 @@ import { ActionField } from "@/ui/action-field";
 import { ActionMenu } from "@/ui/overflow-menu";
 import Keyboard from "lucide-react-native/icons/keyboard";
 import { useCopy } from "@/ui/copy";
+import { DATA_SAVER_FRAME_QUALITY, useDataSaverActive } from "@/state/data-saver";
 import { useMobileTheme } from "@/ui/theme";
 import type { BrowserState } from "./types";
 import { readBrowserCapture } from "./browser-annotation-model";
@@ -83,6 +84,9 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
   const copy = useCopy();
   const active = useHostReadActive();
   const machine = useActiveMachine();
+  const dataSaver = useDataSaverActive();
+  const dataSaverRef = useRef(dataSaver);
+  dataSaverRef.current = dataSaver;
   const composerTransfer = useComposerTransfer();
   const { url, text, comment } = drafts;
   const draftMounted = useRef(false), draftActive = useRef(active);
@@ -132,10 +136,11 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
         const result = await scope.client.request<BrowserState>(method, {
           projectId: scope.projectId, ...(scope.sessionId ? { sessionId: scope.sessionId } : {}), leaseId: scope.latest?.leaseId,
           ...(method.startsWith("browser.annotation.") ? { navigationId: scope.latest?.navigationId, annotationId: scope.latest?.annotationId } : {}), ...params,
+          ...(dataSaverRef.current && (method === "browser.frame" || method === "browser.input") ? { quality: DATA_SAVER_FRAME_QUALITY } : {}),
         }, { retry: false });
         apply(scope, result);
         if (capture && result.open && current(scope)) {
-          const screenshot = await scope.client.request<BrowserState>("browser.frame", { projectId: scope.projectId }, { retry: false });
+          const screenshot = await scope.client.request<BrowserState>("browser.frame", { projectId: scope.projectId, ...(dataSaverRef.current ? { quality: DATA_SAVER_FRAME_QUALITY } : {}) }, { retry: false });
           apply(scope, screenshot);
         }
         return result;
@@ -296,8 +301,8 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
         {frame?.data ? <RemoteFrame
           uri={`data:${frame.mimeType ?? "image/jpeg"};base64,${frame.data}`}
           label={copy("Tarayıcı ekranı", "Browser screen")}
-          width={frame.width ?? 1280}
-          height={frame.height ?? 720}
+          width={frame.width}
+          height={frame.height}
           disabled={!controlling || busy}
           onPress={(point) => state?.annotationId && sessionId && machine?.capabilities?.includes("browser.annotation") ? request("browser.annotation.select", point) : input({ kind: "click", ...point })}
         /> : null}

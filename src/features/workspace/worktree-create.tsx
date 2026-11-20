@@ -3,6 +3,7 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
+import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { ActionMenu, Body, Button, Disclosure, ErrorText, Field, FormActions, Notice, QueryState, SelectField, Sheet } from "@/ui/primitives";
 import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
@@ -95,19 +96,19 @@ export function WorktreeCreate({ scope, visible, blocked, beforeChange, onSelect
     submitted.current = false; createdNow.current = null; setCreated(null); const empty = { branch: "", base: "HEAD", existing: false }; draftNow.current = empty; setDraft(empty); setError(null);
   };
   const unavailableMessage = !machine ? copy("Bilgisayar bağlantısını yeniden kurun ve bu projeyi tekrar açın.", "Reconnect the computer and reopen this project.")
-    : !scopeCurrent ? copy("Bu işlemin bilgisayarını ve projesini yeniden açın. Worktree taslağı korunur.", "Reopen this operation's computer and project. The worktree draft is retained.")
-      : !supported ? copy("Worktree oluşturmak için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer to create worktrees.")
-        : copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.");
+    : !scopeCurrent ? copy("Bu işlemin bilgisayarını ve projesini yeniden açın. Çalışma ağacı taslağı korunur.", "Reopen this operation's computer and project. The worktree draft is retained.")
+      : !supported ? copy("Çalışma ağacı oluşturmak için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer to create worktrees.")
+        : copy(...RECORD_ACCESS_UNAVAILABLE);
   const initialUnavailable = !available && !busy && !draft.branch && draft.base === "HEAD" && !draft.existing && !created && !uncertain && !error && !submitted.current;
-  if (initialUnavailable) return <Sheet visible={visible} title={copy("Worktree oluştur", "Create worktree")} size="compact" onClose={close}>
+  if (initialUnavailable) return <Sheet visible={visible} title={copy("Çalışma ağacı oluştur", "Create worktree")} size="compact" onClose={close}>
     <FeatureUnavailable message={unavailableMessage} /><Button tone="quiet" label={copy("Kapat", "Close")} onPress={close} />
   </Sheet>;
   const feedback = <>{!uncertain ? <ErrorText error={error} /> : <Notice tone="warning" message={copy("Oluşturma sonucu belirsiz. Tekrar göndermeden çalışma klasörlerini yenileyip bilgisayarda kontrol et.", "The create result is uncertain. Refresh working folders and check the computer before sending again.")} />}</>;
-  return <><Sheet visible={visible} title={copy("Worktree oluştur", "Create worktree")} size="form" dismissible={!busy} dirty={draft.branch !== "" || draft.existing || draft.base !== "HEAD"} onClose={close}>
+  return <><Sheet visible={visible} title={copy("Çalışma ağacı oluştur", "Create worktree")} size="form" dismissible={!busy} dirty={draft.branch !== "" || draft.existing || draft.base !== "HEAD"} onClose={close}>
     {readable ? <>
       <CollectionToolbar field={<Body selectable>{opening.machineName}</Body>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
         { key: "refresh", label: copy("Çalışma klasörlerini yenile", "Refresh working folders"), disabled: busy || !enabled, onPress: refresh },
-        !!created && { key: "another", label: copy("Başka worktree oluştur", "Create another worktree"), disabled: busy || blocked, onPress: another },
+        !!created && { key: "another", label: copy("Başka çalışma ağacı oluştur", "Create another worktree"), disabled: busy || blocked, onPress: another },
       ]} />} />
       <Body mono selectable>{sourcePath}</Body>
       {created ? <><Body mono selectable>{created.path}</Body><Body selectable>{created.branch}</Body>
@@ -120,7 +121,7 @@ export function WorktreeCreate({ scope, visible, blocked, beforeChange, onSelect
         {draft.existing ? <SelectField label={copy("Dal", "Branch")} value={draft.branch} disabled={disabled || !!approval} searchable options={availableWorktreeBranches(branches.data, trees.data?.worktrees ?? []).map(value => ({ value, label: value }))} onChange={branch => edit({ branch })} />
           : <><Field label={copy("Yeni dal adı", "New branch name")} value={draft.branch} maxLength={120} editable={!disabled && !approval} autoCapitalize="none" autoCorrect={false} onChangeText={branch => edit({ branch })} />
             <SelectField label={copy("Başlangıç dalı", "Base branch")} value={draft.base} disabled={disabled || !!approval} searchable options={[...new Set(["HEAD", ...(branches.data?.branches ?? []), ...(branches.data?.remotes ?? []).map(ref => `${ref.remote}/${ref.name}`)])].map(value => ({ value, label: value }))} onChange={base => edit({ base })} /></>}
-        <FormActions submitLabel={uncertain ? copy("Çalışma klasörlerini yenile", "Refresh working folders") : copy("Worktree oluştur", "Create worktree")} busy={busy}
+        <FormActions submitLabel={uncertain ? copy("Çalışma klasörlerini yenile", "Refresh working folders") : copy("Çalışma ağacı oluştur", "Create worktree")} busy={busy}
           disabled={uncertain ? busy || !enabled : disabled || !draft.branch.trim() || !ready || !!approval} onSubmit={uncertain ? refresh : start}
           cancelLabel={copy("Vazgeç", "Cancel")} cancelDisabled={busy} onCancel={close} feedback={feedback} />
       </>}

@@ -6,7 +6,7 @@ import { Button, Empty, Field, FormActions, NavigationGroup, NavigationRow, Noti
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
-import { retrySeconds, type GroupLockView, type PasswordOutcome } from "./group-lock-model";
+import { lockConfirmed, retrySeconds, type GroupLockView, type PasswordOutcome } from "./group-lock-model";
 
 /** Typed value stays in this component's state only and is cleared as soon as it is sent. */
 export function GroupPasswordSheet({
@@ -113,12 +113,35 @@ export function HiddenGroupsSheet({
     setPending(undefined);
     if (!ok) setFailed(true);
   };
+  const [locking, setLocking] = useState(false);
+  const [lockFailed, setLockFailed] = useState(false);
+  // Closes only after the Host confirmed the lock; a failure keeps the sheet open for a retry.
+  const lockAll = async () => {
+    if (locking) return;
+    setLocking(true);
+    setLockFailed(false);
+    const locked = await lockConfirmed(onLockAll);
+    setLocking(false);
+    if (locked) onClose();
+    else setLockFailed(true);
+  };
   const hidden = view.hidden ?? [];
   return (
     <Sheet visible title={copy("Gizli gruplar", "Hidden groups")} onClose={onClose}>
       <View style={{ gap: space.md }}>
         {failed ? (
           <Notice tone="warning" message={copy("Grup güncellenemedi. Tekrar dene.", "Could not update the group. Try again.")} />
+        ) : null}
+        {lockFailed ? (
+          <Notice
+            tone="danger"
+            message={copy(
+              "Gruplar kilitlenemedi. Gruplar bilgisayarda hâlâ açık olabilir. Tekrar dene.",
+              "Could not lock the groups. They may still be unlocked on your computer. Try again.",
+            )}
+            onRetry={() => void lockAll()}
+            retrying={locking}
+          />
         ) : null}
         {hidden.length + view.hideable.length === 0 ? (
           <Empty title={copy("Gösterilecek grup yok", "No groups to show")} />
@@ -153,7 +176,8 @@ export function HiddenGroupsSheet({
       <FormActions
         submitLabel={copy("Tüm grupları kilitle", "Lock all groups")}
         tone="default"
-        onSubmit={() => void onLockAll().then(onClose)}
+        onSubmit={() => void lockAll()}
+        busy={locking}
         cancelLabel={copy("Bitti", "Done")}
         onCancel={onClose}
       />

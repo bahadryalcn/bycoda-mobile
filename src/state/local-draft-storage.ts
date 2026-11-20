@@ -1,7 +1,7 @@
 type Job = Promise<unknown>;
 type State = { barrier: Job; pending: Map<string, Job>; epoch: number; versions: Map<string, number>; listeners: Map<string, Set<() => void>>; cleanups: number };
 const states = new WeakMap<object, State>();
-const prefixes = ["bycoda.mobile.draft.v1:", "bycoda.mobile.file-draft.v1:", "bycoda.mobile.note-draft.", "bycoda.mobile.git-draft.v1:", "bycoda.mobile.queue-edit.v1:", "bycoda.mobile.assistant-voice.v1:", "bycoda.mobile.outbox.v1:"];
+const prefixes = ["bycoda.mobile.draft.v1:", "bycoda.mobile.file-draft.v1:", "bycoda.mobile.note-draft.", "bycoda.mobile.git-draft.v1:", "bycoda.mobile.queue-edit.v1:", "bycoda.mobile.assistant-voice.v1:", "bycoda.mobile.outbox.v1:", "bycoda.mobile.side-chat.v1:"];
 export const isUserDraftKey = (key: string) => prefixes.some(prefix => key.startsWith(prefix));
 function stateFor(storage: object): State {
   let state = states.get(storage);
@@ -43,7 +43,7 @@ export function withDraftStorageCleanup<T>(storage: object, operation: (retire: 
     state.epoch++;
     for (const key of state.versions.keys()) if (isUserDraftKey(key) && !retained.has(key)) state.versions.set(key, state.epoch);
     for (const [key, listeners] of [...state.listeners]) if (isUserDraftKey(key) && !retained.has(key)) for (const listener of [...listeners]) listener();
-  })).finally(() => { state.cleanups--; });
+  })).finally(() => { state.cleanups--; notifyPresenceChange(storage, null); });
   state.barrier = task.then(() => {}, () => {}); return task;
 }
 
@@ -60,10 +60,22 @@ function presenceFor(storage: object, key: string) {
   }
   return entry;
 }
+// Reporters learn about keys they never subscribed to: `key` is the one whose presence flipped,
+// or null after a cleanup removed keys without presence entries (rescan everything).
+const changeListeners = new WeakMap<object, Set<(key: string | null) => void>>();
+function notifyPresenceChange(storage: object, key: string | null) {
+  for (const listener of [...(changeListeners.get(storage) ?? [])]) listener(key);
+}
+export function subscribeDraftPresenceChanges(storage: object, listener: (key: string | null) => void) {
+  const listeners = changeListeners.get(storage) ?? new Set(); changeListeners.set(storage, listeners); listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
 export function publishDraftPresence(storage: object, key: string, value: boolean) {
   const entry = presenceFor(storage, key);
+  const flipped = entry.value !== value;
   entry.loaded = true; entry.value = value;
   for (const listener of entry.listeners) listener();
+  if (flipped) notifyPresenceChange(storage, key);
 }
 export const draftPresence = (storage: object, key: string) => presenceFor(storage, key).value;
 export function subscribeDraftPresence(storage: object, key: string, listener: () => void) {

@@ -98,22 +98,6 @@ const READ_METHODS = new Set([
   "browser.frame",
   "inbox.provider.status",
   "inbox.provider.result",
-  "social.oauth.availability",
-  "social.oauth.status",
-  "social.browser.availability",
-  "social.browser.status",
-]);
-
-const READ_SOCIAL_ACTIONS = new Set([
-  "snapshot",
-  "policy.get",
-  "accounts.list",
-  "capabilities.get",
-  "inbox.list",
-  "thread.read",
-  "campaigns.status",
-  "contacts.search",
-  "jobs.status",
 ]);
 
 export function readonlyRequest(method: string, params: Record<string, unknown>): boolean {
@@ -123,9 +107,6 @@ export function readonlyRequest(method: string, params: Record<string, unknown>)
   if (method === "drafts.presence.report") return false;
   return (
     READ_METHODS.has(method) ||
-    (method === "workspace.run" && (params.command === "git_management_snapshot" || params.command === "git_pr_destination" || params.command === "git_submodules")) ||
-    (method === "social.request" &&
-      typeof params.action === "string" &&
-      READ_SOCIAL_ACTIONS.has(params.action))
+    (method === "workspace.run" && (params.command === "git_management_snapshot" || params.command === "git_pr_destination" || params.command === "git_submodules"))
   );
 }

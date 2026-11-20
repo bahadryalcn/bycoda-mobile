@@ -124,6 +124,16 @@ it("retires old search and Done callbacks across reopening", async () => {
   await call("Done"); await call("Open"); await act(async () => { change("retired"); done(); });
   expect(container.querySelector("input")!.value).toBe(""); expect(container.querySelector("section")).not.toBeNull();
 });
+it("does not read option fields for a closed select and still reads them once opened", async () => {
+  let reads = 0;
+  const option = (value: string, label: string) => ({ value, label, get disabled() { reads++; return false; } });
+  s.options = [option("a", "Alpha"), option("b", "Beta")]; await render();
+  s.options = [option("a", "Alpha"), option("b", "Beta")]; await render();
+  expect(reads).toBe(0);
+  await call("Open");
+  expect(reads).toBeGreaterThan(0);
+  expect(s.primitives.get("Alpha")).toBeDefined();
+});
 it("checks private authority before React commits", async () => {
   await render(); await call("Open"); const old = s.actions.get("Alpha")!; s.allowed = false;
   await act(async () => old()); expect(s.changes).toEqual([]);

@@ -1,4 +1,4 @@
-import { MutationObserver, QueryClient } from "@tanstack/react-query";
+import { MutationObserver, QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import type { HostTransport } from "../remote/transport";
 import { hostKey, hostMutationOptions } from "./host-request";
@@ -34,6 +34,42 @@ describe("host mutation destination", () => {
     cache.clear();
   });
 
+  it("settles when the Host replies while the broad refetch is still running, with data already invalidated", async () => {
+    const cache = new QueryClient();
+    const key = hostKey("pc-a", ["tasks"]);
+    let releaseRefetch!: () => void;
+    const refetch = new Promise<string[]>((resolve) => {
+      releaseRefetch = () => resolve(["fresh"]);
+    });
+    const queryFn = vi.fn().mockResolvedValueOnce(["stale"]).mockReturnValueOnce(refetch);
+    await cache.fetchQuery({ queryKey: key, queryFn });
+    const stop = new QueryObserver(cache, { queryKey: key, queryFn, staleTime: Infinity }).subscribe(() => {});
+    const client = { machine: { id: "pc-a" }, request: async () => "ok" } as unknown as HostTransport;
+    const observer = new MutationObserver(cache, hostMutationOptions(cache));
+    expect(await observer.mutate({ client, method: "tasks.start", params: {}, invalidate: [] })).toBe("ok");
+    expect(observer.getCurrentResult().isPending).toBe(false);
+    expect(cache.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(cache.getQueryState(key)?.fetchStatus).toBe("fetching");
+    releaseRefetch();
+    await refetch;
+    stop();
+    cache.clear();
+  });
+  it("does not fail the mutation or leak a rejection when the background refetch fails", async () => {
+    const cache = new QueryClient();
+    const spy = vi.spyOn(cache, "invalidateQueries").mockRejectedValue(new Error("offline"));
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    const client = { machine: { id: "pc-a" }, request: async () => "ok" } as unknown as HostTransport;
+    const observer = new MutationObserver(cache, hostMutationOptions(cache));
+    expect(await observer.mutate({ client, method: "tasks.start", params: {}, invalidate: [] })).toBe("ok");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(observer.getCurrentResult().isError).toBe(false);
+    process.off("unhandledRejection", unhandled);
+    spy.mockRestore();
+    cache.clear();
+  });
   it("a read-only preview does not invalidate or refetch cached data", async () => {
     const cache = new QueryClient();
     const directory = projectPrivacyKey("pc-a", true);

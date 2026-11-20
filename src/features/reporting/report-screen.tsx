@@ -1,6 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { View } from "react-native";
 import { randomUUID } from "expo-crypto";
 import { reportSender } from "./report-config";
 import { Stack as RouterStack, router } from "expo-router";
@@ -13,7 +12,6 @@ import Flag from "lucide-react-native/icons/flag";
 import { Body, Disclosure, ErrorText, Field, NavigationGroup, NavigationRow, Screen, Section, SelectField, Sheet, FormActions, Notice, ToggleField, useSuccessToast } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
-import { space } from "@/ui/tokens";
 import {
   maxReportDescription,
   maxReportExcerpt,
@@ -38,7 +36,7 @@ function tile(Glyph: typeof Flag, color: string) {
 }
 
 export function ContentReportScreen() {
-  const { colors, uiStyles } = useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const privacyInfo = useInfoHint(copy(
     "Yalnızca açıklaman ve eklemeyi seçtiğin alıntı incelenmek üzere bycoda’ya gönderilir. Bu taslak yalnızca bellekte tutulur; uygulama sonlandırılırsa kaybolur.",
@@ -50,6 +48,7 @@ export function ContentReportScreen() {
   );
   const { draft, status, error, receiptId, requestId, revision } = useContentReport();
   const [discarding, setDiscarding] = useState<ReportReview | null>(null);
+  const [descriptionTouched, setDescriptionTouched] = useState(false);
   const active = useRef(true);
   const reviewOwner = useRef<ReportReview | null>(null);
   const retired = useRef(false);
@@ -67,7 +66,11 @@ export function ContentReportScreen() {
   const staleReview = !!discarding && (!reviewCurrent || retired.current);
   const busy = status === "sending";
   const validation = reportDraftError(draft);
-  const visibleError = status === "sent" ? null : error ?? (draft.consent ? validation : null);
+  const visibleError = status === "sent" ? null : error;
+  // A blank description is flagged beside its field once the user has left it or ticked consent.
+  const descriptionError = status !== "sent" && (visibleError === "description" || (!draft.description.trim() && (descriptionTouched || draft.consent)));
+  // Why Send is disabled, shown next to it so the reason is never hidden behind the consent switch.
+  const disabledReason = status === "idle" && reportSender && !error && validation ? validation : null;
   const reasonLabels = {
     unsafe: copy("Zararlı veya tehlikeli içerik", "Unsafe or dangerous content"),
     hate: copy("Nefret veya taciz", "Hate or harassment"),
@@ -84,6 +87,9 @@ export function ContentReportScreen() {
       "Gönderilecek bilgileri onayla.",
       "Confirm the information to send.",
     ),
+    descriptionBlank: copy("Bir açıklama yaz.", "Write a description."),
+    sendBlockedDescription: copy("Göndermek için bir açıklama yaz.", "Write a description to enable Send."),
+    sendBlockedConsent: copy("Göndermek için gönderim onayını işaretle.", "Tick the consent below to enable Send."),
     service: copy(
       "Bildirim hizmeti henüz kullanılamıyor. Taslağın uygulama açıkken korunur.",
       "Reporting is not available yet. Your draft is kept while this app remains running.",
@@ -97,7 +103,10 @@ export function ContentReportScreen() {
     <Screen footer={<FormActions
       submitLabel={status === "sent" ? copy("Gönderildi", "Sent") : copy("Gönder", "Send")}
       disabled={!reportSender || status === "sent" || !!validation} busy={busy}
-      feedback={visibleError === "send" ? <Notice tone="danger" message={errorLabels.send} /> : status === "sent" && receiptId ? <Body selectable muted>{receiptId}</Body> : null}
+      feedback={visibleError === "send" ? <Notice tone="danger" message={errorLabels.send} />
+        : status === "sent" && receiptId ? <Body selectable muted>{receiptId}</Body>
+        : disabledReason ? <Notice message={disabledReason === "consent" ? errorLabels.sendBlockedConsent : errorLabels.sendBlockedDescription} />
+        : null}
       onSubmit={() => { if (!active.current || busy) return; void sendContentReport({ review: { draft, status, requestId, receiptId, revision }, sender: reportSender, newRequestId: randomUUID, assertAccess: assertAppAccess }).catch(() => {}); }}
       cancelLabel={copy("Taslağı sil", "Discard draft")} cancelDisabled={busy}
       onCancel={() => {
@@ -123,19 +132,17 @@ export function ContentReportScreen() {
         </NavigationGroup>
       </Animated.View>
       <Animated.View entering={enterItem(1)}>
-        <View style={{ gap: space.sm }}>
-          <Field
-            label={copy("Açıklama", "Description")}
-            error={visibleError === "description" ? errorLabels.description : undefined}
-            value={draft.description}
-            multiline
-            editable={!busy}
-            onChangeText={(description) => updateContentReport({ description })}
-          />
-          <Body muted style={uiStyles.caption}>
-            {Array.from(draft.description).length} / {maxReportDescription}
-          </Body>
-        </View>
+        <Field
+          label={copy("Açıklama", "Description")}
+          error={descriptionError ? (visibleError === "description" ? errorLabels.description : errorLabels.descriptionBlank) : undefined}
+          hint={`${Array.from(draft.description).length} / ${maxReportDescription}`}
+          value={draft.description}
+          maxLength={maxReportDescription}
+          multiline
+          editable={!busy}
+          onChangeText={(description) => updateContentReport({ description })}
+          onBlur={() => setDescriptionTouched(true)}
+        />
       </Animated.View>
       </Section>
       <Section title={copy("Alıntı", "Excerpt")}>
@@ -148,21 +155,18 @@ export function ContentReportScreen() {
         />
       </NavigationGroup>
       {draft.includeExcerpt ? (
-        <View style={{ gap: space.sm }}>
-          <Field
-            label={copy(
-              "Paylaşılacak alıntı — göndermeden önce düzenle",
-              "Excerpt to share — edit before sending",
-            )}
-            value={draft.excerpt}
-            multiline
-            editable={!busy}
-            onChangeText={(excerpt) => updateContentReport({ excerpt, consent: false })}
-          />
-          <Body muted style={uiStyles.caption}>
-            {Array.from(draft.excerpt).length} / {maxReportExcerpt}
-          </Body>
-        </View>
+        <Field
+          label={copy(
+            "Paylaşılacak alıntı — göndermeden önce düzenle",
+            "Excerpt to share — edit before sending",
+          )}
+          hint={`${Array.from(draft.excerpt).length} / ${maxReportExcerpt}`}
+          value={draft.excerpt}
+          maxLength={maxReportExcerpt}
+          multiline
+          editable={!busy}
+          onChangeText={(excerpt) => updateContentReport({ excerpt, consent: false })}
+        />
       ) : null}
       </Section>
       <Section title={copy("Onay", "Consent")}>

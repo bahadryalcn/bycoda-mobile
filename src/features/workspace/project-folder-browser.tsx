@@ -54,6 +54,7 @@ export function ProjectFolderBrowser({
   const locale = useLocale();
   const [path, setPath] = useState<string>();
   const [manual, setManual] = useState("");
+  const [manualTarget, setManualTarget] = useState<string>();
   const [search, setSearch] = useState("");
   const [cloning, setCloning] = useState(false);
   const searchRef = useRef<TextInputInstance>(null);
@@ -62,6 +63,10 @@ export function ProjectFolderBrowser({
   const folders = useHostQuery<ProjectDirectories>(["folders", path], "projects.browse", { path });
   const homeLabel = copy("Ev klasörü", "Home folder");
   if (folders.data && folders.data !== rootsSource) setRootsSource(folders.data);
+  if (folders.data && manualTarget && pathKey(folders.data.path) === pathKey(manualTarget)) {
+    setManualTarget(undefined);
+    setManual("");
+  }
   const locations = useMemo<Location[]>(() => {
     const data = rootsSource;
     if (!data) return [];
@@ -185,6 +190,38 @@ export function ProjectFolderBrowser({
                 <BusyIndicator size="sm" color={colors.accent} />
               ) : null}
             </Row>
+            <View style={{ gap: space.xs }}>
+              <Button
+                label={copy("Depoyu klonla", "Clone repository")}
+                tone="quiet"
+                density="compact"
+                disabled={!current || !!folders.error || mutation.isPending}
+                onPress={() => setCloning(true)}
+              />
+              <Disclosure label={copy("Yol gir", "Enter path")}>
+                <IdentifierField
+                  label={copy("Klasör yolu", "Folder path")}
+                  value={manual}
+                  onChangeText={setManual}
+                  placeholder={copy(
+                    "Bilgisayarındaki tam klasör yolu",
+                    "Full folder path on your computer",
+                  )}
+                  editable={!mutation.isPending}
+                />
+                <Button
+                  label={copy("Bu yola göz at", "Browse this path")}
+                  tone="quiet"
+                  density="compact"
+                  disabled={!manual.trim() || mutation.isPending}
+                  onPress={() => {
+                    const target = manual.trim();
+                    setManualTarget(target);
+                    navigate(target);
+                  }}
+                />
+              </Disclosure>
+            </View>
             {(folders.data?.entries.length ?? 0) > 12 || search.length > 0 ? (
               <SearchField
                 ref={searchRef}
@@ -210,36 +247,6 @@ export function ProjectFolderBrowser({
             />
           </GroupedListRow>
         )}
-        footer={
-          <>
-          <Button
-            label={copy("Depoyu klonla", "Clone repository")}
-            tone="quiet"
-            density="compact"
-            disabled={!current || !!folders.error || mutation.isPending}
-            onPress={() => setCloning(true)}
-          />
-          <Disclosure label={copy("Yol gir", "Enter path")}>
-            <IdentifierField
-              label={copy("Klasör yolu", "Folder path")}
-              value={manual}
-              onChangeText={setManual}
-              placeholder={copy(
-                "Bilgisayarındaki tam klasör yolu",
-                "Full folder path on your computer",
-              )}
-              editable={!mutation.isPending}
-            />
-            <Button
-              label={copy("Bu yola göz at", "Browse this path")}
-              tone="quiet"
-              density="compact"
-              disabled={!manual.trim() || mutation.isPending}
-              onPress={() => navigate(manual.trim())}
-            />
-          </Disclosure>
-          </>
-        }
       />
       {cloning && current ? (
         <CloneRepositorySheet

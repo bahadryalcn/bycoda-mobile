@@ -54,7 +54,8 @@ export function CommandPalette({ onClose }: { onClose(): void }) {
   useKeyCommand({ key: "ArrowUp", title: copy("Önceki sonuç", "Previous result"), priority: 100 }, () => move(-1));
   useKeyCommand({ key: "Enter", title: copy("Aç", "Open"), priority: 100 }, () => choose(matches[current]));
   return <Sheet visible title={copy("Komut paleti", "Command palette")} onClose={onClose} scroll={false} size="form">
-    <View style={{ flex: 1, minHeight: 0, gap: space.sm }}>
+    {/* A non-scrolling sheet body leaves the side gutter to its content. */}
+    <View style={{ flex: 1, minHeight: 0, gap: space.sm, paddingHorizontal: space.screen }}>
       <Input label={copy("Ara", "Search")} value={query} autoFocus
         onChangeText={(value) => { setQuery(value); setSelected(0); }}
         onSubmitEditing={() => choose(matches[current])} returnKeyType="go" />

@@ -19,14 +19,14 @@ import { ActionMenu, Badge, Body, Button, ErrorText, IconButton, MutationState, 
 import { space } from "@/ui/tokens";
 import type { GitScope } from "./git-types";
 import { useGitBranches, useGitIndex } from "./git-queries";
-import { GitManagementForm, useGitManagementLabels } from "./git-management-form";
-import { managementSnapshotRequest, managementDraft, pullRequestRepository, readGitRemotes, readGitTags, safeRemoteUrl, type GitManagementAction, type GitManagementDraft, type GitManagementRow, type GitManagementSnapshot } from "./git-management-model";
+import { GitManagementForm, useGitManagementIssueText, useGitManagementLabels } from "./git-management-form";
+import { GitManagementIssueError, gitManagementStateIssues, managementSnapshotRequest, managementDraft, pullRequestRepository, readGitRemotes, readGitTags, safeRemoteUrl, type GitManagementAction, type GitManagementDraft, type GitManagementIssue, type GitManagementRow, type GitManagementSnapshot } from "./git-management-model";
 import { uncertainStashWrite } from "./git-stash-model";
 import { FeatureUnavailable } from "./unavailable-state";
 
 type Tab = "branches" | "tags" | "remotes" | "operations" | "pr";
 type PullRequest = { number: number; title: string; url: string; state: string } | null;
-type Editor = { opening: GitManagementDraft; value: GitManagementDraft; branch: string | null; head: string | null; snapshot: GitManagementSnapshot; repository?: string };
+type Editor = { opening: GitManagementDraft; value: GitManagementDraft; branch: string | null; head: string | null; snapshot: GitManagementSnapshot; repository?: string; touched: boolean };
 
 export function GitManagement({ scope, initialTab = "branches", onClose, onBusyChange, registerExit }: {
   scope: GitScope; initialTab?: Tab; onClose: () => void; onBusyChange: (busy: boolean) => void; registerExit: (exit: (() => void) | null) => void;
@@ -35,6 +35,7 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
   const copy = useCopy();
   const locale = useLocale();
   const labels = useGitManagementLabels();
+  const issueText = useGitManagementIssueText();
   const machine = useActiveMachine();
   const connection = useConnectionScope();
   const [openingConnection] = useState(connection);
@@ -92,7 +93,7 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
     if (unavailable || editor || !snapshot.data || !current()) return;
     const value = managementDraft(action, row);
     if (action === "createPr") value.head = index.data?.branch ?? "";
-    setError(null); setEditor({ opening: structuredClone(value), value, branch: index.data?.branch ?? null, head: index.data?.head ?? null, snapshot: structuredClone(snapshot.data), repository: action === "createPr" ? destination.data : undefined });
+    setError(null); setEditor({ opening: structuredClone(value), value, branch: index.data?.branch ?? null, head: index.data?.head ?? null, snapshot: structuredClone(snapshot.data), repository: action === "createPr" ? destination.data : undefined, touched: false });
   };
   const close = useCallback(() => {
     if (occupied.current) return;
@@ -110,8 +111,9 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
   useEffect(() => { registerExit(close); return () => registerExit(null); }, [close, registerExit]);
   const focused = useIsFocused();
   useBackHandler(focused, close);
-  let invalid: string | undefined;
-  if (editor) { try { managementSnapshotRequest(openingScope, editor.value, editor.snapshot); } catch (reason) { invalid = String((reason as Error).message); } }
+  let invalid: GitManagementIssue | undefined;
+  if (editor) { try { managementSnapshotRequest(openingScope, editor.value, editor.snapshot); } catch (reason) { invalid = reason instanceof GitManagementIssueError ? reason.issue : "snapshotInvalid"; } }
+  const shownIssue = invalid && (editor?.touched || gitManagementStateIssues.has(invalid)) ? issueText[invalid] : undefined;
   const submit = () => {
     if (!editor || unavailable || invalid || !current() || !lease.active || editorNow.current !== editor || reviewOwner.current) return;
     const captured = editor;
@@ -213,7 +215,7 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
       discardMessage={copy("Kaydedilmemiş işlem alanları bırakılacak. Depo değişmez.", "Unsaved action fields will be discarded. The repository stays unchanged.")}>
       <Body mono>{editor.branch ?? "HEAD"} · {editor.head}</Body>
       <Button tone="quiet" label={copy("Yenile", "Refresh")} busy={preflighting} disabled={busy || uncertain} onPress={refreshEditor} />
-      <GitManagementForm value={editor.value} onChange={(value) => { if (mounted.current && !occupied.current && editorNow.current === editor) setEditor({ ...editor, value }); }} busy={busy} disabled={unavailable || !!review} error={invalid}
+      <GitManagementForm value={editor.value} onChange={(value) => { if (mounted.current && !occupied.current && editorNow.current === editor) setEditor({ ...editor, value, touched: true }); }} busy={busy} disabled={unavailable || !!review} blocked={!!invalid} error={shownIssue}
         branchOptions={branchRows.map((row) => ({ value: row.remote ? `${row.remote}/${row.name}` : row.name, label: row.remote ? `${row.remote}/${row.name}` : row.name }))}
         onSubmit={submit} onCancel={close} feedback={<MutationState mutation={mutation} />} />
     </Sheet>}

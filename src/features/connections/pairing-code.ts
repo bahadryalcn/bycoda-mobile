@@ -1,4 +1,6 @@
 import {
+  MOBILE_PAIRING_MAX_BYTES,
+  MOBILE_PAIRING_TTL_MS,
   MobilePairingCodeError,
   parseMobilePairingCode,
 } from "../../../../src/integrations/mobile-pairing";
@@ -8,6 +10,31 @@ import type { PairingCopy, PairingFailureKind } from "./connection-types";
 
 export { parseMobilePairingCode };
 export type { MobilePairingCode };
+
+/** The desktop's `expiresAt` in a raw payload, or undefined when it cannot be read. */
+function declaredExpiry(value: string): unknown {
+  if (value.length > MOBILE_PAIRING_MAX_BYTES) return undefined;
+  try {
+    return (JSON.parse(value.trim()) as { expiresAt?: unknown } | null)?.expiresAt;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The desktop stamps `expiresAt` from its own clock, so the phone never compares it with `Date.now()`.
+ * The parse is anchored at the ticket's issue time (`expiresAt - TTL`), keeping every structural check;
+ * the Host still rejects an expired ticket when it is redeemed.
+ */
+export function parseDesktopPairingCode(value: string): MobilePairingCode {
+  return parseMobilePairingCode(value, desktopIssueClock(declaredExpiry(value)));
+}
+
+/** Clock for `parseMobilePairingCode` that never rejects a desktop-stamped expiry; unreadable values fail the shape check instead. */
+export function desktopIssueClock(expiresAt: unknown): number {
+  const expiry = typeof expiresAt === "string" ? Date.parse(expiresAt) : Number.NaN;
+  return Number.isFinite(expiry) ? expiry - MOBILE_PAIRING_TTL_MS : Date.now();
+}
 
 export class PairingFailure extends Error {
   constructor(readonly kind: PairingFailureKind) {

@@ -148,3 +148,19 @@ describe("schema and provider failures", () => {
     expect(out).not.toContain("codex unarchive");
   });
 });
+
+it("never tells a failed read that its action may have been applied", () => {
+  const uncertain = new RemoteHostError("synthetic-machine", "network", "Can't reach your computer", true);
+  const copyEn = (_tr: string, en: string) => en;
+  expect(errorMessage(uncertain, copyEn)).toContain("The action may have been applied");
+  expect(errorMessage(uncertain, copyEn, undefined, { read: true })).not.toContain("may have been applied");
+});
+
+it("shows a known English app or socket error in the screen's language", () => {
+  const schema = new Error("The mobile app and Host use incompatible data. Update both and reconnect.");
+  expect(errorMessage(schema, tr)).toBe("Mobil uygulama ile Host verileri uyumsuz. İkisini de güncelleyip yeniden bağlan.");
+  expect(errorMessage(schema, en)).toBe(schema.message);
+  expect(errorMessage(new Error("Speech could not be recognized. Try again."), tr)).toBe("Konuşma anlaşılamadı. Yeniden dene.");
+  // An unknown message stays as it is.
+  expect(errorMessage(new Error("Unlisted detail"), tr)).toBe("Unlisted detail");
+});

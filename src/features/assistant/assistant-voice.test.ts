@@ -7,7 +7,7 @@ function setup() {
   let buffer: (data: Int16Array, rate: number) => void = () => {};
   let ended: (reason: string, error?: string) => void = () => {};
   const capture = { start: vi.fn(async () => {}), stop: vi.fn() };
-  const request = vi.fn(async (method: string): Promise<unknown> => method === "voice.local.start" ? { lease: "lease-one" }
+  const request = vi.fn(async (method: string, _params?: { id?: string; text?: string }): Promise<unknown> => method === "voice.local.start" ? { lease: "lease-one" }
     : method === "voice.local.transcribe" ? { text: "Review the current project" } : {});
   const dependencies = {
     capture: vi.fn(async (onBuffer: typeof buffer, onEnded?: typeof ended) => { buffer = onBuffer; ended = onEnded ?? (() => {}); return capture; }),
@@ -30,6 +30,17 @@ it("captures real PCM, resamples hardware audio and returns text only to its cap
   expect(atob(payload[1].audio)).toHaveLength(3200);
   expect(state.dependencies.transcript).toHaveBeenCalledWith(target, "Review the current project");
   expect(state.request.mock.calls.map(([method]) => method)).toEqual(["voice.local.start", "voice.local.transcribe", "voice.local.release"]);
+});
+
+// A quiet room's noise passed the speech detector, Whisper returned "" and the whole call stopped.
+it("treats an empty transcription like silence instead of failing the turn", async () => {
+  const state = setup();
+  state.request.mockImplementation(async (method: string) => method === "voice.local.start" ? { lease: "lease-one" } : method === "voice.local.transcribe" ? { text: "  " } : {});
+  await state.voice.record(state.port, target);
+  state.buffer(new Int16Array(4800).fill(1000), 48000);
+  await state.voice.finish();
+  expect(state.dependencies.error).not.toHaveBeenCalled();
+  expect(state.dependencies.transcript).toHaveBeenCalledWith(target, "");
 });
 
 it("publishes measured microphone energy only during recording and clears it on cancellation", async () => {
@@ -119,13 +130,28 @@ it("keeps emoji and combining graphemes whole at the synthesizer's per-utterance
   expect(parts[1]).toContain("👩🏽‍💻");
 });
 
+it("reports a completed Host reply with no audio as a playback failure", async () => {
+  const state = setup();
+  state.request
+    .mockResolvedValueOnce({ lease: "speech-lease" })
+    .mockResolvedValueOnce({ id: "speech-id" })
+    .mockResolvedValueOnce({ done: true });
+  await state.voice.speak(state.port, target, "Read this reply");
+  expect(state.dependencies.play).not.toHaveBeenCalled();
+  expect(state.dependencies.error).toHaveBeenCalledWith(new Error("The computer returned no speech audio."));
+  expect(state.request).toHaveBeenLastCalledWith("voice.local.release", { lease: "speech-lease" }, expect.anything());
+});
+
 it("keeps the Host speech lease alive during long native playback and releases it afterward", async () => {
   vi.useFakeTimers();
   const state = setup();
   let finishPlayback!: () => void;
   state.dependencies.play.mockImplementationOnce(() => new Promise<void>(resolve => { finishPlayback = resolve; }));
-  state.request.mockImplementation(async (method: string) => method === "voice.local.start" ? { lease: "speech-lease" }
-    : method === "voice.local.speak" ? { id: "speech-id" } : method === "voice.local.speechNext" ? { done: true } : {});
+  state.request
+    .mockResolvedValueOnce({ lease: "speech-lease" })
+    .mockResolvedValueOnce({ id: "speech-id" })
+    .mockResolvedValueOnce({ audio: "AAA=", sampleRate: 16000 })
+    .mockResolvedValueOnce({ done: true });
   try {
     const pending = state.voice.speak(state.port, target, "Read this reply");
     await vi.waitFor(() => expect(state.dependencies.play).toHaveBeenCalledTimes(1));
@@ -162,4 +188,72 @@ it("unexpected native service shutdown cancels capture and reports an error with
   const state = setup(); await state.voice.record(state.port, target); state.buffer(new Int16Array(3200)); state.ended("service-stop", "Native service ended");
   expect(state.capture.stop).toHaveBeenCalled(); expect(state.dependencies.error).toHaveBeenCalledWith(new Error("Native service ended"));
   expect(state.dependencies.transcript).not.toHaveBeenCalled(); expect(state.dependencies.state).toHaveBeenLastCalledWith("idle", target);
+});
+
+it("cuts the first reply part at a word boundary so playback can start sooner", () => {
+  const parts = speechParts("word ".repeat(100).trimEnd());
+  expect(parts.length).toBeGreaterThan(1);
+  expect(parts[0]!.length).toBeLessThanOrEqual(160);
+  expect(parts[0]!.endsWith(" ")).toBe(true);
+  expect(parts.join("")).toBe("word ".repeat(100).trimEnd());
+});
+
+it("synthesizes the next reply part while the current one plays, in order", async () => {
+  const state = setup();
+  const polled = new Set<string>();
+  let ids = 0;
+  let finishFirst!: () => void;
+  state.dependencies.play.mockImplementationOnce(() => new Promise<void>(resolve => { finishFirst = resolve; }));
+  state.request.mockImplementation(async (method: string, params?: { id?: string }): Promise<unknown> => {
+    if (method === "voice.local.start") return { lease: "speech-lease" };
+    if (method === "voice.local.speak") return { id: `speech-${++ids}` };
+    if (method === "voice.local.speechNext") {
+      if (polled.has(params!.id!)) return { done: true };
+      polled.add(params!.id!); return { audio: "AAAA", sampleRate: 16000 };
+    }
+    return {};
+  });
+  const pending = state.voice.speak(state.port, target, "word ".repeat(100).trimEnd());
+  await vi.waitFor(() => expect(state.dependencies.play).toHaveBeenCalledTimes(1));
+  const speaks = state.request.mock.calls.filter(([method]) => method === "voice.local.speak");
+  expect(speaks).toHaveLength(2);
+  expect(speaks[0]?.[1]?.text?.length).toBeLessThanOrEqual(160);
+  finishFirst();
+  await pending;
+  expect(state.dependencies.play).toHaveBeenCalledTimes(2);
+  expect(state.dependencies.error).not.toHaveBeenCalled();
+  expect(state.request).toHaveBeenLastCalledWith("voice.local.release", { lease: "speech-lease" }, expect.anything());
+});
+
+it("attributes each failure to the chain step that was running", async () => {
+  const transcription = setup(), stage = vi.fn();
+  Object.assign(transcription.dependencies, { stage });
+  transcription.request.mockImplementation(async (method: string) => {
+    if (method === "voice.local.start") return { lease: "lease-one" };
+    if (method === "voice.local.transcribe") throw new Error("Model file missing");
+    return {};
+  });
+  await transcription.voice.record(transcription.port, target);
+  expect(stage.mock.calls.map(([value]) => value)).toEqual(["microphone", "transcription", "microphone"]);
+  transcription.buffer(new Int16Array(3200).fill(1000));
+  await transcription.voice.finish();
+  expect(stage).toHaveBeenLastCalledWith("transcription");
+  expect(transcription.dependencies.error).toHaveBeenCalledWith(new Error("Model file missing"));
+
+  const microphone = setup(), micStage = vi.fn();
+  Object.assign(microphone.dependencies, { stage: micStage });
+  await microphone.voice.record(microphone.port, target); microphone.ended("service-stop", "Native service ended");
+  expect(micStage).toHaveBeenLastCalledWith("microphone");
+
+  const playback = setup(), playStage = vi.fn();
+  Object.assign(playback.dependencies, { stage: playStage });
+  playback.dependencies.play.mockRejectedValueOnce(new Error("Audio output busy"));
+  playback.request
+    .mockResolvedValueOnce({ lease: "speech-lease" })
+    .mockResolvedValueOnce({ id: "speech-id" })
+    .mockResolvedValueOnce({ audio: "AAAA", sampleRate: 16000 })
+    .mockResolvedValueOnce({ done: true });
+  await playback.voice.speak(playback.port, target, "Read this reply");
+  expect(playStage.mock.calls.map(([value]) => value)).toEqual(["synthesis", "synthesis", "playback"]);
+  expect(playback.dependencies.error).toHaveBeenCalledWith(new Error("Audio output busy"));
 });

@@ -12,15 +12,27 @@ import { HeaderBackButton } from "../src/ui/header-back-button";
 import { useCopy } from "../src/ui/copy";
 import { useReducedMotionPreference } from "../src/ui/use-reduced-motion";
 import { useMobileTheme } from "../src/ui/theme";
+import { useRestoreLastSession } from "../src/features/workspace/last-session";
+import { useAssistantWindowReserve } from "../src/features/assistant/assistant-window-reserve";
 import { useEffect } from "react";
+
+/**
+ * Home sits beneath every cold deep link (widget setup, `bycoda://project/...`, `/machines`,
+ * a resolved session reference), so the header back arrow and the Android back button have
+ * somewhere to go instead of leaving the app. Warm links and `router.push` keep their stack.
+ */
+export const unstable_settings = { anchor: "(tabs)" };
 
 // Module scope: capture starts before the first render so early warnings and crashes are kept.
 startDiagnostics();
 
 function RootNavigation() {
+  useRestoreLastSession();
   const copy = useCopy();
   const reducedMotion = useReducedMotionPreference();
   const { mode, colors, uiStyles } = useMobileTheme();
+  // Pushed screens keep their last rows and bottom actions clear of the minimized assistant window.
+  const assistantReserve = useAssistantWindowReserve((state) => state.reserve);
   const baseTheme = mode === "dark" ? DarkTheme : DefaultTheme;
   const navigationTheme = {
     ...baseTheme,
@@ -36,7 +48,7 @@ function RootNavigation() {
   };
   return (
     <ThemeProvider value={navigationTheme}>
-        <ScreenChromeProvider nativeTitle>
+        <ScreenChromeProvider nativeTitle bottomInset={assistantReserve}>
           <Stack
             screenLayout={({ children }) => <KeyboardScreen>{children}</KeyboardScreen>}
             screenOptions={{

@@ -53,6 +53,7 @@ function QuestionCardOwner({
   onAnswer,
   initialDraft,
   onDraftChange,
+  onDraftFlush,
   attachmentControls,
   attachments,
   attachmentBusy,
@@ -128,6 +129,7 @@ function QuestionCardOwner({
       onChangeText={(text) =>
         !held && form.patch((current) => updateCustomAnswer(item, current, text))
       }
+      onBlur={onDraftFlush}
       multiline
     />
   );
@@ -220,6 +222,7 @@ function QuestionCardOwner({
                   onChangeText={(text) =>
                     !held && form.patch((current) => ({ notes: { ...current.notes, [item.id]: text } }))
                   }
+                  onBlur={onDraftFlush}
                   multiline
                 />
               ) : null}

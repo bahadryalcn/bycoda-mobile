@@ -22,19 +22,36 @@ export function sessionHref(session: QuickActionSession): string {
   return `/session/${encodeURIComponent(session.id)}?projectId=${encodeURIComponent(session.projectId)}&machineId=${encodeURIComponent(session.machineId)}`;
 }
 
-/** Ordered actions: create, talk, search, recent work, then the destinations used most on a tablet. */
+/**
+ * What the navigation rail beside the panel already offers. Settings is always on the rail; New session and
+ * Voice assistant only exist there while a computer is active, so they stay in the panel otherwise.
+ */
+export type QuickPanelRail = { session: boolean };
+
+/**
+ * Ordered actions: create, talk, search, recent work, then the destinations used most on a tablet. With a
+ * `rail`, the actions the rail already shows are left out so one destination has one entry point.
+ */
 export function quickPanelActions(
   commands: readonly PaletteEntry[],
   recents: readonly QuickActionSession[],
   copy: Copy,
+  rail?: QuickPanelRail,
 ): QuickPanelAction[] {
   const route = (id: string, icon: "plus" | "terminal" | "settings"): QuickPanelAction[] => {
     const command = findCommand(commands, id);
     return command ? [{ id: command.id, label: command.label, icon, kind: "route", destination: command.destination }] : [];
   };
+  const voice: QuickPanelAction = {
+    id: "voice",
+    label: copy("Sesli asistan", "Voice assistant"),
+    icon: "mic",
+    kind: "voice",
+    href: VOICE_HREF,
+  };
+  const create = rail?.session ? [] : [...route("new", "plus"), voice];
   return [
-    ...route("new", "plus"),
-    { id: "voice", label: copy("Sesli asistan", "Voice"), icon: "mic", kind: "voice", href: VOICE_HREF },
+    ...create,
     { id: "palette", label: copy("Ara ve komutlar", "Search and commands"), icon: "search", kind: "palette" },
     ...recents.slice(0, QUICK_PANEL_RECENTS).map((session): QuickPanelAction => ({
       id: `session:${session.id}`,
@@ -44,7 +61,7 @@ export function quickPanelActions(
       href: sessionHref(session),
     })),
     ...route("tool:terminals", "terminal"),
-    ...route("settings", "settings"),
+    ...(rail ? [] : route("settings", "settings")),
   ];
 }
 

@@ -32,6 +32,7 @@ export type MobileHostRuntimeLease = {
     options?: HostWsRequestOptions,
   ): Promise<T>;
   subscribe(handler: AppliedHostEvent): () => void;
+  tunnelCredential(): { credential: string; endpoint: string } | undefined;
   state(): MobileHostRuntimeState;
   onState(handler: (state: MobileHostRuntimeState) => void): () => void;
   release(): void;
@@ -46,13 +47,29 @@ type Runtime = {
   fence: number;
   timer?: ReturnType<typeof setTimeout>;
   stable?: ReturnType<typeof setTimeout>;
+  /** Pending close of a live socket whose last lease was released; a new lease cancels it. */
+  idle?: ReturnType<typeof setTimeout>;
   /** Why the runtime is blocked; only authentication/TLS blocks are re-checked. */
   blockedBy?: string;
+  /** Automatic re-checks already scheduled for the current blocked episode. */
+  blockedRechecks: number;
   events: Set<AppliedHostEvent>;
   states: Set<(state: MobileHostRuntimeState) => void>;
 };
 
-const BLOCKED_RECHECK_MS = 20_000;
+/**
+ * Automatic delays between re-checks of a blocked computer. A revoked credential fails every
+ * re-check the same way, so the ladder ends and only a real recovery event (a new lease, app
+ * foreground, or a changed machine/credential) starts it again.
+ */
+const BLOCKED_RECHECK_MS = [20_000, 60_000, 300_000, 900_000] as const;
+/**
+ * How long a connected socket outlives its last lease. Replacing a host client (consent, route
+ * privacy or capability change) releases the old lease before the new one is retained; without
+ * this grace that gap closed the socket and repeated the TLS handshake, hello and resubscribes.
+ * Explicit teardown (revoke, logout, lock, machine/route change, close) ignores it.
+ */
+export const IDLE_RELEASE_GRACE_MS = 8_000;
 /** How long a starting voice call waits for the shared Host socket to (re)connect. */
 export const VOICE_READY_TIMEOUT_MS = 20_000;
 /**
@@ -72,7 +89,7 @@ export class MobileHostRuntimeRegistry {
   private closed = false;
   async openVoice(machine: MobileMachine, scope: AssistantVoiceScope, current: () => boolean) {
     this.assertAccess();
-    const runtime = this.runtimes.get(machine.environmentId);
+    const runtime = this.runtimes.get(machine.id);
     if (!this.native || !runtime || runtime.binding.machineId !== machine.id) throw new HostWsError("unavailable");
     // Returning from the microphone prompt (Android pauses the app for it) reconnects the shared
     // socket under a new access epoch; the call waits for that instead of failing at once.
@@ -113,14 +130,20 @@ export class MobileHostRuntimeRegistry {
     const binding = requireCredentialBinding(input);
     if (!this.accessConfigured || binding.accessEpoch > this.accessEpoch)
       this.setAccess(this.active, Math.max(binding.accessEpoch, this.accessEpoch));
-    const key = binding.environmentId;
+    const key = binding.machineId;
     let runtime = this.runtimes.get(key);
     if (
       runtime &&
       JSON.stringify({ ...runtime.binding, accessEpoch: 0 }) !==
         JSON.stringify({ ...binding, accessEpoch: 0 })
-    )
-      throw new HostWsError("identity");
+    ) {
+      // A lingering socket belongs to the old route/authority: close it now rather than reuse it.
+      if (runtime.idle === undefined) throw new HostWsError("identity");
+      this.stop(runtime);
+      this.setState(runtime, "idle");
+      this.runtimes.delete(key);
+      runtime = undefined;
+    }
     if (!runtime) {
       if (this.runtimes.size >= 16) throw new HostWsError("overload");
       runtime = {
@@ -129,6 +152,7 @@ export class MobileHostRuntimeRegistry {
         state: "idle",
         attempt: 0,
         fence: 0,
+        blockedRechecks: 0,
         events: new Set(),
         states: new Set(),
       };
@@ -136,9 +160,17 @@ export class MobileHostRuntimeRegistry {
     }
     if (runtime.refs >= MAX_LEASES) throw new HostWsError("overload");
     runtime.refs++;
-    if (runtime.refs === 1)
+    if (runtime.refs === 1 && runtime.idle !== undefined) {
+      // Reuse the live (or still connecting) socket of the lease released moments ago.
+      clearTimeout(runtime.idle);
+      runtime.idle = undefined;
+    } else if (runtime.refs === 1)
       if (runtime.state !== "blocked") void this.connect(runtime);
-      else this.recheckBlocked(runtime);
+      else {
+        // A view opening the computer starts a fresh bounded ladder for this blocked episode.
+        runtime.blockedRechecks = 0;
+        this.recheckBlocked(runtime);
+      }
     const owned = runtime;
     const ownedEvents = new Set<AppliedHostEvent>();
     const ownedStates = new Set<(state: MobileHostRuntimeState) => void>();
@@ -167,6 +199,13 @@ export class MobileHostRuntimeRegistry {
           ownedEvents.delete(handler);
         };
       },
+      tunnelCredential: () => {
+        if (released || owned.state !== "ready" || !owned.credential) return undefined;
+        const endpoint = new URL(owned.binding.endpoint);
+        endpoint.pathname = "/ws-tunnel";
+        endpoint.search = "";
+        return { credential: owned.credential.handle, endpoint: endpoint.toString() };
+      },
       state: () => owned.state,
       onState: (handler) => {
         if (released || owned.states.size >= MAX_LEASES) throw new HostWsError("overload");
@@ -183,13 +222,25 @@ export class MobileHostRuntimeRegistry {
         for (const handler of ownedEvents) owned.events.delete(handler);
         for (const handler of ownedStates) owned.states.delete(handler);
         owned.refs--;
-        if (!owned.refs) {
+        if (owned.refs) return;
+        if (this.closed || !this.active || !["ready", "connecting"].includes(owned.state)) {
           const blocked = owned.state === "blocked";
           this.stop(owned);
           this.setState(owned, blocked ? "blocked" : "idle");
+          return;
         }
+        owned.idle = setTimeout(() => {
+          if (owned.refs) return;
+          this.stop(owned);
+          this.setState(owned, "idle");
+        }, IDLE_RELEASE_GRACE_MS);
+        owned.idle.unref?.();
       },
     };
+  }
+  /** A runtime is live while a lease holds it or its idle grace keeps the socket. */
+  private live(runtime: Runtime): boolean {
+    return runtime.refs > 0 || runtime.idle !== undefined;
   }
   private setState(runtime: Runtime, state: MobileHostRuntimeState): void {
     runtime.state = state;
@@ -210,8 +261,10 @@ export class MobileHostRuntimeRegistry {
     runtime.fence++;
     clearTimeout(runtime.timer);
     clearTimeout(runtime.stable);
+    clearTimeout(runtime.idle);
     runtime.timer = undefined;
     runtime.stable = undefined;
+    runtime.idle = undefined;
     runtime.connection?.close();
     runtime.connection = undefined;
   }
@@ -230,7 +283,7 @@ export class MobileHostRuntimeRegistry {
       // ("Access needed" while the Host accepted the same credential); native access
       // checks in acquireCredential/open still refuse a stale or inactive handle.
       await this.invalidation.catch(() => undefined);
-      if (runtime.fence !== fence || !this.active || !runtime.refs) return;
+      if (runtime.fence !== fence || !this.active || !this.live(runtime)) return;
       this.assertAccess();
       const binding = {
         ...runtime.binding,
@@ -249,7 +302,7 @@ export class MobileHostRuntimeRegistry {
           );
         }
       }
-      if (runtime.fence !== fence || !this.active || !runtime.refs) return;
+      if (runtime.fence !== fence || !this.active || !this.live(runtime)) return;
       runtime.credential = credential;
       const connection = new MobileHostWsConnection(
         this.native!,
@@ -282,11 +335,12 @@ export class MobileHostRuntimeRegistry {
       );
       runtime.connection = connection;
       await connection.start();
-      if (runtime.fence !== fence || !this.active || !runtime.refs) {
+      if (runtime.fence !== fence || !this.active || !this.live(runtime)) {
         connection.close();
         return;
       }
       runtime.blockedBy = undefined;
+      runtime.blockedRechecks = 0;
       this.setState(runtime, "ready");
       runtime.stable = setTimeout(() => {
         if (runtime.fence === fence && runtime.state === "ready") runtime.attempt = 0;
@@ -298,7 +352,12 @@ export class MobileHostRuntimeRegistry {
   }
   private failed(runtime: Runtime, error: HostWsError): void {
     this.stop(runtime);
-    if (this.closed || !runtime.refs) return;
+    if (this.closed) return;
+    if (!runtime.refs) {
+      // The socket died while only its idle grace held it: nothing is left to retry for.
+      this.setState(runtime, "idle");
+      return;
+    }
     if (!this.active) {
       this.setState(runtime, "suspended");
       return;
@@ -330,10 +389,14 @@ export class MobileHostRuntimeRegistry {
   private recheckBlocked(runtime: Runtime): void {
     if (runtime.timer || !runtime.refs || !["authentication", "tls"].includes(runtime.blockedBy ?? ""))
       return;
+    const delay = BLOCKED_RECHECK_MS[runtime.blockedRechecks];
+    // Ladder exhausted: stay blocked until a real recovery event resets it.
+    if (delay === undefined) return;
+    runtime.blockedRechecks++;
     runtime.timer = setTimeout(() => {
       runtime.timer = undefined;
       void this.connect(runtime);
-    }, BLOCKED_RECHECK_MS);
+    }, delay);
   }
   /** App lock/background closes sockets and invalidates native handles immediately. */
   setAccess(active: boolean, epoch: number): void {
@@ -345,6 +408,10 @@ export class MobileHostRuntimeRegistry {
     for (const runtime of this.runtimes.values()) {
       this.stop(runtime);
       runtime.credential = undefined;
+      // Foreground return is a real recovery event: the blocked ladder starts over, and so does
+      // the reconnect backoff, so a flaky period does not leave the next failure near the cap.
+      runtime.blockedRechecks = 0;
+      if (active) runtime.attempt = 0;
       this.setState(runtime, active ? "idle" : "suspended");
     }
     // Resume only after native invalidation settles; an old completion cannot
@@ -360,6 +427,19 @@ export class MobileHostRuntimeRegistry {
           for (const runtime of this.runtimes.values())
             if (runtime.refs) void this.connect(runtime);
       });
+  }
+  /**
+   * Offline → online: waiting out a backoff timer only delays recovery, so a computer that is
+   * retrying (or mid-attempt on the dead network) restarts now with a fresh ladder. Identity,
+   * credential binding and access epoch are untouched; the ladder keeps growing while offline.
+   */
+  networkRegained(): void {
+    if (this.closed || !this.active) return;
+    for (const runtime of this.runtimes.values())
+      if (runtime.refs && (runtime.state === "backoff" || runtime.state === "connecting")) {
+        runtime.attempt = 0;
+        void this.connect(runtime);
+      }
   }
   invalidateMachine(machineId: string): void {
     for (const [key, runtime] of this.runtimes)
@@ -433,12 +513,14 @@ async function createMobileHostRuntime(options: {
   const [
     { nativeHostSocket },
     { AppState },
+    { default: NetInfo },
     { useSecurity, isAppAccessAllowed, assertAppAccess },
     { useMachines },
     { useAccountAccess },
   ] = await Promise.all([
     import("../../modules/bycoda-host-socket"),
     import("./app-state"),
+    import("@react-native-community/netinfo"),
     import("./security"),
     import("./machines"),
     import("../features/account/model/account-access"),
@@ -659,6 +741,15 @@ async function createMobileHostRuntime(options: {
   const security = useSecurity.subscribe(access);
   const account = useAccountAccess.subscribe(access);
   const lifecycle = AppState.addEventListener("change", access);
+  // Only an offline -> online edge is a recovery event; the first report just records the state,
+  // and an outage leaves the backoff ladder alone.
+  let online: boolean | undefined;
+  const network = NetInfo.addEventListener((state) => {
+    const next = state.isConnected !== false;
+    const regained = online === false && next;
+    online = next;
+    if (regained) registry.networkRegained();
+  });
   let machines = new Map(
     useMachines
       .getState()
@@ -667,6 +758,7 @@ async function createMobileHostRuntime(options: {
         JSON.stringify([machine.endpoint, machine.environmentId, machine.lanKey]),
       ]),
   );
+  let pendingMachines = new Set(useMachines.getState().pendingMachineIds);
   const machineState = useMachines.subscribe((state) => {
     const next = new Map(
       state.machines.map((machine) => [
@@ -674,12 +766,16 @@ async function createMobileHostRuntime(options: {
         JSON.stringify([machine.endpoint, machine.environmentId, machine.lanKey]),
       ]),
     );
+    const nextPending = new Set(state.pendingMachineIds);
+    // Storage failure or an account-wide change affects every computer; a change to one computer
+    // (pairing, removal, route switch) tears down only that computer's socket, at once when it
+    // starts (revocation stays immediate), and once more when it finishes.
+    const everyComputer = state.accountPending || !!state.storageError || !state.hydrated;
     for (const [id, previous] of machines)
       if (
         next.get(id) !== previous ||
-        state.connectionPending ||
-        state.storageError ||
-        !state.hydrated
+        pendingMachines.has(id) !== nextPending.has(id) ||
+        everyComputer
       ) {
         credentialGenerations.set(id, (credentialGenerations.get(id) ?? 1) + 1);
         for (const key of bootstrap.keys())
@@ -690,6 +786,7 @@ async function createMobileHostRuntime(options: {
         registry.invalidateMachine(id);
       }
     machines = next;
+    pendingMachines = nextPending;
   });
   return {
     registry,
@@ -699,6 +796,7 @@ async function createMobileHostRuntime(options: {
       security();
       account();
       lifecycle.remove();
+      network();
       machineState();
       bootstrap.clear();
       resolvedBootstrap.clear();

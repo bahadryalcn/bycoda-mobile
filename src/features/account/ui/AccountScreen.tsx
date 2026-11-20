@@ -56,7 +56,7 @@ export function AccountScreen() {
   if (account.status === "loading")
     return (
       <Screen title={title}>
-        <Loading centered label={copy("Yükleniyor…", "Loading…")} />
+        <Loading centered immediate />
       </Screen>
     );
   if (account.status === "signedOut")

@@ -43,6 +43,8 @@ export type InputProps = TextInputProps & {
   info?: string;
   error?: string;
   tone?: "default" | SemanticTone;
+  /** Fills the height its parent gives; the editor then owns the only scroller. */
+  fill?: boolean;
 };
 
 export type ScreenProps = PropsWithChildren<{
@@ -54,6 +56,11 @@ export type ScreenProps = PropsWithChildren<{
   actions?: ReactNode;
   /** In-screen back control, shown only when no native header owns navigation. */
   onBack?: () => void;
+  /**
+   * Non-scrolling pages: their content reserves the home-indicator inset itself (a keyboard-aware composer), so
+   * the frame keeps only the dock clearance. Horizontal gutters stay the content's, via `useScreenContentInsets`.
+   */
+  contentOwnsBottomInset?: boolean;
   scroll?: boolean;
   query?: QueryLike;
   refresh?: () => unknown;
@@ -159,7 +166,7 @@ export type UnsavedBadgeProps = { label?: string };
 
 export type FieldErrorProps = { message: string };
 
-export type LoadingProps = { label?: string; centered?: boolean; showLabel?: boolean };
+export type LoadingProps = { label?: string; centered?: boolean; showLabel?: boolean; immediate?: boolean };
 
 export type ErrorTextProps = { error: unknown; message?: string };
 

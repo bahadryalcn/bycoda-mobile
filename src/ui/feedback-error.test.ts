@@ -13,16 +13,12 @@ vi.mock("react-native", () => ({
   Text: "Text",
   View: "View",
 }));
-const handoff = vi.hoisted(() => ({ mounted: true }));
-vi.mock("react-native-reanimated", () => ({ default: { View: "AnimatedView" }, useAnimatedStyle: () => ({}) }));
-vi.mock("panelui-native/hooks/use-skeleton-handoff", () => ({ useSkeletonHandoff: () => ({ mounted: handoff.mounted, opacity: { value: 1 } }) }));
 vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("./motion", () => ({ reveal: undefined }));
 vi.mock("./typography", () => ({ Body: "Body" }));
 vi.mock("./state-view", () => ({ StateView: "StateView" }));
 vi.mock("./toast", () => ({ showToast: vi.fn(), useToastAvailable: () => false }));
-vi.mock("./layout", () => ({ Row: "Row" }));
-vi.mock("./buttons", () => ({ Button: "Button" }));
+vi.mock("./layout", () => ({ Row: "Row" }));vi.mock("./buttons", () => ({ Button: "Button" }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
 vi.mock("panelui-native/components/badge", () => ({ Badge: "Badge" }));
 vi.mock("panelui-native/components/spinner", () => ({ Spinner: "Spinner" }));
@@ -45,7 +41,7 @@ type Rendered = { type: unknown; props: any } | null;
 function unwrap(tree: ReturnType<typeof QueryState>): Rendered {
   const children = (tree?.props as { children: Rendered | Rendered[] }).children;
   if (!Array.isArray(children)) return children;
-  const [skeleton, node = null] = children;
+  const [, skeleton, node = null] = children;
   return skeleton?.props.loading ? skeleton : node;
 }
 function renderQuery(props: ComponentProps<typeof QueryState>) {
@@ -125,15 +121,9 @@ describe("shared feedback error rendering", () => {
     expect(ErrorNotice({ error: undefined })).toBeNull();
   });
 
-  it("dissolves a shown skeleton as an inert overlay after loading and drops it once faded", () => {
-    handoff.mounted = true;
-    const fading = renderSkeleton({ loading: false })!;
-    expect(fading.props.pointerEvents).toBe("none");
-    expect(fading.props.accessibilityRole).toBeUndefined();
-    handoff.mounted = false;
+  it("drops the skeleton as soon as loading ends so the resolved state owns the region", () => {
     expect(renderSkeleton({ loading: false })).toBeNull();
     expect(renderSkeleton({ loading: true })).not.toBeNull();
-    handoff.mounted = true;
   });
 
   it("announces the actual loading dependency with the shared skeleton or inline loader", () => {

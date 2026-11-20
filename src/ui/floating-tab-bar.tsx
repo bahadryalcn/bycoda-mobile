@@ -188,23 +188,7 @@ function TabItem({
         }}
       >
         {icon}
-        {badge ? (
-          <Text
-            style={{
-              position: "absolute",
-              top: -space.sm,
-              end: -space.xs,
-              paddingHorizontal: space.xxs,
-              borderRadius: radii.badge,
-              backgroundColor: colors.accentSolid,
-              color: colors.primaryText,
-              fontSize: fontSize.caption,
-              fontVariant: ["tabular-nums"],
-            }}
-          >
-            {badge}
-          </Text>
-        ) : null}
+        {badge ? <TabBadge badge={badge} top={-space.sm} end={-space.xs} /> : null}
       </View>
       {focused ? (
         <View

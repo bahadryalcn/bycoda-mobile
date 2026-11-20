@@ -9,10 +9,10 @@ vi.mock("react-native-reanimated",()=>({default:{View:({children}:PropsWithChild
 vi.mock("expo-router",()=>({router:{push:vi.fn()}}));
 vi.mock("expo-constants",()=>({default:{expoConfig:{version:"1.0",android:{package:"com.bycoda.mobile"},extra:{engagement:{androidPlayStoreUrl:"https://play.google.com/store/apps/details?id=com.bycoda.mobile"}}}}}));
 vi.mock("expo-application", () => ({ nativeApplicationVersion: "1.0", nativeBuildVersion: "1", applicationId: "com.bycoda.mobile" }));
-vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
+vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string,values?:Record<string,string|number>)=>en.replace(/\{(p\d)\}/g,(_match,key:string)=>String(values?.[key]??""))}));
 vi.mock("@/ui/info-hint",()=>({HintSection:({title,children}:PropsWithChildren<{title:string}>)=>createElement("section",null,createElement("h2",null,title),children)}));
 vi.mock("@/ui/styles",()=>({uiStyles:{}}));vi.mock("@/ui/tokens",()=>({colors:{},space:{},lineHeight:{}}));vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));vi.mock("@/ui/icon-tile",()=>({IconTile:()=>null}));
-vi.mock("lucide-react-native/icons/star",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/external-link",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/share-2",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/globe",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/message-square",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/flag",()=>({default:()=>null}));
+vi.mock("lucide-react-native/icons/star",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/external-link",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/share-2",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/globe",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/message-square",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/flag",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/smartphone",()=>({default:()=>null}));
 vi.mock("@/ui/primitives",()=>{
  const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);
  return {Body:Wrapper,Heading:Wrapper,Stack:Wrapper,NavigationGroup:Wrapper,Disclosure:({label,children}:PropsWithChildren<{label:string}>)=>{const[open,setOpen]=useState(false);return createElement("div",null,createElement("button",{"aria-expanded":open,onClick:()=>setOpen(!open)},label),open?children:null);},Section:({title,children}:PropsWithChildren<{title:string}>)=>createElement("section",null,createElement("h2",null,title),children),
@@ -41,6 +41,12 @@ it("opens the real product website from Help and About", async () => {
 });
 beforeEach(()=>{vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);vi.stubEnv("EXPO_OS","android");container=document.createElement("div");root=createRoot(container);client=new QueryClient();fixture.open.mockResolvedValue(undefined);fixture.share.mockResolvedValue({action:"dismissedAction"});});
 afterEach(async()=>{await act(async()=>root?.unmount());root=undefined;client.clear();fixture.handlers.clear();vi.resetAllMocks();vi.unstubAllGlobals();vi.unstubAllEnvs();});
+it("renders About version and build as whole localized messages", async () => {
+ await render("engagement");
+ expect(container.textContent).toContain("Version: 1.0");
+ expect(container.textContent).toContain("Build: 1");
+ expect(container.textContent).not.toContain("Version: Unknown");
+});
 it("claims legal link opening synchronously and leaves failure under the originating row",async()=>{
  let reject!:(error:Error)=>void;fixture.open.mockImplementationOnce(()=>new Promise((_done,fail)=>{reject=fail;}));await render();
  await act(async()=>{button("Open email app").click();button("GitHub project & public issues").click();});
@@ -58,16 +64,18 @@ it("retires legal callbacks when the document changes or unmounts",async()=>{
  await render();const old=fixture.handlers.get("GitHub project & public issues")!;await render("terms");await act(async()=>old());await settle();expect(fixture.open).not.toHaveBeenCalled();
  const current=fixture.handlers.get("Source code & license")!;await act(async()=>root!.unmount());root=undefined;await act(async()=>current());await settle();expect(fixture.open).not.toHaveBeenCalled();
 });
-it("keeps public-page failure between that action and feedback navigation",async()=>{
+// The About actions report in one place under their group, so a failure never shifts the rows below it.
+it("shows a public-page failure once, under the action group",async()=>{
  fixture.open.mockRejectedValueOnce(new Error("failed"));await render("engagement");await act(async()=>button("App page").click());await settle();
  const message=container.querySelector('[role="alert"]')!;expect(message).not.toBeNull();
- expect(button("App page").compareDocumentPosition(message)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();expect(message.compareDocumentPosition(button("Send feedback"))&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
+ expect(button("App page").compareDocumentPosition(message)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();expect(button("Send feedback").compareDocumentPosition(message)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 it("does not let another tap steal a pending share's cancellation feedback",async()=>{
  let finish!:(value:{action:string})=>void;fixture.share.mockImplementationOnce(()=>new Promise(done=>{finish=done;}));await render("engagement");
  await act(async()=>{button("Share the app").click();button("App page").click();});expect(fixture.share).toHaveBeenCalledTimes(1);expect(fixture.open).not.toHaveBeenCalled();
  await act(async()=>finish({action:"dismissedAction"}));const notice=[...container.querySelectorAll("div")].find(node=>node.textContent==="Sharing was cancelled.")!;
- expect(notice).toBeDefined();expect(notice.compareDocumentPosition(button("App page"))&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ expect(notice).toBeDefined();expect(button("App page").compareDocumentPosition(notice)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 it("does not launch public actions from retained callbacks after unmount",async()=>{
  await render("engagement");const old=fixture.handlers.get("Share the app")!,page=fixture.handlers.get("App page")!;await act(async()=>root!.unmount());root=undefined;

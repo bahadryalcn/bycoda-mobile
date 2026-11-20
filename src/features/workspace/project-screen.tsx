@@ -12,6 +12,7 @@ import FolderTree from "lucide-react-native/icons/folder-tree";
 import Search from "lucide-react-native/icons/search";
 import Plus from "lucide-react-native/icons/plus";
 import { useScreenChrome } from "@/ui/layout";
+import { useScreenContentInsets } from "@/ui/screen-content-insets";
 import { MachineConnectionStatus } from "@/ui/machine-bar";
 import type { ProjectSessionControls } from "./sessions-panel-types";
 import Grid2x2 from "lucide-react-native/icons/grid-2x2";
@@ -46,10 +47,6 @@ import { ToolDirectory } from "../management/tool-directory";
 import { useMobileTheme } from "@/ui/theme";
 import { ProjectIcon } from "@/ui/project-icon";
 import { ProjectSegments } from "./project-segments";
-import { ProjectPreferencesTab } from "./project-preferences-tab";
-import MessagesSquare from "lucide-react-native/icons/messages-square";
-import Folder from "lucide-react-native/icons/folder";
-import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import { ProjectMenuSheet, type ProjectMenuSection } from "./project-menu-sheet";
 import { ProjectDetailsSheet } from "./project-details-sheet";
 import { WorktreeCreate } from "./worktree-create";
@@ -75,6 +72,8 @@ export function ProjectScreen({
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const { nativeTitle } = useScreenChrome();
+  // Horizontal gutters only: the Screen frame below pads the dock and home indicator for its own children.
+  const gutter = useScreenContentInsets();
   const machine = useActiveMachine();
   const projects = useProjectList();
   const visibleProject = projects.data?.find((value) => value.id === id);
@@ -90,7 +89,9 @@ export function ProjectScreen({
     cwd: initialCwd,
     pickingWorktree: false,
   });
-  const { segment, cwd, file: fileToOpen } = view;
+  const { cwd, file: fileToOpen } = view;
+  // The retired Settings tab now lives in Project options; a stale link lands on Sessions.
+  const segment = view.segment === "preferences" ? "sessions" : view.segment;
   const [toolsOpen, setToolsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -134,7 +135,7 @@ export function ProjectScreen({
       .filter((tree) => !tree.missing && !tree.isMain)
       .map((tree) => ({
         value: tree.path,
-        label: tree.branch || copy("Ayrı çalışma klasörü", "Worktree"),
+        label: tree.branch || copy("Çalışma ağacı", "Worktree"),
         detail: tree.path,
       })),
   ];
@@ -160,12 +161,16 @@ export function ProjectScreen({
   const canUseProject = () => !!machine && useMachines.getState().activeId === machine.id && projects.isProjectVisible(id) && !changingWorkspace;
   const menuSections = (sessionControls?: ProjectSessionControls): ProjectMenuSection[] => project ? [
     { key: "view", title: copy("Liste", "List"), items: [
+      sessionControls ? { key: "search", label: copy("Oturum ara", "Search sessions"), icon: <Search size={18} color={colors.muted} />,
+        selected: sessionControls.searchOpen || sessionControls.hasSearch, onPress: sessionControls.toggleSearch } : false,
       sessionControls ? { key: "archive", label: sessionControls.archived ? copy("Etkin oturumlar", "Active sessions") : copy("Arşiv", "Archive"),
         icon: <Archive size={18} color={colors.muted} />, selected: sessionControls.archived, onPress: sessionControls.toggleArchived } : false,
       sessionControls ? { key: "refresh", label: copy("Yenile", "Refresh"), icon: <RefreshCw size={18} color={colors.muted} />,
         disabled: sessionControls.refreshing, onPress: sessionControls.refresh } : false,
     ] },
     { key: "project", title: copy("Proje", "Project"), items: [
+      machine ? { key: "pull-requests", label: copy("Pull request’ler", "Pull requests"), icon: <GitPullRequest size={18} color={colors.muted} />,
+        onPress: () => { if (canUseProject()) router.push(`/pull-requests?projectId=${encodeURIComponent(id)}&machineId=${encodeURIComponent(machine.id)}` as Href); } } : false,
       { key: "details", label: copy("Proje ayrıntıları", "Project details"),
         icon: <Info size={18} color={colors.muted} />, onPress: () => setDetailsOpen(true) },
       { key: "tools", label: copy("Proje araçları", "Project tools"), icon: <Grid2x2 size={18} color={colors.muted} />,
@@ -174,7 +179,7 @@ export function ProjectScreen({
         disabled: changingWorkspace, onPress: () => { if (canUseProject()) setSubmodulesOpen(true); } },
     ] },
     { key: "folder", title: copy("Çalışma klasörü", "Working folder"), items: [
-      canPickWorktree ? { key: "worktree", label: cwd ? copy("Ayrı çalışma klasörü", "Worktree") : copy("Ana proje klasörü", "Main project folder"),
+      canPickWorktree ? { key: "worktree", label: cwd ? copy("Çalışma ağacı", "Worktree") : copy("Ana proje klasörü", "Main project folder"),
         detail: cwd ?? project.cwd, icon: <FolderTree size={18} color={colors.muted} />,
         disabled: changingWorkspace || worktrees.isPending, onPress: () => { if (canUseProject()) setWorktreeOpen(true); } } : false,
     ] },
@@ -183,18 +188,9 @@ export function ProjectScreen({
     if (!project || !machine) return content;
     const headerActions = <PrivateContentAccessProvider value={{ allowed: !!visibleProject, check: canUseProject }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-      <IconButton label={copy("Pull request’ler", "Pull requests")} onPress={() => { if (canUseProject()) router.push(`/pull-requests?projectId=${encodeURIComponent(id)}&machineId=${encodeURIComponent(machine.id)}` as Href); }}>
-        <GitPullRequest color={colors.muted} />
-      </IconButton>
-      {sessionControls ? (
-        <IconButton label={copy("Oturum ara", "Search sessions")} expanded={sessionControls.searchOpen}
-          tone="default" onPress={sessionControls.toggleSearch}>
-          <Search size={18} color={sessionControls.hasSearch ? colors.accent : colors.muted} />
-        </IconButton>
-      ) : null}
       <IconButton label={copy("Proje seçenekleri", "Project options")} expanded={menuOpen}
         onPress={() => { if (canUseProject()) setMenuOpen(true); }}>
-        <MoreHorizontal size={20} color={cwd || sessionControls?.archived ? colors.accent : colors.muted} />
+        <MoreHorizontal size={20} color={cwd || sessionControls?.archived || sessionControls?.hasSearch ? colors.accent : colors.muted} />
       </IconButton>
       {sessionControls ? (
         <IconButton label={copy("Yeni oturum", "New session")} tone="default"
@@ -216,10 +212,9 @@ export function ProjectScreen({
           value={segment}
           disabled={changingWorkspace}
           options={[
-            { value: "sessions", label: copy("Oturumlar", "Sessions"), icon: MessagesSquare },
-            { value: "files", label: copy("Dosyalar", "Files"), icon: Folder },
-            { value: "git", label: copy("Değişiklikler", "Changes"), icon: GitBranch },
-            { value: "preferences", label: copy("Ayarlar", "Settings"), icon: SlidersHorizontal },
+            { value: "sessions", label: copy("Oturumlar", "Sessions") },
+            { value: "files", label: copy("Dosyalar", "Files") },
+            { value: "git", label: copy("Değişiklikler", "Changes") },
           ]}
           onChange={(value) => {
             if (segment !== value)
@@ -236,7 +231,7 @@ export function ProjectScreen({
     <Screen scroll={false}>
       {!visibleProject ? <Stack.Screen options={{ title: copy("Proje", "Project"), headerTitle: undefined, headerRight: undefined }} /> : null}
       {project && !visibleProject ? (
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: space.screen, flexGrow: 1,
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: space.screen, paddingLeft: gutter.left, paddingRight: gutter.right, flexGrow: 1,
           gap: space.md, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}>
           {projectFeedback}
         </ScrollView>
@@ -250,7 +245,7 @@ export function ProjectScreen({
           action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.push("/machines") }}
         />
       ) : !project ? (
-        <View style={{ flex: 1, padding: space.screen, gap: space.md,
+        <View style={{ flex: 1, paddingVertical: space.screen, paddingLeft: gutter.left, paddingRight: gutter.right, gap: space.md,
           width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}>
           {projectFeedback}
         </View>
@@ -279,8 +274,6 @@ export function ProjectScreen({
               onClearInitialPath={() => dispatch({ type: "close-file" })}
               onDraftGuard={registerDraftGuard}
             />
-          ) : segment === "preferences" ? renderWorkspace(
-            <ProjectPreferencesTab sections={menuSections().filter((section) => section.key !== "view")} />
           ) : renderWorkspace(
             <ProjectGit
               key={`git:${machine.id}:${id}:${cwd ?? ""}`}
@@ -316,7 +309,7 @@ export function ProjectScreen({
               }}
             />
             <MutationState mutation={changeAction} />
-            <Button tone="quiet" label={copy("Worktree oluştur", "Create worktree")} disabled={changingWorkspace || !machine.capabilities?.includes("git.worktreeCreate")}
+            <Button tone="quiet" label={copy("Çalışma ağacı oluştur", "Create worktree")} disabled={changingWorkspace || !machine.capabilities?.includes("git.worktreeCreate")}
               onPress={() => { setWorktreeOpen(false); setCreateWorktreeOpen(true); }} />
           </Sheet>
           <WorktreeCreate key={`worktree-create:${machine.id}:${id}:${cwd ?? ""}`} scope={{ machineId: machine.id, projectId: id, ...(cwd ? { cwd } : {}) }} visible={createWorktreeOpen} blocked={changingWorkspace}

@@ -5,7 +5,6 @@ import { ScreenList } from "@/ui/screen-list";
 import { Sheet } from "@/ui/primitives";
 import { useProjectList } from "../workspace/use-project-directory";
 import { useLayoutEffect, useMemo, useReducer, useRef, useState, type ComponentRef } from "react";
-import { useMutation } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import Plus from "lucide-react-native/icons/plus";
@@ -34,7 +33,7 @@ import { initialNoteFlow, noteFlowReducer } from "./note-flow";
 
 import type { Note } from "@/domain/types";
 export type { Note } from "@/domain/types";
-import type { NoteList, StorageOperation } from "./notes/types";
+import type { NoteList } from "./notes/types";
 import { ExistingNote, NoteEditor } from "./notes/note-editor";
 import { NoteSummaryRow } from "./notes/note-summary-row";
 import { noteDirectory, type NoteDirectoryRow, type NoteGrouping, type NoteOrdering } from "./notes/note-directory";
@@ -69,38 +68,21 @@ export function NotesScreen() {
   const recovery = useAsyncAction<LocalNoteDraft | null>();
   const [flow, dispatch] = useReducer(noteFlowReducer, initialNoteFlow);
   const sourceCwd = projects.data?.find((project) => project.id === projectId)?.cwd;
-  const storageAction = useMutation<void, Error, StorageOperation & { owner?: ReturnType<typeof draftStore.bind> | null }>({
-    mutationFn: (operation) => {
-      if (!operation.owner)
-        return Promise.reject(new Error(copy("Bir bilgisayar seçin.", "Choose a computer.")));
-      // The store serializes every keystroke. A single-flight gate would discard newer edits.
-      return operation.kind === "save"
-        ? operation.owner.save(operation.draft)
-        : operation.owner.clearSaved(operation.draft);
-    },
-    retry: false,
-    networkMode: "always",
-  });
-  const storage = { ...storageAction,
-    mutate: (operation: StorageOperation) => storageAction.mutate({ ...operation, owner: localDraft }),
-    mutateAsync: (operation: StorageOperation) => storageAction.mutateAsync({ ...operation, owner: localDraft }),
-  };
   const seenDraft = useRef({ key: draftKey, epoch: draftEpoch });
   useLayoutEffect(() => {
     const previous = seenDraft.current; seenDraft.current = { key: draftKey, epoch: draftEpoch };
     if (previous.key === draftKey && previous.epoch !== draftEpoch) {
-      dispatch({ type: "close", expected: flow }); storageAction.reset();
+      dispatch({ type: "close", expected: flow });
     }
   }, [draftKey, draftEpoch]);
   const close = () => dispatch({ type: "close", expected: flow });
-  const editorProps = { save, remove, storage, onClose: close };
+  const editorProps = { save, remove, draftOwner: localDraft, onClose: close };
   const editorOpen = flow.kind !== "closed";
   const busy = save.isPending || remove.isPending || recovery.isPending;
   const visible = useMemo(() => noteDirectory(query.data?.notes ?? [], search, grouping, ordering, locale), [query.data?.notes, search, grouping, ordering, locale]);
   const canCreate = !editorOpen && !busy && !(!!projectId && !sourceCwd);
   const startNew = () => {
     recovery.reset();
-    storage.reset();
     save.reset();
     remove.reset();
     dispatch({
@@ -176,7 +158,6 @@ export function NotesScreen() {
         busy={recovery.isPending}
         disabled={save.isPending || remove.isPending || recovery.isPending}
         onPress={() => {
-          storage.reset();
           void recovery.run(async () => {
             const draft = localDraft ? await localDraft.recover() : null;
             if (draft) dispatch({ type: "recover", initial: draft, expected: flow });
@@ -199,7 +180,6 @@ export function NotesScreen() {
         success={copy("Not bilgisayara kaydedildi.", "Note saved to computer.")}
       />
       <MutationState mutation={remove} success={copy("Not silindi.", "Note deleted.")} />
-      <MutationState mutation={storage} />
       <Sheet visible={editorOpen} size="full" title={flow.kind === "draft" && flow.initial.expectedUpdatedAt === 0 ? copy("Yeni not", "New note") : copy("Notu düzenle", "Edit note")} onClose={close}>
         {flow.kind === "draft" && <NoteEditor key={flow.initial.id} initial={flow.initial} {...editorProps} />}
         {flow.kind === "existing" && <ExistingNote key={flow.id} id={flow.id} {...editorProps} />}
@@ -210,6 +190,8 @@ export function NotesScreen() {
             query={query}
             empty={visible?.length === 0}
             emptyTitle={search.trim() && query.data?.notes.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz not yok", "No notes yet")}
+            emptyDetail={search.trim() && query.data?.notes.length ? undefined
+              : copy("Notlar bu projede agentların da okuyabileceği kısa kayıtlardır.", "Notes are short records in this project that agents can read too.")}
             emptyAction={
               search.trim() && query.data?.notes.length
                 ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
@@ -227,7 +209,7 @@ export function NotesScreen() {
       ) : null}
     </>}
       renderItem={({ item }) => item.kind === "heading" ? <SectionHeader count={item.count} title={item.group === null ? (item.grouping === "tag" ? copy("Etiketsiz", "Untagged") : copy("Projesiz notlar", "Notes without a project")) : item.grouping === "tag" ? `#${item.group}` : projects.data?.find((project) => project.cwd === item.group)?.name ?? item.group} />
-        : <NoteSummaryRow note={item.note} projectName={!projectId && grouping !== "project" ? projects.data?.find((project) => project.cwd === item.note.sourceCwd)?.name : undefined} disabled={editorOpen || busy} onPress={() => { recovery.reset(); storage.reset(); save.reset(); remove.reset(); dispatch({ type: "open", id: item.note.id }); }} />}
+        : <NoteSummaryRow note={item.note} projectName={!projectId && grouping !== "project" ? projects.data?.find((project) => project.cwd === item.note.sourceCwd)?.name : undefined} disabled={editorOpen || busy} onPress={() => { recovery.reset(); save.reset(); remove.reset(); dispatch({ type: "open", id: item.note.id }); }} />}
     />
   );
 }

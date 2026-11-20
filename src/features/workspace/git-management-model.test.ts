@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { readonlyRequest } from "@/remote/request-policy";
-import { gitManagementRequest, managementSnapshotRequest, managementDraft, pullRequestRepository, readGitRemotes, readGitTags, safeRemoteUrl, type GitManagementAction } from "./git-management-model";
+import { GitManagementIssueError, gitManagementRequest, managementSnapshotRequest, managementDraft, pullRequestRepository, readGitRemotes, readGitTags, safeRemoteUrl, type GitManagementAction } from "./git-management-model";
 
 const scope = { projectId: "project", cwd: "/project", root: "/reviewed/worktree" };
 const commit = "a".repeat(40);
@@ -57,6 +57,22 @@ it("requires the provider destination URL and owner/name to identify the same re
   expect(pullRequestRepository({ url: "https://github.com/owner/repo", nameWithOwner: "owner/repo" })).toBe("github.com/owner/repo");
   expect(() => pullRequestRepository({ url: "https://github.com/other/repo", nameWithOwner: "owner/repo" })).toThrow();
   expect(() => pullRequestRepository({ url: "https://token@github.com/owner/repo", nameWithOwner: "owner/repo" })).toThrow();
+});
+
+it("reports validation as typed issue codes so the form can localize them", () => {
+  const issueOf = (run: () => unknown) => {
+    try { run(); return undefined; } catch (reason) { return reason instanceof GitManagementIssueError ? reason.issue : "untyped"; }
+  };
+  const snapshot = { token: "f".repeat(64), refs: {} };
+  expect(issueOf(() => gitManagementRequest(scope, { ...managementDraft("renameBranch"), name: "main", target: "main" }))).toBe("branchNames");
+  expect(issueOf(() => gitManagementRequest(scope, managementDraft("deleteBranch")))).toBe("chooseBranch");
+  expect(issueOf(() => gitManagementRequest(scope, { ...managementDraft("createTag"), name: "v1", sha: "abcd" }))).toBe("tagSha");
+  expect(issueOf(() => gitManagementRequest(scope, { ...managementDraft("addRemote"), name: "origin", url: "" }))).toBe("remoteUrl");
+  expect(issueOf(() => gitManagementRequest(scope, managementDraft("reset")))).toBe("commitSha");
+  expect(issueOf(() => gitManagementRequest({ projectId: "p" }, managementDraft("undoCommit")))).toBe("rootUnavailable");
+  expect(issueOf(() => managementSnapshotRequest(scope, { ...managementDraft("merge"), target: "missing" }, snapshot))).toBe("targetChanged");
+  expect(issueOf(() => managementSnapshotRequest(scope, managementDraft("undoCommit"), { token: "short", refs: {} }))).toBe("snapshotInvalid");
+  expect(issueOf(() => gitManagementRequest(scope, managementDraft("undoCommit")))).toBeUndefined();
 });
 
 it("permits retries only for the added explicit reads, never management writes", () => {

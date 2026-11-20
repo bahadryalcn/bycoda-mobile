@@ -7,9 +7,16 @@ import {
 import { readonlyRequest } from "../../remote/request-policy";
 import {
   MAX_SECRET_BYTES,
+  nextSecretExpiryDelay,
+  SECRET_POLL_MAX_MS,
+  SECRET_POLL_MS,
+  SECRET_SIGNAL_MIN_MS,
   secretAnswer,
   secretAnswerable,
   secretExpired,
+  secretPollDelay,
+  secretPollInterval,
+  secretSignalDelay,
 } from "./secret-request-model";
 
 describe("secret request model", () => {
@@ -70,6 +77,33 @@ describe("secret request model", () => {
     expect(secretAnswerable("a".repeat(MAX_SECRET_BYTES + 1))).toBe(false);
     expect(secretAnswerable("é".repeat(MAX_SECRET_BYTES / 2 + 1))).toBe(false);
     expect(secretAnswer("")).toBeNull();
+  });
+
+  it("polls at a bounded fallback rate and backs off on failures", () => {
+    expect(secretPollDelay(0)).toBe(SECRET_POLL_MS);
+    expect(secretPollDelay(1)).toBe(SECRET_POLL_MS * 2);
+    expect(secretPollDelay(50)).toBe(SECRET_POLL_MAX_MS);
+    expect(secretPollDelay(-1)).toBe(SECRET_POLL_MS);
+  });
+
+  it("keeps the fallback poll running for transient errors and stops it for unrecoverable ones", () => {
+    expect(secretPollInterval(2, "network")).toBe(SECRET_POLL_MS * 4);
+    expect(secretPollInterval(1, undefined)).toBe(SECRET_POLL_MS * 2);
+    for (const kind of ["auth", "identity", "unsupported"])
+      expect(secretPollInterval(1, kind)).toBe(false);
+  });
+
+  it("spaces session-triggered reads but runs the first at once", () => {
+    expect(secretSignalDelay(0, 10_000)).toBe(0);
+    expect(secretSignalDelay(10_000, 10_500)).toBe(SECRET_SIGNAL_MIN_MS - 500);
+    expect(secretSignalDelay(10_000, 10_000 + SECRET_SIGNAL_MIN_MS)).toBe(0);
+  });
+
+  it("times expiry from the earliest live deadline, capped", () => {
+    expect(nextSecretExpiryDelay([], 0)).toBeNull();
+    expect(nextSecretExpiryDelay([{ deadline: 5 }], 5)).toBeNull();
+    expect(nextSecretExpiryDelay([{ deadline: 9_000 }, { deadline: 3_000 }, { deadline: 1 }], 2_000)).toBe(1_000);
+    expect(nextSecretExpiryDelay([{ deadline: 10 * 60_000 }], 0)).toBe(60_000);
   });
 
   it("detects an elapsed deadline", () => {

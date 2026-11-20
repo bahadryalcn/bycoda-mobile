@@ -50,8 +50,17 @@ export function createWorkApi(request: HostRequest) {
         resolved: boolean,
         options?: RemoteRequestOptions,
       ) => request<HostTask>("tasks.notes.resolve", { taskId, noteId, resolved }, options),
-      delete: (taskId: string, discard = false, options?: RemoteRequestOptions) =>
-        request<{ deleted: true }>("tasks.delete", { taskId, discard }, options),
+      delete: (
+        taskId: string,
+        discard = false,
+        expectedUpdatedAt?: number,
+        options?: RemoteRequestOptions,
+      ) =>
+        request<{ deleted: true }>(
+          "tasks.delete",
+          { taskId, discard, expectedUpdatedAt },
+          options,
+        ),
     },
     goals: {
       update: (goalId: string, settings: GoalSettings, expectedUpdatedAt: number, options?: RemoteRequestOptions) =>

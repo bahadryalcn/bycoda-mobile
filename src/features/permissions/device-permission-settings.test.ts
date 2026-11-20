@@ -211,6 +211,22 @@ it("a failing notification read leaves the camera usable, exposes Retry, and nev
   expect(buttons()).not.toContain("Retry");
   expect(mocks.allow).not.toHaveBeenCalled();
 });
+
+it("keeps ready permission rows usable while explicitly retrying a failed read", async () => {
+  mocks.read.mockImplementation(async (kind: string) => {
+    if (kind === "notifications") throw new Error("unavailable");
+    return undetermined;
+  });
+  await render();
+  let release!: (value: typeof granted) => void;
+  mocks.read.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+  await act(async () => find("Retry").click());
+  expect(find("Camera").disabled).toBe(false);
+  expect(find("Microphone").disabled).toBe(false);
+  expect(find("Notifications").disabled).toBe(true);
+  await act(async () => release(granted));
+  expect(badgeOf("Notifications")).toBe("Granted");
+});
 it("shows no badge while a read is pending and refreshes again when the app returns to the foreground", async () => {
   let release!: (value: typeof granted) => void;
   mocks.read.mockImplementation((kind: string) =>
@@ -266,7 +282,8 @@ it("keeps a camera operation failure beside Camera when a foreground refresh arr
   expect(
     error.compareDocumentPosition(find("Notifications")) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
-  expect(mocks.read).toHaveBeenCalledTimes(3);
+  // Passive reads bypass the action flight: the mount read and the foreground read each cover all three kinds.
+  expect(mocks.read).toHaveBeenCalledTimes(6);
   expect(mocks.allow).toHaveBeenCalledExactlyOnceWith("camera");
 });
 

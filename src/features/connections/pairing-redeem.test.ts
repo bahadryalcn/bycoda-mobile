@@ -69,16 +69,16 @@ describe("short-lived mobile QR redemption", () => {
     expect(firstBody).toBe(secondBody);
   });
 
-  it("does not issue any request for an expired code", async () => {
-    const fetcher = vi.fn<typeof fetch>();
+  it("leaves expiry to the Host when the phone clock is past the code's stamp", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(reply());
     await expect(
       redeemMobilePairingCode(code, claim, "Bycoda phone", {
         fetchImpl: fetcher,
         assertAccess: access,
         now: () => now + 60_000,
       }),
-    ).rejects.toMatchObject({ kind: "expired" });
-    expect(fetcher).not.toHaveBeenCalled();
+    ).resolves.toEqual(result);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a returned credential for a different environment", async () => {

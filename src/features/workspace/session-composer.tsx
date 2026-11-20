@@ -106,7 +106,7 @@ export function SessionComposer({
   const client = useHostClient();
   const account = useAccount();
   const outboxIntent = useRef<string | null>(null);
-  const queue = useSessionQueue(scope);
+  const queue = useSessionQueue(scope, session?.status === "running");
   const submission = useRef(false);
   const queuedDraft = useRef<QueuedComposerDraft | null>(null);
   const { height: windowHeight, fontScale } = useWindowDimensions();
@@ -217,7 +217,8 @@ export function SessionComposer({
     // The composer remains sole draft writer, including explicit outbox Edit.
     return registerOutboxEditor(scope, async (row) => {
       if (!ready || submission.current || transfer.current || row.accountId !== account.device?.id ||
-        account.status !== "signedIn" || useMachines.getState().activeId !== scope.machineId)
+        account.status !== "signedIn" || useMachines.getState().activeId !== scope.machineId ||
+        useMachines.getState().machines.find(machine => machine.id === scope.machineId)?.environmentId !== row.environmentId)
         throw new Error(copy("Taslak şu anda düzenlenemiyor.", "Draft cannot be edited right now."));
       const current = valueRef.current ?? emptyComposerDraft();
       if (current.text || current.attachments.length || current.noteCard)

@@ -22,6 +22,8 @@ import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLException
 import javax.net.ssl.TrustManagerFactory
@@ -50,6 +52,20 @@ class BulkDescriptor : Record {
   @Field var chunkBytes: Double = -1.0
   @Field var sha256: String = ""
   @Field var expiresAt: Double = -1.0
+}
+
+class TunnelTarget : Record {
+  @Field var projectId: String = ""
+  @Field var id: String = ""
+  @Field var pid: Int = 0
+  @Field var startedAt: String = ""
+  @Field var port: Int = 0
+  @Field var address: String = ""
+}
+class TunnelInput : Record {
+  @Field var credential: String = ""
+  @Field var endpoint: String = ""
+  @Field var target: TunnelTarget = TunnelTarget()
 }
 
 /** Each client owns its trust store. There is no process/global TLS override. */
@@ -96,6 +112,8 @@ class BycodaHostSocketModule : Module() {
     val deliveries = linkedMapOf<Long, Int>()
     var deliveryBytes = 0
     val voiceRequests = mutableSetOf<String>()
+    /** Fair so frames of one connection reach the socket in the order their native calls arrived. */
+    val sendLock = ReentrantLock(true)
   }
   private val lock = Any()
   private val credentials = linkedMapOf<String, Credential>()
@@ -103,6 +121,8 @@ class BycodaHostSocketModule : Module() {
   // Logical detach does not release admission while the SDK still owns I/O.
   private val socketJobs = mutableSetOf<Connection>()
   private val bulkCalls = linkedMapOf<Call, String>()
+  // The WebView proxy override is process-wide, so at most one phone tunnel is live; a new one replaces the old.
+  private val tunnels = linkedMapOf<String, TunnelSession>()
   @Volatile private var foreground = true
   private var accessAllowed = false
   private var accessEpoch = -1.0
@@ -146,7 +166,40 @@ class BycodaHostSocketModule : Module() {
       credentials.entries.removeAll { (machineId == null || it.value.binding.machineId == machineId) && !(preserveVoice && voiceCurrent(it.value.voice)) }
       connections.values.toList().filter { (machineId == null || it.credential.binding.machineId == machineId) && !(preserveVoice && voiceCurrent(it.credential.voice)) }.forEach { finish(it, "credentials_invalidated", true) }
       bulkCalls.entries.toList().filter { machineId == null || it.value == machineId }.forEach { it.key.cancel() }
+      tunnels.values.toList().filter { machineId == null || it.machineId == machineId }.forEach { it.stop("credentials_invalidated") }
     }
+  }
+  private suspend fun startTunnel(input: TunnelInput): Map<String, Any> {
+    if (!TunnelWebViewSupport.supported()) throw error("tunnel_unsupported")
+    val t = input.target
+    val spec = TunnelTargetSpec(t.projectId, t.id, t.pid, t.startedAt, t.port, t.address)
+    require(TunnelRules.targetValid(spec))
+    val credential = synchronized(lock) { credentials[input.credential] ?: throw error("credential_handle_expired") }
+    if (credential.voice != null) throw error("credential_scope")
+    require(TunnelRules.endpointValid(input.endpoint, credential.binding.endpoint))
+    val value = secret(credential.binding)
+    if (!MessageDigest.isEqual(credential.digest, digest(value))) { invalidate(credential.binding.machineId); throw error("credential_rotated") }
+    val client = HostTls.client(credential.binding)
+    val endpoint = URI(input.endpoint)
+    val alias = TunnelSession.newAlias()
+    val url = HttpUrl.Builder().scheme("https").host(endpoint.host).port(if (endpoint.port < 0) 443 else endpoint.port)
+      .addPathSegment("ws-tunnel")
+      .addQueryParameter("projectId", spec.projectId).addQueryParameter("id", spec.id).addQueryParameter("pid", spec.pid.toString())
+      .addQueryParameter("startedAt", spec.startedAt).addQueryParameter("port", spec.port.toString()).addQueryParameter("address", spec.address)
+      .addQueryParameter("alias", alias).build()
+    val id = UUID.randomUUID().toString()
+    val session = TunnelSession(id, credential.binding.machineId, client, url, value, spec, alias,
+      onError = { code -> sendEvent("onTunnelEvent", mapOf("tunnelId" to id, "type" to "error", "code" to code)) },
+      onClosed = { code -> synchronized(lock) { tunnels.remove(id) }; sendEvent("onTunnelEvent", mapOf("tunnelId" to id, "type" to "closed", "code" to code)) })
+    val replaced = synchronized(lock) {
+      if (!foreground || !accessAllowed || credential.binding.accessEpoch != accessEpoch || credentials[input.credential] !== credential) { session.stop("access_changed"); throw error("access_changed") }
+      val old = tunnels.values.toList()
+      tunnels[id] = session
+      old
+    }
+    replaced.forEach { it.stop("replaced") }
+    session.start()
+    return mapOf("tunnelId" to id, "proxyPort" to session.proxyPort, "alias" to alias)
   }
   private suspend fun acquire(binding: HostBinding, voice: VoiceScope? = null): Map<String, Any> {
     validate(binding)
@@ -199,6 +252,8 @@ class BycodaHostSocketModule : Module() {
         }
         override fun onMessage(ws: WebSocket, bytes: ByteString) { finish(connection, "binary_not_supported", true) }
         override fun onFailure(ws: WebSocket, cause: Throwable, response: Response?) {
+          // The only trace of why a socket died: the type and OkHttp's short reason (no frames or keys).
+          android.util.Log.w("BycodaHostSocket", "socket failed: ${cause.javaClass.simpleName}: ${cause.message?.take(160)} http=${response?.code}")
           synchronized(lock) { socketJobs.remove(connection) }
           finish(connection, if (response?.code == 401 || response?.code == 403) "authentication" else if (cause is SSLException) "tls" else "network", true)
         }
@@ -213,8 +268,24 @@ class BycodaHostSocketModule : Module() {
   } }
   override fun definition() = ModuleDefinition {
     Name("BycodaHostSocket")
-    Events("onSocketEvent")
+    Events("onSocketEvent", "onTunnelEvent")
     OnCreate { VoiceCompanionRuntime.add(voiceListener) }
+    Function("tunnelSupported") { TunnelWebViewSupport.supported() }
+    AsyncFunction("startTunnel") Coroutine { input: TunnelInput -> startTunnel(input) }
+    AsyncFunction("stopTunnel") { tunnelId: String -> synchronized(lock) { tunnels[tunnelId] }?.stop("stopped"); Unit }
+    View(BycodaTunnelWebView::class) {
+      Events("onNavigationChange", "onLoadError", "onExternalLink")
+      Prop("proxyPort") { view: BycodaTunnelWebView, value: Int -> view.proxyPort = value }
+      Prop("alias") { view: BycodaTunnelWebView, value: String -> view.alias = value }
+      Prop("url") { view: BycodaTunnelWebView, value: String -> view.url = value }
+      Prop("dataSaver") { view: BycodaTunnelWebView, value: Boolean -> view.dataSaver = value }
+      OnViewDidUpdateProps { view: BycodaTunnelWebView -> view.applyProps() }
+      OnViewDestroys { view: BycodaTunnelWebView -> view.destroyTunnelView() }
+      AsyncFunction("goBack") { view: BycodaTunnelWebView -> view.goBack() }
+      AsyncFunction("goForward") { view: BycodaTunnelWebView -> view.goForward() }
+      AsyncFunction("reload") { view: BycodaTunnelWebView -> view.reload() }
+      AsyncFunction("stopLoading") { view: BycodaTunnelWebView -> view.stopLoading() }
+    }
     AsyncFunction("setAccess") { active: Boolean, epoch: Double ->
       synchronized(lock) {
         require(HostTls.safe(epoch) && epoch >= accessEpoch)
@@ -243,20 +314,31 @@ class BycodaHostSocketModule : Module() {
     AsyncFunction("open") Coroutine { handle: String, id: String, generation: Double -> openPeer(handle, id, generation) }
     AsyncFunction("openVoice") Coroutine { handle: String, id: String, generation: Double, sessionId: String -> openPeer(handle, id, generation, sessionId) }
     AsyncFunction("send") { id: String, generation: Double, text: String ->
-      synchronized(lock) {
-        val connection = connections[id] ?: throw error("closed")
-        if (!current(connection) || connection.generation != generation || !connection.opened) throw error("stale_connection")
-        if (text.toByteArray(Charsets.UTF_8).size > 1048576 || (connection.socket?.queueSize() ?: 0) + text.toByteArray(Charsets.UTF_8).size > 8388608) throw error("overload")
-        val frame = runCatching { JSONObject(text) }.getOrNull() ?: throw error("invalid_frame")
-        val method = frame.optString("method")
-        connection.credential.voice?.let { scope ->
-          val params = frame.optJSONObject("params")
-          if (!VoiceRpcPolicy.allowed(method, params?.optString("op"), params?.optString("threadId"), params?.optString("projectId"), scope.threadId, scope.projectId, params?.has("threadId") == true, params != null && params.length() == 0)) throw error("voice_scope_denied")
-          val requestId = frame.optString("id")
-          if (requestId.length !in 1..200 || connection.voiceRequests.size >= 64 || !connection.voiceRequests.add(requestId)) throw error("voice_request_invalid")
+      val connection = synchronized(lock) {
+        val live = connections[id] ?: throw error("closed")
+        if (!current(live) || live.generation != generation || !live.opened) throw error("stale_connection")
+        live
+      }
+      // The size scan and JSON parse of a large frame run outside the shared lock so reads and lifecycle calls are not
+      // stalled; this connection's fair lock keeps its sends in arrival order, and every check is repeated under the lock.
+      connection.sendLock.withLock {
+        val size = text.toByteArray(Charsets.UTF_8).size
+        val parsed = if (size > 1048576) null else runCatching { JSONObject(text) }.getOrNull()
+        synchronized(lock) {
+          if (connections[id] == null) throw error("closed")
+          if (connections[id] !== connection || !current(connection) || connection.generation != generation || !connection.opened) throw error("stale_connection")
+          if (size > 1048576 || (connection.socket?.queueSize() ?: 0) + size > 8388608) throw error("overload")
+          val frame = parsed ?: throw error("invalid_frame")
+          val method = frame.optString("method")
+          connection.credential.voice?.let { scope ->
+            val params = frame.optJSONObject("params")
+            if (!VoiceRpcPolicy.allowed(method, params?.optString("op"), params?.optString("threadId"), params?.optString("projectId"), scope.threadId, scope.projectId, params?.has("threadId") == true, params != null && params.length() == 0)) throw error("voice_scope_denied")
+            val requestId = frame.optString("id")
+            if (requestId.length !in 1..200 || connection.voiceRequests.size >= 64 || !connection.voiceRequests.add(requestId)) throw error("voice_request_invalid")
+          }
+          if (method.startsWith("native.") || method.startsWith("devServers.bridge")) throw error("native_profile_required")
+          if (connection.socket?.send(text) != true) throw error("send_failed")
         }
-        if (method.startsWith("native.") || method.startsWith("devServers.bridge")) throw error("native_profile_required")
-        if (connection.socket?.send(text) != true) throw error("send_failed")
       }
     }
     AsyncFunction("acknowledge") { id: String, generation: Double, sequence: Double ->

@@ -1,5 +1,8 @@
 import type { HostSettingsState } from "../../remote/types";
-import type { AgentDefaultsRecord } from "../../../../src/features/tasks/model/hostSettings";
+import type { AgentDefaultsRecord as HostAgentDefaultsRecord } from "../../../../src/features/tasks/model/hostSettings";
+
+/** The mobile editor only reads and writes the fields it exposes. */
+export type AgentDefaultsRecord = Omit<HostAgentDefaultsRecord, "usageLimitFailover">;
 
 /** Capability-gated reply: never silently fill malformed behavior fields. */
 export function readAgentDefaults(value: unknown): AgentDefaultsRecord {
@@ -34,7 +37,20 @@ export function confirmAgentDefaults(value: unknown, submitted: Partial<AgentDef
 }
 
 export type SettingsFields = { maxRunning: string; dailyMinutes: string };
-export type SettingsDraft = { override: SettingsFields | null };
+/** Holds only the limits the user edited; every other field follows the latest host values. */
+export type SettingsDraft = { override: Partial<SettingsFields> | null };
+export type SettingsLimits = Pick<HostSettingsState, "maxRunningTasks" | "dailyAgentMinutes">;
+/** The save carries just the edited limits, so a limit changed elsewhere is never overwritten. */
+export function editedLimits(edited: Partial<SettingsFields>): Partial<SettingsLimits> {
+  return {
+    ...(edited.maxRunning !== undefined ? { maxRunningTasks: Number(edited.maxRunning) } : {}),
+    ...(edited.dailyMinutes !== undefined ? { dailyAgentMinutes: Number(edited.dailyMinutes) } : {}),
+  };
+}
+/** The host echo must match the limits that were sent; untouched limits may differ. */
+export function confirmsEditedLimits(result: SettingsLimits, sent: Partial<SettingsLimits>): boolean {
+  return (Object.keys(sent) as (keyof SettingsLimits)[]).every((key) => result[key] === sent[key]);
+}
 export function readHostSettingsState(value: unknown): HostSettingsState {
   const row = value as HostSettingsState | null;
   if (!row || !Number.isSafeInteger(row.maxRunningTasks) || row.maxRunningTasks < 1 ||
@@ -64,7 +80,7 @@ export function validSettingsFields(fields: SettingsFields): boolean {
 /** An acknowledgement applies only to the submitted snapshot, never to later edits. */
 export function acknowledgeSettingsDraft(
   current: SettingsDraft,
-  submitted: SettingsFields,
+  submitted: Partial<SettingsFields>,
 ): SettingsDraft {
   return current.override === submitted ? { override: null } : current;
 }

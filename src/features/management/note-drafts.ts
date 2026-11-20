@@ -57,3 +57,5 @@ export function createNoteDraftStore(storage: Storage) {
     clearSaved: (machineId: string, saved: LocalNoteDraft) => existing(machineId).clearSaved(saved),
   };
 }
+/** A machine-scoped store handle whose epoch was captured when its editor opened. */
+export type NoteDraftOwner = ReturnType<ReturnType<typeof createNoteDraftStore>["bind"]>;

@@ -7,7 +7,7 @@ import { decodePcmBase64 } from "../../../../src/features/voice/model/voiceVad";
 import type { AssistantVoiceDependencies } from "./assistant-voice";
 import { requireMicrophonePermission } from "../permissions/microphone-permission";
 import { applyAndroidMicPriority, applyMicPriority, type MicRecorder } from "../voice-settings/mic-input";
-import { voicePreferences } from "../voice-settings/voice-preferences";
+import { speechConfig, voicePreferences } from "../voice-settings/voice-preferences";
 
 /** Local PCM returned by the Host becomes a temporary, standards-compliant mono WAV. */
 export function speechWav(chunks: { audio: string; sampleRate: number }[]) {
@@ -26,7 +26,7 @@ export function speechWav(chunks: { audio: string; sampleRate: number }[]) {
   return bytes;
 }
 
-export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependencies, "state" | "transcript" | "error" | "level">): AssistantVoiceDependencies {
+export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependencies, "state" | "transcript" | "error" | "level" | "stage">): AssistantVoiceDependencies {
   let stopPlayback = () => {};
   const companion = nativeVoiceCompanion();
   // Android always records and plays through the companion service. On iOS the companion owns only a
@@ -37,12 +37,15 @@ export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependenci
   return {
     ...callbacks,
     engine: () => voicePreferences.getState().preferences.engine,
+    speech: () => speechConfig(voicePreferences.getState().preferences),
     async capture(onBuffer: (data: Int16Array, rate: number) => void, onEnded?: (reason: string, error?: string) => void) {
       await requireMicrophonePermission();
+      await voicePreferences.getState().hydrate();
+      const { micOrder } = voicePreferences.getState().preferences;
       if (native()) {
         if (!companion) throw new Error("Update Bycoda to use the native voice companion.");
         const owned = !companion.getState().active;
-        applyAndroidMicPriority(voicePreferences.getState().preferences.micOrder, companion);
+        applyAndroidMicPriority(micOrder, companion);
         const id = owned ? await companion.beginSession() : companion.getState().sessionId;
         try {
           const capture = companionVoiceCapture(companion, onBuffer, onEnded);
@@ -50,7 +53,7 @@ export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependenci
         } catch (error) { if (owned) companion.endSession(id); throw error; }
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true, shouldPlayInBackground: false, interruptionMode: "doNotMix" });
-      await applyMicPriority(voicePreferences.getState().preferences.micOrder, () => new AudioModule.AudioRecorder({}) as unknown as MicRecorder);
+      await applyMicPriority(micOrder, () => new AudioModule.AudioRecorder({}) as unknown as MicRecorder);
       const stream = new AudioModule.AudioStream({ sampleRate: 16000, channels: 1, encoding: "int16" });
       let released = false, stopping = false, starting = false;
       const listener = stream.addListener("audioStreamBuffer", buffer => {
@@ -92,7 +95,8 @@ export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependenci
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true, shouldPlayInBackground: false, interruptionMode: "doNotMix" });
       if (!current()) return;
       const file = new File(Paths.cache, `bycoda-voice-${Date.now()}.wav`);
-      file.write(speechWav(chunks));
+      // write() is asynchronous in expo-file-system 58; the player must open a complete file.
+      file.writeSync(speechWav(chunks));
       const player = createAudioPlayer(file.uri);
       try {
         await new Promise<void>((resolve, reject) => {

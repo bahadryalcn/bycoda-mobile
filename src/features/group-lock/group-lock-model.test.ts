@@ -3,6 +3,7 @@ import type { HostProjectDirectory } from "@/domain/types";
 import {
   cacheHoldsProject,
   groupLockView,
+  lockConfirmed,
   parsePasswordResult,
   passwordOutcomeFromError,
   retrySeconds,
@@ -74,5 +75,23 @@ describe("locking", () => {
     expect(cacheHoldsProject(query(["machine", "m", "session", "s1"], { projectId: "p2" }), "m", ids)).toBe(false);
     expect(cacheHoldsProject(query(["machine", "other", "sessions", "p1"]), "m", ids)).toBe(false);
     expect(cacheHoldsProject(query(["machine", "m", "projects", "p1"]), "m", ids)).toBe(false);
+  });
+});
+
+describe("lock all confirmation", () => {
+  it("closes the sheet only when the Host confirmed the lock", async () => {
+    await expect(lockConfirmed(async () => true)).resolves.toBe(true);
+  });
+
+  it("keeps the sheet open when the lock reports failure or rejects", async () => {
+    await expect(lockConfirmed(async () => false)).resolves.toBe(false);
+    await expect(lockConfirmed(() => Promise.reject(new Error("offline")))).resolves.toBe(false);
+  });
+
+  it("retries by running the same lock again", async () => {
+    const calls: boolean[] = [false, true];
+    const run = async () => calls.shift() ?? false;
+    await expect(lockConfirmed(run)).resolves.toBe(false);
+    await expect(lockConfirmed(run)).resolves.toBe(true);
   });
 });

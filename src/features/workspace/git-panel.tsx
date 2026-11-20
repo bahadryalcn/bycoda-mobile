@@ -23,7 +23,7 @@ import { useCopy } from "@/ui/copy";
 import { useActiveMachine } from "@/state/machines";
 import { useGitActions } from "./git-actions";
 import { GitBranchesPanel } from "./git-branches";
-import { GitCommitPanel } from "./git-changes";
+import { GitCommitBar, GitCommitPanel } from "./git-changes";
 import { GitConfirmationCard } from "./git-confirmation";
 import { GitDiffPanel } from "./git-diff";
 import { GitHistoryPanel } from "./git-history";
@@ -90,6 +90,8 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementTab, setManagementTab] = useState<"branches" | "pr">("branches");
   const [conflictReview, setConflictReview] = useState<string | null>(null);
+  // The commit confirmation that was opened by "Stage all & commit"; confirming stages first.
+  const stageAllReview = useRef<GitConfirmation | null>(null);
   const gitReviewExit = useRef<(() => void) | null>(null);
   const managementExit = useRef<(() => void) | null>(null);
   const [stashWrite, setStashWrite] = useState<{ scope: string; busy: boolean } | null>(null);
@@ -154,7 +156,13 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
   });
   const patchDraft = (patch: Partial<GitDraft>) =>
     draft.setValue((current) => ({ message: "", branchName: "", ...current, ...patch }));
-  const choose = (confirmation: GitConfirmation) => {
+  // Files a commit would record: the staged ones, or every changed file for "Stage all & commit".
+  const reviewFiles = (stageAll: boolean) =>
+    (data?.files ?? [])
+      .filter((file) => (stageAll ? file.staged || file.unstaged : file.staged))
+      .map((file) => file.relative)
+      .sort();
+  const choose = (confirmation: GitConfirmation, stageAll = false) => {
     if (busy || !draft.ready) return;
     // Managed branches refuse a direct push; offer the reviewed delivery flow instead.
     if (confirmation.kind === "push" && isManagedBranch(data?.branch)) {
@@ -163,22 +171,18 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
       return;
     }
     setConfirmationError(null);
-    dispatch({
-      type: "confirm",
-      confirmation: {
-        ...confirmation,
-        context: {
-          machine: machine?.name ?? "",
-          root: root ?? cwd ?? "",
-          branch: data?.branch ?? null,
-          message,
-          files: (data?.files ?? [])
-            .filter((file) => file.staged)
-            .map((file) => file.relative)
-            .sort(),
-        },
+    const next: GitConfirmation = {
+      ...confirmation,
+      context: {
+        machine: machine?.name ?? "",
+        root: root ?? cwd ?? "",
+        branch: data?.branch ?? null,
+        message,
+        files: reviewFiles(stageAll),
       },
-    });
+    };
+    stageAllReview.current = stageAll ? next : null;
+    dispatch({ type: "confirm", confirmation: next });
   };
   const runFileAction = (value: GitFileAction, path?: string) => {
     if (busy) return;
@@ -212,12 +216,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
       (context.branch !== (data?.branch ?? null) ||
         (confirmation.kind === "commit" &&
           JSON.stringify(context.files) !==
-            JSON.stringify(
-              (data?.files ?? [])
-                .filter((file) => file.staged)
-                .map((file) => file.relative)
-                .sort(),
-            )))
+            JSON.stringify(reviewFiles(stageAllReview.current === confirmation))))
     ) {
       setConfirmationError(
         new Error(
@@ -230,7 +229,11 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
       return;
     }
     void actions
-      .executeConfirmation(confirmation, context?.message ?? message)
+      .executeConfirmation(
+        confirmation,
+        context?.message ?? message,
+        stageAllReview.current === confirmation,
+      )
       .then(() => {
         dispatch({ type: "completed", confirmation });
         if (confirmation.kind === "commit") haptic.success();
@@ -339,6 +342,16 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
             />
             {draftStatus}
             {!state.confirmation && !branchPicker ? feedback : null}
+            {!selection && !data.operation && !data.conflicts?.length ? (
+              <GitCommitBar
+                index={data}
+                message={message}
+                onMessageChange={(value) => patchDraft({ message: value })}
+                busy={busy || !draft.ready}
+                onCommit={(stageAll) => choose({ kind: "commit" }, stageAll)}
+                onPush={() => choose({ kind: "push" })}
+              />
+            ) : null}
             {!selection ? (
               <SearchToolbar
                 search={
@@ -454,7 +467,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
         renderItem={({ item, index }) =>
           item.kind === "group" ? (
             <SectionHeader
-              title={item.staged ? copy("Stage’de", "Staged") : copy("Değişen dosyalar", "Changed files")}
+              title={item.staged ? copy("Stage’deki değişiklikler", "Staged changes") : copy("Değişiklikler", "Changes")}
               count={item.count}
               trailing={!filtered ? (
                 <Button
@@ -579,6 +592,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
         >
           <GitConfirmationCard
             confirmation={state.confirmation}
+            stageAll={stageAllReview.current === state.confirmation}
             busy={busy}
             onCancel={() => dispatch({ type: "confirm", confirmation: null })}
             onConfirm={confirm}

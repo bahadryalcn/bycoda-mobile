@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { RemoteHostError } from "@/remote/host-error";
 import { isTransientConnectionError, reconnectRefetchDelay, refetchRecoveredReads, retryTransientRead } from "./query-retry";
 
 describe("transient read retry", () => {
@@ -24,6 +25,13 @@ describe("transient read retry", () => {
   it("backs the visible refetch off to a cap", () => {
     expect([0, 1, 2, 3, 9].map(reconnectRefetchDelay)).toEqual([3000, 6000, 12000, 15000, 15000]);
   });
+
+  it("does not retry a structured Host deadline even on the first failure", () => {
+    const deadline = new RemoteHostError("pc", "timeout", "Request deadline exceeded", false, true);
+    expect(isTransientConnectionError(deadline)).toBe(false);
+    expect(retryTransientRead(0, deadline)).toBe(false);
+    expect(retryTransientRead(0, new RemoteHostError("pc", "timeout", "Link timed out"))).toBe(true);
+  });
 });
 
 describe("refetchRecoveredReads", () => {
@@ -39,6 +47,7 @@ describe("refetchRecoveredReads", () => {
           query("projects", "error", { kind: "network" }, 100),
           query("later", "error", { kind: "network" }, 300),
           query("denied", "error", { kind: "auth" }, 100),
+          query("deadline", "error", { kind: "timeout", hostDeadline: true }, 100),
           query("fine", "success", null, 0),
         ],
       }),

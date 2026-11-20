@@ -4,10 +4,8 @@ import { ProjectDirectorySlot } from "./project-directory-feedback";
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import { useLatestCallback } from "./use-latest-callback";
 import { FlatList, View, type ListRenderItem } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, Stack } from "expo-router";
 import FolderPlus from "lucide-react-native/icons/folder-plus";
-import ArrowUpDown from "lucide-react-native/icons/arrow-up-down";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -25,6 +23,7 @@ import {
   SegmentedControl,
   ToggleField,
 } from "@/ui/primitives";
+import { useScreenContentInsets } from "@/ui/screen-content-insets";
 import { metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { haptic } from "@/ui/motion";
@@ -47,7 +46,7 @@ import { runningProjectCounts } from "./activity-model";
 import { appPreferences, useAppPreferences } from "../navigation-prefs/app-preferences";
 import { groupProjectsByRepository } from "./repository-grouping";
 import { ProjectGroupHeader, ProjectRow, type ProjectRowView } from "./project-row";
-import { ProjectReorderSheet } from "./project-reorder-sheet";
+import { ProjectReorderAction, ProjectReorderSheet } from "./project-reorder-sheet";
 import {
   applyCustomOrder,
   moveInOrder,
@@ -70,7 +69,8 @@ import { modelRoutingProjectKey } from "../../../../src/shared/model/modelRoutin
 export function ProjectsScreen() {
   const { colors } = useMobileTheme();
   const copy = useCopy();
-  const insets = useSafeAreaInsets();
+  // Horizontal gutters only; this component renders the Screen frame that owns the bottom inset.
+  const gutter = useScreenContentInsets();
   const machine = useActiveMachine();
   const selectProject = useMachines((state) => state.selectProject);
   const [search, setSearch] = useState("");
@@ -208,6 +208,8 @@ export function ProjectsScreen() {
     const project = projects.find((item) => item.id === id);
     if (project) choose(project);
   });
+  const addInEmptyState = directoryReady && query.isSuccess && !query.error &&
+    !privacyUnavailable && readiness !== "waiting" && !projects.length && !search.trim();
   const feedbackProps = {
     query,
     readiness,
@@ -217,9 +219,6 @@ export function ProjectsScreen() {
     emptyTitle: search.trim()
       ? copy("Aramana uyan proje yok.", "No projects match your search.")
       : copy("Bu bilgisayarda henüz proje yok.", "No projects on this computer yet."),
-    emptyDetail: search.trim()
-      ? undefined
-      : copy("Başlamak için bir klasör ekle.", "Add a folder to get started."),
     emptyIllustration: search.trim() ? ("search-empty" as const) : ("no-projects" as const),
     emptyAction: search.trim()
       ? { label: copy("Aramayı temizle", "Clear search"), onPress: () => setSearch("") }
@@ -236,7 +235,7 @@ export function ProjectsScreen() {
       <View style={{ gap: space.xs, paddingBottom: space.sm }}>
         <ScreenHeading
           title={copy("Projeler", "Projects")}
-          actions={
+          actions={addInEmptyState ? undefined : (
             <IconButton
               label={copy("Proje ekle", "Add project")}
               disabled={open.isPending || !directoryReady}
@@ -247,7 +246,7 @@ export function ProjectsScreen() {
             >
               <FolderPlus size={20} strokeWidth={2} color={colors.accent} />
             </IconButton>
-          }
+          )}
         />
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -258,13 +257,6 @@ export function ProjectsScreen() {
               placeholder={copy("Proje veya grup ara", "Search project or group")}
             />
           </View>
-          <IconButton
-            label={copy("Sırala", "Reorder")}
-            disabled={!hydrated || !!search.trim() || !projects.length}
-            onPress={() => setReordering(true)}
-          >
-            <ArrowUpDown size={18} color={colors.muted} />
-          </IconButton>
           <IconButton
             label={copy("Proje görünümü", "Project view")}
             expanded={optionsOpen}
@@ -292,8 +284,7 @@ export function ProjectsScreen() {
       search,
       adding,
       optionsOpen,
-      hydrated,
-      projects.length,
+      addInEmptyState,
       open.status,
       open.isPending,
       open.reset,
@@ -378,9 +369,10 @@ export function ProjectsScreen() {
         keyExtractor={keyExtractor}
         style={{ flex: 1, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
         contentContainerStyle={{
-          paddingLeft: Math.max(space.screen, insets.left),
-          paddingRight: Math.max(space.screen, insets.right),
+          paddingLeft: gutter.left,
+          paddingRight: gutter.right,
           paddingTop: space.xs,
+          // The Screen frame below already clears the dock and home indicator.
           paddingBottom: space.lg,
           flexGrow: 1,
         }}
@@ -422,9 +414,7 @@ export function ProjectsScreen() {
           label={copy("Depoya göre grupla", "Group by repository")}
           value={byRepository}
           disabled={!appPrefsHydrated}
-          onChange={(groupByRepository) =>
-            void appPreferences.getState().update({ groupByRepository }).catch(() => undefined)
-          }
+          onChange={(groupByRepository) => void appPreferences.getState().update({ groupByRepository })}
         />
         <SelectField
           label={copy("Sıralama", "Sort order")}
@@ -438,6 +428,7 @@ export function ProjectsScreen() {
           ]}
           onChange={(sort) => updatePreferences({ sort })}
         />
+        <ProjectReorderAction disabled={!hydrated || !!search.trim() || !projects.length} onOpen={() => setReordering(true)} />
         <ToggleField
           label={copy("Tam klasör yolları", "Full folder paths")}
           value={preferences.fullPaths}

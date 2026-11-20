@@ -6,14 +6,19 @@ import type { GitConfirmationCardProps } from "./git-types";
 export function GitConfirmationCard({
   confirmation,
   busy,
+  stageAll = false,
   onCancel,
   onConfirm,
-}: GitConfirmationCardProps) {
+}: GitConfirmationCardProps & {
+  /** The commit stages every changed file first; the review says so instead of "the staged files". */
+  stageAll?: boolean;
+}) {
   useMobileTheme();
   const copy = useCopy();
   let message: string;
   let label: string;
-  let tone: "default" | "danger" = "default";
+  // The reviewed action is the sheet's one primary step; destructive choices stay danger.
+  let tone: "primary" | "danger" = "primary";
 
   switch (confirmation.kind) {
     case "operation":
@@ -31,7 +36,7 @@ export function GitConfirmationCard({
         confirmation.choice === "abort"
           ? copy("İptal etmeyi onayla", "Confirm abort")
           : copy("Devam etmeyi onayla", "Confirm continuation");
-      tone = confirmation.choice === "abort" ? "danger" : "default";
+      tone = confirmation.choice === "abort" ? "danger" : "primary";
       break;
     case "switch":
       message = `${copy("Bu dala geç:", "Switch to:")} ${confirmation.branch}`;
@@ -54,10 +59,15 @@ export function GitConfirmationCard({
       tone = "danger";
       break;
     case "commit":
-      message = copy(
-        "Stage’deki dosyalar bu mesajla bilgisayarda commit edilsin mi?",
-        "Commit the staged files on your computer with this message?",
-      );
+      message = stageAll
+        ? copy(
+            "Listelenen tüm değişiklikler hazırlanıp bu mesajla bilgisayarda commit edilsin mi?",
+            "Stage every listed change and commit it on your computer with this message?",
+          )
+        : copy(
+            "Stage’deki dosyalar bu mesajla bilgisayarda commit edilsin mi?",
+            "Commit the staged files on your computer with this message?",
+          );
       label = copy("Commit et", "Commit changes");
       break;
     case "pull":

@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { framePoint } from "./remote-frame-model";
+import { framePoint, knownFrameSize } from "./remote-frame-model";
+
+describe("remote frame geometry", () => {
+  it("uses payload dimensions only when both are positive whole pixel counts", () => {
+    expect(knownFrameSize(1280, 720)).toEqual({ width: 1280, height: 720 });
+    expect(knownFrameSize(undefined, 720)).toBeUndefined();
+    expect(knownFrameSize(1280, undefined)).toBeUndefined();
+    expect(knownFrameSize(0, 720)).toBeUndefined();
+    expect(knownFrameSize(1280, -720)).toBeUndefined();
+    expect(knownFrameSize(Number.NaN, 720)).toBeUndefined();
+    expect(knownFrameSize(1280, Number.POSITIVE_INFINITY)).toBeUndefined();
+    expect(knownFrameSize(1280.5, 720)).toBeUndefined();
+  });
+});
 
 describe("remote screen coordinates", () => {
   it("maps a scaled phone or browser frame without losing its coordinate space", () => {

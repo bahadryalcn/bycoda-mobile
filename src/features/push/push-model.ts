@@ -97,6 +97,39 @@ export type PushTarget =
 
 const text = (value: unknown) => (typeof value === "string" && value ? value : undefined);
 
+/**
+ * Where a tapped push opens, on the computer the push came from. Callers navigate
+ * (not push) so a tap on the conversation already on screen, or a repeat tap, reuses
+ * its entry instead of stacking another copy.
+ */
+export function pushRoute(target: PushTarget, machineId: string) {
+  if (target.kind === "approval")
+    return { pathname: "/approvals" as const, params: { focus: target.approvalId } };
+  if (target.kind === "assistant")
+    return {
+      pathname: "/assistant" as const,
+      params: { ...(target.jobId ? { job: target.jobId } : {}), ...(target.questions ? { questions: "1" } : {}) },
+    };
+  return {
+    pathname: "/session/[id]" as const,
+    params: {
+      id: target.sessionId,
+      machineId,
+      ...(target.projectId ? { projectId: target.projectId } : {}),
+    },
+  };
+}
+
+/**
+ * What a tapped push that matches no paired computer says. Unreadable saved
+ * computers are not evidence the computer is unpaired, so they get their own text.
+ */
+export function unmatchedPushNotice(storageError: string | null, copy: (tr: string, en: string) => string) {
+  return storageError
+    ? copy("Kayıtlı bilgisayarlar yüklenemedi; bu bildirim açılamadı.", "Saved computers could not be loaded, so this notification could not be opened.")
+    : copy("Bu bildirim artık eşleşmiş bir bilgisayardan geliyor.", "This notification is from a computer that is no longer paired.");
+}
+
 /** Reads where a tapped push points; tests and unknown kinds open nothing. */
 export function pushTarget(data: unknown): PushTarget | null {
   if (!data || typeof data !== "object") return null;

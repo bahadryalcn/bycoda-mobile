@@ -1,6 +1,6 @@
 import type { FileEditorProps, FileEditorMode, FileEditorConfirmation } from "./file-editor-types";
 import { useCallback, useEffect, useState } from "react";
-import { useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import { router, useIsFocused } from "expo-router";
 import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
@@ -12,6 +12,7 @@ import {
   Body,
   Button,
   ConfirmationCard,
+  FormActions,
   HeaderBackButton,
   Input,
   MutationState,
@@ -26,26 +27,23 @@ import {
 import { UnsavedBadge } from "@/ui/unsaved-badge";
 import { useMobileTheme } from "@/ui/theme";
 import { haptic } from "@/ui/motion";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import { View } from "react-native";
 import { DocumentPreview, ProjectMedia } from "@/ui/document-preview";
 import { isFileConflict, isMediaFile } from "./file-preview-model";
 import { useCopy } from "@/ui/copy";
-import { parseFileDraft, type FileDraft } from "./draft-store";
+import { encodeFileDraft, parseFileDraft } from "./draft-store";
 import { registerWorkspaceDraft } from "./draft-guard";
 import { useLocalDraft } from "./use-local-draft";
 import { ErrorText, useProjectRefresh } from "./shared";
 
 export type { DraftGuard } from "./file-editor-types";
 
-const encodeFileDraft = (value: FileDraft | null) =>
-  value && value.content !== value.expected ? JSON.stringify(value) : null;
-
 export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }: FileEditorProps) {
   const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const manageConnections = () => router.push("/machines");
-  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const machine = useActiveMachine();
   const client = useHostClient();
   const media = isMediaFile(path);
@@ -118,8 +116,73 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
       navigation.dispatch(confirmation.action);
     else onBack();
   }, [confirmation, navigation, onBack]);
-  return (
-    <Screen>
+  const showEditor = !binary && !!edit && draft.ready;
+  const fullHeightEditor = showEditor && editing;
+  const editorBody = {
+    flex: 1,
+    gap: space.lg,
+    paddingStart: Math.max(insets.left, space.screen),
+    paddingEnd: Math.max(insets.right, space.screen),
+    paddingTop: space.xs,
+    paddingBottom: space.sm,
+    maxWidth: metrics.contentWidth,
+    width: "100%" as const,
+    alignSelf: "center" as const,
+  };
+  const footer =
+    showEditor && edit ? (
+      <FormActions
+        feedback={
+          <>
+            <MutationState
+              mutation={save}
+              success={copy("Dosya bilgisayara kaydedildi.", "File saved on your computer.")}
+            />
+            {isFileConflict(save.error) ? (
+              <>
+                <Notice
+                  tone="warning"
+                  message={copy(
+                    "Bilgisayarda dosya değişmiş olabilir. Yazdıkların burada korunur; bilgisayardaki sürümü yüklemek değişikliklerini bırakır.",
+                    "The file may have changed on your computer. Your edits remain here; loading the computer version discards them.",
+                  )}
+                />
+                <Button
+                  label={copy("Bilgisayardaki sürümü yükle", "Load computer version")}
+                  disabled={transition.isPending}
+                  onPress={() => setConfirmation({ kind: "reload" })}
+                />
+              </>
+            ) : null}
+          </>
+        }
+        submitLabel={copy("Kaydet", "Save")}
+        onSubmit={() => {
+          const submitted = edit;
+          void save
+            .mutateAsync({
+              projectId,
+              cwd,
+              path,
+              expected: submitted.expected,
+              content: submitted.content,
+            })
+            .then(() => {
+              draft.setValue((current) => ({
+                expected: submitted.content,
+                content: current?.content ?? submitted.content,
+              }));
+              haptic.success();
+              void refreshProject();
+            })
+            .catch(() => {});
+        }}
+        busy={save.isPending}
+        disabled={!dirty || transition.isPending}
+      />
+    ) : undefined;
+  const editorPanel = (
+    <>
       <Row style={{ flexWrap: "nowrap" }}>
         <HeaderBackButton
           label={copy("Dosyalara dön", "Back to files")}
@@ -216,67 +279,16 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
       ) : null}
       {!binary && edit && draft.ready ? (
         <>
-          <Row style={{ gap: space.xs }}>
-            <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 180 }}>
-              <SegmentedControl hideLabel
-                label={copy("Düzenle veya önizle", "Edit or preview")}
-                value={editing ? "edit" : "preview"}
-                disabled={transition.isPending}
-                options={[
-                  { value: "edit", label: copy("Düzenle", "Edit") },
-                  { value: "preview", label: copy("Önizle", "Preview") },
-                ]}
-                onChange={(value) => setMode(value)}
-              />
-            </View>
-            <Button
-              label={copy("Kaydet", "Save")}
-              tone="primary"
-              density="compact"
-              disabled={!dirty || transition.isPending}
-              busy={save.isPending}
-              onPress={() => {
-                const submitted = edit;
-                void save
-                  .mutateAsync({
-                    projectId,
-                    cwd,
-                    path,
-                    expected: submitted.expected,
-                    content: submitted.content,
-                  })
-                  .then(() => {
-                    draft.setValue((current) => ({
-                      expected: submitted.content,
-                      content: current?.content ?? submitted.content,
-                    }));
-                    haptic.success();
-                    void refreshProject();
-                  })
-                  .catch(() => {});
-              }}
-            />
-          </Row>
-          <MutationState
-            mutation={save}
-            success={copy("Dosya bilgisayara kaydedildi.", "File saved on your computer.")}
+          <SegmentedControl hideLabel
+            label={copy("Düzenle veya önizle", "Edit or preview")}
+            value={editing ? "edit" : "preview"}
+            disabled={transition.isPending}
+            options={[
+              { value: "edit", label: copy("Düzenle", "Edit") },
+              { value: "preview", label: copy("Önizle", "Preview") },
+            ]}
+            onChange={(value) => setMode(value)}
           />
-          {isFileConflict(save.error) ? (
-            <>
-              <Notice
-                tone="warning"
-                message={copy(
-                  "Bilgisayarda dosya değişmiş olabilir. Yazdıkların burada korunur; bilgisayardaki sürümü yüklemek değişikliklerini bırakır.",
-                  "The file may have changed on your computer. Your edits remain here; loading the computer version discards them.",
-                )}
-              />
-              <Button
-                label={copy("Bilgisayardaki sürümü yükle", "Load computer version")}
-                disabled={transition.isPending}
-                onPress={() => setConfirmation({ kind: "reload" })}
-              />
-            </>
-          ) : null}
           {confirmation?.kind === "reload" ? (
             <Sheet
               visible
@@ -325,13 +337,18 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
                 draft.setValue((current) => ({ ...(current ?? edit), content }))
               }
               textAlignVertical="top"
-              style={{ minHeight: Math.max(160, Math.min(340, height * 0.45)) }}
+              fill
             />
           ) : (
             <DocumentPreview name={path} text={edit.content} context={context} />
           )}
         </>
       ) : null}
+    </>
+  );
+  return (
+    <Screen scroll={!fullHeightEditor} footer={footer}>
+      {fullHeightEditor ? <View style={editorBody}>{editorPanel}</View> : editorPanel}
     </Screen>
   );
 }

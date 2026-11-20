@@ -4,7 +4,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "id" }));
 vi.mock("expo-audio", () => ({ getRecordingPermissionsAsync: async () => ({ granted: true }), requestRecordingPermissionsAsync: vi.fn() }));
 vi.mock("../../../modules/bycoda-voice-companion", () => ({ nativeVoiceCompanion: () => ({ beginSession: async () => "session", endSession: f.end, getState: () => ({ active: true, sessionId: "session" }), addListener: () => ({ remove: vi.fn() }) }) }));
-vi.mock("@/state/host-runtime", () => ({ openAssistantVoiceRuntime: async () => ({ release: f.release, request: vi.fn() }) }));
+vi.mock("@/state/host-runtime", () => ({ openAssistantVoiceRuntime: async () => ({ release: f.release, request: vi.fn(async (method: string) => method === "voice.local.start" ? { lease: "call-hold" } : undefined) }) }));
 vi.mock("@/state/machines", () => ({ useMachines: { getState: () => ({ machines: [{ id: "host", environmentId: "env" }] }), subscribe: () => () => {} } }));
 vi.mock("@/state/security", () => ({ isAppAccessAllowed: () => true, useSecurity: { getState: () => ({ appState: "active" }), subscribe: () => () => {} } }));
 vi.mock("../account/model/account-access", () => ({ isAccountAccessAllowed: () => true, useAccountAccess: { subscribe: () => () => {} } }));

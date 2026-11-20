@@ -6,6 +6,14 @@ import { watchProjectStream } from "./session-sync";
 import { binding, fakeNative } from "./ws-connection.test-fixture";
 import { registerHostWsRuntimeProvider } from "./ws-runtime-port";
 
+vi.mock("expo-crypto", () => ({
+  CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+  digest: async (_algorithm: string, bytes: Uint8Array) => {
+    const out = createHash("sha256").update(bytes).digest();
+    return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+  },
+}));
+
 const cleanups: (() => void)[] = [];
 afterEach(() => {
   for (const cleanup of cleanups.splice(0).reverse()) cleanup();

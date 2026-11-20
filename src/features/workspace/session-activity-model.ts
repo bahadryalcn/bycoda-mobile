@@ -108,7 +108,9 @@ export function activityStateLabel(activity: SessionActivity, copy: Copy): strin
 /** "2 running · 3 done" (short) or "2 agents running, 3 finished" (accessibility); zero counts are left out. */
 export function agentCountText(counts: AgentCounts, copy: Copy, long = false): string {
   const parts = [
-    counts.running && (long ? copy("{p0} ajan çalışıyor", "{p0} agents running", { p0: counts.running }) : copy("{p0} çalışıyor", "{p0} running", { p0: counts.running })),
+    counts.running && (long
+      ? counts.running === 1 ? copy("1 ajan çalışıyor", "1 agent running") : copy("{p0} ajan çalışıyor", "{p0} agents running", { p0: counts.running })
+      : copy("{p0} çalışıyor", "{p0} running", { p0: counts.running })),
     counts.done && (long ? copy("{p0} bitti", "{p0} finished", { p0: counts.done }) : copy("{p0} bitti", "{p0} done", { p0: counts.done })),
     counts.failed && copy("{p0} başarısız", "{p0} failed", { p0: counts.failed }),
     counts.stopped && copy("{p0} durduruldu", "{p0} stopped", { p0: counts.stopped }),

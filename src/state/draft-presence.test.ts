@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { draftPresence, hydrateDraftPresence, subscribeDraftPresence, withDraftStorageCleanup } from "./local-draft-storage";
+import { draftPresence, hydrateDraftPresence, publishDraftPresence, subscribeDraftPresence, subscribeDraftPresenceChanges, withDraftStorageCleanup } from "./local-draft-storage";
 import { DraftStore } from "../features/workspace/draft-store";
 
 it("hydrates once, isolates machine keys and publishes successful saves and clear", async () => {
@@ -34,3 +34,13 @@ it("cleanup drains hydration before removing presence", async () => {
   expect(draftPresence(storage, key)).toBe(false);
 });
 
+it("announces only presence flips and finished cleanups to storage-wide observers", async () => {
+  const storage = {}; const key = "bycoda.mobile.draft.v1:m:s";
+  const seen: Array<string | null> = []; const stop = subscribeDraftPresenceChanges(storage, changed => { seen.push(changed); });
+  publishDraftPresence(storage, key, false); publishDraftPresence(storage, key, true); publishDraftPresence(storage, key, true);
+  expect(seen).toEqual([key]);
+  await withDraftStorageCleanup(storage, async retire => { retire(new Set()); });
+  expect(seen).toEqual([key, key, null]);
+  stop(); publishDraftPresence(storage, key, true);
+  expect(seen).toHaveLength(3);
+});

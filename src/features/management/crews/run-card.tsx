@@ -92,7 +92,7 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
           copy("Sil", "Delete"), () => { if (supported && !busy && canDeleteCrewRun(run) && useMachines.getState().activeId === machineId) remove.mutate({ projectId: run.projectId, runId: run.id, expectedUpdatedAt: run.updatedAt }); }) },
       ]} />
     </RecordTrailing>}
-    details={<CrewRuntimePanel run={run}>
+    details={(expanded) => <CrewRuntimePanel run={run} active={expanded}>
       <NavigationGroup>{run.tasks.map((task) => <CrewTaskRow key={task.id} task={task}
         model={run.assignments.find((assignment) => assignment.taskId === task.id)?.candidate.model}
         supported={supported} onOpenSession={openSession} />)}</NavigationGroup>

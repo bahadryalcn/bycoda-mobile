@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 function flatten(value: any): any { return Array.isArray(value) ? Object.assign({}, ...value.filter(Boolean).map(flatten)) : value ?? {}; }
 vi.mock("react-native", () => ({ View: "View", useWindowDimensions: () => ({ fontScale: 1 }) }));
 vi.mock("panelui-native/components/ai-input", () => ({ AIInput: Object.assign(() => null, { Field: () => null, Toolbar: () => null, Spacer: () => null }) }));
-vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
+vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: { muted: "#111111", tertiary: "#222222" }, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("./composer-actions", () => ({ ComposerActionArea: () => null }));
 import { ChatComposer } from "./chat-composer";
 const render = (props: Partial<Parameters<typeof ChatComposer>[0]> = {}) =>
@@ -19,6 +19,10 @@ it("starts as a 48dp multiline field that grows to five lines, with exact field 
   const style = flatten(field.props.style);
   expect(style.minHeight).toBe(48);
   expect(style.maxHeight).toBeGreaterThan(40 * 2);
+});
+it("colors the placeholder with the muted text token that is contrast-tested on the raised capsule", () => {
+  const field = render().props.children[1];
+  expect(field.props.placeholderTextColor).toBe("#111111");
 });
 it("locks the field when disabled and lets the feature cap the height", () => {
   const view = render({ disabled: true, field: { style: { maxHeight: 90 } } });

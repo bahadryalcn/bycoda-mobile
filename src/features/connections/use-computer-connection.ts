@@ -11,10 +11,11 @@ import { assertAppAccess, useSecurity } from "@/state/security";
 import { useCopy } from "@/ui/copy";
 import { flushWorkspaceDrafts } from "../workspace/draft-guard";
 import { connectComputer } from "./computer-connection";
+import { pairingCodeExpired } from "./connection-lifecycle";
 import {
   pairingClaimId,
   pairingErrorMessage,
-  parseMobilePairingCode,
+  parseDesktopPairingCode,
   PairingFailure,
 } from "./pairing-code";
 import { redeemMobilePairingCode } from "./pairing-redeem";
@@ -62,35 +63,20 @@ export function useComputerConnection() {
 
   useEffect(() => {
     if (process.env.EXPO_OS === "web") return;
-    const clear = () => {
+    // Reason: leaving the app (Wi-Fi, VPN, Tailscale) aborts pending work and drops the typed
+    // secret only. The scanned code and form text stay in memory for the current flow; the
+    // redeem ticket is re-checked for expiry before use. Android blur (system dialogs) is ignored.
+    const background = () => {
       generation.current++;
       request.current?.abort();
       form.patch({ token: "" });
-      setEntry((current) => (current.kind === "scan" ? current : { kind: "choices" }));
       operation.reset();
     };
     const changed = AppState.addEventListener("change", (state) => {
       foreground.current = state === "active";
-      if (!foreground.current) clear();
+      if (!foreground.current) background();
     });
-    const blurred =
-      process.env.EXPO_OS === "android"
-        ? AppState.addEventListener("blur", () => {
-            foreground.current = false;
-            clear();
-          })
-        : null;
-    const returned =
-      process.env.EXPO_OS === "android"
-        ? AppState.addEventListener("focus", () => {
-            foreground.current = AppState.currentState === "active";
-          })
-        : null;
-    return () => {
-      changed.remove();
-      blurred?.remove();
-      returned?.remove();
-    };
+    return () => changed.remove();
   }, [form.patch, operation.reset]);
 
   useEffect(() => {
@@ -143,13 +129,14 @@ export function useComputerConnection() {
     const attempt = generation.current;
     try {
       assertAccess();
-      const code = parseMobilePairingCode(raw);
+      const code = parseDesktopPairingCode(raw);
+      const receivedAt = Date.now();
       const claimId = pairingClaimId(await Crypto.getRandomBytesAsync(32));
       assertAccess();
       if (attempt !== generation.current) throw new PairingFailure("aborted");
       // The validated QR payload owns route identity; no extra network-selection step is needed.
       setConnectionMode(code.lanKey ? "lan" : "tailscale");
-      setEntry({ kind: "preview", code, claimId });
+      setEntry({ kind: "preview", code, claimId, receivedAt });
     } catch (error) {
       throw new Error(
         error instanceof Error &&
@@ -188,6 +175,7 @@ export function useComputerConnection() {
         const editingId =
           form.values.target?.kind === "existing" ? form.values.target.id : undefined;
         if (entry.kind === "preview") {
+          if (pairingCodeExpired(entry.code, entry.receivedAt)) throw new PairingFailure("expired");
           const redeemed = await redeemMobilePairingCode(entry.code, entry.claimId, phoneName, {
             signal: controller.signal,
             assertAccess,

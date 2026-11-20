@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { useActiveMachine } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
+import { errorMessage } from "@/ui/error-message";
+import { RemoteHostError } from "@/remote/host-error";
 import { Button, Disclosure, FormActions, Notice, NumberField, QueryState, SelectField, Stack } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { providerName } from "../workspace/provider-choices";
@@ -13,9 +15,9 @@ export function WorkCapsSettings({ current, enabled }: { current(): boolean; ena
   const supported = enabled && machine?.capabilities?.includes("models.routing.v1") === true;
   const query = useHostQuery<ModelRoutingState>(["modelRouting"], "modelRouting.get", {}, { enabled: supported,
     queryFn: async (client, signal) => {
-      if (!current()) throw new Error("Computer connection changed.");
+      if (!current()) throw new Error(copy("Bilgisayar bağlantısı değişti.", "Computer connection changed."));
       const result = ModelRoutingGetResultSchema.parse(await client.request("modelRouting.get", {}, { signal }));
-      if (!current()) throw new Error("Computer connection changed.");
+      if (!current()) throw new Error(copy("Bilgisayar bağlantısı değişti.", "Computer connection changed."));
       return result.state;
     } });
   return <Disclosure label={copy("Token ve maliyet sınırları", "Token and cost caps")}>
@@ -25,10 +27,18 @@ export function WorkCapsSettings({ current, enabled }: { current(): boolean; ena
     </>}
   </Disclosure>;
 }
+/** A stale version (the Host says so) or a write that may have landed locks the form until reload; other failures keep the draft editable. */
+export function locksUntilReload(error: unknown) {
+  return error instanceof RemoteHostError && (error.uncertain || error.kind === "timeout" || /changed; reload before saving/.test(error.message));
+}
+/** Only Host errors carry copy this app can show; anything else is reduced to the generic outcome. */
+export function failureText(error: unknown, copy: ReturnType<typeof useCopy>) {
+  return errorMessage(error instanceof RemoteHostError ? error : undefined, copy);
+}
 function WorkCapsEditor({ initial, current, providers, onReload }: { initial: ModelRoutingState; current(): boolean; providers: RemoteProvider[]; onReload(): Promise<ModelRoutingState> }) {
   const copy = useCopy();
   const [opening, setOpening] = useState(initial), [scope, setScope] = useState("total"), [edits, setEdits] = useState<Record<string, Fields>>({});
-  const [held, setHeld] = useState(false), [busy, setBusy] = useState(false);
+  const [held, setHeld] = useState(false), [busy, setBusy] = useState(false), [failure, setFailure] = useState<string>();
   const pending = useRef(false);
   const save = useHostMutation("modelRouting.save", ["modelRouting"]);
   const dirty = Object.keys(edits).length > 0;
@@ -38,7 +48,7 @@ function WorkCapsEditor({ initial, current, providers, onReload }: { initial: Mo
   const valid = Object.values(edits).every(value => parsedFields(value) !== undefined);
   const submit = async () => {
     if (pending.current || held || !dirty || !valid || !current()) return;
-    pending.current = true; setBusy(true);
+    pending.current = true; setBusy(true); setFailure(undefined);
     try {
       const workCaps = { ...opening.workCaps, providers: { ...opening.workCaps?.providers } };
       for (const [key, value] of Object.entries(edits)) {
@@ -49,22 +59,25 @@ function WorkCapsEditor({ initial, current, providers, onReload }: { initial: Mo
       const { version, updatedAt: _updatedAt, ...draft } = opening;
       const result = ModelRoutingSaveResultSchema.parse(await save.mutateAsync({ expectedVersion: version, draft: { ...draft, workCaps } }));
       if (!current()) return;
-      if (result.state.version <= version) throw new Error("Work caps were not confirmed.");
-      for (const [key, value] of Object.entries(edits)) {
+      // Not confirmed: the Host may hold other caps than the draft, so the edits wait for a reload.
+      const confirmed = Object.entries(edits).every(([key, value]) => {
         const expected = parsedFields(value)!;
         const received = key === "total" ? result.state.workCaps?.total : result.state.workCaps?.providers?.[key as RemoteProvider];
-        if (received?.daily?.tokens !== expected.daily?.tokens || received?.daily?.costUsd !== expected.daily?.costUsd || received?.monthly?.tokens !== expected.monthly?.tokens || received?.monthly?.costUsd !== expected.monthly?.costUsd)
-          throw new Error("Work caps were not confirmed.");
-      }
+        return received?.daily?.tokens === expected.daily?.tokens && received?.daily?.costUsd === expected.daily?.costUsd && received?.monthly?.tokens === expected.monthly?.tokens && received?.monthly?.costUsd === expected.monthly?.costUsd;
+      });
+      if (result.state.version <= version || !confirmed) { setHeld(true); return; }
       setOpening(result.state); setEdits({});
-    } catch { if (current()) setHeld(true); }
-    finally { pending.current = false; if (current()) setBusy(false); }
+    } catch (error) {
+      if (!current()) return;
+      if (locksUntilReload(error)) setHeld(true);
+      else setFailure(failureText(error, copy));
+    } finally { pending.current = false; if (current()) setBusy(false); }
   };
   const reload = async () => {
     if (pending.current || !current()) return;
-    pending.current = true; setBusy(true);
+    pending.current = true; setBusy(true); setFailure(undefined);
     try { const state = await onReload(); if (current()) { setOpening(state); setEdits({}); setHeld(false); } }
-    catch { if (current()) setHeld(true); }
+    catch (error) { if (current()) setFailure(failureText(error, copy)); }
     finally { pending.current = false; if (current()) setBusy(false); }
   };
   const labels: Record<keyof Fields, string> = { dailyTokens: copy("Günlük token", "Daily tokens"), monthlyTokens: copy("Aylık token", "Monthly tokens"), dailyCost: copy("Günlük maliyet (USD)", "Daily cost (USD)"), monthlyCost: copy("Aylık maliyet (USD)", "Monthly cost (USD)") };
@@ -75,6 +88,7 @@ function WorkCapsEditor({ initial, current, providers, onReload }: { initial: Mo
     {(Object.keys(labels) as (keyof Fields)[]).map(key => <NumberField key={key} label={labels[key]} value={value[key]} decimal={key.endsWith("Cost")} editable={!busy && !held}
       onChangeText={text => setEdits(previous => ({ ...previous, [scope]: { ...value, [key]: text } }))} />)}
     {!valid ? <Notice tone="warning" message={copy("Tokenlar güvenli tam sayı, maliyetler sıfır veya pozitif sayı olmalıdır.", "Tokens must be safe integers; costs must be zero or positive numbers.")} /> : null}
+    {failure ? <Notice tone="danger" message={failure} /> : null}
     {held ? <Notice tone="warning" message={copy("Kaydetme doğrulanamadı veya ayarlar değişti. Tekrar göndermeden güncel ayarları yükleyin; bu düzenlemeleri sıfırlar.", "Save was not confirmed or settings changed. Load current settings before sending again; this resets these edits.")} /> : null}
     <FormActions submitLabel={copy("Work sınırlarını kaydet", "Save Work caps")} busy={busy} disabled={held || !dirty || !valid || !current()} onSubmit={() => void submit()} />
     {held ? <Button label={copy("Güncel ayarları yükle", "Load current settings")} busy={busy} disabled={busy} onPress={() => void reload()} /> : null}

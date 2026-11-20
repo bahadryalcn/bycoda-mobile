@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import type { PrivateContentAccess } from "./private-content";
 
+/** Layer identity held in provider state. Content is published separately through `setContent`. */
 export type OverlayEntry = {
-  children: ReactNode;
   onClose(): void;
   priority: number;
   label?: string;
@@ -14,9 +14,13 @@ export type OverlayEntry = {
 export type OverlayRegistry = {
   update(id: string, entry: OverlayEntry): void;
   remove(id: string): void;
+  /** Drops the layer and its content at once (used on lock). */
+  drop(id: string): void;
+  setContent(id: string, children: ReactNode): void;
 };
 
 export type ScreenOverlayProps = Omit<OverlayEntry, "priority" | "routeFocused"> & {
+  children: ReactNode;
   visible: boolean;
   priority?: number;
 };

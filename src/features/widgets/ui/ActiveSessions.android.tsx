@@ -17,6 +17,7 @@ import {
   paddingAll,
   semantics,
   size,
+  weight,
   width,
 } from "@expo/ui/jetpack-compose/modifiers";
 import { createWidget, type WidgetEnvironment } from "expo-widgets";
@@ -264,14 +265,16 @@ export function ActiveSessions(
             <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
               {badge(row.status, 30)}
               <Spacer modifiers={[width(10)]} />
-              <Column>
+              <Column modifiers={[weight(1)]}>
                 <Text color={text} maxLines={1} style={{ fontSize: 14, fontWeight: "bold" }}>
                   {row.title || row.project}
                 </Text>
-                <Row verticalAlignment="center">
+                <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
                   <Text
                     color={row.status === "running" ? muted : tone(row.status).fg}
                     maxLines={1}
+                    overflow="ellipsis"
+                    modifiers={[weight(1)]}
                     style={{ fontSize: 12 }}
                   >
                     {row.startedLabel || row.detail}

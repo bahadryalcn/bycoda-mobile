@@ -1,5 +1,13 @@
 import type { MobileInboxItem } from "@/domain/types";
 
+/**
+ * The Host still sends Social attention items, but the phone does not manage Social.
+ * Every surface that lists, counts or marks attention items seen goes through this filter.
+ */
+export function phoneAttentionItems<T extends Pick<MobileInboxItem, "kind">>(items: readonly T[]): T[] {
+  return items.filter((item) => item.kind !== "social");
+}
+
 const urgentStatuses = ["review", "awaiting-approval", "blocked", "failed"];
 const finishedStatuses = ["done", "succeeded", "completed", "finished"];
 

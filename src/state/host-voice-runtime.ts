@@ -34,7 +34,10 @@ export async function openScopedVoiceConnection(native: HostSocketNative, bindin
     await connection.start(); assertCurrent();
     // A Host from before phone voice does not route these methods; say so instead of failing the
     // first voice request as incompatible data.
-    if (!connection.supports("voice.local.start") || !connection.supports("voice.cloud.transcribe")) throw new HostWsError("unsupported");
+    // The spoken message itself goes over this socket too (it has no HTTP fallback); a Host that
+    // does not route it there would otherwise stop every call at the reply as incompatible data.
+    if (!connection.supports("voice.local.start") || !connection.supports("voice.cloud.transcribe") || !connection.supports("assistant.request"))
+      throw new HostWsError("unsupported");
   } catch (error) { connection.close(); throw error; }
   return {
     current: isCurrent,

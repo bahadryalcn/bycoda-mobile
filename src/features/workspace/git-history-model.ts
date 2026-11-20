@@ -1,7 +1,11 @@
+import type { GitHistoryCommit } from "../../../../src/platform/tauri/fs";
 import type { GitScope } from "./git-types";
 
+export const GIT_HISTORY_PAGE = 100;
+export const GIT_HISTORY_MAX = 500;
+
 export type GitHistoryRead =
-  | { kind: "history"; limit: number }
+  | { kind: "history"; limit: number; skip?: number }
   | { kind: "files"; sha: string }
   | { kind: "diff" | "blame"; sha: string; path: string }
   | { kind: "fileHistory"; path: string; limit: number };
@@ -19,12 +23,39 @@ export function gitHistoryRequest(scope: GitScope, read: GitHistoryRead) {
       throw new Error("Invalid repository-relative file path.");
     args.relative = read.path;
   }
-  if ("limit" in read) args.limit = Math.min(500, Math.max(1, Math.trunc(read.limit) || 100));
+  if ("limit" in read) args.limit = Math.min(GIT_HISTORY_MAX, Math.max(1, Math.trunc(read.limit) || GIT_HISTORY_PAGE));
+  if ("skip" in read && read.skip) {
+    const skip = Math.trunc(read.skip);
+    if (!Number.isSafeInteger(skip) || skip < 0 || skip >= GIT_HISTORY_MAX) throw new Error("Invalid history offset.");
+    if (skip > 0) args.skip = skip;
+  }
   const commands = {
     history: "git_history", files: "git_commit_files", diff: "git_commit_file_diff",
     blame: "git_blame", fileHistory: "git_file_history",
   } as const;
   return { command: commands[read.kind], args };
+}
+
+/** Commits a single read asks for once `count` are already shown, bounded by the mobile budget. */
+export const historyReadSize = (count: number) =>
+  Math.min(GIT_HISTORY_MAX, Math.max(GIT_HISTORY_PAGE, Math.trunc(count) || GIT_HISTORY_PAGE));
+
+/** A Host that predates `skip` answers a skipped read with the walk's first commits again. */
+export const historySkipIgnored = (shown: readonly GitHistoryCommit[], page: readonly GitHistoryCommit[]) =>
+  !!page.length && shown.some((commit) => commit.sha === page[0]?.sha);
+
+/**
+ * Merge a later read into the commits already shown. Commits shown are never added twice;
+ * `requested` is the size that read asked for, so a shorter answer means history ended.
+ */
+export function appendHistoryPage(
+  shown: readonly GitHistoryCommit[],
+  page: readonly GitHistoryCommit[],
+  requested: number,
+): { fresh: GitHistoryCommit[]; ended: boolean } {
+  const seen = new Set(shown.map((commit) => commit.sha));
+  const fresh = page.filter((commit) => !seen.has(commit.sha) && !!seen.add(commit.sha));
+  return { fresh, ended: !fresh.length || page.length < requested || shown.length + fresh.length >= GIT_HISTORY_MAX };
 }
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object";

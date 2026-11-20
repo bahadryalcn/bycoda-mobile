@@ -5,6 +5,7 @@ import { useGitReviewScope, useGitReviewReadAccess } from "./use-git-review-acce
 import { useGitWriteReview } from "./git-write-review";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
+import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { confirmAction } from "@/ui/confirm";
 import { ActionMenu, Body, Button, ErrorText, Notice, QueryState, ScreenList, SelectField, Sheet } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
@@ -114,6 +115,6 @@ export function ConflictReview({ scope, path, onClose, onBusyChange, onChanged, 
       <SelectField label={copy("Sürüm", "Version")} value={version} onChange={next => { if (current()) setVersion(next); }} options={[{ value: "base", label: copy("Ortak temel", "Common base") }, { value: "ours", label: copy("Bizim sürüm", "Our version") }, { value: "theirs", label: copy("Gelen sürüm", "Incoming version") }, { value: "working", label: copy("Çalışma dosyası", "Working file") }, { value: "result", label: copy("Çözüm önizlemesi", "Resolution preview") }]} />
       {text === null || text === undefined ? <Body muted>{copy("Bu sürüm mevcut değil veya henüz hazır değil.", "This version is absent or not ready yet.")}</Body> : <GitDiffViewer key={`${review?.snapshot}:${version}`} lines={text.split(/\r?\n/).map((line, index) => ({ kind: "same", text: line, oldLine: index + 1, newLine: index + 1 }))} />}
     </View>} renderItem={({ item }) => <ConflictChoiceField part={item} value={choices[item.id] ?? ""} disabled={disabled} onChange={(value) => { if (!submitted.current && !disabled && current() && latest.current.review === review) setChoices(before => ({ ...before, [item.id]: value })); }} />} />
-    : <>{scopeAccess.available && query.error ? <QueryState query={{ ...query, data: undefined, refetch: () => { if (scopeAccess.check()) return query.refetch(); } }} /> : <FeatureUnavailable message={scopeAccess.scopeCurrent && !supported ? copy("Güvenli çakışma incelemesi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer for safe conflict review.") : copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />}</>}
+    : <>{scopeAccess.available && query.error ? <QueryState query={{ ...query, data: undefined, refetch: () => { if (scopeAccess.check()) return query.refetch(); } }} /> : <FeatureUnavailable message={scopeAccess.scopeCurrent && !supported ? copy("Güvenli çakışma incelemesi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer for safe conflict review.") : copy(...RECORD_ACCESS_UNAVAILABLE)} />}</>}
   </Sheet><PrivateContentAccessProvider value={readAccess}>{approval.element}</PrivateContentAccessProvider></>;
 }

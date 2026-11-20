@@ -16,7 +16,7 @@ import {
 } from "@/ui/primitives";
 import { haptic } from "@/ui/motion";
 import { useSheetGuard } from "@/ui/sheet-guard";
-import { automationTriggerValid, integerInRange, validScheduleTime } from "./schedule-model";
+import { automationEventLabel, automationTriggerValid, integerInRange, validScheduleTime } from "./schedule-model";
 import { useCopy } from "@/ui/copy";
 import { NumberField } from "@/ui/number-field";
 import { useFormDraft } from "@/state/form-draft";
@@ -93,7 +93,7 @@ export function AutomationEditor({ initial, save, busy, onClose }: AutomationEdi
         {draft.trigger?.kind === "continuous" ? <NumberField label={copy("En az bekleme (dakika)", "Minimum gap (minutes)")} value={gap} editable={!busy} onChangeText={setGap}
           error={gapValid ? undefined : copy("1 ile 10080 arasında dakika girin.", "Enter minutes from 1 to 10080.")} /> : null}
         {draft.trigger?.kind === "event" ? <SelectField label={copy("Olay", "Event")} value={draft.trigger.event} disabled={busy}
-          options={(["task.finished", "task.blocked", "session.waiting", "automation.failed"] as const).map(value => ({ value, label: value }))}
+          options={(["task.finished", "task.blocked", "session.waiting", "automation.failed"] as const).map(value => ({ value, label: automationEventLabel(value, copy) }))}
           onChange={event => update({ trigger: { kind: "event", event } })} /> : null}
         {!draft.trigger ? <>
         <ScheduleFields

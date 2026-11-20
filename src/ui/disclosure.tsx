@@ -4,6 +4,7 @@ import { Collapsible } from "panelui-native/components/collapsible";
 import { View } from "react-native";
 import { Body } from "./typography";
 import { metrics, space, type SemanticTone } from "./tokens";
+import { disclosureAccessibleLabel } from "./disclosure-label";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 
 export function Disclosure({
@@ -20,7 +21,7 @@ export function Disclosure({
   return (
     <Collapsible variant="ghost" open={expanded} onOpenChange={(next) => { setVisited(true); setExpanded(next); }}>
       <Collapsible.Trigger
-        accessibilityLabel={label}
+        accessibilityLabel={disclosureAccessibleLabel(label, detail, expanded)}
         aria-expanded={expanded}
         hitSlop={{ top: 5, bottom: 5, left: 0, right: 0 }}
         style={{

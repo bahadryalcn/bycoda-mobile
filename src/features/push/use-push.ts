@@ -1,13 +1,14 @@
 import { logDiagnostic } from "../diagnostics/diagnostic-log";
 import { useEffect, useRef, useState } from "react";
-import { router, useRootNavigationState } from "expo-router";
+import { router, useRootNavigationState, type Href } from "expo-router";
 import { useHostClient } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useSecurity } from "@/state/security";
 import { useCopy } from "@/ui/copy";
+import { showToast } from "@/ui/primitives";
 import { notifications, readDevicePermission } from "../permissions/device-permissions";
-import { PUSH_CAPABILITY, pushTarget, usePushPreferences, usePushStatus, type PushTarget } from "./push-model";
-import { expoProjectId, expoPushToken, pushRegistration } from "./push-registration";
+import { PUSH_CAPABILITY, pushRoute, pushTarget, unmatchedPushNotice, usePushPreferences, usePushStatus, type PushTarget } from "./push-model";
+import { expoProjectId, expoPushToken, onPushTokenRotated, pushRegistration } from "./push-registration";
 
 /** What each computer last accepted in this app run, so focus changes do not re-send it. */
 const accepted = new Map<string, string>();
@@ -25,6 +26,10 @@ export function usePushRegistration() {
   const preferences = usePushPreferences();
   const setStatus = usePushStatus((state) => state.set);
   const wording = JSON.stringify(pushRegistration("", "", preferences, copy).texts);
+  const [tokenEpoch, setTokenEpoch] = useState(0);
+  // The OS rotating the push token is the only reason to look the token up again; a rotation re-runs the registration below.
+  useEffect(() => onPushTokenRotated(() => setTokenEpoch((epoch) => epoch + 1)), []);
+  // Resuming re-reads the (local) permission and re-sends only a changed registration; the held token needs no network.
   useEffect(() => {
     if (!client || !machine || !preferences.hydrated || !active) return;
     if (!machine.capabilities?.includes(PUSH_CAPABILITY)) {
@@ -58,12 +63,13 @@ export function usePushRegistration() {
     return () => { current = false; };
     // `wording` covers the copy language; the other values are listed individually.
   }, [client, machine?.id, machine?.name, machine?.capabilities, preferences.hydrated, preferences.enabled,
-    preferences.events, preferences.assistantUrgentDuringQuiet, active, wording, setStatus]);
+    preferences.events, preferences.assistantUrgentDuringQuiet, active, wording, tokenEpoch, setStatus]);
 }
 
 /** Opens the conversation a tapped push points to, switching computers when needed. */
 export function usePushResponses() {
   const routerReady = !!useRootNavigationState()?.key;
+  const copy = useCopy();
   const [target, setTarget] = useState<PushTarget | null>(null);
   const consumedInitial = useRef(false);
   useEffect(() => {
@@ -88,19 +94,12 @@ export function usePushResponses() {
     setTarget(null);
     const machines = useMachines.getState();
     const machine = machines.machines.find((entry) => entry.environmentId === target.environmentId);
-    // A computer this phone no longer pairs with opens nothing.
-    if (!machine) return;
+    // A computer this phone no longer pairs with (or cannot read) opens nothing; say why, without naming it.
+    if (!machine) {
+      showToast({ tone: "warning", message: unmatchedPushNotice(machines.storageError, copy) });
+      return;
+    }
     if (machines.activeId !== machine.id) machines.selectMachine(machine.id);
-    if (target.kind === "approval") router.push({ pathname: "/approvals", params: { focus: target.approvalId } });
-    else if (target.kind === "assistant")
-      router.push({
-        pathname: "/assistant",
-        params: { ...(target.jobId ? { job: target.jobId } : {}), ...(target.questions ? { questions: "1" } : {}) },
-      });
-    else
-      router.push({
-        pathname: "/session/[id]",
-        params: { id: target.sessionId, machineId: machine.id, ...(target.projectId ? { projectId: target.projectId } : {}) },
-      });
-  }, [routerReady, target]);
+    router.navigate(pushRoute(target, machine.id) as Href);
+  }, [routerReady, target, copy]);
 }

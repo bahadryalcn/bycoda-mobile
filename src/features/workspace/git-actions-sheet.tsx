@@ -16,6 +16,7 @@ import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import type { GitDiffIndex } from "./wire";
 import { gitSheetActions, type GitSheetKey } from "./git-actions-model";
+import { gitFileCount } from "./git-status";
 
 export type { GitSheetKey } from "./git-actions-model";
 
@@ -66,7 +67,7 @@ export function GitActionsSheet({
     >
       <Stack>
         <Body selectable style={{ fontWeight: "600" }}>{index.branch || "Git"}</Body>
-        <Body muted>{copy("{p0} dosya", "{p0} files", { p0: numbers.format(index.files.length) })}{additions}{deletions}</Body>
+        <Body muted>{gitFileCount(index.files.length, copy, numbers)}{additions}{deletions}</Body>
       </Stack>
       <NavigationGroup>
         {gitSheetActions(index, { busy, canRunWorkspace, linkPr }, copy).map((action) => (

@@ -3,8 +3,11 @@ vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
 vi.mock("@/ui/primitives", () => ({ StateView: "StateView", QueryState: "QueryState" }));
 vi.mock("react-native", () => ({ View: "View" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+const machine = vi.hoisted(() => ({ phase: "disconnected" }));
+vi.mock("@/ui/machine-bar", () => ({ useMachineStatus: () => machine }));
 import { router } from "expo-router";
-import { ProjectDirectoryFeedback, ProjectDirectorySlot } from "./project-directory-feedback";
+import { getQueryPresentation } from "@/ui/query-presentation";
+import { ProjectDirectoryFeedback,ProjectDirectorySlot } from "./project-directory-feedback";
 // The slot always renders a stable container; its child is the state (or nothing).
 const slot = (props: Parameters<typeof ProjectDirectorySlot>[0]) => ProjectDirectorySlot(props).props.children;
 
@@ -22,6 +25,19 @@ describe("directory feedback ownership", () => {
     expect(view.props.title).toContain("Waiting for a connection");
     view.props.action.onPress();
     expect(router.push).toHaveBeenCalledWith("/machines");
+  });
+
+  it("loads instead of claiming a lost connection while the link is checked or up", () => {
+    for (const phase of ["checking", "connected"]) {
+      machine.phase = phase;
+      const query = { fetchStatus: "paused" as const, isPending: true };
+      const view = ProjectDirectoryFeedback({ query, readiness: "waiting", loading: "content" });
+      expect(view.type).toBe("QueryState");
+      // The idle/paused read of a freshly selected computer must present as loading, never blank.
+      expect(getQueryPresentation(view.props.query)).toBe("loading");
+      expect(getQueryPresentation(ProjectDirectoryFeedback({ query: { isPending: true, fetchStatus: "idle", isEnabled: false }, readiness: "waiting" }).props.query)).toBe("loading");
+    }
+    machine.phase = "disconnected";
   });
 
   it("preserves precise auth recovery instead of replacing an error with generic waiting", () => {

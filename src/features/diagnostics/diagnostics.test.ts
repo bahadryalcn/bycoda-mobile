@@ -21,6 +21,7 @@ function memoryFiles(initial: Record<string, string> = {}): DiagnosticFiles & { 
     map,
     read: (name) => map.get(name) ?? null,
     write: (name, text) => void map.set(name, text),
+    append: (name, text) => void map.set(name, (map.get(name) ?? "") + text),
     remove: (name) => void map.delete(name),
   };
 }

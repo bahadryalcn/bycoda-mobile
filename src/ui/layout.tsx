@@ -16,27 +16,15 @@ import { HeaderBackButton } from "./header-back-button";
 import { FormActionScrollOwner } from "./form-action-context";
 import { screenFooterLimits } from "./screen-footer-model";
 import { ConnectionFeedbackScope } from "./connection-feedback-scope";
+import { ScreenChrome, useScreenChrome, type HeaderIdentityProps } from "./screen-chrome";
+import { ScreenFrameInsets, useScreenContentInsets } from "./screen-content-insets";
 import type { PropsWithChildren, ReactNode } from "react";
 import type { ScreenProps, ContainerProps, CardProps, SectionProps, CodePanelProps } from "./component-props";
 
-const ScreenChrome = createContext<{
-  nativeTitle: boolean;
-  bottomSafeArea: boolean;
-  /** Measured height of the floating dock overlaying the scene; 0 when no dock is shown. */
-  bottomInset: number;
-  headerAccessory?: ReactNode;
-  headerIdentity?: (props: HeaderIdentityProps) => ReactNode;
-}>({ nativeTitle: false, bottomSafeArea: true, bottomInset: 0 });
-
-export type HeaderIdentityProps = { title: string; subtitle?: string };
-export function useScreenChrome() {
-  return use(ScreenChrome);
-}
-
-/** Space a screen must keep clear at the bottom for the floating dock (absolute elements, last rows). */
-export function useBottomInset() {
-  return use(ScreenChrome).bottomInset;
-}
+// The chrome context lives in its own module so lightweight consumers can read it without this file's imports.
+export { useScreenChrome, useBottomInset } from "./screen-chrome";
+export type { HeaderIdentityProps } from "./screen-chrome";
+export { useScreenContentInsets } from "./screen-content-insets";
 
 /** Suppressed native titles must not leave an empty padded content header behind. */
 export function useScreenHeading(props: { title?: string; subtitle?: string; context?: ReactNode; actions?: ReactNode; onBack?: () => void }) {
@@ -164,9 +152,11 @@ export function Screen({
   onBack,
   footer,
   onContentViewport,
+  contentOwnsBottomInset = false,
 }: ScreenProps) {
   const { colors, uiStyles } = useMobileTheme();
   const insets = useSafeAreaInsets();
+  const content = useScreenContentInsets();
   const chrome = use(ScreenChrome);
   const heading = useScreenHeading({ title, subtitle, context, actions, onBack });
   const keyboardVisible = useKeyboardState(state => state.isVisible);
@@ -177,6 +167,9 @@ export function Screen({
   const onRefresh = refresh ?? query?.refetch;
   const ownRefresh = usePullRefresh(refreshState ? undefined : onRefresh);
   const pullRefresh = refreshState ?? ownRefresh;
+  // The non-scrolling frame pads the home indicator once for everything below it, except content (a keyboard-aware
+  // composer) that reserves it itself. The footer then must not add it again.
+  const frameBottomSafe = !scroll && !contentOwnsBottomInset && chrome.bottomSafeArea && !keyboardVisible;
   const actionArea = footer ? <ScrollView
     keyboardShouldPersistTaps="handled"
     automaticallyAdjustKeyboardInsets={false}
@@ -184,18 +177,23 @@ export function Screen({
     style={{ flexGrow: 0, flexShrink: 0, minHeight: 0, maxHeight: footerLimits.maximum,
       backgroundColor: colors.background, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
     contentContainerStyle={{
-      paddingStart: Math.max(insets.left, space.screen), paddingEnd: Math.max(insets.right, space.screen),
-      paddingTop: space.sm, paddingBottom: space.sm + (chrome.bottomSafeArea && !keyboardVisible ? insets.bottom : 0),
+      paddingStart: content.left, paddingEnd: content.right,
+      paddingTop: space.sm,
+      // The non-scrolling frame already pads the floating chrome; here the action area clears it itself.
+      paddingBottom: space.sm + (scroll && !keyboardVisible ? chrome.bottomInset : 0) +
+        (chrome.bottomSafeArea && !keyboardVisible && (scroll || contentOwnsBottomInset) ? insets.bottom : 0),
     }}>
     <FormActionScrollOwner value>{footer}</FormActionScrollOwner>
   </ScrollView> : null;
   if (!scroll)
     return (
       <KeyboardAvoidingView enabled={!!footer} behavior="padding" automaticOffset style={{ flex: 1 }}>
-      <View style={[uiStyles.screen, { paddingBottom: chrome.bottomInset }]} onLayout={measureFrame}>
-        {heading ? <ScreenHeader onLayout={measureHeader}>{heading}</ScreenHeader> : null}
-        <ConnectionFeedbackScope>{children}</ConnectionFeedbackScope>
-        {actionArea}
+      <View style={[uiStyles.screen, { paddingBottom: chrome.bottomInset + (frameBottomSafe ? insets.bottom : 0) }]} onLayout={measureFrame}>
+        <ScreenFrameInsets value>
+          {heading ? <ScreenHeader onLayout={measureHeader}>{heading}</ScreenHeader> : null}
+          <ConnectionFeedbackScope>{children}</ConnectionFeedbackScope>
+          {actionArea}
+        </ScreenFrameInsets>
       </View>
       </KeyboardAvoidingView>
     );
@@ -205,8 +203,8 @@ export function Screen({
       <KeyboardAwareScrollView
         enabled={!footer}
         onLayout={onContentViewport ? ({ nativeEvent: { layout } }) => onContentViewport({
-          width: Math.max(0, Math.min(layout.width, metrics.contentWidth) - Math.max(insets.left, space.screen) - Math.max(insets.right, space.screen)),
-          height: Math.max(0, layout.height - space.screen - space.lg - (!footer ? chrome.bottomInset + (chrome.bottomSafeArea ? insets.bottom : 0) : 0)),
+          width: Math.max(0, Math.min(layout.width, metrics.contentWidth) - content.left - content.right),
+          height: Math.max(0, layout.height - space.screen - space.lg - (!footer ? content.bottom : 0)),
         }) : undefined}
         bottomOffset={space.lg}
         contentInsetAdjustmentBehavior="never"
@@ -230,9 +228,9 @@ export function Screen({
             flexGrow: 1,
             // Same top inset as ScreenList and the non-scroll header so tab titles do not jump between tabs.
             paddingTop: space.xs,
-            paddingLeft: Math.max(insets.left, space.screen),
-            paddingRight: Math.max(insets.right, space.screen),
-            paddingBottom: space.lg + (!footer ? chrome.bottomInset + (chrome.bottomSafeArea ? insets.bottom : 0) : 0),
+            paddingLeft: content.left,
+            paddingRight: content.right,
+            paddingBottom: space.lg + (!footer ? content.bottom : 0),
           },
         ]}
       >
@@ -257,7 +255,9 @@ function useScreenHeight(initial: number) {
 
 export function ScreenHeader({ children, onLayout }: PropsWithChildren<{ onLayout?: (event: LayoutChangeEvent) => void }>) {
   const { uiStyles } = useMobileTheme();
-  return <View style={uiStyles.header} onLayout={onLayout}>{children}</View>;
+  const content = useScreenContentInsets();
+  // A landscape notch or cutout wins over the flat gutter; the heading otherwise sits under it.
+  return <View style={[uiStyles.header, { paddingLeft: content.left, paddingRight: content.right }]} onLayout={onLayout}>{children}</View>;
 }
 
 const CardDepth = createContext(0);

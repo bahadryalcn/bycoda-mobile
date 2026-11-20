@@ -35,7 +35,7 @@ vi.mock("./theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: { gro
 vi.mock("./tokens", () => ({ metrics: { touchTarget: 48, inputHeight: 48, contentWidth: 760 }, radii: {}, space: { sm: 6, xs: 4, md: 12, lg: 16, xl: 20, screen: 16 } }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./overlays", () => ({ ScreenOverlay: ({ children }: PropsWithChildren) => children, useOverlayProgress: () => null }));
-vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("p", null, children), Heading: ({ children }: PropsWithChildren) => createElement("h2", null, children) }));
+vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("p", null, children), Heading: ({ children, numberOfLines }: PropsWithChildren<{ numberOfLines?: number }>) => createElement("h2", { "data-lines": numberOfLines ?? "" }, children) }));
 vi.mock("./buttons", () => ({ Button: () => null, IconButton: () => createElement("button", null, "Close") }));
 vi.mock("./layout", () => ({ Card: ({ children }: PropsWithChildren) => children, Row: ({ children }: PropsWithChildren) => children }));
 vi.mock("./sheet-guard", async () => {
@@ -78,7 +78,40 @@ it("reserves header space above a scrollable editor and keeps actions outside th
     measureFrame!({ nativeEvent: { layout: { height: 300 } } });
     measureHeader!({ nativeEvent: { layout: { height: 96 } } });
   });
-  expect(JSON.parse(body.getAttribute("data-style")!)).toMatchObject({ minHeight: 94.5 });
+  expect(JSON.parse(body.getAttribute("data-style")!)).toMatchObject({ minHeight: 99 });
   const actions = container.querySelector("footer")!.parentElement!;
-  expect(JSON.parse(actions.getAttribute("data-style")!)).toMatchObject({ maxHeight: 94.5, flexShrink: 0 });
+  expect(JSON.parse(actions.getAttribute("data-style")!)).toMatchObject({ maxHeight: 99, flexShrink: 0 });
+});
+
+it("renders no decorative drag handle on bottom sheets, since they cannot be swiped down", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  root = createRoot(container);
+  await act(async () => root!.render(createElement(Sheet, {
+    visible: true, title: "Pick a model", onClose: () => {},
+  }, createElement("p", null, "Body"))));
+  const drawnHandle = [...container.querySelectorAll("[data-style]")].some((node) => {
+    const style = JSON.parse(node.getAttribute("data-style")!);
+    return style.width === 36 && style.height === 5;
+  });
+  expect(drawnHandle).toBe(false);
+});
+
+it("shows a long sheet title in full inside its bounded scroller, with the close control outside it", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const longTitle = "feature/shared-mobile-sheet-title-readability/".repeat(6) + "session-42";
+  root = createRoot(container);
+  await act(async () => root!.render(createElement(Sheet, {
+    visible: true, title: longTitle, onClose: () => {},
+  }, createElement("p", null, "Body"))));
+  const heading = container.querySelector("h2")!;
+  expect(heading.textContent).toBe(longTitle);
+  expect(heading.getAttribute("data-lines")).toBe("");
+  const titleScroller = heading.parentElement!;
+  expect(titleScroller.getAttribute("data-scroll")).toBe("true");
+  expect(JSON.parse(titleScroller.getAttribute("data-style")!)).toMatchObject({ maxHeight: 96 });
+  // The scroller sits in the labelled title frame; the close control is that frame's sibling in the header row.
+  expect(titleScroller.parentElement!.parentElement!.querySelector("button")!.textContent).toBe("Close");
+  expect(titleScroller.contains(container.querySelector("button"))).toBe(false);
 });

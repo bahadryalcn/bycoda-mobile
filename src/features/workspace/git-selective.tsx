@@ -5,6 +5,7 @@ import { useGitReviewScope, useGitReviewReadAccess } from "./use-git-review-acce
 import { useGitWriteReview } from "./git-write-review";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
+import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { confirmAction } from "@/ui/confirm";
 import { Body, Button, ErrorText, Notice, QueryState, ScreenList, Sheet, ToggleField } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
@@ -67,6 +68,6 @@ export function GitSelective({ scope, path, visible, busy: parentBusy, onBusyCha
         <ErrorText error={error} />{stale ? <Notice tone="warning" message={copy("İncelenen içerik değişti. Yenileyip tekrar inceleyin.", "Reviewed contents changed. Refresh and review again.")} /> : null}
         {sent ? <Notice tone={done ? "success" : "warning"} message={done ? copy("Seçili değişiklikler stage’e alındı.", "Selected changes were staged.") : copy("İşlem gönderildi. Tekrar göndermeden Git durumunu yenileyip incele.", "The action was sent. Refresh and review Git state before sending again.")} /> : null}
         <Button busy={query.isFetching} tone="quiet" label={copy("Güncel diff’i incele", "Review current diff")} disabled={busy || !supported || query.isFetching || !current()} onPress={() => { const captured = latest.current; if (!current()) return; void query.refetch().then((result) => { if (current() && latest.current.review === captured.review && latest.current.selected === captured.selected && result.data && !result.error) { setReview(result.data); setSelected(new Set()); if (done) { submitted.current = false; setSent(false); setDone(false); } } }); }} />
-      </View> : <>{scopeAccess.available && query.error ? <QueryState query={{ ...query, data: undefined, refetch: () => { if (scopeAccess.check()) return query.refetch(); } }} /> : <FeatureUnavailable message={scopeAccess.scopeCurrent && !supported ? copy("Güvenli satır seçimi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer for safe line selection.") : copy("Kayıt erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.", "Record access is unavailable. Check the original computer and project connection.")} />}</>} renderItem={({ item }) => <GitSelectiveItem item={item} selected={selected} disabled={disabled} onToggle={toggle} />} />
+      </View> : <>{scopeAccess.available && query.error ? <QueryState query={{ ...query, data: undefined, refetch: () => { if (scopeAccess.check()) return query.refetch(); } }} /> : <FeatureUnavailable message={scopeAccess.scopeCurrent && !supported ? copy("Güvenli satır seçimi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer for safe line selection.") : copy(...RECORD_ACCESS_UNAVAILABLE)} />}</>} renderItem={({ item }) => <GitSelectiveItem item={item} selected={selected} disabled={disabled} onToggle={toggle} />} />
   </Sheet><PrivateContentAccessProvider value={readAccess}>{approval.element}</PrivateContentAccessProvider></>;
 }

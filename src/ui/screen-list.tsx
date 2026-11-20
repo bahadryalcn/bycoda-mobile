@@ -2,8 +2,8 @@ import { useMobileTheme } from "./theme";
 import { scrollKeyboardDismissMode } from "./scroll-keyboard";
 import { FlatList, RefreshControl, View, type FlatListProps } from "react-native";
 import { createElement, isValidElement, type ComponentType, type ReactNode } from "react";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useScreenHeading, useScreenChrome } from "./layout";
+import { useScreenHeading } from "./layout";
+import { useScreenContentInsets } from "./screen-content-insets";
 import { metrics, space } from "./tokens";
 import type { QueryLike } from "./query-presentation";
 import { usePullRefresh } from "./use-pull-refresh";
@@ -27,6 +27,11 @@ export type ScreenListProps<T> = FlatListProps<T> & {
   grouped?: boolean;
 };
 
+function renderSlot(slot: FlatListProps<unknown>["ListHeaderComponent"]): ReactNode {
+  if (!slot) return null;
+  return isValidElement(slot) ? slot : createElement(slot as ComponentType);
+}
+
 /** The page owns one vertical list; headers/forms live in list slots, never another ScrollView. */
 export function ScreenList<T>({
   title,
@@ -49,12 +54,13 @@ export function ScreenList<T>({
   ...props
 }: ScreenListProps<T>) {
   const { colors, uiStyles } = useMobileTheme();
-  const insets = useSafeAreaInsets();
-  const chrome = useScreenChrome();
+  const content = useScreenContentInsets();
   const heading = useScreenHeading({ title, subtitle, context, actions, onBack });
   const onRefresh = refresh ?? query?.refetch;
   const ownRefresh = usePullRefresh(refreshState ? undefined : onRefresh);
   const pullRefresh = refreshState ?? ownRefresh;
+  const callerHeader = renderSlot(ListHeaderComponent);
+  const callerFooter = renderSlot(ListFooterComponent);
   return (
     <FlatList
       initialNumToRender={12}
@@ -76,10 +82,10 @@ export function ScreenList<T>({
           maxWidth: metrics.contentWidth,
           alignSelf: "center",
           gap: grouped ? 0 : space.xs,
-          paddingStart: Math.max(insets.left, space.screen),
-          paddingEnd: Math.max(insets.right, space.screen),
+          paddingStart: content.left,
+          paddingEnd: content.right,
           paddingTop: space.xs,
-          paddingBottom: space.lg + chrome.bottomInset + (chrome.bottomSafeArea ? insets.bottom : 0),
+          paddingBottom: space.lg + content.bottom,
           flexGrow: 1,
         },
         contentContainerStyle,
@@ -99,6 +105,7 @@ export function ScreenList<T>({
           <View style={{ gap: space.xs, paddingBottom: space.xs }}>
             {heading}
             {header}
+            {callerHeader}
           </View>
         ) : (
           ListHeaderComponent
@@ -106,7 +113,10 @@ export function ScreenList<T>({
       }
       ListFooterComponent={
         footer !== undefined ? (
-          <View style={{ gap: space.sm, paddingTop: space.sm }}>{footer}</View>
+          <View style={{ gap: space.sm, paddingTop: space.sm }}>
+            {footer}
+            {callerFooter}
+          </View>
         ) : (
           ListFooterComponent
         )

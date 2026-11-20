@@ -45,7 +45,7 @@ export function GitHeader({
   const name = index.branch || copy("Git", "Git");
   const numbers = new Intl.NumberFormat(useLocale());
   const summary = [name, index.remote,
-    copy("{p0} dosya", "{p0} files", { p0: numbers.format(index.files.length) }),
+    gitFileCount(index.files.length, copy, numbers),
     linkedPr ? `#${linkedPr.number} ${pullRequestStateLabel(linkedPr.state, copy)}` : undefined,
     index.ahead ? `↑${numbers.format(index.ahead)}` : undefined,
     index.behind ? `↓${numbers.format(index.behind)}` : undefined,
@@ -77,6 +77,11 @@ export function GitHeader({
   );
 }
 
+/** "1 file" / "3 files": the branch card read "1 files" for a single change. Turkish has no plural form. */
+export function gitFileCount(count: number, copy: ReturnType<typeof useCopy>, numbers: Intl.NumberFormat) {
+  return count === 1 ? copy("1 dosya", "1 file") : copy("{p0} dosya", "{p0} files", { p0: numbers.format(count) });
+}
+
 function GitSyncSummary({ index }: { index: GitHeaderProps["index"] }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
@@ -85,7 +90,7 @@ function GitSyncSummary({ index }: { index: GitHeaderProps["index"] }) {
   return (
     <Row style={{ gap: space.xs }}>
       <Body muted style={uiStyles.caption}>
-        {copy("{p0} dosya", "{p0} files", { p0: numbers.format(index.files.length) })}
+        {gitFileCount(index.files.length, copy, numbers)}
         {index.additions ? <Body style={[uiStyles.caption, { color: colors.diffAddText }]}>{` · +${numbers.format(index.additions)}`}</Body> : null}
         {index.deletions ? <Body style={[uiStyles.caption, { color: colors.diffDelText }]}>{` · −${numbers.format(index.deletions)}`}</Body> : null}
       </Body>

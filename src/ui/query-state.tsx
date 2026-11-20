@@ -13,13 +13,14 @@ import { SheetGuardContext } from "./sheet-guard-context";
 import { useConnectionFeedbackOwner } from "./connection-feedback-scope";
 import { FormActionBusy } from "./form-action-context";
 import { isTransientConnectionError, reconnectRefetchDelay } from "../state/query-retry";
+import { useActiveHostLinkDown } from "../state/host-runtime-state";
 
 /** After this many quiet automatic refetches a dropped link is shown as a real, retryable error. */
 const RECONNECT_ATTEMPTS = 4;
 
 /** A dropped link (Host restart, network switch) refetches itself instead of asking for Retry. */
-function useQuietReconnect(query: QueryStateProps["query"]) {
-  const transient = isTransientConnectionError(query.error);
+function useQuietReconnect(query: QueryStateProps["query"], online: boolean) {
+  const transient = online && isTransientConnectionError(query.error);
   const [attempt, setAttempt] = useState(0);
   const refetch = useRef(query.refetch);
   refetch.current = query.refetch;
@@ -38,16 +39,13 @@ function useQuietReconnect(query: QueryStateProps["query"]) {
   return transient && attempt < RECONNECT_ATTEMPTS && !!query.refetch;
 }
 
-/**
- * The placeholder stays mounted across loading → content, so it dissolves over the result
- * instead of being cut: see `Skeleton`'s `loading`.
- */
 export function QueryState(props: QueryStateProps) {
   const { loading = "list", loadingLabel } = props;
   const state = useQueryStatePresentation(props);
   if (loading !== "list" && loading !== "content") return <>{state.node}</>;
   return (
     <>
+      {state.lead}
       <Skeleton variant={loading} label={state.label ?? loadingLabel} loading={state.skeleton} />
       {state.node}
     </>
@@ -66,19 +64,27 @@ function useQueryStatePresentation({
   onManageConnections,
   loading = "list",
   loadingLabel,
-}: QueryStateProps): { node: ReactNode; skeleton: boolean; label?: string } {
+}: QueryStateProps): { node: ReactNode; skeleton: boolean; label?: string; lead?: ReactNode } {
   const copy = useCopy();
   const sheet = useContext(SheetGuardContext);
   const presentation = getQueryPresentation(query, !!empty);
-  const reconnecting = useQuietReconnect(query);
   // The app lifecycle feeds NetInfo into React Query's online manager.
   const deviceOffline = !useSyncExternalStore(onlineManager.subscribe.bind(onlineManager), () => onlineManager.isOnline(), () => onlineManager.isOnline());
+  const reconnecting = useQuietReconnect(query, !deviceOffline);
+  // The computer is known to be unreachable: a read with nothing loaded would otherwise spin
+  // through every request deadline and retry before it could say anything.
+  const linkDown = useActiveHostLinkDown();
   const kind = remoteErrorKind(query.error);
+  const waitingForLink = linkDown && !deviceOffline && query.data === undefined &&
+    (presentation === "loading" || (presentation === "error" && isTransientConnectionError(query.error)));
   const repair = kind === "auth" || kind === "identity";
+  const showOffline = deviceOffline && !repair && query.data === undefined &&
+    (presentation === "loading" || presentation === "paused" ||
+      (presentation === "error" && (kind === "network" || isTransientConnectionError(query.error))));
   // Revoked access, an unreachable or outdated computer and a missing network are one problem
   // for the whole region; only one section of a sheet or screen says so.
-  const connectionLevel = query.data === undefined && presentation !== "empty" && !reconnecting && (
-    deviceOffline || presentation === "paused" ||
+  const connectionLevel = waitingForLink || query.data === undefined && presentation !== "empty" && !reconnecting && (
+    showOffline || presentation === "paused" ||
     (presentation === "error" && isConnectionLevelError(query.error)));
   const showsConnection = useConnectionFeedbackOwner(connectionLevel);
   if (connectionLevel && !showsConnection) return { node: null, skeleton: false };
@@ -91,21 +97,38 @@ function useQueryStatePresentation({
     }),
   } : undefined;
   const placeholder = loading === "list" || loading === "content";
-  if (presentation === "loading")
+  if (presentation === "loading" && !showOffline && !waitingForLink) {
+    // A failed attempt that is being retried can take several request deadlines on a busy
+    // computer; without a word the placeholder looks frozen.
+    const slow = (query.failureCount ?? 0) > 0
+      ? copy("Bilgisayar yavaş yanıt veriyor; yeniden deneniyor…", "The computer is slow to answer; trying again…")
+      : undefined;
     return {
       skeleton: placeholder,
+      label: slow,
+      lead: slow && placeholder ? <Notice message={slow} /> : undefined,
       node: loading === "inline" ? (
-        <Loading label={loadingLabel} />
+        <Loading label={slow ?? loadingLabel} />
       ) : loading === "centered" ? (
-        <Loading label={loadingLabel} centered />
+        <Loading label={slow ?? loadingLabel} centered />
       ) : null,
     };
+  }
   // Shown data stays as it is while a refresh fails or waits: the computer pill carries the
   // connection state, so no warning banner competes with the content.
-  if (query.data !== undefined && (presentation === "paused" || presentation === "stale-error"))
-    return { node: null, skeleton: false };
+  if (query.data !== undefined && (presentation === "paused" || presentation === "stale-error")) {
+    // A link problem is the pill's to report. Any other failed refresh (a rejected or incompatible
+    // reply while the computer is connected) would leave old statuses on screen with no sign at all.
+    if (presentation === "paused" || reconnecting || deviceOffline || isConnectionLevelError(query.error) || isTransientConnectionError(query.error))
+      return { node: null, skeleton: false };
+    return { skeleton: false, node: (
+      <Notice tone="warning"
+        message={copy("Son yüklenen hâli gösteriliyor; yenilenemedi.", "Showing the last loaded version; it could not be refreshed.")}
+        action={query.refetch ? { label: copy("Yenile", "Refresh"), onPress: () => { if (!query.isFetching) void query.refetch?.(); } } : undefined} />
+    ) };
+  }
   // Without a network nothing can load or reconnect: say so once, centered, instead of spinning.
-  if (deviceOffline && query.data === undefined && presentation !== "empty")
+  if (showOffline)
     return { skeleton: false, node: loading === "none" ? null : (
       <StateView
         illustration="offline"
@@ -117,15 +140,17 @@ function useQueryStatePresentation({
       />
     ) };
   // A quiet reconnect is still a load: keep the same placeholder (the pill shows the link state).
-  if (reconnecting && presentation === "error") {
+  if (reconnecting && presentation === "error" && !waitingForLink) {
     const label = copy("Yeniden bağlanılıyor…", "Reconnecting…");
     return {
       skeleton: placeholder,
       label,
+      // The placeholder alone would look like a first load that never ends.
+      lead: placeholder ? <Notice message={label} /> : undefined,
       node: loading === "inline" || loading === "centered" ? <Loading label={label} centered={loading === "centered"} /> : null,
     };
   }
-  if (presentation === "paused")
+  if (presentation === "paused" || waitingForLink)
     return { skeleton: false, node: (
       <StateView
         illustration="unreachable"
@@ -154,7 +179,7 @@ function useQueryStatePresentation({
         tone="danger"
         illustration={errorIllustration(kind, offline)}
         title={errorTitle(kind, copy, offline)}
-        description={errorMessage(query.error, copy)}
+        description={errorMessage(query.error, copy, undefined, { read: true })}
         action={repairAction ?? retry}
       />
     ) };

@@ -112,9 +112,9 @@ describe("page identity and action ownership", () => {
 
   it("forwards scrolling Screen context without creating another scroll owner", () => {
     const html = renderToStaticMarkup(createElement(ScreenChromeProvider, { nativeTitle: true },
-      createElement(Screen, { title: "Social", context: createElement("button", null, "Project scope") },
+      createElement(Screen, { title: "Tasks", context: createElement("button", null, "Project scope") },
         createElement("input", { defaultValue: "Draft" }))));
-    expect(html).not.toContain("Social");
+    expect(html).not.toContain("Tasks");
     expect(html.match(/Project scope/g)).toHaveLength(1);
     expect(html.match(/data-page-scroll/g)).toHaveLength(1);
     expect(html.indexOf("Project scope")).toBeLessThan(html.indexOf("</section>"));

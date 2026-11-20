@@ -1,10 +1,10 @@
-import { useMobileTheme } from "@/ui/theme";
 import { useEffect } from "react";
-import { AppState, View } from "react-native";
+import { AppState } from "react-native";
 import { focusManager, onlineManager } from "@tanstack/react-query";
 import NetInfo from "@react-native-community/netinfo";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { flushQuestionAttachmentDrafts } from "./features/workspace/question-attachment-draft";
 import { useMachines } from "./state/machines";
-import { Loading } from "./ui/primitives";
 import { useSecurity } from "./state/security";
 import { useAttachmentReleaseRetry } from "./state/queries";
 import type { LifecycleProps } from "./app-types";
@@ -13,7 +13,6 @@ import { WidgetCoordinator } from "./features/widgets";
 import { PushCoordinator } from "./features/push";
 
 export function AppLifecycle({ children, cache }: LifecycleProps) {
-  const { uiStyles } = useMobileTheme();
   useAttachmentReleaseRetry();
   const hydrate = useMachines((s) => s.hydrate);
   const hydrated = useMachines((s) => s.hydrated);
@@ -33,13 +32,21 @@ export function AppLifecycle({ children, cache }: LifecycleProps) {
     const subscription = AppState.addEventListener("change", (state) => {
       useSecurity.getState().handleAppState(state);
       focusManager.setFocused(state === "active" && useSecurity.getState().status === "unlocked");
-      if (state !== "active") { void cache.cancelQueries({ queryKey: ["machine"] }); void invalidateProjectPrivacy(cache); }
+      if (state !== "active") {
+        // iOS reports "inactive" for the notification shade, call banners and permission alerts; only
+        // a real background cancels in-flight host reads. Lock still gates reads through the security state.
+        if (state !== "inactive") void cache.cancelQueries({ queryKey: ["machine"] });
+        void invalidateProjectPrivacy(cache);
+        // The process may be suspended or killed: coalesced question text must reach disk first.
+        void flushQuestionAttachmentDrafts(AsyncStorage);
+      }
     });
     const blur =
       process.env.EXPO_OS === "android"
         ? AppState.addEventListener("blur", () => {
             useSecurity.getState().handleWindowFocus(false);
             focusManager.setFocused(false);
+            void flushQuestionAttachmentDrafts(AsyncStorage);
             void cache.cancelQueries({ queryKey: ["machine"] });
           })
         : null;
@@ -72,16 +79,16 @@ export function AppLifecycle({ children, cache }: LifecycleProps) {
     },
     [activeId, cache],
   );
-  if (!hydrated)
-    return (
-      <View style={[uiStyles.screen, uiStyles.centered]}>
-        <Loading label="bycoda" centered />
-      </View>
-    );
+  // Hydration no longer blocks the tree: the lock and account providers below start in parallel and
+  // MachinesReadyGate holds back only the protected workspace until the saved computers are read.
   return (
     <>
-      <WidgetCoordinator />
-      <PushCoordinator />
+      {hydrated ? (
+        <>
+          <WidgetCoordinator />
+          <PushCoordinator />
+        </>
+      ) : null}
       {children}
     </>
   );

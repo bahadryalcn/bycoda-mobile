@@ -1,7 +1,8 @@
 import { useMobileTheme } from "@/ui/theme";
 import { mediaQueryKey, visibleMediaData } from "./media-policy";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { View } from "react-native";
+import { IMAGE_FRAME_MAX_HEIGHT, reservedImageRatio } from "./message-image-frame";
 import { Image } from "expo-image";
 import { useQuery } from "@tanstack/react-query";
 import { Body, Button, ErrorText, Loading, PressableCard } from "./primitives";
@@ -41,6 +42,23 @@ export function MessageImage({
   );
 }
 
+/** Fixed-size frame; the spinner overlays it so finishing a load never changes the row height. */
+function ImageFrame({ ratio, loading, children }: { ratio: number; loading: boolean; children?: ReactNode }) {
+  return (
+    <View style={{ width: "100%", aspectRatio: ratio, maxHeight: IMAGE_FRAME_MAX_HEIGHT }}>
+      {children}
+      {loading ? (
+        <View
+          pointerEvents="none"
+          style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center" }}
+        >
+          <Loading />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function InlineMessageImage({
   source,
   alt = "",
@@ -63,10 +81,11 @@ function InlineMessageImage({
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [ratio, setRatio] = useState(1.6);
   const [attempt, setAttempt] = useState(0);
   const external = externalImageUrl(source);
   const embedded = useMemo(() => inlineRaster(source), [source]);
+  // The frame is fixed before loading: known embedded dimensions or a square, never an onLoad ratio.
+  const ratio = reservedImageRatio(embedded);
   const dataSource = /^data:/i.test(source);
   const noteAsset = source.startsWith("/note-assets/");
   const [allowExternal, setAllowExternal] = useState(false);
@@ -118,7 +137,7 @@ function InlineMessageImage({
   if (!uri)
     return (
       <View style={{ gap: space.sm }}>
-        {query.isFetching && !query.error ? <Loading /> : null}
+        {query.isFetching && !query.error ? <ImageFrame ratio={ratio} loading /> : null}
         <ErrorText error={query.error} />
         {query.error ? (
           <Button busy={query.isFetching}
@@ -146,26 +165,25 @@ function InlineMessageImage({
           backgroundColor: colors.raised,
         }}
       >
-        <Image
-          key={attempt}
-          source={{ uri }}
-          accessibilityLabel={alt}
-          contentFit="contain"
-          transition={0}
-          style={{ width: "100%", aspectRatio: Math.min(3, Math.max(0.6, ratio)), maxHeight: 240 }}
-          onLoad={(event) => {
-            setLoaded(true);
-            setFailed(false);
-            if (event.source.width && event.source.height)
-              setRatio(event.source.width / event.source.height);
-          }}
-          onError={() => {
-            setFailed(true);
-            setLoaded(true);
-          }}
-        />
+        <ImageFrame ratio={ratio} loading={!loaded && !query.error}>
+          <Image
+            key={attempt}
+            source={{ uri }}
+            accessibilityLabel={alt}
+            contentFit="contain"
+            transition={0}
+            style={{ width: "100%", height: "100%" }}
+            onLoad={() => {
+              setLoaded(true);
+              setFailed(false);
+            }}
+            onError={() => {
+              setFailed(true);
+              setLoaded(true);
+            }}
+          />
+        </ImageFrame>
       </PressableCard>
-      {!loaded && !query.error ? <Loading /> : null}
       <ErrorText error={query.error} />
       {failed || query.error ? (
         <Button

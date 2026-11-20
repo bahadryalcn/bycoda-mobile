@@ -12,6 +12,7 @@ import { controlClasses } from "./design-system";
 import { haptic } from "./motion";
 import { useHover } from "./use-hover";
 import { useCopy } from "./copy";
+import { PressableTextContext } from "./text-selection";
 import type {
   ButtonProps,
   ChoiceChipProps,
@@ -91,7 +92,9 @@ export function Button({
         disabled && !busy && tone === "primary" && { backgroundColor: colors.accentSolid },
       ]}
     >
-      <Body selectable={false} style={[uiStyles.buttonLabel, { color: foreground, textAlign: "center" }]}>
+      {/* Keyed by the label: Android re-laid a changed label ("Voice call" → "Try again") at the old
+          label's measured width, wrapped its last word and clipped it to one line. */}
+      <Body key={label} selectable={false} style={[uiStyles.buttonLabel, { color: foreground, textAlign: "center" }]}>
         {label}
       </Body>
     </PanelButton>
@@ -166,7 +169,7 @@ export function PressableCard({
         { opacity: disabled ? opacity.disabled : 1 },
       ])}
     >
-      {children}
+      <PressableTextContext value={true}>{children}</PressableTextContext>
     </AnimatedPressable>
   );
 }

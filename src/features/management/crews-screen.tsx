@@ -34,6 +34,7 @@ import { CrewDefinitionCard } from "./crews/definition-card";
 import { CrewProfileCard } from "./crews/profile-card";
 import { newDefinition, newMember, validateCrewDirectory } from "./crews/model";
 import { crewCatalogState, crewRoleOptions } from "./crews/presentation";
+import { crewDirectoryPollInterval } from "./crews/runtime-model";
 import { useMobileTheme } from "@/ui/theme";
 
 type Tab = "definitions" | "runs" | "agents";
@@ -72,7 +73,7 @@ export function CrewsScreen() {
     { projectId },
     {
       enabled: supported && !!projectId,
-      interval: 5000,
+      interval: (data) => crewDirectoryPollInterval(data, tab === "runs" && !editor),
       queryFn: async (client, signal) =>
         validateCrewDirectory(
           await client.request("crews.list", { projectId }, { signal }),
@@ -186,7 +187,11 @@ export function CrewsScreen() {
               <SegmentedControl hideLabel
                 label={copy("Ekip görünümü", "Crew view")}
                 value={tab}
-                onChange={setTab}
+                onChange={(next) => {
+                  setTab(next);
+                  // Only the Work list polls; entering it shows current data instead of waiting for a tick.
+                  if (next === "runs") void query.refetch();
+                }}
                 options={[
                   { value: "definitions", label: copy("Ekipler", "Crews") },
                   { value: "runs", label: copy("Çalışmalar", "Work") },

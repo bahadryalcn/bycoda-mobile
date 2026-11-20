@@ -13,7 +13,7 @@ Pod::Spec.new do |s|
   s.dependency 'ExpoModulesCore'
   s.dependency 'ExpoSecureStore', '58.0.2'
   s.dependency 'BycodaVoiceCompanion'
-  s.source_files = 'BycodaHostSocketModule.swift'
+  s.source_files = '*.swift'
   s.test_spec 'Tests' do |test|
     test.source_files = 'Tests/**/*.swift'
     test.resources = '../fixtures/*.json'

@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   id: "machine",
   writes: [] as { method: string; params: unknown }[],
   refresh: vi.fn(),
+  options: undefined as undefined | { interval?: (data?: { mime: string; base64: string; capturedAt: string }) => number },
   finishBoot: undefined as undefined | ((value: unknown) => void),
   deferAction: false,
   finishAction: undefined as undefined | ((value: unknown) => void),
@@ -30,8 +31,8 @@ vi.mock("expo-crypto", () => {
   return { randomUUID: () => String(++id) };
 });
 vi.mock("@/state/queries", () => ({
-  useHostQuery: () => ({
-    data: { mime: "image/png", base64: "YWJj" },
+  useHostQuery: (_key: unknown, _method: string, _params: unknown, options: unknown) => ({
+    data: ((state.options = options as typeof state.options), { mime: "image/png", base64: "YWJj", capturedAt: "1" }),
     isFetching: false,
     refetch: state.refresh,
   }),
@@ -190,6 +191,21 @@ it("keeps newer device text when an earlier Type text request completes", async 
     deviceId: "device",
     action: { type: "type", text: "First text" },
   });
+});
+it("Live view slows on identical frames and a refresh or change returns to the base rate", async () => {
+  await render(true);
+  expect(state.options?.interval).toBeUndefined();
+  await click("Live view");
+  const poll = state.options!.interval!;
+  const still = (index: number) => ({ mime: "image/png", base64: "AAAA", capturedAt: String(index) });
+  expect(poll(still(0))).toBe(3_000);
+  for (let index = 1; index < 6; index++) poll(still(index));
+  expect(poll(still(6))).toBeGreaterThan(3_000);
+  expect(poll({ ...still(7), base64: "BBBB" })).toBe(3_000);
+  for (let index = 8; index < 14; index++) poll(still(index));
+  expect(poll(still(14))).toBeGreaterThan(3_000);
+  await click("Refresh screen");
+  expect(poll(still(15))).toBe(3_000);
 });
 it("view-only mode shows the screen without control, tools, boot or the enable-control prompt", async () => {
   await render(true, { canControl: false, viewOnly: true });

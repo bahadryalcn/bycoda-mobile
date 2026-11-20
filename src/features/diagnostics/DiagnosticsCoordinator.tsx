@@ -4,11 +4,11 @@ import { AppState } from "react-native";
 import { useAccount } from "../account/ui/account-context";
 import { Body, Button, ErrorNotice, FormActions, Sheet, Stack, ToggleField, showToast } from "../../ui/primitives";
 import { useCopy } from "../../ui/copy";
-import { diagnosticPrefs, clearCrashMarker, sendDiagnostics, useDiagnosticPrefs } from "./diagnostics-runtime";
+import { clearCrashMarker, periodicDiagnostics, sendDiagnostics, useDiagnosticPrefs } from "./diagnostics-runtime";
 import { useDiagnosticResultText } from "./diagnostic-copy";
 import { logDiagnostic } from "./diagnostic-log";
 import { templateRoute } from "./diagnostic-events";
-import { decideStartup, shouldSendPeriodic } from "./diagnostic-startup";
+import { decideStartup } from "./diagnostic-startup";
 import { expoDiagnosticFiles } from "./expo-diagnostic-files";
 import type { DiagnosticSendResult } from "./diagnostic-report";
 
@@ -57,12 +57,8 @@ export function DiagnosticsCoordinator() {
 
   useEffect(() => {
     if (!hydrated || !accountReady || mode !== "auto" || process.env.EXPO_OS === "web") return;
-    const run = async () => {
-      const last = await diagnosticPrefs.readLastPeriodic();
-      if (!shouldSendPeriodic(mode, last, new Date())) return;
-      const result = await sendDiagnostics(accountRef.current, "periodic");
-      if (result === "sent") await diagnosticPrefs.writeLastPeriodic(new Date());
-    };
+    // One run at a time and a retry backoff live in `periodicDiagnostics`, so foreground flips and effect restarts share them.
+    const run = () => periodicDiagnostics.run(() => sendDiagnostics(accountRef.current, "periodic"));
     void run().catch(() => undefined);
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") void run().catch(() => undefined);

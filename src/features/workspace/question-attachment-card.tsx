@@ -50,7 +50,8 @@ function QuestionAttachmentOwner({ client, scope, identity, ...props }: Question
     void owner.load().then(() => { if (live.current) setReady(true); }).catch(cause => { if (live.current) setError(cause); });
   };
   // This exact occurrence owns all asynchronous continuation and cancellation.
-  useEffect(() => { live.current = true; load(); return () => { live.current = false; owner.cancel(); }; }, [owner]);
+  // Unmount also writes pending coalesced text; a failure stays dirty in the store and retries on the next flush.
+  useEffect(() => { live.current = true; load(); return () => { live.current = false; owner.cancel(); void owner.flushDraft().catch(() => {}); }; }, [owner]);
   // Only authoritative failed delivery clears a persisted sending/unknown latch.
   useEffect(() => {
     if (ready && props.question.delivery === "failed") {
@@ -63,6 +64,9 @@ function QuestionAttachmentOwner({ client, scope, identity, ...props }: Question
     if (live.current && !latest.current.disabled)
       void owner.saveDraft(draft).catch(cause => { if (live.current) setError(cause); });
   }, [owner]);
+  const flushDraft = useCallback(() => {
+    void owner.flushDraft().catch(cause => { if (live.current) setError(cause); });
+  }, [owner]);
   const action = (operation: () => Promise<unknown>) => {
     setError(undefined);
     void operation().catch(cause => { if (live.current) setError(cause); });
@@ -72,7 +76,7 @@ function QuestionAttachmentOwner({ client, scope, identity, ...props }: Question
   const question = entry?.delivery && !props.question.delivery ? { ...props.question, delivery: entry.delivery } : props.question;
   return <Stack>
     <ErrorText error={error} />
-    <QuestionCard {...props} question={question} initialDraft={entry?.draft} onDraftChange={saveDraft}
+    <QuestionCard {...props} question={question} initialDraft={entry?.draft} onDraftChange={saveDraft} onDraftFlush={flushDraft}
       attachments={owner.draft().attachments ?? {}} attachmentBusy={owner.busy()}
       submitAnswer={(reply, draft) => owner.send(draft, reply.kind === "skipped", props.onAnswer)}
       attachmentControls={(id, held) => {

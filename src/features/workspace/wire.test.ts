@@ -99,6 +99,15 @@ describe("mobile transcript wire", () => {
     );
   });
 
+  it("sends only the first loaded block and retries the full window once when the Host returns a snapshot", async () => {
+    const known = snapshot();
+    known.session.blocks.unshift({ id: "old", role: "assistant", text: "earlier" });
+    const current = snapshot(2);
+    const request = vi.fn().mockResolvedValue({ kind: "snapshot", value: current });
+    await expect(readSession(client(request), "session", known)).resolves.toEqual(current);
+    expect(request.mock.calls.map(([, params]) => params.loadedBlockIds)).toEqual([["old"], ["old", "tail"]]);
+  });
+
   it("recovers an obsolete delta with a fresh tail instead of applying it", async () => {
     const fresh = snapshot(4);
     const request = vi

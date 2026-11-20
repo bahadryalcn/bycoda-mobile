@@ -77,11 +77,11 @@ it("matches Turkish tool and group labels using selected app language", async ()
   expect(fixture.push).not.toHaveBeenCalled();
 });
 
-it("shows project and unsupported capability before opening tools", async () => {
+it("shows unsupported capability and leaves project scope to the opened tool", async () => {
   fixture.capabilities = [];
   await render();
   expect(container.textContent).toContain("Update needed");
-  expect(container.textContent).toContain("Project required");
+  expect(container.textContent).not.toContain("Project required");
   await click("Browser");
   expect(container.querySelector("aside")).toBeNull();
   expect(fixture.push).toHaveBeenCalledWith({ pathname: "/tools/[tool]", params: { tool: "browser", projectId: "", machineId: "machine" } });

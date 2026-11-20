@@ -1,6 +1,10 @@
-import { createElement, type PropsWithChildren } from "react";
+// @vitest-environment happy-dom
+import { act, createElement, type PropsWithChildren } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
+import { Linking } from "react-native";
+import { LoopbackLinkProvider } from "@/ui/loopback-link";
 
 vi.mock("react-native", () => ({
   View: ({ children, style }: PropsWithChildren<{ style?: object }>) =>
@@ -13,10 +17,10 @@ vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {}
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => ({
   Body: ({ children }: PropsWithChildren) => createElement("span", null, children),
-  ErrorText: () => null,
+  ErrorText: ({ error }: { error?: unknown }) => error ? createElement("p", null, String(error)) : null,
   PressableCard: ({ children }: PropsWithChildren) => createElement("button", null, children),
 }));
-vi.mock("panelui-native/components/chip", () => ({ Chip: ({ children }: PropsWithChildren) => createElement("button", null, children) }));
+vi.mock("panelui-native/components/chip", () => ({ Chip: ({ children, onPress }: PropsWithChildren<{ onPress: () => void }>) => createElement("button", { onClick: onPress }, children) }));
 vi.mock("lucide-react-native/icons/link", () => ({ default: () => null }));
 vi.mock("./activity-group", () => ({ ActivityGroup: () => createElement("button", { style: { minHeight: 48 } }, "Work") }));
 vi.mock("./transcript-block", () => ({ TranscriptBlock: () => null }));
@@ -44,4 +48,37 @@ it("keeps message link chips intrinsic height instead of filling the virtual cel
   }));
   expect(html).toContain("&quot;flexGrow&quot;:0");
   expect(html).toContain("&quot;flexShrink&quot;:0");
+});
+
+it("opens loopback chips only under their own session and leaves public links external", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const open = vi.fn();
+  const href = "http://localhost:3000/app?tab=1#top";
+  const external = "https://example.com/";
+  vi.mocked(Linking.openURL).mockResolvedValue(undefined);
+  const useScope = (ownerScope: string) => act(async () => root.render(createElement(
+    LoopbackLinkProvider,
+    { value: { scope: "session-a", open } },
+    createElement(ComposerLinks, { ownerScope, links: [
+      { href, host: "localhost", path: "/app" },
+      { href: external, host: "example.com", path: "" },
+    ] }),
+  )));
+  try {
+    await useScope("session-b");
+    await act(async () => container.querySelectorAll("button")[0].click());
+    expect(open).not.toHaveBeenCalled();
+    expect(Linking.openURL).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Record access is unavailable.");
+    await useScope("session-a");
+    await act(async () => container.querySelectorAll("button")[0].click());
+    expect(open).toHaveBeenCalledWith(href);
+    await act(async () => container.querySelectorAll("button")[1].click());
+    expect(Linking.openURL).toHaveBeenCalledWith(external);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
 });

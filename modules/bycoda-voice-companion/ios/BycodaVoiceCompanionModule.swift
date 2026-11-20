@@ -62,6 +62,8 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
   private var captureLimit: DispatchWorkItem?
   private var playbackLimit: DispatchWorkItem?
   private var observers: [NSObjectProtocol] = []
+  /** Route-change observer of the current engine only; replaced and removed with it, never accumulated. */
+  private var engineObserver: NSObjectProtocol?
   private let target = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: sampleRate, channels: 1, interleaved: true)!
 
   private func locked<T>(_ body: () -> T) -> T { lock.lock(); defer { lock.unlock() }; return body() }
@@ -83,6 +85,9 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
   }
   private func armIdle() {
     idleTimer?.cancel()
+    idleTimer = nil
+    // Muted time is not idle time: the window runs only while unmuted and restarts on unmute.
+    if locked({ muted }) { return }
     idleTimer = later(Self.idleTimeout) { [weak self] in self?.end("timeout") }
   }
 
@@ -178,13 +183,14 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
     do { try next.start() } catch { input.removeTap(onBus: 0); throw VoiceError("Microphone could not start.") }
     engine = next
     // A route change (headset, Bluetooth) stops the engine; reopen it on the new input or end the call.
-    observers.append(NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: next, queue: .main) { [weak self] _ in
+    engineObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: next, queue: .main) { [weak self] _ in
       guard let self, self.engine === next, !self.ended else { return }
       self.stopEngine()
       do { try self.startEngine() } catch { self.end("audio-interrupted", (error as? VoiceError)?.param) }
-    })
+    }
   }
   private func stopEngine() {
+    if let observer = engineObserver { NotificationCenter.default.removeObserver(observer); engineObserver = nil }
     guard let current = engine else { return }
     engine = nil
     current.inputNode.removeTap(onBus: 0)
@@ -251,6 +257,8 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
     guard allows(supplied) else { return }
     locked { muted = value }
     if value { stopCapture(supplied, reason: "muted") }
+    // Re-evaluate after stopCapture (which re-arms): mute disarms the timer, unmute starts a fresh window. Never opens the microphone.
+    if !ended { armIdle() }
     publish()
   }
 
@@ -269,10 +277,9 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
       throw VoiceError("Invalid cached voice audio.")
     }
     stopCapture(supplied); stopPlayback(supplied)
-    guard let next = try? AVAudioPlayer(contentsOf: file) else { throw VoiceError("Speech playback failed.") }
-    next.delegate = self
-    guard next.prepareToPlay(), next.play() else { throw VoiceError("Speech playback failed.") }
-    player = next; playbackId = playingId
+    // Reserve the playback on the main queue, then read and decode the WAV off it; only the start and the
+    // state publish hop back. A failure or cancel arrives as a playback event, never as a main-queue stall.
+    playbackId = playingId
     locked { phase = "speaking" }
     armIdle(); publish()
     playbackLimit?.cancel()
@@ -280,6 +287,20 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
       guard let self, self.playbackId == playingId else { return }
       self.stopPlayback(self.id, error: "Speech playback timed out.")
     }
+    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+      let next = try? AVAudioPlayer(contentsOf: file)
+      let prepared = next?.prepareToPlay() ?? false
+      DispatchQueue.main.async { self?.startPrepared(next, prepared, supplied, playingId) }
+    }
+  }
+  /** Main queue: adopt the prepared player only if this exact playback is still the live one. */
+  private func startPrepared(_ next: AVAudioPlayer?, _ prepared: Bool, _ supplied: String, _ playingId: String) {
+    guard allows(supplied), playbackId == playingId, playbackFence.allows(playingId) else { return }
+    guard let next, prepared else { stopPlayback(supplied, error: "Speech playback failed."); return }
+    next.delegate = self
+    guard next.play() else { next.delegate = nil; stopPlayback(supplied, error: "Speech playback failed."); return }
+    player = next
+    armIdle()
   }
   func stopPlayback(_ supplied: String, error: String? = nil, expected: String? = nil) {
     guard !id.isEmpty, id == supplied else { return }

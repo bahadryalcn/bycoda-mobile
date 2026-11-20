@@ -4,7 +4,12 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({
   history: {} as Record<string, any>, branches: {} as any,
+  deferredSearch: undefined as string | undefined,
   reads: [] as any[], events: [] as string[], choose: vi.fn(), create: vi.fn(), name: vi.fn(), busy: false,
+}));
+vi.mock("react", async (importOriginal) => ({
+  ...await importOriginal<typeof import("react")>(),
+  useDeferredValue: (value: string) => fixture.deferredSearch ?? value,
 }));
 vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
 vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
@@ -22,7 +27,17 @@ vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }))
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
 vi.mock("./shared", () => ({ rowInset: 16, relativeTime: () => "now", GroupedListRow: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("./git-queries", () => ({ useGitBranches: () => fixture.branches }));
-vi.mock("./git-history-queries", () => ({ useGitHistoryRead: (_scope: unknown, read: any) => { fixture.reads.push(read); return fixture.history[read.kind]; } }));
+vi.mock("./git-history-queries", () => ({
+  useGitHistoryRead: (_scope: unknown, read: any) => { fixture.reads.push(read); return fixture.history[read.kind]; },
+  // The commit list reads one first page; paging itself is covered by the query hook's own tests.
+  useGitCommitPages: (_scope: unknown, path?: string) => {
+    const read = path ? { kind: "fileHistory", path, limit: 100 } : { kind: "history", limit: 100 };
+    fixture.reads.push(read);
+    const query = fixture.history[read.kind];
+    const data = query.data as { commits?: unknown[] } | unknown[] | undefined;
+    return { query, commits: (Array.isArray(data) ? data : data?.commits) ?? [], hasMore: false, capped: false, loadMore: () => undefined, loadingMore: false, moreError: undefined };
+  },
+}));
 vi.mock("./use-diff-preview", () => ({ useDiffPreview: () => null }));
 vi.mock("./git-diff-viewer", () => ({ GitDiffViewer: () => null }));
 vi.mock("@/ui/feedback", () => ({
@@ -62,6 +77,7 @@ const search = async (label: string, value: string) => { const input = container
   await act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); }); };
 beforeEach(() => {
   vi.clearAllMocks(); fixture.events = []; fixture.reads = []; fixture.busy = false;
+  fixture.deferredSearch = undefined;
   fixture.history = { history: ok({ commits: [commit] }), files: ok([{ relative: "src/app.ts", status: "modified", additions: 1, deletions: 0 }]),
     diff: ok({ current: "hello", original: "old", binary: false, tooLarge: false, status: "modified" }), blame: ok([]), fileHistory: ok([commit]) };
   fixture.branches = ok({ current: "main", branches: ["feature", "main"], remotes: [{ remote: "origin", name: "main" }] });
@@ -72,6 +88,16 @@ it("clears a no-match commit filter without changing the loaded request or openi
   await history(); await search("Search loaded commits", "missing"); expect(container.textContent).toContain("No commits match your search.");
   await click("Clear search"); expect(document.activeElement).toBe(container.querySelector("input")); expect(container.textContent).toContain("Reviewed change");
   expect(fixture.reads.every((r) => r.kind === "history" && r.limit === 100)).toBe(true); expect(fixture.events).toEqual([]);
+});
+it("updates the search field before applying the deferred commit filter", async () => {
+  fixture.deferredSearch = "";
+  await history();
+  await search("Search loaded commits", "missing");
+  expect(container.querySelector("input")?.value).toBe("missing");
+  expect(container.textContent).toContain("Reviewed change");
+  fixture.deferredSearch = "missing";
+  await history();
+  expect(container.textContent).toContain("No commits match your search.");
 });
 it("gives cached list and commit-file errors precedence over empty success messages", async () => {
   fixture.history.history = { ...ok({ commits: [] }), error: new Error("Read failed") }; await history();
@@ -102,6 +128,16 @@ it("keeps branch pending/error states distinct and closes before repair without 
   fixture.events = []; fixture.busy = true; await branches(); await click("Manage connections"); expect(fixture.events).toEqual([]);
 });
 
+it("filters loaded commits without changing the page request and opens the matched commit", async () => {
+  const other = { ...commit, sha: "b".repeat(40), shortSha: "bbbbbbb", subject: "Other change" };
+  fixture.history.history = ok({ commits: [commit, other] }); await history();
+  await search("Search loaded commits", "other");
+  expect(container.textContent).toContain("Other change"); expect(container.textContent).not.toContain("Reviewed change");
+  expect(fixture.reads.every((r) => r.kind === "history" && r.limit === 100)).toBe(true);
+  await click("Other change");
+  expect(fixture.reads.some((r) => r.kind === "files" && r.sha === other.sha)).toBe(true);
+  expect(fixture.reads.some((r) => r.kind === "files" && r.sha === commit.sha)).toBe(false); expect(fixture.events).toEqual([]);
+});
 it("matches Turkish branch and commit names without Git commands", async () => {
   const lower = String.prototype.toLocaleLowerCase;
   vi.spyOn(String.prototype, "toLocaleLowerCase").mockImplementation(function (this: string, locale) { return lower.call(this, locale ?? "en"); });

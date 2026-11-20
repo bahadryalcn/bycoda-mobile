@@ -1,6 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useEditorRecord } from "../shared/use-editor-record";
-import { Stack, MutationState, SegmentedControl } from "@/ui/primitives";
+import { Stack, MutationState, SegmentedControl, ErrorNotice } from "@/ui/primitives";
+import { useNoteDraftWriter } from "./use-note-draft-writer";
 import { MessageText } from "@/ui/message-text";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useRef, useState } from "react";
@@ -18,7 +19,7 @@ import { noteTags, noteTagIssue, noteTitleTooLong } from "./note-tags";
 export function ExistingNote({ id, ...props }: ExistingNoteProps) {
   useMobileTheme();
   const query = useHostQuery<Note | null>(["notes", "detail", id], "notes.get", { id });
-  useSheetGuard({ pending: props.save.isPending || props.remove.isPending || props.storage.isPending });
+  useSheetGuard({ pending: props.save.isPending || props.remove.isPending });
   const copy = useCopy();
   const note = useEditorRecord(id, query.data ?? undefined);
   if (!note)
@@ -52,7 +53,7 @@ export function ExistingNote({ id, ...props }: ExistingNoteProps) {
   );
 }
 
-export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEditorProps) {
+export function NoteEditor({ initial, save, remove, draftOwner, onClose }: NoteEditorProps) {
   const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const base = useRef(initial).current;
@@ -69,15 +70,25 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
   const busy = save.isPending || remove.isPending;
   const changed =
     draft.title !== base.title || draft.body !== base.body || draft.tags !== base.tags;
-  const { requestClose } = useSheetGuard({ dirty: changed && storage.isError, pending: busy || storage.isPending, onClose });
+  const { writer, state: draftWrite } = useNoteDraftWriter(draftOwner);
+  const draftFailed = draftWrite.status === "error";
+  const draftSaving = draftWrite.status === "saving";
+  const { requestClose } = useSheetGuard({ dirty: changed && draftFailed, pending: busy || draftSaving, onClose });
+  // Two patches in one tick must both reach storage, so merge into the newest draft, not the rendered one.
+  const newest = useRef(draft);
   const update = (patch: Partial<LocalNoteDraft>) => {
+    newest.current = { ...newest.current, ...patch };
     form.patch(patch);
-    storage.mutate({ kind: "save", draft: { ...draft, ...patch } });
+    writer.schedule(newest.current);
   };
+  const retryDraft = () => { void writer.flush().catch(() => {}); };
   const finish = () => {
-    storage.mutate({ kind: "clear", draft });
+    // The note is safe on the computer; a failed cleanup only leaves a recoverable stale draft.
+    void writer.clear(newest.current).catch(() => {});
     onClose();
   };
+  // Closing writes the debounced edit first; a failure keeps the editor open with its error and retry.
+  const closeAfterFlush = () => { void writer.flush().then(requestClose, () => {}); };
   return (
     <Stack>
       <SegmentedControl hideLabel label={copy("Görünüm", "View")} value={mode} options={[{value:"edit",label:copy("Düzenle","Edit")},{value:"preview",label:copy("Önizleme","Preview")}]} onChange={setMode} />
@@ -115,11 +126,11 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
       <FormActions
         feedback={<><MutationState mutation={save} />
       <MutationState mutation={remove} />
-      <MutationState mutation={storage} />
-      {storage.isError && (
-        <Button
-          label={copy("Taslağı telefona tekrar kaydet", "Retry saving draft on phone")}
-          onPress={() => storage.mutate({ kind: "save", draft })}
+      {draftWrite.status === "error" && (
+        <ErrorNotice
+          error={draftWrite.error}
+          onRetry={retryDraft}
+          retryLabel={copy("Taslağı telefona tekrar kaydet", "Retry saving draft on phone")}
         />
       )}</>}
         submitLabel={copy("Bilgisayara kaydet", "Save to computer")}
@@ -142,9 +153,9 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
             { onSuccess: () => { haptic.success(); finish(); } },
           );
         }}
-        cancelDisabled={busy || storage.isPending}
+        cancelDisabled={busy || draftSaving}
         cancelLabel={copy("Kapat", "Close")}
-        onCancel={requestClose}
+        onCancel={closeAfterFlush}
       />
       {draft.expectedUpdatedAt > 0 && (
         <Button
@@ -169,7 +180,7 @@ export function NoteEditor({ initial, save, remove, storage, onClose }: NoteEdit
           }
         />
       )}
-      {changed && !storage.isError && !storage.isPending && <Body muted>{copy("Taslak bu telefonda saklandı.", "Draft saved on this phone.")}</Body>}
+      {changed && draftWrite.status === "saved" && <Body muted>{copy("Taslak bu telefonda saklandı.", "Draft saved on this phone.")}</Body>}
     </Stack>
   );
 }

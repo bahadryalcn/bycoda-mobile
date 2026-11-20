@@ -6,31 +6,35 @@ import { space } from "@/ui/tokens";
 import { ApprovalDetails } from "./approval-details";
 import { approvalOpen, remainingTime, type ApprovalView } from "./approvals-model";
 import { approvalSignatureMatches } from "./approvals-signature";
+import { useNow } from "./use-approvals";
 
 /** What this phone knows about its own answer for one approval. */
 export type LocalDecision = "sending" | "sent" | "uncertain" | "rejected";
 
 export function ApprovalCard({
   approval,
-  now,
-  local,
+  local: stored,
   sentApproved,
   canDecide,
   onDecide,
   onCheck,
   checking,
+  waitingForOther = false,
 }: {
   approval: ApprovalView;
-  now: number;
   local?: LocalDecision;
   sentApproved?: boolean;
   canDecide: boolean;
   onDecide(approval: ApprovalView, approved: boolean): void;
   onCheck(): void;
   checking: boolean;
+  /** Another card's answer is in flight; answers go out one at a time, so this card's actions wait. */
+  waitingForOther?: boolean;
 }) {
   const copy = useCopy();
   const [verified, setVerified] = useState<boolean | null>(null);
+  // Only a pending card has a countdown; settled cards do not tick.
+  const now = useNow(approval.status === "pending", approval.deadline);
   useEffect(() => {
     let current = true;
     void approvalSignatureMatches(approval).then((ok) => current && setVerified(ok));
@@ -39,6 +43,8 @@ export function ApprovalCard({
     };
   }, [approval]);
   const open = approvalOpen(approval, now);
+  // A decision only shows while the approval is still open; after its deadline the card reads as expired.
+  const local = open ? stored : undefined;
   const left = remainingTime(approval.deadline, now);
   const expired = approval.status === "expired" || (approval.status === "pending" && !open);
   const status =
@@ -57,6 +63,7 @@ export function ApprovalCard({
         : null;
   const busy = local === "sending";
   const actionable = open && approval.remote && canDecide && local !== "sent";
+  const held = busy || checking || waitingForOther;
   return (
     <Card variant="surface">
       <View style={{ gap: space.sm }}>
@@ -122,18 +129,26 @@ export function ApprovalCard({
         ) : null}
         {actionable && verified && local !== "uncertain" ? (
           <View style={{ gap: space.xs }}>
+            {waitingForOther ? (
+              <Notice
+                message={copy(
+                  "Önceki yanıt gönderiliyor; bitince bu isteği yanıtlayabilirsin.",
+                  "Waiting for the previous answer to be sent; you can answer this request next.",
+                )}
+              />
+            ) : null}
             <Button
               label={busy ? copy("Gönderiliyor…", "Sending…") : approval.confirmLabel || copy("Onayla", "Approve")}
               tone="primary"
               fullWidth
               busy={busy}
-              disabled={busy || checking}
+              disabled={held}
               onPress={() => onDecide(approval, true)}
             />
             <Button
               label={copy("Reddet", "Deny")}
               fullWidth
-              disabled={busy || checking}
+              disabled={held}
               onPress={() => onDecide(approval, false)}
             />
           </View>

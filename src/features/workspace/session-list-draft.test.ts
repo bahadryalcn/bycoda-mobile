@@ -19,7 +19,9 @@ const disk = vi.hoisted(() => {
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: disk }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }));
 vi.mock("@/state/security", () => ({ useSecurity: create(() => ({ status: "unlocked" })) }));
-vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children), useWindowDimensions: () => ({ width: 320, height: 700, fontScale: 1 }) }));
+vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children), useWindowDimensions: () => ({ width: 320, height: 700, fontScale: 1 }),
+  // The shared row clock listens for app foreground changes.
+  AppState: { currentState: "active", addEventListener: () => ({ remove() {} }) } }));
 vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/folder-tree", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/git-pull-request", () => ({ default: () => null }));

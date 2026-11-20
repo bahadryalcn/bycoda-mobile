@@ -1,6 +1,5 @@
 import { Inbox as DuotoneInbox, Info as DuotoneInfo, CircleCheck as DuotoneCircleCheck, TriangleAlert as DuotoneTriangleAlert, CircleAlert as DuotoneCircleAlert } from "./duotone-icon";
 import { View } from "react-native";
-import Animated from "react-native-reanimated";
 import { EmptyState } from "panelui-native/components/empty-state";
 import Inbox from "lucide-react-native/icons/inbox";
 import Info from "lucide-react-native/icons/info";
@@ -10,12 +9,8 @@ import CircleAlert from "lucide-react-native/icons/circle-alert";
 import { Body, Heading } from "./typography";
 import { Button } from "./buttons";
 import { Illustration } from "./illustrations";
-import { reveal } from "./motion";
 import { useMobileTheme } from "./theme";
 import type { StateAction, StateTone, StateViewProps } from "./component-props";
-
-// PanelUI owns the centered Header/Content structure; the region keeps its entrance reveal.
-const AnimatedEmptyState = Animated.createAnimatedComponent(EmptyState);
 
 const toneIcons = { neutral: Inbox, info: Info, success: CircleCheck, warning: TriangleAlert, danger: CircleAlert };
 
@@ -50,7 +45,7 @@ export function StateView({
 }: StateViewProps) {
   const theme = useMobileTheme();
   const { uiStyles } = theme;
-  const inline = compact && !illustration;
+  const inline = compact;
   const Icon = (inline ? toneIcons : regionIcons)[tone];
   const palette = toneColors(tone, theme);
   const text = (
@@ -65,26 +60,24 @@ export function StateView({
   );
   if (inline)
     return (
-      <Animated.View entering={reveal} testID={testID} style={uiStyles.stateInline}>
+      <View testID={testID} style={uiStyles.stateInline}>
         <Icon size={20} strokeWidth={2} color={palette.text} style={{ marginTop: 1 }} />
         <View style={[uiStyles.grow, { gap: 4, alignItems: "flex-start" }]}>
           {text}
           {action ? <View style={{ marginTop: 8 }}><ActionButton action={action} tone="primary" primary={false} inline /></View> : null}
           {secondaryAction ? <ActionButton action={secondaryAction} tone="quiet" primary={false} inline /> : null}
         </View>
-      </Animated.View>
+      </View>
     );
   return (
-    <AnimatedEmptyState
-      entering={reveal}
+    <EmptyState
       testID={testID}
-      // Padding and gap come from the bycoda state styles; "flex-none" keeps a compact region sized to its content.
-      className={compact ? "flex-none gap-0 p-0" : "gap-0 p-0"}
-      style={compact ? uiStyles.stateRegionCompact : uiStyles.stateRegion}
+      className="gap-0 p-0"
+      style={uiStyles.stateRegion}
     >
       <EmptyState.Header style={uiStyles.stateColumn}>
         {illustration ? (
-          <Illustration name={illustration} size={compact ? 112 : 168} />
+          <Illustration name={illustration} size={168} />
         ) : (
           <View accessible={false} style={[uiStyles.stateIconTile, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <Icon size={24} strokeWidth={1.75} color={palette.text} />
@@ -98,6 +91,6 @@ export function StateView({
           {secondaryAction ? <ActionButton action={secondaryAction} tone="quiet" primary={false} /> : null}
         </EmptyState.Content>
       ) : null}
-    </AnimatedEmptyState>
+    </EmptyState>
   );
 }

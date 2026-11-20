@@ -4,17 +4,29 @@ import Animated, { useAnimatedRef } from "react-native-reanimated";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Sortable } from "panelui-native/components/sortable";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
-import { Button, PressableCard, Sheet } from "@/ui/primitives";
+import ArrowUp from "lucide-react-native/icons/arrow-up";
+import ArrowDown from "lucide-react-native/icons/arrow-down";
+import ArrowUpDown from "lucide-react-native/icons/arrow-up-down";
+import { ActionMenu, Button, NavigationRow, PressableCard, Sheet } from "@/ui/primitives";
+import { useSheetGuard } from "@/ui/sheet-guard";
 import { ProjectIcon } from "@/ui/project-icon";
 import { gapIcon, metrics, radii, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import type { DirectorySection } from "./project-directory";
-import type { ProjectOrderMove } from "./project-order";
+import { neighbourMove, type ProjectOrderMove } from "./project-order";
+
+export function ProjectReorderAction({ disabled, onOpen }: { disabled: boolean; onOpen: () => void }) {
+  const copy = useCopy();
+  const { requestCloseThen } = useSheetGuard({});
+  return <NavigationRow label={copy("Sırala", "Reorder")} disabled={disabled} onPress={() => requestCloseThen(onOpen)} />;
+}
 
 /**
  * Drag-to-reorder for groups and, inside one group, its projects. Two levels instead of a nested
  * sortable: a drag only ever moves one flat list, so scrolling and auto-scroll stay unambiguous.
+ * Every row also has a Move up/down menu that reports the same `onMove`, for screen readers,
+ * switch access and lists too long to drag.
  */
 export function ProjectReorderSheet({
   visible,
@@ -51,6 +63,23 @@ export function ProjectReorderSheet({
     backgroundColor: colors.raised,
     paddingStart: space.row,
   };
+  // Same onMove as a drag; the menu is the path for screen readers, switch access and long lists.
+  const moveMenu = (name: string, scope: ProjectOrderMove["scope"], index: number, length: number) => {
+    const run = (delta: -1 | 1) => {
+      const move = neighbourMove(scope, index, length, delta);
+      if (move) onMove(move);
+    };
+    return (
+      <ActionMenu
+        label={`${copy("Taşı", "Move")}: ${name}`}
+        trigger={<ArrowUpDown size={20} strokeWidth={2} color={colors.accent} />}
+        actions={[
+          { key: "up", icon: <ArrowUp size={18} color={colors.muted} />, label: copy("Yukarı taşı", "Move up"), disabled: !neighbourMove(scope, index, length, -1), onPress: () => run(-1) },
+          { key: "down", icon: <ArrowDown size={18} color={colors.muted} />, label: copy("Aşağı taşı", "Move down"), disabled: !neighbourMove(scope, index, length, 1), onPress: () => run(1) },
+        ]}
+      />
+    );
+  };
   const handle = (label: string) => (
     <Sortable.Handle accessibilityLabel={label} style={{ minWidth: metrics.touchTarget, minHeight: metrics.touchTarget }} />
   );
@@ -80,7 +109,7 @@ export function ProjectReorderSheet({
               scrollRef={scrollRef}
               onReorder={(_, { from, to }) => onMove({ scope: "groups", from, to })}
             >
-              {sections.map((section) => (
+              {sections.map((section, index) => (
                 <Sortable.Item key={section.key} id={section.key}>
                   <View style={rowStyle}>
                     <PressableCard
@@ -93,6 +122,7 @@ export function ProjectReorderSheet({
                       <Text style={[uiStyles.caption, { fontVariant: ["tabular-nums"] }]}>{section.data.length}</Text>
                       <ChevronRight size={16} color={colors.muted} />
                     </PressableCard>
+                    {moveMenu(groupName(section), "groups", index, sections.length)}
                     {handle(copy("Grubu sürükle", "Drag group"))}
                   </View>
                 </Sortable.Item>
@@ -106,11 +136,12 @@ export function ProjectReorderSheet({
               scrollRef={scrollRef}
               onReorder={(_, { from, to }) => onMove({ scope: grouped ? { group: open.key } : "flat", from, to })}
             >
-              {open.data.map((project) => (
+              {open.data.map((project, index) => (
                 <Sortable.Item key={project.id} id={project.id}>
                   <View style={[rowStyle, { gap: gapIcon }]}>
                     <ProjectIcon appearance={project.appearance} size={22} box={28} />
                     <Text numberOfLines={1} style={[uiStyles.label, { flex: 1, minWidth: 0 }]}>{project.name}</Text>
+                    {moveMenu(project.name, grouped ? { group: open.key } : "flat", index, open.data.length)}
                     {handle(copy("Projeyi sürükle", "Drag project"))}
                   </View>
                 </Sortable.Item>

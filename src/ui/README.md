@@ -141,39 +141,9 @@ visible label where the page already supplies that context. Its accessible name,
 current choice, option labels and guards remain intact; the default is unchanged.
 Labels retain their text and touch targets and wrap in normal flow.
 
-Social workspace browsing retains independent search text, committed query and
-Host page offset for Inbox, Drafts, Content, Rules and Sending history. These
-controls belong to `useSocialWorkspace`, scoped to its current reviewed connection
-and project; changing projects resets them. Returning through Accounts does not
-clear a collection. Inactive controls cannot accept old callbacks or run a search
-timer. Host page limits, debounce, query cursors and snapshot validation stay in
-their existing owners; no persistence is introduced.
-
-The social connection scope observes every canonical machine-store event before
-notifying React. Its opaque epoch and cache change for endpoint/environment/key
-replacement, including batched A/B/A. `isCurrent` checks the issued epoch itself,
-so late reads and pending policy checks cannot revive old authority. Detached
-views immediately reject callbacks; immediate StrictMode subscription replay
-keeps the current epoch. Never infer authority from a saved machine ID alone.
-
-SocialScreen owns conversation, draft, content and rule Sheets independently of
-workspace collection availability. Collection panels only compose their rows,
-search, pagination and record actions. Temporarily missing or rejected workspace
-data must not unmount these form owners. Editors receive explicit availability,
-keep unsent values read-only while verification is unavailable, and retain their
-opening connection epoch after re-pairing. Normal polling or later refresh must
-not silently create new authority. Account setup/profile/policy forms retain
-separate lifecycle owners and still require their own scope/lifetime proof.
-
-`social/editor-access.ts` composes the canonical connection epoch and existing
-useFormDraft owner for draft/content/rule editors. Live value refs capture the
-submitted snapshot without losing input that arrives before React commits; late
-success closes only an unchanged current draft. Check access before and after
-fresh policy and before cleaning or closing. A blocked editor retains its own
-account/project/fact context instead of adopting a replacement connection's
-metadata. Dates, links, automatic/draft mode, trigger, facts and limits retain
-their original state/storage/approval semantics. Invalid uncommitted schedule
-text also prevents an older successful request from closing the editor.
+Social media management is not part of the phone app: it stays a desktop feature and
+the phone only follows the computer. The phone still filters the Social attention
+items the Host sends through `phoneAttentionItems` in `features/inbox`.
 Conversation kind is flat metadata beside account/project/time, not a competing
 trailing column; an actual review reason stays fully readable inside its row.
 
@@ -742,10 +712,9 @@ to the list header. Scope validation, project search, current selection and
 directory recovery remain owned by Scope. At large text, controls and context
 may grow or wrap; never shrink labels to preserve a one-line toolbar. Search and
 applied-filter summaries stay in the list header and keep their state owners.
-Social uses `ContextControls` for project and view selection. Its column basis
-grows with system font scale so narrow large-text layouts become one column;
-normal phone text uses two columns. Selected values may grow vertically and
-retain full accessible labels. Inbox scope stays in its list heading so it can
+`ContextControls` column basis grows with system font scale so narrow large-text
+layouts become one column; normal phone text uses two columns. Selected values may
+grow vertically and retain full accessible labels. Inbox scope stays in its list heading so it can
 scroll away; the outer mode selector must not acquire another fixed scope row.
 
 Settings presents phone preferences before computer-scoped destinations. The
@@ -782,8 +751,7 @@ one flight for status/list reads. Device service setup belongs in the common
 overflow menu, with runtime/viewer owners outside the virtualized header. Device
 readiness wraps below the identity and remains in its full accessible name.
 
-Reviewed connection epochs are owned by `src/state/connection-scope.ts`; Social's
-former module remains a compatibility facade. Device list windows, runtime,
+Reviewed connection epochs are owned by `src/state/connection-scope.ts`. Device list windows, runtime,
 viewer and preview capture an opening lease and recheck both that lease and the
 reviewed machine before acting or publishing asynchronous results. Batched
 endpoint/credential/environment/active-computer A/B/A changes retire old leases.

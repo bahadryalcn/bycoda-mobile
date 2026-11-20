@@ -11,15 +11,18 @@ import Info from "lucide-react-native/icons/info";
 import Palette from "lucide-react-native/icons/palette";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import Globe from "lucide-react-native/icons/globe";
+import Gauge from "lucide-react-native/icons/gauge";
 import Flag from "lucide-react-native/icons/flag";
 import Scale from "lucide-react-native/icons/scale";
 import UserRound from "lucide-react-native/icons/user-round";
+import LayoutGrid from "lucide-react-native/icons/layout-grid";
 import { IconTile } from "../../ui/icon-tile";
 import { LANGUAGES } from "../../localization";
 import { useActiveMachine, useMachines } from "../../state/machines";
 import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { useAppearance } from "../../state/appearance";
 import { busySendStore, useBusySend } from "../../state/busy-send";
+import { dataSaverStore, useDataSaver } from "../../state/data-saver";
 import {
   NavigationGroup,
   NavigationRow,
@@ -46,6 +49,7 @@ import { appearanceSummary, themeModeOptions } from "./appearance-settings-model
 import { PALETTES } from "@/ui/tokens";
 import { WidgetSettings } from "../widgets";
 import { DevicePermissionSettings } from "../permissions/device-permission-settings";
+import { leaveSheetThen } from "./sheet-navigation";
 
 export function SettingsScreen() {
   const { colors } = useMobileTheme();
@@ -62,8 +66,11 @@ export function SettingsScreen() {
   const busySend = useBusySend((s) => s.mode);
   const busySendHydrated = useBusySend((s) => s.hydrated);
   const busySendError = useBusySend((s) => s.storageError);
+  const dataSaver = useDataSaver((s) => s.dataSaver);
+  const dataSaverHydrated = useDataSaver((s) => s.hydrated);
+  const dataSaverError = useDataSaver((s) => s.storageError);
   const [panel, setPanel] = useState<
-    "security" | "host" | "privacy" | "about" | "visual" | "permissions" | null
+    "security" | "host" | "privacy" | "about" | "visual" | "permissions" | "widgets" | null
   >(null);
   const [hostTarget, setHostTarget] = useState<{
     id: string;
@@ -77,7 +84,9 @@ export function SettingsScreen() {
     privacy: copy("Gizlilik ve veriler", "Privacy & data"),
     about: copy("bycoda hakkında", "About bycoda"),
     visual: copy("Görünüm", "Appearance"),
+    widgets: copy("Widget'lar", "Widgets"),
   };
+  const leaveSheet = (go: () => void) => leaveSheetThen(() => setPanel(null), go);
   const tile = (Glyph: typeof Laptop) => (
     <IconTile color={colors.muted}>
       <Glyph size={18} strokeWidth={2} color={colors.muted} />
@@ -85,19 +94,13 @@ export function SettingsScreen() {
   );
   return (
     <Screen title={copy("Ayarlar", "Settings")}>
-      <Section title={copy("Hesap", "Account")}>
-        <NavigationGroup>
-          <NavigationRow
-            label={copy("bycoda hesabı", "bycoda account")}
-            detail={copy(
-              "Hesap, cihazlar ve aktif süre",
-              "Account, devices and active time",
-            )}
-            icon={tile(UserRound)}
-            onPress={() => router.navigate("/account" as Href)}
-          />
-        </NavigationGroup>
-      </Section>
+      <NavigationGroup>
+        <NavigationRow
+          label={copy("bycoda hesabı", "bycoda account")}
+          icon={tile(UserRound)}
+          onPress={() => router.navigate("/account" as Href)}
+        />
+      </NavigationGroup>
       <Section title={copy("Bilgisayar", "Computer")}>
         <NavigationGroup>
           <NavigationRow
@@ -178,8 +181,27 @@ export function SettingsScreen() {
             ]}
             onChange={(value) => { void busySendStore.getState().setMode(value); }}
           />
+          <SegmentedRow
+            icon={tile(Gauge)}
+            label={copy("Veri tasarrufu", "Data saver")}
+            help={copy(
+              "Açıkken görseller dokununca yüklenir ve bilgisayar tarayıcısı daha düşük kalitede akar. Otomatik: mobil veride açılır.",
+              "When on, images load on tap and the computer browser streams at lower quality. Auto turns it on over mobile data.",
+            )}
+            value={dataSaver}
+            disabled={!dataSaverHydrated}
+            options={[
+              { value: "auto" as const, label: copy("Otomatik", "Auto") },
+              { value: "on" as const, label: copy("Her zaman", "Always") },
+              { value: "off" as const, label: copy("Kapalı", "Off") },
+            ]}
+            onChange={(value) => { void dataSaverStore.getState().setDataSaver(value); }}
+          />
+          {dataSaverError ? <Notice tone="warning" message={copy("Veri tasarrufu tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The data saver preference could not be read or saved. Select it again to retry.")} /> : null}
           {busySendError ? <Notice tone="warning" message={copy("Gönderim tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The send preference could not be read or saved. Select it again to retry.")} /> : null}
           <KeyboardSettings />
+          <VoiceSettings />
+          <NavigationRow label={titles.widgets} icon={tile(LayoutGrid)} onPress={() => setPanel("widgets")} />
         </NavigationGroup>
         {appearanceError ? (
           <Notice
@@ -198,9 +220,6 @@ export function SettingsScreen() {
       </Section>
       <Section title={copy("Gezinme", "Navigation")}>
         <NavigationSettings />
-      </Section>
-      <Section title={copy("Ses", "Voice")}>
-        <VoiceSettings />
       </Section>
       <Section title={copy("Erişim ve gizlilik", "Access & privacy")}>
         <NavigationGroup>
@@ -221,9 +240,6 @@ export function SettingsScreen() {
           />
         </NavigationGroup>
       </Section>
-      <Section title={copy("Widget'lar", "Widgets")}>
-        <NavigationGroup><WidgetSettings /></NavigationGroup>
-      </Section>
       <Section title={copy("Destek", "Support")}>
         <NavigationGroup>
           <NavigationRow
@@ -232,7 +248,7 @@ export function SettingsScreen() {
             onPress={() => router.navigate("/legal/help")}
           />
           <NavigationRow
-            label={copy("AI içeriğini bildir", "Report AI content")}
+            label={copy("İçerik bildir", "Report content")}
             icon={tile(Flag)}
             onPress={() => router.navigate("/report")}
           />
@@ -256,6 +272,8 @@ export function SettingsScreen() {
         >
           {panel === "permissions" ? (
             <DevicePermissionSettings />
+          ) : panel === "widgets" ? (
+            <NavigationGroup><WidgetSettings /></NavigationGroup>
           ) : panel === "security" ? (
             <SecuritySettings />
           ) : panel === "host" && hostTarget ? (
@@ -270,17 +288,11 @@ export function SettingsScreen() {
               <NavigationGroup>
                 <NavigationRow
                   label={copy("Gizlilik politikası", "Privacy policy")}
-                  onPress={() => {
-                    setPanel(null);
-                    router.navigate("/legal/privacy");
-                  }}
+                  onPress={() => leaveSheet(() => router.navigate("/legal/privacy"))}
                 />
                 <NavigationRow
                   label={copy("Kullanım koşulları ve lisans", "Terms of use & license")}
-                  onPress={() => {
-                    setPanel(null);
-                    router.navigate("/legal/terms");
-                  }}
+                  onPress={() => leaveSheet(() => router.navigate("/legal/terms"))}
                 />
               </NavigationGroup>
               <DiagnosticsSettings />
@@ -288,7 +300,7 @@ export function SettingsScreen() {
             </>
           ) : (
             <>
-              <EngagementSettings />
+              <EngagementSettings leaveSheet={leaveSheet} />
               <UpdatesRow />
             </>
           )}

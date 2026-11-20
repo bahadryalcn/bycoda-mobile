@@ -63,3 +63,45 @@ it("route blur cancels pending work; focus performs one fresh read", async () =>
   await act(async () => root.render(createElement(Probe)));
   expect(request).toHaveBeenCalledTimes(2);
 });
+
+const snapshot = { terminal: { id: "t", projectId: "p" }, output: "", cursor: 0, truncated: false, hasMore: false };
+let renders = 0;
+let lastFetching = false;
+function Recorder() {
+  const result = useTerminalOutput(client, "p", "t", true, true);
+  renders += 1;
+  lastFetching = result.isFetching;
+  refetch = result.refetch;
+  return null;
+}
+it("background polls with unchanged output neither flash fetching nor re-render", async () => {
+  request.mockImplementation(async () => snapshot);
+  await act(async () => root.render(createElement(Recorder)));
+  const afterFirstRead = renders;
+  expect(lastFetching).toBe(false);
+  await act(async () => { await vi.advanceTimersByTimeAsync(4500); });
+  expect(request.mock.calls.length).toBeGreaterThan(2);
+  expect(renders).toBe(afterFirstRead);
+  expect(lastFetching).toBe(false);
+});
+it("backs off after read failures while an explicit retry still reads immediately", async () => {
+  request.mockImplementation(async () => { throw new Error("Host unreachable"); });
+  await act(async () => root.render(createElement(Recorder)));
+  expect(request).toHaveBeenCalledTimes(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2999); });
+  expect(request).toHaveBeenCalledTimes(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(request).toHaveBeenCalledTimes(2);
+  await act(async () => { await vi.advanceTimersByTimeAsync(5999); });
+  expect(request).toHaveBeenCalledTimes(2);
+  await act(async () => { await refetch(); });
+  expect(request).toHaveBeenCalledTimes(3);
+});
+it("auth failures stop background polling, while an explicit retry still reads", async () => {
+  request.mockImplementation(async () => { throw Object.assign(new Error("denied"), { kind: "auth" }); });
+  await act(async () => root.render(createElement(Recorder)));
+  await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+  expect(request).toHaveBeenCalledTimes(1);
+  await act(async () => { await refetch(); });
+  expect(request).toHaveBeenCalledTimes(2);
+});
