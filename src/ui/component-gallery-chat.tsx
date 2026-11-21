@@ -296,7 +296,6 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
             )}
           </Body>
         )}
-        <Button label={copy("Kapat", "Close")} onPress={() => setPreview(false)} />
       </Sheet>
     </Stack>
   );

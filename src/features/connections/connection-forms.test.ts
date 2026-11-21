@@ -9,7 +9,7 @@ vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/tokens", () => ({ space: {} }));
 vi.mock("@/ui/primitives", () => ({
-  Body: "Body", FormActions: "FormActions", Disclosure: "Disclosure",
+  Body: "Body", ErrorNotice: "ErrorNotice", FormActions: "FormActions", Disclosure: "Disclosure",
   Field: "Field", IdentifierField: "IdentifierField", Stack: "Stack", Heading: "Heading",
 }));
 import { ManualConnectionForm } from "./manual-connection-form";
@@ -33,8 +33,9 @@ it("keeps connection feedback with the guarded action, without submitting or can
   } as unknown as ManualConnectionFormProps["controller"];
   const footer = () => find(ManualConnectionForm({ controller, disabled: false }), "FormActions")!;
   const actions = footer();
-  expect(actions.props.feedback.type).toBe(ConnectionFeedback);
-  expect(actions.props.feedback.props.operation).toBe(operation);
+  expect(actions.props.feedback.type).toBe("ErrorNotice");
+  expect(actions.props.feedback.props.error).toBe(operation.error);
+  expect(actions.props.feedback.props.onRetry).toBeUndefined();
   expect(actions.props.disabled).toBe(false);
   expect(connect).not.toHaveBeenCalled();
   expect(cancel).not.toHaveBeenCalled();
@@ -46,6 +47,8 @@ it("keeps connection feedback with the guarded action, without submitting or can
   controller.connectionMode = "lan";
   controller.form.values.target = { kind: "existing", id: "synthetic" };
   expect(footer().props.disabled).toBe(false);
+  expect(footer().props.submitLabel).toBe("Save connection");
   controller.busy = true;
   expect(footer().props.cancelDisabled).toBe(true);
+  expect(footer().props.feedback.type).toBe(ConnectionFeedback);
 });

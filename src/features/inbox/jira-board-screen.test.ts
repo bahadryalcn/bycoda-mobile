@@ -3,6 +3,8 @@ import { act, createElement, type ComponentProps, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProviderJiraBoards } from "./jira-board-screen";
+import { InboxLocalScopeContext, useInboxLocalScope } from "./inbox-local-scope";
+import type { InboxOrigin } from "./provider-protocol";
 vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
 
 type Request = { action: string; input?: { boardId?: number; scope?: string; sprintId?: number; pageToken?: string } };
@@ -10,7 +12,7 @@ const state = vi.hoisted(() => ({
   requests: [] as Request[], selected: null as null | { issue: unknown; snapshot: unknown },
   activeId: "machine", projectId: "project", fetching: false, error: null as unknown, reflect: true,
   selectors: new Map<string, (value: string) => void>(), rowPress: null as null | (() => void),
-  refetch: vi.fn(), apply: null as null | (() => void), actions: new Map<string, () => void>(), singleBoard: false,
+  refetch: vi.fn(), apply: null as null | (() => void), actions: new Map<string, () => void>(), singleBoard: false, localProjectId: null as string | null,
 }));
 vi.mock("@/state/machines", () => ({
   useActiveMachine: () => ({ id: "machine", name: "Computer", capabilities: ["inbox.jiraBoard.v1"] }),
@@ -18,8 +20,9 @@ vi.mock("@/state/machines", () => ({
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, params?: Record<string, string | number>) =>
   en.replace(/\{(\w+)\}/g, (key, name: string) => String(params?.[name] ?? key)) }));
-vi.mock("./jira-board-issue", () => ({ JiraBoardIssueActions: ({ issue, snapshot }: { issue: unknown; snapshot: unknown }) => {
-  state.selected = { issue, snapshot }; return createElement("output", null, "Selected issue");
+vi.mock("./jira-board-issue", () => ({ JiraBoardIssueActions: ({ issue, snapshot, origin }: { issue: unknown; snapshot: unknown; origin: InboxOrigin }) => {
+  const scope = useInboxLocalScope();
+  state.selected = { issue, snapshot }; return createElement("output", null, scope.matches(origin) ? "Selected issue" : "Unavailable issue");
 } }));
 vi.mock("./provider-queries", () => ({ useInboxRead: (request: Request, enabled: boolean) => {
   if (enabled) state.requests.push(request);
@@ -46,7 +49,8 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: { children?: ReactNode }) => createElement("div", null, children);
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress?: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
   return { Body: Wrapper, Badge: ({ label }: { label: string }) => createElement("span", null, label),
-    Sheet: ({ children, title }: { children: ReactNode; title: string }) => createElement("div", { role: "dialog", "aria-label": title }, children),
+    Sheet: ({ children, title }: { children: ReactNode; title: string }) => createElement("div", { role: "dialog", "aria-label": title },
+      createElement(InboxLocalScopeContext, { value: null }, children)),
     Row: Wrapper, Stack: Wrapper, StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: { message: string }) => createElement("span", null, message), QueryState: () => null, Button,
     ActionMenu: ({ actions }: { actions: Array<{ key: string; label: string; disabled?: boolean; onPress: () => void }> }) => createElement("div", null, actions.map((action) => {
       state.actions.set(action.key, action.onPress); return createElement(Button, { ...action, key: action.key });
@@ -66,7 +70,15 @@ let snapshot: {
 };
 const container = document.createElement("div");
 let root: ReturnType<typeof createRoot>, props: ComponentProps<typeof ProviderJiraBoards>;
-async function render() { await act(async () => root.render(createElement(ProviderJiraBoards, props))); }
+async function render() {
+  const boards = createElement(ProviderJiraBoards, props);
+  const localProjectId = state.localProjectId;
+  await act(async () => root.render(localProjectId ? createElement(InboxLocalScopeContext, { value: {
+    projectId: localProjectId,
+    setProjectId: () => {},
+    matches: origin => origin.machineId === state.activeId && origin.projectId === state.localProjectId,
+  } }, boards) : boards));
+}
 async function mount(empty = false, canWrite = true, issueState = "To do") {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); document.body.append(container);
   snapshot = { snapshotId: "snapshot", projectCwd: "/project", board: { id: 1, name: "Fixture board" }, scope: { scope: "board", pageToken: null },
@@ -83,7 +95,7 @@ function button(label: string) { return [...container.querySelectorAll("button")
 async function click(label: string) { await act(async () => button(label).click()); }
 function latestRead() { return state.requests.filter((request) => request.action === "jira-board-read").at(-1)!.input!; }
 afterEach(async () => { await act(async () => root?.unmount()); container.remove(); state.requests = []; state.selected = null; state.activeId = "machine"; state.projectId = "project";
-  state.fetching = false; state.error = null; state.reflect = true; state.singleBoard = false; state.apply = null; state.actions.clear(); state.selectors.clear(); state.rowPress = null; vi.clearAllMocks(); vi.unstubAllGlobals(); });
+  state.fetching = false; state.error = null; state.reflect = true; state.singleBoard = false; state.localProjectId = null; state.apply = null; state.actions.clear(); state.selectors.clear(); state.rowPress = null; vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
 it("explains a page-local empty column and clears only that filter", async () => {
   await mount(); await click("Filters"); await select("Column", "2"); await click("Apply");
@@ -114,6 +126,15 @@ it.each([true, false])("retains full custom state, original issue/snapshot and c
   await act(async () => row.click());
   expect(state.selected?.issue).toBe(snapshot.page.issues[0]); expect(state.selected?.snapshot).toBe(snapshot);
 });
+it("preserves the Inbox project when Jira issue content moves into the overlay", async () => {
+  state.projectId = "workspace-project";
+  state.localProjectId = "project";
+  await mount();
+  const row = container.querySelector('button[aria-label^="Fixture issue"]') as HTMLButtonElement;
+  await act(async () => row.click());
+  expect(container.querySelector("output")?.textContent).toBe("Selected issue");
+});
+
 it("loads issues automatically when there is one Jira board", async () => {
   state.singleBoard = true; await mount();
   expect(latestRead()).toMatchObject({ projectId: "project", boardId: 1, scope: "board" });

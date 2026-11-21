@@ -22,7 +22,8 @@ vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => {state.commands.set(label,onPress);return createElement("button", { disabled, onClick: onPress }, label);};
   return { Stack:wrapper, Disclosure:wrapper, Body: wrapper, ActionMenu:({actions}:any)=>createElement("nav",null,...actions.filter(Boolean).map((a:any)=>button({label:a.label,disabled:a.disabled,onPress:a.onPress}))), Button: button, QueryState: ({query}:any) => query.error?createElement("p",null,query.error.message):null, SelectField: (props:any) => {state.fields.set(props.label,props);return null;},
-    Sheet: ({ visible, children }: PropsWithChildren<{ visible: boolean }>) => visible ? wrapper({ children }) : null,
+    Sheet: ({ visible, title, dirty, children }: PropsWithChildren<{ visible: boolean; title: string; dirty?: boolean }>) =>
+      visible ? createElement("section", null, createElement("h2", null, title), dirty && "Unsaved changes", children) : null,
     ErrorText: ({error}:any) => error ? createElement("p",null,error.message) : null, Notice: ({ message }: { message: string }) => createElement("div", null, message), StateView: ({ title }: { title: string }) => createElement("div", null, title),
     Field: ({ value, onChangeText }: { value: string; onChangeText: (text: string) => void }) => {state.fields.set("New branch name",{value,onChangeText});return createElement("input", { value, onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChangeText(event.target.value), onInput: (event: React.FormEvent<HTMLInputElement>) => onChangeText(event.currentTarget.value) });},
     FormActions: ({ submitLabel, disabled, onSubmit, onCancel, cancelLabel, cancelDisabled, feedback }: any) => createElement("footer",null,feedback,button({ label: submitLabel, disabled, onPress: onSubmit }),onCancel ? button({label:cancelLabel,disabled:cancelDisabled,onPress:onCancel}) : null),
@@ -66,10 +67,13 @@ it("creates once and preserves the selected checkout when the existing draft gua
   state.write.mockResolvedValueOnce({ path: "/host/worktrees/wt-new-feature", branch: "new-feature", head: "a".repeat(40), isMain: false, missing: false });
   state.beforeChange.mockRejectedValueOnce(new Error("Keep current draft"));
   await mount();
+  expect(container.textContent).toContain("Unsaved changes");
   await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Create worktree")!.click());
   const confirm = state.confirmation!;
   await act(async () => confirm()); await act(async () => confirm());
   expect(state.write).toHaveBeenCalledTimes(1); expect(state.select).not.toHaveBeenCalled();
+  expect(container.querySelector("h2")?.textContent).toBe("Worktree created");
+  expect(container.textContent).not.toContain("Unsaved changes");
   await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Use this working folder")!.click());
   expect(state.beforeChange).toHaveBeenCalledTimes(1); expect(state.select).not.toHaveBeenCalled();
   expect(container.textContent).toContain("/host/worktrees/wt-new-feature");

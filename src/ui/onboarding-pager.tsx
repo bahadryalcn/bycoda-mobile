@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useState, type ComponentRef, type Ref } from "react";
+import { StyleSheet, View, type ScrollView } from "react-native";
+import ChevronLeft from "lucide-react-native/icons/chevron-left";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Animated, {
   Extrapolation,
   interpolate,
@@ -8,18 +10,20 @@ import Animated, {
   useAnimatedStyle,
   type SharedValue,
 } from "react-native-reanimated";
-import { Body, Heading } from "./primitives";
+import { Body, Heading, IconButton } from "./primitives";
 import { CodeArt, codeArtWidth, type CodeArtName } from "./code-art";
 import { useMobileTheme } from "./theme";
 import { useCopy } from "./copy";
 import { pageAtOffset } from "./onboarding-page-offset";
-import { fontSize, lineHeight, radii, space } from "./tokens";
+import { fontSize, lineHeight, metrics, radii, space } from "./tokens";
 
 /**
  * `lightArt` replaces `art` on a light ground. As on the website, the dot-matrix face belongs to the
  * dark stage; light sections use the code-glyph crew in dark ink.
  */
 export type OnboardingPage = { key: string; art: CodeArtName; lightArt?: CodeArtName; title: string; /** One short sentence under the title. */ body?: string };
+
+const artHeight = 360;
 
 /** A page's figure resolves when its page settles; figure and title drift at different speeds. */
 function Slide({ page, position, offset, width, top, bottomClearance, active }: {
@@ -39,8 +43,9 @@ function Slide({ page, position, offset, width, top, bottomClearance, active }: 
     transform: [{ translateX: interpolate(offset.value, range, [width * 0.35, 0, -width * 0.35], Extrapolation.CLAMP) }],
   }));
   return (
-    <View style={{ width, paddingTop: top, paddingBottom: bottomClearance, paddingHorizontal: space.xl, gap: space.xl }}>
-      <Animated.View style={[{ flex: 1, alignItems: "center", justifyContent: "center" }, art]}
+    <View accessibilityElementsHidden={!active} importantForAccessibility={active ? "auto" : "no-hide-descendants"}
+      style={{ width, paddingTop: top, paddingBottom: bottomClearance, paddingHorizontal: space.xl, gap: space.xl, justifyContent: "center" }}>
+      <Animated.View style={[{ flexBasis: artHeight, flexShrink: 1, alignItems: "center", justifyContent: "center" }, art]}
         onLayout={({ nativeEvent }) => setBox({ width: nativeEvent.layout.width, height: nativeEvent.layout.height })}>
         {box.height > 0 ? <CodeArt name={figure} width={codeArtWidth(figure, box)} active={active} /> : null}
       </Animated.View>
@@ -59,27 +64,30 @@ function Slide({ page, position, offset, width, top, bottomClearance, active }: 
  * stay between `top` and the title; the title sits `bottomClearance` above the caller's fixed
  * actions. Never auto-advances. `offset` is shared with `PageDots`.
  */
-export function OnboardingPager({ pages, index, offset, onIndexChange, top, bottomClearance }: {
+export function OnboardingPager({ pages, index, offset, onIndexChange, top, bottomClearance, scrollRef }: {
   pages: OnboardingPage[];
   index: number;
   offset: SharedValue<number>;
   onIndexChange: (index: number) => void;
   top: number;
   bottomClearance: number;
+  scrollRef: Ref<ComponentRef<typeof ScrollView>>;
 }) {
-  const [width, setWidth] = useState(0);
+  const [{ width, initialIndex }, setPageLayout] = useState({ width: 0, initialIndex: index });
   const onScroll = useAnimatedScrollHandler((event) => { offset.value = event.contentOffset.x; });
   return (
     <View style={StyleSheet.absoluteFill} onLayout={({ nativeEvent }) => {
-      if (nativeEvent.layout.width === width) return;
-      setWidth(nativeEvent.layout.width);
-      offset.value = 0;
-      onIndexChange(0);
+      const nextWidth = nativeEvent.layout.width;
+      if (nextWidth === width) return;
+      setPageLayout({ width: nextWidth, initialIndex: index });
+      offset.value = nextWidth * index;
     }}>
       {width > 0 ? (
         <Animated.ScrollView
-          // A new width (rotation, split view) remounts at the first page instead of between pages.
+          // Re-anchor the current page after rotation or split view changes the width.
           key={width}
+          ref={scrollRef}
+          contentOffset={{ x: width * initialIndex, y: 0 }}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
@@ -109,20 +117,26 @@ function Dot({ position, offset, width }: { position: number; offset: SharedValu
   return <Animated.View style={[{ height: 6, borderRadius: radii.pill }, style]} />;
 }
 
-/** Position indicator following the swipe; one accessible summary instead of unlabeled dots. */
-export function PageDots({ count, index, offset, width }: {
-  count: number; index: number; offset: SharedValue<number>; width: number;
+/** Position indicator and swipe-free navigation, with one accessible summary for the dots. */
+export function PageDots({ count, index, offset, width, onIndexChange }: {
+  count: number; index: number; offset: SharedValue<number>; width: number; onIndexChange: (index: number) => void;
 }) {
   const copy = useCopy();
+  const { colors } = useMobileTheme();
   return (
-    <View
-      accessible
-      accessibilityLabel={copy("Sayfa {p0} / {p1}", "Page {p0} of {p1}", { p0: index + 1, p1: count })}
-      style={{ flexDirection: "row", justifyContent: "center", gap: space.sm }}
-    >
-      {Array.from({ length: count }, (_, position) => (
-        <Dot key={position} position={position} offset={offset} width={width} />
-      ))}
+    <View style={{ minHeight: metrics.touchTarget, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: space.md }}>
+      <IconButton label={copy("Önceki", "Previous")} disabled={index === 0} onPress={() => onIndexChange(index - 1)}>
+        <ChevronLeft size={20} color={colors.text} />
+      </IconButton>
+      <View accessible accessibilityLabel={copy("Sayfa {p0} / {p1}", "Page {p0} of {p1}", { p0: index + 1, p1: count })}
+        style={{ flexDirection: "row", gap: space.sm }}>
+        {Array.from({ length: count }, (_, position) => (
+          <Dot key={position} position={position} offset={offset} width={width} />
+        ))}
+      </View>
+      <IconButton label={copy("Sonraki", "Next")} disabled={index === count - 1} onPress={() => onIndexChange(index + 1)}>
+        <ChevronRight size={20} color={colors.text} />
+      </IconButton>
     </View>
   );
 }

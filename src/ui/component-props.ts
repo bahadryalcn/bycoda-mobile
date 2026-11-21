@@ -190,6 +190,8 @@ export type NoticeProps = PropsWithChildren<{
 
 export type QueryStateProps = {
   query: QueryLike;
+  /** Uses inline feedback when the query owns a section of a form or sheet. */
+  compact?: boolean;
   /** Overrides the default nearest-Sheet guarded close and connection navigation. */
   onManageConnections?: () => void;
   empty?: boolean | string;
@@ -259,6 +261,8 @@ export type SheetProps = PropsWithChildren<{
   scroll?: boolean;
   dismissible?: boolean;
   dirty?: boolean;
+  /** A new non-null value re-enables dismissal after an async close fails without hiding the sheet. */
+  dismissalRetryKey?: unknown;
   discardTitle?: string;
   discardMessage?: string;
   returnFocusRef?: RefObject<HostInstance | TextInputInstance | null>;

@@ -5,7 +5,7 @@ import { useCopy } from "@/ui/copy";
 import { metrics } from "@/ui/tokens";
 import { QueryState, Sheet, StateView } from "@/ui/primitives";
 import { urgencyGlobalSessionRows } from "./global-session-shelves";
-import { queryOwnsRegion } from "./query-region";
+import { directoryOwnsRegion, ProjectDirectoryFeedback } from "./project-directory-feedback";
 import { filterProjectSessionDirectory, listedSession } from "./session-collection";
 import { SessionListRow } from "./session-list-row";
 import { useProjectActivity } from "./use-project-activity";
@@ -20,19 +20,32 @@ export function SessionListSheet({ visible, onClose, machineId, selectedSessionI
   const copy = useCopy();
   const activeId = useMachines((state) => state.activeId);
   const activity = useProjectActivity();
+  const sameComputer = activeId === machineId;
   const rows = urgencyGlobalSessionRows(
-    activeId === machineId ? filterProjectSessionDirectory(activity.projects.data ?? [],
+    sameComputer ? filterProjectSessionDirectory(activity.projects.data ?? [],
       activity.directory.filter(({ session }) => listedSession(session) && !session.archived), "") : [],
     Date.now(),
   );
   // Loading, connection and read failures fill the sheet like they fill the Sessions list.
   const query = {
-    data: activity.directory.length ? activity.directory : undefined,
+    data: rows.length ? rows : undefined,
     isPending: activity.pending,
     error: activity.error,
     isFetching: activity.refreshing,
     refetch: activity.refetch,
   };
+  const feedback = {
+    query,
+    readiness: activity.readiness,
+    privacyUnavailable: activity.privacyUnavailable,
+    loading: "list" as const,
+    loadingLabel: copy("Oturumlar yükleniyor…", "Loading sessions…"),
+  };
+  const emptyState = !sameComputer
+    ? <StateView title={copy("Bilgisayar bağlantısı değişti.", "Computer connection changed.")} />
+    : directoryOwnsRegion(feedback)
+      ? <ProjectDirectoryFeedback {...feedback} />
+      : <StateView illustration="no-sessions" title={copy("Son 7 günde oturum yok", "No sessions in the last 7 days")} />;
   const open = (id: string, projectId: string) => {
     if (useMachines.getState().activeId !== machineId || !activity.projects.isProjectVisible(projectId)) return;
     onClose();
@@ -42,9 +55,8 @@ export function SessionListSheet({ visible, onClose, machineId, selectedSessionI
     <Sheet visible={visible} onClose={onClose} title={copy("Oturumlar", "Sessions")} scroll={false}>
       {/* The non-scrolling sheet body is a definite viewport; the list must fill it to virtualize. */}
       <FlatList style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }} data={rows} keyExtractor={(row) => row.key}
-        ListEmptyComponent={queryOwnsRegion(query)
-          ? <QueryState query={query} loading="list" loadingLabel={copy("Oturumlar yükleniyor…", "Loading sessions…")} />
-          : <StateView illustration="no-sessions" title={copy("Son 7 günde oturum yok", "No sessions in the last 7 days")} />}
+        ListHeaderComponent={rows.length && query.error ? <QueryState query={query} loading="none" compact /> : undefined}
+        ListEmptyComponent={emptyState}
         renderItem={({ item }) => {
           if (item.kind !== "session") return null;
           const { project, session } = item;

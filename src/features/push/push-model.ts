@@ -86,9 +86,19 @@ export type PushStatus =
   | { state: "unconfigured" }
   | { state: "error"; error: unknown };
 
-export const usePushStatus = create<{ status: PushStatus; set: (status: PushStatus) => void }>(
-  (set) => ({ status: { state: "checking" }, set: (status) => set({ status }) }),
-);
+export const usePushStatus = create<{
+  status: PushStatus;
+  set: (status: PushStatus) => void;
+  retryEpoch: number;
+  retry: () => void;
+}>((set) => ({
+  status: { state: "checking" },
+  set: (status) => set({ status }),
+  retryEpoch: 0,
+  retry: () => set((state) => state.status.state === "error"
+    ? { status: { state: "checking" }, retryEpoch: state.retryEpoch + 1 }
+    : state),
+}));
 
 export type PushTarget =
   | { kind: "session"; environmentId: string; sessionId: string; projectId?: string }
@@ -127,7 +137,7 @@ export function pushRoute(target: PushTarget, machineId: string) {
 export function unmatchedPushNotice(storageError: string | null, copy: (tr: string, en: string) => string) {
   return storageError
     ? copy("Kayıtlı bilgisayarlar yüklenemedi; bu bildirim açılamadı.", "Saved computers could not be loaded, so this notification could not be opened.")
-    : copy("Bu bildirim artık eşleşmiş bir bilgisayardan geliyor.", "This notification is from a computer that is no longer paired.");
+    : copy("Bu bildirimi gönderen bilgisayar artık eşleşmiş değil.", "This notification is from a computer that is no longer paired.");
 }
 
 /** Reads where a tapped push points; tests and unknown kinds open nothing. */

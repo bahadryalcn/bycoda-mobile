@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   writes: vi.fn(),
   invalidate: vi.fn(),
   push: vi.fn(),
+  confirm: vi.fn(),
 }));
 vi.mock("expo-router", () => ({ router: { navigate: state.push } }));
 vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
@@ -45,8 +46,10 @@ vi.mock("../shared/format", () => ({
   stamp: (value?: number) => (value === undefined ? "—" : `DATE:${value}`),
 }));
 vi.mock("@/ui/confirm", () => ({
-  confirmAction: (_title: string, _detail: string, _label: string, action: () => void) => action(),
+  confirmAction: state.confirm,
 }));
+vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ isCurrent: () => state.activeId === "pc" }) }));
+vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
 vi.mock("./runtime-panel", () => ({
   CrewRuntimePanel: ({ children }: PropsWithChildren) => createElement("div", null, children),
 }));
@@ -145,6 +148,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.activeId = "pc";
   state.machine = { id: "pc", capabilities: ["crews.v1", "crews.run-delete.v1"] };
+  state.confirm.mockImplementation((_title: string, _detail: string, _label: string, action: () => void) => action());
   container = document.createElement("div");
   root = createRoot(container);
 });
@@ -165,6 +169,17 @@ it("offers deletion with a conflict token instead of a redundant Stop for idle p
     runId: "run",
     expectedUpdatedAt: 42,
   });
+});
+
+it("names the crew work and computer before resuming", async () => {
+  state.confirm.mockImplementation(() => undefined);
+  await act(async () => root.render(createElement(CrewRunCard, { run: { ...value(), title: "Harbor work" } })));
+  state.actions.get("Resume")!.onPress();
+  const [, detail, , confirm] = state.confirm.mock.calls[0]!;
+  expect(detail).toContain("Harbor work · pc");
+  expect(state.writes).not.toHaveBeenCalled();
+  confirm();
+  expect(state.writes).toHaveBeenCalledExactlyOnceWith("crews.resume", { projectId: "project", runId: "run" }, expect.anything());
 });
 
 it("refreshes a failed Stop against its original machine without repeating it", async () => {

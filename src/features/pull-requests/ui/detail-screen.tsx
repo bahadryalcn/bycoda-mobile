@@ -18,11 +18,36 @@ export function PullRequestDetailScreen() {
   const projects = useProjectList();
   const availability = useProviderInboxAvailability();
   const target = readPrRoute(params);
-  const item = useCachedPrItem(machine?.id ?? null, projectId, target);
-  if (!machine || machine.id !== params.machineId || projectId && !projects.isProjectVisible(projectId)) return <Screen><StateView illustration="unreachable" title={copy("Pull request erişimi kullanılamıyor", "Pull request access unavailable")} /></Screen>;
-  if (!item) return <Screen><StateView illustration="unreachable" title={copy("Pull request açılamadı", "Could not open pull request")} /></Screen>;
+  const scopeCurrent = machine?.id === params.machineId && (!projectId || projects.isProjectVisible(projectId));
+  const verifiedMachine = scopeCurrent ? machine : null;
+  const item = useCachedPrItem(verifiedMachine?.id ?? null, projectId, target);
+  const title = copy("Pull request", "Pull request");
+  const close = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else if (verifiedMachine && useMachines.getState().activeId === verifiedMachine.id &&
+      (!projectId || projects.isProjectVisible(projectId))) {
+      router.replace({ pathname: "/pull-requests", params: { machineId: verifiedMachine.id, projectId: projectId ?? "" } });
+    } else {
+      router.replace("/");
+    }
+  };
+  if (!verifiedMachine || !item) return <>
+    <Stack.Screen options={{ title }} />
+    <Screen>
+      <StateView
+        illustration="unreachable"
+        title={verifiedMachine ? copy("Pull request açılamadı", "Could not open pull request") : copy("Pull request erişimi kullanılamıyor", "Pull request access unavailable")}
+        action={{
+          label: router.canGoBack() ? copy("Geri dön", "Go back") : verifiedMachine ? copy("Pull request’ler", "Pull requests") : copy("Projeler", "Projects"),
+          onPress: close,
+        }}
+      />
+    </Screen>
+  </>;
   return <InboxLocalScopeContext value={{ projectId, setProjectId: () => {}, matches: origin => useMachines.getState().activeId === origin.machineId && origin.machineId === params.machineId && origin.projectId === projectId && (!projectId || projects.isProjectVisible(projectId)) }}>
-    <Stack.Screen options={{ title: copy("Pull request", "Pull request") }} /><ProviderInboxDetail key={`${machine.id}:${projectId}:${item.repo}:${item.number}`} item={item} origin={{ machineId: machine.id, projectId }} availability={availability} onClose={() => router.back()} />
+    <Stack.Screen options={{ title }} />
+    <ProviderInboxDetail key={`${verifiedMachine.id}:${projectId}:${item.repo}:${item.number}`} item={item} origin={{ machineId: verifiedMachine.id, projectId }} availability={availability} onClose={close} />
   </InboxLocalScopeContext>;
 }
 

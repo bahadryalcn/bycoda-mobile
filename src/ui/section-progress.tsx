@@ -1,13 +1,22 @@
-import { SectionProgress } from "panelui-native/components/section-progress";
-export { sectionNavigatorClearance } from "./section-progress-model";
+import { useState } from "react";
+import { View } from "react-native";
+import { useAnimatedReaction } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import type { ScrollSectionsPosition } from "panelui-native/hooks/use-scroll-sections";
+import { useLocale } from "../i18n";
+import { Button, SelectRow } from "./buttons";
+import { Sheet } from "./dialogs";
+import { Stack } from "./layout";
+import { useScreenContentInsets } from "./screen-content-insets";
+import { readingProgressPercent } from "./section-progress-model";
+import { metrics, space } from "./tokens";
+import { Body } from "./typography";
 
 export type SectionNavigatorItem = { id: string; title: string };
 
 /**
- * Reading-progress pill for one long document: ring = scroll depth, label = current section,
- * press = jump list. It floats over its parent, so the scroll owner must reserve bottom
- * clearance (see `sectionNavigatorClearance`) and the pill must be a sibling of that scroller.
+ * The reading toolbar sits beside the document scroller. The shared sheet owns
+ * back, dismissal, and scrolling through the jump list.
  */
 export function SectionNavigator({ sections, active, scroll, onSelect, label }: {
   sections: readonly SectionNavigatorItem[];
@@ -16,9 +25,46 @@ export function SectionNavigator({ sections, active, scroll, onSelect, label }: 
   onSelect: (id: string) => void;
   label: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const locale = useLocale();
+  const insets = useScreenContentInsets();
+  const currentTitle = sections.find(({ id }) => id === active)?.title;
+  const percent = new Intl.NumberFormat(locale, { style: "percent" }).format(progress / 100);
+  const { offset, viewport, content } = scroll;
+  useAnimatedReaction(
+    () => readingProgressPercent(offset.value, viewport.value, content.value),
+    (value, previous) => { if (value !== previous) scheduleOnRN(setProgress, value); },
+  );
   return (
-    <SectionProgress scroll={scroll} value={active} onValueChange={onSelect} label={label}>
-      {sections.map((section) => <SectionProgress.Item key={section.id} value={section.id}>{section.title}</SectionProgress.Item>)}
-    </SectionProgress>
+    <View style={{
+      alignSelf: "center", width: "100%", maxWidth: metrics.contentWidth,
+      paddingLeft: insets.left, paddingRight: insets.right, paddingBottom: insets.bottom + space.xs,
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm,
+    }}>
+      <Body
+        muted numberOfLines={1}
+        accessibilityElementsHidden importantForAccessibility="no"
+        style={{ flex: 1, minWidth: 0 }}
+      >
+        {currentTitle ? `${percent} · ${currentTitle}` : percent}
+      </Body>
+      <Button
+        label={label}
+        accessibilityLabel={[label, currentTitle, percent].filter(Boolean).join(". ")}
+        style={{ minHeight: metrics.touchTarget }}
+        onPress={() => setOpen(true)}
+      />
+      <Sheet title={label} visible={open} onClose={() => setOpen(false)}>
+        <Stack>
+          {sections.map(({ id, title }) => (
+            <SelectRow key={id} label={title} selected={id === active} onPress={() => {
+              setOpen(false);
+              onSelect(id);
+            }} />
+          ))}
+        </Stack>
+      </Sheet>
+    </View>
   );
 }

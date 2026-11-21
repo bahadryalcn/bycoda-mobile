@@ -3,7 +3,7 @@ import type { HostModelCatalog } from "@/domain/types";
 import { useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
-import { Notice, QueryState, SelectField } from "@/ui/primitives";
+import { Loading, Notice, QueryState, SelectField } from "@/ui/primitives";
 import { ProviderIcon } from "@/ui/provider-identity";
 import type { AssistantProfile } from "../../../../src/shared/model/host-contracts/assistant";
 import { catalogProviders, sessionModel, sessionModelName } from "../workspace/catalog";
@@ -26,21 +26,23 @@ export function AssistantReplyModel({ client, profile, projectId, disabled, onSa
   const [issue, setIssue] = useState(false);
   const [saving, setSaving] = useState(false);
   const pending = useRef(false);
-  if (!execution) return null;
-  const currentModel = sessionModel(catalog.data, execution.harness, execution.model);
-  const selectedValue = JSON.stringify([execution.harness, currentModel?.id ?? execution.model]);
-  const providers = [...new Set([...catalogProviders(undefined, catalog.data), execution.harness])];
+  const currentModel = execution ? sessionModel(catalog.data, execution.harness, execution.model) : undefined;
+  const selectedValue = execution ? JSON.stringify([execution.harness, currentModel?.id ?? execution.model]) : undefined;
+  const providers = catalogProviders(undefined, catalog.data);
+  if (execution && !providers.includes(execution.harness)) providers.push(execution.harness);
   const options = providers.flatMap(harness => {
-    const group = providerName(harness);
+    const group = harness === "codex" ? "OpenAI · Codex" : providerName(harness);
     const icon = <ProviderIcon provider={harness} size={20} />;
     const models = catalog.data?.models[harness] ?? [];
     const rows = models.map(model => ({
       value: JSON.stringify([harness, model.id]), label: model.name, group, icon,
+      searchKeywords: harness === "codex" ? "OpenAI Open AI" : undefined,
       harness, model: model.id, savedOnly: false,
     }));
-    if (harness === execution.harness && !currentModel) {
+    if (execution && selectedValue && harness === execution.harness && !currentModel) {
       rows.push({
         value: selectedValue, label: sessionModelName(execution), group, icon,
+        searchKeywords: harness === "codex" ? "OpenAI Open AI" : undefined,
         harness, model: execution.model, savedOnly: true,
       });
     }
@@ -49,6 +51,13 @@ export function AssistantReplyModel({ client, profile, projectId, disabled, onSa
   const hasChoices = options.some(option => !option.savedOnly);
   return <>
     <QueryState query={catalog} loading="inline" />
+    {catalog.isSuccess && !hasChoices ? (
+      catalog.data.pending?.length ? (
+        <Loading label={copy("Yükleniyor…", "Loading…")} />
+      ) : (
+        <Notice message={copy("Kullanılabilir model yok.", "No models available.")} />
+      )
+    ) : null}
     <SelectField label={copy("Yanıt modeli", "Reply model")} value={selectedValue}
       options={options} searchable disabled={disabled || saving || !hasChoices}
       onChange={(value) => {
@@ -59,7 +68,11 @@ export function AssistantReplyModel({ client, profile, projectId, disabled, onSa
         setSaving(true);
         setIssue(false);
         void client.updateProfile(profile.version, { replyExecution: {
-          ...execution, harness: selected.harness, model: selected.model, modelSettings: {},
+          harness: selected.harness,
+          model: selected.model,
+          modelSettings: {},
+          runtimeMode: execution?.runtimeMode ?? "supervised",
+          maxRunMinutes: execution?.maxRunMinutes ?? 60,
         } }).then(onSaved).catch(() => setIssue(true)).finally(() => {
           pending.current = false;
           setSaving(false);

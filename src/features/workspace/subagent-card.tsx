@@ -55,7 +55,7 @@ export function SubagentCard({ block, detailsDisabled, ...props }: Props) {
         {latest ? <Body muted numberOfLines={2} style={small}>{latest}</Body> : null}
       </PressableCard>
       <Sheet visible={sheet} title={run.name || copy("Alt ajan ayrıntıları", "Subagent details")} size="full" scroll={false} onClose={() => setSheet(false)}>
-        {sheet ? <SubagentDetails block={block} {...props} onClose={() => setSheet(false)} /> : null}
+        {sheet ? <SubagentDetails block={block} {...props} /> : null}
       </Sheet>
     </>
   );

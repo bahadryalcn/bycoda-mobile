@@ -17,5 +17,5 @@ export function confirmAction(
   Alert.alert(title, detail, [
     { text: cancelLabel, style: "cancel" },
     { text: label, style: intent, onPress: action },
-  ]);
+  ], { cancelable: true });
 }

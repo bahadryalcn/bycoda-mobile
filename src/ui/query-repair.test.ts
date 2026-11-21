@@ -85,6 +85,18 @@ it("shows offline immediately during an initial fetch and retains an explicit re
   expect(repair?.props.action.label).toBe("Manage connections");
 });
 
+it("keeps connection recovery compact inside a settings section", () => {
+  recordActiveHostDisconnected(true);
+  const waiting = renderQuery({
+    query: { status: "pending", fetchStatus: "fetching", isLoading: true },
+    loading: "inline",
+    compact: true,
+  });
+  expect(waiting?.props.compact).toBe(true);
+  expect(waiting?.props.title).toBe("Waiting for a connection");
+  expect(waiting?.props.action.label).toBe("Manage connections");
+});
+
 it("shows one centered offline state instead of reconnecting while the device has no network", () => {
   onlineManager.setOnline(false);
   const failed = renderQuery({ query: { error: new RemoteHostError("computer", "network", "down"), refetch: vi.fn() } });

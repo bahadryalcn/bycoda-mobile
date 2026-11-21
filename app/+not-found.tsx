@@ -6,7 +6,7 @@ export default function NotFound() {
   const copy = useCopy();
   return (
     <Screen scroll={false}>
-      <Stack.Screen options={{ title: copy("Sayfa bulunamadı", "Page not found") }} />
+      <Stack.Screen options={{ title: copy("Sayfa bulunamadı", "Page not found"), headerTitle: "" }} />
       <StateView
         title={copy("Sayfa bulunamadı", "Page not found")}
         description={copy("Aradığın sayfa taşınmış ya da hiç var olmamış olabilir.", "The page you were looking for may have moved or never existed.")}

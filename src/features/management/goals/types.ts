@@ -22,6 +22,7 @@ export type ReplanEditorProps = {
   goalId: string;
   replan: ReturnType<typeof useHostMutation<HostGoal>>;
   busy: boolean;
+  available: boolean;
   onClose: () => void;
 };
 export type GoalCardProps = {

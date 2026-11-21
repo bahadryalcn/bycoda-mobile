@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useCanGoBack, useIsFocused } from "expo-router";
+import { KeyboardController } from "react-native-keyboard-controller";
+import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useSecurity } from "@/state/security";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body } from "@/ui/typography";
 import { HeaderBackButton } from "@/ui/primitives";
@@ -23,6 +26,20 @@ export const SESSION_HEADER_ACTIONS_WIDTH = metrics.touchTarget * 2 + space.xs;
 
 const toneColor = (tone: SessionHeaderTone, colors: MobileColors) =>
   tone === "danger" ? colors.danger : tone === "warning" ? colors.warning : tone === "live" ? colors.live : colors.muted;
+
+/** Tablet conversations have no header Back in split view. Keep a route out when launched without a stack. */
+export function useTabletSessionBackFallback(tablet: boolean) {
+  const focused = useIsFocused();
+  const canGoBack = useCanGoBack();
+  const unlocked = useSecurity((state) => state.status === "unlocked");
+  useBackHandler(tablet && focused && unlocked && !canGoBack, () => {
+    if (KeyboardController.isVisible()) {
+      void KeyboardController.dismiss().catch(() => undefined);
+      return;
+    }
+    router.replace("/chats");
+  });
+}
 
 /** Compact 48dp header: back, title over "project · status", then fixed action slots. */
 export function SessionHeader({

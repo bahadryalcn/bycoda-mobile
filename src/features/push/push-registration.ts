@@ -1,8 +1,11 @@
 import Constants from "expo-constants";
+import type { DevicePushToken } from "expo-notifications";
+import { withTimeout } from "../../../../src/shared/lib/withTimeout";
 import { notifications } from "../permissions/device-permissions";
 import type { PushPreferenceKind, PushPreferences } from "./push-model";
 
 type Copy = (tr: string, en: string) => string;
+const PUSH_TOKEN_TIMEOUT_MS = 15_000;
 
 /** The EAS project that Expo push tokens belong to; absent until the app is linked with `eas init`. */
 export function expoProjectId(): string | undefined {
@@ -14,6 +17,7 @@ export function expoProjectId(): string | undefined {
 /** This installation's token for the last project asked about; only a rotation or `fresh` replaces it. */
 let cachedToken: { projectId: string; token: string } | undefined;
 let pendingToken: { projectId: string; request: Promise<string> } | undefined;
+let devicePushToken: DevicePushToken | undefined;
 /** Bumped on every rotation so a fetch that started before it never fills the cache with the old token. */
 let rotations = 0;
 let rotationWatch: Promise<void> | undefined;
@@ -26,8 +30,13 @@ export function onPushTokenRotated(listener: () => void): () => void {
 }
 
 function watchRotation(): Promise<void> {
-  rotationWatch ??= notifications().then((api) => {
-    api.addPushTokenListener(() => {
+  rotationWatch ??= withTimeout(notifications(), PUSH_TOKEN_TIMEOUT_MS, "Notification setup").then((api) => {
+    api.addPushTokenListener((token) => {
+      // Android emits the token even when a native lookup returns the same value.
+      const previous = devicePushToken;
+      if (previous?.type === token.type && previous.data === token.data) return;
+      devicePushToken = token;
+      if (!previous) return;
       rotations += 1;
       cachedToken = undefined;
       pendingToken = undefined;
@@ -55,8 +64,17 @@ export async function expoPushToken(projectId: string, options?: { fresh?: boole
     if (pendingToken?.projectId === projectId) return pendingToken.request;
   }
   const generation = rotations;
-  const request = notifications()
-    .then(async (api) => (await api.getExpoPushTokenAsync({ projectId })).data)
+  const request = withTimeout(
+    notifications().then(async (api) => {
+      if (!devicePushToken) {
+        const observedToken = await api.getDevicePushTokenAsync();
+        devicePushToken ??= observedToken;
+      }
+      return (await api.getExpoPushTokenAsync({ projectId, devicePushToken })).data;
+    }),
+    PUSH_TOKEN_TIMEOUT_MS,
+    "Notification token",
+  )
     .then((token) => {
       if (generation === rotations) cachedToken = { projectId, token };
       return token;

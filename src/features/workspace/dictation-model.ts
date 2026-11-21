@@ -1,4 +1,5 @@
 import type { AssistantVoiceState } from "../assistant/assistant-voice";
+import type { TranscriptionEngine } from "../voice-settings/voice-preferences";
 
 /** Longest draft the composer field accepts. */
 const DRAFT_LIMIT = 256_000;
@@ -34,9 +35,9 @@ export function dictationView(phase: AssistantVoiceState, block: DictationBlock 
 }
 
 /** Capability gate: the chosen engine must be offered by the Host; an unknown capability list is allowed to try. */
-export function dictationBlock(input: { connected: boolean; capabilities: readonly string[] | undefined; engine: "local" | "cloud"; otherVoiceActive: boolean }): DictationBlock | null {
+export function dictationBlock(input: { connected: boolean; capabilities: readonly string[] | undefined; engine: TranscriptionEngine; otherVoiceActive: boolean }): DictationBlock | null {
   if (!input.connected) return "no-computer";
-  const needed = input.engine === "cloud" ? "voice.cloud.v1" : "voice.local.v1";
+  const needed = input.engine === "local" ? "voice.local.v1" : "voice.cloud.v1";
   if (input.capabilities && !input.capabilities.includes(needed)) return "update";
   return input.otherVoiceActive ? "busy" : null;
 }

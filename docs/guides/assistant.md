@@ -18,9 +18,11 @@ For Telegram delivery, use **Load Telegram conversations**, then select a permit
 
 ## Dictation and hands-free calling
 
-The reply model picker groups results by provider and sorts models by name within each group. Search accepts model and provider names. Expand **Voice settings** to load speech-engine availability and choose the assistant's voice.
+The reply model picker groups results by provider and sorts models by name within each group. Search accepts model and provider names. GPT models from the connected computer's Codex catalog appear under **OpenAI · Codex**. Search for **Grok** to find available Grok models. Expand **Voice settings** to load speech-engine availability and choose the assistant's voice.
 
-Open **Settings** next to the chat button in the call header. Choose **Global** or a visible project for the conversation, and choose the reply model from that scope's Host catalog. Changing scope during a call asks you to end the call before switching. Choose the transcription engine, installed Whisper model or available OpenRouter model, and the assistant's voice on the paired computer. Voice changes apply between utterances. Short noises that fail speech detection do not send a message.
+Open **Settings** next to the chat button in the call header. Choose **Global** or a visible project for the conversation, and choose the reply model from that scope's Host catalog. Changing scope during a call asks you to end the call before switching. For transcription, choose the paired computer's installed Whisper model or a cloud option (OpenRouter, OpenAI, or Grok). Cloud options require a compatible Host and credentials configured on that computer. Voice changes apply between utterances. Short noises that fail speech detection do not send a message.
+
+For spoken replies, choose Supertonic, VoxCPM2 or ElevenLabs in the assistant's voice settings. On Android 12 and later, the player starts as audio arrives and keeps the same output open for the whole reply. Speech recognition still sends one utterance after a pause. OpenAI Realtime and Grok Voice are separate desktop call modes.
 
 **Dictate message** captures at most 30 seconds, recognizes speech on the paired computer and inserts text into the original conversation's draft. Review it and press **Send** yourself. **Read reply aloud** is a separate foreground action. Both stop when the app backgrounds, locks or loses access. Pending dictation recovery keeps its original speech identity and cannot be overwritten by another recording.
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, Stack } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocale } from "@/i18n";
 import { useCopy } from "@/ui/copy";
 import {
   Body,
@@ -57,6 +58,7 @@ import type {
   AssistantResponse,
   AssistantThread,
 } from "../../../../src/shared/model/host-contracts/assistant";
+import { dateTimeFormat } from "../../../../src/shared/lib/intl";
 
 export function AssistantScreen({ focusJobId, voiceRequested = false }: { focusJobId?: string; voiceRequested?: boolean } = {}) {
   const machine = useActiveMachine(),
@@ -142,6 +144,7 @@ function AssistantWorkspace({
   current(): boolean;
 }) {
   const copy = useCopy(),
+    locale = useLocale(),
     active = useHostReadActive(),
     projects = useProjectList(),
     cache = useQueryClient();
@@ -440,6 +443,30 @@ function AssistantWorkspace({
       {operationIssue}
     </>
   );
+  const visibleProjectNames = new Map(
+    (projects.directoryReady ? projects.data ?? [] : [])
+      .filter(project => projects.isProjectVisible(project.id))
+      .map(project => [project.id, project.name]),
+  );
+  const globalScope = copy("Genel", "Global");
+  const projectScope = copy("Proje", "Project");
+  const scopeHidden = !!projectId && !visibleProjectNames.has(projectId);
+  const scopeName = !projectId ? globalScope : visibleProjectNames.get(projectId) ||
+    (projects.verifying ? copy("Projeler yükleniyor…", "Loading projects…") : projectScope);
+  const matchingThreadDetails = new Map<string, number>();
+  const recentOptions = inCall ? [] : threads.map(row => {
+    const project = row.projectId ? visibleProjectNames.get(row.projectId) || projectScope : globalScope;
+    const purpose = row.purpose === "job-planning" ? copy("Planlama", "Planning") : copy("Konuşma", "Conversation");
+    const label = `${project} · ${purpose}`;
+    const date = new Date(row.updatedAt);
+    const time = Number.isFinite(date.getTime())
+      ? dateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(date)
+      : copy("Zaman bilinmiyor", "Time unavailable");
+    const key = JSON.stringify([label, time]);
+    const occurrence = (matchingThreadDetails.get(key) ?? 0) + 1;
+    matchingThreadDetails.set(key, occurrence);
+    return { value: row.id, label, detail: occurrence === 1 ? time : `${time} · ${occurrence.toLocaleString(locale)}` };
+  });
   const recentConversations = !inCall ? (
     <>
       {visibleThread?.purpose === "job-planning" ? (
@@ -450,18 +477,12 @@ function AssistantWorkspace({
           disabled={busy || callActive || !state || (!!projectId && !projects.isProjectVisible(projectId))}
         />
       ) : null}
-        {threads.length ? (
+        {recentOptions.length ? (
           <SelectField
             label={copy("Son konuşmalar", "Recent conversations")}
             value={visibleThread?.id}
             disabled={busy || callActive}
-            options={threads.map((row) => ({
-              value: row.id,
-              label: `${row.projectId
-                ? ((projects.data ?? []).find((p) => p.id === row.projectId)?.name ??
-                  copy("Proje", "Project"))
-                : copy("Genel", "Global")} · ${row.purpose === "job-planning" ? copy("Planlama", "Planning") : copy("Konuşma", "Conversation")}`,
-            }))}
+            options={recentOptions}
             onChange={(id) => {
               if (!current() || pending.current || useAssistantCall.getState().phase !== "idle") return;
               const selected = threads.find((row) => row.id === id);
@@ -479,15 +500,12 @@ function AssistantWorkspace({
     label={copy("Onaylar ({p0} bekliyor)", "Approvals ({p0} waiting)", { p0: pendingApprovals })}
     tone="primary" onPress={() => router.push("/approvals")} /> : null;
   const title = state?.profile.name || copy("Asistan", "Assistant");
-  const scopeName = (projects.data ?? []).find(project => project.id === projectId)?.name || copy("Genel", "Global");
-  const scopeHidden = !!projectId && !projects.isProjectVisible(projectId);
   const settings = state ? <>
     <SelectField label={copy("Konuşma kapsamı", "Conversation scope")} value={projectId}
       disabled={busy || (callActive && callPhase !== "listening" && callPhase !== "muted")} options={[
-        { value: "", label: copy("Genel", "Global") },
-        ...(projects.directoryReady ? (projects.data ?? []) : []).filter(project => projects.isProjectVisible(project.id)).map(project => ({
-          value: project.id, label: project.name,
-        })),
+        { value: "", label: globalScope },
+        ...(scopeHidden ? [{ value: projectId, label: scopeName, disabled: true }] : []),
+        ...Array.from(visibleProjectNames, ([value, label]) => ({ value, label })),
       ]} onChange={(value) => {
         if (value === projectId || !current() || busy || (value && !projects.isProjectVisible(value))) return;
         const sessionId = useAssistantCall.getState().sessionId;

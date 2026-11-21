@@ -23,6 +23,10 @@ describe("subagent child sessions", () => {
     expect(childSessions([row("x")], "a")).toEqual([]);
     expect(childSessions(undefined, "a")).toEqual([]);
   });
+  it("keeps an interrupted child distinct from a completed child", () => {
+    const list = childSessions([row("interrupted", { delegationParent: link("a", 1), status: "interrupted" }), row("done", { delegationParent: link("a", 2) })], "a");
+    expect(list.map(child => child.state)).toEqual(["interrupted", "completed"]);
+  });
   it("reads the parent link from the summary or the child's settings", () => {
     expect(parentLinkOf({ delegationParent: link("a", 1) })?.parentSessionId).toBe("a");
     expect(parentLinkOf({ modelSettings: { delegationParent: JSON.stringify(link("b", 1, "advisor")) } })).toMatchObject({ parentSessionId: "b", kind: "advisor" });

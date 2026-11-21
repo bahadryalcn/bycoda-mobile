@@ -5,11 +5,26 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 vi.mock("expo-constants", () => ({ default: { expoConfig: { extra: {} } } }));
 vi.mock("../permissions/device-permissions", () => ({ notifications: vi.fn() }));
 import { readFileSync } from "node:fs";
-import { decodePushPreferences, pushRoute, pushTarget, unmatchedPushNotice } from "./push-model";
+import { decodePushPreferences, pushRoute, pushTarget, unmatchedPushNotice, usePushStatus } from "./push-model";
 import { isViewingSession, setViewingSession } from "./push-viewing";
 import { expoProjectId, pushRegistration } from "./push-registration";
 
 const copy = (_tr: string, en: string) => en;
+
+it("starts a single retry while notification registration is in error", () => {
+  const initial = usePushStatus.getState();
+  try {
+    initial.set({ state: "error", error: new Error("offline") });
+    initial.retry();
+    initial.retry();
+    expect(usePushStatus.getState()).toMatchObject({
+      status: { state: "checking" },
+      retryEpoch: initial.retryEpoch + 1,
+    });
+  } finally {
+    usePushStatus.setState(initial);
+  }
+});
 
 describe("push preferences", () => {
   it("defaults to every event and keeps explicit choices", () => {

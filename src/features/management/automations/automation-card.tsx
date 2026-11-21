@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { agentPresentation } from "../shared/agent-presentation";
 import { RecordCard } from "@/ui/record-card";
 import { router } from "expo-router";
@@ -14,6 +15,7 @@ import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shar
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
+import { useConnectionScope } from "@/state/connection-scope";
 import { Status } from "../shared/status";
 import { AutomationHistory } from "./automation-history";
 import type { AutomationCardProps } from "./types";
@@ -33,17 +35,43 @@ export function AutomationCard({
 }: AutomationCardProps) {
   const copy = useCopy();
   const machine = useActiveMachine();
+  const connection = useConnectionScope();
+  const pendingReview = useRef<symbol | null>(null);
+  const current = useRef({ item, busy, editorOpen });
+  current.current = { item, busy, editorOpen };
   const glyph = useMenuGlyph();
   const relative = useRelativeTime();
   const running = run.isPending && run.variables?.automationId === item.id;
+  const lastRunStatus = item.lastRunStatus;
+  const status = item.needsInput ? "needs-input"
+    : lastRunStatus === "running" || lastRunStatus === "failed" ? lastRunStatus
+    : item.enabled ? (lastRunStatus ?? "idle") : "paused";
   const dayNames = [copy("Paz", "Sun"), copy("Pzt", "Mon"), copy("Sal", "Tue"), copy("Çar", "Wed"), copy("Per", "Thu"), copy("Cum", "Fri"), copy("Cmt", "Sat")];
   const blocks = weekRunBlocks(item);
-  const runNow = () => confirmAction(
-    copy("Şimdi çalıştır", "Run now"),
-    copy("Ajan bu bilgisayarda otomasyon talimatlarını çalıştıracak.", "The agent will run this automation on the computer."),
-    copy("Çalıştır", "Run"),
-    () => run.mutate({ automationId: item.id }), undefined, "default",
-  );
+  const review = (operation: "run" | "delete") => {
+    const deleting = operation === "delete";
+    const token = Symbol();
+    pendingReview.current = token;
+    const target = `${item.name} · ${machine?.name || copy("Bağlı bilgisayar", "Connected computer")}`;
+    const detail = deleting
+      ? copy("Zamanlanmış iş ve çalıştırma geçmişi silinecek.", "The schedule and run history will be deleted.")
+      : copy("Ajan bu bilgisayarda otomasyon talimatlarını çalıştıracak.", "The agent will run this automation on the computer.");
+    confirmAction(
+      deleting ? copy("Otomasyonu sil", "Delete automation") : copy("Şimdi çalıştır", "Run now"),
+      `${target}\n\n${detail}`,
+      deleting ? copy("Sil", "Delete") : copy("Çalıştır", "Run"),
+      () => {
+        if (pendingReview.current !== token) return;
+        pendingReview.current = null;
+        const latest = current.current;
+        if (!connection.isCurrent() || latest.busy || (!deleting && latest.editorOpen) ||
+          latest.item.id !== item.id || latest.item.projectId !== item.projectId || latest.item.updatedAt !== item.updatedAt) return;
+        (deleting ? remove : run).mutate({ automationId: item.id });
+      },
+      undefined,
+      deleting ? "destructive" : "default",
+    );
+  };
   // Edit, history, last session and delete are secondary; they live in the overflow menu.
   const menu = [
     {
@@ -86,23 +114,15 @@ export function AutomationCard({
       label: copy("Sil", "Delete"),
       destructive: true,
       disabled: busy,
-      onPress: () =>
-        confirmAction(
-          copy("Otomasyonu sil", "Delete automation"),
-          copy(
-            "Zamanlanmış iş ve çalıştırma geçmişi silinecek.",
-            "The schedule and run history will be deleted.",
-          ),
-          copy("Sil", "Delete"),
-          () => remove.mutate({ automationId: item.id }),
-        ),
+      onPress: () => review("delete"),
     },
   ];
   return (
     <RecordCard
       title={item.name}
-      status={<Status value={item.enabled ? (item.lastRunStatus ?? "idle") : "paused"} />}
+      status={<Status value={status} />}
       metadata={joinMeta([
+        !item.enabled && status !== "paused" ? copy("Duraklatıldı", "Paused") : undefined,
         item.template?.kind === "project-scan" ? copy("Proje taraması", "Project scan") : undefined,
         !item.projectId ? "Room" : undefined,
         item.trigger?.kind === "continuous" ? copy("Sürekli · en az {p0} dk", "Continuous · minimum {p0} min", { p0: item.trigger.minimumGapMinutes }) : item.trigger?.kind === "event" ? automationEventLabel(item.trigger.event, copy) : scheduleSentence(item, copy),
@@ -111,7 +131,7 @@ export function AutomationCard({
       ])}
       preview={item.prompt ? <Body muted numberOfLines={2}>{item.prompt}</Body> : null}
       footer={<Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running}
-        disabled={busy || editorOpen} onPress={runNow} />}
+        disabled={busy || editorOpen} onPress={() => review("run")} />}
       menu={<RecordTrailing>
         <ActionMenu label={copy("Otomasyon işlemleri", "Automation actions")}
           busy={(save.isPending && (save.variables?.automation as { id?: string } | undefined)?.id === item.id) || (remove.isPending && remove.variables?.automationId === item.id)} actions={menu} />

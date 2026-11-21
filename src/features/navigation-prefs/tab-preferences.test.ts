@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { defaultTabPreferences, dockTabState, moveTab, normalizeTabPreferences, setTabHidden } from "./tab-preferences";
+import { defaultTabPreferences, dockTabState, hasCustomTabLayout, moveTab, normalizeTabPreferences, setTabHidden } from "./tab-preferences";
 
 const routes = ["index", "chats", "inbox", "manage", "settings"].map((name) => ({ key: `${name}-k`, name }));
 
@@ -17,6 +17,12 @@ it("moves and hides tabs", () => {
   const hidden = setTabHidden(defaultTabPreferences, "chats", true);
   expect(hidden.hidden).toEqual(["chats"]);
   expect(setTabHidden(hidden, "chats", false).hidden).toEqual([]);
+});
+
+it("only offers restoring defaults when a tab is hidden or moved", () => {
+  expect(hasCustomTabLayout(defaultTabPreferences)).toBe(false);
+  expect(hasCustomTabLayout(setTabHidden(defaultTabPreferences, "chats", true))).toBe(true);
+  expect(hasCustomTabLayout(moveTab(defaultTabPreferences, 0, 1))).toBe(true);
 });
 
 it("orders the dock, always keeps settings and tracks the focused route", () => {

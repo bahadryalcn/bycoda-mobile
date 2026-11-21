@@ -120,7 +120,7 @@ it("reports refused template insertion without changing the composer draft or se
   const original = { ...emptyComposerDraft(), text: "x".repeat(256_000), noteCard: note };
   state.draft = original; await mount();
   await act(async () => state.select!({ start: 3, end: 5 }));
-  await click("Add to message"); await click("Phone templates");
+  await click("Add to message"); await click("Templates");
   expect(() => state.templateInsert!("too long")).toThrow("The message is too long.");
   expect(state.draft).toBe(original); expect(state.selection).toEqual({ start: 3, end: 5 });
   expect(container.textContent).toContain("Template panel");

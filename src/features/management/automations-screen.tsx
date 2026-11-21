@@ -19,9 +19,10 @@ import {
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { getQueryPresentation } from "@/ui/query-presentation";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { useActiveMachine } from "@/state/machines";
 import type { HostAutomation } from "@/domain/types";
+import { useProjectList } from "../workspace/use-project-directory";
 import { identifier } from "./shared/format";
 import { initialAgent, useAgentProviders } from "./shared/agent";
 import { Scope } from "./shared/scope";
@@ -49,8 +50,8 @@ export function AutomationsScreen() {
     { value: "enabled", label: copy("Etkin", "Enabled") },
     { value: "paused", label: copy("Duraklatılmış", "Paused") },
   ];
-  const machine = useActiveMachine();
   const { projectId, setProjectId } = useLocalProjectScope();
+  const projects = useProjectList();
   const { providers, query: providerQuery } = useAgentProviders(projectId);
   const query = useHostQuery<HostAutomation[]>(
     ["automations"],
@@ -75,26 +76,31 @@ export function AutomationsScreen() {
   const [historyId, setHistoryId] = useState<string | null>(null);
   const busy = save.isPending || run.isPending || remove.isPending;
   const scoped = query.data?.filter(item => !projectId || item.projectId === projectId);
+  const presentation = getQueryPresentation(query);
+  const showCreateInHeader = !!scoped?.length &&
+    (presentation === "ready" || presentation === "stale-error");
   const visible = scoped?.filter(item => (filter === "all" || (filter === "enabled") === item.enabled) && matchesSearch(item.name + " " + item.prompt, search, locale));
-  const canCreate = !!providers.length && !editor && !busy;
+  const projectReady = !projectId || (projects.directoryReady && projects.isProjectVisible(projectId));
+  const canCreate = projectReady && providers.length > 0 && !editor && !busy;
   const startNew = () => {
+    if (!canCreate) return;
     save.reset();
-      setEditor({
-        kind: "new",
-        initial: {
-          ...initialAgent(providers),
-          id: identifier(),
-          name: "",
-          prompt: "",
-          projectId: projectId ?? "",
-          enabled: true,
-          scheduleKind: "daily",
-          time: "09:00",
-          minute: 0,
-          dayOfWeek: 1,
-          maxRunsPerDay: 0,
-        },
-      });
+    setEditor({
+      kind: "new",
+      initial: {
+        ...initialAgent(providers),
+        id: identifier(),
+        name: "",
+        prompt: "",
+        projectId: projectId ?? "",
+        enabled: true,
+        scheduleKind: "daily",
+        time: "09:00",
+        minute: 0,
+        dayOfWeek: 1,
+        maxRunsPerDay: 0,
+      },
+    });
   };
   return (
     <ScreenList<HostAutomation>
@@ -103,7 +109,7 @@ export function AutomationsScreen() {
       data={visible ?? []}
       keyExtractor={(item) => item.id}
       context={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
-      actions={
+      actions={showCreateInHeader ? (
         <IconButton
           label={copy("Yeni otomasyon", "New automation")}
           disabled={!canCreate}
@@ -111,7 +117,7 @@ export function AutomationsScreen() {
         >
           <Plus size={22} strokeWidth={2.2} color={colors.accent} />
         </IconButton>
-      }
+      ) : undefined}
       header={
         <>
           {!projectId ? (
@@ -197,7 +203,7 @@ export function AutomationsScreen() {
                 ? search.trim()
                   ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
                   : { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") }
-                : canCreate
+                : scoped?.length === 0 && canCreate
                   ? { label: copy("Yeni otomasyon", "New automation"), onPress: startNew }
                   : undefined
             }

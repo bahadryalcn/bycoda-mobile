@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { randomUUID } from "expo-crypto";
 import { reportSender } from "./report-config";
 import { Stack as RouterStack, router } from "expo-router";
@@ -9,7 +9,7 @@ import { useInfoHint } from "@/ui/info-hint";
 import { ConsentField } from "@/ui/consent-field";
 import Animated from "react-native-reanimated";
 import Flag from "lucide-react-native/icons/flag";
-import { Body, Disclosure, ErrorText, Field, NavigationGroup, NavigationRow, Screen, Section, SelectField, Sheet, FormActions, Notice, ToggleField, useSuccessToast } from "@/ui/primitives";
+import { Body, Disclosure, ErrorText, Field, NavigationGroup, NavigationRow, Screen, Section, SelectField, Sheet, FormActions, Notice, StateView, ToggleField } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
 import {
@@ -52,23 +52,31 @@ export function ContentReportScreen() {
   const active = useRef(true);
   const reviewOwner = useRef<ReportReview | null>(null);
   const retired = useRef(false);
-  const toastSuccess = useSuccessToast();
-  // Announce the delivery once, when it happens while this screen is mounted.
-  const announced = useRef(status);
-  useEffect(() => {
-    if (announced.current !== status && status === "sent") toastSuccess(copy("Bildirim alındı.", "Report received."));
-    announced.current = status;
-  }, [status, toastSuccess, copy]);
   const reviewCurrent = !discarding || isContentReportReviewCurrent(discarding);
   useLayoutEffect(() => { if (discarding && !reviewCurrent) retired.current = true; }, [discarding, reviewCurrent]);
   useLayoutEffect(() => { active.current = true; return () => { active.current = false; reviewOwner.current = null; }; }, []);
   const closeReview = () => { reviewOwner.current = null; retired.current = true; setDiscarding(null); };
   const staleReview = !!discarding && (!reviewCurrent || retired.current);
+  const title = copy("İçerik bildir", "Report content");
+  const doneLabel = copy("Tamam", "Done");
+  const close = () => { if (router.canGoBack()) router.back(); else router.replace("/settings"); };
+  if (status === "sent") {
+    return (
+      <Screen footer={<FormActions submitLabel={doneLabel} onSubmit={close} />}>
+        <RouterStack.Screen options={{ title }} />
+        <StateView
+          illustration="success"
+          title={copy("Bildirim alındı.", "Report received.")}
+          description={receiptId ? copy("Referans: {p0}", "Reference: {p0}", { p0: receiptId }) : undefined}
+        />
+      </Screen>
+    );
+  }
   const busy = status === "sending";
+  const hasDraft = draft.reason !== "other" || !!draft.description.trim() || !!draft.excerpt || draft.includeExcerpt || draft.consent;
   const validation = reportDraftError(draft);
-  const visibleError = status === "sent" ? null : error;
   // A blank description is flagged beside its field once the user has left it or ticked consent.
-  const descriptionError = status !== "sent" && (visibleError === "description" || (!draft.description.trim() && (descriptionTouched || draft.consent)));
+  const descriptionError = error === "description" || (!draft.description.trim() && (descriptionTouched || draft.consent));
   // Why Send is disabled, shown next to it so the reason is never hidden behind the consent switch.
   const disabledReason = status === "idle" && reportSender && !error && validation ? validation : null;
   const reasonLabels = {
@@ -101,21 +109,20 @@ export function ContentReportScreen() {
   };
   return (
     <Screen footer={<FormActions
-      submitLabel={status === "sent" ? copy("Gönderildi", "Sent") : copy("Gönder", "Send")}
-      disabled={!reportSender || status === "sent" || !!validation} busy={busy}
-      feedback={visibleError === "send" ? <Notice tone="danger" message={errorLabels.send} />
-        : status === "sent" && receiptId ? <Body selectable muted>{receiptId}</Body>
+      submitLabel={!reportSender ? doneLabel : error === "send" ? copy("Yeniden dene", "Retry") : copy("Gönder", "Send")}
+      disabled={!!reportSender && !!validation} busy={busy}
+      feedback={error === "send" ? <Notice tone="danger" message={errorLabels.send} />
         : disabledReason ? <Notice message={disabledReason === "consent" ? errorLabels.sendBlockedConsent : errorLabels.sendBlockedDescription} />
         : null}
-      onSubmit={() => { if (!active.current || busy) return; void sendContentReport({ review: { draft, status, requestId, receiptId, revision }, sender: reportSender, newRequestId: randomUUID, assertAccess: assertAppAccess }).catch(() => {}); }}
-      cancelLabel={copy("Taslağı sil", "Discard draft")} cancelDisabled={busy}
-      onCancel={() => {
+      onSubmit={reportSender ? () => { if (!active.current || busy) return; void sendContentReport({ review: { draft, status, requestId, receiptId, revision }, sender: reportSender, newRequestId: randomUUID, assertAccess: assertAppAccess }).catch(() => {}); } : close}
+      cancelLabel={hasDraft ? copy("Taslağı sil", "Discard draft") : undefined} cancelDisabled={busy}
+      onCancel={hasDraft ? () => {
         if (busy || !active.current) return;
         const review = { draft, status, requestId, receiptId, revision };
         retired.current = false; reviewOwner.current = review; setDiscarding(review);
-      }}
+      } : undefined}
     />}>
-      <RouterStack.Screen options={{ title: copy("İçerik bildir", "Report content") }} />
+      <RouterStack.Screen options={{ title }} />
       {!reportSender || error === "service" ? <Notice tone="info" message={errorLabels.service} /> : null}
       <Section title={copy("Neden", "Reason")}>
       <Animated.View entering={enterItem(0)}>
@@ -134,7 +141,7 @@ export function ContentReportScreen() {
       <Animated.View entering={enterItem(1)}>
         <Field
           label={copy("Açıklama", "Description")}
-          error={descriptionError ? (visibleError === "description" ? errorLabels.description : errorLabels.descriptionBlank) : undefined}
+          error={descriptionError ? (error === "description" ? errorLabels.description : errorLabels.descriptionBlank) : undefined}
           hint={`${Array.from(draft.description).length} / ${maxReportDescription}`}
           value={draft.description}
           maxLength={maxReportDescription}
@@ -169,7 +176,7 @@ export function ContentReportScreen() {
         />
       ) : null}
       </Section>
-      <Section title={copy("Onay", "Consent")}>
+      {reportSender ? <Section title={copy("Onay", "Consent")}>
       <ConsentField label={copy("Gönderim onayı", "Consent to send")}
         detail={copy(
           "Seçtiğim bilgilerin incelenmek üzere bycoda’ya gönderilmesini onaylıyorum.",
@@ -177,8 +184,8 @@ export function ContentReportScreen() {
         )}
         value={draft.consent} disabled={busy}
         onChange={(consent) => updateContentReport({ consent })} />
-      <ErrorText error={visibleError === "consent"} message={errorLabels.consent} />
-      </Section>
+      <ErrorText error={error === "consent"} message={errorLabels.consent} />
+      </Section> : null}
       <Body muted>{warning}</Body>
       <Disclosure label={copy("Bildirim ve gizlilik", "Reporting & privacy")}>
         <NavigationGroup>
@@ -198,7 +205,10 @@ export function ContentReportScreen() {
           onSubmit={() => {
             if (!discarding || reviewOwner.current !== discarding || retired.current) return;
             try { assertAppAccess(); } catch { return; }
-            if (discardReviewedContentReport(discarding)) closeReview();
+            if (discardReviewedContentReport(discarding)) {
+              setDescriptionTouched(false);
+              closeReview();
+            }
           }} />
       </Sheet>
     </Screen>

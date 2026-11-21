@@ -6,7 +6,7 @@ const fixture = vi.hoisted(() => ({ send: vi.fn(), logs: vi.fn(), toast: vi.fn()
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, useLocalSearchParams: () => ({}) }));
 vi.mock("@/ui/info-hint", () => ({ HintSection: ({ children }: PropsWithChildren) => createElement("section", null, children) }));
 vi.mock("../account/ui/account-context", () => ({ useAccount: () => ({ status: "signedOut" }) }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: { p0: string }) => en.replace("{p0}", values?.p0 ?? "{p0}") }));
 vi.mock("./diagnostic-copy", () => ({ useDiagnosticResultText: () => (value: string) => value }));
 vi.mock("./diagnostics-runtime", () => ({
   useDiagnosticPrefs: (select: (state: unknown) => unknown) => select({ consent: { mode: "ask" }, hydrate: async () => {}, setMode: async () => {} }),
@@ -52,6 +52,21 @@ it("suppresses synchronous duplicate send taps and clears only unchanged sent dr
   const response = deferred<FeedbackSubmitResult>(); fixture.send.mockReturnValue(response.promise); useFeedbackDraft.getState().patch({ message: "Send once" }); await render();
   await act(() => { container.querySelector("button")!.click(); container.querySelector("button")!.click(); });
   expect(fixture.send).toHaveBeenCalledOnce(); await act(async () => response.resolve({ status: "sent", reference: "receipt" })); expect(useFeedbackDraft.getState().draft.message).toBe("");
+});
+it("keeps one delivery and its receipt when feedback is reopened before the response", async () => {
+  const response = deferred<FeedbackSubmitResult>();
+  fixture.send.mockReturnValue(response.promise);
+  useFeedbackDraft.getState().patch({ message: "One pending feedback" });
+  await render();
+  await send();
+  await act(() => root.unmount());
+  root = createRoot(container);
+  await render();
+  await send();
+  expect(fixture.send).toHaveBeenCalledOnce();
+  await act(async () => response.resolve({ status: "sent", reference: "reopened-receipt" }));
+  expect(container.textContent).toContain("reopened-receipt");
+  expect(useFeedbackDraft.getState().draft.message).toBe("");
 });
 it("keeps diagnostic note edited during upload", async () => {
   const response = deferred<"sent">(); fixture.logs.mockReturnValue(response.promise); await act(async () => root.render(createElement(DiagnosticsSettings)));

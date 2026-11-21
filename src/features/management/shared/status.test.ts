@@ -15,3 +15,8 @@ it("names every job state in words and gives problems and finished work their ow
   expect(tone("completed")).toBe("success");
   expect(["queued", "paused", "cancelled"].map(tone)).toEqual(["default", "default", "default"]);
 });
+
+it("localizes a skipped automation run", () => {
+  expect(statusLabel("skipped", copy)).toBe("Skipped");
+  expect(statusLabel("skipped", (tr) => tr)).toBe("Atlanan");
+});

@@ -5,9 +5,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { RemoteInboxItem } from "../../../../src/features/inbox/model/remoteInbox";
 import { createInboxBrowseMemory } from "./inbox-browse-memory";
 import { RemoteHostError } from "@/remote/host-error";
+import { InboxLocalScopeContext, useInboxLocalScope } from "./inbox-local-scope";
 const fixture = vi.hoisted(() => ({
   memory:null as ReturnType<typeof createInboxBrowseMemory>|null, locale: "en",
-  active: "fixture-machine", project: "fixture-project", readError: null as Error | null,
+  active: "fixture-machine", project: "fixture-project", localProject: null as string | null, readError: null as Error | null,
   reads: [] as boolean[], presses: new Map<string,()=>void>(), searchChange: null as null | ((value:string)=>void),
   available: true, success: true, fetching: false, partial: false, empty: false,
   omittedProjects: [] as { id: string; path: string }[],
@@ -40,7 +41,8 @@ vi.mock("./provider-queries", () => ({
 }));
 vi.mock("./provider-detail", async () => {
   const { useState } = await import("react");
-  return { ProviderInboxDetail: ({ item }: any) => { const [draft, setDraft] = useState(""); return createElement("label", null, item.title,
+  return { ProviderInboxDetail: ({ item, origin }: any) => { const [draft, setDraft] = useState(""); const scope = useInboxLocalScope();
+    return createElement("label", { "data-detail-scope": scope.matches(origin) ? "current" : "stale" }, item.title,
     createElement("input", { "aria-label": "Draft reply", value: draft, onChange: (event: any) => setDraft(event.target.value) })); } };
 });
 vi.mock("@/ui/issue-summary", () => ({ IssueSummary: ({ issues, onRetry, retrying }: any) => issues.filter(Boolean).length ? createElement("section", null,
@@ -74,14 +76,23 @@ vi.mock("@/ui/primitives", async () => {
     Empty: ({ title }: any) => createElement("p", null, title),
     ActionMenu: ({ actions }: any) => createElement("div", null, ...actions.filter(Boolean).map((action: any) => createElement(Button, { key: action.key, ...action }))),
     ToggleField: ({ label, value, onChange }: any) => createElement("button", { onClick: () => onChange(!value) }, label),
-    Sheet: ({ children, title }: PropsWithChildren<{ title?: string }>) => createElement("aside", { "data-detail-sheet": true, "data-title": title }, children),
+    Sheet: ({ children, title }: PropsWithChildren<{ title?: string }>) => createElement("aside", { "data-detail-sheet": true, "data-title": title },
+      createElement(InboxLocalScopeContext, { value: null }, children)),
     QueryState,
   };
 });
 import { ProviderInboxBrowse } from "./provider-browse";
 let root: ReturnType<typeof createRoot>, container: HTMLDivElement;
 const origin = { machineId: "fixture-machine", projectId: "fixture-project" };
-async function render() { await act(async () => root.render(createElement(ProviderInboxBrowse, { origin }))); }
+async function render() {
+  const browse = createElement(ProviderInboxBrowse, { origin });
+  const projectId = fixture.localProject;
+  await act(async () => root.render(projectId ? createElement(InboxLocalScopeContext, { value: {
+    projectId,
+    setProjectId: () => {},
+    matches: target => target.machineId === fixture.active && target.projectId === fixture.localProject,
+  } }, browse) : browse));
+}
 function buttons(label: string) { return [...container.querySelectorAll("button")].filter((button) => button.textContent === label); }
 async function click(label: string) { await act(async () => buttons(label)[0].click()); }
 async function input(label: string, value: string) {
@@ -89,7 +100,7 @@ async function input(label: string, value: string) {
   await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(field, value); field.dispatchEvent(new Event("input", { bubbles: true })); });
 }
 beforeEach(() => {
-  fixture.memory=null;fixture.locale="en";fixture.error = null; fixture.readError=null;fixture.active="fixture-machine";fixture.project="fixture-project";fixture.reads=[];fixture.presses.clear();fixture.searchChange=null;
+  fixture.memory=null;fixture.locale="en";fixture.error = null; fixture.readError=null;fixture.active="fixture-machine";fixture.project="fixture-project";fixture.localProject=null;fixture.reads=[];fixture.presses.clear();fixture.searchChange=null;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); vi.useFakeTimers();
   fixture.available = true; fixture.success = true; fixture.fetching = false; fixture.partial = false; fixture.empty = false;
   fixture.omittedProjects = [];
@@ -98,6 +109,16 @@ beforeEach(() => {
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.clearAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+it("rechecks the desktop connection without reading provider data while unavailable", async () => {
+  fixture.available = false;
+  await render();
+  expect(container.textContent).toContain("Open Bycoda on your computer");
+  await click("Retry");
+  expect(fixture.availabilityRetry).toHaveBeenCalledOnce();
+  expect(fixture.itemsRetry).not.toHaveBeenCalled();
+  expect(fixture.providersRetry).not.toHaveBeenCalled();
+});
 
 it("discloses projects outside the remote Inbox limit while keeping available items visible", async () => {
   fixture.omittedProjects = [{ id: "other", path: "/other" }, { id: "another", path: "/another" }];
@@ -122,8 +143,18 @@ it.each([0, 1, 1284])("labels the %s returned records with an active-locale coun
 it("clears an empty filter result without changing filters before Apply", async () => {
   fixture.empty = true; await render(); expect(fixture.request.assignedToMe).toBe(false);
   await click("Filters"); await click("Assigned to me only"); expect(fixture.request.assignedToMe).toBe(false);
-  await click("Apply"); expect(fixture.request.assignedToMe).toBe(true); await click("Clear filters");
+  await click("Apply"); expect(fixture.request.assignedToMe).toBe(true);
+  expect(buttons("Clear filters")).toHaveLength(1);
+  await click("Clear filters");
   expect(fixture.request).toEqual({ assignedToMe: false, state: "open", search: "" });
+  expect(buttons("Clear filters")).toHaveLength(0);
+});
+it("uses search recovery without advertising active filters for an empty text search", async () => {
+  fixture.empty = true;
+  await render();
+  await input("Search", "no match");
+  await act(async () => vi.advanceTimersByTime(350));
+  expect(container.textContent).toContain("No matching results");
   expect(buttons("Clear filters")).toHaveLength(0);
 });
 it("retains independent partial failures and routes each retry to its source without claiming an empty success", async () => {
@@ -170,6 +201,14 @@ it("keeps a selected detail and its draft outside the virtualized header when av
   expect(container.querySelector("main")!.dataset.rowCount).toBe("0");
   expect(container.querySelector("main aside[data-detail-sheet]")).toBeNull();
   expect(container.querySelector("aside[data-detail-sheet]")?.getAttribute("data-title")).toBe("Details");
+});
+
+it("preserves the Inbox-local project when provider detail moves into the overlay", async () => {
+  fixture.project = "workspace-project";
+  fixture.localProject = origin.projectId;
+  await render();
+  await click("Item 1");
+  expect(container.querySelector("[data-detail-scope]")?.getAttribute("data-detail-scope")).toBe("current");
 });
 
 it("describes committed filters without previewing cancelled draft choices",async()=>{

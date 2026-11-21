@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   endpoint: "https://original.example", supported: true,
+  disconnected: false, pending: false,
   settings: { maxRunningTasks: 2, dailyAgentMinutes: 120, usedMinutes: 42.5, limitReached: false },
   write: vi.fn(), refetch: vi.fn(), reads: [] as boolean[], error: undefined as unknown,
 }));
@@ -12,21 +13,22 @@ const machine = () => ({ id: "machine", name: "Original computer", environmentId
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => machine(), useMachines: { getState: () => ({ activeId: "machine", machines: [machine()] }) } }));
 vi.mock("@/state/queries", () => ({
   hostKey: (id: string, key: string[]) => ["machine", id, ...key],
-  useHostQuery: (_key: unknown, _method: string, _params: unknown, options: { enabled: boolean }) => { state.reads.push(options.enabled); return { data: (state.error as { kind?: string })?.kind === "auth" ? undefined : state.settings, error: state.error, isError: !!state.error, refetch: state.refetch }; },
+  useHostQuery: (_key: unknown, _method: string, _params: unknown, options: { enabled: boolean }) => { state.reads.push(options.enabled); return { data: state.pending || (state.error as { kind?: string })?.kind === "auth" ? undefined : state.settings, isPending: state.pending, error: state.error, isError: !!state.error, refetch: state.refetch }; },
   useHostMutation: () => ({ mutateAsync: state.write, isPending: false }),
 }));
 vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
+vi.mock("@/state/host-runtime-state", () => ({ useActiveHostLinkDown: () => state.disconnected }));
 vi.mock("react-native-reanimated", () => ({ default: { View: ({ children }: PropsWithChildren) => createElement("div", null, children) } }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { caption: {} } }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
-vi.mock("./shell-profile-settings", () => ({ ShellProfileSettings: () => null }));
+vi.mock("./shell-profile-settings", () => ({ ShellProfileSettings: () => "Shell settings" }));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestCloseThen: (action: () => void) => action() }) }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: { p0?: string }) => en.replace("{p0}", values?.p0 ?? "{p0}") }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean }) => createElement("button", { disabled: disabled || busy, onClick: onPress }, label);
-  return { Stack: Wrap, Body: Wrap, Disclosure: Wrap, Button,
+  return { Stack: Wrap, Body: Wrap, Disclosure: Wrap, SectionHeader: Wrap, Button,
     QueryState: ({ query }: { query: { error?: Error } }) => query.error ? createElement("p", null, query.error.message) : null,
     ErrorText: ({ error }: { error?: string | Error }) => error ? createElement("p", null, String(error)) : null,
     StateView: ({ title, description, action }: { title: string; description?: string; action?: { label: string; onPress: () => void } }) => createElement("div", null, createElement("p", null, title), description ? createElement("p", null, description) : null, action ? createElement("button", { onClick: action.onPress }, action.label) : null), Notice: ({ message }: { message: string }) => createElement("p", null, message),
@@ -45,6 +47,44 @@ async function render() {
 async function edit(value: string) { await act(async () => { const input = node.querySelector("input")!; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); }); }
 async function click(label: string) { await act(async () => [...node.querySelectorAll("button")].find(button => button.textContent === label)!.click()); }
 const save = () => click("Save computer settings");
+it("offers one recovery action when opened with an unreachable computer", async () => {
+  state.disconnected = true;
+  try {
+    await render();
+    expect(node.textContent).toContain("Can't reach Original computer on this network.");
+    expect(node.textContent).not.toContain("Shell settings");
+    expect(node.querySelector("input")).toBeNull();
+    expect(state.reads).toEqual([false]);
+  } finally {
+    state.disconnected = false;
+  }
+});
+it("keeps independent settings available while the task limits load", async () => {
+  state.pending = true;
+  try {
+    await render();
+    expect(node.querySelector("input")).toBeNull();
+    expect(node.textContent).toContain("Shell settings");
+  } finally { state.pending = false; }
+});
+it("keeps a task limit draft through a dropped connection and prevents sending it offline", async () => {
+  await render();
+  await edit("3");
+  state.disconnected = true;
+  try {
+    await render();
+    expect(node.querySelector("input")?.value).toBe("3");
+    expect(node.querySelector("input")?.disabled).toBe(true);
+    await save();
+    expect(state.write).not.toHaveBeenCalled();
+    state.disconnected = false;
+    await render();
+    expect(node.querySelector("input")?.value).toBe("3");
+    expect(node.querySelector("input")?.disabled).toBe(false);
+  } finally {
+    state.disconnected = false;
+  }
+});
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; node?.remove(); cache?.clear(); state.endpoint = "https://original.example"; state.supported = true; state.settings = { maxRunningTasks: 2, dailyAgentMinutes: 120, usedMinutes: 42.5, limitReached: false }; state.error = undefined; state.reads = []; vi.resetAllMocks(); vi.unstubAllGlobals(); });
 it("saves only the explicit draft and preserves newer edits during acknowledgement", async () => {
   let resolve!: (result: unknown) => void; state.write.mockImplementation(() => new Promise(reply => { resolve = reply; }));

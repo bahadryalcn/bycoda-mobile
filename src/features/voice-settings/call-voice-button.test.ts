@@ -26,7 +26,7 @@ it("opens the model settings without mounting voice setup until requested", asyn
     await act(async () => container.querySelector("button")!.click());
     expect(container.textContent).toContain("Reply model");
     expect(container.textContent).not.toContain("Voice runtime controls");
-    await act(async () => container.querySelector("section button")!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>("section button")!.click());
     expect(container.textContent).toContain("Voice runtime controls");
   } finally {
     await act(async () => root.unmount());

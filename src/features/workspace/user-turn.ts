@@ -28,6 +28,26 @@ export function userTurn(block: Pick<Block, "role" | "text" | "author" | "attach
 /** The words a person sees: crew envelopes and legacy command prefixes stay in the send only. */
 export const userPromptDisplay = (text: string) => operatorPromptText(visibleUserPrompt(text));
 
+/** A kickoff embeds a versioned worker contract between paragraphs of execution guidance. */
+export function taskKickoffObjective(text: string, author: Block["author"]): string | undefined {
+  if (author?.kind !== "task" || author.reason !== "kickoff") return;
+  const schema = "bycoda.task-contract.v1";
+  for (const paragraph of text.split(/\r?\n[\t ]*\r?\n/)) {
+    const candidate = paragraph.trim();
+    if (!candidate.startsWith("{") || !candidate.includes(schema)) continue;
+    try {
+      const contract: { schema?: unknown; task?: { id?: unknown; instructions?: { objective?: unknown } } } | null =
+        JSON.parse(candidate);
+      const objective = contract?.task?.instructions?.objective;
+      if (contract?.schema === schema && contract.task?.id === author.id && typeof objective === "string" && objective.trim()) {
+        return objective.trim();
+      }
+    } catch {
+      // Older or shortened transcript blocks can lack a complete contract.
+    }
+  }
+}
+
 /** Desktop's "{name} wrote" line for prompts an assistant, task, automation or steward sent. */
 export function userTurnAuthorLabel(
   author: Block["author"],

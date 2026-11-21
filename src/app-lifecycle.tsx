@@ -83,12 +83,8 @@ export function AppLifecycle({ children, cache }: LifecycleProps) {
   // MachinesReadyGate holds back only the protected workspace until the saved computers are read.
   return (
     <>
-      {hydrated ? (
-        <>
-          <WidgetCoordinator />
-          <PushCoordinator />
-        </>
-      ) : null}
+      {hydrated ? <WidgetCoordinator /> : null}
+      <PushCoordinator />
       {children}
     </>
   );

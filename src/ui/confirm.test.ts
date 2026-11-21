@@ -20,6 +20,17 @@ describe("confirmation intent and authority", () => {
     expect(remove).toHaveBeenCalledOnce();
   });
 
+  it("lets Android Back dismiss the prompt without confirmation", () => {
+    vi.stubEnv("EXPO_OS", "android");
+    const dispatch = vi.fn();
+    confirmAction("Run now", "Review target", "Run", dispatch);
+    const [, , buttons, options] = vi.mocked(Alert.alert).mock.calls[0]!;
+    expect(options?.cancelable).toBe(true);
+    options?.onDismiss?.();
+    buttons?.[0]?.onPress?.();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("ordinary start still requires confirmation and uses ordinary styling", () => {
     vi.stubEnv("EXPO_OS", "ios");
     const start = vi.fn();

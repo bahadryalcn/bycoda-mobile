@@ -17,6 +17,9 @@ export type NativeVoiceCompanion = {
   setMuted(sessionId: string, muted: boolean): void;
   /** Only an app-owned cached WAV is accepted. Completion arrives as a playback event. */
   playWav(sessionId: string, playbackId: string, uri: string): Promise<void>;
+  startPcm?(sessionId: string, playbackId: string, sampleRate: number): Promise<void>;
+  appendPcm?(sessionId: string, playbackId: string, audio: string): Promise<void>;
+  finishPcm?(sessionId: string, playbackId: string): Promise<void>;
   stopPlayback(sessionId: string, playbackId: string): void;
   endSession(sessionId: string): void;
   enterPip(sessionId: string): Promise<boolean>;

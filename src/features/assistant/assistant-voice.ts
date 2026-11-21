@@ -2,17 +2,19 @@ import { AssistantUtteranceVad } from "./assistant-call-loop";
 import { pcmBase64, resamplePcm } from "../../../../src/features/voice/model/voiceVad";
 import { graphemes } from "../../../../src/shared/lib/text/truncate";
 import { assistantMicrophoneLevel, type AssistantVoiceStage } from "./assistant-voice-presentation";
+import type { TranscriptionEngine } from "../voice-settings/voice-preferences";
+import type { CloudDictationProvider } from "../../../../src/features/voice/model/dictationModels";
 
 /** shortcut: the first part ends at a word boundary within 160 graphemes so audio starts sooner; upgrade if synthesis cost changes. */
 const FIRST_SPEECH_PART = 160;
 const MAX_SPEECH_PART = 700;
 
-export function speechParts(text: string): string[] {
+export function speechParts(text: string, shortFirstPart = true): string[] {
   const units = [...graphemes(text)];
   for (const unit of units) if (unit.length > MAX_SPEECH_PART) throw new Error("Speech text contains an oversized character sequence.");
   const parts: string[] = [];
   let start = 0;
-  if (units.length > FIRST_SPEECH_PART) {
+  if (shortFirstPart && units.length > FIRST_SPEECH_PART) {
     const end = units.lastIndexOf(" ", FIRST_SPEECH_PART - 1) + 1;
     const head = units.slice(0, end).join("");
     if (end > 0 && head.length <= MAX_SPEECH_PART) { parts.push(head); start = end; }
@@ -26,7 +28,8 @@ export function speechParts(text: string): string[] {
   return parts;
 }
 
-type SpeechChunks = { audio: string; sampleRate: number }[];
+export type SpeechChunk = { audio: string; sampleRate: number };
+type SpeechChunks = SpeechChunk[];
 
 /** Thrown when the phone denied microphone access; the UI offers to open system Settings. */
 export class MicrophonePermissionError extends Error {
@@ -51,13 +54,14 @@ export type VoiceCapture = { start(): Promise<void>; stop(): void };
 export type AssistantVoiceDependencies = {
   capture(onBuffer: (data: Int16Array, sampleRate: number) => void, onEnded?: (reason: string, error?: string) => void): Promise<VoiceCapture>;
   play(chunks: { audio: string; sampleRate: number }[], current: () => boolean): Promise<void>;
+  playStream?(chunks: AsyncIterable<SpeechChunk>, current: () => boolean): Promise<void>;
   stopPlayback(): void;
   state(state: AssistantVoiceState, target?: AssistantVoiceTarget): void;
   transcript(target: AssistantVoiceTarget, text: string): void | Promise<void>;
   error(error: unknown): void;
   level?(value: number): void;
   /** Transcription engine chosen in Settings → Voice; absent means this computer. */
-  engine?(): "local" | "cloud";
+  engine?(): TranscriptionEngine;
   cloudModel?(): string | undefined;
   /** The assistant's voice chosen in Settings → Voice; absent means the Host default. */
   speech?(): Record<string, unknown>;
@@ -69,7 +73,7 @@ export type AssistantVoiceDependencies = {
 export class AssistantVoice {
   private epoch = 0;
   private capture?: VoiceCapture;
-  private lease?: { port: VoicePort; id: string };
+  private lease?: { port: VoicePort; id: string; cloud?: { provider: CloudDictationProvider; model?: string } };
   private timer?: ReturnType<typeof setTimeout>;
   private keepAlive?: ReturnType<typeof setInterval>;
   private frames: Int16Array[] = [];
@@ -129,7 +133,13 @@ export class AssistantVoice {
       if (!this.current(epoch)) { capture.stop(); if (epoch === this.epoch) this.cancel(); return; }
       this.capture = capture;
       this.dependencies.stage?.("transcription");
-      const result = this.dependencies.engine?.() === "cloud" ? { lease: CLOUD_LEASE } : await port.request<{ lease: string }>("voice.local.start", { config: options?.natural ? this.speechConfig() : { natural: false }, recognitionOnly: true }, { retry: false, timeoutMs: 60000 });
+      const engine = this.dependencies.engine?.() ?? "local";
+      const model = this.dependencies.cloudModel?.();
+      const cloud = engine === "local" ? undefined : {
+        provider: engine === "cloud" ? "openrouter" as const : engine,
+        ...(model ? { model } : {}),
+      };
+      const result = cloud ? { lease: CLOUD_LEASE } : await port.request<{ lease: string }>("voice.local.start", { config: options?.natural ? this.speechConfig() : { natural: false }, recognitionOnly: true }, { retry: false, timeoutMs: 60000 });
       if (typeof result?.lease !== "string" || !result.lease) throw new Error("Invalid voice connection.");
       if (!this.current(epoch)) {
         capture.stop();
@@ -137,7 +147,7 @@ export class AssistantVoice {
         if (result.lease !== CLOUD_LEASE) await port.request("voice.local.release", { lease: result.lease }, { retry: false, timeoutMs: 5000 }).catch(() => {});
         return;
       }
-      this.lease = { port, id: result.lease };
+      this.lease = { port, id: result.lease, cloud };
       this.dependencies.stage?.("microphone");
       await capture.start();
       if (!this.current(epoch)) { capture.stop(); if (epoch === this.epoch) this.cancel(); return; }
@@ -171,9 +181,8 @@ export class AssistantVoice {
       for (const frame of this.frames) { pcm.set(frame, offset); offset += frame.length; }
       this.frames = []; this.samples = 0;
       const audio = pcmBase64(pcm);
-      const model = this.dependencies.cloudModel?.();
-      const result = lease.id === CLOUD_LEASE
-        ? await lease.port.request<{ text: string }>("voice.cloud.transcribe", { provider: "openrouter", audio, ...(model ? { model } : {}) }, { retry: false, timeoutMs: 40000 })
+      const result = lease.cloud
+        ? await lease.port.request<{ text: string }>("voice.cloud.transcribe", { ...lease.cloud, audio }, { retry: false, timeoutMs: 40000 })
         : await lease.port.request<{ text: string }>("voice.local.transcribe", { lease: lease.id, audio }, { retry: false, timeoutMs: 40000 });
       if (!this.current(epoch)) return;
       if (typeof result?.text !== "string" || result.text.length > 16000) throw new Error("Speech could not be recognized. Try again.");
@@ -201,6 +210,10 @@ export class AssistantVoice {
           if (this.current(epoch)) { this.cancel(); this.dependencies.error(error); }
         });
       }, 30000);
+      if (this.dependencies.playStream) {
+        await this.dependencies.playStream(this.streamSpeech(port, result.lease, epoch, text), () => this.current(epoch));
+        return;
+      }
       // Parts play in order. The next part synthesizes while the current one plays; parts are never synthesized concurrently.
       const parts = speechParts(text);
       let pending: Promise<SpeechChunks | undefined> | undefined;
@@ -219,11 +232,32 @@ export class AssistantVoice {
     finally { if (epoch === this.epoch) { await this.release(); if (epoch === this.epoch) this.update("idle"); } }
   }
 
+  private async *streamSpeech(port: VoicePort, lease: string, epoch: number, text: string) {
+    let started = false;
+    for (const part of speechParts(text, false)) {
+      if (!this.current(epoch)) return;
+      try {
+        for await (const chunk of this.speechChunks(port, lease, epoch, part)) {
+          if (!started) { started = true; this.dependencies.stage?.("playback"); }
+          yield chunk;
+        }
+      } catch (error) {
+        if (this.current(epoch)) this.dependencies.stage?.("synthesis");
+        throw error;
+      }
+    }
+  }
+
   /** Synthesizes one part; resolves undefined once the request is no longer current. */
   private async synthesize(port: VoicePort, lease: string, epoch: number, part: string): Promise<SpeechChunks | undefined> {
+    const chunks: SpeechChunks = [];
+    for await (const chunk of this.speechChunks(port, lease, epoch, part)) chunks.push(chunk);
+    if (this.current(epoch)) return chunks;
+  }
+
+  private async *speechChunks(port: VoicePort, lease: string, epoch: number, part: string): AsyncGenerator<SpeechChunk> {
     const speech = await port.request<{ id: string }>("voice.local.speak", { lease, text: part }, { retry: false, timeoutMs: 30000 });
     if (typeof speech?.id !== "string" || !speech.id) throw new Error("Invalid speech response.");
-    const chunks: SpeechChunks = [];
     let complete = false, bytes = 0;
     for (let count = 0; count < 420 && this.current(epoch); count++) {
       const chunk = await port.request<{ audio?: string; sampleRate?: number; done?: boolean; error?: string }>("voice.local.speechNext", { lease, id: speech.id }, { retry: false, timeoutMs: 15000 });
@@ -234,12 +268,11 @@ export class AssistantVoice {
         if (!/^[A-Za-z0-9+/]+={0,2}$/.test(chunk.audio) || !Number.isInteger(chunk.sampleRate) || chunk.sampleRate! < 8000 || chunk.sampleRate! > 96000) throw new Error("Invalid speech audio.");
         bytes += chunk.audio.length;
         if (bytes > 8_000_000) throw new Error("Speech response is too large.");
-        chunks.push({ audio: chunk.audio, sampleRate: chunk.sampleRate! });
+        yield { audio: chunk.audio, sampleRate: chunk.sampleRate! };
       }
     }
-    if (!this.current(epoch)) return undefined;
+    if (!this.current(epoch)) return;
     if (!complete) throw new Error("The computer took too long to generate speech.");
-    if (!chunks.length) throw new Error("The computer returned no speech audio.");
-    return chunks;
+    if (!bytes) throw new Error("The computer returned no speech audio.");
   }
 }

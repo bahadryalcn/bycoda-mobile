@@ -28,7 +28,6 @@ import {
   Stack,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
 import { Status } from "../shared/status";
 import { joinMeta, useRelativeTime } from "../shared/record-bits";
@@ -38,6 +37,8 @@ import { ReviewNotes } from "./review-notes";
 import type { TaskCardProps } from "./types";
 import { TaskDeclineFeedback } from "./task-feedback";
 import { stamp } from "../shared/format";
+import { useRecordConfirmation } from "../shared/use-record-confirmation";
+import { hasUnmergedBranch } from "../../../../../src/features/tasks/model/taskRules";
 
 export function TaskCard({
   task,
@@ -46,6 +47,7 @@ export function TaskCard({
   editorOpen,
   onEdit,
   onDelivery,
+  onReviewDelivery,
   move,
   remove,
   decline,
@@ -59,14 +61,14 @@ export function TaskCard({
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
+  const confirm = useRecordConfirmation(task, machine?.name || machine?.id, busy);
   const relative = useRelativeTime();
   const moves = taskActions(task, machine?.capabilities);
   const supported = !!machine?.capabilities?.includes("tasks.workspaces");
   const moving = move.isPending && move.variables?.taskId === task.id;
   const admissionWait =
     task.status === "queued" && !task.needsInput ? task.modelRoutingWait : undefined;
-  // Desktop names a task that reached review "Completed" (success), never an open warning.
-  const presentedStatus = admissionWait?.reason ? "waiting" : task.status === "review" ? "finished" : task.status;
+  const presentedStatus = admissionWait?.reason ? "waiting" : task.status;
   const starting = start.isPending && start.variables?.taskId === task.id;
   const orderedHere = useRef(false);
   useEffect(() => {
@@ -95,6 +97,9 @@ export function TaskCard({
   };
   const queued = supported && (task.status === "todo" || task.status === "queued");
   const canStart = supported && ["todo", "queued", "blocked"].includes(task.status);
+  const isBlocked = task.status === "blocked";
+  const startUnavailable = !lifecycleReady || moves.queueBlocked || waiting.length > 0;
+  const showStart = starting || (canStart && (isBlocked ? !startUnavailable : !task.sessionId));
   const openSession = () => {
     if (machine && task.sessionId)
       router.navigate({
@@ -106,18 +111,14 @@ export function TaskCard({
         },
       });
   };
+  const reviewingDelivery = task.status === "review" && hasUnmergedBranch(task);
+  const deliverySupported = machine?.capabilities?.includes("workspaces.delivery.v1");
   const complete = () =>
-    confirmAction(
+    confirm(
       copy("Görevi tamamla", "Complete task"),
-      task.status === "review" && task.branch
-        ? copy(
-            "Bu işlem görev dalını bilgisayardaki hedef dala birleştirebilir.",
-            "This can merge the task branch into the target branch on the computer.",
-          )
-        : copy("Görev tamamlandı olarak işaretlenecek.", "The task will be marked complete."),
+      copy("Görev tamamlandı olarak işaretlenecek.", "The task will be marked complete."),
       copy("Tamamla", "Complete"),
       () => move.mutate({ taskId: task.id, to: "done" }),
-      undefined,
       "default",
     );
   // Rare or secondary actions live in the overflow menu; the card keeps only the next step.
@@ -130,12 +131,13 @@ export function TaskCard({
   const glyph = (Icon: LucideIcon, color = colors.muted) => <Icon size={18} color={color} />;
   const menu = [
     canStart &&
+      !isBlocked &&
       !!task.sessionId &&
       !starting && {
         key: "start",
         icon: glyph(Play),
         label: copy("Şimdi başlat", "Start now"),
-        disabled: busy || !lifecycleReady || moves.queueBlocked || waiting.length > 0,
+        disabled: busy || startUnavailable,
         onPress: () => start.mutate({ taskId: task.id }),
       },
     moves.finishWithFindings && {
@@ -144,7 +146,7 @@ export function TaskCard({
       label: copy("Bulgularla tamamla", "Finish with findings"),
       disabled: busy,
       onPress: () =>
-        confirmAction(
+        confirm(
           copy("Bulgularla tamamla", "Finish with findings"),
           copy(
             "Başarısız inceleme korunur; teslim için onayınız gerekir.",
@@ -154,7 +156,7 @@ export function TaskCard({
           () => finish.mutate({ taskId: task.id, expectedUpdatedAt: task.updatedAt }),
         ),
     },
-    moves.complete && {
+    moves.complete && !reviewingDelivery && {
       key: "complete",
       icon: glyph(Check),
       label: copy("Tamamla", "Complete"),
@@ -173,7 +175,7 @@ export function TaskCard({
           !machine?.capabilities?.includes("stewards") ||
           decline.error?.message.includes("Unsupported host method"),
         onPress: () =>
-          confirmAction(
+          confirm(
             copy("Öneriyi reddet", "Decline suggestion"),
             copy(
               "Bu görev önerisi kaldırılacak ve proje sorumlusu aynı başlığı tekrar önermeyecek. Diğer görevler korunur.",
@@ -243,7 +245,7 @@ export function TaskCard({
       destructive: true,
       disabled: busy,
       onPress: () =>
-        confirmAction(
+        confirm(
           copy("Görevi sil", "Delete task"),
           copy(
             "Görev kaydı silinecek. Birleştirilmemiş çalışma varsa host işlemi engeller.",
@@ -267,7 +269,7 @@ export function TaskCard({
         tone="danger"
         disabled={busy}
         onPress={() =>
-          confirmAction(
+          confirm(
             copy("Görevi durdur", "Stop task"),
             copy(
               "Aktif çalışma durdurulacak, çalışma dosyaları korunacak.",
@@ -305,18 +307,21 @@ export function TaskCard({
         </Row>
       }
       footer={
-        starting ||
-        (canStart && !task.sessionId) ||
+        showStart || reviewingDelivery && moves.complete && deliverySupported ||
         (moving && ["done", "queued"].includes(String(move.variables?.to))) ? (
           <Row>
-            {(starting || (canStart && !task.sessionId)) && (
+            {showStart && (
               <Button
-                label={copy("Şimdi başlat", "Start now")}
+                label={isBlocked ? copy("Yeniden dene", "Retry") : copy("Şimdi başlat", "Start now")}
                 busy={starting}
-                tone="quiet"
-                disabled={busy || !lifecycleReady || moves.queueBlocked || waiting.length > 0}
+                tone={isBlocked ? "primary" : "quiet"}
+                disabled={busy || startUnavailable}
                 onPress={() => start.mutate({ taskId: task.id })}
               />
+            )}
+            {reviewingDelivery && moves.complete && deliverySupported && (
+              <Button label={copy("Teslimi incele", "Review delivery")} tone="primary"
+                disabled={busy || editorOpen} onPress={() => onReviewDelivery(task)} />
             )}
             {moving && move.variables?.to === "queued" && (
               <Button
@@ -385,6 +390,9 @@ export function TaskCard({
         </>
       }
     >
+      {reviewingDelivery && moves.complete && !deliverySupported ? (
+        <Body muted>{copy("Bu özellik için bilgisayarındaki Bycoda’yı güncelle.", "Update Bycoda on your computer to use this feature.")}</Body>
+      ) : null}
       <ErrorNotice error={task.error} />
       <ErrorNotice error={task.mergeError} />
       {move.variables?.taskId === task.id ? <MutationState mutation={move} /> : null}

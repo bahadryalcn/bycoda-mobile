@@ -59,7 +59,7 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
           action={{ label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} /> : null}
         {projects.directoryReady && !visibleProject && !(machine?.capabilities && !supported) ? <Empty compact={false} illustration="no-projects" title={projectId
           ? copy("Bu bilgisayarda proje bulunamadı.", "Project not found on this computer.")
-          : copy("Proje seçin", "Choose a project")}
+          : copy("Proje gerekli", "Project required")}
           action={canChooseProject ? {
             label: copy("Proje seçin", "Choose a project"),
             onPress: () => setChoosingProject(true),

@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import {
+  Badge,
   Body,
   Disclosure,
   FormActions,
@@ -32,6 +33,40 @@ import {
 import { stamp } from "../management/shared/format";
 import { FeatureUnavailable } from "./unavailable-state";
 import { Status, statusLabel } from "../management/shared/status";
+import { agentStateLabel } from "./agent-state";
+import { activityState } from "./transcript-model";
+
+type Step = NonNullable<TranscriptBlockProps["block"]["agentRun"]>["steps"][number];
+
+function AgentTrailStep({ step, context, live }: { step: Step; context: TranscriptBlockProps["context"]; live: boolean }) {
+  const copy = useCopy();
+  const nested = step.agentRun;
+  const state = nested ? activityState({ id: step.id, role: "tool", text: step.text, tool: { status: step.status }, agentRun: nested }) : undefined;
+  const content = (
+    <Stack style={{ gap: space.xs }}>
+      {!nested ? (
+        <Row>
+          <Body muted>{statusLabel(step.kind, copy)}</Body>
+          {step.status ? <Status value={step.status} /> : null}
+        </Row>
+      ) : null}
+      {step.text !== nested?.name ? <MessageText text={step.text} context={context} compactMedia /> : null}
+      {step.detail ? <MessageText text={step.detail} context={context} compactMedia /> : null}
+      {step.output && step.output !== step.detail ? <MessageText text={step.output} context={context} compactMedia /> : null}
+      {step.preview ? <TranscriptToolPreview preview={step.preview} status={step.status} context={context} /> : null}
+      {step.outputTruncated ? <Body muted>{copy("Çıktı kısaltıldı.", "Output was truncated.")}</Body> : null}
+    </Stack>
+  );
+  if (!nested || !state) return content;
+  const meta = [state === "neutral" ? undefined : agentStateLabel(state === "running" && !live ? "interrupted" : state, copy), nested.model].filter(Boolean).join(" · ");
+  return (
+    <Disclosure label={nested.name || step.text} detail={meta || undefined}>
+      {content}
+      {nested.prompt ? <MessageText text={nested.prompt} context={context} compactMedia /> : null}
+      {nested.steps?.map(item => <AgentTrailStep key={item.id} step={item} context={context} live={live && state === "running"} />)}
+    </Disclosure>
+  );
+}
 
 export function SubagentDetails({
   block,
@@ -41,11 +76,11 @@ export function SubagentDetails({
   onCommand,
   context,
   parentProvider,
-  onClose,
+  interrupted = false,
 }: Pick<
   TranscriptBlockProps,
   "block" | "scope" | "runId" | "disabled" | "onCommand" | "context" | "parentProvider"
-> & { onClose?: () => void }) {
+> & { interrupted?: boolean }) {
   const copy = useCopy(),
     connection = useConnectionScope(),
     access = usePrivateContentAccess();
@@ -72,8 +107,7 @@ export function SubagentDetails({
     [attempted, setAttempted] = useState(false),
     [error, setError] = useState<unknown>(null);
   const attemptedNow = useRef(false);
-  const pendingNow = useRef(false);
-  const { requestClose } = useSheetGuard({ pending, onClose });
+  useSheetGuard({ pending });
   const matches =
     target.blockId === block.id &&
     target.callId === block.tool?.callId &&
@@ -101,7 +135,7 @@ export function SubagentDetails({
     useMachines.getState().activeId === target.machineId &&
     latest.current.access.allowed &&
     latest.current.access.check();
-  const running = matches && activeSubagent(block);
+  const running = matches && !interrupted && activeSubagent(block);
   const canStop =
     readable &&
     running &&
@@ -175,7 +209,6 @@ export function SubagentDetails({
     try {
       const command = subagentStopCommand(target, value.scope, value.block, value.runId);
       attemptedNow.current = true;
-      pendingNow.current = true;
       setAttempted(true);
       setPending(true);
       setError(null);
@@ -184,7 +217,6 @@ export function SubagentDetails({
     } catch (cause) {
       if (mounted.current) setError(cause);
     } finally {
-      pendingNow.current = false;
       if (mounted.current) setPending(false);
     }
   };
@@ -206,9 +238,7 @@ export function SubagentDetails({
   const closeReader = () => {
     if (mounted.current && readerLease.active) setReader(undefined);
   };
-  const close = () => {
-    if (mounted.current && readLease.active && !pendingNow.current) requestClose();
-  };
+  const showStopAction = readable && canStop && (!attempted || pending);
   const feedback = (
     <>
       <ErrorText error={error} />
@@ -235,7 +265,9 @@ export function SubagentDetails({
                 <CollectionToolbar
                   field={<Body selectable>{opening.machineName}</Body>}
                   actions={
-                    block.approval && !block.approval.decided ? (
+                    interrupted ? (
+                      <Badge label={agentStateLabel("interrupted", copy)} tone="warning" />
+                    ) : block.approval && !block.approval.decided ? (
                       <Status value="awaiting-approval" />
                     ) : running ? (
                       <Status value="running" />
@@ -292,7 +324,7 @@ export function SubagentDetails({
                     {target.callId}
                   </Body>
                 </Disclosure>
-                {!onClose && (!canStop || attempted) ? feedback : null}
+                {!showStopAction ? feedback : null}
               </>
             ) : (
               <FeatureUnavailable
@@ -308,31 +340,9 @@ export function SubagentDetails({
             )}
           </Stack>
         }
-        renderItem={({ item: step }) => (
-          <Stack style={{ gap: space.xs }}>
-            <Row>
-              <Body muted>{statusLabel(step.kind, copy)}</Body>
-              {step.status ? <Status value={step.status} /> : null}
-            </Row>
-            <MessageText text={step.text} context={context} compactMedia />
-            {step.detail ? <MessageText text={step.detail} context={context} compactMedia /> : null}
-            {step.output && step.output !== step.detail ? (
-              <MessageText text={step.output} context={context} compactMedia />
-            ) : null}
-            {step.preview ? (
-              <TranscriptToolPreview
-                preview={step.preview}
-                status={step.status}
-                context={context}
-              />
-            ) : null}
-            {step.outputTruncated ? (
-              <Body muted>{copy("Çıktı kısaltıldı.", "Output was truncated.")}</Body>
-            ) : null}
-          </Stack>
-        )}
+        renderItem={({ item: step }) => <AgentTrailStep step={step} context={context} live={running} />}
       />
-      {readable && canStop && (!attempted || pending) ? (
+      {showStopAction ? (
         <FormActions
           submitLabel={copy("Bu alt ajanı durdur", "Stop this subagent")}
           tone="danger"
@@ -340,13 +350,6 @@ export function SubagentDetails({
           busy={pending}
           onSubmit={openStop}
           feedback={feedback}
-        />
-      ) : onClose ? (
-        <FormActions
-          submitLabel={copy("Kapat", "Close")}
-          onSubmit={close}
-          disabled={pending}
-          feedback={readable ? feedback : undefined}
         />
       ) : null}
       <PrivateContentAccessProvider value={{ allowed: readable, check: current }}>
@@ -373,7 +376,6 @@ export function SubagentDetails({
               context={context}
               compactMedia
             />
-            <FormActions submitLabel={copy("Kapat", "Close")} onSubmit={closeReader} />
           </Sheet>
         ) : null}
       </PrivateContentAccessProvider>

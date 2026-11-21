@@ -153,11 +153,11 @@ const props = {
   onClose: vi.fn(),
   onInsert: insert,
 };
-async function mount() {
+async function mount(embedded = false) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   document.body.append(container);
   root = createRoot(container);
-  await act(async () => root.render(createElement(DesktopPreferences, props)));
+  await act(async () => root.render(createElement(DesktopPreferences, { ...props, embedded })));
 }
 async function click(label: string) {
   await act(async () =>
@@ -182,6 +182,14 @@ afterEach(async () => {
   props.onClose.mockClear();
   f.confirmations = [];
   f.snapshot = { ...f.snapshot, revision: "a".repeat(64), projectCwd: "/project", workingCwd: "/checkout" };
+});
+
+it("keeps the embedded template library focused on templates", async () => {
+  await mount(true);
+  expect(container.textContent).toContain("Add computer template");
+  expect(container.textContent).toContain("Computer · project");
+  expect(container.textContent).not.toContain("Computer defaults apply to future conversations.");
+  expect(container.textContent).not.toContain("Restore project inheritance");
 });
 
 it("shows the captured computer/project inside the editor and preserves its fields through path disclosure and polling", async () => {

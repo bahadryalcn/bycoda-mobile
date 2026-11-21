@@ -24,6 +24,7 @@ export function DevicePermissionSettings() {
   const action = useAsyncAction();
   const retry = useAsyncAction();
   const [reads, setReads] = useState<PermissionReads>(pendingPermissionReads);
+  const latestRead = useRef<Partial<Record<DevicePermissionKind, symbol>>>({});
   const mounted = useRef(true);
   const [operationTarget, setOperationTarget] = useState<DevicePermissionKind | "test" | "settings">();
   // A rejected concurrent request must not steal the active operation's feedback.
@@ -34,9 +35,14 @@ export function DevicePermissionSettings() {
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   // Status reads never request a permission; each kind settles on its own.
   const refresh = useCallback(async (kinds: readonly DevicePermissionKind[] = permissionKinds) => {
+    if (!mounted.current) return;
+    const request = Symbol();
+    for (const kind of kinds) latestRead.current[kind] = request;
     setReads((current) => markRetrying(current, kinds));
     await readDevicePermissionStatuses(kinds, readDevicePermission, (kind, outcome) => {
-      if (mounted.current) setReads((current) => ({ ...current, [kind]: outcome }));
+      if (mounted.current && latestRead.current[kind] === request) {
+        setReads((current) => ({ ...current, [kind]: outcome }));
+      }
     });
   }, []);
   // Passive status reads bypass the user-action flight: otherwise a mount or foreground read would disable every row.
@@ -50,14 +56,12 @@ export function DevicePermissionSettings() {
   }, [refresh]);
   if (process.env.EXPO_OS === "web") return <StateView compact={false} tone="info" title={copy("Telefon izinlerini mobil uygulamada yönet.", "Manage phone permissions in the mobile app.")} />;
   // Unknown (pending or failed) reads show no badge; the issue summary explains failures.
-  const badge = (read: PermissionRead) => {
-    if (read.status !== "ready") return null;
-    if (read.permission.granted) return <Badge label={copy("İzin verildi", "Granted")} tone="success" />;
-    return read.permission.status === "undetermined"
-      ? <Badge label={copy("Henüz sorulmadı", "Not asked")} />
-      : read.permission.status === "denied"
-        ? <Badge label={copy("Reddedildi", "Denied")} tone="danger" />
-        : <Badge label={copy("Kullanılamıyor", "Unavailable")} />;
+  const status = (read: PermissionRead) => {
+    if (read.status !== "ready") return undefined;
+    if (read.permission.granted) return { label: copy("İzin verildi", "Granted"), tone: "success" } as const;
+    if (read.permission.status === "undetermined") return { label: copy("Henüz sorulmadı", "Not asked") };
+    if (read.permission.status === "denied") return { label: copy("Reddedildi", "Denied"), tone: "danger" } as const;
+    return { label: copy("Kullanılamıyor", "Unavailable") };
   };
   const failed = failedPermissionKinds(reads);
   const labels = { camera: copy("Kamera", "Camera"), microphone: copy("Mikrofon", "Microphone"), notifications: copy("Bildirimler", "Notifications") };
@@ -78,8 +82,10 @@ ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`);
   });
   const row = (kind: DevicePermissionKind, icon: typeof Camera) => {
     const read = reads[kind];
+    const badge = status(read);
     const Icon = icon;
-    return <><NavigationRow label={labels[kind]} trailing={badge(read)}
+    return <><NavigationRow label={labels[kind]} trailing={badge ? <Badge {...badge} /> : null}
+      accessibilityLabel={badge ? `${labels[kind]}. ${badge.label}` : labels[kind]}
       icon={<IconTile color={colors.muted}><Icon size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
       busy={operationTarget === kind && action.isPending}
       disabled={action.isPending || read.status !== "ready"}

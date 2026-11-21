@@ -7,7 +7,7 @@ vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, s
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./motion", () => ({ reveal: undefined }));
 vi.mock("./layout", () => ({ SectionHeader: () => null }));
-vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => h("span", null, children) }));
+vi.mock("./typography", () => ({ Body: ({ children, selectable }: PropsWithChildren<{ selectable?: boolean }>) => h("span", { "data-selectable": selectable }, children) }));
 vi.mock("lucide-react-native/icons/info", () => ({ default: () => null }));
 vi.mock("react-native-reanimated", () => ({ default: { View: ({ children }: PropsWithChildren) => h("div", null, children) } }));
 vi.mock("react-native", () => ({
@@ -44,6 +44,8 @@ it("reveals even a short explicit info text behind the icon when always is set",
 
 it("renders no icon without help and none for a short unit hint", async () => {
   await act(async () => root.render(h(HintLabel, { label: "Limit", help: "0 = unlimited" })));
+  expect(container.firstElementChild?.tagName).toBe("SPAN");
+  expect(container.firstElementChild?.getAttribute("data-selectable")).toBe("false");
   expect(container.querySelector("button")).toBeNull();
   expect(isUnitHint("0 = unlimited")).toBe(true);
   expect(isUnitHint(HELP)).toBe(false);

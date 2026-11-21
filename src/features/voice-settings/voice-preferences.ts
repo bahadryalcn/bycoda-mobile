@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useStore } from "zustand";
 import { createPreferenceStore } from "@/state/preference-store";
 
-export type TranscriptionEngine = "local" | "cloud";
+export type TranscriptionEngine = "local" | "cloud" | "openai" | "xai";
 export const MIC_KINDS = ["wired", "bluetooth", "builtin", "carplay"] as const;
 export type MicKind = (typeof MIC_KINDS)[number];
 /** The assistant's spoken voice, the same engines the desktop offers. */
@@ -17,7 +17,10 @@ export type SupertonicSpeaker = (typeof SUPERTONIC_SPEAKERS)[number];
  * `engine` is where the owner's speech is recognized; `speech` and `speaker` are how the assistant sounds.
  */
 export type VoicePreferences = { engine: TranscriptionEngine; micOrder: MicKind[]; speech: SpeechEngine; speaker: SupertonicSpeaker;
-  whisperModel?: "small" | "turbo"; cloudModel?: string; elevenVoice?: string };
+  whisperModel?: "small" | "turbo"; cloudModel?: string; openaiModel?: string; elevenVoice?: string };
+export function selectedCloudModel(preferences: VoicePreferences) {
+  return preferences.engine === "openai" ? preferences.openaiModel : preferences.engine === "cloud" ? preferences.cloudModel : undefined;
+}
 export const defaultVoicePreferences: VoicePreferences = { engine: "local", micOrder: ["wired", "bluetooth", "builtin", "carplay"], speech: "supertonic", speaker: "M1" };
 
 /**
@@ -45,12 +48,13 @@ export function normalizeMicOrder(value: unknown): MicKind[] {
 export function normalizeVoicePreferences(value: unknown): VoicePreferences {
   const data = value && typeof value === "object" ? (value as Partial<Record<keyof VoicePreferences, unknown>>) : {};
   return {
-    engine: data.engine === "cloud" ? "cloud" : "local",
+    engine: data.engine === "cloud" || data.engine === "openai" || data.engine === "xai" ? data.engine : "local",
     micOrder: normalizeMicOrder(data.micOrder),
     speech: (SPEECH_ENGINES as readonly unknown[]).includes(data.speech) ? (data.speech as SpeechEngine) : "supertonic",
     speaker: (SUPERTONIC_SPEAKERS as readonly unknown[]).includes(data.speaker) ? (data.speaker as SupertonicSpeaker) : "M1",
     ...(data.whisperModel === "small" || data.whisperModel === "turbo" ? { whisperModel: data.whisperModel } : {}),
     ...(typeof data.cloudModel === "string" && /^[\w./:-]{1,200}$/.test(data.cloudModel) ? { cloudModel: data.cloudModel } : {}),
+    ...(typeof data.openaiModel === "string" && /^[\w-]{1,200}$/.test(data.openaiModel) ? { openaiModel: data.openaiModel } : {}),
     ...(typeof data.elevenVoice === "string" && /^[A-Za-z0-9]{1,64}$/.test(data.elevenVoice) ? { elevenVoice: data.elevenVoice } : {}),
   };
 }

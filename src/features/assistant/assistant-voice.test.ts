@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { AssistantVoice, speechParts, type VoicePort } from "./assistant-voice";
+import { AssistantVoice, speechParts, type SpeechChunk, type VoicePort } from "./assistant-voice";
 
 const target = { machineId: "phone-host", environmentId: "host-env", threadId: "room-thread" };
 function setup() {
@@ -224,6 +224,46 @@ it("synthesizes the next reply part while the current one plays, in order", asyn
   expect(state.dependencies.play).toHaveBeenCalledTimes(2);
   expect(state.dependencies.error).not.toHaveBeenCalled();
   expect(state.request).toHaveBeenLastCalledWith("voice.local.release", { lease: "speech-lease" }, expect.anything());
+});
+
+it("streams the first PCM chunk before the Host signals the end of synthesis", async () => {
+  const state = setup();
+  const first = { audio: "AAA=", sampleRate: 16000 };
+  const played: SpeechChunk[] = [];
+  const playStream = vi.fn(async (chunks: AsyncIterable<SpeechChunk>) => {
+    for await (const chunk of chunks) played.push(chunk);
+  });
+  Object.assign(state.dependencies, { playStream });
+  let complete!: (value: { done: true }) => void;
+  state.request
+    .mockResolvedValueOnce({ lease: "speech-lease" })
+    .mockResolvedValueOnce({ id: "first" })
+    .mockResolvedValueOnce(first)
+    .mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+  const pending = state.voice.speak(state.port, target, "Read this reply");
+  await vi.waitFor(() => expect(played).toEqual([first]));
+  expect(state.dependencies.play).not.toHaveBeenCalled();
+  complete({ done: true });
+  await pending;
+  expect(playStream).toHaveBeenCalledOnce();
+  expect(state.dependencies.error).not.toHaveBeenCalled();
+});
+
+it("keeps the original cloud provider and model for the whole utterance", async () => {
+  const state = setup();
+  const engine = vi.fn().mockReturnValue("openai");
+  const cloudModel = vi.fn().mockReturnValue("gpt-4o-mini-transcribe");
+  Object.assign(state.dependencies, { engine, cloudModel });
+  state.request.mockResolvedValue({ text: "Recognized speech" });
+  await state.voice.record(state.port, target);
+  engine.mockReturnValue("xai");
+  cloudModel.mockReturnValue(undefined);
+  state.buffer(new Int16Array(3200).fill(1000));
+  await state.voice.finish();
+  expect(state.request).toHaveBeenCalledExactlyOnceWith("voice.cloud.transcribe", {
+    provider: "openai", model: "gpt-4o-mini-transcribe", audio: expect.any(String),
+  }, expect.anything());
+  expect(state.dependencies.transcript).toHaveBeenCalledWith(target, "Recognized speech");
 });
 
 it("attributes each failure to the chain step that was running", async () => {

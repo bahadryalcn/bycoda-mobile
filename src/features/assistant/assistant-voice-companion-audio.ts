@@ -1,7 +1,7 @@
 import { File, Paths } from "expo-file-system";
 import type { NativeVoiceCompanion } from "../../../modules/bycoda-voice-companion";
 import { decodePcmBase64 } from "../../../../src/features/voice/model/voiceVad";
-import type { VoiceCapture } from "./assistant-voice";
+import type { SpeechChunk, VoiceCapture } from "./assistant-voice";
 let captureSequence = 0;
 let playbackSequence = 0;
 
@@ -34,8 +34,62 @@ export function companionVoiceCapture(native: NativeVoiceCompanion, onBuffer: (d
 /** Native playback is also stopped by the notification actions (Android) while JS sleeps. */
 export function companionVoicePlayback(native: NativeVoiceCompanion) {
   let stop = () => {};
+  const startPcm = native.startPcm?.bind(native);
+  const appendPcm = native.appendPcm?.bind(native);
+  const finishPcm = native.finishPcm?.bind(native);
   return {
     stop: () => stop(),
+    playStream: startPcm && appendPcm && finishPcm ? async (
+      chunks: AsyncIterable<SpeechChunk>, current: () => boolean,
+    ) => {
+      const playbackId = `${Date.now()}-${++playbackSequence}`;
+      let id: string | undefined;
+      let sampleRate: number | undefined;
+      let listened: ReturnType<NativeVoiceCompanion["addListener"]> | undefined;
+      let ownsSession = false;
+      let stopped = false;
+      let serviceError: string | undefined;
+      const cancel = () => { stopped = true; if (id) native.stopPlayback(id, playbackId); };
+      stop = cancel;
+      try {
+        for await (const chunk of chunks) {
+          if (serviceError) throw new Error(serviceError);
+          if (stopped || !current()) return;
+          if (id === undefined) {
+            const session = native.getState();
+            ownsSession = !session.active;
+            id = ownsSession ? await native.beginPlaybackSession() : session.sessionId;
+            if (stopped || !current()) return;
+            listened = native.addListener("onVoiceEvent", event => {
+              if (event.sessionId !== id) return;
+              if (event.type === "playback" && event.playbackId === playbackId) {
+                serviceError = event.error;
+                stopped = true;
+              } else if (event.type === "ended" && !event.captureId && event.reason !== "limit" && event.reason !== "muted") {
+                serviceError = event.error ?? "Voice session stopped.";
+                stopped = true;
+              }
+            });
+            sampleRate = chunk.sampleRate;
+            await startPcm(id, playbackId, sampleRate);
+          }
+          if (serviceError) throw new Error(serviceError);
+          if (stopped || !current()) return;
+          if (chunk.sampleRate !== sampleRate) throw new Error("Invalid speech sample rate.");
+          await appendPcm(id, playbackId, chunk.audio);
+        }
+        if (serviceError) throw new Error(serviceError);
+        if (id && !stopped && current()) await finishPcm(id, playbackId);
+        if (serviceError) throw new Error(serviceError);
+      } finally {
+        listened?.remove();
+        if (id) {
+          native.stopPlayback(id, playbackId);
+          if (ownsSession) native.endSession(id);
+        }
+        if (stop === cancel) stop = () => {};
+      }
+    } : undefined,
     async play(wav: Uint8Array, current: () => boolean) {
       if (!current()) throw new Error("The voice session is unavailable.");
       const session = native.getState(), owned = !session.active;

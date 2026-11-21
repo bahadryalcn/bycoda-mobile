@@ -1,24 +1,24 @@
-import { ScrollView, View, useWindowDimensions } from "react-native";
+import { ScrollView, View } from "react-native";
 import { useScrollSections } from "panelui-native/hooks/use-scroll-sections";
 import { SectionNavigator } from "@/ui/section-progress";
-import { sectionNavigatorClearance } from "@/ui/section-progress-model";
 import { useScreenContentInsets } from "@/ui/screen-content-insets";
 import { metrics, space } from "@/ui/tokens";
 import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
 import { LegalDocument, legalSectionId, type LegalDocumentId } from "./legal-document";
-import { legalSections } from "./legal-content";
+import { legalAppendixTitle, legalSections } from "./legal-content";
 
 /**
- * Long terms/privacy text: this view owns the scroll so a reading-progress pill can jump between
- * sections. The pill floats, so the content reserves its height at the bottom instead of being covered.
+ * Long terms/privacy text: the reader owns the document scroll and the
+ * section toolbar sits below it in the normal layout.
  */
 export function LegalReader({ document }: { document: Exclude<LegalDocumentId, "help"> }) {
   const copy = useCopy();
   const { colors } = useMobileTheme();
   const content = useScreenContentInsets();
-  const { fontScale } = useWindowDimensions();
   const sections = legalSections[document].map((section, index) => ({ id: legalSectionId(index), title: copy(...section.title) }));
+  if (document === "terms") sections.push({ id: "mit-license", title: legalAppendixTitle("mit-license", copy) });
+  sections.push({ id: "contact-links", title: legalAppendixTitle("contact-links", copy) });
   const tracker = useScrollSections({ ids: sections.map((section) => section.id) });
   return (
     <View style={{ flex: 1 }}>
@@ -30,8 +30,7 @@ export function LegalReader({ document }: { document: Exclude<LegalDocumentId, "
           // Safe-area edges are physical even when text and section navigation are RTL.
           paddingLeft: content.left,
           paddingRight: content.right,
-          // The Screen frame already clears the home indicator; the floating section pill sits above it.
-          paddingBottom: content.bottom + space.lg + sectionNavigatorClearance(fontScale),
+          paddingBottom: space.lg,
         }}>
         <LegalDocument document={document} sectionLayout={tracker.measure} />
       </ScrollView>

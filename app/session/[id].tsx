@@ -12,6 +12,7 @@ import { SplitView } from "../../src/ui/split-view";
 import { TabletQuickPanel } from "../../src/features/workspace/tablet-quick-panel";
 import { SessionComposerHeightProvider } from "../../src/features/workspace/session-keyboard-frame";
 import { useRememberLastSession } from "../../src/features/workspace/last-session";
+import { useTabletSessionBackFallback } from "../../src/features/workspace/session-header";
 
 export default function SessionRoute() {
   const { id, projectId, machineId, targetTurnId } = useLocalSearchParams<{
@@ -23,6 +24,7 @@ export default function SessionRoute() {
   useRememberLastSession(id, projectId, machineId);
   const active = useMachines((s) => s.activeId);
   const { tablet, split } = useAdaptiveLayout();
+  useTabletSessionBackFallback(tablet);
   const insets = useSafeAreaInsets();
   const sessionScreen = (
     <SessionScreen

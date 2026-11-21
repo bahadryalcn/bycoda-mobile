@@ -4,7 +4,7 @@ import Animated from "react-native-reanimated";
 import QrCode from "lucide-react-native/icons/qr-code";
 import ClipboardPaste from "lucide-react-native/icons/clipboard-paste";
 import PencilLine from "lucide-react-native/icons/pencil-line";
-import { Button, NavigationGroup, NavigationRow, Row } from "@/ui/primitives";
+import { Body, Button, Heading, NavigationGroup, NavigationRow, Row, Stack } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
 import { space } from "@/ui/tokens";
@@ -32,14 +32,13 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
   if (entry.kind === "choices")
     return (
       <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
-        <HintLabel
-          label={copy("Bilgisayarına bağlan", "Connect your computer")}
-          style={uiStyles.heading}
-          always help={copy(
+        <Stack style={{ gap: space.xs }}>
+          <Heading>{copy("Bilgisayarına bağlan", "Connect your computer")}</Heading>
+          <Body muted>{copy(
             "Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
             "In bycoda on your computer, choose “Connect your phone” and scan the QR code.",
-          )}
-        />
+          )}</Body>
+        </Stack>
         <Button
           label={copy("QR kodu tara", "Scan QR code")}
           tone="primary"
@@ -56,7 +55,7 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
         <NavigationGroup>
           <NavigationRow
             label={copy("Manuel bağlan", "Connect manually")}
-            detail={copy("Farklı ağlardan özel bağlantı", "Private access across networks")}
+            detail="Tailscale"
             detailLines={0}
             icon={tile(PencilLine, colors.muted)}
             disabled={disabled || busy}

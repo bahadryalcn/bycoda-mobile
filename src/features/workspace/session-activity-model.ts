@@ -48,26 +48,27 @@ const delegatedChildId = (blockId: string) => (blockId.startsWith(DELEGATED) ? b
 /**
  * The one counting rule for this session's subagents: every delegated run in the transcript plus every
  * child session, each once. A child session is the truth for its own transcript block, so the block is dropped.
+ * An unfinished transcript call is interrupted after its parent run ends.
  */
-export function sessionAgentEntries(blocks: readonly Block[] | undefined, children: readonly ChildSessionEntry[] = []): AgentEntry[] {
+export function sessionAgentEntries(blocks: readonly Block[] | undefined, children: readonly ChildSessionEntry[], live: boolean): AgentEntry[] {
   const childIds = new Set(children.map((child) => child.sessionId));
-  return listAgents(blocks).filter((entry) => !childIds.has(delegatedChildId(entry.id) ?? ""));
+  return listAgents(blocks)
+    .filter((entry) => !childIds.has(delegatedChildId(entry.id) ?? ""))
+    .map((entry) => !live && entry.state === "running" ? { ...entry, state: "interrupted" } : entry);
 }
 
 export function countAgents(blocks: readonly Block[] | undefined, children: readonly ChildSessionEntry[] = [], live: boolean): AgentCounts {
   const counts: AgentCounts = { total: 0, running: 0, done: 0, failed: 0, stopped: 0, interrupted: 0 };
-  const add = (state: AgentEntry["state"], delegated: boolean) => {
+  const add = (state: AgentEntry["state"]) => {
     counts.total++;
-    if (state === "running") {
-      // A call still marked in flight once the run is over is a leftover: neither running nor known to be done.
-      if (live || delegated) counts.running++;
-      else counts.interrupted++;
-    } else if (state === "failed") counts.failed++;
+    if (state === "running") counts.running++;
+    else if (state === "interrupted") counts.interrupted++;
+    else if (state === "failed") counts.failed++;
     else if (state === "stopped") counts.stopped++;
     else counts.done++;
   };
-  for (const entry of sessionAgentEntries(blocks, children)) add(entry.state, false);
-  for (const child of children) add(child.state, true);
+  for (const entry of sessionAgentEntries(blocks, children, live)) add(entry.state);
+  for (const child of children) add(child.state);
   return counts;
 }
 

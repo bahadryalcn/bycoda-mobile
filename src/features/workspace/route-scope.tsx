@@ -1,11 +1,20 @@
 import { useRef, type PropsWithChildren } from "react";
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useMachines } from "@/state/machines";
-import { Body, Button, Empty, Screen } from "@/ui/primitives";
+import { Screen, StateView } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { RouteMachine } from "./route-machine";
 
 export function WorkspaceRouteScope({
+  machineId,
+  children,
+}: PropsWithChildren<{ machineId?: string }>) {
+  // Router entries can be reused for a new explicit computer. An active
+  // computer change alone must never retarget the already-open entry.
+  return <BoundWorkspaceRoute key={machineId} machineId={machineId}>{children}</BoundWorkspaceRoute>;
+}
+
+function BoundWorkspaceRoute({
   machineId,
   children,
 }: PropsWithChildren<{ machineId?: string }>) {
@@ -18,14 +27,14 @@ export function WorkspaceRouteScope({
   if (!binding.current.matches(active))
     return (
       <Screen>
-        <Empty
-          compact={false}
+        <Stack.Screen options={{ title: copy("Bilgisayar seç", "Choose computer"), headerTitle: undefined, headerRight: undefined }} />
+        <StateView
           illustration="unreachable"
-          title={copy(
+          title={binding.current.origin === null ? copy("Bilgisayar bağla", "Connect a computer") : copy(
             "Bu çalışma alanı başka bir bilgisayara ait.",
             "This workspace belongs to another computer.",
           )}
-          detail={
+          description={
             origin
               ? `${copy("Bilgisayar:", "Computer:")} ${origin.name}`
               : copy(
@@ -33,20 +42,14 @@ export function WorkspaceRouteScope({
                   "Open this workspace from the intended computer’s project list.",
                 )
           }
-        />
-        <Body muted>
-          {copy(
-            "Seçili bilgisayarda farklı bir çalışma alanı açabilirsin.",
-            "You can open another workspace on the selected computer.",
-          )}
-        </Body>
-        <Button
-          label={copy("Projelere dön", "Back to projects")}
-          onPress={() => router.replace("/")}
-        />
-        <Button
-          label={copy("Bilgisayar seç", "Choose computer")}
-          onPress={() => router.push("/machines")}
+          action={{
+            label: copy("Bilgisayar seç", "Choose computer"),
+            onPress: () => router.push("/machines"),
+          }}
+          secondaryAction={{
+            label: copy("Projelere dön", "Back to projects"),
+            onPress: () => router.replace("/"),
+          }}
         />
       </Screen>
     );

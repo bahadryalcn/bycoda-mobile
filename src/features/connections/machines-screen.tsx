@@ -16,7 +16,7 @@ import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
 import { useMachines } from "@/state/machines";
 import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { assertAppAccess } from "@/state/security";
-import { Body, Button, Disclosure, FormActions, HeaderBackButton, IconButton, NavigationGroup, NavigationRow, Notice, QueryState, Screen, SearchField, Sheet, StateView, Skeleton } from "@/ui/primitives";
+import { Body, Button, Disclosure, FormActions, HeaderBackButton, IconButton, Loading, NavigationGroup, NavigationRow, Notice, QueryState, Screen, SearchField, Sheet, StateView } from "@/ui/primitives";
 import { confirmAction } from "@/ui/confirm";
 import { metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
@@ -69,6 +69,12 @@ export function MachinesScreen() {
   const entryOwnsFeedback = showPairing && (controller.entry.kind === "manual" || controller.entry.kind === "preview");
   const insideEntry = controller.entry.kind !== "choices";
   const entryActive = adding || insideEntry;
+  const addComputer = !showPairing ? (
+    <IconButton label={copy("Bilgisayar ekle", "Add computer")} disabled={unavailable || busy}
+      onPress={() => controller.begin("choices")}>
+      <Plus size={20} color={colors.accent} />
+    </IconButton>
+  ) : undefined;
   const visible = machines.filter(machine => matchesSearch(`${machine.name} ${machine.endpoint}`, search, locale));
   const listMemory = useFilteredListScrollMemory<(typeof machines)[number]>(search, !showPairing, visible.length, { suspended: showPairing });
   const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
@@ -89,7 +95,7 @@ export function MachinesScreen() {
   />;
 
   const feedback = <>
-    {!hydrated && !storageError ? <Skeleton rows={3} /> : null}
+    {!hydrated && !storageError ? <Loading label={copy("Kaydedilmiş bağlantılar yükleniyor…", "Loading saved connections…")} /> : null}
     {storageError ? <StateView compact tone="danger" illustration="error"
       title={copy("Kaydedilmiş bilgisayarlar yüklenemedi", "Saved computers could not be loaded")}
       description={errorMessage(storageError, copy)}
@@ -99,28 +105,28 @@ export function MachinesScreen() {
           hydrate: () => useMachines.getState().hydrate(), getState: () => useMachines.getState(),
         }), copy("Kaydedilmiş bağlantılar yeniden yüklendi.", "Saved connections reloaded."));
       } }} /> : null}
-    {!selected && !removal && !entryOwnsFeedback ? <ConnectionFeedback operation={operation} success={operation.data?.message} /> : null}
+    {hydrated && !storageError && !selected && !removal && !entryOwnsFeedback ? <ConnectionFeedback operation={operation} success={operation.data?.message} /> : null}
   </>;
   const help = <Disclosure label={copy("Bağlantı kurulum yardımı", "Connection setup help")}>
-    <Body muted>{copy(
+    {!showPairing ? <Body muted>{copy(
       "Bilgisayarında bycoda’yı aç. “Telefon bağla”yı seçip bir kod oluştur ve telefonunla tara.",
       "Open bycoda on your computer. Choose “Connect your phone” to create a code and scan it with your phone.",
-    )}</Body>
+    )}</Body> : null}
     <Button tone="quiet" label={copy("Yardım sayfasını aç", "Open help page")} onPress={() => router.navigate("/legal/help")} />
     <LegalLinks onOpen={(document) => router.navigate({ pathname: "/legal/[document]", params: { document } })} />
   </Disclosure>;
-  const addAction = !adding && !insideEntry && machines.length ? <IconButton label={copy("Bilgisayar ekle", "Add computer")} disabled={unavailable || busy} onPress={() => controller.begin("choices")}><Plus size={22} strokeWidth={2.2} color={colors.accent} /></IconButton> : undefined;
   return <Screen scroll={showPairing} title={showPairing ? copy("Bilgisayarlar", "Computers") : undefined}
     actions={!nativeTitle && showPairing && entryActive ? <HeaderBackButton disabled={busy} onPress={cancelEntry} /> : undefined}>
     <Stack.Screen options={{
       title: copy("Bilgisayarlar", "Computers"),
       gestureEnabled: !entryActive && !busy && !controller.form.dirty,
       headerLeft: entryActive ? () => <HeaderBackButton disabled={busy} onPress={cancelEntry} /> : undefined,
-      headerRight: addAction ? () => addAction : undefined,
+      headerRight: nativeTitle && addComputer ? () => addComputer : undefined,
     }} />
     {!showPairing ? <ScreenList
       {...listMemory.listProps}
-      title={copy("Bilgisayarlar", "Computers")} actions={!nativeTitle ? addAction : undefined}
+      title={copy("Bilgisayarlar", "Computers")}
+      actions={!nativeTitle ? addComputer : undefined}
       grouped data={visible} keyExtractor={machine => machine.id}
       contentContainerStyle={{ maxWidth: metrics.entryWidth }}
       header={<>{feedback}
@@ -130,11 +136,11 @@ export function MachinesScreen() {
           searching emptyTitle={copy("Eşleşen sonuç yok", "No matching results")}
           emptyAction={{label:copy("Aramayı temizle", "Clear search"),onPress:clearSearch}} />
       </>}
-      footer={help}
+      footer={search.trim() ? undefined : help}
       renderItem={({item:machine}) => {
           const active = machine.id === activeId;
           return <NavigationRow
-            key={machine.id} label={machine.name} detail={machine.endpoint} selected={active} intent="navigate"
+            key={machine.id} label={machine.name} selected={active} intent="navigate"
             icon={<IconTile color={colors.muted}><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
             supporting={active ? <ActiveComputerStatus /> : undefined}
             disabled={unavailable || busy} onPress={() => setManaging(machine.id)}
@@ -142,10 +148,10 @@ export function MachinesScreen() {
       }}
     /> : <View style={{ width: "100%", maxWidth: metrics.entryWidth, alignSelf: "center", gap: space.lg, paddingTop: space.sm }}>
       {feedback}
-      {adding || insideEntry
+      {entryActive
         ? <PairingEntry controller={{ ...controller, cancel: cancelEntry }} disabled={unavailable} />
-        : <AccountComputersSection others={<PairingEntry controller={{ ...controller, cancel: cancelEntry }} disabled={unavailable} />} />}
-      {help}
+        : !unavailable ? <AccountComputersSection others={<PairingEntry controller={{ ...controller, cancel: cancelEntry }} disabled={false} />} /> : null}
+      {!entryActive && !unavailable ? help : null}
     </View>}
     {selected || removal ? <Sheet visible size="compact" title={removal ? copy("Bilgisayarı kaldır", "Remove computer") : selected!.name} onClose={closeManagement} dismissible={!busy}>
       {removal ? <>
@@ -165,20 +171,25 @@ export function MachinesScreen() {
             setRemoval(null); setManaging(null);
           }, copy("Bilgisayar bağlantısı kaldırıldı.", "Computer connection removed.")); }} />
       </> : selected ? <>
-      <Body muted>{selected.endpoint}</Body>
+      {selected.id === activeId ? <ActiveComputerStatus /> : null}
       <NavigationGroup>
         {selected.id === activeId ? null : <NavigationRow label={copy("Seç", "Use computer")} disabled={unavailable || busy} onPress={() => {
           void recover(() => selectSavedComputer(selected.id, {
             flushDrafts: flushWorkspaceDrafts, assertAccess: assertAppAccess,
             getState: () => useMachines.getState(),
             selectMachine: (id) => useMachines.getState().selectMachine(id),
-            navigate: () => { setManaging(null); router.replace("/"); },
+            onSelected: () => setManaging(null),
           }), copy("Bilgisayar seçildi.", "Computer selected."));
         }} />}
-        {selected.id === activeId ? <RetryConnectionRow onRetried={() => setManaging(null)} /> : null}
-        <NavigationRow label={copy("Bağlantıyı düzenle", "Edit connection")} disabled={unavailable || busy} onPress={() => { setManaging(null); controller.edit(selected); }} />
-        <NavigationRow label={copy("Kaldır", "Remove")} tone="danger" disabled={unavailable || busy} onPress={() => { retiredRemoval.current = false; operation.reset(); setRemoval({ ...reviewedMachine(selected)!, name: selected.name }); }} />
+        {selected.id === activeId ? <RetryConnectionRow onPair={() => { setManaging(null); controller.begin("scan"); }} /> : null}
       </NavigationGroup>
+      <Disclosure label={copy("Gelişmiş seçenekler", "Advanced options")}>
+        <Body muted>{selected.endpoint}</Body>
+        <NavigationGroup>
+          <NavigationRow label={copy("Bağlantıyı düzenle", "Edit connection")} disabled={unavailable || busy} onPress={() => { setManaging(null); controller.edit(selected); }} />
+          <NavigationRow label={copy("Kaldır", "Remove")} tone="danger" disabled={unavailable || busy} onPress={() => { retiredRemoval.current = false; operation.reset(); setRemoval({ ...reviewedMachine(selected)!, name: selected.name }); }} />
+        </NavigationGroup>
+      </Disclosure>
       <ConnectionFeedback operation={operation} />
       </> : null}
     </Sheet> : null}

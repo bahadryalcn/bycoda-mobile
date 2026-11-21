@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
-import { Body, ErrorNotice, Notice, Screen, Section, Stack, StateView, ToggleField, Skeleton } from "@/ui/primitives";
+import { Body, ErrorNotice, Loading, Notice, Screen, Section, Stack, StateView, ToggleField, Skeleton } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { TimeField } from "@/ui/time-field";
 import { HoursOverview } from "@/ui/week-hours";
@@ -37,7 +37,7 @@ const QUIET: SaveControl<QuietHours | null> = { id: "quietHours", read: (setting
 type QuietDraft = { on: boolean; start: string; end: string };
 
 function quietValid(draft: QuietDraft) {
-  return ClockTime.safeParse(draft.start).success && ClockTime.safeParse(draft.end).success;
+  return draft.start !== draft.end && ClockTime.safeParse(draft.start).success && ClockTime.safeParse(draft.end).success;
 }
 
 function sameQuiet(a: QuietHours | null, b: QuietHours | null) {
@@ -48,7 +48,7 @@ function sameQuiet(a: QuietHours | null, b: QuietHours | null) {
 /** Event x channel toggles that matter on a phone (push, in app), quiet hours and push detail text. */
 export function NotificationSettingsScreen() {
   const copy = useCopy();
-  const { runtime, device } = useAccount();
+  const { status, runtime, device, registerError, retryRegistration } = useAccount();
   const saves = useNotificationSaves(KEY);
   // The client is captured per change, so a response from a previous account cannot be applied here.
   const put = (body: NotificationSettings) => runtime!.client.putNotificationSettings({ body });
@@ -59,7 +59,7 @@ export function NotificationSettingsScreen() {
       saves.adopt(loaded);
       return loaded;
     },
-    enabled: !!runtime && !!device,
+    enabled: status === "signedIn" && !!runtime && !!device,
   });
   const labels: Record<NotificationEventKey, string> = {
     "account.new_device_sign_in": copy("Yeni cihazdan giriş", "Sign-in from a new device"),
@@ -96,7 +96,20 @@ export function NotificationSettingsScreen() {
     else if (quietValid(next)) commitQuiet({ start: next.start, end: next.end, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
   }
 
-  if (!runtime || !device)
+  if (status === "loading" || (status === "signedIn" && (!runtime || !device))) {
+    return (
+      <Screen title={title}>
+        {registerError ? (
+          <ErrorNotice
+            error={registerError}
+            onRetry={retryRegistration}
+            message={copy("Bu telefon hesaba kaydedilemedi.", "This phone could not be registered to your account.")}
+          />
+        ) : <Loading centered immediate />}
+      </Screen>
+    );
+  }
+  if (status !== "signedIn")
     return (
       <Screen title={title}>
         <View style={{ flex: 1, justifyContent: "center" }}>
@@ -166,7 +179,11 @@ export function NotificationSettingsScreen() {
                   <>
                     <TimeField label={copy("Başlangıç (SS:DD)", "Start (HH:MM)")} value={quiet.start} onChange={(start) => editQuiet({ ...quiet, start })} disabled={busy(QUIET.id)} />
                     <TimeField label={copy("Bitiş (SS:DD)", "End (HH:MM)")} value={quiet.end} onChange={(end) => editQuiet({ ...quiet, end })} disabled={busy(QUIET.id)} />
-                    <HoursOverview tone="muted" rows={[{ key: "daily", label: copy("Her gün", "Daily"), blocks: windowBlocks(quiet.start, quiet.end) }]} />
+                    {quiet.start === quiet.end ? (
+                      <Notice tone="danger" message={copy("Başlangıç ve bitiş saatleri farklı olmalı.", "Start and end times must differ.")} />
+                    ) : (
+                      <HoursOverview tone="muted" rows={[{ key: "daily", label: copy("Her gün", "Daily"), blocks: windowBlocks(quiet.start, quiet.end) }]} />
+                    )}
                   </>
                 ) : null}
               </Stack>

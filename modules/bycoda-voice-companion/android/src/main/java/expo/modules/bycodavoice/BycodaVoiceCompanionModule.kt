@@ -88,6 +88,17 @@ class BycodaVoiceCompanionModule : Module() {
     AsyncFunction("playWav") Coroutine { id: String, playingId: String, uri: String ->
       withContext(Dispatchers.Main) { val service = VoiceCompanionRuntime.service ?: error("Voice session is unavailable."); service.playWav(id, playingId, uri) }
     }
+    AsyncFunction("startPcm") Coroutine { id: String, playingId: String, sampleRate: Int ->
+      withContext(Dispatchers.Main) { checkNotNull(VoiceCompanionRuntime.service).startPcm(id, playingId, sampleRate) }
+    }
+    AsyncFunction("appendPcm") Coroutine { id: String, playingId: String, audio: String ->
+      val stream = withContext(Dispatchers.Main) { checkNotNull(VoiceCompanionRuntime.service).pcmPlayback(id, playingId) }
+      withContext(Dispatchers.IO) { stream.append(audio) }
+    }
+    AsyncFunction("finishPcm") Coroutine { id: String, playingId: String ->
+      val stream = withContext(Dispatchers.Main) { checkNotNull(VoiceCompanionRuntime.service).pcmPlayback(id, playingId) }
+      withContext(Dispatchers.IO) { stream.drain() }
+    }
     Function("stopPlayback") { id: String, playingId: String -> main { VoiceCompanionRuntime.service?.stopPlayback(id, expectedPlayback = playingId) } }
     Function("endSession") { id: String -> main {
       VoiceCompanionRuntime.service?.takeIf { VoiceSessionPolicy.matches(it.snapshot()["sessionId"] as? String, id) }?.end("revoked")

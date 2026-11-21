@@ -20,8 +20,10 @@ export function PullRequestsScreen() {
   const bounds = useInfoHint(copy("Her depo için sınırlı sonuç gösterilir. Filtreler GitHub’da uygulanır.", "Results per repository are bounded. Filters are applied on GitHub."));
   const access = providerInboxAccess(availability);
   const scopeCurrent = (!params.machineId || machine?.id === params.machineId) && (!projectId || projects.isProjectVisible(projectId));
-  const query = useInboxRead({ action: "list", input: { ...(projectId ? { projectId } : {}), query: prListQuery(filters) } }, access.canRead && scopeCurrent);
-  const visible = !!machine && scopeCurrent && access.canRead && !isInboxPrivateFailure(query.error);
+  const readAllowed = !!machine && scopeCurrent && access.canRead;
+  const query = useInboxRead({ action: "list", input: { ...(projectId ? { projectId } : {}), query: prListQuery(filters) } }, readAllowed);
+  const privateFailure = isInboxPrivateFailure(query.error);
+  const visible = readAllowed && !privateFailure;
   const items = visible ? prListItems(query.data?.items ?? [], filters) : [];
   const current = () => !!machine && useMachines.getState().activeId === machine.id && scopeCurrent && (!projectId || projects.isProjectVisible(projectId));
   const refresh = () => {
@@ -50,10 +52,11 @@ export function PullRequestsScreen() {
           empty={availability.data?.available === false} emptyIllustration="connect-computer"
           emptyTitle={copy("Bilgisayardaki Bycoda açık olmalı", "Open Bycoda on your computer")}
           emptyDetail={copy("GitHub, GitLab, Azure DevOps, Linear ve Jira erişimi bilgisayardaki oturumundan alınır. Bycoda’yı aç veya güncelle; bağlantı otomatik kontrol edilir.",
-            "Provider access uses your desktop session. Open or update Bycoda on this computer; availability is checked automatically.")} />}
-        {visible ? <><QueryState query={query} empty={query.data !== undefined && items.length === 0} />
-          {query.data ? <ProviderInboxFeedback result={query.data} onRetry={() => { void refresh(); }} retrying={query.isFetching} /> : null}
-</> : null}
+            "Provider access uses your desktop session. Open or update Bycoda on this computer; availability is checked automatically.")}
+          emptyAction={{ label: copy("Yeniden dene", "Retry"), busy: availability.isFetching, onPress: () => { void refresh(); } }} />}
+        {readAllowed ? <QueryState query={privateFailure ? { ...query, data: undefined, refetch: refresh } : query}
+          empty={visible && query.data !== undefined && items.length === 0} /> : null}
+        {visible && query.data ? <ProviderInboxFeedback result={query.data} onRetry={() => { void refresh(); }} retrying={query.isFetching} /> : null}
       </Stack>}
       renderItem={({ item }) => <ProviderInboxRow item={item} onOpen={() => {
         if (!visible || !machine || !current()) return;

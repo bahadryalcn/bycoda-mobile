@@ -104,7 +104,7 @@ export function WorktreeCreate({ scope, visible, blocked, beforeChange, onSelect
     <FeatureUnavailable message={unavailableMessage} /><Button tone="quiet" label={copy("Kapat", "Close")} onPress={close} />
   </Sheet>;
   const feedback = <>{!uncertain ? <ErrorText error={error} /> : <Notice tone="warning" message={copy("Oluşturma sonucu belirsiz. Tekrar göndermeden çalışma klasörlerini yenileyip bilgisayarda kontrol et.", "The create result is uncertain. Refresh working folders and check the computer before sending again.")} />}</>;
-  return <><Sheet visible={visible} title={copy("Çalışma ağacı oluştur", "Create worktree")} size="form" dismissible={!busy} dirty={draft.branch !== "" || draft.existing || draft.base !== "HEAD"} onClose={close}>
+  return <><Sheet visible={visible} title={created ? copy("Çalışma ağacı oluşturuldu", "Worktree created") : copy("Çalışma ağacı oluştur", "Create worktree")} size="form" dismissible={!busy} dirty={!created && (draft.branch !== "" || draft.existing || draft.base !== "HEAD")} onClose={close}>
     {readable ? <>
       <CollectionToolbar field={<Body selectable>{opening.machineName}</Body>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
         { key: "refresh", label: copy("Çalışma klasörlerini yenile", "Refresh working folders"), disabled: busy || !enabled, onPress: refresh },

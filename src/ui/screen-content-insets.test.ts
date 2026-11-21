@@ -49,8 +49,13 @@ it("pads the home indicator in the non-scrolling frame and marks it owned, witho
 it("keeps callers that reserve the home indicator themselves from doubling it", () => {
   expect(read("features/workspace/session-screen.tsx")).toContain("<Screen scroll={false} contentOwnsBottomInset>");
   expect(read("features/workspace/sessions-panel.tsx")).toContain("paddingBottom: insets.bottom");
-  expect(read("features/legal/legal-reader.tsx")).toContain("paddingBottom: content.bottom + space.lg");
   expect(read("ui/screen-list.tsx")).toContain("paddingBottom: space.lg + content.bottom");
+});
+
+it("keeps the legal reader and its section toolbar inside the frame that owns the bottom inset", () => {
+  expect(read("features/legal/legal-screen.tsx")).toMatch(/<Screen scroll=\{false\}>[\s\S]*?<LegalReader/);
+  expect(read("features/legal/legal-reader.tsx")).not.toContain("content.bottom");
+  expect(read("ui/section-progress.tsx")).toContain("const insets = useScreenContentInsets()");
 });
 
 it("gives the raw ScrollView and FlatList call sites in non-scrolling screens landscape gutters", () => {

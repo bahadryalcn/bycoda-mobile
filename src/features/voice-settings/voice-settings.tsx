@@ -28,7 +28,7 @@ export function VoiceSettings() {
       <NavigationRow
         label={copy("Ses", "Voice")}
         icon={<SettingIcon glyph={AudioLines} />}
-        detail={`${speechSummary(preferences.speech, preferences.speaker, copy)} · ${preferences.engine === "cloud" ? copy("Bulut", "Cloud") : computer ?? copy("Bağlı bilgisayar", "Connected computer")}`}
+        detail={`${speechSummary(preferences.speech, preferences.speaker, copy)} · ${preferences.engine === "openai" ? "OpenAI" : preferences.engine === "xai" ? "Grok" : preferences.engine === "cloud" ? "OpenRouter" : computer ?? copy("Bağlı bilgisayar", "Connected computer")}`}
         onPress={() => setOpen(true)}
       />
       <Sheet visible={open} title={copy("Ses", "Voice")} size="form" onClose={() => setOpen(false)}>
@@ -114,7 +114,7 @@ function LocalModels({ supported, computer }: { supported: boolean; computer: st
       <SectionHeader title={copy("{p0} üzerindeki ses modelleri", "Voice models on {p0}", { p0: computer })} />
       {!supported ? <Notice message={copy("Ses modelleri için {p0} üzerindeki bycoda’yı güncelleyin.", "Update bycoda on {p0} for voice models.", { p0: computer })} /> : <>
         {setup.data?.state === "installing" ? <Notice tone="info" message={copy("Ses kurulumu sürüyor.", "Voice setup is running.")} /> : null}
-        <QueryState query={models} />
+        <QueryState query={models} loading="inline" compact />
         {models.data?.map((model) => {
           const state = modelRowState(model, job);
           const working = state === "downloading" || state === "testing" || state === "removing";

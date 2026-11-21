@@ -100,7 +100,9 @@ vi.mock("@/ui/primitives", () => {
       footer: import("react").ReactNode;
     }>) => {
       state.close = onClose;
-      return visible ? createElement("section", null, children, footer) : null;
+      return visible
+        ? createElement("section", null, createElement("button", { onClick: onClose }, "Close"), children, footer)
+        : null;
     },
   };
 });
@@ -148,6 +150,40 @@ afterEach(async () => {
   state.close = null;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+});
+
+it("omits the bulk entry when no tasks are visible", async () => {
+  tasks = [];
+  await render();
+  expect(container.querySelector('[aria-label="Bulk actions"]')).toBeNull();
+  expect(container.querySelector("section")).toBeNull();
+});
+
+it("uses the shared sheet's single close control and retains selection after closing", async () => {
+  await render();
+  await click("Bulk actions");
+  await act(async () => state.select!([task.id]));
+  expect([...container.querySelectorAll("button")].filter(button => button.textContent === "Close")).toHaveLength(1);
+  await click("Close");
+  expect(container.querySelector("section")).toBeNull();
+  await click("Bulk actions");
+  expect(container.querySelector("output")?.textContent).toBe(task.id);
+});
+
+it("retires an approval if its selected task leaves the visible results", async () => {
+  await render();
+  await click("Bulk actions");
+  await act(async () => state.select!([task.id]));
+  await click("Delete");
+  const approve = state.approvals[0]!;
+  tasks = [];
+  await render();
+  expect(container.querySelector('[aria-label="Bulk actions"]')).toBeNull();
+  expect(container.querySelector("output")).toBeNull();
+  expect(container.textContent).toContain("No matching results");
+  await act(async () => approve());
+  expect(state.writes).not.toHaveBeenCalled();
+  await click("Close");
 });
 
 it("retires deferred approval when its panel closes and opens again", async () => {

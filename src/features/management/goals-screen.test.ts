@@ -2,6 +2,7 @@
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
+import { getQueryPresentation, type QueryLike } from "@/ui/query-presentation";
 const fixture = vi.hoisted(() => ({ push: vi.fn(), mutate: vi.fn(), projectId: null as string | null, providers: [] as unknown[], visible: true, catalog: undefined as unknown, goals: [] as unknown[], tasks: undefined as unknown, taskRefetch: vi.fn(() => Promise.resolve()), queries: [] as { key: unknown[]; method: string; options: { enabled?: boolean; interval?: () => number | false } }[], cards: [] as { goal: { id: string }; progress?: unknown; tasks?: unknown }[] }));
 vi.mock("expo-router", () => ({ router: { navigate: fixture.push } }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
@@ -18,14 +19,21 @@ vi.mock("./shared/format", () => ({ identifier: () => "fixture-automation" }));
 vi.mock("./shared/scope", () => ({ Scope: () => null }));
 vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({ data: [], directoryReady: true, isProjectVisible: () => fixture.visible }) }));
 vi.mock("./goals/goal-editor", () => ({ GoalEditor: () => null }));
-vi.mock("./goals/replan-editor", () => ({ ReplanEditor: () => null }));
+vi.mock("./goals/replan-editor", () => ({ ReplanEditor: ({ available }: { available: boolean }) => createElement(
+  "div", null, createElement("textarea", { "aria-label": "Plan feedback" }), createElement("button", { disabled: !available }, "Replan"),
+) }));
 vi.mock("./goals/settings-editor", () => ({ GoalSettingsEditor: () => null }));
-vi.mock("./goals/goal-card", () => ({ GoalCard: (props: { goal: { id: string } }) => { fixture.cards.push(props); return null; } }));
+vi.mock("./goals/goal-card", () => ({ GoalCard: (props: { goal: { id: string }; onReplan(id: string): void }) => {
+  fixture.cards.push(props);
+  return createElement("button", { onClick: () => props.onReplan(props.goal.id) }, "Revise plan");
+} }));
 vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterSheet: () => null }));
-vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, actions, data, renderItem }: { header: React.ReactNode; actions: React.ReactNode; data: { id: string }[]; renderItem: (info: { item: { id: string } }) => React.ReactNode }) => createElement("main", null, actions, header, ...data.map(item => createElement("section", { key: item.id }, renderItem({ item })))) }));
+vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, actions, data, renderItem }: { header: React.ReactNode; actions: React.ReactNode; data: { id: string }[]; renderItem: (info: { item: { id: string } }) => React.ReactNode }) => createElement("main", null, createElement("nav", null, actions), header, ...data.map(item => createElement("section", { key: item.id }, renderItem({ item })))) }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Group, Heading: Group, Button: () => null, Sheet: Group, MutationState: () => null, QueryState: () => null, SelectField: () => null, SearchField: () => null, SearchToolbar: () => null,
+  return { Body: Group, Heading: Group, Button: () => null, Sheet: Group, MutationState: () => null, SelectField: () => null, SearchField: () => null, SearchToolbar: () => null,
+    QueryState: ({ query, empty, emptyAction }: { query: QueryLike; empty?: boolean; emptyAction?: { label: string; onPress(): void } }) =>
+      getQueryPresentation(query, empty) === "empty" && emptyAction ? createElement("button", { onClick: emptyAction.onPress }, emptyAction.label) : null,
     IconButton: ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),
     Notice: ({ message, retryLabel, onRetry }: { message: string; retryLabel?: string; onRetry?(): void }) => createElement("aside", null, message, retryLabel ? createElement("button", { onClick: onRetry }, retryLabel) : null) };
 });
@@ -40,6 +48,32 @@ it("does not load the task list for an Epics screen without task-owning epics", 
   try {
     await renderScreen(root);
     expect(taskQuery().options.enabled).toBe(false);
+  } finally { await act(async () => root.unmount()); vi.unstubAllGlobals(); }
+});
+it("retains feedback and blocks replanning when the open epic disappears during a refresh", async () => {
+  const goal = epic("review", "awaiting-approval", []);
+  fixture.goals = [goal];
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div"), root = createRoot(container);
+  const replan = () => [...container.querySelectorAll("button")].find(button => button.textContent === "Replan");
+  try {
+    await renderScreen(root);
+    await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "Revise plan")!.click());
+    const draft = container.querySelector("textarea");
+    expect(draft).not.toBeNull();
+    draft!.value = "Verify the tablet layout first";
+
+    fixture.goals = [];
+    await renderScreen(root);
+    expect(container.querySelector("textarea")).toBe(draft);
+    expect(draft!.value).toBe("Verify the tablet layout first");
+    expect(container.textContent).toContain("The epic is no longer available.");
+    expect(replan()?.disabled).toBe(true);
+
+    fixture.goals = [goal];
+    await renderScreen(root);
+    expect(container.querySelector("textarea")).toBe(draft);
+    expect(replan()?.disabled).toBe(false);
   } finally { await act(async () => root.unmount()); vi.unstubAllGlobals(); }
 });
 it("polls the shared task list only while an epic is open and indexes it once for every card", async () => {
@@ -90,7 +124,7 @@ it.each([null, "project"])("explains unavailable providers without allowing epic
     expect(container.textContent).toContain("This computer has not reported an available agent. Check providers.");
 
     const buttons = [...container.querySelectorAll("button")];
-    expect(buttons.find(node => node.textContent === "New epic")?.disabled).toBe(true);
+    expect(buttons.find(node => node.textContent === "New epic")).toBeUndefined();
     await act(async () => buttons.find(node => node.textContent === "Provider center")!.click());
     expect(fixture.push).toHaveBeenCalledExactlyOnceWith("/tools/providers"); expect(fixture.mutate).not.toHaveBeenCalled();
   } finally { await act(async () => root.unmount()); vi.unstubAllGlobals(); }
@@ -100,7 +134,7 @@ it("does not enable creation for an unavailable selected project", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); const container = document.createElement("div"), root = createRoot(container);
   try {
     await act(async () => root.render(createElement(GoalsScreen)));
-    expect([...container.querySelectorAll("button")].find(node => node.textContent === "New epic")?.disabled).toBe(true);
+    expect([...container.querySelectorAll("button")].find(node => node.textContent === "New epic")).toBeUndefined();
     expect(fixture.mutate).not.toHaveBeenCalled();
   } finally { await act(async () => root.unmount()); vi.unstubAllGlobals(); }
 });
@@ -112,7 +146,14 @@ it("allows an all-projects epic when live discovery adds a provider to an empty 
   const container = document.createElement("div"), root = createRoot(container);
   try {
     await act(async () => root.render(createElement(GoalsScreen)));
-    const button = [...container.querySelectorAll("button")].find(node => node.textContent === "New epic")!;
+    const buttons = () => [...container.querySelectorAll("button")].filter(node => node.textContent === "New epic");
+    expect(buttons()).toHaveLength(1);
+    expect(buttons()[0]!.closest("nav")).toBeNull();
+    fixture.goals = [epic("existing", "planning", [])];
+    await renderScreen(root);
+    expect(buttons()).toHaveLength(1);
+    const button = buttons()[0]!;
+    expect(button.closest("nav")).not.toBeNull();
     expect(button.disabled).toBe(false);
     await act(async () => button.click());
     expect(fixture.mutate).not.toHaveBeenCalled();

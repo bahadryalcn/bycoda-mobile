@@ -62,6 +62,8 @@ export function TaskBulkActions({
   const [refreshing, setRefreshing] = useState(false);
   const lock = useRef(false);
   const [results, setResults] = useState<TaskBulkResult[]>([]);
+  const currentScope = useRef({ tasks, disabled });
+  currentScope.current = { tasks, disabled };
   const [action, setAction] = useState<TaskBulkAction>("delete");
   const remove = useHostMutation("tasks.delete");
   const start = useHostMutation("tasks.start");
@@ -74,6 +76,7 @@ export function TaskBulkActions({
     const ids = new Set(tasks.map((task) => task.id));
     if (!selected.every((id) => ids.has(id))) setSelected(selected.filter((id) => ids.has(id)));
   }
+  const retryIds = new Set(results.filter((row) => row.status === "failed").map((row) => row.task.id));
   const labels = {
     delete: copy("Sil", "Delete"),
     start: copy("Başlat", "Start"),
@@ -90,9 +93,7 @@ export function TaskBulkActions({
   };
   const run = async (operation: TaskBulkAction, retry: boolean) => {
     if (lock.current || disabled) return;
-    const ids = new Set(
-      retry ? results.filter((row) => row.status === "failed").map((row) => row.task.id) : selected,
-    );
+    const ids = retry ? retryIds : new Set(selected);
     const batch = tasks
       .filter((task) => ids.has(task.id))
       .map((task) => ({ ...task, machineId, machineName: machineId, cwd: "" }));
@@ -130,6 +131,11 @@ export function TaskBulkActions({
     if (busy || refreshing || disabled || (!retry && (!port || opening.current !== port))) return;
     const approve = () => {
       if (!retry && opening.current !== port) return;
+      const current = currentScope.current;
+      if (current.disabled) return;
+      const visibleIds = new Set(current.tasks.map((task) => task.id));
+      const requested = retry ? tasks.filter((task) => retryIds.has(task.id)).map((task) => task.id) : selected;
+      if (!requested.length || !requested.every((id) => visibleIds.has(id))) return;
       void run(operation, retry).catch(setActionError);
     };
     if (operation === "delete" || operation === "stop")
@@ -188,10 +194,10 @@ export function TaskBulkActions({
             ))}
         </Disclosure>
       ) : null}
-      {results.some((row) => row.status === "failed") ? (
+      {retryIds.size ? (
         <Button
           label={copy("Başarısızları tekrar dene", "Retry failed tasks")}
-          disabled={busy || refreshing || disabled}
+          disabled={busy || refreshing || disabled || !tasks.some((task) => retryIds.has(task.id))}
           onPress={() => request(action, true)}
         />
       ) : null}
@@ -199,68 +205,75 @@ export function TaskBulkActions({
   );
   return (
     <>
-      <Row style={{ justifyContent: "space-between", alignItems: "center" }}>
-        {context}
-        <Button
-          label={
-            copy("Toplu işlemler", "Bulk actions") +
-            (selected.length ? ` · ${selected.length}` : "")
-          }
-          accessibilityLabel={copy("Toplu işlemler", "Bulk actions")}
-          tone="secondary"
-          disabled={disabled || refreshing}
-          onPress={show}
-        />
-      </Row>
+      {tasks.length ? (
+        <Row style={{ justifyContent: "space-between", alignItems: "center" }}>
+          {context}
+          <Button
+            label={
+              copy("Toplu işlemler", "Bulk actions") +
+              (selected.length ? ` · ${selected.length}` : "")
+            }
+            accessibilityLabel={copy("Toplu işlemler", "Bulk actions")}
+            tone="secondary"
+            disabled={disabled || busy || refreshing}
+            onPress={show}
+          />
+        </Row>
+      ) : context}
       {!open ? feedback : null}
       <Sheet
         visible={open}
         title={copy("Toplu işlemler", "Bulk actions")}
         size="full"
         onClose={close}
-        footer={<Button label={copy("Kapat", "Close")} tone="quiet" onPress={close} />}
       >
-        <MultiSelectField
-          label={copy("Görevleri seç", "Select tasks")}
-          values={selected}
-          options={tasks.map((task) => ({ value: task.id, label: task.title }))}
-          onChange={setSelected}
-          disabled={busy || refreshing || disabled}
-          searchable
-        />
-        <Row>
-          <Button
-            label={copy("Sonuçların tümünü seç", "Select all results")}
-            tone="quiet"
-            disabled={busy || refreshing || disabled || !tasks.length}
-            onPress={() => setSelected(tasks.map((task) => task.id))}
-          />
-          <Button
-            label={copy("Seçimi temizle", "Clear selection")}
-            tone="quiet"
-            disabled={busy || refreshing || disabled || !selected.length}
-            onPress={() => setSelected([])}
-          />
-        </Row>
-        <Row>
-          <Button
-            label={labels.start}
-            tone="primary"
-            style={{ flex: 1 }}
-            disabled={busy || refreshing || disabled || !selected.length}
-            onPress={() => request("start")}
-          />
-          <ActionMenu
-            label={copy("Diğer işlemler", "More actions")}
-            actions={(["stop", "retry", "delete"] as const).map((operation) => ({
-              key: operation,
-              label: labels[operation],
-              destructive: operation === "delete",
-              disabled: busy || refreshing || disabled || !selected.length,
-              onPress: () => request(operation),
-            }))}
-          />
-        </Row>
+        {tasks.length ? (
+          <>
+            <MultiSelectField
+              label={copy("Görevleri seç", "Select tasks")}
+              values={selected}
+              options={tasks.map((task) => ({ value: task.id, label: task.title }))}
+              onChange={setSelected}
+              disabled={busy || refreshing || disabled}
+              searchable
+            />
+            <Row>
+              <Button
+                label={copy("Sonuçların tümünü seç", "Select all results")}
+                tone="quiet"
+                disabled={busy || refreshing || disabled}
+                onPress={() => setSelected(tasks.map((task) => task.id))}
+              />
+              <Button
+                label={copy("Seçimi temizle", "Clear selection")}
+                tone="quiet"
+                disabled={busy || refreshing || disabled || !selected.length}
+                onPress={() => setSelected([])}
+              />
+            </Row>
+            <Row>
+              <Button
+                label={labels.start}
+                tone="primary"
+                style={{ flex: 1 }}
+                disabled={busy || refreshing || disabled || !selected.length}
+                onPress={() => request("start")}
+              />
+              <ActionMenu
+                label={copy("Diğer işlemler", "More actions")}
+                actions={(["stop", "retry", "delete"] as const).map((operation) => ({
+                  key: operation,
+                  label: labels[operation],
+                  destructive: operation === "delete",
+                  disabled: busy || refreshing || disabled || !selected.length,
+                  onPress: () => request(operation),
+                }))}
+              />
+            </Row>
+          </>
+        ) : !busy && !refreshing && !results.length ? (
+          <Body muted>{copy("Eşleşen sonuç yok", "No matching results")}</Body>
+        ) : null}
         {open ? feedback : null}
       </Sheet>
     </>

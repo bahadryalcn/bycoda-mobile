@@ -2,11 +2,15 @@
 import { act, createElement, useState, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import type { AssistantMessage } from "../../../../src/shared/model/host-contracts/assistant";
-const review = vi.hoisted(() => ({ approvals: 0, pending: false, messages: [] as AssistantMessage[] }));
+import type { AssistantMessage, AssistantThread } from "../../../../src/shared/model/host-contracts/assistant";
+const review = vi.hoisted(() => ({
+  approvals: 0, pending: false, messages: [] as AssistantMessage[], extraThreads: [] as AssistantThread[],
+  directoryReady: true, verifying: false, projectVisible: true,
+}));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("expo-router", () => ({ router: { push: vi.fn() }, Stack: { Screen: () => null } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/i18n", () => ({ useLocale: () => "en-GB" }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { muted: "muted" }, uiStyles: { grow: {}, caption: {}, heading: {} } }) }));
 vi.mock("./assistant-call-controls", () => ({ AssistantCallButton: () => createElement("button", { "data-call": true }, "Voice call"), AssistantCallError: () => null }));
 vi.mock("./assistant-call-session", () => ({ endAssistantCall: vi.fn() }));
@@ -22,7 +26,7 @@ vi.mock("../voice-settings/call-voice-button", () => ({
 vi.mock("./assistant-home-hero", () => ({
   AssistantHomeLoading: () => createElement("div", { role: "progressbar", "data-assistant-orb": true }),
   AssistantContextBadges: ({ machineName, scope }: { machineName: string; scope: string }) => createElement("span", null, `${machineName} ${scope}`),
-  AssistantHomeHero: ({ name, machineName, onOpen, onVoice, openDisabled, voiceDisabled }: { name: string; machineName: string; onOpen(): void; onVoice(): void; openDisabled: boolean; voiceDisabled: boolean }) => createElement("section", { "data-hero": name }, machineName,
+  AssistantHomeHero: ({ name, machineName, scope, onOpen, onVoice, openDisabled, voiceDisabled }: { name: string; machineName: string; scope: string; onOpen(): void; onVoice(): void; openDisabled: boolean; voiceDisabled: boolean }) => createElement("section", { "data-hero": name, "data-scope": scope }, machineName,
     createElement("button", { onClick: onOpen, disabled: openDisabled }, "Open conversation"),
     createElement("button", { onClick: onVoice, disabled: voiceDisabled }, "Voice call")),
 }));
@@ -32,7 +36,12 @@ vi.mock("./use-assistant-voice-entry", () => ({ useAssistantVoiceEntry: () => ({
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "host-a", name: "Work computer" }) }));
 vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ token: "epoch-a", review: { environmentId: "env-a" }, isCurrent: () => true }) }));
 vi.mock("@/state/queries", () => ({ useHostClient: () => ({}), useHostReadActive: () => true, hostKey: (id: string, parts: unknown[]) => [id, ...parts] }));
-vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({ directoryReady: true, data: [{ id: "project-a", name: "Product project" }], isProjectVisible: () => true }) }));
+vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({
+  directoryReady: review.directoryReady,
+  verifying: review.verifying,
+  data: [{ id: "project-a", name: "Product project" }],
+  isProjectVisible: () => review.projectVisible,
+}) }));
 vi.mock("./assistant-client", () => ({ AssistantMobileClient: class {} }));
 vi.mock("@/ui/error-message", () => ({ remoteErrorKind: () => null }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
@@ -57,6 +66,7 @@ vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}), useQuery: 
   threads: [
     { id: "thread-conversation", projectId: "project-a", summary: "", version: 1, createdAt: 1, updatedAt: 1 },
     { id: "thread-planning", projectId: "project-a", purpose: "job-planning", summary: "", version: 2, createdAt: 2, updatedAt: 2 },
+    ...review.extraThreads,
   ],
 } }, isPending: false, refetch: vi.fn() }) }));
 vi.mock("@/ui/primitives", () => {
@@ -76,7 +86,7 @@ vi.mock("@/ui/primitives", () => {
       renderItem?: (row: { item: AssistantMessage; index: number }) => React.ReactNode;
     }) => createElement("main", null, header,
       data?.length ? data.map((item, index) => createElement("div", { key: item.id }, renderItem?.({ item, index }))) : ListEmptyComponent),
-    SelectField: ({ label, options }: { label: string; options: { value: string; label: string }[] }) => createElement("select", { "aria-label": label }, ...options.map(option => createElement("option", { key: option.value, value: option.value }, option.label))) };
+    SelectField: ({ label, options }: { label: string; options: { value: string; label: string; detail?: string; disabled?: boolean }[] }) => createElement("select", { "aria-label": label }, ...options.map(option => createElement("option", { key: option.value, value: option.value, disabled: option.disabled, "data-detail": option.detail }, option.label))) };
 });
 import { AssistantScreen } from "./assistant-screen";
 import { useAssistantCompanion } from "./assistant-companion-state";
@@ -119,6 +129,55 @@ it("distinguishes normal and planning threads in the same project using the publ
     expect(options.map(option => option.value)).toEqual(["thread-conversation", "thread-planning"]);
     expect(options.map(option => option.textContent)).toEqual(["Product project · Conversation", "Product project · Planning"]);
   } finally { await act(async () => root.unmount()); vi.unstubAllGlobals(); }
+});
+
+it.each([
+  { projectId: "project-missing", verifying: true, label: "Loading projects…" },
+  { projectId: "project-a", verifying: false, label: "Project" },
+])("keeps the selected project scope while verifying access ($projectId)", async ({ projectId, verifying, label }) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  review.directoryReady = !verifying;
+  review.verifying = verifying;
+  review.projectVisible = false;
+  useAssistantCompanion.setState({ machineId: "host-a", environmentId: "env-a", projectId, thread: null });
+  const container = document.createElement("div"), root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(AssistantScreen)));
+    expect(container.querySelector("[data-scope]")?.getAttribute("data-scope")).toBe(label);
+    await act(async () => container.querySelector<HTMLButtonElement>("[data-call-settings] button")!.click());
+    const scope = container.querySelector(`select[aria-label="Conversation scope"] option[value="${projectId}"]`) as HTMLOptionElement | null;
+    expect(scope?.textContent).toBe(label);
+    expect(scope?.disabled).toBe(true);
+    expect(container.textContent).not.toContain("Product project");
+  } finally {
+    await act(async () => root.unmount());
+    review.directoryReady = true; review.verifying = false; review.projectVisible = true;
+    useAssistantCompanion.setState({ machineId: undefined, environmentId: undefined, projectId: "", thread: null });
+    vi.unstubAllGlobals();
+  }
+});
+
+it("gives same-purpose recent threads distinct details even when their formatted times match", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  review.extraThreads = [
+    { id: "same-time", projectId: "project-a", summary: "", version: 1, createdAt: 1, updatedAt: 1 },
+    { id: "later", projectId: "project-a", summary: "", version: 1, createdAt: 86_400_001, updatedAt: 86_400_001 },
+  ];
+  const container = document.createElement("div"), root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(AssistantScreen)));
+    await act(async () => container.querySelector<HTMLButtonElement>("[data-call-settings] button")!.click());
+    const options = [...container.querySelectorAll<HTMLOptionElement>('select[aria-label="Recent conversations"] option')]
+      .filter(option => option.textContent === "Product project · Conversation");
+    expect(options.map(option => option.value)).toEqual(["thread-conversation", "same-time", "later"]);
+    const details = options.map(option => option.getAttribute("data-detail"));
+    expect(details.every(detail => detail?.includes("1970"))).toBe(true);
+    expect(new Set(details).size).toBe(3);
+  } finally {
+    await act(async () => root.unmount());
+    review.extraThreads = [];
+    vi.unstubAllGlobals();
+  }
 });
 
 it("opens and closes header settings without remounting the selected composer", async () => {

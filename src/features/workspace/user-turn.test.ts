@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { CONTINUE_PROMPT, RESUME_PROMPT } from "../../../../src/features/sessions/model/userPromptText";
-import { userPromptDisplay, userTurn, userTurnAuthorLabel } from "./user-turn";
+import { taskKickoffObjective, userPromptDisplay, userTurn, userTurnAuthorLabel } from "./user-turn";
 import type { Block } from "./wire";
 
 const user = (text: string, fields: Partial<Block> = {}) => ({ role: "user", text, ...fields }) as Block;
@@ -30,6 +30,21 @@ it("hides crew envelopes and legacy command prefixes from the visible prompt", (
   expect(userPromptDisplay("Fix it\n\n<bycoda_assignment id=\"1\">secret</bycoda_assignment>")).toBe("Fix it");
   expect(userPromptDisplay("/bycoda list sessions")).toBe("list sessions");
   expect(userPromptDisplay("plain")).toBe("plain");
+});
+
+it("reads the matching versioned objective only from a generated task kickoff", () => {
+  const author = { kind: "task", id: "task-1", name: "Check receipts", reason: "kickoff" } as const;
+  const contract = JSON.stringify({
+    schema: "bycoda.task-contract.v1",
+    task: { id: author.id, instructions: { objective: "  Check the receipt layout.  " } },
+  }, null, 2);
+  const text = `Execution instructions.\n\n${contract}\n\nPrevious attempt feedback.`;
+  expect(taskKickoffObjective(text, author)).toBe("Check the receipt layout.");
+  expect(taskKickoffObjective(text, undefined)).toBeUndefined();
+  expect(taskKickoffObjective(text, { ...author, reason: "review" })).toBeUndefined();
+  expect(taskKickoffObjective(text, { ...author, id: "another-task" })).toBeUndefined();
+  expect(taskKickoffObjective(contract.slice(0, -1), author)).toBeUndefined();
+  expect(taskKickoffObjective("Legacy task prompt", author)).toBeUndefined();
 });
 
 it("names who wrote a prompt the owner did not type", () => {

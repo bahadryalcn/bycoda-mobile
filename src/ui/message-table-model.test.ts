@@ -4,6 +4,12 @@ import { messageTableColumnWidths, tableColumnWidths } from "./message-table-mod
 
 const flatten = (nodes: MessageNode[]): MessageNode[] => nodes.flatMap((node) => [node, ...flatten(node.children)]);
 
+it("uses the ARIA table role instead of the legacy native role that crashes on Android", () => {
+  const renderer = readFileSync(new URL("./message-content.tsx", import.meta.url), "utf8");
+  expect(renderer).not.toContain('accessibilityRole="table"');
+  expect(renderer).toContain('role="table"');
+});
+
 describe("markdown table column sizing", () => {
   it("sizes each column to its longest cell instead of a fixed width", () => {
     const [short, long] = tableColumnWidths([[2, 40], [3, 6]], 15, 1);
@@ -46,3 +52,4 @@ describe("markdown table column sizing", () => {
     expect(widths.every((width) => width >= 6 * 15 && width <= 16 * 15)).toBe(true);
   });
 });
+import { readFileSync } from "node:fs";

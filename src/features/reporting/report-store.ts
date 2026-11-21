@@ -86,7 +86,7 @@ export async function sendContentReport(options: {
     if (attempt !== generation) return;
     options.assertAccess();
     if (receipt.requestId !== requestId || !receipt.reportId) throw new Error("Invalid report receipt");
-    useContentReport.setState({ status: "sent", receiptId: receipt.reportId });
+    useContentReport.setState({ draft: emptyReportDraft(), status: "sent", receiptId: receipt.reportId });
   } catch {
     if (attempt !== generation) return;
     try {

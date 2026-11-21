@@ -62,13 +62,14 @@ export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionSc
   const inspect=(row:QueuedMessage)=>{if(!exists(row)||issued.current)return;const next={row,lease};issued.current=next;setSelection(next);};
   const closeReader=()=>{if(mounted.current&&selection&&issued.current===selection){issued.current=undefined;setSelection(undefined);}};
   const review=(row:QueuedMessage,outcome:QueueDeliveryReview)=>{if(writable(row)&&row.deliveryUnknown&&!(outcome==="retry"&&live.current.state.retryBlocked))live.current.actions.review(row.id,outcome);};
-  const edit=(row:QueuedMessage)=>{if(writable(row)&&live.current.state.canEdit&&!live.current.state.queueError){closeReader();live.current.actions.edit(row);}};
+  const edit=(row:QueuedMessage)=>{if(writable(row)&&!row.deliveryUnknown&&live.current.state.canEdit&&!live.current.state.queueError){closeReader();live.current.actions.edit(row);}};
   const reload=()=>{if(origin()&&!live.current.state.reloadBusy)live.current.actions.reload();};
   const close=()=>{if(mounted.current&&lease.active)live.current.actions.close();};
-  const primary=!readable||state.queueError||!!state.warning?"reload":state.hasDraft?"resume":state.rows.length?"send":"close";
-  const submit=()=>{if(primary==="close"){close();return;}if(primary==="reload"){reload();return;}if(!current()||live.current.state.disabled)return;if(primary==="resume"&&live.current.state.hasDraft)live.current.actions.resume();else if(primary==="send"&&!live.current.state.disableSend)live.current.actions.send();};
+  const primary=!readable||state.queueError||!!state.warning?"reload":state.hasDraft?"resume":state.rows.length?"send":undefined;
+  const submit=()=>{if(primary==="reload"){reload();return;}if(!current()||live.current.state.disabled)return;if(primary==="resume"&&live.current.state.hasDraft)live.current.actions.resume();else if(primary==="send"&&!live.current.state.disableSend)live.current.actions.send();};
   const feedback=<><ErrorText error={state.error} message={state.errorMessage}/>{state.warning&&state.warning!==state.errorMessage?<Notice tone="warning" message={state.warning}/>:null}</>;
   const selected=selection?state.rows.find(row=>row.id===selection.row.id):undefined;
+  const canEditSelected=selected&&!selected.deliveryUnknown&&state.canEdit&&!state.queueError;
   return <><Sheet visible={visible} title={copy("Mesaj sırası", "Message queue")} size="form" scroll={false} onClose={close}>
     <ScreenList {...scroll.listProps} data={readable?state.rows:[]} keyExtractor={row=>row.id} header={<Stack>
       {readable?<CollectionToolbar field={<Stack><Body selectable>{opening.name}</Body><Body muted style={uiStyles.caption}>{state.label}</Body></Stack>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
@@ -77,6 +78,7 @@ export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionSc
         state.hasDraft&&{key:"resume",icon:glyph(Pencil),label:copy("Düzenlemeye devam et", "Continue editing"),disabled:state.disabled,onPress:()=>{if(current()&&!live.current.state.disabled&&live.current.state.hasDraft)live.current.actions.resume();}},
       ]}/>}/>:privateFailure?<ErrorText error={state.error}/>:<RecordAccessUnavailable />}
       {readable&&!state.rows.length?<Empty compact title={copy("Sıra boş", "Queue is empty")} detail={copy("Tur sürerken yazdığın mesajlar burada sırayla bekler ve sırayla gönderilir.", "Messages you queue while a turn runs wait here and are sent in order.")}/>:null}
+      {readable&&!primary?feedback:null}
     </Stack>} renderItem={({item:row,index})=><Row style={{alignItems:"flex-start"}}>
       <View style={{flex:1,minWidth:0}}><NavigationRow label={row.text||copy("Ekli mesaj", "Message with attachments")} labelLines={2} detail={[index+1,sessionModelLabel(row.modelTarget)].filter(Boolean).join(" · ")} metadata={row.attachments.map(file=>file.name).join(" · ")} supporting={row.id===state.sendingId?<Badge tone="info" label={copy("Gönderiliyor…", "Sending…")}/>:row.deliveryUnknown?<Badge tone="warning" label={copy("Kontrol gerekiyor", "Needs review")}/>:undefined} onPress={()=>inspect(row)}/></View>
       <ActionMenu label={copy("Mesaj işlemleri", "Message actions")} actions={row.deliveryUnknown?[
@@ -91,15 +93,16 @@ export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionSc
         {key:"remove",icon:glyph(Trash2,true),label:copy("Sıradan kaldır", "Remove from queue"),destructive:true,disabled:state.disabled||state.hasDraft,onPress:()=>{if(writable(row)&&!live.current.state.hasDraft)live.current.actions.remove(row.id);}},
       ]}/>
     </Row>}/>
-    <FormActions submitLabel={!readable?copy("Sırayı yeniden yükle", "Reload queue"):primary==="reload"?copy("Sırayı yeniden yükle", "Reload queue"):primary==="resume"?copy("Düzenlemeye devam et", "Continue editing"):primary==="send"?copy("Sonrakini gönder", "Send next"):copy("Kapat", "Close")}
-      onSubmit={readable?submit:reload} disabled={!available||(primary==="resume"&&state.disabled)||(primary==="send"&&state.disableSend)||(primary==="reload"&&state.reloadBusy)} busy={state.sending||state.controlling||primary==="reload"&&state.reloadBusy} feedback={readable?feedback:undefined} onCancel={(primary!=="close"||!readable)&&!state.sending&&!state.controlling?close:undefined} cancelLabel={copy("Kapat", "Close")}/>
+    {primary?<FormActions submitLabel={primary==="reload"?copy("Sırayı yeniden yükle", "Reload queue"):primary==="resume"?copy("Düzenlemeye devam et", "Continue editing"):copy("Sonrakini gönder", "Send next")}
+      onSubmit={submit} disabled={!available||(primary==="resume"&&state.disabled)||(primary==="send"&&state.disableSend)||(primary==="reload"&&state.reloadBusy)} busy={state.sending||state.controlling||primary==="reload"&&state.reloadBusy} feedback={readable?feedback:undefined}/>
+    :null}
   </Sheet><PrivateContentAccessProvider value={{allowed:readable,check:current}}>
     {visible&&readable&&selection&&selection.lease===lease&&selected?<Sheet visible title={copy("Mesaj", "Message")} size="form" scroll={false} onClose={closeReader}>
       <ScreenList data={selected.attachments} keyExtractor={file=>file.id} header={<Stack><Body muted>{sessionModelLabel(selected.modelTarget)}</Body><Body selectable>{selected.text}</Body>
         {selected.deliveryUnknown&&state.warning?<Notice tone="warning" message={state.warning}/>:null}
         {selected.attachments.length?<Body muted>{copy("Dosyalar mesaj gönderildikten sonra açılabilir.", "Files can be opened after the queued message is sent.")}</Body>:null}
       </Stack>} renderItem={({item:file})=><Body muted selectable>{file.name} · {Math.ceil(file.size/1024)} KB</Body>}/>
-      <FormActions submitLabel={state.canEdit&&!state.queueError?copy("Sırayı duraklat ve düzenle", "Pause queue and edit"):copy("Kapat", "Close")} onSubmit={state.canEdit&&!state.queueError?()=>edit(selected):closeReader} disabled={state.canEdit&&!state.queueError&&state.disabled} onCancel={state.canEdit&&!state.queueError?closeReader:undefined} cancelLabel={copy("Kapat", "Close")}/>
+      {canEditSelected?<FormActions submitLabel={copy("Sırayı duraklat ve düzenle", "Pause queue and edit")} onSubmit={()=>edit(selected)} disabled={state.disabled}/>:null}
     </Sheet>:null}
   </PrivateContentAccessProvider></>;
 }

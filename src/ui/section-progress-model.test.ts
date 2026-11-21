@@ -1,9 +1,10 @@
 import { expect, it } from "vitest";
-import { sectionNavigatorClearance } from "./section-progress-model";
+import { readingProgressPercent } from "./section-progress-model";
 
-it("reserves the floating pill's height and grows with large text, capped at 2x", () => {
-  expect(sectionNavigatorClearance(1)).toBe(72);
-  expect(sectionNavigatorClearance(0.8)).toBe(72);
-  expect(sectionNavigatorClearance(1.5)).toBe(108);
-  expect(sectionNavigatorClearance(3)).toBe(144);
+it("reports reading progress without overscroll or unmeasured layout affecting it", () => {
+  expect(readingProgressPercent(0, 0, 0)).toBe(0);
+  expect(readingProgressPercent(-10, 400, 800)).toBe(0);
+  expect(readingProgressPercent(100, 400, 800)).toBe(25);
+  expect(readingProgressPercent(450, 400, 800)).toBe(100);
+  expect(readingProgressPercent(0, 400, 300)).toBe(100);
 });

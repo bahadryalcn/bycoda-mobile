@@ -15,6 +15,10 @@ export const privacyPolicyUrl =
 export const repositoryUrl = "https://github.com/bahadryalcn/bycoda";
 export const websiteUrl = PRODUCT_IDENTITY.websiteUrl;
 
+export function legalAppendixTitle(id: "mit-license" | "contact-links", copy: LegalCopy) {
+  return id === "mit-license" ? copy("MIT lisansı", "MIT license") : copy("İletişim ve bağlantılar", "Contact & links");
+}
+
 const titles: Record<LegalDocumentId, LegalText> = {
   privacy: ["Gizlilik politikası", "Privacy policy"],
   terms: ["Kullanım koşulları", "Terms of use"],

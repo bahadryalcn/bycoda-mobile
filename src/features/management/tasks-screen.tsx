@@ -22,6 +22,7 @@ import {
   Screen,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { getQueryPresentation } from "@/ui/query-presentation";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import type { HostTask } from "@/domain/types";
@@ -41,6 +42,9 @@ import type { TaskEditorFlow } from "./tasks/types";
 import { useMobileTheme } from "@/ui/theme";
 import { useLocalSearchParams } from "expo-router";
 import { useProjectList } from "../workspace/use-project-directory";
+import { GitDeliverySheet } from "../workspace/git-delivery";
+
+const newTaskStatus = "todo";
 
 export function TasksScreen() {
   const { colors } = useMobileTheme();
@@ -82,6 +86,7 @@ export function TasksScreen() {
   const reorder = useHostMutation("tasks.reorder", ["tasks"]);
   const [editor, setEditor] = useState<TaskEditorFlow>(null);
   const [deliveryTask, setDeliveryTask] = useState<HostTask | null>(null);
+  const [reviewTask, setReviewTask] = useState<HostTask | null>(null);
   const editProjectId = editor?.kind === "edit" ? editor.projectId : null;
   const editQuery = useHostQuery<HostTask[]>(
     ["tasks", editProjectId],
@@ -102,25 +107,25 @@ export function TasksScreen() {
   const [filter, setFilter] = useState<string>("active");
   const [filterDraft, setFilterDraft] = useState<string | null>(null);
   const start = () => {
+    if (!canCreate) return;
     save.reset();
-    if (providers.length)
-      setEditor({
-        kind: "new",
-        initial: {
-          ...initialAgent(providers),
-          inheritMaxRunMinutes: true,
-          id: identifier(),
-          title: "",
-          prompt: "",
-          projectId: projectId ?? "",
-          isolate: true,
-          review: true,
-          autoMerge: false,
-          continueUntilDone: true,
-          verifyCommand: "",
-          status: "todo",
-        },
-      });
+    setEditor({
+      kind: "new",
+      initial: {
+        ...initialAgent(providers),
+        inheritMaxRunMinutes: true,
+        id: identifier(),
+        title: "",
+        prompt: "",
+        projectId: projectId ?? "",
+        isolate: true,
+        review: true,
+        autoMerge: false,
+        continueUntilDone: true,
+        verifyCommand: "",
+        status: newTaskStatus,
+      },
+    });
   };
   const filterOptions = [
     { value: "active", label: copy("Aktif", "Active") },
@@ -142,6 +147,21 @@ export function TasksScreen() {
     finish.isPending ||
     manualStart.isPending ||
     reorder.isPending;
+  const canCreate = providers.length > 0 && !busy && !editor && !deliveryTask && !reviewTask;
+  const presentation = getQueryPresentation(query);
+  const hasScopedTasks = !!query.data?.length;
+  const showCreateInHeader = hasScopedTasks &&
+    (presentation === "ready" || presentation === "stale-error");
+  const searchActive = !linkedTaskId && !!search.trim();
+  const statusHidesTasks = !linkedTaskId && filter !== "all" &&
+    (hasScopedTasks || !taskMatchesFilter({ status: newTaskStatus }, filter));
+  const emptyAction = searchActive
+    ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+    : statusHidesTasks
+      ? { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") }
+      : query.data?.length === 0 && !linkedTaskId && canCreate
+        ? { label: copy("Yeni görev", "New task"), onPress: start }
+        : undefined;
   const visible = query.data?.filter(
     (task) =>
       linkedTaskId ? task.id === linkedTaskId : taskMatchesFilter(task, filter) &&
@@ -155,17 +175,11 @@ export function TasksScreen() {
       data={visible ?? []}
       keyExtractor={(item) => item.id}
       context={<Scope allowAll projectId={selectedProjectId} onChange={setProjectId} />}
-      actions={
-        <>
-          <IconButton
-            label={copy("Yeni görev", "New task")}
-            disabled={!providers.length || busy || !!editor}
-            onPress={start}
-          >
-            <Plus size={22} strokeWidth={2.2} color={colors.accent} />
-          </IconButton>
-        </>
-      }
+      actions={showCreateInHeader ? (
+        <IconButton label={copy("Yeni görev", "New task")} disabled={!canCreate} onPress={start}>
+          <Plus size={22} strokeWidth={2.2} color={colors.accent} />
+        </IconButton>
+      ) : undefined}
       header={
         <>
           <FilterSheet
@@ -186,7 +200,7 @@ export function TasksScreen() {
           </FilterSheet>
           <SearchToolbar search={<SearchField ref={searchInput} label={copy("Görevlerde ara", "Search tasks")} value={search} onChangeText={setSearch} />}
             actions={<FilterButton count={filter !== "active" ? 1 : 0} onPress={() => setFilterDraft(filter)} />} />
-          {machine ? <TaskBulkActions key={`${machine.id}:${projectId ?? "all"}`} tasks={visible ?? []} machineId={machine.id} disabled={busy && !bulkBusy || !!editor || !!deliveryTask}
+          {machine ? <TaskBulkActions key={`${machine.id}:${projectId ?? "all"}`} tasks={presentation === "error" ? [] : visible ?? []} machineId={machine.id} disabled={busy && !bulkBusy || !!editor || !!deliveryTask || !!reviewTask}
             context={filterContext} onBusy={setBulkBusy} onComplete={async () => { await listQuery.refetch(); }} /> : filterContext}
           {!providers.length ? <>{providerQuery.isLoading || providerQuery.error ? <QueryState query={providerQuery} loading="inline" /> : <AgentProviderPrerequisite />}</> : null}
           {!editor && (
@@ -217,7 +231,7 @@ export function TasksScreen() {
             <Sheet
               visible
               size="form"
-              title={copy("Görev ayrıntıları", "Task details")}
+              title={editor?.kind === "new" ? copy("Yeni görev", "New task") : copy("Görev ayrıntıları", "Task details")}
               onClose={() => {
                 if (!busy) setEditor(null);
               }}
@@ -245,17 +259,16 @@ export function TasksScreen() {
               />
             )}
           </Sheet>
+          {reviewTask?.branch ? <GitDeliverySheet
+            scope={{ projectId: reviewTask.projectId }} branch={reviewTask.branch}
+            task={reviewTask} onClose={() => setReviewTask(null)} /> : null}
           <QueryState
             query={query}
             empty={visible?.length === 0}
-            emptyTitle={search.trim() && query.data?.length ? copy("Eşleşen sonuç yok", "No matching results") : copy("Bu görünümde görev yok", "No tasks in this view")}
-            emptyDetail={search.trim() && query.data?.length ? undefined
-              : copy("Görevler sırayla bir agent tarafından çalıştırılır; durumları burada görünür.", "Tasks run one after another by an agent; their status shows here.")}
-            emptyAction={query.data?.length ? search.trim()
-              ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
-              : filter !== "all" ? { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") } : undefined
-              : providers.length && !busy && !editor
-                ? { label: copy("Yeni görev", "New task"), onPress: start } : undefined}
+            emptyTitle={searchActive ? copy("Eşleşen sonuç yok", "No matching results") : copy("Bu görünümde görev yok", "No tasks in this view")}
+            emptyDetail={searchActive || statusHidesTasks ? undefined
+              : copy("Görevler bağlı bilgisayarında çalışır.", "Tasks run on your connected computer.")}
+            emptyAction={emptyAction}
           />
         </>
       }
@@ -264,7 +277,7 @@ export function TasksScreen() {
           task={task}
           projectName={projects.data?.find((project) => project.id === task.projectId)?.name}
           busy={busy}
-          editorOpen={!!draft || !!deliveryTask}
+          editorOpen={!!draft || !!deliveryTask || !!reviewTask}
           move={move}
           remove={remove}
           decline={decline}
@@ -275,6 +288,7 @@ export function TasksScreen() {
           tasks={lifecycleTasks ?? []}
           lifecycleReady={!projectId || !!lifecycleTasks}
           onDelivery={setDeliveryTask}
+          onReviewDelivery={setReviewTask}
           onEdit={(task) => {
             save.reset();
             setEditor({ kind: "edit", id: task.id, projectId: task.projectId });

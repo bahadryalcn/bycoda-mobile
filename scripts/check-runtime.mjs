@@ -11,9 +11,13 @@ const pureContracts = new Set([
   "shared/lib/productIdentity",
   // Pure typed-array PCM/VAD math and base64 codecs; no DOM, audio device or desktop imports.
   "features/voice/model/voiceVad",
+  "features/voice/model/dictationModels",
   "shared/lib/text/truncate",
   // Dependency-free Intl formatter caches; widget timestamps use the selected mobile locale.
   "shared/lib/intl",
+  "shared/lib/withTimeout",
+  "shared/lib/time/hostLifetime",
+  "shared/lib/time/timestamps",
   "shared/model/host-contracts",
   // Pool flattening is a pure function over the routing contract.
   "shared/model/modelRoutingPools",
@@ -24,6 +28,8 @@ const pureContracts = new Set([
   "shared/model/host-contracts/image-models",
   // Findings eligibility uses primitives only; authority remains on the Host.
   "shared/model/host-contracts/task-findings",
+  "shared/model/host-contracts/schemas",
+  "shared/model/host-contracts/tasks",
   // Work caps share the canonical pure model routing schema; no desktop UI runtime.
   "shared/model/host-contracts/model-routing",
   // Two constants shared with the desktop and Host: the response byte cap and its error code.

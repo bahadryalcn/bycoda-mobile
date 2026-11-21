@@ -12,6 +12,7 @@ import type { HostModelCatalog } from "@/domain/types";
 import { useActiveMachine } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
+import { getQueryPresentation } from "@/ui/query-presentation";
 import {
   IconButton,
   MutationState,
@@ -125,6 +126,9 @@ export function CrewsScreen() {
       ? copy("Yeni kütüphane üyesi", "New library member")
       : copy("Yeni ekip", "New crew");
   const canCreate = !!projectId && !!directory && !busy && !editor;
+  const presentation = getQueryPresentation(query);
+  const showCreateInHeader = supported && tab !== "runs" && rows.length > 0 &&
+    (presentation === "ready" || presentation === "stale-error");
   const create = () => {
     if (!projectId || !directory) return;
     if (tab === "agents")
@@ -152,7 +156,7 @@ export function CrewsScreen() {
       }
       context={<Scope projectId={projectId} onChange={setProjectId} />}
       actions={
-        supported && tab !== "runs" ? (
+        showCreateInHeader ? (
           <IconButton
             label={createLabel}
             disabled={!canCreate}
@@ -224,7 +228,7 @@ export function CrewsScreen() {
               ) : null}
               <QueryState
                 query={query}
-                empty={!visible.length}
+                empty={!!directory && !visible.length}
                 emptyTitle={
                   search.trim() && rows.length
                     ? copy("Eşleşen sonuç yok", "No matching results")
@@ -239,7 +243,7 @@ export function CrewsScreen() {
                 emptyAction={
                   search.trim() && rows.length
                     ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
-                    : !search.trim() && tab !== "runs" && canCreate
+                    : !rows.length && tab !== "runs" && canCreate
                       ? { label: createLabel, onPress: create }
                       : undefined
                 }

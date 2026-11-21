@@ -357,10 +357,10 @@ upstream hook, so `vitest.config.ts` aliases it to `src/ui/back-handler-test-dou
 Disclosure open state uses PanelUI useDisclosure.
 
 The Files browser breadcrumb strip uses PanelUI ScrollFade as an overflow hint.
-`SectionNavigator` (section-progress.tsx) wraps PanelUI SectionProgress and
-useScrollSections as a reading-progress pill for long single-page documents such as
-terms and privacy. It must be a sibling of the scroller, and the scroller reserves
-`sectionNavigatorClearance(fontScale)` bottom padding.
+`SectionNavigator` (section-progress.tsx) displays localized reading progress
+from PanelUI's useScrollSections and uses the shared Sheet for the jump list.
+Use it after the document scroller so its action takes up layout space without
+covering the final heading.
 
 PanelUI components evaluated and not adopted:
 

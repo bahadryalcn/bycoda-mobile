@@ -1,4 +1,4 @@
-import { useInboxLocalScope } from "./inbox-local-scope";
+import { InboxLocalScopeContext, useInboxLocalScope } from "./inbox-local-scope";
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
 import { useActiveMachine } from "@/state/machines";
@@ -86,6 +86,8 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
     error: availability.error ?? privateRead?.error ?? null, refetch: refresh };
   const rows = available ? items.data?.items.slice(0, limit) ?? [] : [];
   const empty = items.data?.items.length === 0 && Object.keys(items.data.errors).length === 0;
+  const hasFilters = assigned || all;
+  const searching = search.trim().length > 0;
   const scrollMemory = useInboxScrollMemory<(typeof rows)[number]>(memory, origin, initialView?.offset ?? 0,
     available && items.data !== undefined, rows.length, { suspended: !available });
   const dispatch = useCallback((action: InboxBrowseAction) => {
@@ -93,6 +95,7 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
     if (action.type !== "commit-search") scrollMemory.cancelRestore();
     reduce(action);
   }, [scrollMemory.cancelRestore, canBrowse]);
+  const clearFilters = { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => dispatch({ type: "clear-filters" }) };
   const closeFilters = () => { filterOwner.current = null; setFilterDraft(null); };
   const changeFilters = (next: Filters) => { filterOwner.current = next; setFilterDraft(next); };
   useLayoutEffect(() => { if (!available) closeFilters(); }, [available]);
@@ -113,14 +116,17 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
       empty={availability.data?.available === false} emptyIllustration="connect-computer" emptyTitle={copy("Bilgisayardaki Bycoda açık olmalı", "Open Bycoda on your computer")}
       emptyDetail={copy("GitHub, GitLab, Azure DevOps, Linear ve Jira erişimi bilgisayardaki oturumundan alınır. Bycoda’yı aç veya güncelle; bağlantı otomatik kontrol edilir.",
         "Provider access uses your desktop session. Open or update Bycoda on this computer; availability is checked automatically.")}
+      emptyAction={{ label: copy("Yeniden dene", "Retry"), busy: availability.isFetching, onPress: () => { void refresh(); } }}
       onManageConnections={connectionsOpen ? manageConnections : undefined} />}
     {scopeCurrent && readAllowed && privateRead ? <QueryState query={{...privateRead, data: undefined, refetch: refresh}}
       onManageConnections={connectionsOpen ? manageConnections : undefined} /> : null}
   </>;
   return <>
     {view.kind === "detail" ? <Sheet visible size="full" scroll={false} title={copy("Ayrıntılar", "Details")} onClose={() => dispatch({type:"close"})}>
-      <ProviderInboxDetail key={inboxItemKey(view.item)} item={view.item} origin={origin} availability={scopedAvailability}
-        onClose={message => dispatch({type:"close",notice:message})} />
+      <InboxLocalScopeContext value={inboxScope}>
+        <ProviderInboxDetail key={inboxItemKey(view.item)} item={view.item} origin={origin} availability={scopedAvailability}
+          onClose={message => dispatch({type:"close",notice:message})} />
+      </InboxLocalScopeContext>
     </Sheet> : null}
     {jiraBoards ? <ProviderJiraBoards origin={origin} canRead={available} canWrite={available} onClose={() => setJiraBoards(false)} /> : null}
     <ScreenList {...scrollMemory.listProps} title={embedded ? undefined : copy("Servis gelen kutusu", "Provider inbox")}
@@ -148,11 +154,11 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
             </>} />
           <AppliedFilters result={items.data ? copy("Kayıtlar: {p0}", "Items: {p0}", { p0: new Intl.NumberFormat(locale).format(items.data.items.length) }) : undefined}
             filters={[assigned&&copy("Yalnız bana atananlar","Assigned to me only"),all&&copy("Kapalı kayıtları da göster","Include closed items")]} />
-          {search.trim() || assigned || all ? <Button tone="quiet" label={copy("Filtreleri temizle", "Clear filters")}
-            onPress={() => dispatch({type:"clear-filters"})} /> : null}
-          <QueryState query={{...items,refetch:retryItems}} empty={empty} searching={!!(search.trim()||assigned||all)} emptyIllustration="inbox-empty" emptyTitle={search.trim() || assigned || all
-            ? copy("Bu filtrede kayıt yok","No items match these filters") : copy("Açık kayıt yok", "No open items")}
-            emptyAction={search.trim()||assigned||all?{label:copy("Filtreleri temizle","Clear filters"),onPress:()=>dispatch({type:"clear-filters"})}:undefined} />
+          {hasFilters && !empty ? <Button tone="quiet" {...clearFilters} /> : null}
+          <QueryState query={{...items,refetch:retryItems}} empty={empty} searching={searching || hasFilters} emptyIllustration="inbox-empty"
+            emptyTitle={hasFilters ? copy("Bu filtrede kayıt yok", "No items match these filters") : searching
+              ? copy("Eşleşen sonuç yok", "No matching results") : copy("Açık kayıt yok", "No open items")}
+            emptyAction={hasFilters ? clearFilters : undefined} />
           {items.data ? <ProviderInboxFeedback result={items.data} retrying={items.isFetching} onRetry={retryItems} /> : null}
         </> : null}
       </>} />

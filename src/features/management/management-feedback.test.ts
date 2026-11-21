@@ -33,6 +33,7 @@ vi.mock("@/ui/copy", () => ({
   useCopy: () => (_tr: string, en: string) => en,
 }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
+vi.mock("../workspace/git-delivery", () => ({ GitDeliverySheet: () => null }));
 vi.mock("./crews/member-avatars", () => ({ MemberAvatars: () => null }));
 vi.mock("./crews/member-lines", () => ({ MemberLines: () => null }));
 vi.mock("./crews/active-crews", () => ({ ActiveCrews: () => null }));
@@ -56,6 +57,7 @@ vi.mock("@/state/queries", () => ({
     isSuccess: true,
     isFetching: false,
     error: null,
+    refetch: () => Promise.resolve(),
   }),
   useHostMutation: (method: string) => ({
     mutate: state.mutate,
@@ -313,10 +315,10 @@ it.each([AutomationsScreen, StewardsScreen, TasksScreen])(
     await render(Screen);
     if (Screen === StewardsScreen) {
       expect(container.textContent).toContain("Choose a project to create");
-      expect(container.querySelector("button")!.disabled).toBe(true);
+      expect(container.textContent).not.toContain("New project steward");
     } else {
-      // Tasks and automations permit projectless creation; steward scope remains required.
-      expect(container.querySelector("button")!.disabled).toBe(false);
+      const createLabel = Screen === TasksScreen ? "New task" : "New automation";
+      expect(button(createLabel).disabled).toBe(false);
     }
     state.projectId = "project";
     state.providers = [];
@@ -324,7 +326,12 @@ it.each([AutomationsScreen, StewardsScreen, TasksScreen])(
     expect(container.textContent).toContain(
       "This computer has not reported an available agent. Check providers.",
     );
-    expect(container.querySelector("button")!.disabled).toBe(true);
+    if (Screen === StewardsScreen) {
+      expect(container.textContent).not.toContain("New project steward");
+    } else {
+      const createLabel = Screen === TasksScreen ? "New task" : "New automation";
+      expect([...container.querySelectorAll("button")].some(node => node.textContent === createLabel)).toBe(false);
+    }
     await act(async () => button("Provider center").click());
     expect(state.navigate).toHaveBeenCalledExactlyOnceWith("/tools/providers");
     expect(state.projectId).toBe("project");
@@ -336,6 +343,15 @@ it.each([AutomationsScreen, StewardsScreen, TasksScreen])(
     );
   },
 );
+it("offers a single create action for a selected project without a steward", async () => {
+  state.data = [{ id: "other", projectId: "other-project", focus: "Inspect", model: "fixture" }];
+  await render(StewardsScreen);
+  const createButtons = [...container.querySelectorAll("button")].filter(node => node.textContent === "New project steward");
+  expect(createButtons).toHaveLength(1);
+  await act(async () => createButtons[0]!.click());
+  expect(container.textContent).toContain("editing:");
+  expect(state.mutate).not.toHaveBeenCalled();
+});
 it("opens the existing steward instead of permitting a duplicate", async () => {
   state.data = [
     {
@@ -390,6 +406,20 @@ it.each(["stewards.save", "stewards.runNow", "stewards.delete"])(
     expect(state.mutate).not.toHaveBeenCalled();
   },
 );
+
+it("shows one create action per empty Crews tab and none on Work", async () => {
+  state.data = { definitions: [], agents: [], runs: [] };
+  await render(CrewsScreen);
+  const createButtons = () => [...container.querySelectorAll("button")]
+    .filter(node => node.textContent === "New crew" || node.textContent === "New library member");
+  expect(createButtons().map(node => node.textContent)).toEqual(["New crew"]);
+
+  await act(async () => button("Member library").click());
+  expect(createButtons().map(node => node.textContent)).toEqual(["New library member"]);
+
+  await act(async () => button("Work").click());
+  expect(createButtons()).toHaveLength(0);
+});
 
 it("routes crew deletion feedback by record kind as well as id and keeps recovery across tabs", async () => {
   state.data = {

@@ -7,7 +7,6 @@ import Plus from "lucide-react-native/icons/plus";
 import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 
 import {
-  Button,
   IconButton,
   MutationState,
   Notice,
@@ -19,8 +18,8 @@ import {
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { getQueryPresentation } from "@/ui/query-presentation";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { useActiveMachine } from "@/state/machines";
 import type { HostGoal, HostTask } from "@/domain/types";
 import { useAgentProviders } from "./shared/agent";
 import { Scope } from "./shared/scope";
@@ -64,7 +63,6 @@ export function GoalsScreen() {
     { value: "awaiting", label: copy("Onay bekleyen", "Awaiting approval") },
     { value: "finished", label: copy("Bitmiş", "Finished") },
   ];
-  const machine = useActiveMachine();
   const { projectId, setProjectId } = useLocalProjectScope();
   const { providers, query: providerQuery } = useAgentProviders(projectId);
   const query = useHostQuery<HostGoal[]>(["goals"], "goals.list", {}, { interval: goalsPollInterval });
@@ -83,6 +81,9 @@ export function GoalsScreen() {
     remove.isPending ||
     replan.isPending;
   const scoped = query.data?.filter((goal) => !projectId || goal.projectIds.includes(projectId));
+  const presentation = getQueryPresentation(query);
+  const showCreateInHeader = !!scoped?.length &&
+    (presentation === "ready" || presentation === "stale-error");
   const visible = scoped?.filter((goal) => goalFilterMatches(goal.status, filter) && matchesSearch(goal.title + " " + goal.prompt, search, locale));
   // Same key as the Tasks screen, so the cached list is shared; it only loads for epics that own tasks.
   const taskScope = goalTaskScope(visible);
@@ -110,7 +111,7 @@ export function GoalsScreen() {
       data={visible ?? []}
       keyExtractor={(item) => item.id}
       context={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
-      actions={
+      actions={showCreateInHeader ? (
         <IconButton
           label={copy("Yeni epic", "New epic")}
           disabled={!canCreate}
@@ -118,7 +119,7 @@ export function GoalsScreen() {
         >
           <Plus size={22} strokeWidth={2.2} color={colors.accent} />
         </IconButton>
-      }
+      ) : undefined}
       header={<>
 
       {!providers.length && <>{providerQuery.isLoading || providerQuery.error ? <QueryState query={providerQuery} loading="inline" /> : <AgentProviderPrerequisite />}</>}
@@ -171,7 +172,7 @@ export function GoalsScreen() {
       {flow.kind === "settings" && <Sheet visible size="form" title={copy("Epic ayarları", "Epic settings")} onClose={close}>
         <GoalSettingsEditor key={flow.goal.id} initial={flow.goal} onClose={close} />
       </Sheet>}
-      {replanGoal && (
+      {flow.kind === "replan" && (
         <Sheet
           visible
           size="form"
@@ -180,23 +181,21 @@ export function GoalsScreen() {
             if (!busy) close();
           }}
         >
-          <Heading>{replanGoal.title}</Heading>
+          {replanGoal ? <Heading>{replanGoal.title}</Heading> : (
+            <Notice
+              tone="warning"
+              message={copy("Epic artık bulunamadı.", "The epic is no longer available.")}
+            />
+          )}
           <ReplanEditor
-            key={replanGoal.id}
-            goalId={replanGoal.id}
+            key={flow.goalId}
+            goalId={flow.goalId}
             replan={replan}
             busy={busy}
+            available={!!replanGoal}
             onClose={close}
           />
         </Sheet>
-      )}
-      {flow.kind === "replan" && query.isSuccess && !replanGoal && (
-        <Notice
-          tone="warning"
-          message={copy("Epic artık bulunamadı.", "The epic is no longer available.")}
-        >
-          <Button label={copy("Kapat", "Close")} onPress={close} />
-        </Notice>
       )}
       <QueryState
         query={query}
@@ -209,7 +208,7 @@ export function GoalsScreen() {
             ? search.trim()
               ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
               : { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") }
-            : canCreate
+            : scoped?.length === 0 && canCreate
               ? { label: copy("Yeni epic", "New epic"), onPress: startNew }
               : undefined
         }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useMachines } from "@/state/machines";
-import { useHostClient, useHostReadActive } from "@/state/queries";
+import { useConsentPending, useHostClient, useHostReadActive } from "@/state/queries";
 import { assertAppAccess } from "@/state/security";
 import {
   Body,
@@ -40,14 +40,23 @@ export function SessionReferenceScreen({ link }: { link: string }) {
   const [attempt, setAttempt] = useState(0);
   const client = useHostClient();
   const readable = useHostReadActive();
+  const consentPending = useConsentPending();
   const request = useRef(0);
+  const chosen = candidates.find((machine) => machine.id === chosenId);
+  const selectedHere = !!chosen && chosen.id === activeId;
+  const resolving = selectedHere && !!client && readable;
+  const waitingForConnection = selectedHere && !client && !consentPending;
+  const manageConnections = () => router.push("/machines");
+  const manageAction = { label: copy("Bağlantıları yönet", "Manage connections"), onPress: manageConnections };
 
+  // A single eligible computer can be selected without asking the reader.
   useEffect(() => {
     if (!reference || !ready || !readable || chosenId || candidates.length !== 1) return;
     useMachines.getState().selectMachine(candidates[0].id);
     setChosenId(candidates[0].id);
   }, [reference, ready, readable, chosenId, candidates]);
 
+  // Cancel stale lookups when the route, selected connection or access changes.
   useEffect(() => {
     if (!reference || !ready || !chosenId || activeId !== chosenId || !client || !readable) return;
     const machine = machines.find((value) => value.id === chosenId);
@@ -100,23 +109,40 @@ export function SessionReferenceScreen({ link }: { link: string }) {
     setAttempt((value) => value + 1);
   };
   return (
-    <Screen scroll={false}>
-      <View style={{ flex: 1, justifyContent: "center", gap: space.md }}>
+    <Screen footer={
+      <Button tone="quiet"
+        label={copy("Projelere dön", "Back to projects")}
+        onPress={() => router.replace("/")}
+      />
+    }>
+      <View style={{ flexGrow: 1, justifyContent: "center", gap: space.md }}>
         {!reference ? (
           <StateView
             illustration="error"
             title={copy("Oturum bağlantısı geçersiz.", "Invalid conversation link.")}
           />
         ) : storageError ? (
-          <QueryState query={{ error: storageError }} />
+          <QueryState query={{ error: storageError }} onManageConnections={manageConnections} />
         ) : !ready ? (
           <Loading centered label={copy("Bağlantılar yükleniyor…", "Loading connections…")} />
+        ) : !candidates.length ? (
+          <Empty
+            title={copy("Bu oturum için eşleştirilmiş bilgisayar bulunamadı.", "No paired computer is available for this conversation.")}
+            action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: manageConnections }}
+          />
         ) : (
           <>
             {error ? (
-              <ErrorNotice error={error} onRetry={() => setAttempt((value) => value + 1)} />
-            ) : chosenId && activeId === chosenId ? (
+              <ErrorNotice error={error} onRetry={chosen ? () => choose(chosen.id) : undefined} />
+            ) : resolving ? (
               <Loading label={copy("Oturum açılıyor…", "Opening conversation…")} />
+            ) : selectedHere && consentPending ? (
+              <Loading label={copy("Bağlantı kontrol ediliyor…", "Checking connection…")} />
+            ) : waitingForConnection ? (
+              <StateView compact tone="warning"
+                title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
+                action={manageAction}
+              />
             ) : (
               <Body muted>
                 {copy(
@@ -125,35 +151,21 @@ export function SessionReferenceScreen({ link }: { link: string }) {
                 )}
               </Body>
             )}
-            {!candidates.length ? (
-              <Empty
-                title={copy(
-                  "Bu oturum için eşleştirilmiş bilgisayar bulunamadı.",
-                  "No paired computer is available for this conversation.",
-                )}
+            {candidates.map((machine) => (
+              <Button
+                key={machine.id}
+                label={machine.name}
+                selected={machine.id === chosenId}
+                busy={!error && resolving && machine.id === chosenId}
+                onPress={() => choose(machine.id)}
               />
-            ) : (
-              candidates.map((machine) => (
-                <Button
-                  key={machine.id}
-                  label={machine.name}
-                  selected={machine.id === chosenId}
-                  busy={!error && machine.id === chosenId && activeId === chosenId}
-                  onPress={() => choose(machine.id)}
-                />
-              ))
-            )}
-            <Button
-              label={copy("Bilgisayar bağla", "Connect a computer")}
-              onPress={() => router.push("/machines")}
-            />
+            ))}
+            {(!waitingForConnection || !!error) ? (
+              <Button tone="quiet" {...manageAction} />
+            ) : null}
           </>
         )}
       </View>
-      <Button
-        label={copy("Projelere dön", "Back to projects")}
-        onPress={() => router.replace("/")}
-      />
     </Screen>
   );
 }

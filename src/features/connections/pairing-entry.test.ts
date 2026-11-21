@@ -15,7 +15,7 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: "IconTile" }));
 vi.mock("@/ui/info-hint", () => ({ HintLabel: "HintLabel" }));
-vi.mock("@/ui/primitives", () => ({ Body: "Body", Button: "Button", Heading: "Heading", NavigationGroup: "NavigationGroup", NavigationRow: "NavigationRow", Row: "Row", StateView: "StateView" }));
+vi.mock("@/ui/primitives", () => ({ Body: "Body", Button: "Button", Heading: "Heading", NavigationGroup: "NavigationGroup", NavigationRow: "NavigationRow", Row: "Row", Stack: "Stack" }));
 vi.mock("./manual-connection-form", () => ({ ManualConnectionForm: "ManualConnectionForm" }));
 vi.mock("./pairing-preview", () => ({ PairingPreview: "PairingPreview" }));
 vi.mock("./pairing-paste", () => ({ PairingPaste: "PairingPaste" }));

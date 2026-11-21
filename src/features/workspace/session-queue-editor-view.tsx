@@ -57,11 +57,13 @@ export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typ
   const retry=async()=>{if(!current()||retryRef.current||live.current.editor.working)return;retryRef.current=true;setRetrying(true);setNeedsResume(true);try{await live.current.editor.load();}finally{retryRef.current=false;if(mounted.current)setRetrying(false);}};
   const resume=()=>{if(current()&&!disabled&&!issued.current&&live.current.editor.valueRef.current){setNeedsResume(false);live.current.editor.open();}};
   const feedback=<ErrorText error={editor.error||editor.editError} message={composerDeliveryError(editor.error||editor.editError,copy)}/>;
+  const canRetry=available&&!!editor.error&&!editor.ready;
+  const canSave=available&&!!edit&&editor.ready;
   return <>
     {edit||editor.error?<Button tone="quiet" style={{ minHeight: 48 }} label={edit?copy("Sıradaki mesaj düzenleniyor", "Editing queued message"):copy("Sıradaki mesajın taslağı", "Queued message draft")} onPress={()=>{if(origin())live.current.editor.open();}} disabled={!available}><Pencil size={14} color={colors.muted}/></Button>:null}
     {edit?<Button tone="quiet" style={{ minHeight: 48 }} label={copy("Düzenlemeyi iptal et", "Cancel editing")} busy={editor.working} disabled={!available||disabled||!!approval} onPress={()=>openReview("discard",true)}/>:null}
     {!editor.visible?<ErrorText error={editor.editError} message={composerDeliveryError(editor.editError,copy)}/>:null}
-    <Sheet visible={editor.visible} title={copy("Sıradaki mesajı düzenle", "Edit queued message")} dismissible={!editor.working} dirty={!!edit && edit.text !== edit.original.text} onClose={close} size="form" scroll={false}>
+    <Sheet visible={editor.visible} title={copy("Sıradaki mesajı düzenle", "Edit queued message")} dismissible={!editor.working} dismissalRetryKey={editor.editError} onClose={close} size="form" scroll={false}>
       <ScreenList data={available&&edit?edit.original.attachments:[]} keyExtractor={file=>file.id} header={<Stack>
         {available?<>
           <CollectionToolbar field={<Body selectable>{opening.name}</Body>} actions={edit?<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
@@ -77,11 +79,11 @@ export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typ
               <Body mono selectable>{edit.original.id}</Body>
             </Disclosure>
           </>:editor.ready&&!editor.error?<Empty compact title={copy("Sıradaki mesaja ait taslak yok.", "No queued message draft.")}/>:null}
+          {!canRetry&&!canSave?feedback:null}
         </>:<RecordAccessUnavailable />}
       </Stack>} renderItem={({item:file})=><Body muted selectable>{file.name} · {Math.ceil(file.size/1024)} KB</Body>}/>
-      {available&&editor.error&&!editor.ready?<FormActions submitLabel={copy("Taslağı yeniden yükle", "Retry loading draft")} onSubmit={()=>{void retry();}} busy={retrying} disabled={editor.working} feedback={feedback} onCancel={!retrying?close:undefined} cancelLabel={copy("Kapat", "Close")}/>:
-        available&&edit&&editor.ready?<FormActions submitLabel={needsResume?copy("Düzenlemeye devam et", "Continue editing"):copy("Değişiklikleri kaydet", "Save changes")} onSubmit={needsResume?resume:save} busy={editor.working} disabled={blocked||!!approval} feedback={feedback} onCancel={close} cancelLabel={copy("Kapat", "Close")}/>:
-          <FormActions submitLabel={copy("Kapat", "Close")} onSubmit={close} disabled={editor.working} feedback={available?feedback:undefined}/>}
+      {canRetry?<FormActions submitLabel={copy("Taslağı yeniden yükle", "Retry loading draft")} onSubmit={()=>{void retry();}} busy={retrying} disabled={editor.working} feedback={feedback}/>:
+        canSave?<FormActions submitLabel={needsResume?copy("Düzenlemeye devam et", "Continue editing"):copy("Değişiklikleri kaydet", "Save changes")} onSubmit={needsResume?resume:save} busy={editor.working} disabled={blocked||!!approval} dirty={!!edit && edit.text !== edit.original.text} feedback={feedback}/>:null}
     </Sheet>
     <PrivateContentAccessProvider value={{allowed:available,check:()=>approval?.inline?origin()&&window.active:current()}}>
       {approval&&approval.lease===lease&&available&&(approval.inline||editor.visible)&&!disabled?<QueueEditReview kind={approval.kind} edit={approval.edit} machineName={opening.name} onClose={cancelReview} onConfirm={confirm}/>:null}

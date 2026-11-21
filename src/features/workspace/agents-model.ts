@@ -5,7 +5,7 @@ import { subagentNow } from "./run-status-model";
 export type AgentEntry = {
   id: string;
   name: string;
-  state: ReturnType<typeof activityState>;
+  state: ReturnType<typeof activityState> | "interrupted";
   startedAt?: number;
   endedAt?: number;
   /** Agent type and model, e.g. "explorer · gpt-5". */

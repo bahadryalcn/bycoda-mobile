@@ -247,6 +247,18 @@ it("inserts only an unchanged template and does not write or send anything on re
   await field("Template text", "Unsaved body");
   expect(button("Insert into message").disabled).toBe(true);
 });
+it("offers a single creation action before the first phone template exists", async () => {
+  useTemplates.setState({ rows: [] });
+  await act(async () =>
+    root.render(createElement(TemplateLibrary, { onClose: close, onInsert: insert })),
+  );
+  expect(button("Add template")).toBeUndefined();
+  expect(container.querySelector('input[aria-label="Search template names, triggers and text"]')).toBeNull();
+  await click("New template");
+  expect(container.querySelector('input[aria-label="Template name"]')).not.toBeNull();
+  expect(button("Save template").disabled).toBe(true);
+});
+
 it("searches name, trigger and body, retains search after closing a pristine editor and provides empty-filter recovery", async () => {
   await act(async () =>
     root.render(createElement(TemplateLibrary, { onClose: close, onInsert: insert })),

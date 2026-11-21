@@ -26,7 +26,6 @@ import { useSwitchComputer } from "../features/connections/use-switch-computer";
 import { useCopy } from "./copy";
 import { CONNECTED_WINDOW_MS, connectionPhase } from "./connection-presentation";
 import { connectionNeedsPairing, connectionReason } from "./connection-reason";
-import { useLocalNetworkDenied } from "./local-network-permission";
 import { Menu } from "panelui-native/components/menu";
 import { BusyIndicator as Spinner } from "./busy-indicator";
 import { decorativeSvgProps } from "./accessibility";
@@ -130,8 +129,7 @@ export function useMachineStatus() {
   };
   const status = statuses[phase];
   const errorKind = remoteErrorKind(health.error);
-  const lanDenied = useLocalNetworkDenied();
-  const reason = connectionReason(phase, errorKind, machine?.name ?? "", copy, lanDenied);
+  const reason = connectionReason(phase, errorKind, machine?.name ?? "", copy);
   const needsPairing = connectionNeedsPairing(phase, errorKind);
   const statusColor =
     phase === "connected"

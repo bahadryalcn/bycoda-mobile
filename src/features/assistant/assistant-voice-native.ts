@@ -7,7 +7,7 @@ import { decodePcmBase64 } from "../../../../src/features/voice/model/voiceVad";
 import type { AssistantVoiceDependencies } from "./assistant-voice";
 import { requireMicrophonePermission } from "../permissions/microphone-permission";
 import { applyAndroidMicPriority, applyMicPriority, type MicRecorder } from "../voice-settings/mic-input";
-import { speechConfig, voicePreferences } from "../voice-settings/voice-preferences";
+import { selectedCloudModel, speechConfig, voicePreferences } from "../voice-settings/voice-preferences";
 
 /** Local PCM returned by the Host becomes a temporary, standards-compliant mono WAV. */
 export function speechWav(chunks: { audio: string; sampleRate: number }[]) {
@@ -37,7 +37,7 @@ export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependenci
   return {
     ...callbacks,
     engine: () => voicePreferences.getState().preferences.engine,
-    cloudModel: () => voicePreferences.getState().preferences.cloudModel,
+    cloudModel: () => selectedCloudModel(voicePreferences.getState().preferences),
     speech: () => speechConfig(voicePreferences.getState().preferences),
     async capture(onBuffer: (data: Int16Array, rate: number) => void, onEnded?: (reason: string, error?: string) => void) {
       await requireMicrophonePermission();
@@ -115,6 +115,8 @@ export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependenci
         if (file.exists) file.delete();
       }
     },
+    // Android 12 added a configurable start threshold, including for a short final chunk.
+    playStream: Platform.OS === "android" && Number(Platform.Version) >= 31 ? playback?.playStream : undefined,
     stopPlayback: () => { playback?.stop(); stopPlayback(); },
   };
 }

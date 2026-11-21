@@ -8,7 +8,7 @@ vi.mock("./report-config",()=>({get reportSender(){return fixture.sender;}}));
 vi.mock("expo-crypto",()=>({randomUUID:()=>"screen-request"}));
 vi.mock("expo-router",()=>({Stack:{Screen:()=>null},router:{push:vi.fn()}}));
 vi.mock("@/state/security",()=>({assertAppAccess:()=>{if(fixture.locked)throw Error("Locked");}}));
-vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
+vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string,values?:{p0:string})=>en.replace("{p0}",values?.p0??"{p0}")}));
 vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));
 vi.mock("@/ui/info-hint",()=>({useInfoHint:()=>({button:null,panel:null})}));
 vi.mock("@/ui/styles",()=>({uiStyles:{}}));vi.mock("@/ui/tokens",()=>({colors:{},space:{}}));
@@ -19,6 +19,7 @@ vi.mock("@/ui/consent-field",()=>({ConsentField:()=>null}));
 vi.mock("@/ui/primitives",()=>{
  const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);
  return {Body:Wrapper,NavigationGroup:Wrapper,NavigationRow:()=>null,Disclosure:()=>null,Section:Wrapper,Button:()=>null,ToggleField:()=>null,SelectField:()=>null,useSuccessToast:()=>()=>"",
+ StateView:({title,description}:{title:string;description:string})=>createElement("p",{"data-state-view":true},title," ",description),
  Screen:({children,footer}:PropsWithChildren<{footer:import("react").ReactNode}>)=>createElement("main",null,createElement("article",null,children),createElement("footer",null,footer)),
  Field:({label,error,hint,maxLength,onBlur}:{label:string;error?:string;hint?:string;maxLength?:number;onBlur?:()=>void})=>createElement("section",{"data-field":label,"data-max":maxLength,"data-hint":hint,tabIndex:0,onBlur},error),
  ErrorText:({error,message}:{error:unknown;message:string})=>error?createElement("p",null,message):null,
@@ -38,12 +39,30 @@ it("shows the unavailable service once and keeps task actions outside form conte
  await act(async()=>useContentReport.setState({error:"service"}));
  const message="Reporting is not available yet. Your draft is kept while this app remains running.";
  expect([...container.querySelectorAll("p")].filter(p=>p.textContent===message)).toHaveLength(1);
- expect(container.querySelector("footer")?.textContent).toContain("Send");expect(button("Send").disabled).toBe(true);
- expect(container.querySelector("article")?.textContent).not.toContain("SendDiscard draft");
+ expect(button("Done").disabled).toBe(false);
+ expect(button("Send")).toBeUndefined();
+ expect(button("Discard draft")).toBeUndefined();
 });
-it("does not present missing consent as an error for an already received report",async()=>{
+it("replaces the editor with a permanent acknowledgement after delivery",async()=>{
  await act(async()=>{updateContentReport({description:"Reviewed report"});useContentReport.setState({status:"sent",receiptId:"receipt-one"});});
- expect(container.textContent).toContain("receipt-one");expect(container.textContent).not.toContain("Confirm the information to send.");expect(button("Sent").disabled).toBe(true);
+ expect(container.textContent).toContain("Report received.");
+ expect(container.textContent).toContain("receipt-one");
+ expect(container.querySelector("[data-state-view]")?.textContent).toContain("Reference: receipt-one");
+ expect(container.querySelector('[data-field="Description"]')).toBeNull();
+ expect(button("Discard draft")).toBeUndefined();
+ expect(button("Done").disabled).toBe(false);
+});
+it("keeps the reviewed draft and offers an explicit retry with the same request ID",async()=>{
+ const sender=vi.fn<NonNullable<typeof fixture.sender>>()
+   .mockRejectedValueOnce(new Error("Offline")).mockResolvedValue({requestId:"screen-request",reportId:"receipt"});
+ fixture.sender=sender;
+ await act(async()=>{updateContentReport({description:"Reviewed report"});updateContentReport({consent:true});});
+ await act(async()=>button("Send").click());
+ expect(container.querySelector("footer")?.textContent).toContain("Delivery could not be confirmed.");
+ expect(useContentReport.getState().draft.description).toBe("Reviewed report");
+ await act(async()=>button("Retry").click());
+ expect(sender.mock.calls.map(([id])=>id)).toEqual(["screen-request","screen-request"]);
+ expect(useContentReport.getState().draft.description).toBe("");
 });
 it("keeps description validation with its field",async()=>{
  await act(async()=>updateContentReport({consent:true}));expect(container.querySelector('[data-field="Description"]')?.textContent).toContain("Write a description");

@@ -68,10 +68,13 @@ export function HintLabel({ label, help, always, style, trailing }: {
 }) {
   const { uiStyles } = useMobileTheme();
   const info = useInfoHint(!always && isUnitHint(help) ? undefined : help);
+  const labelStyle = style ?? uiStyles.fieldLabel;
+  // A label alone uses the full field width so Android can measure wrapped text in the column.
+  if (!info.button && !trailing) return <Body selectable={false} style={labelStyle}>{label}</Body>;
   return (
     <View style={{ gap: space.xxs }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-        <Body style={[style ?? uiStyles.fieldLabel, { flexShrink: 1 }]}>{label}</Body>
+        <Body selectable={false} style={[labelStyle, { flexShrink: 1 }]}>{label}</Body>
         {info.button}
         {trailing}
       </View>

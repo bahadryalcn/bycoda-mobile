@@ -6,7 +6,7 @@ import { FloatingTabBar } from "./floating-tab-bar";
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./dialogs", () => ({
   Sheet: ({ visible, children }: PropsWithChildren<{ visible: boolean }>) =>
-    visible ? createElement("section", null, children) : null,
+    visible ? createElement("section", { role: "dialog" }, children) : null,
 }));
 vi.mock("./navigation-row", () => ({
   NavigationRow: ({
@@ -267,6 +267,20 @@ it("keeps large-text destinations reachable while the quick action owns a slot",
   ) as HTMLElement;
   await act(async () => more.click());
   expect(container.querySelector('[data-destination="settings"]')).not.toBeNull();
+});
+it("closes the overflow sheet when a window resize makes every destination visible", async () => {
+  state.fontScale = 2;
+  await render();
+  const more = container.querySelector('[aria-label^="More"]') as HTMLElement;
+  await act(async () => more.click());
+  expect(container.querySelector('[data-destination="settings"]')).not.toBeNull();
+  state.width = 520;
+  await render();
+  expect(container.querySelector('[aria-label^="More"]')).toBeNull();
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  state.width = 320;
+  await render();
+  expect(container.querySelector('[data-destination="settings"]')).toBeNull();
 });
 it("labels every tab, keeps every accessible name and never changes the tab row for the action", async () => {
   await render();

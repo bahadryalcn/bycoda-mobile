@@ -9,7 +9,11 @@ on the computer. The phone has no local agent runtime or local project checkout.
 Bottom navigation uses a floating icon dock for Projects, Sessions, Inbox, Tools
 and Settings. A dot marks the current tab; Sessions shows its running count.
 The plus button opens New session; hold it for quick actions. On narrow screens
-or with large text, More opens the remaining destinations. Screen readers retain
+or with large text, More opens the remaining destinations. The sheet closes when
+the window fits all destinations. In **Settings →
+Customize tabs**, switches control which tabs appear, and the grips change their
+order. Changes apply immediately. If you change the layout, **Use default tab
+layout** restores the original order and visibility. Screen readers retain
 full destination names and running-count descriptions. The dock hides while the
 keyboard is open.
 
@@ -26,6 +30,19 @@ conversation's header button opens the same urgency-ordered list. Phones are
 unchanged.
 
 ## Read and control your workspace
+
+When changing the **Working folder** from Files or Changes, bycoda saves any
+open draft before switching. If the save fails, the picker stays open with the
+error and the current folder remains selected.
+
+The Sessions tab opens with **Recent sessions**. Pick **All time** in the time
+filter to include older conversations. When the recent list is empty and older
+sessions are available, **All time** is also available directly from the list.
+
+If a project tool opens without a visible project, use **Choose a project** to
+open that same tool for a project on the connected computer.
+
+**Settings → Chat** contains the send behavior for busy agents and voice settings.
 
 Long-press a session in project lists, active sessions or search results for grouped actions: Rename, Pin, Copy link, Copy session ID, Copy conversation as text, Details, Settle, Archive and Delete. Stop appears for running sessions on supported Hosts and requires confirmation. Rename keeps its draft on failure. Conversation copy includes committed user and assistant text only, excludes tools and private internal blocks, and rejects incomplete text or exports over 256 Ki UTF-16 code units. Host permissions and session authority checks still apply.
 
@@ -54,6 +71,8 @@ Mobile use requires a Bycoda account. Sign in with Apple, Google, Facebook,
 GitHub or an email verification code before opening computers, projects or
 conversations. A build without account configuration keeps the workspace
 unavailable. Privacy, terms and help remain readable from the sign-in screen.
+The **Sections** menu in Privacy and Terms jumps to headings and contact links.
+Terms also includes a **MIT license** entry.
 Desktop use remains available without an account.
 
 Signing out immediately closes phone access to the Host, including its live
@@ -72,6 +91,8 @@ reference only offers computers with its exact environment identity. Native
 references keep their original store and profile identity and are resolved by the
 selected computer; an unrelated conversation with the same ID is never substituted.
 The computer must advertise `sessions.references.v1`; update its Host if prompted.
+If **Waiting for a connection** appears, open **Manage connections** to repair
+the paired computer. Returning to the link keeps the original conversation target.
 Opening a link does not migrate, unarchive, send a message or start an agent.
 
 Links citing a specific message offer **Open conversation** before opening the
@@ -234,6 +255,9 @@ recording or a call. Granted access can also be reviewed in phone settings.
 
 ### Computer notifications
 
+After you tap a notification, bycoda waits for the app to unlock and its saved
+computers to load before opening the original destination.
+
 With notification access allowed, the phone registers an Expo push token with
 the active computer (Hosts that advertise `push.expo.v1`). The computer then
 notifies the phone, even while the app is closed, when a conversation waits for
@@ -242,6 +266,10 @@ Phone permissions turns this off or chooses the moments; **Send a test from the
 computer** checks the whole path. Each paired computer is registered when it is
 the active computer; revoking the phone's pairing on the computer stops its
 notifications.
+
+If the notification service takes too long to respond, choose **Retry** in
+**Notifications from your computer**. **Test on this phone** remains available
+while the phone has notification permission.
 
 - Nothing is sent while someone is using the bycoda desktop app on that
   computer (focused window with input in the last two minutes); its own
@@ -281,12 +309,16 @@ are intentionally unset until registrations exist. iOS requires the assigned
 numeric App Store ID; the Android listing must match `com.bycoda.mobile`. This
 explicit action does not schedule review prompts or claim that a rating occurred.
 
+In **Help & support**, **Open email app** uses the device's email handler.
+If the handler cannot open, use **Copy** beside the support address.
+
 Use **Report** on an AI answer, or **Settings → Help & support → Report AI
 content**, to review a description and an optional excerpt. Reports use the
 Firebase HTTP adapter described in [Firebase reporting](../integrations/firebase-reporting.md).
 The service is unavailable until a verified endpoint is configured. No mail app
-is opened. Only a matching server receipt confirms delivery; failures preserve
-the in-memory draft and retry identity. No excerpt is included without choosing it.
+is opened. If delivery cannot be confirmed, **Retry** keeps the in-memory draft
+and resubmits the same request. A matching server receipt clears the draft and
+shows its reference. No excerpt is included without choosing it.
 
 ## Prepare a native release
 
@@ -305,10 +337,12 @@ privacy, reviewer, reporting, native-device and architectural evidence. Source
 checks and browser previews do not establish native or store acceptance.
 
 Add as many computers as needed. The machine strip identifies the active host.
-Changing computers returns to Projects and retains that computer's selected
-project. Re-pair a revoked credential through **Settings → Manage computers →
-Edit connection**. Removing a connection forgets it on the phone; revoke the
-device on the host if you also want to remove its authorization.
+Tap a saved computer in the machine picker to switch. In **Manage computers**,
+open a saved computer and tap **Use computer**. Check its connection status, then
+go back to the workspace. Each computer keeps its selected project.
+Re-pair a revoked credential through **Settings → Manage computers → Edit
+connection**. Removing a connection forgets it on the phone. Revoke the device
+on the host to remove its authorization.
 
 ## Work from the phone
 
@@ -545,7 +579,9 @@ to screen readers and in the conversation; the list preview uses up to two lines
 Swipe a conversation left to reveal **Archive** (or **Unarchive**), **Delete**
 and **Details**. The row's **Session options** button exposes the same actions
 without a gesture. Swiping only reveals controls; tap an action to use it.
-Archive keeps the conversation available through the Archive filter. Delete
+Archive keeps the conversation available through the Archive filter. In a project,
+open **Project options** and choose **Archive**. Choose **Active sessions**
+above the archive list to return to the project's active sessions. Delete
 opens a confirmation explaining that the conversation and its history will be
 permanently removed; stop a running session before deleting it.
 
@@ -564,8 +600,10 @@ The message composer gives text a full-width editing row and keeps attachment,
 mode and send controls together below it. Its surface stays steady while typing.
 Long forms and operation reviews use a scrolling body with a shared action area;
 errors and recovery remain beside those actions. Closing an editor retains its
-existing draft or unsaved-change behavior. The offline tour remains sample data
-and does not connect to a computer or grant operation authority.
+existing draft or unsaved-change behavior. Use Previous and Next or swipe to
+browse the welcome pages. On short screens the offline tour keeps the page text
+and navigation in a scrollable view. Its sample session works without a computer
+connection and has no operation authority.
 
 Initial list and conversation placeholders follow the available content area.
 Brief reads delay their placeholders; cached content remains visible during a
@@ -640,6 +678,12 @@ retained-session start/retry commands stay in the task menu. Stop, pending
 operations and errors remain beside the affected task. Technical execution and
 review details expand on demand. Short computer preferences use content-sized
 sheets; longer editors keep their scrolling body and reserved action area.
+
+Task, epic and Crew work confirmations show the record and computer. If either changes
+while the confirmation is open, reopen it and review the current action.
+For an unmerged review branch, **Review delivery** shows the planned merge,
+including the source, target and blockers. Confirm **Approve delivery** to merge that plan.
+If the Host rejects a stale plan, choose **Review again** for a fresh one.
 
 Single-project epics can select an Agent or saved Crew. Automations support
 scheduled, continuous and event triggers; projectless automations run in Room.

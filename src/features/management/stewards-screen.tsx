@@ -1,12 +1,12 @@
 import { useRef, useState, type ComponentRef } from "react";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "./shared/search";
-import Plus from "lucide-react-native/icons/plus";
 import Pencil from "lucide-react-native/icons/pencil";
 import type { HostSteward, HostStewardInput } from "@/remote/types";
 import { useActiveMachine } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
+import { getQueryPresentation } from "@/ui/query-presentation";
 import {
   Body,
   IconButton,
@@ -54,16 +54,13 @@ export function StewardsScreen() {
   const existingSteward = projectId
     ? query.data?.find((item) => item.projectId === projectId)
     : undefined;
-  const canCreate = !!projectId && !!providers.length && !busy && !editor && !existingSteward;
+  const presentation = getQueryPresentation(query);
+  const canCreate = supported && presentation === "ready" && query.data !== undefined &&
+    !!projectId && !!providers.length && !busy && !editor && !existingSteward;
+  const showEditInHeader = supported && existingSteward &&
+    (presentation === "ready" || presentation === "stale-error");
   const create = () => {
-    if (
-      !projectId ||
-      !providers.length ||
-      busy ||
-      editor ||
-      existingSteward
-    )
-      return;
+    if (!canCreate || !projectId) return;
     const { maxRunMinutes: _minutes, ...agent } = initialAgent(
       providers,
     );
@@ -91,28 +88,13 @@ export function StewardsScreen() {
       keyExtractor={(item) => item.id}
       context={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
       actions={
-        supported ? (
+        showEditInHeader ? (
           <IconButton
-            label={
-              existingSteward
-                ? copy("Proje sorumlusunu düzenle", "Edit project steward")
-                : copy("Yeni proje sorumlusu", "New project steward")
-            }
-            onPress={
-              existingSteward ? () => setEditor(existingSteward) : create
-            }
-            disabled={
-              !projectId ||
-              (!existingSteward && !providers.length) ||
-              busy ||
-              !!editor
-            }
+            label={copy("Proje sorumlusunu düzenle", "Edit project steward")}
+            onPress={() => setEditor(existingSteward)}
+            disabled={busy || !!editor}
           >
-            {existingSteward ? (
-              <Pencil size={22} strokeWidth={2.2} color={colors.accent} />
-            ) : (
-              <Plus size={22} strokeWidth={2.2} color={colors.accent} />
-            )}
+            <Pencil size={22} strokeWidth={2.2} color={colors.accent} />
           </IconButton>
         ) : undefined
       }
@@ -167,7 +149,7 @@ export function StewardsScreen() {
               ) : null}
               <QueryState
                 query={query}
-                empty={!rows.length}
+                empty={!!query.data && !rows.length}
                 emptyTitle={
                   search.trim() && scoped.length
                     ? copy("Eşleşen sonuç yok", "No matching results")
@@ -187,7 +169,7 @@ export function StewardsScreen() {
                 emptyAction={
                   search.trim() && scoped.length
                     ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
-                    : !search.trim() && canCreate
+                    : !scoped.length && canCreate
                       ? { label: copy("Yeni proje sorumlusu", "New project steward"), onPress: create }
                       : undefined
                 }

@@ -39,6 +39,7 @@ class VoiceCompanionService : Service() {
   private val captureOperations = VoiceOperationFence()
   private val playbackOperations = VoiceOperationFence()
   private var player: MediaPlayer? = null
+  private var pcm: PcmPlayback? = null
   private var playbackId: String? = null
   /** The current player finished prepareAsync; only then may it be started or paused. */
   private var playerPrepared = false
@@ -65,15 +66,19 @@ class VoiceCompanionService : Service() {
   private fun suspendForFocus() {
     if (captureId != null) stopCapture(id, "focus-lost")
     val playing = playbackId ?: return
-    val current = player ?: return
+    val stream = pcm
+    val current = player
+    if (current == null && stream == null) return
     suspendedPlayback = playing
-    if (playerPrepared) try { current.pause() } catch (_: Exception) { }
+    try { stream?.pause(); if (playerPrepared) current?.pause() } catch (_: Exception) { }
   }
   private fun resumeAfterFocus() {
-    val current = player ?: return
+    val stream = pcm
+    val current = player
+    if (current == null && stream == null) return
     suspendedPlayback = null
-    if (!playerPrepared) return
-    try { current.start(); armIdle() } catch (_: Exception) { stopPlayback(id, "Speech playback failed.") }
+    if (stream == null && !playerPrepared) return
+    try { stream?.resume(); current?.start(); armIdle() } catch (_: Exception) { stopPlayback(id, "Speech playback failed.") }
   }
   private fun acquireFocus() {
     if (focusHeld) return
@@ -261,17 +266,36 @@ class VoiceCompanionService : Service() {
       next.release(); releaseFocus(); throw error
     }
   }
+  fun startPcm(supplied: String, playingId: String, sampleRate: Int) {
+    check(allowsSession(supplied) && playbackOperations.allows(playingId)) { "Voice session is unavailable." }
+    stopCapture(supplied); stopPlayback(supplied)
+    acquireFocus()
+    try { pcm = PcmPlayback(sampleRate, audioAttributes) }
+    catch (error: Exception) { releaseFocus(); throw error }
+    playbackId = playingId
+    phase = "speaking"
+    handler.postDelayed(playbackLimit, 120000)
+    armIdle(); updated()
+  }
+
+  internal fun pcmPlayback(supplied: String, playingId: String): PcmPlayback {
+    check(allowsSession(supplied) && playbackId == playingId) { "Voice session is unavailable." }
+    return checkNotNull(pcm) { "Voice stream is unavailable." }
+  }
+
   fun stopPlayback(supplied: String, error: String? = null, expectedPlayback: String? = null) {
     if (!VoiceSessionPolicy.matches(id, supplied)) return
     if (expectedPlayback != null) playbackOperations.cancel(expectedPlayback)
     if (expectedPlayback != null && playbackId != expectedPlayback) return
     handler.removeCallbacks(playbackLimit)
     val previous = player; player = null
+    val previousPcm = pcm; pcm = null
     val previousId = playbackId; playbackId = null
     playerPrepared = false; suspendedPlayback = null
     previousId?.let { playbackOperations.cancel(it) }
     try { previous?.stop() } catch (_: Exception) { }
     previous?.release()
+    try { previousPcm?.close() } catch (_: Exception) { }
     if (phase == "speaking") phase = "idle"
     if (phase == "idle") releaseFocus()
     if (previousId != null) VoiceCompanionRuntime.emit(mapOf("type" to "playback", "sessionId" to id, "playbackId" to previousId, "error" to error))

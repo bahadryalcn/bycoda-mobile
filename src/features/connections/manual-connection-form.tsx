@@ -1,7 +1,8 @@
 import { ConnectionFeedback } from "./connection-feedback";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
-import { Body, FormActions, Disclosure, Field, Heading, IdentifierField, Stack } from "@/ui/primitives";
+import { Body, ErrorNotice, FormActions, Disclosure, Field, Heading, IdentifierField, Stack } from "@/ui/primitives";
+import { remoteErrorKind } from "@/ui/error-message";
 import { enterItem } from "@/ui/motion";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
@@ -12,6 +13,8 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
   const { form, busy } = controller;
   const { name, endpoint, token, target } = form.values;
   const editing = target?.kind === "existing";
+  const error = controller.operation.error;
+  const timedOut = remoteErrorKind(error) === "timeout";
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <View style={{ gap: space.sm }}>
@@ -23,12 +26,12 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
         <Body muted>
           {controller.connectionMode === "lan"
             ? copy(
-                "Yerel ağ adresini güncelle. Bilgisayarın QR koduyla doğrulanan anahtarı korunur.",
-                "Update the local network address. The computer key verified by its QR code is retained.",
+                "Bilgisayarının ağ adresi değiştiyse yenisini gir.",
+                "Enter your computer’s new address if it changed.",
               )
             : copy(
-                "Bilgisayarındaki bycoda Host için HTTPS adresini ve cihaz anahtarını gir.",
-                "Enter your bycoda Host HTTPS address and device key.",
+                "Bilgisayarının Tailscale adresini ve cihaz anahtarını gir.",
+                "Enter your computer’s Tailscale address and device key.",
               )}
         </Body>
       </View>
@@ -56,15 +59,13 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
             editable={!busy && !disabled}
           />
         ) : null}
-        <Disclosure label={copy("Ad (isteğe bağlı)", "Name (optional)")} defaultExpanded={editing}>
-          <Field
-            label={copy("Bilgisayar adı", "Computer name")}
+        <Field
+            label={copy("Bilgisayar adı (isteğe bağlı)", "Computer name (optional)")}
             value={name}
             onChangeText={(value) => form.setField("name", value)}
             editable={!busy && !disabled}
             placeholder={copy("Çalışma bilgisayarım", "My work computer")}
-          />
-        </Disclosure>
+        />
       </Stack>
       {controller.connectionMode === "tailscale" ? (
         <Disclosure label={copy("Cihaz anahtarını nereden alırım?", "Where do I get a device key?")}>
@@ -77,8 +78,13 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
         </Disclosure>
       ) : null}
       <FormActions
-        feedback={<ConnectionFeedback operation={controller.operation} onRetry={disabled ? undefined : () => { void controller.connect(); }} />}
-        submitLabel={copy("Bağlan", "Connect")}
+        feedback={error && !busy
+          ? <ErrorNotice error={error} message={timedOut ? copy(
+            "Bilgisayar yanıt vermedi. Adresi kontrol edip tekrar dene.",
+            "The computer did not answer. Check the address and try again.",
+          ) : undefined} />
+          : <ConnectionFeedback operation={controller.operation} />}
+        submitLabel={editing ? copy("Bağlantıyı kaydet", "Save connection") : copy("Bağlan", "Connect")}
         onSubmit={() => {
           void controller.connect();
         }}

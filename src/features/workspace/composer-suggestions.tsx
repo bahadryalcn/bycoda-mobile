@@ -16,10 +16,12 @@ export function ComposerSuggestions({ items, loading, error, trigger, selected: 
   const selected = hardwareSelection?.items === items ? hardwareSelection.index : inputSelected;
   const move = (direction: -1 | 1) => setHardwareSelection({ items, index: movePaletteSelection(selected, items.length, direction) });
   const choose = () => { const item = items[Math.max(0, selected)]; if (item) onPick(item); };
-  useKeyCommand({ key: "ArrowDown", title: copy("Sonraki sonuç", "Next result"), enabled: keyboardActive, priority: 20, textInput: true }, () => move(1));
-  useKeyCommand({ key: "ArrowUp", title: copy("Önceki sonuç", "Previous result"), enabled: keyboardActive, priority: 20, textInput: true }, () => move(-1));
-  useKeyCommand({ key: "Enter", title: copy("Seç", "Select"), enabled: keyboardActive && items.length > 0, priority: 20, textInput: true }, choose);
-  useKeyCommand({ key: "Tab", title: copy("Seç", "Select"), enabled: keyboardActive && items.length > 0, priority: 20, textInput: true }, choose);
+  const canNavigate = keyboardActive && items.length > 0;
+  const highlighted = items[selected];
+  useKeyCommand({ key: "ArrowDown", title: copy("Sonraki sonuç", "Next result"), enabled: canNavigate, priority: 20, textInput: true }, () => move(1));
+  useKeyCommand({ key: "ArrowUp", title: copy("Önceki sonuç", "Previous result"), enabled: canNavigate, priority: 20, textInput: true }, () => move(-1));
+  useKeyCommand({ key: "Enter", title: copy("Seç", "Select"), enabled: canNavigate && !!highlighted, priority: 20, textInput: true }, () => { if (highlighted) onPick(highlighted); });
+  useKeyCommand({ key: "Tab", title: copy("Seç", "Select"), enabled: canNavigate, priority: 20, textInput: true }, choose);
   useKeyCommand({ key: "Escape", title: copy("Kapat", "Close"), enabled: keyboardActive, priority: 20, textInput: true }, onClose);
   const { fontScale } = useWindowDimensions();
   const list = useRef<FlatList<ComposerSuggestion>>(null);

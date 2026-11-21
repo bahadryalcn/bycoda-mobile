@@ -1,9 +1,13 @@
 import { Linking } from "react-native";
+import { create } from "zustand";
 import { requestDevicePermission, type DevicePermission } from "./permission-flow";
 import { isViewingSession } from "../push/push-viewing";
 
 export type DevicePermissionKind = "camera" | "microphone" | "notifications";
 let handlerReady = false;
+
+// Native permission prompts can answer without producing an AppState transition.
+export const useNotificationPermissionRevision = create<{ revision: number }>(() => ({ revision: 0 }));
 
 /** Loads expo-notifications with its foreground handler and Android channel in place. */
 export async function notifications() {
@@ -60,7 +64,9 @@ export async function allowDevicePermission(kind: DevicePermissionKind) {
         return camera.Camera.requestCameraPermissionsAsync();
       }
       const api = await notifications();
-      return api.requestPermissionsAsync({ ios: { allowAlert: true, allowBadge: true, allowSound: true } });
+      const result = await api.requestPermissionsAsync({ ios: { allowAlert: true, allowBadge: true, allowSound: true } });
+      useNotificationPermissionRevision.setState(({ revision }) => ({ revision: revision + 1 }));
+      return result;
     },
     () => Linking.openSettings(),
   );

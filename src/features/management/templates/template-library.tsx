@@ -52,6 +52,7 @@ export function TemplateLibrary({
   const [search, setSearch] = useState("");
   const searchRef = useRef<TextInputInstance>(null);
   const term = search.trim();
+  const hasTemplates = state.rows.length > 0;
   const rows = state.rows.filter((row) =>
     matchesSearch(`${row.name} ${row.trigger ?? ""} ${row.body}`, search, locale),
   );
@@ -92,8 +93,9 @@ export function TemplateLibrary({
       />
     );
   const addTemplate = () => {
-    if (state.rows.length < MAX_TEMPLATES && !state.saving)
-      setEditing({ id: randomUUID(), name: "", body: "" });
+    if (state.rows.length >= MAX_TEMPLATES || state.saving) return;
+    if (!hasTemplates) setSearch("");
+    setEditing({ id: randomUUID(), name: "", body: "" });
   };
   const loadFailed = !!state.error && !state.rows.length;
   const reload = copy("Şablonları yeniden yükle", "Reload templates");
@@ -181,7 +183,7 @@ export function TemplateLibrary({
               }}
             />
           ) : null}
-          {state.hydrated && !state.error ? (
+          {state.hydrated && !state.error && hasTemplates ? (
             <SearchToolbar
               search={
                 <SearchField

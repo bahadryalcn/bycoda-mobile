@@ -5,17 +5,21 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { HostGoal } from "@/domain/types";
 import { GoalSettingsEditor } from "./goals/settings-editor";
+import { GoalCard } from "./goals/goal-card";
 import { SchedulePreview } from "./automations/schedule-preview";
 import { TaskCard } from "./tasks/task-card";
 import { ReviewNotes } from "./tasks/review-notes";
 
 const state = vi.hoisted(() => ({
-  machine: { id: "pc", capabilities: ["goals.settings", "automations"] },
+  machine: { id: "pc", name: "Harbor computer", capabilities: ["goals.settings", "automations"] },
+  confirm: vi.fn(),
+  currentConnection: true,
   mutation: { mutate: vi.fn(), isPending: false, isSuccess: false, error: null as Error | null, data: undefined as unknown },
   fields: new Map<string, (value: string) => void>(), submit: undefined as undefined | (() => void),
   actions: [] as Array<{ key: string; disabled?: boolean; onPress: () => void } | false | null>,
 }));
 vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/settings-2", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/cpu", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/bot", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
@@ -31,13 +35,23 @@ vi.mock("lucide-react-native/icons/undo-2", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
 vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
+vi.mock("react-native", () => ({ View: "div" }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
-vi.mock("@/ui/record-card", () => ({ RecordCard: ({ menu }: { menu: React.ReactNode }) => menu }));
+vi.mock("@/ui/record-card", () => ({
+  RecordCard: ({ menu, metadata }: { menu: React.ReactNode; metadata?: string }) =>
+    createElement("article", null, createElement("output", null, metadata), menu),
+}));
+vi.mock("@/ui/plan-steps", () => ({ PlanSteps: () => null }));
 vi.mock("./tasks/task-status-icon", () => ({ TaskStatusIcon: () => null }));
 vi.mock("@/ui/hint", () => ({ Hint: ({children}: PropsWithChildren) => children }));
 vi.mock("@/ui/provider-identity", () => ({ ProviderIcon: () => null }));
-vi.mock("./shared/record-bits", () => ({ joinMeta: (parts: unknown[]) => parts.filter(Boolean).join(" · "), useRelativeTime: () => () => "" }));
+vi.mock("./shared/record-bits", () => ({
+  joinMeta: (parts: unknown[]) => parts.filter(Boolean).join(" · "),
+  useRelativeTime: () => () => "",
+  useMenuGlyph: () => () => null,
+  RecordTrailing: ({ children }: PropsWithChildren) => children,
+}));
 vi.mock("./shared/status", () => ({ Status: () => null, statusLabel: (value: string) => value }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => state.machine }));
 vi.mock("@/state/queries", () => ({ useHostMutation: () => state.mutation }));
@@ -46,7 +60,9 @@ vi.mock("@/ui/copy", () => ({
     en.replace(/\{(\w+)\}/g, (token, key: string) => String(values?.[key] ?? token)),
 }));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestClose: vi.fn() }) }));
-vi.mock("@/ui/confirm", () => ({ confirmAction: (_title: string, _message: string, _action: string, run: () => void) => run() }));
+vi.mock("@/ui/confirm", () => ({ confirmAction: state.confirm }));
+vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ isCurrent: () => state.currentConnection }) }));
+vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
 vi.mock("./shared/format", () => ({ stamp: (value: number) => `date:${value}` }));
 vi.mock("@/ui/number-field", async () => ({ NumberField: (await import("@/ui/primitives")).Field }));
 vi.mock("@/ui/primitives", () => {
@@ -67,11 +83,58 @@ const container = document.createElement("div");
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  state.machine = { id: "pc", capabilities: ["goals.settings", "automations"] };
+  state.machine = { id: "pc", name: "Harbor computer", capabilities: ["goals.settings", "automations"] };
+  state.currentConnection = true;
+  state.confirm.mockImplementation((_title: string, _message: string, _action: string, run: () => void) => run());
   Object.assign(state.mutation, { isPending: false, isSuccess: false, error: null, data: undefined });
   root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); vi.clearAllMocks(); state.fields.clear(); vi.unstubAllGlobals(); });
+
+it.each([
+  [0, "0 tasks"],
+  [1, "1 task"],
+  [2, "2 tasks"],
+])("uses the right wording for an epic with %s planned tasks", async (count, label) => {
+  const goal = {
+    id: "goal",
+    title: "Goal",
+    status: "awaiting-approval",
+    projectIds: [],
+    taskIds: [],
+    plan: { tasks: Array.from({ length: count }, (_, index) => ({ key: String(index), title: "Plan step", dependsOn: [] })) },
+  } as unknown as HostGoal;
+  const props = {
+    goal, projects: [], busy: false, editorOpen: false, onReplan: vi.fn(), onSettings: vi.fn(),
+    approve: state.mutation, cancel: state.mutation, remove: state.mutation,
+  } as unknown as Parameters<typeof GoalCard>[0];
+  await act(async () => root.render(createElement(GoalCard, props)));
+  expect(container.querySelector("output")?.textContent).toBe(label);
+});
+
+it("names the reviewed epic and only cancels after confirmation", async () => {
+  state.confirm.mockImplementation(() => undefined);
+  const goal = { id: "goal", title: "Harbor plan", status: "awaiting-approval", updatedAt: 12, projectIds: [], taskIds: [] } as unknown as HostGoal;
+  const props = { goal, projects: [], busy: false, editorOpen: false, onReplan: vi.fn(), onSettings: vi.fn(),
+    approve: state.mutation, cancel: state.mutation, remove: state.mutation,
+  } as unknown as Parameters<typeof GoalCard>[0];
+  await act(async () => root.render(createElement(GoalCard, props)));
+  const cancel = state.actions.find((item) => item && item.key === "cancel");
+  if (!cancel) throw new Error("Cancel action not found");
+  await act(async () => cancel.onPress());
+  const [title, message, , confirm] = state.confirm.mock.calls[0]!;
+  expect(title).toBe("Cancel epic");
+  expect(message).toContain("Harbor plan · Harbor computer");
+  expect(state.mutation.mutate).not.toHaveBeenCalled();
+  state.currentConnection = false;
+  await act(async () => confirm());
+  expect(state.mutation.mutate).not.toHaveBeenCalled();
+  state.currentConnection = true;
+  await act(async () => cancel.onPress());
+  const acceptCurrent = state.confirm.mock.calls[1]![3];
+  await act(async () => { acceptCurrent(); acceptCurrent(); });
+  expect(state.mutation.mutate).toHaveBeenCalledExactlyOnceWith({ goalId: "goal" });
+});
 
 it("preserves goal draft and conflict token when a newer goal arrives, closes only on success and blocks a switched computer", async () => {
   const close = vi.fn();
@@ -126,7 +189,7 @@ it("declines only a steward to-do suggestion and never invokes ordinary task del
   const remove = vi.fn();
   const props = { task: { id: "proposal", title: "Proposal", harness: "codex", model: "codex:test", prompt: "Inspect the project", source: "steward", status: "todo", dependsOn: [] },
     busy: false, editorOpen: false, tasks: [], lifecycleReady: true,
-    onEdit: vi.fn(), onDelivery: vi.fn(),
+    onEdit: vi.fn(), onDelivery: vi.fn(), onReviewDelivery: vi.fn(),
     move: { ...state.mutation, mutate: vi.fn() }, start: { ...state.mutation, mutate: vi.fn() },
     finish: { ...state.mutation, mutate: vi.fn() }, recheck: { ...state.mutation, mutate: vi.fn() }, reorder: { ...state.mutation, mutate: vi.fn() },
     decline: { ...state.mutation, mutate: decline }, remove: { ...state.mutation, mutate: remove } } as unknown as Parameters<typeof TaskCard>[0];
@@ -151,7 +214,7 @@ it("deletes a task card only against the revision the user confirmed", async () 
   const remove = vi.fn();
   const props = { task: { id: "task-fake", title: "Fake task", harness: "codex", model: "codex:test", prompt: "Fake prompt", source: "manual", status: "queued", updatedAt: 12, dependsOn: [] },
     busy: false, editorOpen: false, tasks: [], lifecycleReady: true,
-    onEdit: vi.fn(), onDelivery: vi.fn(),
+    onEdit: vi.fn(), onDelivery: vi.fn(), onReviewDelivery: vi.fn(),
     move: { ...state.mutation, mutate: vi.fn() }, start: { ...state.mutation, mutate: vi.fn() },
     finish: { ...state.mutation, mutate: vi.fn() }, recheck: { ...state.mutation, mutate: vi.fn() }, reorder: { ...state.mutation, mutate: vi.fn() },
     decline: { ...state.mutation, mutate: vi.fn() }, remove: { ...state.mutation, mutate: remove } } as unknown as Parameters<typeof TaskCard>[0];

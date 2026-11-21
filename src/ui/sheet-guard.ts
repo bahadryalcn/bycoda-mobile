@@ -6,8 +6,9 @@ import { SheetGuardContext, type SheetGuardState as Guard } from "./sheet-guard-
 export { SheetGuardContext } from "./sheet-guard-context";
 
 /** The Sheet owns approval; a continuation exists only for that specific request. */
-export function useSheetDismissal({ visible, dirty, pending, onClose }: {
+export function useSheetDismissal({ visible, dirty, pending, onClose, dismissalRetryKey }: {
   visible: boolean; dirty: boolean; pending: boolean; onClose: () => void;
+  dismissalRetryKey?: unknown;
 }) {
   type Intent = { afterClose?: () => void };
   const [confirmation, setConfirmation] = useState<Intent | null>(null);
@@ -24,6 +25,10 @@ export function useSheetDismissal({ visible, dirty, pending, onClose }: {
   useLayoutEffect(() => {
     if (!visible) { completed.current = false; cancelClose(); }
   }, [visible, cancelClose]);
+  // Async owners can keep their editor mounted after a failed close.
+  useLayoutEffect(() => {
+    if (dismissalRetryKey != null) completed.current = false;
+  }, [dismissalRetryKey]);
   const startClose = useCallback((afterClose?: () => void) => {
     const state = latest.current;
     if (!mounted.current || completed.current || !state.visible || state.pending) return;

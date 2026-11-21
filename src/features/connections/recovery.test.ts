@@ -17,7 +17,7 @@ function fixture() {
     selectMachine: vi.fn((id: string) => {
       state.activeId = id;
     }),
-    navigate: vi.fn(),
+    onSelected: vi.fn(),
   };
   return { state, actions };
 }
@@ -32,7 +32,7 @@ describe("connection recovery with mounted workspace drafts", () => {
     expect(state.hydrated).toBe(true);
     await expect(selectSavedComputer("computer-b", actions)).rejects.toBe(failure);
     expect(actions.selectMachine).not.toHaveBeenCalled();
-    expect(actions.navigate).not.toHaveBeenCalled();
+    expect(actions.onSelected).not.toHaveBeenCalled();
     expect(state.activeId).toBe("computer-a");
   });
 
@@ -91,29 +91,29 @@ describe("connection recovery with mounted workspace drafts", () => {
         ConnectionRecoveryError,
       );
       expect(actions.selectMachine).not.toHaveBeenCalled();
-      expect(actions.navigate).not.toHaveBeenCalled();
+      expect(actions.onSelected).not.toHaveBeenCalled();
       expect(state.activeId).toBe("computer-a");
     },
   );
 
-  it("does not navigate when the store rejected the requested selection", async () => {
+  it("does not notify the caller when the store rejected the requested selection", async () => {
     const { state, actions } = fixture();
     actions.selectMachine.mockImplementationOnce(() => undefined);
     await expect(selectSavedComputer("computer-b", actions)).rejects.toBeInstanceOf(
       ConnectionRecoveryError,
     );
-    expect(actions.navigate).not.toHaveBeenCalled();
+    expect(actions.onSelected).not.toHaveBeenCalled();
     expect(state.activeId).toBe("computer-a");
   });
 
-  it("navigates once after a successful current-state selection", async () => {
+  it("notifies the caller once after a successful current-state selection", async () => {
     const { state, actions } = fixture();
-    actions.navigate.mockImplementationOnce(() => {
+    actions.onSelected.mockImplementationOnce(() => {
       expect(state.activeId).toBe("computer-b");
     });
     await selectSavedComputer("computer-b", actions);
     expect(actions.selectMachine).toHaveBeenCalledWith("computer-b");
-    expect(actions.navigate).toHaveBeenCalledTimes(1);
+    expect(actions.onSelected).toHaveBeenCalledTimes(1);
   });
 
   it.each(["reload", "select"] as const)(
@@ -132,7 +132,7 @@ describe("connection recovery with mounted workspace drafts", () => {
       ).rejects.toThrow("locked");
       expect(actions.hydrate).not.toHaveBeenCalled();
       expect(actions.selectMachine).not.toHaveBeenCalled();
-      expect(actions.navigate).not.toHaveBeenCalled();
+      expect(actions.onSelected).not.toHaveBeenCalled();
     },
   );
 });

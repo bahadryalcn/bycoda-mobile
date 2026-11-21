@@ -15,11 +15,12 @@ export const USER_MESSAGE_LINES = 4;
  * A hidden, unclamped copy at the same width reports the real line count, so Show more appears
  * only when the laid-out text exceeds four lines.
  */
-export function UserMessageText({ text }: { text: string }) {
+export function UserMessageText({ text, preview }: { text: string; preview?: string }) {
   const copy = useCopy();
   const typography = useChatTextStyles(useChatAppearance((state) => state.textSize));
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
+  const collapsedText = preview ?? text;
   const measure = (event: TextLayoutEvent) =>
     setOverflows(event.nativeEvent.lines.length > USER_MESSAGE_LINES);
   return (
@@ -30,7 +31,7 @@ export function UserMessageText({ text }: { text: string }) {
           numberOfLines={expanded ? undefined : USER_MESSAGE_LINES}
           style={typography.user}
         >
-          {text}
+          {expanded ? text : collapsedText}
         </Body>
         {expanded ? null : (
           <Body
@@ -41,11 +42,11 @@ export function UserMessageText({ text }: { text: string }) {
             onTextLayout={measure}
             style={[typography.user, { position: "absolute", left: 0, right: 0, opacity: 0 }]}
           >
-            {text}
+            {collapsedText}
           </Body>
         )}
       </View>
-      {overflows ? (
+      {preview !== undefined || overflows ? (
         <Collapsible.Trigger
           accessibilityLabel={expanded ? copy("Daha az göster", "Show less") : copy("Daha fazla göster", "Show more")}
           className="min-h-12 justify-start gap-2 py-0"

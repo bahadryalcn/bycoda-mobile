@@ -14,7 +14,7 @@ vi.mock("expo-notifications", () => ({
   AndroidNotificationVisibility: { PRIVATE: 0 }, IosAuthorizationStatus: { PROVISIONAL: 3, EPHEMERAL: 4 },
   SchedulableTriggerInputTypes: { TIME_INTERVAL: "timeInterval" },
 }));
-import { allowDevicePermission, testDeviceNotification } from "./device-permissions";
+import { allowDevicePermission, readDevicePermission, testDeviceNotification, useNotificationPermissionRevision } from "./device-permissions";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -83,6 +83,15 @@ describe("native device permission integration", () => {
   it("does not schedule a test when notification permission is denied", async () => {
     await expect(testDeviceNotification("bycoda", "test")).rejects.toThrow();
     expect(mocks.schedule).not.toHaveBeenCalled();
+  });
+  it("invalidates notification registration after the native prompt answers without requiring a resume", async () => {
+    const before = useNotificationPermissionRevision.getState().revision;
+    await readDevicePermission("notifications");
+    await allowDevicePermission("camera");
+    expect(useNotificationPermissionRevision.getState().revision).toBe(before);
+
+    await allowDevicePermission("notifications");
+    expect(useNotificationPermissionRevision.getState().revision).toBe(before + 1);
   });
   it("schedules a generic local test after permission is granted", async () => {
     mocks.notificationRead.mockResolvedValue({ granted: true, canAskAgain: true, status: "granted" });

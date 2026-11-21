@@ -259,7 +259,7 @@ export const MessageContent = memo(function MessageContent({
           <ScrollView
             key={key}
             horizontal
-            accessibilityRole="table"
+            role="table"
             accessibilityLabel={copy("Tablo: {p0} sütun, {p1} satır.", "Table: {p0} columns, {p1} rows.", {
               p0: widths.length,
               p1: rows.length,

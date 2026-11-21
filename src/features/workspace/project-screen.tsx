@@ -3,6 +3,7 @@ import { ProjectDirectoryFeedback } from "./project-directory-feedback";
 import type { ProjectScreenProps, ProjectWorktrees } from "./project-screen-types";
 import { useCallback, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { rememberOpenedProject } from "@/state/project-directory-preferences";
+import { useConnectionScope } from "@/state/connection-scope";
 import { ScrollView, Text, View } from "react-native";
 import MoreHorizontal from "lucide-react-native/icons/ellipsis";
 import Archive from "lucide-react-native/icons/archive";
@@ -75,6 +76,7 @@ export function ProjectScreen({
   // Horizontal gutters only: the Screen frame below pads the dock and home indicator for its own children.
   const gutter = useScreenContentInsets();
   const machine = useActiveMachine();
+  const connection = useConnectionScope();
   const projects = useProjectList();
   const visibleProject = projects.data?.find((value) => value.id === id);
   const retainedProject = useRef<{ machineId: string; id: string; value: NonNullable<typeof visibleProject> } | undefined>(undefined);
@@ -108,8 +110,13 @@ export function ProjectScreen({
   }, []);
   const changeWorkspace = (change: () => void) => {
     void changeAction.run(async () => {
+      const assertProject = () => {
+        if (!connection.isCurrent() || !projects.isProjectVisible(id))
+          throw new Error("The selected project is no longer available.");
+      };
+      assertProject();
       await beforeChange.current?.();
-      if (!projects.isProjectVisible(id)) throw new Error("The selected project is no longer available.");
+      assertProject();
       createSessionInitially.current = false;
       change();
     });
@@ -192,7 +199,7 @@ export function ProjectScreen({
         onPress={() => { if (canUseProject()) setMenuOpen(true); }}>
         <MoreHorizontal size={20} color={cwd || sessionControls?.archived || sessionControls?.hasSearch ? colors.accent : colors.muted} />
       </IconButton>
-      {sessionControls ? (
+      {sessionControls?.showCreateInHeader ? (
         <IconButton label={copy("Yeni oturum", "New session")} tone="default"
           disabled={sessionControls.createDisabled} onPress={sessionControls.create}>
           <Plus size={20} strokeWidth={2} color={colors.accent} />
@@ -292,6 +299,7 @@ export function ProjectScreen({
           <Sheet
             visible={worktreeOpen}
             size="compact"
+            dismissible={!changingWorkspace}
             title={copy("Çalışma klasörü", "Working folder")}
             onClose={() => setWorktreeOpen(false)}
           >
@@ -302,13 +310,13 @@ export function ProjectScreen({
               disabled={changingWorkspace || worktrees.isPending}
               options={worktreeOptions}
               onChange={(value) => {
-                setWorktreeOpen(false);
-                changeWorkspace(() =>
-                  dispatch({ type: "worktree", ...(value ? { cwd: value } : {}) }),
-                );
+                changeWorkspace(() => {
+                  dispatch({ type: "worktree", ...(value ? { cwd: value } : {}) });
+                  setWorktreeOpen(false);
+                });
               }}
             />
-            <MutationState mutation={changeAction} />
+            <MutationState mutation={changeAction} pending={copy("Taslak kaydediliyor…", "Saving draft…")} />
             <Button tone="quiet" label={copy("Çalışma ağacı oluştur", "Create worktree")} disabled={changingWorkspace || !machine.capabilities?.includes("git.worktreeCreate")}
               onPress={() => { setWorktreeOpen(false); setCreateWorktreeOpen(true); }} />
           </Sheet>

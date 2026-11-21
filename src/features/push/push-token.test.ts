@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("expo-constants", () => ({ default: { expoConfig: { extra: {} } } }));
 
-const rotationHandlers: (() => void)[] = [];
+const rotationHandlers: ((token: { type: "android"; data: string }) => void)[] = [];
+const announceToken = (data: string) => rotationHandlers.forEach((handler) => handler({ type: "android", data }));
 const getExpoPushTokenAsync = vi.fn<(options: { projectId: string }) => Promise<{ data: string }>>();
 const api = {
   getExpoPushTokenAsync,
-  addPushTokenListener: vi.fn((handler: () => void) => {
+  getDevicePushTokenAsync: vi.fn(async () => ({ type: "android", data: "native-a" })),
+  addPushTokenListener: vi.fn((handler: (typeof rotationHandlers)[number]) => {
     rotationHandlers.push(handler);
     return { remove: vi.fn() };
   }),
@@ -22,6 +24,7 @@ async function load() {
 beforeEach(() => {
   rotationHandlers.length = 0;
   getExpoPushTokenAsync.mockReset();
+  api.getDevicePushTokenAsync.mockReset().mockResolvedValue({ type: "android", data: "native-a" });
   api.addPushTokenListener.mockClear();
   getExpoPushTokenAsync.mockResolvedValue({ data: "ExpoPushToken[a]" });
 });
@@ -51,13 +54,37 @@ describe("expo push token", () => {
     expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(2);
   });
 
+  it("releases stalled callers and retries without caching the late token", async () => {
+    const { expoPushToken } = await load();
+    let finishLate!: (result: { data: string }) => void;
+    getExpoPushTokenAsync.mockReturnValueOnce(new Promise((resolve) => { finishLate = resolve; }));
+    vi.useFakeTimers();
+    try {
+      const first = expoPushToken("project");
+      const second = expoPushToken("project");
+      const failed = Promise.allSettled([first, second]);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(1);
+      expect(await failed).toEqual([
+        { status: "rejected", reason: expect.objectContaining({ name: "TimeoutError" }) },
+        { status: "rejected", reason: expect.objectContaining({ name: "TimeoutError" }) },
+      ]);
+      await expect(expoPushToken("project")).resolves.toBe("ExpoPushToken[a]");
+      finishLate({ data: "ExpoPushToken[late]" });
+      await expect(expoPushToken("project")).resolves.toBe("ExpoPushToken[a]");
+      expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 1_000);
+
   it("fetches again after the OS rotates the token and tells listeners", async () => {
     const { expoPushToken, onPushTokenRotated } = await load();
     const rotated = vi.fn();
     onPushTokenRotated(rotated);
     await expoPushToken("project");
     getExpoPushTokenAsync.mockResolvedValue({ data: "ExpoPushToken[b]" });
-    rotationHandlers.forEach((handler) => handler());
+    announceToken("native-b");
     expect(rotated).toHaveBeenCalledTimes(1);
     await expect(expoPushToken("project")).resolves.toBe("ExpoPushToken[b]");
     expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(2);
@@ -69,7 +96,7 @@ describe("expo push token", () => {
     getExpoPushTokenAsync.mockReturnValueOnce(new Promise((resolve) => { finishStale = resolve; }));
     const stale = expoPushToken("project");
     await vi.waitFor(() => expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(1));
-    rotationHandlers.forEach((handler) => handler());
+    announceToken("native-b");
     getExpoPushTokenAsync.mockResolvedValue({ data: "ExpoPushToken[b]" });
     finishStale({ data: "ExpoPushToken[old]" });
     await stale;
@@ -89,7 +116,24 @@ describe("expo push token", () => {
     const rotated = vi.fn();
     onPushTokenRotated(rotated)();
     await expoPushToken("project");
-    rotationHandlers.forEach((handler) => handler());
+    announceToken("native-b");
     expect(rotated).not.toHaveBeenCalled();
+  });
+
+  it("treats Android's lookup echo and repeated notifications for the same native token as one observation", async () => {
+    const { expoPushToken, onPushTokenRotated } = await load();
+    const rotated = vi.fn();
+    onPushTokenRotated(rotated);
+    api.getDevicePushTokenAsync.mockImplementationOnce(async () => {
+      announceToken("native-a");
+      return { type: "android", data: "native-a" };
+    });
+    await expoPushToken("project");
+    announceToken("native-a");
+    await expoPushToken("project");
+    expect(rotated).not.toHaveBeenCalled();
+    expect(getExpoPushTokenAsync).toHaveBeenCalledExactlyOnceWith({
+      projectId: "project", devicePushToken: { type: "android", data: "native-a" },
+    });
   });
 });

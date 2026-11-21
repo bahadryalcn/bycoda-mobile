@@ -6,6 +6,10 @@ export const SETTINGS_TAB = "settings";
 export type TabPreferences = { order: DockTabId[]; hidden: DockTabId[] };
 export const defaultTabPreferences: TabPreferences = { order: [...DOCK_TAB_IDS], hidden: [] };
 
+export function hasCustomTabLayout(tabs: TabPreferences): boolean {
+  return tabs.hidden.length > 0 || tabs.order.some((id, position) => id !== DOCK_TAB_IDS[position]);
+}
+
 const isTabId = (value: unknown): value is DockTabId => DOCK_TAB_IDS.includes(value as DockTabId);
 
 /** Unknown or duplicate ids are dropped; tabs missing from a stored order keep their default place at the end. */

@@ -4,8 +4,9 @@ import { Linking } from "react-native";
 import { useCopy } from "@/ui/copy";
 import { useAsyncAction } from "@/state/actions";
 
-import { Badge, Body, Button, Disclosure, Heading, MutationState, Notice, QueryState, Row, SelectField, Sheet, Stack } from "@/ui/primitives";
+import { Badge, Body, Button, Disclosure, Heading, MutationState, Notice, QueryState, Row, SelectField, Sheet, Stack, StateView } from "@/ui/primitives";
 import { MessageText } from "@/ui/message-text";
+import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { useLocale } from "@/i18n";
 import { ErrorText } from "../workspace/shared";
 import { useInboxRead } from "./provider-queries";
@@ -53,9 +54,10 @@ export function JiraBoardIssueActions({
     writeAllowed = useRef(canWrite);
   writeAllowed.current = canWrite;
   const current = () => inboxScope.matches(origin);
-  const details = useInboxRead({ action: "details", input: inboxItemInput(issue, origin.projectId) }, current());
+  const scopeCurrent = current();
+  const details = useInboxRead({ action: "details", input: inboxItemInput(issue, origin.projectId) }, scopeCurrent);
   const openLink = useAsyncAction<void>();
-  const readable = current() && !isInboxPrivateFailure(details.error);
+  const readable = scopeCurrent && !isInboxPrivateFailure(details.error);
   const locked =
     !readable ||
     !canWrite ||
@@ -151,15 +153,15 @@ export function JiraBoardIssueActions({
       title={readable ? issue.identifier : copy("Ayrıntılar", "Details")}
       onClose={onClose}
       dismissible={!delivery.busy}
-      footer={
+      footer={readable && !delivery.result ? (
         <Button
           tone="primary"
-          label={!readable || delivery.result ? copy("Kapat", "Close") : copy("İşlemi incele", "Review action")}
+          label={copy("İşlemi incele", "Review action")}
           busy={delivery.busy}
-          disabled={!readable || delivery.result ? false : locked || !!review || !command}
-          onPress={!readable || delivery.result ? onClose : submit}
+          disabled={locked || !!review || !command}
+          onPress={submit}
         />
-      }
+      ) : undefined}
     >
       <Stack>
         {readable ? <>
@@ -180,7 +182,10 @@ export function JiraBoardIssueActions({
             void openLink.run(async () => { if (current()) await Linking.openURL(issue.url); });
           }} /> : null}
           <MutationState mutation={openLink} />
-        </> : <QueryState query={details} />}
+        </> : scopeCurrent ? <QueryState query={details} /> : (
+          <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
+            description={copy(...RECORD_ACCESS_UNAVAILABLE)} />
+        )}
         <ErrorText error={readable ? delivery.draft.error || delivery.error : undefined} />
         {pending ? (
           <>

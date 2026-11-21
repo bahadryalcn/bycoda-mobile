@@ -10,7 +10,7 @@ import { isAccountAccessAllowed, useAccountAccess } from "../account/model/accou
 import { reviewedMachine, isReviewedMachine } from "@/state/reviewed-machine";
 import { AssistantVoice, type AssistantVoiceTarget, type VoicePort } from "./assistant-voice";
 import { nativeVoiceDependencies } from "./assistant-voice-native";
-import { speechConfig, voicePreferences } from "../voice-settings/voice-preferences";
+import { selectedCloudModel, speechConfig, voicePreferences } from "../voice-settings/voice-preferences";
 import { AssistantMobileClient } from "./assistant-client";
 import { AssistantCallLoop } from "./assistant-call-loop";
 import { AssistantCallError, companionEndFailure } from "./assistant-call-error";
@@ -177,7 +177,7 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
       stage,
       error: error => { audioError = error; const failed = pending; pending = undefined; failed?.reject(error); },
     }), engine: () => turnPreferences.engine,
-      cloudModel: () => turnPreferences.cloudModel, speech: () => speechConfig(turnPreferences) });
+      cloudModel: () => selectedCloudModel(turnPreferences), speech: () => speechConfig(turnPreferences) });
     cleanups.push(() => engine.cancel());
     const loop = new AssistantCallLoop({
       current,

@@ -101,11 +101,13 @@ vi.mock("@/ui/primitives", () => {
     Badge: ({ label }: { label: string }) => createElement("span", { "data-badge": true }, label),
     NavigationRow: ({
       label,
+      accessibilityLabel,
       disabled,
       onPress,
       trailing,
     }: {
       label: string;
+      accessibilityLabel?: string;
       disabled?: boolean;
       onPress: () => void;
       trailing?: ReactNode;
@@ -113,7 +115,7 @@ vi.mock("@/ui/primitives", () => {
       createElement(
         "div",
         { "data-row": label },
-        createElement("button", { disabled, onClick: onPress }, label),
+        createElement("button", { "aria-label": accessibilityLabel, disabled, onClick: onPress }, label),
         trailing,
       ),
     Button: ({
@@ -180,6 +182,8 @@ it("distinguishes a retryable denial from a permission never requested", async (
   await render();
   expect(badgeOf("Camera")).toBe("Denied");
   expect(badgeOf("Notifications")).toBe("Not asked");
+  expect(find("Camera").getAttribute("aria-label")).toBe("Camera. Denied");
+  expect(find("Notifications").getAttribute("aria-label")).toBe("Notifications. Not asked");
   expect(mocks.allow).not.toHaveBeenCalled();
 });
 
@@ -244,6 +248,25 @@ it("shows no badge while a read is pending and refreshes again when the app retu
   mocks.read.mockResolvedValue({ granted: false, canAskAgain: false, status: "denied" });
   await act(async () => mocks.listeners.forEach((listener) => listener("active")));
   expect(badgeOf("Camera")).toBe("Denied");
+  expect(mocks.allow).not.toHaveBeenCalled();
+});
+
+it("ignores a stale grant that resolves after a newer foreground denial", async () => {
+  let releaseOldCamera!: (value: typeof granted) => void;
+  mocks.read.mockImplementation((kind: string) => kind === "camera"
+    ? new Promise((resolve) => { releaseOldCamera = resolve; })
+    : Promise.resolve(granted));
+  await render();
+
+  mocks.read.mockImplementation(async (kind: string) => kind === "camera"
+    ? { granted: false, canAskAgain: false, status: "denied" }
+    : granted);
+  await act(async () => mocks.listeners.forEach((listener) => listener("active")));
+  expect(badgeOf("Camera")).toBe("Denied");
+
+  await act(async () => releaseOldCamera(granted));
+  expect(badgeOf("Camera")).toBe("Denied");
+  expect(badgeOf("Notifications")).toBe("Granted");
   expect(mocks.allow).not.toHaveBeenCalled();
 });
 

@@ -7,6 +7,7 @@ const fixture = vi.hoisted(() => ({ approve: undefined as undefined | (() => voi
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./confirm", () => ({ confirmAction: (_title: string, _detail: string, _label: string, action: () => void) => { fixture.approve = action; } }));
 let dirty = false, pending = false, visible = true, childPending = false;
+let dismissalRetryKey: unknown;
 let controller: ReturnType<typeof useSheetDismissal>, editor: ReturnType<typeof useSheetGuard>;
 let events: string[], root: ReturnType<typeof createRoot>, node: HTMLDivElement;
 const close = () => events.push("close");
@@ -17,12 +18,13 @@ function Editor({ standalone = false }: { standalone?: boolean }) {
 }
 function SheetHarness() {
   const guards = useSheetGuards();
-  controller = useSheetDismissal({ visible, dirty: dirty || guards.dirty, pending: pending || guards.pending, onClose: close });
+  controller = useSheetDismissal({ visible, dirty: dirty || guards.dirty, pending: pending || guards.pending, onClose: close, dismissalRetryKey });
   return createElement(SheetGuardContext.Provider, { value: { register: guards.register, requestClose: controller.requestClose, requestCloseThen: controller.requestCloseThen } }, createElement(Editor));
 }
 const render = () => act(() => root.render(createElement(SheetHarness)));
 beforeEach(() => {
   dirty = false; pending = false; childPending = false; visible = true; events = []; fixture.approve = undefined;
+  dismissalRetryKey = undefined;
   node = document.createElement("div"); root = createRoot(node);
 });
 afterEach(() => { act(() => root.unmount()); vi.clearAllMocks(); });
@@ -31,6 +33,22 @@ it("closes a clean parent before running a continuation exactly once", () => {
   expect(events).toEqual(["close", "navigate"]); expect(controller.confirming).toBe(false);
   visible = false; render(); visible = true; render(); act(() => editor.requestCloseThen(navigate));
   expect(events).toEqual(["close", "navigate", "close", "navigate"]);
+});
+it("accepts one new dismissal after a failure signal without bypassing pending guards", () => {
+  render();
+  act(() => controller.requestClose());
+  expect(events).toEqual(["close"]);
+  pending = true;
+  dismissalRetryKey = new Error("Draft write failed");
+  render();
+  act(() => controller.requestClose());
+  expect(events).toEqual(["close"]);
+  pending = false;
+  render();
+  act(() => { controller.requestClose(); controller.requestClose(); });
+  render();
+  act(() => controller.requestClose());
+  expect(events).toEqual(["close", "close"]);
 });
 it("keeps dirty state on cancel and never carries a canceled continuation into normal dismissal", () => {
   dirty = true; render(); act(() => editor.requestCloseThen(navigate)); expect(events).toEqual([]); expect(controller.confirming).toBe(true);

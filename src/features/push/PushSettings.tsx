@@ -3,7 +3,8 @@ import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine } from "@/state/machines";
 import { useHostClient } from "@/state/queries";
 import { View } from "react-native";
-import { Body, NavigationGroup, SectionHeader, ToggleField } from "@/ui/primitives";
+import { NavigationGroup, Notice, SectionHeader, ToggleField } from "@/ui/primitives";
+import { TimeoutError } from "../../../../src/shared/lib/withTimeout";
 import { useInfoHint } from "@/ui/info-hint";
 import { useCopy } from "@/ui/copy";
 import { errorMessage } from "@/ui/error-message";
@@ -14,8 +15,10 @@ import { usePushPreferences, usePushStatus, type PushPreferenceKind } from "./pu
 export function PushSettings() {
   const copy = useCopy();
   const machine = useActiveMachine();
+  const client = useHostClient();
   const preferences = usePushPreferences();
   const status = usePushStatus((state) => state.status);
+  const retry = usePushStatus((state) => state.retry);
   useEffect(() => {
     void preferences.hydrate();
   }, [preferences.hydrate]);
@@ -39,14 +42,16 @@ export function PushSettings() {
             : status.state === "unconfigured"
               ? copy("Bu uygulama sürümünde uzaktan bildirim yapılandırılmamış.", "Remote notifications are not configured in this app build.")
               : status.state === "error"
-                ? errorMessage(status.error, copy)
+                ? status.error instanceof TimeoutError
+                  ? copy("Bildirim hizmetinin yanıtı çok uzun sürdü.", "The notification service took too long to respond.")
+                  : errorMessage(status.error, copy)
                 : copy("Kontrol ediliyor…", "Checking…");
   const stateInfo = useInfoHint(status.state === "error" ? undefined : detail);
   return (
     <View style={{ gap: space.sm }}>
       <SectionHeader flush title={copy("Bilgisayardan bildirimler", "Notifications from your computer")} trailing={stateInfo.button} />
       {stateInfo.panel}
-      {status.state === "error" ? <Body muted>{detail}</Body> : null}
+      {status.state === "error" ? <Notice tone="warning" message={detail} onRetry={client ? retry : undefined} /> : null}
       <NavigationGroup>
         <ToggleField
           label={copy("Telefona bildirim gönder", "Notify this phone")}

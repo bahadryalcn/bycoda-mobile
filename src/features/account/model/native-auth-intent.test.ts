@@ -36,3 +36,25 @@ it.each([true, false])("preserves the full pending session identity on ordinary 
   const widget = "bycoda://session/session?projectId=project&machineId=machine";
   expect(redirectSystemPath({ path: widget, initial })).toBe(widget);
 });
+
+it.each([true, false])("keeps prompt text containing dataUrl, initial=%s", initial => {
+  const intent = "bycoda://new/v1?prompt=Check+the+dataUrl=example";
+  expect(redirectSystemPath({ path: intent, initial })).toMatch(
+    /^\/sessions\?new=1&prompt=Check%20the%20dataUrl%3Dexample&n=link/,
+  );
+});
+
+it.each([
+  "bycoda://dataUrl=bycodaShareKey?nonce=123#text",
+  "bycoda:///dataUrl=bycodaShareKey?nonce=123#media",
+  "/dataUrl=bycodaShareKey?nonce=123#file",
+  "dataUrl=bycodaShareKey?nonce=123#weburl",
+])("keeps share callbacks with the share receiver, %s", path => {
+  expect(redirectSystemPath({ path, initial: true })).toBe("/");
+  expect(redirectSystemPath({ path, initial: false })).toBeNull();
+});
+
+it("does not suppress an ordinary route just because it contains dataUrl", () => {
+  const path = "bycoda://session/session?projectId=project&dataUrl=example";
+  expect(redirectSystemPath({ path, initial: false })).toBe(path);
+});

@@ -16,7 +16,8 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostClient, useHostQuery } from "@/state/queries";
 import { useCreateSession } from "./use-create-session";
 import { useScreenContentInsets } from "@/ui/screen-content-insets";
-import { Body, FormActions, Sheet, SearchField, ScreenList, QueryState } from "@/ui/primitives";
+import { Body, Button, FormActions, Sheet, SearchField, ScreenList, QueryState } from "@/ui/primitives";
+import { getQueryPresentation } from "@/ui/query-presentation";
 import { useCopy } from "@/ui/copy";
 import { PermissionField } from "./agent-option-icons";
 import { selectedChoice } from "./provider-choices";
@@ -153,6 +154,16 @@ export function ProjectSessions({
       ? copy("Arşivlenmiş oturum yok.", "No archived sessions.")
       : copy("Henüz oturum yok.", "No sessions yet.");
   const ownsRegion = queryOwnsRegion(listQuery, !visible.length);
+  const presentation = getQueryPresentation(listQuery, !visible.length);
+  const showEmptyCreate = presentation === "empty" && !search.trim() && !archived;
+  const current = () =>
+    mounted.current &&
+    !!machine &&
+    useMachines.getState().activeId === machine.id &&
+    canReadProject();
+  const openCreate = () => {
+    if (current() && !locked) setCreating(true);
+  };
   const listState = (
     <QueryState
       query={listQuery}
@@ -171,22 +182,15 @@ export function ProjectSessions({
               label: copy("Aramayı temizle", "Clear search"),
               onPress: () => setSearch(""),
             }
-          : !archived
+          : showEmptyCreate && !locked
             ? {
                 label: copy("Yeni oturum", "New session"),
-                onPress: () => {
-                  if (current() && !locked) setCreating(true);
-                },
+                onPress: openCreate,
               }
             : undefined
       }
     />
   );
-  const current = () =>
-    mounted.current &&
-    !!machine &&
-    useMachines.getState().activeId === machine.id &&
-    canReadProject();
   const content = (
     <HierarchyWidthProvider>
       <ScreenList<ProjectSessionRow>
@@ -198,6 +202,18 @@ export function ProjectSessions({
         ListEmptyComponent={ownsRegion ? listState : undefined}
         ListHeaderComponent={
           <View style={[uiStyles.stack, { gap: space.sm }]}>
+            {archived ? (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", columnGap: space.sm }}>
+                <Body accessibilityRole="header" style={{ flexShrink: 1 }}>
+                  {copy("Arşivlenmiş oturumlar", "Archived sessions")}
+                </Body>
+                <Button
+                  label={copy("Etkin oturumlar", "Active sessions")}
+                  tone="quiet"
+                  onPress={() => { if (current()) setArchived(false); }}
+                />
+              </View>
+            ) : null}
             {searchOpen ? (
               <SearchField
                 label={copy("Oturum ara", "Search sessions")}
@@ -360,10 +376,9 @@ export function ProjectSessions({
     toggleSearch: () => {
       if (current()) setSearchOpen((value) => !value);
     },
+    showCreateInHeader: !showEmptyCreate && (listQuery.data !== undefined || presentation === "error"),
     createDisabled: locked,
-    create: () => {
-      if (current() && !locked) setCreating(true);
-    },
+    create: openCreate,
     archived,
     toggleArchived: () => {
       if (current()) setArchived((value) => !value);

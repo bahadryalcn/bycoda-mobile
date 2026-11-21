@@ -25,6 +25,7 @@ export function DemoScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <OnboardingShell
+        compactPages
         top={
           <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
             <IconButton label={copy("Kapat", "Close")} onPress={close}>

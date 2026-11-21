@@ -1,13 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveHostLinkDown } from "@/state/host-runtime-state";
 import { reviewedMachine, isReviewedMachine } from "@/state/reviewed-machine";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { router } from "expo-router";
 import Animated from "react-native-reanimated";
 import type { HostSettingsState } from "../../remote/types";
 import { hostKey, useHostMutation, useHostQuery } from "../../state/queries";
-import { Body, Disclosure, FormActions, NumberField, QueryState, MutationState, Notice, Stack, StateView, ErrorText } from "../../ui/primitives";
+import { Body, Disclosure, FormActions, NumberField, QueryState, MutationState, Notice, SectionHeader, Stack, StateView, ErrorText } from "../../ui/primitives";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
 import { useSheetGuard } from "@/ui/sheet-guard";
@@ -36,6 +37,7 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
   const locale = useLocale();
   const cache = useQueryClient();
   const machine = useActiveMachine();
+  const linkDown = useActiveHostLinkDown();
   const [opening] = useState(() => ({ machineId, name: machineName ?? machine?.name, target: target ?? reviewedMachine(machine) }));
   const latest = useRef(machineId); latest.current = machineId;
   const mounted = useRef(true), retired = useRef(false);
@@ -46,7 +48,7 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
   };
   const validScope = current();
   const supported = validScope && !!machine?.capabilities?.includes("host.settings");
-  const settings = useHostQuery<HostSettingsState>(["settings"], "host.settings.get", {}, { enabled: supported,
+  const settings = useHostQuery<HostSettingsState>(["settings"], "host.settings.get", {}, { enabled: supported && !linkDown,
     queryFn: async (client, signal) => {
       if (!current()) throw new Error("This computer connection changed. Reopen its current route.");
       const result = readHostSettingsState(await client.request("host.settings.get", {}, { signal }));
@@ -56,7 +58,10 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
   const received = useRef<HostSettingsState | undefined>(undefined);
   if (supported && settings.data) received.current = settings.data;
   const errorKind = (settings.error as { kind?: string } | null)?.kind;
-  const snapshot = errorKind === "auth" || errorKind === "identity" ? undefined : received.current;
+  const accessError = errorKind === "auth" || errorKind === "identity";
+  const snapshot = accessError ? undefined : received.current;
+  const showSections = useRef(false);
+  if (validScope && !linkDown && !accessError) showSections.current = true;
   const save = useHostMutation<HostSettingsState>("host.settings.save", ["settings"]);
   const action = useAsyncAction<HostSettingsState>();
   const [uncertain, setUncertain] = useState(false), [reading, setReading] = useState(false);
@@ -69,7 +74,7 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
   };
   const dirty = draft.values.override !== null;
   const { requestCloseThen } = useSheetGuard({ dirty, pending: action.isPending || save.isPending || reading });
-  const writable = supported && getQueryPresentation(settings) === "ready" && !uncertain;
+  const writable = supported && !linkDown && getQueryPresentation(settings) === "ready" && !uncertain;
   const validMax = /^\d+$/.test(fields.maxRunning) && Number(fields.maxRunning) >= 1 && Number.isSafeInteger(Number(fields.maxRunning));
   const validMinutes = /^\d+$/.test(fields.dailyMinutes) && Number.isSafeInteger(Number(fields.dailyMinutes));
   const update = (key: keyof typeof fields, value: string) =>
@@ -108,19 +113,32 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
     } catch { /* QueryState owns read failure and retry. */ }
     finally { readFlight.current = false; if (mounted.current) setReading(false); }
   };
+  const manageConnections = () => requestCloseThen(() => router.navigate("/machines"));
+  if (validScope && linkDown && !showSections.current && opening.name) return (
+    <StateView compact tone="warning"
+      title={copy("{p0} bu ağda erişilemiyor.", "Can't reach {p0} on this network.", { p0: opening.name })}
+      action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: manageConnections }} />
+  );
+  if (validScope && !linkDown && accessError && supported) return (
+    <Stack><Body muted>{opening.name}</Body>
+      <QueryState query={settings} loading="inline" compact onManageConnections={manageConnections} />
+    </Stack>
+  );
   return (
     <Stack style={{ gap: space.lg }}>
       <Body>{opening.name}</Body>
-      {!validScope ? <Notice tone="warning" message={copy("Seçili bilgisayar değişti. Ayarları yeniden açın.", "The selected computer changed. Reopen the settings.")} /> : !supported ? <StateView compact illustration="error" title={copy("Görev sınırları kullanılamıyor", "Task limits unavailable")} description={copy("Görev sınırlarını düzenlemek için bu bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to edit task limits.")} /> : <QueryState query={uncertain ? { ...settings, refetch: undefined } : settings} onManageConnections={() => requestCloseThen(() => router.navigate("/machines"))} />}
+      {validScope && !linkDown && !snapshot && supported ? <SectionHeader title={copy("Görev sınırları", "Task limits")} /> : null}
+      {!validScope ? <Notice tone="warning" message={copy("Seçili bilgisayar değişti. Ayarları yeniden açın.", "The selected computer changed. Reopen the settings.")} /> : linkDown ? <Notice tone="warning" message={copy("{p0} bu ağda erişilemiyor.", "Can't reach {p0} on this network.", { p0: opening.name ?? "" })} action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: manageConnections }} /> : !supported ? <StateView compact illustration="error" title={copy("Görev sınırları kullanılamıyor", "Task limits unavailable")} description={copy("Görev sınırlarını düzenlemek için bu bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to edit task limits.")} /> : <QueryState query={uncertain ? { ...settings, refetch: undefined } : settings} loading="inline" compact onManageConnections={manageConnections} />}
       {snapshot ? (
         <>
           <Animated.View entering={enterItem(0)}>
             <Stack>
+              <SectionHeader title={copy("Görev sınırları", "Task limits")} />
               <NumberField
                 label={copy("Aynı anda çalışan görev", "Concurrent tasks")}
                 value={fields.maxRunning}
                 onChangeText={(value) => update("maxRunning", value)}
-                editable={supported && !uncertain && !reading}
+                editable={supported && !linkDown && !uncertain && !reading}
               />
               {!validMax ? (
                 <ErrorText error={copy("Pozitif bir tam sayı girin.", "Enter a positive whole number.")} />
@@ -130,7 +148,7 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
                 hint={copy("0 sınırsız", "0 unlimited")}
                 value={fields.dailyMinutes}
                 onChangeText={(value) => update("dailyMinutes", value)}
-                editable={supported && !uncertain && !reading}
+                editable={supported && !linkDown && !uncertain && !reading}
               />
               {!validMinutes ? (
                 <ErrorText error={copy("Sıfır veya pozitif bir tam dakika girin.", "Enter zero or a positive whole number of minutes.")} />
@@ -152,7 +170,7 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
           <FormActions
             submitLabel={uncertain ? copy("Yenile", "Refresh") : copy("Bilgisayar ayarlarını kaydet", "Save computer settings")}
             busy={action.isPending || save.isPending || reading}
-            disabled={uncertain ? !supported : !writable || !dirty || !validSettingsFields(fields)}
+            disabled={uncertain ? !supported || linkDown : !writable || !dirty || !validSettingsFields(fields)}
             onSubmit={uncertain ? () => { void refreshSettings(); } : submit}
             feedback={<>{uncertain ? <><Notice tone="warning" message={copy("Kaydetmenin sonucu bilinmiyor. Tekrar göndermeden bilgisayardaki tercihi kontrol edin.", "The save outcome is unknown. Check the preference on the computer before sending again.")} /></> : null}{validScope && observed ? <Body muted>{copy("Son alınan sınırlar: {p0} görev · {p1} dakika (0 sınırsız).", "Last received limits: {p0} tasks · {p1} minutes (0 unlimited).", { p0: observed.maxRunningTasks, p1: observed.dailyAgentMinutes })}</Body> : null}{validScope && !uncertain ? <MutationState
             mutation={action}

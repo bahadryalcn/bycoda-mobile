@@ -5,7 +5,7 @@ import type { HostProject } from "@/domain/types";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
-import { Body, FormActions, NavigationRow, ScreenList, SearchField, Sheet } from "@/ui/primitives";
+import { Body, NavigationRow, ScreenList, SearchField, Sheet } from "@/ui/primitives";
 import { usePrivateContentAccess } from "@/ui/private-access";
 import { ScreenChromeProvider } from "@/ui/layout";
 import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
@@ -85,8 +85,7 @@ function ProjectPickerOpening({ onClose, onSelect }: Omit<Props, "visible">) {
     emptyAction: normalized ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined,
     onManageConnections: manageConnections,
   };
-  return <Sheet visible title={copy("Proje seçin", "Choose a project")} size="full" scroll={false} onClose={close}
-    footer={<FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />}>
+  return <Sheet visible title={copy("Proje seçin", "Choose a project")} size="full" scroll={false} onClose={close}>
     {!available ? <RecordAccessUnavailable /> : <>
       <View style={{ paddingHorizontal: space.screen, paddingVertical: space.sm }}>
         <SearchField label={copy("Projelerinde ara", "Search projects")} value={readable ? search : ""} editable={readable} onChangeText={changeSearch} />

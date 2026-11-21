@@ -244,11 +244,10 @@ export function FloatingTabBar({
   const hidden = overflow ? state.routes.slice(slots - 1) : [];
   // Navigator content and toasts clear exactly the rendered navigation footprint.
   useEffect(() => {
-    if (keyboard) {
-      onInsetChange?.(0);
-      setMore(false);
-    }
-  }, [keyboard, onInsetChange]);
+    if (keyboard) onInsetChange?.(0);
+    // A resize or preference change can remove the overflow while its sheet is open.
+    if (keyboard || !overflow) setMore(false);
+  }, [keyboard, onInsetChange, overflow]);
   // Unmount releases the clearance owned by this navigation instance.
   useEffect(() => () => onInsetChange?.(0), [onInsetChange]);
   const label = (route: (typeof state.routes)[number]) =>
@@ -409,7 +408,7 @@ export function FloatingTabBar({
           ) : null}
         </View>
       </View>
-      {more ? (
+      {more && overflow ? (
         <Sheet
           visible
           title={copy("Gezinme", "Navigation")}

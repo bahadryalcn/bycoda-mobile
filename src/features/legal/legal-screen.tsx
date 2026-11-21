@@ -31,7 +31,7 @@ export function LegalScreen() {
     return (
       <Screen scroll={false}>
         <Stack.Screen options={{ title: legalDocumentTitle(document, copy) }} />
-        <LegalReader document={document} />
+        <LegalReader key={document} document={document} />
       </Screen>
     );
   }

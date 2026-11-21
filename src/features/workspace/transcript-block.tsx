@@ -34,7 +34,7 @@ import { PlanReview } from "@/features/management/plans/plan-review";
 import { SubagentCard } from "./subagent-card";
 import { OrchestrationDetails } from "./orchestration-details";
 import { ActivityApproval } from "./activity-inspector-approval";
-import { userPromptDisplay, userTurn, userTurnAuthorLabel } from "./user-turn";
+import { taskKickoffObjective, userPromptDisplay, userTurn, userTurnAuthorLabel } from "./user-turn";
 import { UserTurnNotice } from "./user-turn-notice";
 import { UserMessageText } from "./user-message-text";
 import { formatMessageTime } from "./transcript-format";
@@ -213,7 +213,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
       {text && value.role === "tool" && !value.agentRun ? (
         <MessageCode code={text} output compact error={isError} allowPreview={false} context={context} readerTitle={inputBlock ? copy("Komut", "Command") : undefined} copyLabel={inputBlock ? copy("Komutu kopyala", "Copy command") : undefined} />
       ) : text && value.role === "user" ? (
-        <UserMessageText text={text} />
+        <UserMessageText text={text} preview={taskKickoffObjective(text, value.author)} />
       ) : text ? (
         <MessageText
           text={text}

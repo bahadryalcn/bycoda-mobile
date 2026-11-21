@@ -36,7 +36,7 @@ export function ComposerSheets({
     <>
       <Sheet
         visible={templateOpen}
-        title={copy("Telefon şablonları", "Phone templates")}
+        title={copy("Şablonlar", "Templates")}
         size="full"
         scroll={false}
         onClose={onTemplateClose}
@@ -49,7 +49,7 @@ export function ComposerSheets({
         <NavigationGroup>
           <NavigationRow
             intent="navigate"
-            label={copy("Telefon şablonları", "Phone templates")}
+            label={copy("Şablonlar", "Templates")}
             icon={<IconTile><LayoutTemplate size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
             onPress={onTemplateOpen}
           />

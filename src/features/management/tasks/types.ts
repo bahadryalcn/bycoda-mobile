@@ -20,6 +20,7 @@ export type TaskCardProps = {
   editorOpen: boolean;
   onEdit: (task: HostTask) => void;
   onDelivery: (task: HostTask) => void;
+  onReviewDelivery: (task: HostTask) => void;
   move: ReturnType<typeof useHostMutation<HostTask>>;
   remove: ReturnType<typeof useHostMutation>;
   decline: ReturnType<typeof useHostMutation>;

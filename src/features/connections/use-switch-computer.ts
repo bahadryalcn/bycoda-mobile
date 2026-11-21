@@ -17,7 +17,7 @@ export function useSwitchComputer() {
           assertAccess: assertAppAccess,
           getState: () => useMachines.getState(),
           selectMachine: (next) => useMachines.getState().selectMachine(next),
-          navigate: onDone,
+          onSelected: onDone,
         });
       } catch (error) {
         throw error instanceof ConnectionRecoveryError

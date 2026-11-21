@@ -8,7 +8,6 @@ import type { CrewRunView } from "@/remote/contracts/crews";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { hostKey, useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { confirmAction } from "@/ui/confirm";
 import { ActionMenu, Button, ErrorNotice, MutationState, NavigationGroup, NavigationRow, Row, Stack, Body } from "@/ui/primitives";
 import { RecordCard } from "@/ui/record-card";
 import { Status, statusLabel } from "../shared/status";
@@ -17,6 +16,7 @@ import { joinMeta, RecordTrailing, useMenuGlyph } from "../shared/record-bits";
 import { MemberLines } from "./member-lines";
 import { CrewRuntimePanel } from "./runtime-panel";
 import { canDeleteCrewRun, canStopCrewRun, crewActivityKnown, crewHasRunningWork, crewTaskSessions } from "./runtime-model";
+import { useRecordConfirmation } from "../shared/use-record-confirmation";
 
 function CrewTaskRow({ task, model, supported, onOpenSession }: {
   task: CrewRunView["tasks"][number];
@@ -57,15 +57,18 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
   const remove = useHostMutation("crews.deleteRun", ["crews", run.projectId]);
   const busy = pause.isPending || resume.isPending || stop.isPending || remove.isPending;
   const supported = machine?.id === machineId && machine?.capabilities?.includes("crews.v1") === true;
+  const title = run.title || run.definition.name;
+  const confirm = useRecordConfirmation({ id: run.id, title, status: run.status, updatedAt: run.updatedAt },
+    machine?.name || machine?.id, busy || !supported);
   const openSession = (sessionId: string) => {
     if (supported && machineId && useMachines.getState().activeId === machineId)
       router.navigate({ pathname: "/session/[id]", params: { id: sessionId, machineId, projectId: run.projectId } });
   };
   const done = run.tasks.filter((task) => task.status === "done").length;
   const created = `${copy("Oluşturulma", "Created")}: ${stamp(run.createdAt)}`;
-  const stopWork = () => confirmAction(copy("Çalışmayı durdur", "Stop work"), copy("Koordinatör ve çalışan ekip görevleri durdurulur. Dosyalar ve çalışma kaydı korunur.", "The coordinator and active crew tasks will stop. Files and the work record are kept."),
+  const stopWork = () => confirm(copy("Çalışmayı durdur", "Stop work"), copy("Koordinatör ve çalışan ekip görevleri durdurulur. Dosyalar ve çalışma kaydı korunur.", "The coordinator and active crew tasks will stop. Files and the work record are kept."),
     copy("Durdur", "Stop"), () => { if (supported && useMachines.getState().activeId === machineId) stop.mutate({ projectId: run.projectId, runId: run.id }, { onError: refreshAfterFailure }); });
-  return <RecordCard title={run.title || run.definition.name} status={<Status value={run.status} />}
+  return <RecordCard title={title} status={<Status value={run.status} />}
     metadata={joinMeta([run.definition.name, run.tasks.length ? copy("{p0}/{p1} görev", "{p0}/{p1} tasks", { p0: done, p1: run.tasks.length }) : "", created])}
     preview={run.tasks.length ? <Progress value={done} maxValue={run.tasks.length} size="sm"
       color={run.status === "finished" ? "success" : "primary"}
@@ -76,11 +79,11 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
         disabled={busy || !supported} onPress={stopWork} />}
       {run.status !== "finished" && <Button tone="quiet" busy={pause.isPending || resume.isPending}
         label={run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Beklet", "Pause")}
-        disabled={busy || !supported} onPress={() => confirmAction(run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Beklet", "Pause"),
+        disabled={busy || !supported} onPress={() => confirm(run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Beklet", "Pause"),
           run.status === "paused" ? copy("Ekip görevleri bilgisayarda yeniden ilerleyebilir; gerekirse koordinatör yeniden başlatılır.", "Crew work may continue on the computer; the coordinator may restart if needed.")
             : copy("Yeni görevler bekletilir. Çalışan görevleri de durdurmak için Çalışmayı durdur işlemini kullanın.", "New work is paused. Use Stop work to stop currently running tasks too."),
           run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Beklet", "Pause"),
-          () => { if (supported && useMachines.getState().activeId === machineId) (run.status === "paused" ? resume : pause).mutate({ projectId: run.projectId, runId: run.id }, { onError: refreshAfterFailure }); }, undefined, "default")} />}
+          () => { if (supported && useMachines.getState().activeId === machineId) (run.status === "paused" ? resume : pause).mutate({ projectId: run.projectId, runId: run.id }, { onError: refreshAfterFailure }); }, "default")} />}
     </Row> : null}
     menu={<RecordTrailing>
       <ActionMenu label={copy("Ekip çalışması işlemleri", "Crew work actions")} actions={[
@@ -88,7 +91,7 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
         disabled: !supported, onPress: () => openSession(run.coordinatorSessionId!) },
       machine?.capabilities?.includes("crews.run-delete.v1") && { key: "delete", icon: glyph(Trash2, true), label: copy("Çalışmayı sil", "Delete work"), destructive: true,
         disabled: busy || !supported || !canDeleteCrewRun(run),
-        onPress: () => confirmAction(copy("Çalışmayı sil", "Delete work"), copy("Bu çalışma listeden kaldırılsın mı? Ekip, görevler ve oturumlar korunur.", "Remove this work from the list? The crew, tasks and conversations are kept."),
+        onPress: () => confirm(copy("Çalışmayı sil", "Delete work"), copy("Bu çalışma listeden kaldırılsın mı? Ekip, görevler ve oturumlar korunur.", "Remove this work from the list? The crew, tasks and conversations are kept."),
           copy("Sil", "Delete"), () => { if (supported && !busy && canDeleteCrewRun(run) && useMachines.getState().activeId === machineId) remove.mutate({ projectId: run.projectId, runId: run.id, expectedUpdatedAt: run.updatedAt }); }) },
       ]} />
     </RecordTrailing>}

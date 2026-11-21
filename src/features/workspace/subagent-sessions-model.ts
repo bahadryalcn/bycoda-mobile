@@ -15,7 +15,7 @@ export type ChildSessionEntry = {
 };
 
 const stateOf = (row: HostSessionSummary): AgentEntry["state"] =>
-  row.status === "running" ? "running" : row.issue === "failed" ? "failed" : "completed";
+  row.status === "running" ? "running" : row.status === "interrupted" ? "interrupted" : row.issue === "failed" ? "failed" : "completed";
 
 /**
  * Children of one parent from a project session list, oldest first. Older Hosts omit

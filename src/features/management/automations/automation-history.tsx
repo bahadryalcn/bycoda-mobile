@@ -31,8 +31,7 @@ export function AutomationHistory({ automationId, projectId, summary, automation
   const current = useRef(runs); current.current = runs;
   const summarized = summarizedAutomationRun(summary, runs ?? []);
   const close = () => { if (!mounted.current || retired.current) return; retired.current = true; onClose(); };
-  return <Sheet visible title={copy("Geçmiş", "History")} size="full" scroll={false} onClose={close}
-    footer={<Button tone="quiet" label={copy("Kapat", "Close")} onPress={close} />}>
+  return <Sheet visible title={copy("Geçmiş", "History")} size="full" scroll={false} onClose={close}>
     {!readable ? <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")} description={copy(...RECORD_ACCESS_UNAVAILABLE)} /> :
       <ScreenChromeProvider nativeTitle bottomSafeArea={false}>
         <ScreenList data={runs ?? []} keyExtractor={run => run.id}

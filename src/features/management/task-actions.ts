@@ -8,7 +8,7 @@ import {
   taskRequiresInstructions,
 } from "../../../../src/features/tasks/model/taskRules";
 
-export function taskMatchesFilter(task: HostTask, filter: string) {
+export function taskMatchesFilter(task: Pick<HostTask, "status">, filter: string) {
   return (
     filter === "all" ||
     (filter === "active"

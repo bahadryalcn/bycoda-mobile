@@ -17,8 +17,10 @@ export function statusLabel(value: string, copy: (tr: string, en: string) => str
     blocked: ["Engellendi", "Blocked"],
     planning: ["Planlanıyor", "Planning"],
     "awaiting-approval": ["Onay bekliyor", "Awaiting approval"],
+    "needs-input": ["Yanıt bekliyor", "Needs input"],
     cancelled: ["İptal edildi", "Cancelled"],
     failed: ["Başarısız", "Failed"],
+    skipped: ["Atlanan", "Skipped"],
     succeeded: ["Başarılı", "Succeeded"],
     completed: ["Tamamlandı", "Completed"],
     comment: ["Yorum", "Comment"],
@@ -37,7 +39,7 @@ export function Status({ value }: StatusProps) {
     ? "danger"
     : ["done", "succeeded", "completed", "finished"].includes(value)
       ? "success"
-      : ["review", "awaiting-approval"].includes(value)
+      : ["review", "awaiting-approval", "needs-input"].includes(value)
         ? "warning"
         : ["running", "verifying", "planning", "active"].includes(value)
           ? "live"

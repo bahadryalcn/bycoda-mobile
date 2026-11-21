@@ -52,7 +52,7 @@ describe("report privacy and delivery", () => {
     expect(useContentReport.getState()).toMatchObject({ status: "idle", error: "send", draft, requestId: "request-1" });
     await sendContentReport(opts);
     expect(opts.newRequestId).toHaveBeenCalledTimes(1);
-    expect(useContentReport.getState()).toMatchObject({ status: "sent", receiptId: "receipt-1", draft });
+    expect(useContentReport.getState()).toMatchObject({ status: "sent", receiptId: "receipt-1", draft: emptyReportDraft() });
     await sendContentReport(opts);
     expect(opts.sender).toHaveBeenCalledTimes(2);
     updateContentReport({ description: "Edited report" });

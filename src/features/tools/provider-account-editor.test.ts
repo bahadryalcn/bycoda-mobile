@@ -275,7 +275,7 @@ it("keeps quota observation available without authorizing unsupported metadata c
   });
 });
 
-it("sends reviewed Automatic account kind through existing delivery", async () => {
+it("sends Personal for a legacy unset account kind after review", async () => {
   state.submit.mockResolvedValue(undefined);
   state.value = {
     kind: "accountKind",
@@ -286,5 +286,5 @@ it("sends reviewed Automatic account kind through existing delivery", async () =
   await render();
   await click("Review changes");
   await click("Save");
-  expect(state.submit).toHaveBeenCalledWith({ kind: "accountKind", accountKind: null });
+  expect(state.submit).toHaveBeenCalledWith({ kind: "accountKind", accountKind: "personal" });
 });

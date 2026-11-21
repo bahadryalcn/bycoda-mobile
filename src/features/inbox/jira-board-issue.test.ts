@@ -34,6 +34,7 @@ vi.mock("@/ui/primitives", () => {
     Sheet: ({ children, footer, title, onClose }: PropsWithChildren<{ footer?: ReactNode; title: string; onClose: () => void }>) =>
       createElement("div", { role: "dialog", "aria-label": title }, children, footer, createElement(Button, { label: `Close ${title}`, onPress: onClose })),
     Notice: ({ message }: { message: string }) => createElement("p", null, message), Button,
+    StateView: ({ title, description }: { title: string; description: string }) => createElement("p", null, title, description),
     FormActions: ({ submitLabel, cancelLabel, onSubmit, onCancel }: { submitLabel: string; cancelLabel: string; onSubmit: () => void; onCancel: () => void }) =>
       createElement("div", null, createElement(Button, { label: cancelLabel, onPress: onCancel }), createElement(Button, { label: submitLabel, onPress: onSubmit })),
     Disclosure: ({ label, children, defaultExpanded = false }: PropsWithChildren<{ label: string; defaultExpanded?: boolean }>) => {
@@ -66,6 +67,18 @@ async function openReview() { await choose("Jira transition", "4"); await click(
 it("shows issue details and metadata alongside actions", async () => {
   await mount();
   for (const value of ["Readable description", "Reporter", "High", "bug", "Ada", "Updated"]) expect(container.textContent).toContain(value);
+});
+
+it.each(["access lost", "action completed"])("shows only the shared close when %s", async outcome => {
+  await mount();
+  if (outcome === "access lost") state.project = "other";
+  else state.result = { outcome: "submitted" };
+  await render();
+  const closes = [...container.querySelectorAll("button")].filter(control => control.textContent?.startsWith("Close"));
+  expect(closes).toHaveLength(1);
+  if (outcome === "access lost") expect(container.textContent).toContain("Record access is unavailable.");
+  await act(async () => closes[0]!.click());
+  expect(defaults.onClose).toHaveBeenCalledOnce();
 });
 
 it.each(["project","auth"])("conceals Jira identity and fields across %s loss, keeping choices on restoration",async kind=>{

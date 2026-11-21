@@ -3,7 +3,8 @@ import { act, createElement as h, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 const f = vi.hoisted(() => ({
-  installed: true, job: { state: "idle" } as Record<string, unknown>,
+  installed: true, disconnected: false, job: { state: "idle" } as Record<string, unknown>,
+  cloud: undefined as Record<string, boolean> | undefined,
   modelsRefetch: vi.fn(), action: vi.fn(async () => ({})),
 }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
@@ -21,14 +22,16 @@ vi.mock("./voice-preferences", () => ({
   voicePreferences: { getState: () => ({ update: vi.fn(async () => undefined) }) }, moveVisibleMic: vi.fn(), visibleMics: (order: unknown[]) => order,
 }));
 vi.mock("@/state/machines", () => {
-  const machine = { id: "m", name: "Office PC", capabilities: ["voice.local.v1"] };
+  const machine = { id: "m", name: "Office PC", capabilities: ["voice.local.v1", "voice.cloud.v1"] };
   const state = { hydrated: true, connectionPending: false, storageError: null };
   return { useActiveMachine: () => machine, useMachines: (select: (value: typeof state) => unknown) => select(state) };
 });
+vi.mock("@/state/host-runtime-state", () => ({ useActiveHostLinkDown: () => f.disconnected }));
 vi.mock("@/state/queries", () => ({
   useHostQuery: (key: string[]) => {
-    if (key[1] === "models") return { data: [{ id: "small", label: "Whisper small", installed: f.installed }], refetch: f.modelsRefetch };
+    if (key[1] === "models") return { data: [{ id: "small", label: "Whisper small", installed: f.installed }], isSuccess: true, refetch: f.modelsRefetch };
     if (key[1] === "modelStatus") return { data: f.job, refetch: async () => ({ data: f.job }) };
+    if (key[1] === "cloud") return { data: f.cloud, isSuccess: f.cloud !== undefined };
     return { data: undefined, isSuccess: false };
   },
   useHostMutation: (method: string) => ({ mutateAsync: method === "voice.local.modelAction" ? f.action : vi.fn(), isPending: false }),
@@ -41,7 +44,8 @@ vi.mock("@/ui/primitives", () => {
     Notice: ({ message }: { message: string }) => h("p", null, message), ErrorNotice: () => null, QueryState: () => null,
     SettingIcon: () => null, SegmentedRow: () => null,
     SelectField: ({ label }: { label: string }) => h("p", null, label),
-    SelectRow: ({ label, detail }: { label: string; detail?: string }) => h("p", null, label, detail),
+    SelectRow: ({ label, detail, disabled }: { label: string; detail?: string; disabled?: boolean }) =>
+      h("p", { "data-choice": label, "aria-disabled": disabled }, label, detail),
     ChoiceChip: ({ label }: { label: string }) => h("span", null, label),
     NavigationRow: ({ label, detail, onPress }: { label: string; detail: string; onPress(): void }) => h("button", { onClick: onPress }, label, detail),
     Sheet: ({ visible, children }: PropsWithChildren<{ visible: boolean }>) => (visible ? h("section", null, children) : null),
@@ -52,7 +56,40 @@ vi.mock("@/ui/primitives", () => {
 });
 import { VoiceSettings } from "./voice-settings";
 let root: ReturnType<typeof createRoot>;
-afterEach(async () => { await act(async () => root?.unmount()); vi.unstubAllGlobals(); vi.clearAllMocks(); f.installed = true; f.job = { state: "idle" }; });
+afterEach(async () => { await act(async () => root?.unmount()); vi.unstubAllGlobals(); vi.clearAllMocks(); f.installed = true; f.job = { state: "idle" }; f.cloud = undefined; });
+
+it("shows which computer update or account setup the transcription choice needs", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div"); root = createRoot(container);
+  f.cloud = { openrouter: true };
+  await act(async () => root.render(h(VoiceSettings)));
+  await act(async () => container.querySelector("button")!.click());
+  const find = (label: string) => container.querySelector(`[data-choice="${label}"]`)!;
+  expect(find("OpenAI").getAttribute("aria-disabled")).toBe("true");
+  expect(find("OpenAI").textContent).toContain("Update bycoda on this computer for voice models.");
+  f.cloud = { openai: true, xai: false };
+  await act(async () => root.render(h(VoiceSettings)));
+  expect(find("OpenAI").getAttribute("aria-disabled")).toBe("false");
+  expect(find("OpenAI").textContent).toContain("Codex");
+  expect(find("Grok").getAttribute("aria-disabled")).toBe("true");
+  expect(find("Grok").textContent).toContain("Needs setup on the computer");
+});
+
+it("waits for the computer before prompting for a voice-model update", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div"); root = createRoot(container);
+  f.disconnected = true;
+  try {
+    await act(async () => root.render(h(VoiceSettings)));
+    await act(async () => container.querySelector("button")!.click());
+    expect(container.textContent).not.toContain("Update bycoda on this computer for voice models.");
+    f.disconnected = false;
+    await act(async () => root.render(h(VoiceSettings)));
+    expect(container.textContent).toContain("Update bycoda on this computer for voice models.");
+  } finally {
+    f.disconnected = false;
+  }
+});
 
 it("names the computer and refreshes the list when a removal settles before any poll", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

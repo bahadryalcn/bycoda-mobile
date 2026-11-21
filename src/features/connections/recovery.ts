@@ -34,13 +34,13 @@ export async function reloadSavedConnections(
   if (!current.hydrated || current.storageError) throw new ConnectionRecoveryError();
 }
 
-/** Selection and navigation use current storage state after the asynchronous draft flush. */
+/** Verify the selected computer against current storage state after the asynchronous draft flush. */
 export async function selectSavedComputer(
   id: string,
   actions: DraftAccess & {
     getState(): SelectionState;
     selectMachine(id: string): void;
-    navigate(): void;
+    onSelected(): void;
   },
 ): Promise<void> {
   actions.assertAccess();
@@ -64,7 +64,7 @@ export async function selectSavedComputer(
     selected.activeId !== id
   )
     throw new ConnectionRecoveryError();
-  actions.navigate();
+  actions.onSelected();
 }
 
 

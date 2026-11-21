@@ -2,9 +2,11 @@ import { useState } from "react";
 import { View } from "react-native";
 import { useActiveMachine } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
+import { useActiveHostLinkDown } from "@/state/host-runtime-state";
 import { useCopy } from "@/ui/copy";
 import { Button, Input, Notice, QueryState, SectionHeader, SelectField, SelectRow, Stack } from "@/ui/primitives";
 import { parseLocalModels, type LocalVoiceModel } from "./voice-models-model";
+import { DICTATION_MODELS } from "../../../../src/features/voice/model/dictationModels";
 import { SUPERTONIC_SPEAKERS, useVoicePreferences, voicePreferences, type SpeechEngine, type SupertonicSpeaker, type VoicePreferences } from "./voice-preferences";
 
 type Copy = ReturnType<typeof useCopy>;
@@ -25,11 +27,12 @@ export function speechSummary(speech: SpeechEngine, speaker: SupertonicSpeaker, 
 export function VoiceChoices() {
   const copy = useCopy();
   const machine = useActiveMachine();
+  const linkDown = useActiveHostLinkDown();
   const { preferences, hydrated, storageError } = useVoicePreferences();
   const localSupported = machine?.capabilities?.includes("voice.local.v1") === true;
   const cloudSupported = machine?.capabilities?.includes("voice.cloud.v1") === true;
   const selectableModels = machine?.capabilities?.includes("voice.transcription-models.v1") === true;
-  const keys = useHostQuery<{ openrouter?: unknown; elevenlabs?: unknown }>(["voice", "cloud"], "voice.cloud.status", {}, { enabled: cloudSupported });
+  const keys = useHostQuery<{ openrouter?: boolean; elevenlabs?: boolean; openai?: boolean; xai?: boolean }>(["voice", "cloud"], "voice.cloud.status", {}, { enabled: cloudSupported });
   const models = useHostQuery<LocalVoiceModel[]>(["voice", "models"], "voice.local.models", {}, { enabled: localSupported,
     queryFn: async (client, signal) => parseLocalModels(await client.request("voice.local.models", {}, { signal })) });
   const cloudModels = useHostQuery<{ id: string; label: string }[]>(["voice", "cloud-models"], "voice.cloud.models", {}, {
@@ -40,7 +43,14 @@ export function VoiceChoices() {
   const [elevenDraft, setElevenDraft] = useState<string>();
   if (!machine) return null;
   const openrouter = cloudSupported && keys.data?.openrouter === true;
+  const openai = cloudSupported && keys.data?.openai === true;
+  const xai = cloudSupported && keys.data?.xai === true;
+  const needsCloudSetup = copy("Bilgisayarda kurulum gerekiyor", "Needs setup on the computer");
+  const needsHostUpdate = copy("Ses modelleri için bu bilgisayarda bycoda’yı güncelle", "Update bycoda on this computer for voice models.");
   const elevenlabs = cloudSupported && keys.data?.elevenlabs === true;
+  const recognitionReady = preferences.engine === "local"
+    ? localSupported && models.isSuccess
+    : preferences.engine === "cloud" && keys.isSuccess && openrouter;
   const installed = models.data?.filter(model => model.installed && (model.id === "small" || model.id === "turbo")) ?? [];
   const update = (patch: Partial<VoicePreferences>) => void voicePreferences.getState().update(patch).catch(() => {});
   const engines: { value: SpeechEngine; label: string; detail?: string; disabled?: boolean }[] = [
@@ -56,27 +66,38 @@ export function VoiceChoices() {
         <SelectRow label={machine.name} selected={preferences.engine === "local"} disabled={!hydrated || !localSupported}
           detail={copy("Whisper bu bilgisayarda", "Whisper on this computer")}
           onPress={() => update({ engine: "local" })} />
-        <SelectRow label={copy("Bulut", "Cloud")} selected={preferences.engine === "cloud"} disabled={!hydrated || !openrouter}
-          detail="OpenRouter"
+        <SelectRow label="OpenRouter" selected={preferences.engine === "cloud"} disabled={!hydrated || !openrouter}
+          detail={copy("Bulutta", "In the cloud")}
           onPress={() => update({ engine: "cloud" })} />
+        <SelectRow label="OpenAI" selected={preferences.engine === "openai"} disabled={!hydrated || !openai}
+          detail={openai ? "Codex" : keys.isSuccess && keys.data?.openai === undefined ? needsHostUpdate : needsCloudSetup}
+          onPress={() => update({ engine: "openai" })} />
+        <SelectRow label="Grok" selected={preferences.engine === "xai"} disabled={!hydrated || !xai}
+          detail={xai ? DICTATION_MODELS.xai[0]?.label : keys.isSuccess && keys.data?.xai === undefined ? needsHostUpdate : needsCloudSetup}
+          onPress={() => update({ engine: "xai" })} />
       </View>
       {preferences.engine === "local" && localSupported ? <>
-        <QueryState query={models} loading="inline" />
-        <SelectField label={copy("Yazıya dökme modeli", "Transcription model")}
-          value={selectableModels && installed.some(model => model.id === preferences.whisperModel) ? preferences.whisperModel ?? "" : ""}
-          disabled={!hydrated || !selectableModels || !installed.length}
+        <QueryState query={models} loading="inline" compact />
+        {selectableModels ? <SelectField label={copy("Yazıya dökme modeli", "Transcription model")}
+          value={installed.some(model => model.id === preferences.whisperModel) ? preferences.whisperModel ?? "" : ""}
+          disabled={!hydrated || !installed.length}
           options={[{ value: "", label: copy("Otomatik", "Automatic") }, ...installed.map(model => ({ value: model.id, label: model.label }))]}
-          onChange={value => update({ whisperModel: value === "small" || value === "turbo" ? value : undefined })} />
+          onChange={value => update({ whisperModel: value === "small" || value === "turbo" ? value : undefined })} /> : null}
       </> : null}
       {preferences.engine === "cloud" && openrouter && selectableModels ? <>
-        <QueryState query={cloudModels} loading="inline" />
+        <QueryState query={cloudModels} loading="inline" compact />
         <SelectField label={copy("Yazıya dökme modeli", "Transcription model")} value={preferences.cloudModel ?? ""}
           disabled={!hydrated || !cloudModels.data?.length}
           options={[{ value: "", label: copy("Otomatik", "Automatic") }, ...(cloudModels.data ?? []).map(model => ({ value: model.id, label: model.label }))]}
           onChange={value => update({ cloudModel: value || undefined })} />
       </> : null}
-      {!selectableModels && (localSupported || openrouter) ? (
-        <Notice message={copy("Ses modelleri için bu bilgisayarda bycoda’yı güncelle.", "Update bycoda on this computer for voice models.")} />
+      {preferences.engine === "openai" && openai ?
+        <SelectField label={copy("Yazıya dökme modeli", "Transcription model")} value={preferences.openaiModel ?? ""}
+          disabled={!hydrated}
+          options={[{ value: "", label: copy("Otomatik", "Automatic") }, ...DICTATION_MODELS.openai.map(model => ({ value: model.id, label: model.label }))]}
+          onChange={value => update({ openaiModel: value || undefined })} /> : null}
+      {!linkDown && recognitionReady && !selectableModels ? (
+        <Notice message={needsHostUpdate} />
       ) : null}
       {preferences.engine === "cloud" && keys.isSuccess && !openrouter ? (
         <Notice tone="warning" message={copy("Bulut seçili ama bilgisayarda anahtar yok; konuşman anlaşılamaz. {p0} seç.", "Cloud is selected but the computer has no key, so your speech cannot be understood. Choose {p0}.", { p0: machine.name })} />

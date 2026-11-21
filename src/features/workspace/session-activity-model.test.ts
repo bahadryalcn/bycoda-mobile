@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import type { Block } from "@/domain/types";
 import type { ChildSessionEntry } from "./subagent-sessions-model";
-import { activityStateLabel, agentCountText, countAgents, deriveSessionActivity } from "./session-activity-model";
+import { activityStateLabel, agentCountText, countAgents, deriveSessionActivity, sessionAgentEntries } from "./session-activity-model";
 
 const copy = (_tr: string, en: string, v?: Record<string, string | number>) => en.replace(/\{(p\d+)\}/g, (_, k) => String(v?.[k]));
 const user = { id: "u", role: "user", text: "go", startedAt: 1000 } as Block;
@@ -50,6 +50,16 @@ it("counts every agent once: blocks across turns plus child sessions, child winn
 
 it("does not call an unfinished call running once the run is over", () => {
   expect(countAgents([agent("a", "running")], [], false)).toMatchObject({ running: 0, interrupted: 1, done: 0 });
+});
+
+it("presents finished-parent rows with the same interrupted state as their counts", () => {
+  const blocks = [agent("active", "running"), agent("delegated:child", "running"), agent("done", "completed")];
+  const children = [child("child", "running")];
+  expect(sessionAgentEntries(blocks, children, false).map(({ id, state }) => [id, state])).toEqual([
+    ["done", "completed"], ["active", "interrupted"],
+  ]);
+  expect(sessionAgentEntries(blocks, children, true).find(({ id }) => id === "active")?.state).toBe("running");
+  expect(countAgents(blocks, children, false)).toMatchObject({ total: 3, done: 1, interrupted: 1, running: 1 });
 });
 
 it("rejects an invalid start time", () => {

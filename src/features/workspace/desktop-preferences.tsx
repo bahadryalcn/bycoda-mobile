@@ -215,12 +215,14 @@ export function DesktopPreferences({
   const header = (
     <Stack>
       <DesktopPreferenceContext computerName={opening.machineName?.trim() || opening.machineId} snapshot={snapshot} />
-      <Body muted>
-        {copy(
-          "Bilgisayar ayarları yalnızca gelecekteki konuşmalara uygulanır. Şablon eklemek mesaj göndermez.",
-          "Computer defaults apply to future conversations. Inserting a template does not send a message.",
-        )}
-      </Body>
+      {!embedded ? (
+        <Body muted>
+          {copy(
+            "Bilgisayar ayarları yalnızca gelecekteki konuşmalara uygulanır. Şablon eklemek mesaj göndermez.",
+            "Computer defaults apply to future conversations. Inserting a template does not send a message.",
+          )}
+        </Body>
+      ) : null}
       {!supported ? (
         <FeatureUnavailable message={copy(
           "Açık konuşması olan bağlı ve desteklenen bir bilgisayar seçin.",

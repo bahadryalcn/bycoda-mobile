@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   filesReducer,
   gitReducer,
@@ -45,6 +46,12 @@ describe("workspace view transitions", () => {
       { type: "worktree", cwd: "/demo/b" },
     );
     expect(next).toEqual({ segment: "files", cwd: "/demo/b", pickingWorktree: false });
+  });
+  it("keeps the folder picker open until the guarded workspace change commits", () => {
+    const screen = readFileSync(new URL("./project-screen.tsx", import.meta.url), "utf8");
+    const picker = screen.slice(screen.indexOf("visible={worktreeOpen}"), screen.indexOf("<WorktreeCreate"));
+    expect(picker).toContain("dismissible={!changingWorkspace}");
+    expect(picker).toMatch(/onChange=\{\(value\) => \{\s*changeWorkspace\(\(\) => \{\s*dispatch\(\{ type: "worktree"[\s\S]*?setWorktreeOpen\(false\)/);
   });
   it("keeps a newly opened editor when an older file creation completes", () => {
     const creating = { kind: "create" } as const;

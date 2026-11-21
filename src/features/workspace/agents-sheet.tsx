@@ -30,7 +30,7 @@ type Props = Pick<TranscriptBlockProps, "scope" | "runId" | "disabled" | "onComm
 };
 
 const badgeTone = (state: AgentEntry["state"]) =>
-  state === "running" ? "info" : state === "failed" ? "danger" : state === "stopped" ? "warning" : "success";
+  state === "running" ? "info" : state === "failed" ? "danger" : state === "stopped" || state === "interrupted" ? "warning" : "success";
 
 type ListItem =
   | AgentListItem
@@ -40,7 +40,7 @@ type ListItem =
 export function AgentsSheet({ blocks, childRuns: children = [], live = false, onClose, ...props }: Props) {
   const copy = useCopy();
   const [selectedId, setSelectedId] = useState<string>();
-  const entries = sessionAgentEntries(blocks, children);
+  const entries = sessionAgentEntries(blocks, children, live);
   const counts = countAgents(blocks, children, live);
   const summary = agentCountText(counts, copy);
   const running = entries.some((entry) => entry.state === "running");
@@ -57,7 +57,8 @@ export function AgentsSheet({ blocks, childRuns: children = [], live = false, on
     <Sheet visible size="full" scroll={false} onClose={onClose}
       title={selected?.agentRun?.name || (selected ? copy("Alt ajan ayrıntıları", "Subagent details") : copy("Ajanlar", "Agents"))}
       headerAction={selected ? <ChatToolbarAction label={copy("Ajanlar", "Agents")} onPress={() => setSelectedId(undefined)} /> : undefined}>
-      {selected ? <SubagentDetails key={selected.id} block={selected} {...props} /> : (
+      {selected ? <SubagentDetails key={selected.id} block={selected} {...props}
+        interrupted={entries.some((entry) => entry.id === selected.id && entry.state === "interrupted")} /> : (
         <FlatList data={items}
           ListHeaderComponent={summary ? <Body muted accessibilityLabel={agentCountText(counts, copy, true)} style={{ fontVariant: ["tabular-nums"] }}>{summary}</Body> : undefined}
           keyExtractor={(item) => item.id}

@@ -8,6 +8,26 @@ vi.mock("expo-file-system", () => ({ Paths: { cache: "file:///cache" }, File: cl
 import { companionVoiceCapture, companionVoicePlayback } from "./assistant-voice-companion-audio";
 import { pcmBase64 } from "../../../../src/features/voice/model/voiceVad";
 
+it("feeds ordered PCM chunks to one playback, then drains it", async () => {
+  const f = fixture();
+  const startPcm = vi.fn(async () => {});
+  const appendPcm = vi.fn(async () => {});
+  const finishPcm = vi.fn(async () => {});
+  Object.assign(f.native, { startPcm, appendPcm, finishPcm });
+  const playback = companionVoicePlayback(f.native);
+  async function* chunks() {
+    yield { audio: "AAA=", sampleRate: 16000 };
+    yield { audio: "AQA=", sampleRate: 16000 };
+  }
+  await playback.playStream!(chunks(), () => true);
+  const id = vi.mocked(f.native.startPcm!).mock.calls[0]![1];
+  expect(startPcm).toHaveBeenCalledExactlyOnceWith("original", id, 16000);
+  expect(appendPcm.mock.calls).toEqual([["original", id, "AAA="], ["original", id, "AQA="]]);
+  expect(finishPcm).toHaveBeenCalledExactlyOnceWith("original", id);
+  expect(f.native.playWav).not.toHaveBeenCalled();
+  expect(f.native.endSession).not.toHaveBeenCalled();
+});
+
 function fixture() {
   let listener: (event: NativeVoiceEvent) => void = () => {};
   const remove = vi.fn();

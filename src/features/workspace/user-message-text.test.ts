@@ -45,11 +45,11 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 
-async function render(text: string) {
+async function render(text: string, preview?: string) {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  await act(async () => root!.render(h(UserMessageText, { text })));
+  await act(async () => root!.render(h(UserMessageText, { text, preview })));
   return container;
 }
 
@@ -72,5 +72,15 @@ describe("user message text", () => {
   it("does not guess overflow from length alone", async () => {
     const container = await render("x".repeat(400));
     expect(container.querySelector("button")).toBeNull();
+  });
+  it("shows the task objective first and lets the owner reopen the full execution prompt", async () => {
+    const text = "Generated execution instructions.\n\nCheck the receipt layout.";
+    const container = await render(text, "Check the receipt layout.");
+    expect(container.querySelector("p")?.textContent).toBe("Check the receipt layout.");
+    expect(container.textContent).not.toContain("Generated execution instructions.");
+    await act(async () => container.querySelector("button")!.click());
+    expect(container.querySelector("p")?.textContent).toBe(text);
+    await act(async () => container.querySelector("button")!.click());
+    expect(container.querySelector("p")?.textContent).toBe("Check the receipt layout.");
   });
 });

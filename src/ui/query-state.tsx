@@ -54,6 +54,7 @@ export function QueryState(props: QueryStateProps) {
 
 function useQueryStatePresentation({
   query,
+  compact = false,
   empty,
   emptyTitle,
   emptyDetail,
@@ -134,6 +135,7 @@ function useQueryStatePresentation({
   if (showOffline)
     return { skeleton: false, node: loading === "none" ? null : (
       <StateView
+        compact={compact}
         illustration="offline"
         title={copy("Çevrimdışısın", "You're offline")}
         description={copy(
@@ -156,9 +158,10 @@ function useQueryStatePresentation({
   if (presentation === "paused" || waitingForLink)
     return { skeleton: false, node: (
       <StateView
+        compact={compact}
         illustration="unreachable"
         title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
-        description={copy(
+        description={compact ? undefined : copy(
           "Bilgisayarına yeniden ulaşıldığında içerik kendiliğinden yüklenecek.",
           "This loads by itself when your computer is reachable again.",
         )}
@@ -179,6 +182,7 @@ function useQueryStatePresentation({
         : undefined;
     return { skeleton: false, node: (
       <StateView
+        compact={compact}
         tone="danger"
         illustration={errorIllustration(kind, offline)}
         title={errorTitle(kind, copy, offline)}
@@ -189,6 +193,7 @@ function useQueryStatePresentation({
   }
   return { skeleton: false, node: presentation === "empty" ? (
     <StateView
+      compact={compact}
       illustration={emptyIllustration ?? (searching ? "search-empty" : undefined)}
       title={
         emptyTitle ??

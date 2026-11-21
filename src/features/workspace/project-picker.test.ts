@@ -29,7 +29,8 @@ vi.mock("./use-project-directory", () => ({ useProjectList: () => ({ data: fixtu
   privacyUnavailable: fixture.privacy, error: fixture.error, isSuccess: true, refetch: fixture.refetch, isProjectVisible: (id: string, cwd?: string) => fixture.allowed && fixture.rows.some((row) => row.id === id && (cwd === undefined || row.cwd === cwd)) }) }));
 vi.mock("@/ui/primitives", () => {
   const Button = ({ label, onPress }: any) => { fixture.actions.set(label, onPress); return createElement("button", { onClick: onPress }, label); };
-  return { Body: ({ children }: PropsWithChildren) => createElement("span", null, children), Sheet: ({ children, footer, onClose }: any) => { fixture.actions.set("Close", onClose); return createElement("section", null, children, footer); },
+  return { Body: ({ children }: PropsWithChildren) => createElement("span", null, children), Sheet: ({ children, footer, onClose }: any) => createElement("section", null,
+    createElement("header", null, createElement(Button, { label: "Close", onPress: onClose })), children, footer),
     FormActions: ({ submitLabel, onSubmit }: any) => createElement(Button, { label: submitLabel, onPress: onSubmit }),
     ScreenList: ({ header, data, renderItem, ListEmptyComponent }: any) => createElement("main", null, createElement("header", null, header),
       createElement("section", null, !data.length ? ListEmptyComponent : null, ...data.map((item: unknown, index: number) => createElement("div", { key: index }, renderItem({ item, index }))))),
@@ -52,6 +53,14 @@ beforeEach(() => {
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
+it("shows one header close action and retires later dismissals", async () => {
+  await render();
+  const closeButtons = [...container.querySelectorAll("button")].filter(button => button.textContent === "Close");
+  expect(closeButtons).toHaveLength(1);
+  expect(closeButtons[0].closest("header")).not.toBeNull();
+  await act(async () => { closeButtons[0].click(); closeButtons[0].click(); });
+  expect(fixture.events).toEqual(["close"]);
+});
 it("sorts and searches projects, with explicit clear recovery and the exact selected object", async () => {
   await render(); expect([...container.querySelectorAll("main button")].map((button) => button.textContent)).toEqual(["Alpha", "Beta"]);
   expect(container.textContent).toContain("Computer");

@@ -138,6 +138,7 @@ export function Sheet({
   scroll = true,
   dismissible = true,
   dirty = false,
+  dismissalRetryKey,
   discardTitle,
   discardMessage,
   returnFocusRef,
@@ -156,7 +157,7 @@ export function Sheet({
   const [actionsStore] = useState(createSheetActionsStore);
   const canClose = dismissible && !guards.pending;
   const { confirming, requestClose, requestCloseThen, cancelClose, confirmClose } = useSheetDismissal({
-    visible, dirty: dirty || guards.dirty, pending: !canClose, onClose,
+    visible, dirty: dirty || guards.dirty, pending: !canClose, onClose, dismissalRetryKey,
   });
   const blocked = !canClose || !!parentSheet?.blocked;
   const blockedRef = useRef(blocked);

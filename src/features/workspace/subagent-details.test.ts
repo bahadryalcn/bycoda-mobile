@@ -3,6 +3,8 @@ import { act, createElement, type PropsWithChildren, type ReactNode } from "reac
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Block } from "@/domain/types";
+import { Sheet } from "@/ui/primitives";
+import { SheetGuardContext, useSheetDismissal, useSheetGuards } from "@/ui/sheet-guard";
 import type { TranscriptBlockProps } from "./session-types";
 import { SubagentDetails } from "./subagent-details";
 const state = vi.hoisted(() => ({
@@ -71,8 +73,15 @@ vi.mock("@/ui/primitives", () => {
     Stack: content,
     Row: content,
     Body: content,
-    Disclosure: content,
-    Sheet: ({ children, title }: any) => createElement("article", null, title, children),
+    Disclosure: ({ children, label, detail }: PropsWithChildren<{ label: string; detail?: string }>) =>
+      createElement("details", null, createElement("summary", null, label, detail), children),
+    Sheet: function SheetFixture({ children, title, onClose }: PropsWithChildren<{ title: string; onClose: () => void }>) {
+      const guards = useSheetGuards();
+      const { requestClose, requestCloseThen } = useSheetDismissal({ visible: true, dirty: guards.dirty, pending: guards.pending, onClose });
+      return createElement(SheetGuardContext.Provider, { value: { register: guards.register, requestClose, requestCloseThen } },
+        createElement("article", { "aria-label": title },
+          createElement("header", null, title, button({ label: "Close", onPress: requestClose, disabled: guards.pending })), children));
+    },
     NavigationRow: button,
     FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: any) =>
       createElement(
@@ -134,10 +143,10 @@ async function mount(parentProvider: "claude" | "codex" = "claude") {
     ),
   );
 }
-async function render(overrides: Partial<React.ComponentProps<typeof SubagentDetails>> = {}) {
+async function render(overrides: Partial<React.ComponentProps<typeof SubagentDetails>> = {}, sheet = false) {
   await act(async () =>
-    root.render(
-      createElement(SubagentDetails, {
+    {
+      const detail = createElement(SubagentDetails, {
         block,
         scope: { machineId: "m", sessionId: "parent" },
         runId: "run",
@@ -145,8 +154,9 @@ async function render(overrides: Partial<React.ComponentProps<typeof SubagentDet
         disabled: false,
         onCommand: state.command as unknown as TranscriptBlockProps["onCommand"],
         ...overrides,
-      }),
-    ),
+      });
+      root.render(sheet ? createElement(Sheet, { title: "Reviewer", visible: true, onClose: state.close }, detail) : detail);
+    },
   );
 }
 async function press(label: string) {
@@ -340,11 +350,48 @@ it("conceals cached assignment/activity and retires the reader after access loss
   expect(container.textContent).toContain("Private activity");
 });
 
+it("exposes provider-native nested steps and keeps distinct action output", async () => {
+  await mount();
+  await render({ block: {
+    ...block,
+    tool: { ...block.tool, status: "completed" },
+    agentRun: { ...block.agentRun!, steps: [{
+      id: "child", kind: "tool", status: "completed", text: "Called reviewer", output: "Distinct action output",
+      agentRun: { name: "Nested reviewer", steps: [{ id: "grandchild", kind: "message", text: "Nested finding" }] },
+    }] },
+  } });
+  const nested = [...container.querySelectorAll("details")].find(node => node.querySelector("summary")?.textContent?.includes("Nested reviewer"));
+  expect(nested?.textContent).toContain("Nested finding");
+  expect(nested?.textContent).toContain("Distinct action output");
+});
+
+it("uses one header close on details and each nested reader", async () => {
+  await mount();
+  const completed = {
+    ...block,
+    tool: { ...block.tool, status: "completed", detail: "Final report" },
+    agentRun: { ...block.agentRun!, prompt: "Read the checklist" },
+  };
+  await render({ block: completed }, true);
+  const closeButtons = (section: ParentNode) => [...section.querySelectorAll("button")].filter(button => button.textContent === "Close");
+  const detail = container.querySelector('article[aria-label="Reviewer"]')!;
+  expect(closeButtons(detail)).toHaveLength(1);
+  for (const reader of ["Assignment", "Report"]) {
+    await press(reader);
+    const nested = detail.querySelector(`article[aria-label="${reader}"]`)!;
+    expect(closeButtons(nested)).toHaveLength(1);
+    await act(async () => closeButtons(nested)[0].click());
+    expect(detail.querySelector("article")).toBeNull();
+  }
+  await act(async () => closeButtons(detail)[0].click());
+  expect(state.close).toHaveBeenCalledOnce();
+});
+
 it("keeps one pending stop, rejects queued close and permits close after acknowledgement", async () => {
   await mount();
-  await render({ onClose: state.close, disabled: true });
+  await render({ disabled: true }, true);
   const close = state.commands.get("Close")!;
-  await render({ onClose: state.close });
+  await render({}, true);
   let resolve!: () => void;
   state.command.mockImplementationOnce(
     () =>

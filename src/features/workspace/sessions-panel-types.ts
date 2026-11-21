@@ -6,6 +6,7 @@ export type ProjectSessionControls = {
   searchOpen: boolean;
   hasSearch: boolean;
   toggleSearch: () => void;
+  showCreateInHeader: boolean;
   createDisabled: boolean;
   create: () => void;
   archived: boolean;

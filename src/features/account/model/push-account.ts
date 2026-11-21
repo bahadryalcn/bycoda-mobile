@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { Device } from "../contracts";
-import { allowDevicePermission, notifications, readDevicePermission } from "../../permissions/device-permissions";
-import { expoProjectId, expoPushToken } from "../../push/push-registration";
+import { allowDevicePermission, readDevicePermission } from "../../permissions/device-permissions";
+import { expoProjectId, expoPushToken, onPushTokenRotated } from "../../push/push-registration";
 import type { AccountRuntime } from "./account-runtime";
 import { usePushStatus } from "../../push/push-model";
 import { syncHostCanonical } from "./push-host-canonical";
@@ -53,23 +53,21 @@ export function useAccountPushSync(runtime: AccountRuntime | null, device: Devic
   useEffect(() => {
     if (!runtime || !device || !accountPushAvailable()) return;
     let cancelled = false;
-    let subscription: { remove(): void } | undefined;
-    const sync = (options?: { fresh?: boolean }) =>
-      syncAccountPush(runtime, device, options).catch((error: unknown) => {
+    let stopWatching: (() => void) | undefined;
+    const sync = () =>
+      syncAccountPush(runtime, device).catch((error: unknown) => {
         console.warn("[account] Push token sync failed.", error instanceof Error ? error.message : error);
       });
     void (async () => {
       const permission = await readDevicePermission("notifications").catch(() => null);
       if (cancelled || !permission?.granted) return;
+      // The shared listener invalidates its token cache before notifying us.
+      stopWatching = onPushTokenRotated(() => void sync());
       await sync();
-      const api = await notifications();
-      if (cancelled) return;
-      // A rotation asks for the new token explicitly instead of relying on listener order.
-      subscription = api.addPushTokenListener(() => void sync({ fresh: true }));
     })();
     return () => {
       cancelled = true;
-      subscription?.remove();
+      stopWatching?.();
     };
   }, [runtime, device]);
 }

@@ -91,7 +91,12 @@ export function useRememberLastSession(id: string | undefined, projectId: string
 }
 
 // Module scope: a warm return to the app keeps its own stack, so restore runs once per process.
-let restoreStarted = false;
+let restoreState: "idle" | "started" | "suppressed" = "idle";
+
+/** Remember the notification intent after Expo clears its native response cache. */
+export function suppressLastSessionRestore() {
+  restoreState = "suppressed";
+}
 
 async function launchedFromNotification(): Promise<boolean> {
   try {
@@ -109,6 +114,7 @@ async function restoreLastSession() {
     Linking.getInitialURL().catch(() => null),
     launchedFromNotification(),
   ]);
+  if (restoreState === "suppressed") return;
   const machines = useMachines.getState();
   const target = lastSessionRestoreTarget({
     stored,
@@ -133,8 +139,8 @@ export function useRestoreLastSession() {
   const hydrated = useMachines((state) => state.hydrated);
   useEffect(() => {
     // The router and the saved computers must exist before a stored id can be checked against them.
-    if (restoreStarted || !ready || !hydrated) return;
-    restoreStarted = true;
+    if (restoreState !== "idle" || !ready || !hydrated) return;
+    restoreState = "started";
     void restoreLastSession().catch(() => {
       // A failed restore leaves the normal Home screen, which is already on screen.
     });

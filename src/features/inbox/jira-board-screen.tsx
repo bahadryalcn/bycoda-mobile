@@ -1,4 +1,4 @@
-import { useInboxLocalScope } from "./inbox-local-scope";
+import { InboxLocalScopeContext, useInboxLocalScope } from "./inbox-local-scope";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useActiveMachine } from "@/state/machines";
 import { useCopy } from "@/ui/copy";
@@ -86,9 +86,13 @@ export function ProviderJiraBoards({ origin, canRead, canWrite, onClose }: {
   const nextPage = snapshot?.page.nextPageToken;
   const cursorStopped = !!nextPage && (pages.length >= 100 || pages.includes(nextPage));
   return <Sheet visible title={copy("Jira panoları", "Jira boards")} size="full" scroll={false} onClose={onClose}>
-    {selected && contentAvailable ? <JiraBoardIssueActions key={`${selected.snapshot.snapshotId}:${selected.issue.identifier}`}
-      origin={opening} snapshot={selected.snapshot} issue={selected.issue} canWrite={contentAvailable && canWrite}
-      onChanged={() => { if (available()) void board.refetch(); }} onClose={() => setSelected(null)} /> : null}
+    {selected && contentAvailable ? (
+      <InboxLocalScopeContext value={inboxScope}>
+        <JiraBoardIssueActions key={`${selected.snapshot.snapshotId}:${selected.issue.identifier}`}
+          origin={opening} snapshot={selected.snapshot} issue={selected.issue} canWrite={contentAvailable && canWrite}
+          onChanged={() => { if (available()) void board.refetch(); }} onClose={() => setSelected(null)} />
+      </InboxLocalScopeContext>
+    ) : null}
     <ScreenList<JiraMobileIssue> data={rows} keyExtractor={(item) => item.identifier} refresh={readable ? refresh : undefined}
       header={<Stack>
         {!supported ? <StateView illustration="permission" title={copy("Güncelleme gerekiyor", "Update needed")} description={copy("Jira panoları için bir proje seç ve bilgisayardaki bycoda’yı güncelle.", "Select a project and update bycoda on this computer to open Jira boards.")} /> :

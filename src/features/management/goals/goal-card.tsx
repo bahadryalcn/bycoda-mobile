@@ -12,10 +12,10 @@ import { space } from "@/ui/tokens";
 import { ActionMenu, Body, Button, ErrorNotice, IconButton, MutationState, Row } from "@/ui/primitives";
 import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
 import { useCopy } from "@/ui/copy";
-import { confirmAction } from "@/ui/confirm";
 import { useActiveMachine } from "@/state/machines";
 import { Status } from "../shared/status";
 import type { GoalCardProps } from "./types";
+import { useRecordConfirmation } from "../shared/use-record-confirmation";
 
 export function GoalCard({
   goal,
@@ -33,13 +33,14 @@ export function GoalCard({
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
+  const confirm = useRecordConfirmation(goal, machine?.name || machine?.id, busy);
   const glyph = useMenuGlyph();
   const relative = useRelativeTime();
   const canCancel = !["done", "cancelled"].includes(goal.status);
   const canDelete = ["done", "cancelled"].includes(goal.status);
   const active = goal.status === "planning" || goal.status === "running";
   const cancelling = cancel.isPending && cancel.variables?.goalId === goal.id;
-  const stop = () => confirmAction(
+  const stop = () => confirm(
     copy("Epici durdur", "Cancel epic"),
     copy(
       "Hedef ve devam eden görevleri durdurulacak; çalışma dosyaları korunacak.",
@@ -81,7 +82,7 @@ export function GoalCard({
       destructive: true,
       disabled: busy,
       onPress: () =>
-        confirmAction(
+        confirm(
           copy("Epici sil", "Delete epic"),
           copy(
             "Hedef kaydı silinecek; görevler korunacak.",
@@ -92,6 +93,10 @@ export function GoalCard({
         ),
     },
   ];
+  const taskCount = goal.plan?.tasks.length ?? goal.taskIds.length;
+  const taskSummary = taskCount === 1
+    ? copy("1 görev", "1 task")
+    : copy("{p0} görev", "{p0} tasks", { p0: taskCount });
   return (
     <RecordCard
       title={goal.title}
@@ -99,7 +104,7 @@ export function GoalCard({
       metadata={joinMeta([
         progress && progress.total > 0
           ? copy("{p0}/{p1} görev bitti", "{p0}/{p1} tasks done", { p0: progress.done, p1: progress.total })
-          : copy("{p0} görev", "{p0} tasks", { p0: goal.plan?.tasks.length ?? goal.taskIds.length }),
+          : taskSummary,
         goal.projectIds.length === 1 && projects.find((project) => project.id === goal.projectIds[0])?.name,
         goal.projectIds.length > 1 && copy("{p0} proje", "{p0} projects", { p0: goal.projectIds.length }),
         relative(goal.updatedAt) && copy("Güncellendi {p0}", "Updated {p0}", { p0: relative(goal.updatedAt) }),
@@ -131,14 +136,14 @@ export function GoalCard({
               busy={approve.isPending && approve.variables?.goalId === goal.id}
               disabled={busy}
               onPress={() =>
-                confirmAction(
+                confirm(
                   copy("Planı onayla", "Approve plan"),
                   copy(
                     "Plandaki görevler bilgisayarda çalıştırılmaya başlanacak.",
                     "The planned tasks will start running on the computer.",
                   ),
                   copy("Onayla", "Approve"),
-                  () => approve.mutate({ goalId: goal.id }), undefined, "default",
+                  () => approve.mutate({ goalId: goal.id }), "default",
                 )
               }
             />

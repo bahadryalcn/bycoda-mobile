@@ -12,17 +12,13 @@ export function connectionReason(
   kind: RemoteErrorKind | undefined,
   name: string,
   copy: Copy,
-  /** Android refuses this app the local network, so a LAN computer looks silent rather than refused. */
-  localNetworkDenied = false,
 ): string | undefined {
   if (phase !== "disconnected" && phase !== "access") return undefined;
   const values = { p0: name };
-  if (phase === "disconnected" && localNetworkDenied && (kind === "network" || kind === "timeout" || kind === undefined))
-    return copy("Telefon yerel ağa erişemiyor. Ayarlar'da bycoda için Yakındaki cihazlar iznini aç.",
-      "This phone blocks bycoda from the local network. Allow Nearby devices for bycoda in Settings.");
   if (phase === "access" || kind === "auth")
     return copy("Eşleşme süresi doldu. {p0} bilgisayarını yeniden eşleştir.", "Pairing expired. Pair {p0} again.", values);
   switch (kind) {
+    case undefined:
     case "network":
       return copy("{p0} bu ağda erişilemiyor.", "Can't reach {p0} on this network.", values);
     case "timeout":
