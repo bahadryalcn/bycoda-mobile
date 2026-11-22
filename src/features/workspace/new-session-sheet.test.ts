@@ -4,7 +4,7 @@ const source = readFileSync(new URL("./new-session-sheet.tsx", import.meta.url),
 describe("new session sheet", () => {
   it("requires an explicit start after project selection", () => {
     expect(source).not.toMatch(/started\.current|run\(\);\s*\}, \[ready/);
-    expect(source).toContain('label={copy("Oturumu başlat", "Start session")}');
+    expect(source).toContain('copy("Oturumu başlat", "Start session")');
     expect(source).toContain("onPress={run}");
   });
   it("offers all visible projects and an always available add action", () => {
@@ -14,9 +14,9 @@ describe("new session sheet", () => {
       /showAll\s*\?\s*ordered\s*:\s*ordered\.slice\(0, RECENT_PROJECT_LIMIT\)/,
     );
   });
-  it("shows the catalog name for the model that will start the session", () => {
-    expect(source).toContain('selection.selectedModelValue?.name || selection.selectedModel || "—"');
-    expect(source).toContain("${modelName}");
+  it("uses the shared catalog picker for the model that will start the session", () => {
+    expect(source).toContain("<ModelPickerField");
+    expect(source).toContain("model={selectedModel}");
   });
   it("fits short lists and keeps the controls inside the only scrollable list", () => {
     expect(source).toContain('size="compact"');

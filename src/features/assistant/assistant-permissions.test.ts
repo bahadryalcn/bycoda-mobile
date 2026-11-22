@@ -9,6 +9,8 @@ import type { AssistantMobileClient } from "./assistant-client";
 const sheetGuard = vi.hoisted(() => vi.fn());
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: sheetGuard }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/limit-presets", async () =>
+  (await import("@/ui/limit-presets.fixture")).limitFieldDoubles((await import("@/ui/primitives")).NumberField as never));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {

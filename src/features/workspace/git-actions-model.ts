@@ -1,4 +1,5 @@
 import type { GitDiffIndex } from "./wire";
+import { gitAheadCount, gitBehindCount, gitChangedCount } from "./git-commit-model";
 import { linkPullRequestReason } from "./git-link-pr-model";
 
 export type GitSheetKey =
@@ -31,12 +32,12 @@ export function gitSheetActions(
     { key: "commit", label: draftOnly ? copy("Commit mesajı", "Commit message") : copy("Commit", "Commit"), disabled: opts.busy,
       detail: blocked ? copy("Çakışmaları veya devam eden işlemi önce bitir.", "Finish conflicts or the running operation first.")
         : draftOnly ? copy("Kaydedilecek değişiklik yok.", "Nothing to commit.")
-        : copy("{p0} dosya değişti, {p1} stage’de", "{p0} files changed, {p1} staged", { p0: index.files.length, p1: staged }) },
+        : gitChangedCount(index.files.length, staged, copy) },
     { key: "push", label: copy("Push", "Push"), disabled: opts.busy || !index.remote || index.ahead === 0,
       detail: remoteReason || (index.ahead === 0 ? copy("Gönderilecek yerel commit yok.", "No local commits to push.")
-        : copy("{p0} commit gönderilecek", "{p0} commits to push", { p0: index.ahead })) },
+        : gitAheadCount(index.ahead, copy)) },
     { key: "pull", label: copy("Pull", "Pull"), disabled: workspace || !index.remote,
-      detail: remoteReason || (index.behind ? copy("{p0} yeni commit al", "Get {p0} new commits", { p0: index.behind })
+      detail: remoteReason || (index.behind ? gitBehindCount(index.behind, copy)
         : copy("Uzak depodaki değişiklikleri al", "Bring in remote changes")) },
     { key: "fetch", label: copy("Fetch", "Fetch"), disabled: workspace || !index.remote,
       detail: remoteReason || copy("Uzak depoyu kontrol et, dosyalara dokunma", "Check the remote without touching files") },

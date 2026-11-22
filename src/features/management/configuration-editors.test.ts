@@ -21,6 +21,8 @@ vi.mock("./shared/schedule-fields", () => ({ ScheduleFields: () => null }));
 vi.mock("./automations/schedule-preview", () => ({ SchedulePreview: () => null }));
 vi.mock("./shared/agent-fields", () => ({ AgentFields: ({ onChange }: { onChange: (value: Record<string, unknown>) => void }) => { calls.agent = onChange; return null; } }));
 vi.mock("@/ui/number-field", async () => ({ NumberField: (await import("@/ui/primitives")).Field }));
+vi.mock("@/ui/limit-presets", async () =>
+  (await import("@/ui/limit-presets.fixture")).limitFieldDoubles((await import("@/ui/number-field")).NumberField as never));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Stack: wrapper, Section: wrapper, NumberField: () => null, Body: wrapper, Disclosure: wrapper, NavigationGroup: wrapper,

@@ -6,7 +6,7 @@ import { useActiveMachine } from "@/state/machines";
 import { useFormDraft } from "@/state/form-draft";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useCopy } from "@/ui/copy";
-import { NumberField } from "@/ui/number-field";
+import { LimitPresets, MinuteLimitField } from "@/ui/limit-presets";
 import { Body, FormActions, MutationState, Notice, NavigationGroup, Section, Stack, ToggleField } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
 import { integerInRange } from "../automations/schedule-model";
@@ -52,14 +52,13 @@ export function GoalSettingsEditor({ initial, onClose, accessDenied }: { initial
       </NavigationGroup>
     </Section>
     <Section title={copy("Sınırlar", "Limits")}>
-      <NumberField label={copy("Eşzamanlı görev sınırı", "Concurrent task limit")} unit={copy("görev", "tasks")}
-        hint={copy("0 = bilgisayar sınırı", "0 = computer limit")}
+      <LimitPresets label={copy("Eşzamanlı görev sınırı", "Concurrent task limit")} customLabel={copy("Özel", "Custom")} unit={copy("görev", "tasks")}
         error={concurrencyValid ? undefined : copy("Sıfır veya pozitif bir güvenli tam sayı girin.", "Enter zero or a positive safe integer.")}
-        value={concurrency} onChangeText={setConcurrency} editable={supported && !save.isPending} />
-      <NumberField label={copy("Çalışma süresi sınırı", "Run time limit")} unit={copy("dk", "min")}
-        hint={copy("0 = sınırsız", "0 = unlimited")}
+        values={["0", "1", "2", "3", "5", "10"]} format={(count) => count === "0" ? copy("Bilgisayar sınırı", "Computer limit") : count}
+        value={concurrency} onChange={setConcurrency} disabled={!supported || save.isPending} />
+      <MinuteLimitField label={copy("Çalışma süresi sınırı", "Run time limit")}
         error={minutesValid ? undefined : copy("0 ile 10080 arasında dakika girin.", "Enter minutes from 0 to 10080.")}
-        value={minutes} onChangeText={setMinutes} editable={supported && !save.isPending && opening.status !== "planning"} />
+        value={minutes} onChange={setMinutes} disabled={!supported || save.isPending || opening.status === "planning"} />
     </Section>
     {!valid && concurrencyValid && minutesValid && <Notice tone="warning" message={copy("Süre sınırı 0–10080 olmalıdır. Planlama sırasında süre değiştirilemez.", "Time limit must be 0–10080. The time limit cannot change during planning.")} />}
     <FormActions feedback={<MutationState mutation={save} />} submitLabel={copy("Kaydet", "Save")} submitRef={saveButton}

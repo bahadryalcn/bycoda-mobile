@@ -236,11 +236,10 @@ export function ProviderInboxDetail({
             onPress={openProviderLink}
           />
         ) : null}
-        {contentAvailable ? <ActionMenu
+        {contentAvailable && prActions.length ? <ActionMenu
           label={copy("Diğer işlemler", "More actions")}
           busy={submission.isPending && pendingAction === "pr-action"}
           actions={[
-            { key: "back", label: copy("Gelen kutusuna dön", "Back to inbox"), disabled: busy, onPress: requestClose },
             ...prActions.map((action) => ({
               key: action,
               label: providerActionLabel(action, copy),

@@ -215,6 +215,7 @@ export function TaskBulkActions({
             }
             accessibilityLabel={copy("Toplu işlemler", "Bulk actions")}
             tone="secondary"
+            flush
             disabled={disabled || busy || refreshing}
             onPress={show}
           />

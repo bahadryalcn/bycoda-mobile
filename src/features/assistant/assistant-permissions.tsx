@@ -11,12 +11,12 @@ import {
   Disclosure,
   MultiSelectField,
   Notice,
-  NumberField,
   Section,
   SelectField,
   Stack,
   ToggleField,
 } from "@/ui/primitives";
+import { IntegerTextStepper, MinuteLimitField } from "@/ui/limit-presets";
 
 const exclusions = [
   "pushMain",
@@ -63,6 +63,7 @@ export function AssistantPermissions({
   const [targetsLoaded, setTargetsLoaded] = useState(false),
     [targetsFailed, setTargetsFailed] = useState(false);
   const [targetsBusy, setTargetsBusy] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [busy, setBusy] = useState(false),
     [failed, setFailed] = useState(false);
   const pending = useRef(false),
@@ -72,9 +73,8 @@ export function AssistantPermissions({
   const changedTarget = telegram !== targetKey(opening.notificationTelegram);
   const originalProjects = opening.permissionProjectIds ?? [];
   const originalExclusions: readonly string[] = opening.criticalExclusions ?? exclusions;
-  useSheetGuard({
-    pending: busy,
-    dirty: level !== (opening.permissionLevel ?? "legacy") ||
+  const dirty =
+    level !== (opening.permissionLevel ?? "legacy") ||
       projectIds.length !== originalProjects.length ||
       projectIds.some(id => !originalProjects.includes(id)) ||
       critical.length !== originalExclusions.length ||
@@ -82,8 +82,8 @@ export function AssistantPermissions({
       keepAwake !== (opening.keepAwakeWhileAway ?? true) ||
       repeats !== String(opening.urgentNotificationRepeats ?? 2) ||
       interval !== String(opening.urgentNotificationIntervalMinutes ?? 30) ||
-      changedTarget,
-  });
+      changedTarget;
+  useSheetGuard({ pending: busy, dirty });
   const selectedTarget = targets.find((target) => targetKey(target) === telegram);
   const targetUnavailable = !!telegram && targetsLoaded && !selectedTarget;
   const loadTargets = async () => {
@@ -154,6 +154,7 @@ export function AssistantPermissions({
     pending.current = true;
     setBusy(true);
     setFailed(false);
+    setJustSaved(false);
     try {
       // Recheck allowed destinations on the original Host before a changed target is written.
       if (changedTarget && telegram) {
@@ -185,7 +186,9 @@ export function AssistantPermissions({
       });
       if (current()) {
         setOpening(saved);
-        await onChanged();
+        setJustSaved(true);
+        // The save is already confirmed; a failed refresh only leaves the parent profile stale.
+        await onChanged().catch(() => undefined);
       }
     } catch {
       if (current()) setFailed(true);
@@ -256,11 +259,13 @@ export function AssistantPermissions({
           disabled={!enabled || busy || failed}
           onChange={setKeepAwake}
         />
-        <NumberField
+        <IntegerTextStepper
           label={copy("Acil bildirim tekrarları", "Urgent notification repeats")}
+          help={copy("0–10; 0 tekrarı kapatır.", "0–10; 0 turns repeats off.")}
           value={repeats}
-          editable={enabled && !busy && !failed}
-          hint={copy("0–10; 0 tekrarı kapatır.", "0–10; 0 turns repeats off.")}
+          min={0}
+          max={10}
+          disabled={!enabled || busy || failed}
           onChangeText={setRepeats}
           error={
             validRepeats
@@ -268,14 +273,15 @@ export function AssistantPermissions({
               : copy("0 ile 10 arasında bir tam sayı girin.", "Enter a whole number from 0 to 10.")
           }
         />
-        <NumberField
+        <MinuteLimitField
           label={copy(
             "Acil bildirim tekrar aralığı (dakika)",
             "Urgent notification repeat interval (minutes)",
           )}
+          min={1}
           value={interval}
-          editable={enabled && !busy && !failed}
-          onChangeText={setInterval}
+          disabled={!enabled || busy || failed}
+          onChange={setInterval}
           error={
             validInterval
               ? undefined
@@ -347,6 +353,7 @@ export function AssistantPermissions({
         ) : null}
       </Section>
       <Stack>
+        {justSaved && !dirty && !failed ? <Notice tone="success" message={copy("Tercihler kaydedildi.", "Preferences saved.")} /> : null}
         {failed ? (
           <Notice
             tone="warning"

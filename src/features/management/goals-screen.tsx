@@ -231,6 +231,7 @@ export function GoalsScreen() {
         <GoalCard
           goal={goal}
           projects={projects.data ?? []}
+          scopedProjectId={projectId ?? undefined}
           progress={taskViews?.get(goal.id)?.progress}
           tasks={taskViews?.get(goal.id)?.tasks}
           busy={busy}

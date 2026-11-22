@@ -118,7 +118,9 @@ export function SessionComposer({
   const [templatePicker, setTemplatePicker] = useState(false);
   const templateDestination = useRef<{ machineId: string; sessionId: string } | null>(null);
   const [retryingDraft, setRetryingDraft] = useState(false);
-  const [stopping, setStopping] = useState(false);
+  // The ref is the synchronous double-tap guard; the state only drives the busy indicator.
+  const stopping = useRef(false);
+  const [stopBusy, setStopBusy] = useState(false);
   const [localError, setLocalError] = useState<unknown>(null);
   const mounted = useMounted();
   const [prefixHeight, measurePrefix] = useComposerHeight();
@@ -562,7 +564,7 @@ export function SessionComposer({
   const hasContent = !!prompt.trim() || value.attachments.length > 0 || !!value.noteCard;
   const canStop = running && !!session?.runId;
   const stop = () => {
-    if (!session || !session.runId || stopping) return;
+    if (!session || !session.runId || stopping.current) return;
     const intent = sessionIntent(session, {
       type: "cancel",
       sessionId: scope.sessionId,
@@ -570,15 +572,21 @@ export function SessionComposer({
     });
     // Pause durable follow-ups before stopping the exact active run.
     // A pause failure must not hide the session's primary Stop action.
+    stopping.current = true;
+    setLocalError(null);
     void (async () => {
-      setStopping(true);
+      if (mounted.current) setStopBusy(true);
       try {
         if (queue.supported) await queue.pause().catch(() => {});
         await onCommand(intent);
       } finally {
-        if (mounted.current) setStopping(false);
+        stopping.current = false;
+        if (mounted.current) setStopBusy(false);
       }
-    })().catch(() => {});
+    })().catch((cause: unknown) => {
+      // The run may still be going: show why Stop failed instead of dropping it.
+      if (mounted.current) setLocalError(cause);
+    });
   };
   const contextReading = composerContextReading(session);
   const compact = () => {
@@ -812,7 +820,7 @@ export function SessionComposer({
                 <ChatCircleAction
                   label={copy("Durdur", "Stop")}
                   danger
-                  busy={stopping}
+                  busy={stopBusy}
                   disabled={blocked}
                   onPress={stop}
                 >

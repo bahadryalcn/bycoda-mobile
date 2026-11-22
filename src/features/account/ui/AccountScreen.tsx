@@ -15,16 +15,18 @@ import { PushSection } from "./PushSection";
 import { AccountWelcome } from "./AccountWelcome";
 import { useAccount } from "./account-context";
 import { useAccountMe } from "./use-account-me";
+import { useGracedReadError } from "./use-graced-read-error";
 
 function Profile() {
   const copy = useCopy();
   const { uiStyles } = useMobileTheme();
   const me = useAccountMe();
+  const meError = useGracedReadError(me);
   const user = me.data?.user;
   const name = user?.displayName || user?.email || "";
   return (
     <Stack>
-      <ErrorNotice error={me.error} onRetry={() => void me.refetch()} message={copy("Profil alınamadı.", "Your profile could not be loaded.")} />
+      <ErrorNotice error={meError} onRetry={() => void me.refetch()} message={copy("Profil alınamadı.", "Your profile could not be loaded.")} />
       {user ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
           <Avatar

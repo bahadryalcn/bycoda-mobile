@@ -73,6 +73,7 @@ vi.mock("@/ui/primitives", () => {
   return {
     Empty: () => null,
     NavigationGroup: pass,
+    FormActions: () => null,
     Body: pass,
     Sheet: pass,
     Disclosure: ({ label, children }: { label: string; children?: ReactNode }) => {
@@ -148,18 +149,15 @@ beforeEach(() => {
   searchShown = false;
 });
 
-it.each([false, true])("offers an exact custom model ID while preserving independent delegation (sparse %s)", sparseSettings => {
+it.each([false, true])("keeps a saved model outside the catalogue and preserves independent settings when selecting a listed model (sparse %s)", sparseSettings => {
   const settings = { crossSubagents: "auto", crossAdvisor: "null", crossSubagentMaxEffort: "high", crewTools: "[]" };
-  const onChange = render({ settings, sparseSettings });
-  const input = identifiers.find(field => field.label === "Model ID");
-  expect(input).toBeDefined();
-  input!.onChangeText("openrouter/anthropic:claude-sonnet-custom");
-  expect(onChange).toHaveBeenCalledWith("openrouter/anthropic:claude-sonnet-custom", settings);
-});
-
-it.each([{ disabled: true }, { unavailableAccount: true }])("locks custom model ID for unavailable controls %o", state => {
-  render(state);
-  expect(identifiers.find(field => field.label === "Model ID")?.editable).toBe(false);
+  const savedModel = "openrouter/anthropic:claude-sonnet-custom";
+  const onChange = render({ model: savedModel, settings, sparseSettings });
+  expect(identifiers).toHaveLength(0);
+  expect(pressables.find(item => item.selected)?.label).toBe(savedModel);
+  expect(onChange).not.toHaveBeenCalled();
+  pressables.find(item => item.label === "M1")!.onPress();
+  expect(onChange).toHaveBeenCalledWith("m1", settings);
 });
 
 describe("model picker view", () => {
@@ -267,7 +265,7 @@ describe("model picker view", () => {
     expect(toggles[0]!.value).toBe(false);
     toggles[0]!.onChange(true);
     expect(onChange).toHaveBeenCalledWith("m0", { serviceTier: "fast" });
-    expect(disclosures).toEqual(["Custom model ID", "Context", "Advisor and subagents"]);
+    expect(disclosures).toEqual(["Context", "Advisor and subagents"]);
     expect(selects.map((select) => select.label)).toEqual(["Advisor"]);
   });
 
@@ -279,7 +277,7 @@ describe("model picker view", () => {
       settings: {},
       catalog,
     });
-    expect(disclosures).toEqual(["Custom model ID", "Agents"]);
+    expect(disclosures).toEqual(["Agents"]);
     expect(selects.map((select) => select.label)).toEqual([]);
   });
 

@@ -13,9 +13,10 @@ import { useMobileTheme } from "@/ui/theme";
 /** Meaning is announced by the task identity; long press reveals its full label. */
 export function TaskStatusIcon({ value }: { value: string }) {
   const { colors } = useMobileTheme();
-  const Icon = ({ todo: Circle, queued: Clock, running: Play, verifying: Eye, review: Eye,
+  const Icon = ({ todo: Circle, queued: Clock, waiting: Clock, pending: Clock, running: Play, planning: Play,
+    verifying: Eye, review: Eye, "awaiting-approval": Eye, "needs-input": Eye,
     blocked: Alert, failed: Alert, done: Check, succeeded: Check, completed: Check,
-    finished: Check, cancelled: Cancel, paused: Pause } as Record<string, typeof Circle>)[value] ?? Help;
+    finished: Check, cancelled: Cancel, skipped: Cancel, paused: Pause } as Record<string, typeof Circle>)[value] ?? Help;
   const color = ["blocked", "failed"].includes(value) ? colors.danger
     : ["done", "succeeded", "completed", "finished", "review"].includes(value) ? colors.success
     : ["awaiting-approval"].includes(value) ? colors.warning

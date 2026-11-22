@@ -1,4 +1,5 @@
-import { Body, ErrorText, NumberField, SelectField } from "@/ui/primitives";
+import { Body, ErrorText, SelectField } from "@/ui/primitives";
+import { IntegerTextStepper } from "@/ui/limit-presets";
 import { TimeField } from "@/ui/time-field";
 import { useCopy } from "@/ui/copy";
 import { HoursOverview } from "@/ui/week-hours";
@@ -29,8 +30,8 @@ export function ScheduleFields({ value, minute, onMinuteChange, onChange, disabl
         { value: "weekly", label: copy("Haftalık", "Weekly") },
       ]} onChange={(scheduleKind) => onChange({ scheduleKind })} />
     {value.scheduleKind === "hourly" ? <>
-      <NumberField editable={!disabled} label={copy("Her saatin dakikası", "Minute of each hour")} unit={copy("dk", "min")}
-        hint="0–59" value={minute} onChangeText={onMinuteChange}
+      <IntegerTextStepper disabled={disabled} label={copy("Her saatin dakikası", "Minute of each hour")}
+        min={0} max={59} value={minute} onChangeText={onMinuteChange}
         error={!integerInRange(minute, 0, 59) ? copy("0 ile 59 arasında bir dakika girin.", "Enter a minute from 0 to 59.") : undefined} />
     </> : <>
       <TimeField disabled={disabled} label={copy("Saat (SS:DD)", "Time (HH:MM)")} value={value.time}

@@ -146,6 +146,37 @@ describe("mobile single-attempt native WS", () => {
     });
     await rejected;
   });
+  // A commit refused while a session ran read "could not complete, try again", hiding the reason.
+  it("shows the reason of a typed Host refusal and redacts secrets from it", async () => {
+    const f = await connected();
+    const result = f.connection.request("commands.dispatch", { type: "send", commandId: "command-c", sessionId: "session-a", text: "hello" });
+    const rejected = expect(result).rejects.toMatchObject({
+      category: "validation",
+      uncertain: false,
+      code: "COMMAND_BUSY",
+      message: "Wait for running sessions in this project to finish, then try again. token …",
+    });
+    f.emit({
+      jsonrpc: "2.0",
+      id: f.sent.at(-1)!.id,
+      error: {
+        code: RPC_ERROR_CODES.conflict,
+        message: "Wait for running sessions in this project to finish, then try again. token=abc",
+        data: { category: "conflict", retryable: false, delivery: "not-sent", code: "COMMAND_BUSY" },
+      },
+    });
+    await rejected;
+  });
+  it("keeps the fixed message for a Host error without a typed refusal", async () => {
+    const f = await connected();
+    const result = f.connection.request("projects.list");
+    const rejected = expect(result).rejects.toMatchObject({
+      category: "internal",
+      message: "The computer could not complete this request. Try again.",
+    });
+    f.emit({ jsonrpc: "2.0", id: f.sent.at(-1)!.id, error: { code: RPC_ERROR_CODES.internalError, message: "stack detail" } });
+    await rejected;
+  });
   it("preserves native TLS failures for in-flight reads", async () => {
     const f = await connected();
     const result = f.connection.request("projects.list");

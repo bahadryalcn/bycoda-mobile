@@ -1,5 +1,13 @@
 import { expect, it } from "vitest";
-import { conflictParts, resolveConflictParts, readConflictStages } from "./conflict-review-model";
+import { RemoteHostError } from "@/remote/host-error";
+import { conflictParts, conflictWriteRefused, resolveConflictParts, readConflictStages } from "./conflict-review-model";
+it("allows another attempt only after the Host clearly refused the resolution", () => {
+  expect(conflictWriteRefused(new RemoteHostError("machine", "host", "Snapshot changed"))).toBe(true);
+  expect(conflictWriteRefused(new RemoteHostError("machine", "network", "Lost", true))).toBe(false);
+  expect(conflictWriteRefused(new RemoteHostError("machine", "timeout", "Slow"))).toBe(false);
+  expect(conflictWriteRefused(new RemoteHostError("machine", "network", "Offline"))).toBe(false);
+  expect(conflictWriteRefused(new Error("Unknown"))).toBe(false);
+});
 it("resolves each reviewed block independently while preserving all context, CRLF and final-newline state", () => {
   const working = "before\r\n<<<<<<< HEAD\r\nours\r\n||||||| base\r\nold\r\n=======\r\ntheirs\r\n>>>>>>> incoming\r\nafter";
   const parts = conflictParts(working);

@@ -4,8 +4,8 @@ import { useRef, useState } from "react";
 import type { HostInstance } from "react-native";
 import { catalogProviders } from "@/features/workspace/catalog";
 import { ErrorText } from "@/ui/primitives";
-import { NumberField } from "@/ui/number-field";
-import { Body, Disclosure, IdentifierField, NavigationRow, QueryState, SelectField } from "@/ui/primitives";
+import { MinuteLimitField } from "@/ui/limit-presets";
+import { Body, Disclosure, NavigationRow, QueryState, SelectField } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
@@ -33,7 +33,7 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
   );
   const available = models.data?.models[value.harness] ?? [];
   const providers = catalogProviders(machine?.providers, models.data);
-  const selectedModel = available.find((model) => model.id === value.model);
+  const selectedModel = available.find((model) => model.id === value.model || model.nativeId === value.model);
   return (
     <>
       <SelectField
@@ -63,16 +63,6 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
         disabled={disabled || !available.length}
         onPress={() => setChoosingModel(true)}
       />
-      <Disclosure label={copy("Özel model kimliği", "Custom model ID")}>
-        <IdentifierField
-
-          label={copy("Model kimliği", "Model ID")}
-          value={value.model}
-          onChangeText={(model) => onChange(selectAgentModel(value, model, models.data))}
-          editable={!disabled}
-          placeholder={copy("Bilgisayardaki model kimliği", "Model ID on the computer")}
-        />
-      </Disclosure>
       {choosingModel ? <AgentModelPicker catalog={models.data} query={models} harness={value.harness}
         selected={value.model} disabled={disabled} returnFocusRef={modelTrigger}
         onSelect={model => onChange(selectAgentModel(value, model, models.data))}
@@ -94,21 +84,18 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
           disabled={disabled}
           onChange={(runtimeMode) => onChange({ ...value, runtimeMode })}
         />
-        {showRunLimit ? <><NumberField
-          label={copy(
-            "Çalışma sınırı (dakika, 0 = sınırsız)",
-            "Run limit (minutes, 0 = unlimited)",
-          )}
+        {showRunLimit ? <MinuteLimitField
+          label={copy("Çalışma sınırı", "Run limit")}
           value={minutes}
-          onChangeText={(text) => {
+          invalid={!minutesValid}
+          onChange={(text) => {
             setMinutes(text);
             const valid = validAgentRunMinutes(text);
             onValidityChange?.(valid);
             if (valid) onChange({ ...value, maxRunMinutes: Number(text) });
           }}
-          editable={!disabled}
-        />
-        </> : null}
+          disabled={disabled}
+        /> : null}
       </Disclosure>
       {!choosingModel ? <QueryState query={models} loading="inline" /> : null}
     </>

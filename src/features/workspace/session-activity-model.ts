@@ -17,7 +17,7 @@ type Copy = (tr: string, en: string, values?: Record<string, string | number>) =
  */
 export type ActivityState = "working" | "waiting" | "needs-input" | "background" | "done" | "idle";
 
-export type AgentCounts = { total: number; running: number; done: number; failed: number; stopped: number; interrupted: number };
+export type AgentCounts = { total: number; queued: number; running: number; done: number; failed: number; stopped: number; interrupted: number };
 
 export type SessionActivityInput = {
   blocks: readonly Block[] | undefined;
@@ -54,18 +54,19 @@ export function sessionAgentEntries(blocks: readonly Block[] | undefined, childr
   const childIds = new Set(children.map((child) => child.sessionId));
   return listAgents(blocks)
     .filter((entry) => !childIds.has(delegatedChildId(entry.id) ?? ""))
-    .map((entry) => !live && entry.state === "running" ? { ...entry, state: "interrupted" } : entry);
+    .map((entry) => !live && (entry.state === "running" || entry.state === "queued") ? { ...entry, state: "interrupted" } : entry);
 }
 
 export function countAgents(blocks: readonly Block[] | undefined, children: readonly ChildSessionEntry[] = [], live: boolean): AgentCounts {
-  const counts: AgentCounts = { total: 0, running: 0, done: 0, failed: 0, stopped: 0, interrupted: 0 };
+  const counts: AgentCounts = { total: 0, queued: 0, running: 0, done: 0, failed: 0, stopped: 0, interrupted: 0 };
   const add = (state: AgentEntry["state"]) => {
     counts.total++;
     if (state === "running") counts.running++;
+    else if (state === "queued") counts.queued++;
     else if (state === "interrupted") counts.interrupted++;
     else if (state === "failed") counts.failed++;
-    else if (state === "stopped") counts.stopped++;
-    else counts.done++;
+    else if (state === "stopped" || state === "cancelled") counts.stopped++;
+    else if (state === "completed") counts.done++;
   };
   for (const entry of sessionAgentEntries(blocks, children, live)) add(entry.state);
   for (const child of children) add(child.state);
@@ -112,6 +113,7 @@ export function agentCountText(counts: AgentCounts, copy: Copy, long = false): s
     counts.running && (long
       ? counts.running === 1 ? copy("1 ajan çalışıyor", "1 agent running") : copy("{p0} ajan çalışıyor", "{p0} agents running", { p0: counts.running })
       : copy("{p0} çalışıyor", "{p0} running", { p0: counts.running })),
+    counts.queued && copy("{p0} sırada", "{p0} queued", { p0: counts.queued }),
     counts.done && (long ? copy("{p0} bitti", "{p0} finished", { p0: counts.done }) : copy("{p0} bitti", "{p0} done", { p0: counts.done })),
     counts.failed && copy("{p0} başarısız", "{p0} failed", { p0: counts.failed }),
     counts.stopped && copy("{p0} durduruldu", "{p0} stopped", { p0: counts.stopped }),

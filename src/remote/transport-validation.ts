@@ -67,10 +67,8 @@ export function utf8Bytes(text: string): number {
   return bytes;
 }
 
-export function safeHostMessage(value: string, credential: string): string {
-  return value
-    .split(credential)
-    .join("…")
+export function safeHostMessage(value: string, credential?: string): string {
+  return (credential ? value.split(credential).join("…") : value)
     .replace(/Bearer\s+[\w.~+/=-]+/gi, "Bearer …")
     .replace(/\b(token|password|passphrase|secret|credential)\s*[=:]\s*\S+/gi, "$1 …")
     .replace(/([?&](?:access_token|token|key|secret|password)=)[^&#\s]*/gi, "$1…")

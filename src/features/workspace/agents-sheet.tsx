@@ -35,7 +35,8 @@ type Props = Pick<TranscriptBlockProps, "scope" | "runId" | "disabled" | "onComm
 };
 
 const badgeTone = (state: AgentEntry["state"]) =>
-  state === "running" ? "info" : state === "failed" ? "danger" : state === "stopped" || state === "interrupted" ? "warning" : "success";
+  state === "running" ? "info" : state === "failed" ? "danger" : state === "stopped" || state === "interrupted" ? "warning"
+    : state === "completed" ? "success" : "default";
 
 type ListItem =
   | AgentListItem

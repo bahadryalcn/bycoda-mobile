@@ -4,12 +4,16 @@ import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { errorMessage } from "@/ui/error-message";
 import { RemoteHostError } from "@/remote/host-error";
-import { Button, Disclosure, FormActions, Notice, NumberField, QueryState, SelectField, Stack } from "@/ui/primitives";
+import { Button, Disclosure, FormActions, Notice, QueryState, SelectField, Stack } from "@/ui/primitives";
+import { LimitPresets } from "@/ui/limit-presets";
+import { useLocale } from "@/i18n";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { providerName } from "../workspace/provider-choices";
 import type { RemoteProvider } from "@/domain/types";
 import { ModelRoutingGetResultSchema, ModelRoutingSaveResultSchema, type ModelRoutingState } from "../../../../src/shared/model/host-contracts/model-routing";
 import { workCapFields as fields, parseWorkCapFields as parsedFields, type WorkCapFields as Fields } from "./work-caps-model";
+const TOKEN_PRESETS = ["0", "100000", "500000", "1000000", "5000000", "10000000"] as const;
+const COST_PRESETS = ["0", "5", "10", "25", "50", "100", "250"] as const;
 export function WorkCapsSettings({ current, enabled }: { current(): boolean; enabled: boolean }) {
   const copy = useCopy(), machine = useActiveMachine();
   const supported = enabled && machine?.capabilities?.includes("models.routing.v1") === true;
@@ -31,12 +35,16 @@ export function WorkCapsSettings({ current, enabled }: { current(): boolean; ena
 export function locksUntilReload(error: unknown) {
   return error instanceof RemoteHostError && (error.uncertain || error.kind === "timeout" || /changed; reload before saving/.test(error.message));
 }
+/** A reply that cannot be verified may hide a landed write, so it holds the draft like an uncertain save. */
+export function holdsUnconfirmedSave(error: unknown) {
+  return !(error instanceof RemoteHostError) || locksUntilReload(error);
+}
 /** Only Host errors carry copy this app can show; anything else is reduced to the generic outcome. */
 export function failureText(error: unknown, copy: ReturnType<typeof useCopy>) {
   return errorMessage(error instanceof RemoteHostError ? error : undefined, copy);
 }
 function WorkCapsEditor({ initial, current, providers, onReload }: { initial: ModelRoutingState; current(): boolean; providers: RemoteProvider[]; onReload(): Promise<ModelRoutingState> }) {
-  const copy = useCopy();
+  const copy = useCopy(), locale = useLocale();
   const [opening, setOpening] = useState(initial), [scope, setScope] = useState("total"), [edits, setEdits] = useState<Record<string, Fields>>({});
   const [held, setHeld] = useState(false), [busy, setBusy] = useState(false), [failure, setFailure] = useState<string>();
   const pending = useRef(false);
@@ -83,10 +91,16 @@ function WorkCapsEditor({ initial, current, providers, onReload }: { initial: Mo
   const labels: Record<keyof Fields, string> = { dailyTokens: copy("Günlük token", "Daily tokens"), monthlyTokens: copy("Aylık token", "Monthly tokens"), dailyCost: copy("Günlük maliyet (USD)", "Daily cost (USD)"), monthlyCost: copy("Aylık maliyet (USD)", "Monthly cost (USD)") };
   return <Stack>
     <SelectField label={copy("Kapsam", "Scope")} value={scope} disabled={busy || held}
-      hint={copy("Boş veya 0 sınırsız. Sağlayıcı ve toplam sınırlar birlikte uygulanır.", "Empty or 0 is unlimited. Provider and total caps both apply.")}
+      hint={copy("Sağlayıcı ve toplam sınırlar birlikte uygulanır.", "Provider and total caps both apply.")}
       options={[{ value: "total", label: copy("Toplam", "Total") }, ...[...new Set([...providers, ...Object.keys(caps?.providers ?? {})])].map(value => ({ value, label: providerName(value) }))]} onChange={setScope} />
-    {(Object.keys(labels) as (keyof Fields)[]).map(key => <NumberField key={key} label={labels[key]} value={value[key]} decimal={key.endsWith("Cost")} editable={!busy && !held}
-      onChangeText={text => setEdits(previous => ({ ...previous, [scope]: { ...value, [key]: text } }))} />)}
+    {(Object.keys(labels) as (keyof Fields)[]).map(key => {
+      const cost = key.endsWith("Cost"), text = value[key];
+      return <LimitPresets key={`${scope}:${key}`} label={labels[key]} customLabel={labels[key]} unit={cost ? "USD" : undefined}
+        values={cost ? COST_PRESETS : TOKEN_PRESETS} value={text === "" ? "0" : text} disabled={busy || held}
+        invalid={text !== "" && !/^\d+(?:\.\d+)?$/.test(text)}
+        format={preset => preset === "0" ? copy("Sınırsız", "Unlimited") : cost ? `$${new Intl.NumberFormat(locale).format(Number(preset))}` : new Intl.NumberFormat(locale, { notation: "compact" }).format(Number(preset))}
+        onChange={next => setEdits(previous => ({ ...previous, [scope]: { ...value, [key]: next } }))} />;
+    })}
     {!valid ? <Notice tone="warning" message={copy("Tokenlar güvenli tam sayı, maliyetler sıfır veya pozitif sayı olmalıdır.", "Tokens must be safe integers; costs must be zero or positive numbers.")} /> : null}
     {failure ? <Notice tone="danger" message={failure} /> : null}
     {held ? <Notice tone="warning" message={copy("Kaydetme doğrulanamadı veya ayarlar değişti. Tekrar göndermeden güncel ayarları yükleyin; bu düzenlemeleri sıfırlar.", "Save was not confirmed or settings changed. Load current settings before sending again; this resets these edits.")} /> : null}

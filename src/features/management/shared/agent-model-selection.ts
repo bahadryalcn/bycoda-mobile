@@ -1,5 +1,6 @@
 import type { HostModelCatalog, RemoteProvider } from "@/domain/types";
 import { modelDefaults } from "@/features/workspace/catalog";
+import { modelRows } from "@/features/workspace/model-picker-model";
 import { filterSelection } from "@/ui/selection-model";
 import type { AgentDraft } from "./types";
 
@@ -19,10 +20,7 @@ export function selectAgentProvider<T extends AgentDraft>(value: T, harness: Rem
   };
 }
 
-/** Search presentation is derived separately from the controlled, freely editable model ID. */
-export function agentModelChoices(catalog: HostModelCatalog | undefined, harness: RemoteProvider, search: string, locale?: string) {
-  return filterSelection((catalog?.models[harness] ?? []).map((model) => ({
-    value: model.id, label: model.name || model.id,
-    detail: model.name && model.name !== model.id ? model.id : undefined,
-  })), search, locale);
+/** Keep the saved choice visible while browsing the provider catalogue. */
+export function agentModelChoices(catalog: HostModelCatalog | undefined, harness: RemoteProvider, search: string, locale?: string, selected = "") {
+  return filterSelection(modelRows(catalog?.models[harness] ?? [], selected), search, locale);
 }

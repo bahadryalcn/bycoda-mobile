@@ -1,9 +1,13 @@
+import { useEffect, useEffectEvent } from "react";
+import CopyIcon from "lucide-react-native/icons/copy";
 import Trash2 from "lucide-react-native/icons/trash-2";
 import type { Note } from "@/domain/types";
 import { useCopy } from "@/ui/copy";
 import { usePrivateContentAccess } from "@/ui/private-access";
 import { ActionMenu } from "@/ui/primitives";
 import { SwipeActions } from "@/ui/swipe-actions";
+import { showToast } from "@/ui/toast";
+import { useClipboardFeedback } from "@/ui/use-clipboard-feedback";
 import { RecordConfirmationSheet, useRecordConfirmation } from "../shared/use-record-confirmation";
 import { NoteSummaryRow } from "./note-summary-row";
 
@@ -37,6 +41,23 @@ export function NoteLibraryRow({
     busy,
     !available,
   );
+  const readable = access.allowed && access.check();
+  const clipboard = useClipboardFeedback(note.body, !busy && !!note.body.trim());
+  const announceCopy = useEffectEvent((failed: boolean) => showToast(failed
+    ? { tone: "danger", message: copy("Kopyalanamadı. Yeniden deneyin.", "Could not copy. Try again.") }
+    : { message: copy("Kopyalandı", "Copied") }));
+  // Reason: the menu and swipe rail close on press, so the copy result needs feedback outside them.
+  useEffect(() => {
+    if (clipboard.copied) announceCopy(false);
+    else if (clipboard.error) announceCopy(true);
+  }, [clipboard.copied, clipboard.error]);
+  const copyAction = {
+    key: "copy",
+    label: copy("Notu kopyala", "Copy note"),
+    icon: <CopyIcon size={18} />,
+    disabled: busy || clipboard.inFlight || !note.body.trim(),
+    onPress: clipboard.copy,
+  };
   const deleteLabel = copy("Notu sil", "Delete note");
   const deleteAction = {
     key: "delete",
@@ -55,18 +76,20 @@ export function NoteLibraryRow({
       );
     },
   };
+  // Swipe and menu expose the same actions; a read-only computer still allows copying.
+  const actions = canDelete ? [copyAction, deleteAction] : [copyAction];
   return (
     <>
-      <SwipeActions actions={[deleteAction]} disabled={busy || !available}>
+      <SwipeActions actions={actions} disabled={busy || !readable}>
         <NoteSummaryRow
           note={note}
           projectName={projectName}
           disabled={busy}
           onPress={onOpen}
-          trailing={available ? <ActionMenu
+          trailing={readable ? <ActionMenu
             label={copy("Diğer işlemler", "More actions")}
             subtitle={title}
-            actions={[deleteAction]}
+            actions={actions}
             reserveTouchTarget
           /> : undefined}
         />

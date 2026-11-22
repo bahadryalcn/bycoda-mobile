@@ -1,8 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { RemoteHostError } from "@/remote/host-error";
-import { isTransientConnectionError, reconnectRefetchDelay, refetchRecoveredReads, retryTransientRead } from "./query-retry";
+import { isTransientConnectionError, reconnectRefetchDelay, refetchRecoveredReads, retryTransientRead, visibleReadError } from "./query-retry";
 
 describe("transient read retry", () => {
+  it("holds a brief link failure back until its grace ends and shows lasting failures at once", () => {
+    const dropped = { kind: "network" };
+    const refused = { kind: "auth" };
+    const uncertain = { kind: "network", uncertain: true };
+    expect(visibleReadError(dropped, false)).toBeNull();
+    expect(visibleReadError(dropped, true)).toBe(dropped);
+    expect(visibleReadError(refused, false)).toBe(refused);
+    expect(visibleReadError(uncertain, false)).toBe(uncertain);
+    expect(visibleReadError(null, true)).toBeNull();
+  });
+
   it("retries network and timeout failures twice, never auth or protocol", () => {
     expect(retryTransientRead(0, { kind: "network" })).toBe(true);
     expect(retryTransientRead(1, { kind: "timeout" })).toBe(true);

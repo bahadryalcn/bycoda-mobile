@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("expo-router", () => ({ router: { navigate: state.navigate }, useLocalSearchParams: () => ({}) }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
+vi.mock("@/ui/query-state", () => ({ useReadRetryNotice: () => true }));
 vi.mock("react-native", () => ({ View: "div" }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));

@@ -6,8 +6,6 @@ import type { useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { RecordCard } from "@/ui/record-card";
-import Power from "lucide-react-native/icons/power";
-import Pause from "lucide-react-native/icons/pause";
 import Pencil from "lucide-react-native/icons/pencil";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import Trash2 from "lucide-react-native/icons/trash-2";
@@ -17,6 +15,7 @@ import {
   ErrorNotice,
   Button,
   MutationState,
+  Row,
 } from "@/ui/primitives";
 import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
 import { Status } from "../shared/status";
@@ -49,6 +48,7 @@ export function StewardCard({
   const glyph = useMenuGlyph();
   const relative = useRelativeTime();
   const running = run.isPending && run.variables?.stewardId === item.id;
+  const toggling = save.isPending && (save.variables?.steward as { id?: string } | undefined)?.id === item.id;
   const runNow = () =>
     confirmAction(
       copy("Şimdi çalıştır", "Run now"),
@@ -87,8 +87,13 @@ export function StewardCard({
           <Body muted>{agentPresentation(item.harness, item.model)}</Body>
         </>
       }
-      footer={<Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running}
-        disabled={busy || !!item.run || editorOpen} onPress={runNow} />}
+      footer={<Row>
+        <Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running} style={{ flexGrow: 1 }}
+          disabled={busy || !!item.run || editorOpen} onPress={runNow} />
+        <Button tone="secondary" label={item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable")} style={{ flexGrow: 1 }}
+          busy={toggling} disabled={busy || editorOpen || toggling} onPress={() =>
+            save.mutate({ steward: { ...item, enabled: !item.enabled, expectedConfiguration: item } })} />
+      </Row>}
       menu={
         <RecordTrailing>
         <ActionMenu
@@ -100,22 +105,6 @@ export function StewardCard({
             (remove.isPending && remove.variables?.stewardId === item.id)
           }
           actions={[
-            {
-              key: "toggle",
-              icon: glyph(item.enabled ? Pause : Power),
-              label: item.enabled
-                ? copy("Duraklat", "Pause")
-                : copy("Etkinleştir", "Enable"),
-              disabled: busy || editorOpen,
-              onPress: () =>
-                save.mutate({
-                  steward: {
-                    ...item,
-                    enabled: !item.enabled,
-                    expectedConfiguration: item,
-                  },
-                }),
-            },
             {
               key: "edit",
               icon: glyph(Pencil),

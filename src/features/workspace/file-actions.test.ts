@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   operation: undefined as undefined | ((value: string) => void),
   submit: undefined as undefined | (() => void),
   size: "",
+  buttons: {} as Record<string, () => void>,
   mutate: vi.fn(async () => undefined),
 }));
 vi.mock("react-native", () => ({
@@ -35,6 +36,10 @@ vi.mock("@/ui/primitives", () => ({
     state.operation = onChange;
     return null;
   },
+  Button: ({ label, onPress }: { label: string; onPress: () => void }) => {
+    state.buttons[label] = onPress;
+    return null;
+  },
   IdentifierField: () => null,
   ErrorNotice: () => null,
   FormActions: ({ onSubmit }: { onSubmit: () => void }) => {
@@ -59,7 +64,7 @@ it("keeps the complete target and same owner while switching to compact deletion
   try {
     await act(async () => root.render(createElement(FileActions, props)));
     expect(state.size).toBe("form");
-    await act(async () => state.operation!("delete_path"));
+    await act(async () => state.buttons.Delete!());
     expect(state.size).toBe("compact");
     expect(container.textContent).toContain("/host/project/with/a/long/target/path/nested/file.ts");
     expect(container.querySelector("[data-lines]")).toBeNull();

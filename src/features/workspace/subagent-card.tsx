@@ -7,7 +7,7 @@ import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { fontSize, lineHeight, metrics, radii, space } from "@/ui/tokens";
 import { agentStateLabel, agentStateTone } from "./agent-state";
-import { activityState } from "./transcript-model";
+import { agentRunState } from "./transcript-model";
 import { formatElapsed, subagentNow } from "./run-status-model";
 import { useElapsedNow } from "./use-elapsed-now";
 import { SubagentDetails } from "./subagent-details";
@@ -26,7 +26,7 @@ export function SubagentCard({ block, detailsDisabled, ...props }: Props) {
   const copy = useCopy();
   const [sheet, setSheet] = useState(false);
   const run = block.agentRun;
-  const state = activityState(block);
+  const state = agentRunState(block);
   const running = state === "running";
   const now = useElapsedNow(running);
   if (!run) return null;

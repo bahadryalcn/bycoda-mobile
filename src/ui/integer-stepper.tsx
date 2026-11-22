@@ -10,8 +10,9 @@ import { useMobileTheme } from "./theme";
 import { metrics, opacity, radii, space } from "./tokens";
 import { Body } from "./typography";
 
-type IntegerStepperProps = {
+export type IntegerStepperProps = {
   label: string;
+  help?: string;
   value: number;
   min: number;
   max: number;
@@ -19,8 +20,14 @@ type IntegerStepperProps = {
   disabled?: boolean;
 };
 
+/** The number a text draft shows on a stepper. Unreadable text starts from the lower bound. */
+export function stepperValue(text: string, min: number, max: number) {
+  const parsed = Number(text);
+  return text.trim() && Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : min;
+}
+
 /** A bounded integer control with a readable center and no editable input. */
-export function IntegerStepper({ label, value, min, max, onValueChange, disabled }: IntegerStepperProps) {
+export function IntegerStepper({ label, help, value, min, max, onValueChange, disabled }: IntegerStepperProps) {
   const copy = useCopy();
   const locale = useLocale();
   const { colors, uiStyles } = useMobileTheme();
@@ -81,7 +88,7 @@ export function IntegerStepper({ label, value, min, max, onValueChange, disabled
   };
   return (
     <View style={uiStyles.field}>
-      <HintLabel label={label} />
+      <HintLabel label={label} help={help} />
       <View style={{
         flexDirection: "row", alignItems: "stretch", minHeight: metrics.touchTarget,
         borderRadius: radii.control, borderWidth: StyleSheet.hairlineWidth,

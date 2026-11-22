@@ -3,6 +3,7 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ refetch: vi.fn(), data: undefined as undefined | { today: number; week: number; month: number; year: number }, error: true }));
+vi.mock("./use-graced-read-error", () => ({ useGracedReadError: (query: { error: unknown }) => query.error ?? null }));
 vi.mock("react-native", () => ({ AppState: { currentState: "active", addEventListener: () => ({ remove() {} }) } }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: fixture.data, isError: fixture.error, error: fixture.error ? new Error("failed") : null, refetch: fixture.refetch }) }));
 vi.mock("./account-context", () => ({ useAccount: () => ({ runtime: { client: {} }, device: { id: "phone" } }) }));

@@ -11,7 +11,7 @@ import { useCommands } from "./shared";
 
 /**
  * Creates sessions in one project: the shared owner of the model catalog, the command and the
- * single-flight guard. The project panel passes its form draft; the quick flow passes none.
+ * single-flight guard. Each entry point passes the settings from its own draft.
  */
 export function useCreateSession(
   projectId: string,

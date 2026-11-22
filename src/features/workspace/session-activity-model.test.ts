@@ -42,7 +42,7 @@ it("keeps running in the background after the run when child sessions work, then
 it("counts every agent once: blocks across turns plus child sessions, child winning over its block", () => {
   const blocks = [agent("old", "completed"), user, agent("new", "running"), agent("delegated:c1", "running"), agent("gone", "failed")];
   const counts = countAgents(blocks, [child("c1", "completed"), child("c2", "running")], true);
-  expect(counts).toEqual({ total: 5, running: 2, done: 2, failed: 1, stopped: 0, interrupted: 0 });
+  expect(counts).toEqual({ total: 5, queued: 0, running: 2, done: 2, failed: 1, stopped: 0, interrupted: 0 });
   expect(agentCountText(counts, copy)).toBe("2 running · 2 done · 1 failed");
   expect(agentCountText(counts, copy, true)).toBe("2 agents running, 2 finished, 1 failed");
   expect(agentCountText({ ...counts, running: 1, done: 0, failed: 0 }, copy, true)).toBe("1 agent running");

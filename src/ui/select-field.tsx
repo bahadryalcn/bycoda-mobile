@@ -90,6 +90,8 @@ function SelectionField<T extends string>({
   const copy = useCopy();
   const reducedMotion = useReducedMotionPreference();
   const locale = useLocale(), access = usePrivateContentAccess();
+  // Inside a Sheet the options expand under the trigger: one overlay, one scroll owner.
+  const inSheet = useContext(SheetGuardContext) !== null;
   const trigger = useRef<HostInstance>(null);
   const mounted = useRef(false);
   useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -122,11 +124,15 @@ function SelectionField<T extends string>({
   live.current = { opening, view, input, available, access, values, onChange, filtered };
   const current = () => mounted.current && !!opening && live.current.opening === opening && live.current.available &&
     live.current.access.allowed && live.current.access.check() && opening.access.allowed && opening.access.check();
-  const openPanel = () => {
-    if (!mounted.current || live.current.opening || !live.current.available || !live.current.access.allowed || !live.current.access.check()) return;
+  const close = () => { if (mounted.current && opening && live.current.opening === opening) { live.current.opening = null; setOpening(null); } };
+  const activateTrigger = () => {
+    if (!mounted.current || live.current.opening !== opening || !live.current.available || !live.current.access.allowed || !live.current.access.check()) return;
+    if (opening) {
+      if (inSheet) close();
+      return;
+    }
     const next = { access: live.current.access }; live.current.opening = next; setSearch(""); setOpening(next);
   };
-  const close = () => { if (mounted.current && opening && live.current.opening === opening) { live.current.opening = null; setOpening(null); } };
   useLayoutEffect(() => { if (opening && !available) close(); }, [opening, available]);
   const changeSearch = (value: string) => { if (current() && live.current.input === input) setSearch(value); };
   const clearSearch = () => { if (live.current.view === view) changeSearch(""); };
@@ -141,8 +147,6 @@ function SelectionField<T extends string>({
   const position = useFilteredListScrollMemory<SelectionFieldOption<T>>(searchKey, open && available, filtered.length, { suspended: !open || !available });
   const row = variant === "row";
   const grouped = useInNavigationGroup();
-  // Inside a Sheet the options expand under the trigger: one overlay, one scroll owner.
-  const inSheet = useContext(SheetGuardContext) !== null;
   const inline = inSheet && open && available;
   const gutter = inSheet ? 0 : space.screen;
   const controls = searchEnabled || multiple ? (
@@ -233,7 +237,7 @@ function SelectionField<T extends string>({
           aria-expanded={open && available}
           aria-disabled={!available}
           disabled={!available}
-          onPress={openPanel}
+          onPress={activateTrigger}
           style={{
             minHeight: metrics.rowHeightProject,
             flexDirection: "row",
@@ -275,7 +279,7 @@ function SelectionField<T extends string>({
         aria-disabled={!available}
         disabled={!available}
         hitSlop={compact ? { top: 8, bottom: 8, left: 0, right: 0 } : undefined}
-        onPress={openPanel}
+        onPress={activateTrigger}
         style={[
           uiStyles.input,
           compact && {

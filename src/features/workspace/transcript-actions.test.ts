@@ -10,6 +10,7 @@ vi.mock("@/state/security",()=>({isAppAccessAllowed:()=>f.allowed,useSecurity:{g
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));vi.mock("../reporting/report-store",()=>({startContentReport:f.report}));vi.mock("./composer-transfer",()=>({useComposerTransfer:()=>({transfer:vi.fn()})}));vi.mock("./selected-text",()=>({SelectedText:()=>createElement("p",null,"Selection open")}));
 vi.mock("@/ui/primitives",()=>{const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);const Action=({label,onPress,disabled,intent}:{label:string;onPress:()=>void;disabled?:boolean;intent?:string})=>{f.rows.push({label,press:onPress});return createElement("button",{onClick:onPress,disabled,"data-intent":intent},label);};return {Body:Wrapper,NavigationGroup:Wrapper,NavigationRow:Action,Button:Action,ErrorText:({error}:{error:unknown})=>error?createElement("p",{role:"alert"},String(error)):null,Notice:({message}:{message:string})=>createElement("p",null,message), Sheet:({children,dismissible}:PropsWithChildren<{dismissible?:boolean}>)=>createElement("section",{"data-dismissible":String(dismissible)},children)};});
 vi.mock("lucide-react-native/icons/copy", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/flag", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/notebook-pen", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/quote", () => ({ default: () => null }));

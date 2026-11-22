@@ -20,7 +20,7 @@ export function CollectionToolbar({ field, actions }: { field: ReactNode; action
   useMobileTheme();
   const { fontScale } = useWindowDimensions();
   return <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }}>
-    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 180 * Math.max(1, fontScale), minWidth: 0 }}>{field}</View>
+    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 148 * Math.max(1, fontScale), minWidth: 0 }}>{field}</View>
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginStart: "auto", minWidth: 0, flexShrink: 1, maxWidth: "100%" }}>{actions}</View>
   </View>;
 }

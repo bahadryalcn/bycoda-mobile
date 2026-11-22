@@ -11,7 +11,10 @@ import { settingsSummary } from "./model-picker-model";
 import { settingLabels } from "./setting-labels";
 
 /** Form field that shows the current provider, model and effort and opens the model picker sheet. */
-export function ModelPickerField(props: Omit<ModelPickerProps, "visible" | "onClose">) {
+export function ModelPickerField({ hideLabel, ...props }: Omit<ModelPickerProps, "visible" | "onClose"> & {
+  /** The compact picker trigger keeps its accessible label without a separate caption. */
+  hideLabel?: boolean;
+}) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const [open, setOpen] = useState(false);
@@ -24,7 +27,7 @@ export function ModelPickerField(props: Omit<ModelPickerProps, "visible" | "onCl
     .join(" · ");
   return (
     <View style={uiStyles.field}>
-      <Text style={uiStyles.fieldLabel}>{copy("Model", "Model")}</Text>
+      {hideLabel ? null : <Text style={uiStyles.fieldLabel}>{copy("Model", "Model")}</Text>}
       <PressableCard
         role="combobox"
         label={`${copy("Model", "Model")}: ${name}${second ? `, ${second}` : ""}`}
@@ -51,7 +54,7 @@ export function ModelPickerField(props: Omit<ModelPickerProps, "visible" | "onCl
             {name}
           </Body>
           {second ? (
-            <Body muted numberOfLines={1} selectable={false} style={uiStyles.caption}>
+            <Body muted selectable={false} style={uiStyles.caption}>
               {second}
             </Body>
           ) : null}

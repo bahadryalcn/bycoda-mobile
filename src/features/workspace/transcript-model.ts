@@ -289,6 +289,20 @@ export function activityState(
   return "neutral";
 }
 
+export type AgentRunState = ReturnType<typeof activityState> | "queued" | "cancelled";
+
+/** Agent surfaces name queued and cancelled work; transcript grouping keeps the coarser activity state. */
+export function agentRunState(block: Block): AgentRunState {
+  const state = activityState(block);
+  const status = block.tool?.status?.toLowerCase();
+  if (state === "failed" && block.notice !== "error" && (status === "cancelled" || status === "canceled"))
+    return "cancelled";
+  if (state === "neutral" && status === "queued") return "queued";
+  if (state === "running" && status === "pending" && !block.streaming && block.agentRun?.startedAt === undefined)
+    return "queued";
+  return state;
+}
+
 export function activitySummary(blocks: readonly Block[]) {
   const running = blocks.findLast((block) => activityState(block) === "running");
   const tools = blocks.filter((block) => block.role === "tool");

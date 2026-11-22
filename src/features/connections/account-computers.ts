@@ -44,6 +44,28 @@ export type AccountComputersState =
   | { kind: "error"; error: unknown }
   | { kind: "ready"; computers: Computer[] };
 
+/** A dropped or overloaded read gets two quiet retries; a refusal is final. */
+export function retryAccountComputers(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 2) return false;
+  return !(error instanceof AccountApiError) || error.status === 429 || error.status >= 500;
+}
+
+/** A loaded list stays on screen through a failed refresh; only a first load reports the failure. */
+export function accountComputersRead(
+  data: { items: Computer[] } | undefined,
+  error: unknown,
+  now: number,
+): AccountComputersState {
+  if (error && isComputersUnavailable(error)) return { kind: "hidden" };
+  if (data) {
+    const computers = [...data.items].sort(
+      (a, b) => Number(isComputerOnline(b, now)) - Number(isComputerOnline(a, now)),
+    );
+    return { kind: "ready", computers };
+  }
+  return error ? { kind: "error", error } : { kind: "loading" };
+}
+
 /** Computers of the signed-in account, online first. Refetch is exposed for focus handling. */
 export function useAccountComputers(): { state: AccountComputersState; refetch: () => void } {
   const account = useAccount();
@@ -52,7 +74,7 @@ export function useAccountComputers(): { state: AccountComputersState; refetch: 
     queryKey: COMPUTERS_KEY,
     queryFn: () => account.runtime!.client.listComputers(),
     enabled,
-    retry: false,
+    retry: retryAccountComputers,
   });
   const refetch = () => {
     if (enabled) void query.refetch();
@@ -60,15 +82,6 @@ export function useAccountComputers(): { state: AccountComputersState; refetch: 
   let state: AccountComputersState;
   if (account.status === "unavailable" || account.status === "loading") state = { kind: "hidden" };
   else if (account.status === "signedOut") state = { kind: "signedOut" };
-  else if (query.error) {
-    state = isComputersUnavailable(query.error) ? { kind: "hidden" } : { kind: "error", error: query.error };
-  } else if (!query.data) state = { kind: "loading" };
-  else {
-    const now = Date.now();
-    const computers = [...query.data.items].sort(
-      (a, b) => Number(isComputerOnline(b, now)) - Number(isComputerOnline(a, now)),
-    );
-    state = { kind: "ready", computers };
-  }
+  else state = accountComputersRead(query.data, query.error, Date.now());
   return { state, refetch };
 }

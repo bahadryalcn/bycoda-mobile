@@ -66,6 +66,8 @@ export function ProjectDetailsSheet({
         <Button
           label={registered ? copy("Aç", "Open") : copy("Projeyi aç", "Open project")}
           tone="primary"
+          fullWidth
+          reserveTouchTarget
           onPress={onOpen}
         />
       ) : null}

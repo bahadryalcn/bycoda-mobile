@@ -62,10 +62,19 @@ export function ToggleField({ label, labelLines, detail, help, value, onChange, 
         </View>
       </Pressable>
       {help ? <InfoHint text={help} open={helpOpen} onToggle={() => setHelpOpen((v) => !v)} /> : null}
-      {/* The row owns the announcement and the tap; the Switch only draws the state. */}
-      <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-        <Switch value={value} onValueChange={toggle} disabled={disabled} />
-      </View>
+      {/* The track accepts touch, but the label is the row's only accessible switch. */}
+      <Pressable
+        accessible={false}
+        focusable={false}
+        aria-hidden
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden
+        disabled={disabled}
+        onPress={toggle}
+        style={{ minWidth: metrics.touchTarget, minHeight: metrics.touchTarget, justifyContent: "center", alignItems: "center" }}
+      >
+        <Switch value={value} interactive={false} disabled={disabled} />
+      </Pressable>
     </View>
   );
   // Same rhythm as NavigationRow: optional leading icon slot and an inset separator in groups.

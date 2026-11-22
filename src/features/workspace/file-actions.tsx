@@ -1,8 +1,10 @@
+import { useState } from "react";
 import type { FileActionsProps, FileActionDraft } from "./file-actions-types";
 import { View } from "react-native";
 import { useFormDraft } from "@/state/form-draft";
 import {
   Body,
+  Button,
   FormActions,
   SegmentedControl,
   IdentifierField,
@@ -33,12 +35,14 @@ export function FileActions({
     destination: "",
   });
   const { operation, name, destination } = form.values;
+  // Reviewing a deletion is a step, not an edit, so it never reads as unsaved changes.
+  const [deleting, setDeleting] = useState(false);
   const refreshProject = useProjectRefresh(projectId);
   const path = joinHostPath(root, entry.path);
   return (
     <Sheet
       visible
-      size={operation === "delete_path" ? "compact" : "form"}
+      size={deleting ? "compact" : "form"}
       title={entry.name}
       dirty={form.dirty}
       dismissible={!action.isPending}
@@ -50,32 +54,32 @@ export function FileActions({
         <Body mono muted selectable>
           {path}
         </Body>
-        <SegmentedControl
-          label={copy("İşlem", "Operation")}
-          value={operation}
-          disabled={action.isPending}
-          onChange={(value) => form.setField("operation", value)}
-          options={(["rename_path", "copy_path", "move_path", "delete_path"] as const).map((value) => ({
-            value,
-            label:
-                value === "rename_path"
-                  ? copy("Adını değiştir", "Rename")
-                  : value === "copy_path"
-                    ? copy("Kopyala", "Copy")
-                    : value === "move_path"
-                      ? copy("Taşı", "Move")
-                      : copy("Sil", "Delete")
-          }))}
-        />
-        {operation === "rename_path" ? (
+        {!deleting ? (
+          <SegmentedControl
+            label={copy("İşlem", "Operation")}
+            value={operation}
+            disabled={action.isPending}
+            onChange={(value) => form.setField("operation", value)}
+            options={(["rename_path", "copy_path", "move_path"] as const).map((value) => ({
+              value,
+              label:
+                  value === "rename_path"
+                    ? copy("Adını değiştir", "Rename")
+                    : value === "copy_path"
+                      ? copy("Kopyala", "Copy")
+                      : copy("Taşı", "Move"),
+            }))}
+          />
+        ) : null}
+        {deleting ? (
+          <Body>{`${copy("Bilgisayardan silinecek:", "This will be deleted on your computer:")} ${entry.path}${entry.isDir ? copy(" ve içindeki dosyalar", " and its contents") : ""}`}</Body>
+        ) : operation === "rename_path" ? (
           <IdentifierField
             label={copy("Yeni ad", "New name")}
             value={name}
             editable={!action.isPending}
             onChangeText={(value) => form.setField("name", value)}
           />
-        ) : operation === "delete_path" ? (
-          <Body>{`${copy("Bilgisayardan silinecek:", "This will be deleted on your computer:")} ${entry.path}${entry.isDir ? copy(" ve içindeki dosyalar", " and its contents") : ""}`}</Body>
         ) : (
           <IdentifierField
             label={copy("Hedef klasör (proje içinde)", "Destination folder (inside project)")}
@@ -85,25 +89,32 @@ export function FileActions({
             placeholder={copy("Kök için boş bırak", "Leave empty for project root")}
           />
         )}
+        {/* Delete is destructive, so it is not one of the view segments: a separate step with its own confirmation. */}
+        {!deleting ? (
+          <Button
+            label={copy("Sil", "Delete")}
+            tone="danger"
+            disabled={action.isPending}
+            onPress={() => setDeleting(true)}
+          />
+        ) : null}
         <FormActions
           feedback={<ErrorNotice error={action.error} />}
-          submitLabel={
-            operation === "delete_path"
-              ? copy("Silmeyi onayla", "Confirm deletion")
-              : copy("Uygula", "Apply")
-          }
-          tone={operation === "delete_path" ? "danger" : "primary"}
+          submitLabel={deleting ? copy("Silmeyi onayla", "Confirm deletion") : copy("Uygula", "Apply")}
+          tone={deleting ? "danger" : "primary"}
           busy={action.isPending}
-          disabled={operation === "rename_path" && (!name.trim() || name === entry.name)}
+          disabled={!deleting && operation === "rename_path" && (!name.trim() || name === entry.name)}
+          cancelLabel={deleting ? copy("Vazgeç", "Cancel") : undefined}
+          cancelDisabled={action.isPending}
+          onCancel={deleting ? () => setDeleting(false) : undefined}
           onSubmit={() => {
-            const args =
-              operation === "rename_path"
+            const args = deleting
+              ? { path }
+              : operation === "rename_path"
                 ? { path, name: name.trim() }
-                : operation === "delete_path"
-                  ? { path }
-                  : { from: path, destParent: joinHostPath(root, destination.trim()) };
+                : { from: path, destParent: joinHostPath(root, destination.trim()) };
             void action
-              .mutateAsync({ command: operation, args })
+              .mutateAsync({ command: deleting ? "delete_path" : operation, args })
               .then(() => {
                 void refreshProject();
                 onCompleted();

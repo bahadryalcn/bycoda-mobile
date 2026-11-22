@@ -10,6 +10,7 @@ import { useCopy } from "@/ui/copy";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import type { Device } from "../contracts";
 import { useAccount } from "./account-context";
+import { useGracedReadError } from "./use-graced-read-error";
 
 const KEY = ["account", "devices"] as const;
 
@@ -28,6 +29,7 @@ export function DevicesSection() {
     queryFn: () => runtime!.client.listDevices(),
     enabled: !!runtime && !!self,
   });
+  const listError = useGracedReadError(list);
   const refresh = () => queries.invalidateQueries({ queryKey: KEY });
   const rename = useMutation({
     mutationFn: (input: { id: string; name: string }) =>
@@ -63,9 +65,10 @@ export function DevicesSection() {
   return (
     <Section title={copy("Cihazlar", "Devices")}>
       <Stack>
-        <ErrorNotice error={list.error} onRetry={() => void list.refetch()} message={copy("Cihazlar alınamadı.", "Devices could not be loaded.")} />
+        <ErrorNotice error={listError} onRetry={() => void list.refetch()} message={copy("Cihazlar alınamadı.", "Devices could not be loaded.")} />
         <ErrorNotice error={revoke.error} message={copy("Oturum kapatılamadı.", "Could not sign out that device.")} />
-        {list.isPending && !list.error ? <Skeleton variant="content" rows={2} /> : null}
+        {/* isLoading stays false while the query is disabled, so a failed phone registration cannot spin forever. */}
+        {list.isLoading ? <Skeleton variant="content" rows={2} /> : null}
         <NavigationGroup>
           {items.map((item) => (
             <NavigationRow

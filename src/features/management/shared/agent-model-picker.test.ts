@@ -8,9 +8,10 @@ import { AgentFields } from "./agent-fields";
 const state = vi.hoisted(() => ({ rows: new Map<string, () => void>(), search: null as null | ((text: string) => void), close: null as null | (() => void), returnFocusRef: undefined as unknown }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
 vi.mock("@/ui/duotone-icon", () => ({ Cpu: () => null }));
+vi.mock("@/ui/agent-avatar", () => ({ ProviderAccountMark: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/provider-identity", () => ({ providerSelectionOption: (provider: string) => ({ value: provider, label: provider }) }));
-vi.mock("@/ui/number-field", () => ({ NumberField: () => null }));
+vi.mock("@/ui/limit-presets", () => ({ MinuteLimitField: () => null }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => undefined }));
 vi.mock("@/state/queries", () => ({ useHostQuery: () => ({ data: props.catalog, isSuccess: true }) }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
@@ -65,6 +66,13 @@ it("retires rows removed by a catalogue refresh without changing the draft", asy
   await render(); const old = state.rows.get("Second")!;
   props = { ...props, catalog: { models: { codex: [] }, errors: {} } }; await render();
   await act(async () => old()); expect(select).not.toHaveBeenCalled(); expect(close).not.toHaveBeenCalled();
+});
+
+it("closes when the saved model is pressed without rewriting the draft", async () => {
+  await render();
+  await act(async () => state.rows.get("private/custom")!());
+  expect(select).not.toHaveBeenCalled();
+  expect(close).toHaveBeenCalledOnce();
 });
 
 it.each(["disabled", "provider"])("does not revive old choices after %s loss and recovery", async mode => {

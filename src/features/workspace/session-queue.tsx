@@ -5,6 +5,8 @@ import ListOrdered from "lucide-react-native/icons/list-ordered";
 import { Button, ErrorText, StatusText } from "@/ui/primitives";
 import { useQueryClient } from "@tanstack/react-query";
 import { hostKey, useHostClient } from "@/state/queries";
+import { isTransientConnectionError, visibleReadError } from "@/state/query-retry";
+import { useReadRetryNotice } from "@/ui/query-state";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { moveQueuedMessage, queuedCommand } from "./composer-delivery";
@@ -64,6 +66,9 @@ export function SessionQueue({
     };
   }, []);
   const rows = queue.data?.messages ?? [];
+  // Send controls still respect queue.error; only the red state waits out a brief link drop.
+  const readGraceElapsed = useReadRetryNotice(isTransientConnectionError(queue.error), scope.machineId);
+  const queueReadError = visibleReadError(queue.error, readGraceElapsed);
   const unconfirmed = rows.some((row) => row.deliveryUnknown);
   const stage = queueDeliveryStage(queue.data);
   // Desktop shows an accepted send briefly. A settlement already present on the first read
@@ -212,7 +217,7 @@ export function SessionQueue({
   return (
     <>
       <View style={{ flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
-      {rows.length || accepted || queue.error || queue.changeError || error || editor.value || editor.error || editor.visible ? (
+      {rows.length || accepted || queueReadError || queue.changeError || error || editor.value || editor.error || editor.visible ? (
         <View
           style={{
             flexDirection: "row",
@@ -225,9 +230,9 @@ export function SessionQueue({
             maxWidth: "100%",
           }}
         >
-          {rows.length || queue.error || queue.changeError || error ? (
+          {rows.length || queueReadError || queue.changeError || error ? (
             <Button
-              label={queue.error || error || queue.changeError
+              label={queueReadError || error || queue.changeError
                 ? `${copy("Sıra", "Queue")} · ${copy("Hata", "Error")}`
                 : `${copy("{p0} sırada", "{p0} queued", { p0: rows.length })}${unconfirmed
                   ? ` · ${copy("Kontrol gerekiyor", "Needs review")}`
@@ -239,13 +244,13 @@ export function SessionQueue({
                     ? ` · ${copy("Kabul edilmedi", "Not accepted")}`
                   : queue.data?.status !== "active" || queue.data?.editingId
                     ? ` · ${copy("Duraklatıldı", "Paused")}` : ""}`}
-              accessibilityLabel={queue.error ? copy("Sıra yüklenemedi", "Queue unavailable")
+              accessibilityLabel={queueReadError ? copy("Sıra yüklenemedi", "Queue unavailable")
                 : `${copy("{p0} sırada", "{p0} queued", { p0: rows.length })} · ${queueState}`}
-              tone={queue.error || queue.changeError || error || unconfirmed || stage?.stage === "rejected" ? "danger" : "quiet"}
+              tone={queueReadError || queue.changeError || error || unconfirmed || stage?.stage === "rejected" ? "danger" : "quiet"}
               style={{ minHeight: 48 }}
               onPress={() => setOpen(true)}
             >
-              <ListOrdered size={14} color={queue.error || error ? colors.danger : colors.muted} />
+              <ListOrdered size={14} color={queueReadError || error ? colors.danger : colors.muted} />
             </Button>
           ) : null}
           {accepted ? (
@@ -261,8 +266,8 @@ export function SessionQueue({
           ? copy("Bu ekran açıkken sırayla gönderilir", "Sends in order while this screen is open")
           : queue.data?.status === "active" ? copy("Başka bir istemci sırayı sürdürebilir", "Another client may continue this queue")
             : copy("Duraklatıldı · göndermek için aç", "Paused · open to send"),
-          error: queue.error || queue.changeError || error,
-          errorMessage: composerDeliveryError(queue.error || queue.changeError || error, copy),
+          error: queueReadError || queue.changeError || error,
+          errorMessage: composerDeliveryError(queueReadError || queue.changeError || error, copy),
           warning: unconfirmed ? (running
             ? copy("Sağlayıcı henüz yanıt vermedi ve bu mesajı yine de iletebilir. Yeniden göndermek mesajı çoğaltabilir. Bekleyin veya turu durdurun.", "The provider has not answered yet and may still deliver this message. Sending it again could duplicate it. Wait, or stop the turn.")
             : copy("Önce konuşmayı kontrol edin. Yeniden göndermek, iletilmiş bir mesajı çoğaltır. Kuyrukta tutmak kuyruğu duraklatır ve mesajı yeniden göndermez.", "Check the conversation first. Sending again duplicates a message that was delivered. Keeping it queued pauses the queue and does not resend it.")) : undefined,

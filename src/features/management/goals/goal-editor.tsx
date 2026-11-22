@@ -31,6 +31,8 @@ import { GoalCreateDelivery } from "./create-delivery";
 import { useConnectionScope } from "@/state/connection-scope";
 import type { CrewDirectory } from "@/remote/contracts/crews";
 import { validateCrewDirectory } from "../crews/model";
+import { useReadRetryNotice } from "@/ui/query-state";
+import { isTransientConnectionError } from "@/state/query-retry";
 
 export function GoalEditor({ projectId, projects, providers, create, busy, onClose }: GoalEditorProps) {
   const copy = useCopy();
@@ -64,6 +66,9 @@ export function GoalEditor({ projectId, projects, providers, create, busy, onClo
     { projectId: draft.leadProjectId }, { enabled: crewsSupported,
       queryFn: async (client, signal) => validateCrewDirectory(await client.request("crews.list", { projectId: draft.leadProjectId }, { signal }), draft.leadProjectId) });
   const crewDirectory = crewsSupported ? crews.data : undefined;
+  // A dropped link refetches itself; a refresh warning waits out the same grace as other reads.
+  const crewsGraceElapsed = useReadRetryNotice(crews.isError && isTransientConnectionError(crews.error), machine?.id ?? null);
+  const crewsRefreshFailed = crews.isError && (!isTransientConnectionError(crews.error) || crewsGraceElapsed);
   const crewValid = !draft.crewDefinitionId || (crewsSupported && crews.isSuccess && crewDirectory?.definitions.some(crew => crew.id === draft.crewDefinitionId));
   const update = (patch: Partial<HostGoalInput>) => {
     if (!busy && !delivery.busy && !delivery.pending) form.patch(patch);
@@ -121,7 +126,7 @@ export function GoalEditor({ projectId, projects, providers, create, busy, onClo
       </Section>
       <Section title={copy("Çalışan", "Worker")}>
         {crewsSupported && crewDirectory === undefined && <QueryState query={crews} loading="inline" />}
-        {crewsSupported && crewDirectory !== undefined && crews.isError && <Notice tone="warning"
+        {crewsSupported && crewDirectory !== undefined && crewsRefreshFailed && <Notice tone="warning"
           message={copy("Ekip listesi yenilenemedi. Seçiminiz korunur; kaydetmeden önce yeniden deneyin.", "The crew list could not be refreshed. Your selection is kept; retry before saving.")}
           retryLabel={copy("Yeniden dene", "Retry")} retrying={crews.isFetching}
           onRetry={() => { if (opening.isCurrent() && !crews.isFetching) void crews.refetch().catch(() => {}); }} />}

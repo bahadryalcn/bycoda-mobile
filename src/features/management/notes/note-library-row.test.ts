@@ -9,7 +9,10 @@ const fixture = vi.hoisted(() => ({
   connection: { token: "computer-a", isCurrent: () => true },
   allowed: true,
   showToast: vi.fn(),
+  clipboard: { copy: vi.fn(), inFlight: false, busy: false, copied: false, error: null as Error | null },
 }));
+vi.mock("@/ui/use-clipboard-feedback", () => ({ useClipboardFeedback: () => fixture.clipboard }));
+vi.mock("lucide-react-native/icons/copy", () => ({ default: () => null }));
 vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => fixture.connection }));
 vi.mock("@/ui/private-access", () => ({
   usePrivateContentAccess: () => ({ allowed: fixture.allowed, check: () => fixture.allowed }),
@@ -23,7 +26,7 @@ vi.mock("./note-summary-row", () => ({
 vi.mock("@/ui/swipe-actions", () => ({
   SwipeActions: ({ actions, children, disabled }: PropsWithChildren<{ actions: SwipeRowAction[]; disabled: boolean }>) =>
     h("div", null, children, ...actions.map((action) =>
-      h("button", { key: action.key, "data-action": "swipe", disabled, onClick: action.onPress }, action.label))),
+      h("button", { key: action.key, "data-action": action.key === "delete" ? "swipe" : `swipe-${action.key}`, disabled, onClick: action.onPress }, action.label))),
 }));
 vi.mock("@/ui/primitives", () => ({
   Body: ({ children }: PropsWithChildren) => h("p", null, children),
@@ -33,7 +36,7 @@ vi.mock("@/ui/primitives", () => ({
     h("button", { "data-action": "confirm", onClick: onSubmit }, submitLabel),
   ActionMenu: ({ actions }: { actions: SwipeRowAction[] }) =>
     h("div", null, ...actions.map((action) =>
-      h("button", { key: action.key, "data-action": "menu", disabled: action.disabled, onClick: action.onPress }, action.label))),
+      h("button", { key: action.key, "data-action": action.key === "delete" ? "menu" : `menu-${action.key}`, disabled: action.disabled, onClick: action.onPress }, action.label))),
 }));
 
 import { NoteLibraryRow } from "./note-library-row";
@@ -49,6 +52,7 @@ beforeEach(() => {
   fixture.connection = { token: "computer-a", isCurrent: () => true };
   fixture.allowed = true;
   fixture.showToast.mockClear();
+  fixture.clipboard = { copy: vi.fn(), inFlight: false, busy: false, copied: false, error: null };
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -80,6 +84,24 @@ it.each(["swipe", "menu"])("requires explicit confirmation after selecting delet
   const confirm = button("confirm")!;
   act(() => { confirm.click(); confirm.click(); });
   expect(onDelete).toHaveBeenCalledExactlyOnceWith("note-1", 2);
+});
+
+it.each(["swipe-copy", "menu-copy"])("copies the note through %s and reports the result", (action) => {
+  const { render, click } = row();
+  click(action);
+  expect(fixture.clipboard.copy).toHaveBeenCalledOnce();
+  fixture.clipboard = { ...fixture.clipboard, copied: true };
+  render();
+  expect(fixture.showToast).toHaveBeenCalledExactlyOnceWith({ message: "Copied" });
+});
+
+it("offers copy without delete on a computer that cannot delete notes", () => {
+  const { button } = row();
+  act(() => root.render(h(NoteLibraryRow, {
+    note, machineName: "Studio", projectId: "project-a", busy: false, canDelete: false, onOpen: vi.fn(), onDelete: vi.fn(),
+  })));
+  expect(button("menu-copy")).not.toBeNull();
+  expect(button("menu")).toBeNull();
 });
 
 it("rejects confirmation after its reviewed revision changes", () => {

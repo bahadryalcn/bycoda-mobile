@@ -9,6 +9,7 @@ import Clock from "lucide-react-native/icons/clock";
 import { useCopy } from "@/ui/copy";
 import { activitySummaryQuery, splitMinutes } from "../model/activity-query";
 import { useAccount } from "./account-context";
+import { useGracedReadError } from "./use-graced-read-error";
 
 const currentPeriod = () => activitySummaryQuery(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
 
@@ -37,6 +38,7 @@ export function ActivitySection() {
     queryFn: () => runtime!.client.getActivitySummary({ query }),
     enabled: !!runtime && !!device,
   });
+  const summaryError = useGracedReadError(summary);
   const format = (minutes: number) => {
     const { hours, minutes: rest } = splitMinutes(minutes);
     return hours ? copy("{p0} sa {p1} dk", "{p0}h {p1}m", { p0: hours, p1: rest }) : copy("{p0} dk", "{p0}m", { p0: rest });
@@ -54,9 +56,9 @@ export function ActivitySection() {
             </NavigationGroup>
           </>
         ) : (
-          summary.isError ? (
+          summary.isError && summaryError ? (
             <ErrorNotice
-              error={summary.error}
+              error={summaryError}
               retrying={summary.isFetching}
               onRetry={() => void summary.refetch()}
               message={copy("Aktif süre şu an alınamadı.", "Active time could not be loaded right now.")}

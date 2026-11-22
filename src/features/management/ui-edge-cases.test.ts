@@ -26,6 +26,8 @@ vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
 vi.mock("./shared/record-bits", () => ({ useRelativeTime: () => () => "Yesterday" }));
 vi.mock("@/ui/message-text", () => ({ MessageText: ({ text }: { text: string }) => h("p", null, text) }));
 vi.mock("@/ui/number-field", () => ({ NumberField: ({ label, error, value }: { label: string; error?: string; value: string }) => h("label", { "data-field": label }, value, error ? h("span", { role: "alert" }, error) : null) }));
+vi.mock("@/ui/limit-presets", async () =>
+  (await import("@/ui/limit-presets.fixture")).limitFieldDoubles((await import("@/ui/number-field")).NumberField as never));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => h("div", null, children);
   return { Stack: Wrapper, Row: Wrapper, Section: Wrapper, NavigationGroup: Wrapper, PressableCard: Wrapper, Body: Wrapper,

@@ -23,6 +23,7 @@ import { useActiveMachine } from "@/state/machines";
 import { useGitActions } from "./git-actions";
 import { GitBranchesPanel } from "./git-branches";
 import { GitChangeGroupHeader, GitCommitBar, GitCommitPanel } from "./git-changes";
+import { gitPushTarget } from "./git-commit-model";
 import { useGitCommitGeneration } from "./use-git-commit-generation";
 import { GitConfirmationCard } from "./git-confirmation";
 import { GitDiffPanel } from "./git-diff";
@@ -190,6 +191,8 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
         branch: data?.branch ?? null,
         message,
         files: reviewFiles(stageAll),
+        pushTarget: gitPushTarget(data?.upstream, data?.remote, data?.branch),
+        ahead: data?.ahead ?? 0,
       },
     };
     stageAllReview.current = stageAll ? next : null;

@@ -102,7 +102,11 @@ export function useGitActions({ projectId, cwd, root }: GitScope) {
     fetch: () => exclusive(fetch),
     executeConfirmation: (confirmation: GitConfirmation, message: string, stageAll = false) =>
       exclusive(() =>
-        executeConfirmation(confirmation, confirmation.context?.message ?? message, stageAll),
+        executeConfirmation(confirmation, confirmation.context?.message ?? message, stageAll).catch((error: unknown) => {
+          // A failed step can still have changed Git (stage-all before commit, a push with a lost reply).
+          void refreshProject();
+          throw error;
+        }),
       ),
   };
 }

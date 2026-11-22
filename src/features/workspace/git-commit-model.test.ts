@@ -1,7 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { gitCommitBlock } from "./git-commit-model";
+import { gitAheadCount, gitBehindCount, gitChangedCount, gitCommitAction, gitCommitBlock, gitMergeSuggestion, gitPushTarget } from "./git-commit-model";
+
+it("applies one smart-commit rule to every commit button", () => {
+  const input = { message: "Fix", hasConflicts: false, hasOperation: false };
+  expect(gitCommitAction({ ...input, files: [{ staged: false, unstaged: true }] })).toMatchObject({ stageAll: true, disabled: false });
+  expect(gitCommitAction({ ...input, files: [{ staged: true, unstaged: false }, { staged: false, unstaged: true }] })).toMatchObject({ stageAll: false, disabled: false });
+  expect(gitCommitAction({ ...input, files: [] })).toMatchObject({ block: "clean", disabled: true });
+});
+
+it("keeps a typed commit message when a suggestion is applied", () => {
+  expect(gitMergeSuggestion("", "Add login")).toBe("Add login");
+  expect(gitMergeSuggestion("  ", "Add login")).toBe("Add login");
+  expect(gitMergeSuggestion("WIP fix\n", "Add login")).toBe("WIP fix\n\nAdd login");
+});
 
 const ready = { message: "Fix", stagedCount: 1, hasConflicts: false, hasOperation: false };
+
+it("uses the singular for one commit or file and the plural otherwise", () => {
+  const copy = (_tr: string, en: string, values?: Record<string, string | number>) =>
+    en.replace(/\{(p\d)\}/g, (_match, key: string) => String(values?.[key]));
+  expect(gitAheadCount(1, copy)).toBe("1 commit to push");
+  expect(gitAheadCount(2, copy)).toBe("2 commits to push");
+  expect(gitBehindCount(1, copy)).toBe("Get 1 new commit");
+  expect(gitBehindCount(3, copy)).toBe("Get 3 new commits");
+  expect(gitChangedCount(1, 0, copy)).toBe("1 file changed, 0 staged");
+  expect(gitChangedCount(3, 1, copy)).toBe("3 files changed, 1 staged");
+});
+
+it("names the exact push destination, including a branch that has no upstream yet", () => {
+  expect(gitPushTarget("origin/release", "origin", "main")).toBe("origin/release");
+  expect(gitPushTarget(null, "origin", "feature")).toBe("origin/feature");
+  expect(gitPushTarget(null, "origin", null)).toBe("origin");
+  expect(gitPushTarget(null, null, "feature")).toBeNull();
+});
 
 it("allows Commit only when a message and staged files exist without conflicts or a running operation", () => {
   expect(gitCommitBlock(ready)).toBeUndefined();

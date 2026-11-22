@@ -1,11 +1,11 @@
 import type { Block } from "@/domain/types";
-import { activityState, activityTitle } from "./transcript-model";
+import { activityTitle, agentRunState, type AgentRunState } from "./transcript-model";
 import { subagentNow } from "./run-status-model";
 
 export type AgentEntry = {
   id: string;
   name: string;
-  state: ReturnType<typeof activityState> | "interrupted";
+  state: AgentRunState | "interrupted";
   startedAt?: number;
   endedAt?: number;
   /** Agent type and model, e.g. "explorer · gpt-5". */
@@ -23,8 +23,8 @@ export function listAgents(blocks: readonly Block[] | undefined): AgentEntry[] {
   for (const block of blocks ?? []) {
     const run = block.agentRun;
     if (!run || block.internal) continue;
-    const state = activityState(block);
-    const report = state === "running" ? undefined : squash(block.tool?.detail);
+    const state = agentRunState(block);
+    const report = state === "running" || state === "queued" ? undefined : squash(block.tool?.detail);
     entries.push({
       id: block.id,
       name: run.name || activityTitle(block),
@@ -46,8 +46,9 @@ export type AgentListItem =
 /** Group Workflow members by call and phase while retaining standalone status groups. */
 export function groupAgents(entries: readonly AgentEntry[], running: string, finished: string): AgentListItem[] {
   const standalone = entries.filter((entry) => !entry.workflow);
-  const active = standalone.filter((entry) => entry.state === "running");
-  const rest = standalone.filter((entry) => entry.state !== "running");
+  const unfinished = (entry: AgentEntry) => entry.state === "running" || entry.state === "queued";
+  const active = standalone.filter(unfinished);
+  const rest = standalone.filter((entry) => !unfinished(entry));
   const out: AgentListItem[] = [];
   if (active.length && rest.length) out.push({ kind: "heading", id: "h:running", label: running });
   out.push(...active.map((entry): AgentListItem => ({ kind: "agent", id: entry.id, entry })));

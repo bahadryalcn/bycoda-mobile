@@ -8,7 +8,6 @@ import {
   NavigationRow,
   SearchField,
   SelectField,
-  IdentifierField,
   Sheet,
   FormActions,
 } from "@/ui/primitives";
@@ -94,8 +93,8 @@ export function ModelPicker({
   const [search, setSearch] = useState("");
   const labels = settingLabels(copy);
   const rows = useMemo(
-    () => modelRows(models, model, copy("bağlam", "context")),
-    [models, model, copy],
+    () => modelRows(models, model),
+    [models, model],
   );
   const filtered = useMemo(() => filterSelection(rows, search, locale), [rows, search, locale]);
   const selected = models.find((entry) => entry.id === model || entry.nativeId === model);
@@ -110,6 +109,8 @@ export function ModelPicker({
     (item, index) => choices.findIndex((other) => other.provider === item.provider) === index,
   );
   const accounts = choices.filter((item) => item.provider === choice?.provider);
+  const singleAccount = !unavailableAccount && accounts.length === 1 && choice?.accountId
+    ? choice.label : undefined;
   const label = (text: string) => labels[text] ?? text;
   const grouped = groupedSettings(selected);
   const providerIds = useMemo(() => [...new Set(choices.map((item) => item.provider))], [choices]);
@@ -162,13 +163,15 @@ export function ModelPicker({
             dirty={dirty}
             disabled={!dirty || disabled || unavailableAccount || saveDisabled}
           />
-        ) : undefined
+        ) : (
+          <FormActions submitLabel={copy("Tamam", "Done")} onSubmit={close} />
+        )
       }
     >
       <View style={{ gap: space.lg }}>
         {notice ? <View>{notice}</View> : null}
         {providers.length === 1 && choice ? (
-          <Body muted>{providerName(choice.provider)}</Body>
+          <Body muted>{[providerName(choice.provider), singleAccount].filter(Boolean).join(" · ")}</Body>
         ) : null}
         {providers.length > 1 ? (
           <SelectField
@@ -193,7 +196,7 @@ export function ModelPicker({
         {accounts.length > 1 || unavailableAccount ? (
           <SelectField
             label={copy("Hesap", "Account")}
-            value={choice?.key ?? accounts[0]!.key}
+            value={choice?.key ?? accounts[0]?.key ?? ""}
             options={[
               ...(unavailableAccount && choice
                 ? [{ value: choice.key, label: choice.label, disabled: true }]
@@ -216,12 +219,11 @@ export function ModelPicker({
             }}
           />
         ) : null}
-        {accounts.length === 1 && !unavailableAccount ? (
+        {providers.length > 1 && singleAccount ? (
           <Body muted>
-            {copy("Hesap", "Account")}: {accounts[0]!.label}
+            {copy("Hesap", "Account")}: {singleAccount}
           </Body>
         ) : null}
-        <Body>{selected?.name ?? model}</Body>
         {settingRows.map(field())}
         <View style={{ gap: space.xs }}>
           {searchable ? (
@@ -237,7 +239,7 @@ export function ModelPicker({
                 <NavigationRow
                   key={item.value}
                   label={item.label}
-                  detail={item.detail}
+                  icon={choice ? <ProviderAccountMark provider={choice.provider} size={18} /> : undefined}
                   selected={item.selected}
                   disabled={disabled || unavailableAccount}
                   onPress={() => {
@@ -262,14 +264,6 @@ export function ModelPicker({
             />
           )}
         </View>
-        <Disclosure label={copy("Özel model kimliği", "Custom model ID")}>
-          <IdentifierField label={copy("Model kimliği", "Model ID")} value={model}
-            editable={!disabled && !unavailableAccount}
-            onChangeText={(id) => {
-              const target = models.find(entry => entry.id === id || entry.nativeId === id);
-              onChange(id, carryCrossDelegation(settings, sparseSettings ? {} : modelDefaults(target)));
-            }} />
-        </Disclosure>
         {groups.map(({ group, items }) => (
           <Disclosure key={group} label={label(SETTING_GROUP_TITLE[group])}>
             <View style={{ gap: space.lg }}>{items.map(field())}</View>

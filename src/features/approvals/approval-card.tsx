@@ -147,8 +147,8 @@ export function ApprovalCard({
             />
             <Button
               label={copy("Reddet", "Deny")}
-              tone="quiet"
-              style={{ alignSelf: "center" }}
+              tone="secondary"
+              fullWidth
               disabled={held}
               onPress={() => onDecide(approval, false)}
             />

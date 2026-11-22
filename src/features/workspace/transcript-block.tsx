@@ -1,7 +1,6 @@
 import { memo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
-import Pencil from "lucide-react-native/icons/pencil";
 import Terminal from "lucide-react-native/icons/terminal";
 import ListChecks from "lucide-react-native/icons/list-checks";
 import { Badge, Body, Button, QueryState, Row, Sheet } from "@/ui/primitives";
@@ -139,6 +138,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
     value.orchestration?.title ||
     value.shell?.command ||
     title;
+  const canRewind = !!onRewind && !value.draft && !disabled;
   const canReport = value.role === "assistant" && !value.streaming && !!text.trim();
   const canAct =
     !value.streaming && (!!text.trim() || !!value.attachments?.length || !!value.image);
@@ -483,19 +483,14 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             {contents}
             {planAction}
           </ChatMessage>
-          {value.role === "user" && (value.startedAt || canAct || onRewind) ? (
+          {value.role === "user" && (value.startedAt || canAct || canRewind) ? (
             <Row style={{ justifyContent: "flex-end", flexWrap: "nowrap", gap: space.xxs }}>
               {value.startedAt ? (
                 <Body muted style={typography.metadata}>
                   {formatMessageTime(value.startedAt, locale, copy)}
                 </Body>
               ) : null}
-              {onRewind && !value.draft ? (
-                <ChatAction label={copy("Buradan düzenle", "Edit from here")} disabled={disabled} onPress={onRewind}>
-                  <Pencil size={15} color={colors.subtle} />
-                </ChatAction>
-              ) : null}
-              {canAct ? (
+              {canAct || canRewind ? (
                 <ChatAction
                   label={copy("Mesaj seçenekleri", "Message options")}
                   onPress={() => setActions(true)}
@@ -536,6 +531,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           responseText={responseText?.(block.id)}
           context={context}
           reportable={canReport}
+          onRewind={canRewind ? onRewind : undefined}
           onClose={() => setActions(false)}
         />
       ) : null}

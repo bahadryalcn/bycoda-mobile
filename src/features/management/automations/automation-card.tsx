@@ -2,13 +2,11 @@ import { useRef } from "react";
 import { agentPresentation } from "../shared/agent-presentation";
 import { RecordCard } from "@/ui/record-card";
 import { router } from "expo-router";
-import Power from "lucide-react-native/icons/power";
-import Pause from "lucide-react-native/icons/pause";
 import Pencil from "lucide-react-native/icons/pencil";
 import History from "lucide-react-native/icons/history";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import Trash2 from "lucide-react-native/icons/trash-2";
-import { ActionMenu, Body, Button, ErrorNotice, MutationState } from "@/ui/primitives";
+import { ActionMenu, Body, Button, ErrorNotice, MutationState, Row } from "@/ui/primitives";
 import { HoursOverview } from "@/ui/week-hours";
 import { WEEK_ORDER, weekRunBlocks } from "@/ui/week-hours-model";
 import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
@@ -72,17 +70,13 @@ export function AutomationCard({
       deleting ? "destructive" : "default",
     );
   };
-  // Edit, history, last session and delete are secondary; they live in the overflow menu.
+  const toggling = save.isPending && (save.variables?.automation as { id?: string } | undefined)?.id === item.id;
+  const toggle = () =>
+    save.mutate({
+      automation: { ...item, enabled: !item.enabled, expectedConfiguration: item },
+    });
+  // Pause/enable is a frequent action and sits beside Run now; edit, history, last session and delete are secondary.
   const menu = [
-    {
-      key: "toggle", icon: glyph(item.enabled ? Pause : Power),
-      label: item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable"),
-      disabled: busy || editorOpen,
-      onPress: () =>
-        save.mutate({
-          automation: { ...item, enabled: !item.enabled, expectedConfiguration: item },
-        }),
-    },
     {
       key: "edit", icon: glyph(Pencil),
       label: copy("Düzenle", "Edit"),
@@ -130,8 +124,12 @@ export function AutomationCard({
         !!relative(item.lastRunAt) && copy("Son çalışma {p0}", "Last run {p0}", { p0: relative(item.lastRunAt) }),
       ])}
       preview={item.prompt ? <Body muted numberOfLines={2}>{item.prompt}</Body> : null}
-      footer={<Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running}
-        disabled={busy || editorOpen} onPress={() => review("run")} />}
+      footer={<Row>
+        <Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running} style={{ flexGrow: 1 }}
+          disabled={busy || editorOpen} onPress={() => review("run")} />
+        <Button tone="secondary" label={item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable")} style={{ flexGrow: 1 }}
+          busy={toggling} disabled={busy || editorOpen || toggling} onPress={toggle} />
+      </Row>}
       menu={<RecordTrailing>
         <ActionMenu label={copy("Otomasyon işlemleri", "Automation actions")}
           busy={(save.isPending && (save.variables?.automation as { id?: string } | undefined)?.id === item.id) || (remove.isPending && remove.variables?.automationId === item.id)} actions={menu} />

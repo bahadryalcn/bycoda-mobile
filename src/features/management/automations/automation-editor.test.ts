@@ -24,6 +24,8 @@ vi.mock("./schedule-preview", () => ({ SchedulePreview: () => null }));
 vi.mock("@/ui/number-field", async () => ({
   NumberField: (await import("@/ui/primitives")).Field,
 }));
+vi.mock("@/ui/limit-presets", async () =>
+  (await import("@/ui/limit-presets.fixture")).limitFieldDoubles((await import("@/ui/number-field")).NumberField as never));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
@@ -100,9 +102,9 @@ it.each(["0", "1", "10080", "10081"])(
           }),
         ),
       );
-      await act(async () => fixture.fields.get("Minimum gap (minutes)")!.onChangeText(text));
+      await act(async () => fixture.fields.get("Minimum gap")!.onChangeText(text));
       const valid = text === "1" || text === "10080";
-      expect(fixture.fields.get("Minimum gap (minutes)")?.error).toBe(
+      expect(fixture.fields.get("Minimum gap")?.error).toBe(
         valid ? undefined : "Enter minutes from 1 to 10080.",
       );
       expect(fixture.submit?.disabled).toBe(!valid);

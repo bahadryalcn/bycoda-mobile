@@ -564,7 +564,11 @@ When the computer is connected and project visibility still needs a sync,
 the filter offers **Refresh** and explains how to sync from desktop Bycoda.
 
 With a connected computer, tap the center **New session** action to choose a
-project, or hold it for quick actions. The separate project action adds a project.
+project, or hold it for quick actions. The selected project is marked in the list.
+Open the model row to choose an agent, account, and model before tapping
+**Start session**. The separate project action adds a project.
+Model lists use the connected computer's catalogue. A model already saved on a
+session or task stays selected if it no longer appears in the catalogue.
 Opening the same project or conversation again reuses its destination. Registered
 projects remain independent even when one repository is stored inside another.
 
@@ -844,6 +848,9 @@ preserves the binding; selecting a fixed model explicitly replaces that binding.
 Sessions on supporting Hosts show an unread accent dot and a stronger title after new assistant output, a finished turn or a new input request. Mark as read/unread is shared across devices. Opening a visible foreground conversation marks observed activity read after a short debounce; a manual unread flag set while it is already open remains until the next opening. Metadata changes do not count as agent activity.
 
 Snooze offers one hour, the next local 18:00, tomorrow at 09:00 and seven calendar days later at 09:00. Project and active lists keep snoozed sessions in a folded Snoozed shelf; the global Sessions filter can show them separately. Rows show the local wake time. Deadlines return sessions automatically, new input requests wake them early, and Wake now clears the deadline. Unsupported Hosts hide the attention actions. Share beside Copy link opens the native share sheet with the title and canonical session link.
+
+In **Sessions > Filters**, tap an open dropdown again to close it. Tap a switch
+or its label to change it, then tap **Apply** to update the list.
 
 
 ### Home-screen widgets

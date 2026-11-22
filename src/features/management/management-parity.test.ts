@@ -72,6 +72,8 @@ vi.mock("@/state/connection-scope", () => ({
 vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
 vi.mock("./shared/format", () => ({ stamp: (value: number) => `date:${value}` }));
 vi.mock("@/ui/number-field", async () => ({ NumberField: (await import("@/ui/primitives")).Field }));
+vi.mock("@/ui/limit-presets", async () =>
+  (await import("@/ui/limit-presets.fixture")).limitFieldDoubles((await import("@/ui/number-field")).NumberField as never));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Section: wrapper, NavigationGroup: wrapper, NumberField: () => null,
@@ -329,10 +331,11 @@ it("shows the review note counts only in the disclosure heading", async () => {
   expect(container.textContent).toContain("Resolved finding");
 });
 
-it("places Run now in both management card footers and uses a separate enable icon", () => {
+it("keeps Run now and Pause or Enable side by side in both management card footers", () => {
   for (const path of ["./automations/automation-card.tsx", "./stewards/steward-card.tsx"]) {
     const card = readFileSync(new URL(path, import.meta.url), "utf8");
-    expect(card).toMatch(/footer=\{<Button tone="primary" label=\{copy\("Şimdi çalıştır", "Run now"\)/);
-    expect(card).toContain("glyph(item.enabled ? Pause : Power)");
+    expect(card).toMatch(/footer=\{<Row>\s*<Button tone="primary" label=\{copy\("Şimdi çalıştır", "Run now"\)/);
+    expect(card).toContain('<Button tone="secondary" label={item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable")}');
+    expect(card).not.toContain('key: "toggle"');
   }
 });

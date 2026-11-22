@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ rename: vi.fn(), revoke: vi.fn(), confirm: vi.fn(), sheet: null as null | { dirty?: boolean; dismissible?: boolean; onClose(): void }, form: null as null | { dirty?: boolean; busy?: boolean } }));
 const items = [{ id: "desktop", name: "Work computer", platform: "windows", osVersion: "11", appVersion: "1.0", channel: "stable", kind: "desktop", createdAt: "2026-11-13T00:00:00Z", lastSeenAt: "2026-11-13T00:00:00Z", revokedAt: null }];
+vi.mock("./use-graced-read-error", () => ({ useGracedReadError: (query: { error: unknown }) => query.error ?? null }));
 vi.mock("./account-context", () => ({ useAccount: () => ({ runtime: { client: { listDevices: async () => ({ items }), renameDevice: fixture.rename, revokeDevice: fixture.revoke } }, device: { id: "phone" } }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: fixture.confirm }));

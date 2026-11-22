@@ -20,6 +20,7 @@ import { RecordConfirmationSheet, useRecordConfirmation } from "../shared/use-re
 export function GoalCard({
   goal,
   projects,
+  scopedProjectId,
   progress,
   tasks,
   busy,
@@ -40,6 +41,7 @@ export function GoalCard({
   const canDelete = ["done", "cancelled"].includes(goal.status);
   const active = goal.status === "planning" || goal.status === "running";
   const cancelling = cancel.isPending && cancel.variables?.goalId === goal.id;
+  const repeatsScope = goal.projectIds.length === 1 && goal.projectIds[0] === scopedProjectId;
   const stop = () => confirm(
     copy("Epici durdur", "Cancel epic"),
     copy(
@@ -55,7 +57,7 @@ export function GoalCard({
         id: goal.plannerSessionId, machineId: machine.id, projectId: goal.leadProjectId,
       } });
   };
-  // Active work keeps Stop direct; inactive cancellation remains secondary.
+  // Active work keeps a compact direct Stop beside the menu; inactive cancellation stays in it.
   const menu = [
     canCancel && {
       key: "settings", icon: glyph(Settings2),
@@ -105,7 +107,7 @@ export function GoalCard({
         progress && progress.total > 0
           ? copy("{p0}/{p1} görev bitti", "{p0}/{p1} tasks done", { p0: progress.done, p1: progress.total })
           : taskSummary,
-        goal.projectIds.length === 1 && projects.find((project) => project.id === goal.projectIds[0])?.name,
+        !repeatsScope && goal.projectIds.length === 1 && projects.find((project) => project.id === goal.projectIds[0])?.name,
         goal.projectIds.length > 1 && copy("{p0} proje", "{p0} projects", { p0: goal.projectIds.length }),
         relative(goal.updatedAt) && copy("Güncellendi {p0}", "Updated {p0}", { p0: relative(goal.updatedAt) }),
       ])}
@@ -115,48 +117,39 @@ export function GoalCard({
         {goal.plannerSessionId ? <IconButton label={copy("Planlayıcı oturumu", "Planner session")} onPress={openPlanner}>
           <MessageSquare size={18} color={colors.accent} />
         </IconButton> : null}
+        {active ? <IconButton label={copy("Epici durdur", "Cancel epic")} tone="danger" busy={cancelling} disabled={busy} onPress={stop}>
+          <Square size={18} color={colors.danger} />
+        </IconButton> : null}
         <ActionMenu label={copy("Epic işlemleri", "Epic actions")}
           busy={(!active && cancelling) || (remove.isPending && remove.variables?.goalId === goal.id)} actions={menu} />
       </RecordTrailing>}
-      footer={active || goal.status === "awaiting-approval" ? (
-        <Row>
-          {active && (
-            <Button
-              label={copy("Epici durdur", "Cancel epic")}
-              tone="danger"
-              busy={cancelling}
-              disabled={busy}
-              onPress={stop}
-            />
-          )}
-          {goal.status === "awaiting-approval" && (
-            <Button
-              label={copy("Planı onayla", "Approve plan")}
-              tone="success"
-              busy={approve.isPending && approve.variables?.goalId === goal.id}
-              disabled={busy}
-              onPress={() =>
-                confirm(
-                  copy("Planı onayla", "Approve plan"),
-                  copy(
-                    "Plandaki görevler bilgisayarda çalıştırılmaya başlanacak.",
-                    "The planned tasks will start running on the computer.",
-                  ),
-                  copy("Onayla", "Approve"),
-                  () => approve.mutate({ goalId: goal.id }), "default",
-                )
-              }
-            />
-          )}
-        </Row>
+      footer={goal.status === "awaiting-approval" ? (
+        <Button
+          label={copy("Planı onayla", "Approve plan")}
+          tone="success"
+          fullWidth
+          busy={approve.isPending && approve.variables?.goalId === goal.id}
+          disabled={busy}
+          onPress={() =>
+            confirm(
+              copy("Planı onayla", "Approve plan"),
+              copy(
+                "Plandaki görevler bilgisayarda çalıştırılmaya başlanacak.",
+                "The planned tasks will start running on the computer.",
+              ),
+              copy("Onayla", "Approve"),
+              () => approve.mutate({ goalId: goal.id }), "default",
+            )
+          }
+        />
       ) : null}
       details={<>
         <Body>{goal.prompt}</Body>
-        <Body muted style={uiStyles.caption}>
+        {repeatsScope ? null : <Body muted style={uiStyles.caption}>
           {goal.projectIds
             .map((id) => projects.find((project) => project.id === id)?.name ?? id)
             .join(" · ")}
-        </Body>
+        </Body>}
         {tasks?.length ? <View style={{ gap: space.xs }}>
           <Body muted style={uiStyles.caption}>{copy("Görevler", "Tasks")}</Body>
           {tasks.map((task) => <Row key={task.id} style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
@@ -169,7 +162,7 @@ export function GoalCard({
             id: task.key,
             title: task.title,
             description: task.prompt,
-            metadata: [task.project, task.dependsOn.length
+            metadata: [repeatsScope ? "" : task.project, task.dependsOn.length
               ? `${copy("Bağımlılıklar", "Depends on")}: ${task.dependsOn.join(", ")}` : ""].filter(Boolean).join(" · "),
           }))} />
         </View> : null}

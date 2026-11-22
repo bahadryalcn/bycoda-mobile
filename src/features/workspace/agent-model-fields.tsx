@@ -7,13 +7,14 @@ import {
   settingLabel,
 } from "./agent-model-settings";
 import { View } from "react-native";
-import { Disclosure, IdentifierField, SectionHeader, SelectField } from "@/ui/primitives";
+import { Disclosure, SectionHeader, SelectField } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import { SettingIcon } from "./agent-option-icons";
 import { useCopy } from "@/ui/copy";
 import { modelDefaults } from "./catalog";
 import { settingLabels } from "./setting-labels";
 import { ModelPickerField } from "./model-picker-field";
+import { modelRows } from "./model-picker-model";
 import type { ProviderChoice } from "./provider-choices";
 import type { HostModelCatalog } from "./wire";
 
@@ -48,15 +49,7 @@ export function AgentModelFields({
   const copy = useCopy();
   const labels = settingLabels(copy);
   const selected = models.find((entry) => entry.id === model || entry.nativeId === model);
-  // The id is only a second line when it adds something the name does not already say.
-  const detailFor = (name: string, id: string) =>
-    name.trim().toLowerCase() === id.trim().toLowerCase() ? undefined : id;
-  const options = models.map((entry) => ({
-    value: entry.id,
-    label: entry.name,
-    detail: detailFor(entry.name, entry.nativeId || entry.id),
-  }));
-  if (model && !selected) options.unshift({ value: model, label: model, detail: undefined });
+  const options = provider ? [] : modelRows(models, model);
   const groups = groupedSettings(selected);
   // Reasoning, Fast and Thinking lead; the rarer model options and the groups below are secondary.
   // The form reads downward; keep Reasoning first even when the mirrored desktop
@@ -148,17 +141,6 @@ export function AgentModelFields({
           ) : null}
         </Disclosure>
       ) : null}
-      {!provider ? <Disclosure label={copy("Özel model kimliği", "Custom model ID")}>
-        <IdentifierField
-          label={copy("Model kimliği", "Model ID")}
-          value={model}
-          editable={!disabled && !unavailableAccount}
-          onChangeText={(id) => {
-            const target = models.find((entry) => entry.id === id || entry.nativeId === id);
-            onChange(id, carryCrossDelegation(settings, sparseSettings ? {} : modelDefaults(target)));
-          }}
-        />
-      </Disclosure> : null}
     </View>
   );
 }

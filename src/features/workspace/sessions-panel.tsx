@@ -386,7 +386,10 @@ function ProjectSessionsConnection({
     searchOpen,
     hasSearch: !!search.trim(),
     toggleSearch: () => {
-      if (readable()) setSearchOpen((value) => !value);
+      if (!readable()) return;
+      // A closed field must not keep filtering the list out of sight.
+      if (searchOpen) setSearch("");
+      setSearchOpen(!searchOpen);
     },
     showCreateInHeader: !showEmptyCreate && (listQuery.data !== undefined || presentation === "error"),
     createDisabled: locked,

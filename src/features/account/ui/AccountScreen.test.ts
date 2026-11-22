@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { AccountScreen } from "./AccountScreen";
 const state = vi.hoisted(() => ({ signOut: vi.fn(), name: "👩🏽‍💻 Priya", me: { user: { displayName: "👩🏽‍💻 Priya", email: "priya@example.test" } } }));
+vi.mock("./use-graced-read-error", () => ({ useGracedReadError: (query: { error: unknown }) => query.error ?? null }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
 vi.mock("panelui-native/components/avatar", () => ({ Avatar: ({ fallback }: { fallback: string }) => h("span", { "data-avatar": fallback }) }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: {} }) }));

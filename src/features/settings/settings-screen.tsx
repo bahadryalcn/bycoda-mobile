@@ -200,10 +200,10 @@ export function SettingsScreen() {
             ]}
             onChange={(value) => { void dataSaverStore.getState().setDataSaver(value); }}
           />
-          {dataSaverError ? <Notice tone="warning" message={copy("Veri tasarrufu tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The data saver preference could not be read or saved. Select it again to retry.")} /> : null}
           <KeyboardSettings />
           <NavigationRow label={titles.widgets} icon={tile(LayoutGrid)} separator={false} onPress={() => setPanel("widgets")} />
         </NavigationGroup>
+        {dataSaverError ? <Notice tone="warning" message={copy("Veri tasarrufu tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The data saver preference could not be read or saved. Select it again to retry.")} /> : null}
         {appearanceError ? (
           <Notice
             tone="warning"

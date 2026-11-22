@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from "react";
-import ArrowDownToLine from "lucide-react-native/icons/arrow-down-to-line";
-import ArrowUpFromLine from "lucide-react-native/icons/arrow-up-from-line";
 import Eye from "lucide-react-native/icons/eye";
 import FileText from "lucide-react-native/icons/file-text";
+import Minus from "lucide-react-native/icons/minus";
+import Plus from "lucide-react-native/icons/plus";
 import Trash2 from "lucide-react-native/icons/trash-2";
 import { NavigationGroup, NavigationRow, Sheet } from "@/ui/primitives";
 import { SwipeActions, type SwipeRowAction } from "@/ui/swipe-actions";
@@ -35,8 +35,8 @@ export function GitFileSwipeRow({
   const [sheet, setSheet] = useState(false);
   const all = gitFileRowActions(file, staged);
   const icons: Record<GitFileRowAction, ReactNode> = {
-    stage: <ArrowDownToLine size={18} />,
-    unstage: <ArrowUpFromLine size={18} />,
+    stage: <Plus size={18} />,
+    unstage: <Minus size={18} />,
     preview: <Eye size={18} color={colors.muted} />,
     open: <FileText size={18} color={colors.muted} />,
     discard: <Trash2 size={18} />,

@@ -284,7 +284,7 @@ function ProjectsConnectionScreen({ machine, connection }: {
             />
           </View>
           <IconButton
-            label={copy("Proje görünümü", "Project view")}
+            label={copy("Liste seçenekleri", "List options")}
             expanded={optionsOpen}
             onPress={() => setOptionsOpen(true)}
           >
@@ -362,7 +362,7 @@ function ProjectsConnectionScreen({ machine, connection }: {
           running={running[project.id] ?? 0}
           activeAt={activeAt[project.id]}
           opening={openingId === project.id}
-          disabled={open.isPending}
+          disabled={open.isPending || !directoryReady}
           onPress={chooseById}
           onDetails={showDetails}
           onOpenView={openView}
@@ -378,6 +378,7 @@ function ProjectsConnectionScreen({ machine, connection }: {
       projectKinds,
       openingId,
       open.isPending,
+      directoryReady,
       showGroups,
       copy,
       updatePreferences,
@@ -423,7 +424,7 @@ function ProjectsConnectionScreen({ machine, connection }: {
       </SwipeActionsGroup>
       <Sheet
         visible={optionsOpen}
-        title={copy("Proje görünümü", "Project view")}
+        title={copy("Liste seçenekleri", "List options")}
         size="compact"
         onClose={() => setOptionsOpen(false)}
       >

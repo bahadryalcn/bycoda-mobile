@@ -12,6 +12,7 @@ import { channelEnabled, setChannel, withQuietHours } from "../model/notificatio
 import type { SaveControl } from "../model/notification-saves";
 import { useAccount } from "./account-context";
 import { useNotificationSaves } from "./use-notification-saves";
+import { useGracedReadError } from "./use-graced-read-error";
 
 const KEY = ["account", "notification-settings"] as const;
 const CHANNELS: { channel: Extract<NotificationChannel, "push" | "in_app">; tr: string; en: string }[] = [
@@ -33,6 +34,9 @@ const PUSH_DETAILS: SaveControl<boolean> = {
   write: (settings, value) => ({ ...settings, pushShowDetails: value }),
 };
 const QUIET: SaveControl<QuietHours | null> = { id: "quietHours", read: (settings) => settings.quietHours ?? null, write: withQuietHours };
+
+const OPTIONAL_EVENTS = NOTIFICATION_EVENTS.filter((event) => !event.mandatory);
+const MANDATORY_EVENTS = NOTIFICATION_EVENTS.filter((event) => event.mandatory);
 
 type QuietDraft = { on: boolean; start: string; end: string };
 
@@ -61,6 +65,7 @@ export function NotificationSettingsScreen() {
     },
     enabled: status === "signedIn" && !!runtime && !!device,
   });
+  const settingsError = useGracedReadError(settings);
   const labels: Record<NotificationEventKey, string> = {
     "account.new_device_sign_in": copy("Yeni cihazdan giriş", "Sign-in from a new device"),
     "agent.finished": copy("Agent tamamlandı", "Agent finished"),
@@ -123,7 +128,7 @@ export function NotificationSettingsScreen() {
   return (
     <Screen title={title}>
       <Stack>
-        <ErrorNotice error={settings.error} onRetry={() => void settings.refetch()} message={copy("Ayarlar alınamadı.", "Settings could not be loaded.")} />
+        <ErrorNotice error={settingsError} onRetry={() => void settings.refetch()} message={copy("Ayarlar alınamadı.", "Settings could not be loaded.")} />
         {failedCount > 0 ? (
           <Notice
             tone="danger"
@@ -140,15 +145,15 @@ export function NotificationSettingsScreen() {
             {CHANNELS.map(({ channel, tr, en }) => (
               <Section key={channel} title={copy(tr, en)}>
                 <Stack>
-                  {NOTIFICATION_EVENTS.map((event) => {
+                  {OPTIONAL_EVENTS.map((event) => {
                     const control = preferenceControl(event.key, channel);
                     return (
                       <ToggleField
                         key={event.key}
                         label={labels[event.key]}
-                        detail={event.mandatory ? copy("Güvenlik için zorunlu; kapatılamaz.", "Required for security; it cannot be turned off.") : failedText(control.id)}
-                        value={event.mandatory ? true : control.read(data)}
-                        disabled={event.mandatory || busy(control.id)}
+                        detail={failedText(control.id)}
+                        value={control.read(data)}
+                        disabled={busy(control.id)}
                         onChange={(value) => saves.save(control, value, put)}
                       />
                     );
@@ -156,6 +161,13 @@ export function NotificationSettingsScreen() {
                 </Stack>
               </Section>
             ))}
+            <Section title={copy("Güvenlik bildirimleri", "Security alerts")}>
+              <Stack>
+                {MANDATORY_EVENTS.map((event) => (
+                  <ToggleField key={event.key} label={labels[event.key]} detail={copy("Güvenlik için zorunlu; kapatılamaz.", "Required for security; it cannot be turned off.")} value disabled onChange={() => undefined} />
+                ))}
+              </Stack>
+            </Section>
             <Section title={copy("Bildirim ayrıntıları", "Push details")}>
               <ToggleField
                 label={copy("Bildirimde ayrıntıları göster", "Show details in push text")}

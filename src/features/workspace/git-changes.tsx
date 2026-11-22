@@ -9,14 +9,14 @@ import Square from "lucide-react-native/icons/square";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import GitCommitHorizontal from "lucide-react-native/icons/git-commit-horizontal";
-import { ActionMenu, Body, Button, Disclosure, ErrorNotice, IconButton, Input, Notice, PressableCard, Row } from "@/ui/primitives";
+import { Body, Button, Disclosure, ErrorNotice, IconButton, Input, Notice, PressableCard, Row } from "@/ui/primitives";
 import { HintLabel } from "@/ui/info-hint";
 import { decorativeSvgProps } from "@/ui/accessibility";
 import { metrics, space, fontSize, lineHeight } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
 import { GitFileRow } from "./git-file-row";
-import { gitCommitBlock, gitPrimaryAction, type GitCommitBlock } from "./git-commit-model";
+import { gitAheadCount, gitBehindCount, gitCommitAction, gitMergeSuggestion, gitPrimaryAction, type GitCommitBlock } from "./git-commit-model";
 import type { GitChangesPanelProps, GitCommitPanelProps } from "./git-types";
 import type { GitChangeGroup } from "./git-list-model";
 
@@ -56,15 +56,12 @@ export function GitChangeGroupHeader({ group, count, expanded, onToggle, onBulkA
         <Body muted selectable={false}>{countText}</Body>
       </PressableCard>
       {onBulkAction ? (
-        <ActionMenu
-          label={`${title}. ${copy("Diğer işlemler", "More actions")}`}
+        <Button
+          density="compact"
           reserveTouchTarget
-          actions={[{
-            key: "bulk",
-            label: staged ? copy("Tümünü çıkar", "Unstage all") : copy("Tümünü stage’e al", "Stage all"),
-            disabled: busy,
-            onPress: onBulkAction,
-          }]}
+          label={staged ? copy("Tümünü çıkar", "Unstage all") : copy("Tümünü stage’e al", "Stage all")}
+          disabled={busy}
+          onPress={onBulkAction}
         />
       ) : null}
     </Row>
@@ -129,9 +126,11 @@ function CommitMessageField({ message, generation, busy, onChange, placeholder }
           <Body selectable>{active.suggestion}</Body>
           <Button
             tone="secondary"
-            label={copy("Öneriyi kullan", "Use suggestion")}
+            label={message.trim()
+              ? copy("Öneriyi mesajımın altına ekle", "Add suggestion below my message")
+              : copy("Öneriyi kullan", "Use suggestion")}
             disabled={busy}
-            onPress={() => active.useSuggestion(onChange)}
+            onPress={() => active.useSuggestion((suggestion) => onChange(gitMergeSuggestion(message, suggestion)))}
           />
         </Notice>
       ) : null}
@@ -228,14 +227,19 @@ export function GitCommitPanel({
   const copy = useCopy();
   const numbers = new Intl.NumberFormat(useLocale());
   const stagedCount = index.files.filter((file) => file.staged).length;
-  const commitBlock = gitCommitBlock({
+  // Same smart-commit rule as the commit bar: nothing staged means "stage all & commit".
+  const commit = gitCommitAction({
     message,
-    stagedCount,
+    files: index.files,
     hasConflicts: !!index.conflicts?.length,
     hasOperation: !!index.operation,
   });
-  const commitReason = commitBlock ? commitBlockText(commitBlock, copy) : undefined;
-  const draftOnly = index.files.length === 0 && commitBlock === "staged";
+  const commitBlock = commit.block;
+  const commitReason = commitBlock && commitBlock !== "clean" ? commitBlockText(commitBlock, copy) : undefined;
+  const draftOnly = commitBlock === "clean";
+  const commitLabel = commit.stageAll
+    ? copy("Tümünü stage’e al ve commit et", "Stage all & commit")
+    : copy("Commit", "Commit");
   const messageField = (
     <CommitMessageField message={message} onChange={onMessageChange} busy={busy} generation={generation} />
   );
@@ -247,25 +251,26 @@ export function GitCommitPanel({
           stagedCount
             ? copy("{p0} dosya stage’de", "{p0} staged files", { p0: numbers.format(stagedCount) })
             : copy(
-                "Önce kaydedilecek dosyaları stage’e al.",
-                "Stage the files you want to record first.",
+                "Stage’de dosya yok; tüm değişiklikler commit’e eklenir.",
+                "Nothing is staged; all changes will be included in the commit.",
               )
         }
-        defaultExpanded={stagedCount > 0}
+        defaultExpanded={!commitBlock || commitBlock === "message"}
       >
         {messageField}
         <Button
-          label={copy("Commit", "Commit")}
+          label={commitLabel}
           accessibilityLabel={
-            commitReason && !busy ? `${copy("Commit", "Commit")}. ${commitReason}` : undefined
+            commitReason && !busy ? `${commitLabel}. ${commitReason}` : undefined
           }
           tone="primary"
           fullWidth
           disabled={busy || !!commitBlock}
-          onPress={() => onChoose({ kind: "commit" })}
+          onPress={() => onChoose({ kind: "commit" }, commit.stageAll)}
         >
           <GitCommitHorizontal size={18} color={colors.primaryText} />
         </Button>
+        {commitReason && !busy ? <Body muted selectable={false} style={uiStyles.caption}>{commitReason}</Body> : null}
       </Disclosure>}
       {index.remote ? (
         <>
@@ -295,7 +300,7 @@ export function GitCommitPanel({
               label={copy("Push", "Push")}
               accessibilityLabel={
                 index.ahead === 0 && !busy
-                  ? `${copy("Push", "Push")}. ${copy("No local commits to push.", "No local commits to push.")}`
+                  ? `${copy("Push", "Push")}. ${copy("Gönderilecek yerel commit yok.", "No local commits to push.")}`
                   : undefined
               }
               density="compact"
@@ -305,14 +310,14 @@ export function GitCommitPanel({
               <ArrowUpFromLine size={16} color={colors.text} />
             </Button>
           </Row>
-          {index.ahead || index.behind ? (
-            <Body muted selectable={false} style={uiStyles.caption}>
-              {[
-                index.ahead ? copy("{p0} commit gönderilecek", "{p0} commits to push", { p0: numbers.format(index.ahead) }) : null,
-                index.behind ? copy("{p0} yeni commit al", "Get {p0} new commits", { p0: numbers.format(index.behind) }) : null,
-              ].filter(Boolean).join(" · ")}
-            </Body>
-          ) : null}
+          <Body muted selectable={false} style={uiStyles.caption}>
+            {[
+              index.ahead
+                ? gitAheadCount(index.ahead, copy, numbers.format)
+                : copy("Gönderilecek yerel commit yok.", "No local commits to push."),
+              index.behind ? gitBehindCount(index.behind, copy, numbers.format) : null,
+            ].filter(Boolean).join(" · ")}
+          </Body>
         </>
       ) : null}
       {children}
@@ -343,7 +348,7 @@ export function GitCommitBar({
   onCommit: (stageAll: boolean) => void;
   onPush: () => void;
 }) {
-  const { colors } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const numbers = new Intl.NumberFormat(useLocale());
   const primary = gitPrimaryAction({
@@ -392,6 +397,7 @@ export function GitCommitBar({
           <GitCommitHorizontal size={18} color={colors.primaryText} />
         )}
       </Button> : null}
+      {reason && !busy ? <Body muted selectable={false} style={uiStyles.caption}>{reason}</Body> : null}
     </View>
   );
 }

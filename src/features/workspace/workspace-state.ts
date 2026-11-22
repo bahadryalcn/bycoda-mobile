@@ -86,6 +86,9 @@ export type GitConfirmation = (
     branch: string | null;
     message: string;
     files: string[];
+    /** Where a reviewed push lands and how many commits it sends. */
+    pushTarget?: string | null;
+    ahead?: number;
   };
 };
 export type GitState = { view: GitView; confirmation: GitConfirmation | null };

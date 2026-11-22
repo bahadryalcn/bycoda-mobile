@@ -11,7 +11,8 @@ const fixture = vi.hoisted(() => ({
   appendToDraft: vi.fn(),
   remember: vi.fn(async () => {}),
   selectProject: vi.fn(),
-  create: vi.fn<(created: (id: string) => void) => Promise<boolean>>(),
+  create: vi.fn<(created: (id: string) => void, options?: { settings: Record<string, string> }) => Promise<boolean>>(),
+  creationDraft: vi.fn(),
   recover: undefined as ((receipt: { sessionId: string }) => void) | undefined,
   dismiss: undefined as (() => void) | undefined,
   command: { isPending: false, error: undefined as Error | undefined, reset: vi.fn() },
@@ -31,16 +32,19 @@ vi.mock("@/state/project-directory-preferences", () => ({
   rememberOpenedProject: fixture.remember, useProjectDirectoryPreferences: () => ({ preferences: { recent: {} } }),
 }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
-vi.mock("lucide-react-native/icons/mic", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("@/ui/primitives", () => {
-  const Action = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) =>
-    h("button", { onClick: onPress, disabled }, label);
+  const Action = ({ label, onPress, disabled, selected, fullWidth }: {
+    label: string; onPress: () => void; disabled?: boolean; selected?: boolean; fullWidth?: boolean;
+  }) => h("button", { onClick: onPress, disabled, "aria-pressed": selected, "data-full-width": fullWidth }, label);
   return {
     Body: ({ children }: { children: ReactNode }) => h("p", null, children),
     Button: Action,
     IconButton: Action,
     NavigationRow: Action,
     SearchField: () => null,
+    SegmentedControl: ({ options, onChange }: { options: { value: string; label: string }[]; onChange: (value: string) => void }) =>
+      h("div", null, options.map((option) => h("button", { key: option.value, onClick: () => onChange(option.value) }, option.label))),
     Sheet: ({ children, footer }: { children: ReactNode; footer?: ReactNode }) => h("section", null, children, footer),
     ScreenList: ({ data, renderItem, ListHeaderComponent }: {
       data: { id: string }[];
@@ -65,12 +69,29 @@ vi.mock("./shared", () => ({
   },
   relativeTime: () => "",
 }));
+vi.mock("@/state/model-catalog", () => ({ useModelCatalog: () => ({ data: undefined }) }));
+vi.mock("./last-creation-choice", () => ({
+  rememberedDraft: () => undefined,
+  useLastCreationChoice: () => undefined,
+  lastCreationChoices: { getState: () => ({ remember: () => Promise.resolve() }) },
+}));
+vi.mock("./model-picker-field", () => ({
+  ModelPickerField: ({ onChooseProvider, onChange }: Pick<
+    import("./model-picker").ModelPickerProps, "onChooseProvider" | "onChange"
+  >) => h("div", null,
+    h("button", { onClick: () => onChooseProvider({ key: "claude:work", provider: "claude", accountId: "work", label: "Work" }) }, "Choose provider"),
+    h("button", { onClick: () => onChange("chosen-model", { reasoningEffort: "high" }) }, "Choose model"),
+  ),
+}));
 vi.mock("./use-create-session", () => ({
-  useCreateSession: () => ({
-    catalog: {}, command: fixture.command, canStart: true, create: fixture.create, choices: [],
-    locked: fixture.command.isPending || fixture.command.error?.name === "UncertainCommand",
-    selection: { selectedProvider: "codex", selectedModel: "test-model" },
-  }),
+  useCreateSession: (_projectId: string, options: unknown) => {
+    fixture.creationDraft(options);
+    return {
+      catalog: {}, command: fixture.command, canStart: true, create: fixture.create, choices: [],
+      locked: fixture.command.isPending || fixture.command.error?.name === "UncertainCommand",
+      selection: { selectedProvider: "codex", selectedModel: "test-model", models: [] },
+    };
+  },
 }));
 vi.mock("./use-project-activity", async () => {
   const { useActiveMachine } = await import("@/state/machines");
@@ -99,6 +120,21 @@ let container: HTMLDivElement;
 const onClose = vi.fn();
 const render = () => root.render(h(NewSessionSheet, { visible: true, onClose }));
 const button = (label: string) => [...container.querySelectorAll("button")].find((node) => node.textContent === label);
+
+it("marks the project once and starts with the edited provider, account and model settings", async () => {
+  queueLaunch(firstShare);
+  await act(async () => render());
+  expect(button("First project")?.getAttribute("aria-pressed")).toBe("true");
+  expect(container.textContent?.match(/First project/g)).toHaveLength(1);
+  expect(button("Start session")?.getAttribute("data-full-width")).toBe("true");
+  await act(async () => button("Choose provider")!.click());
+  await act(async () => button("Choose model")!.click());
+  expect(fixture.creationDraft).toHaveBeenLastCalledWith({ draft: {
+    provider: "claude", accountId: "work", model: "chosen-model",
+  } });
+  await act(async () => button("Start session")!.click());
+  expect(fixture.create).toHaveBeenCalledExactlyOnceWith(expect.any(Function), { settings: { reasoningEffort: "high" } });
+});
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

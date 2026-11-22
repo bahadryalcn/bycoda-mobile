@@ -24,6 +24,7 @@ const fixture = vi.hoisted(() => ({
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/motion", () => ({ haptic: { success: vi.fn() } }));
+vi.mock("@/ui/query-state", () => ({ useReadRetryNotice: () => true }));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestClose: vi.fn() }) }));
 vi.mock("@/state/machines", () => ({
   useActiveMachine: () => ({ id: "host", providers: [], capabilities: ["crews.tasks.v1"] }),

@@ -1,33 +1,18 @@
 import type { AgentModel } from "../../../../src/features/sessions/model/models";
 import { groupedSettings, isPrimarySetting, settingLabel } from "./agent-model-settings";
 
-export type ModelRow = { value: string; label: string; detail?: string; selected: boolean };
-
-/** "200K" / "1M" for a context window; undefined when the catalog does not report one. */
-export function contextLabel(tokens: number | undefined): string | undefined {
-  if (!tokens || !Number.isFinite(tokens) || tokens <= 0) return undefined;
-  if (tokens >= 1_000_000) return `${Math.round(tokens / 100_000) / 10}M`.replace(".0M", "M");
-  return `${Math.round(tokens / 1000)}K`;
-}
-
-/** The id is a second line only when it adds something; the context window joins it. */
-export function modelDetail(model: AgentModel, contextSuffix: string): string | undefined {
-  const id = model.nativeId || model.id;
-  const named = model.name.trim().toLowerCase() === id.trim().toLowerCase() ? undefined : id;
-  const context = contextLabel(model.contextWindow);
-  return [named, context ? `${context} ${contextSuffix}` : undefined].filter(Boolean).join(" · ") || undefined;
-}
+type ModelRow = { value: string; label: string; searchKeywords?: string; selected: boolean };
 
 /** One row per catalog model; a saved custom id missing from the catalog is kept first. */
-export function modelRows(models: readonly AgentModel[], current: string, contextSuffix: string): ModelRow[] {
+export function modelRows(models: readonly AgentModel[], current: string): ModelRow[] {
   const selected = models.find((entry) => entry.id === current || entry.nativeId === current);
   const rows = models.map((entry) => ({
     value: entry.id,
-    label: entry.name,
-    detail: modelDetail(entry, contextSuffix),
+    label: entry.name || entry.id,
+    searchKeywords: [entry.id, entry.nativeId].filter(Boolean).join(" "),
     selected: entry === selected,
   }));
-  return current && !selected ? [{ value: current, label: current, detail: undefined, selected: true }, ...rows] : rows;
+  return current && !selected ? [{ value: current, label: current, selected: true }, ...rows] : rows;
 }
 
 /** Reasoning first, then the speed and thinking toggles: the settings shown inline in the picker. */

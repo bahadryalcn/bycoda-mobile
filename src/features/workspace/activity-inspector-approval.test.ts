@@ -4,7 +4,13 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RemoteHostError } from "@/remote/host-error";
 
+const session = vi.hoisted(() => ({ updatedAt: 1, refetch: vi.fn<() => Promise<void>>() }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({
+  getQueryState: () => ({ dataUpdatedAt: session.updatedAt }),
+  refetchQueries: session.refetch,
+}) }));
+vi.mock("@/state/queries", () => ({ hostKey: (machineId: string, key: unknown[]) => [machineId, ...key] }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
@@ -46,6 +52,28 @@ it("holds uncertain results across navigation and separates a replacement occurr
   expect(props.onCommand).toHaveBeenCalledTimes(1);
   props = { ...props, approval: { ...props.approval, occurrenceId: "replacement" } }; await render();
   expect(button("Allow").disabled).toBe(false);
+});
+
+it("releases an uncertain answer only after a newer session read, and never resends it", async () => {
+  props.onCommand = vi.fn().mockRejectedValue(new Error("Connection lost"));
+  await render(); await act(async () => button("Allow").click());
+  session.refetch.mockImplementation(async () => {});
+  await act(async () => button("Check status").click());
+  expect(button("Allow").disabled).toBe(true);
+  session.refetch.mockImplementation(async () => { session.updatedAt += 1; });
+  await act(async () => button("Check status").click());
+  expect(button("Allow").disabled).toBe(false);
+  expect(button("Check status")).toBeUndefined();
+  expect(props.onCommand).toHaveBeenCalledTimes(1);
+});
+
+it("keeps the hold and shows the failure when the status read fails", async () => {
+  props.onCommand = vi.fn().mockRejectedValue(new Error("Connection lost"));
+  await render(); await act(async () => button("Deny").click());
+  session.refetch.mockRejectedValue(new Error("Still offline"));
+  await act(async () => button("Check status").click());
+  expect(button("Allow").disabled).toBe(true);
+  expect(container.textContent).toContain("Still offline");
 });
 
 it("keeps known rejection actionable and respects external permission and missing run guards", async () => {

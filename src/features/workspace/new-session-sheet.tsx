@@ -2,15 +2,17 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import type { HostProject } from "@/domain/types";
+import { carryCrossDelegation } from "../../../../src/shared/model/host-contracts/delegation";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { useSingleFlight } from "@/state/actions";
+import { useModelCatalog } from "@/state/model-catalog";
 import {
   rememberOpenedProject,
   useProjectDirectoryPreferences,
 } from "@/state/project-directory-preferences";
 import { useLocale } from "@/i18n";
-import Mic from "lucide-react-native/icons/mic";
+import Plus from "lucide-react-native/icons/plus";
 import {
   Body,
   Button,
@@ -18,6 +20,7 @@ import {
   NavigationRow,
   ScreenList,
   SearchField,
+  SegmentedControl,
   Sheet,
 } from "@/ui/primitives";
 import { ScreenChromeProvider } from "@/ui/layout";
@@ -34,7 +37,10 @@ import { latestProjectActivity } from "./project-summaries";
 import { useAppPreferences } from "../navigation-prefs/app-preferences";
 import { lastUsedProject, orderProjectsByRecency, projectRecency, RECENT_PROJECT_LIMIT } from "./recent-projects";
 import { CommandError, relativeTime } from "./shared";
-import { providerName } from "./provider-choices";
+import type { CreationDraft } from "./creation-selection";
+import { ModelPickerField } from "./model-picker-field";
+import { selectedChoice } from "./provider-choices";
+import { rememberedDraft, lastCreationChoices, useLastCreationChoice } from "./last-creation-choice";
 import { useCreateSession } from "./use-create-session";
 import { useLatestCallback } from "./use-latest-callback";
 import { useProjectActivity } from "./use-project-activity";
@@ -169,6 +175,7 @@ function NewSessionConnection({ connection, allowAutomaticSelection, onClose }: 
         <QuickStart
           key={`${selected.project.id}:${selected.attempt}`}
           project={selected.project}
+          showProjectName={!rows.some((row) => row.id === selected.project.id)}
           onLocked={setLocked}
           isCurrent={isCurrent}
           onCreated={(sessionId) => created(selected.project, sessionId, launch)}
@@ -195,15 +202,15 @@ function NewSessionConnection({ connection, allowAutomaticSelection, onClose }: 
                     onChangeText={setSearch}
                   />
                 </View>
-                <IconButton
-                  label={copy("Asistan", "Assistant")}
-                  disabled={locked}
-                  onPress={() => {
-                    if (leave()) router.push("/assistant");
-                  }}
-                >
-                  <Mic size={20} color={colors.accent} />
-                </IconButton>
+                {rows.length > 0 || query ? (
+                  <IconButton
+                    label={copy("Proje ekle", "Add project")}
+                    disabled={locked}
+                    onPress={addProject}
+                  >
+                    <Plus size={20} color={colors.accent} />
+                  </IconButton>
+                ) : null}
               </View>
               {launch ? (
                 <Body muted style={uiStyles.caption}>
@@ -226,45 +233,34 @@ function NewSessionConnection({ connection, allowAutomaticSelection, onClose }: 
                   {copy("Bilgisayar bağlantısı değişti.", "Computer connection changed.")}
                 </Body>
               ) : null}
-              <View style={{ flexDirection: "row", gap: space.xs, flexWrap: "wrap" }}>
-                <Button
-                  label={
-                    showAll ? copy("Son kullanılanlar", "Recent") : copy("Tüm projeler", "All projects")
-                  }
-                  tone="quiet"
-                  flush
-                  disabled={!readable || locked}
-                  onPress={() => setShowAll(!showAll)}
-                />
-                <Button
-                  label={copy("Proje ekle", "Add project")}
-                  tone="quiet"
-                  disabled={locked}
-                  onPress={addProject}
-                />
-              </View>
-              {!query && rows.length > 0 ? (
-                <Body muted style={uiStyles.caption}>
-                  {showAll
-                    ? copy("Tüm projeler", "All projects")
-                    : copy("Son kullanılanlar", "Recent")}
-                </Body>
-              ) : null}
+              <SegmentedControl
+                label={copy("Projeler", "Projects")}
+                hideLabel
+                value={showAll ? "all" : "recent"}
+                options={[
+                  { value: "recent", label: copy("Son kullanılanlar", "Recent") },
+                  { value: "all", label: copy("Tüm projeler", "All projects") },
+                ]}
+                disabled={!readable || locked}
+                onChange={(next) => setShowAll(next === "all")}
+              />
             </View>
           }
           renderItem={({ item }) => {
             const last = projectRecency(item.id, times);
-            const busy = locked && selected?.project.id === item.id;
+            const isSelected = selected?.project.id === item.id;
+            const busy = locked && isSelected;
             return (
               <NavigationRow
                 variant="plain"
                 intent="select"
                 label={item.name}
                 detail={projectPathLabel(item.cwd)}
-                detailEllipsizeMode="middle"
+                detailSelectable={false}
+                selected={isSelected}
                 icon={<ProjectIcon appearance={item.appearance} />}
                 trailing={
-                  last ? (
+                  last && !isSelected ? (
                     <Body muted style={uiStyles.caption}>
                       {relativeTime(last, copy)}
                     </Body>
@@ -273,7 +269,7 @@ function NewSessionConnection({ connection, allowAutomaticSelection, onClose }: 
                 busy={busy}
                 disabled={locked && !busy}
                 onPress={() => {
-                  if (locked || !isCurrent() || !activity.projects.isProjectVisible(item.id, item.cwd)) return;
+                  if (locked || isSelected || !isCurrent() || !activity.projects.isProjectVisible(item.id, item.cwd)) return;
                   setPicked((current) => ({
                     id: item.id,
                     attempt: (current?.attempt ?? 0) + 1,
@@ -288,24 +284,32 @@ function NewSessionConnection({ connection, allowAutomaticSelection, onClose }: 
   );
 }
 
-/** Starts the session in the picked project with defaults; owns its error and recovery UI. */
+/** Owns the chosen project's launch settings and command recovery. */
 function QuickStart({
   project,
+  showProjectName,
   onCreated,
   onLocked,
   isCurrent,
 }: {
   project: HostProject;
+  showProjectName: boolean;
   onCreated: (sessionId: string) => void;
   onLocked: (locked: boolean) => void;
   isCurrent: () => boolean;
 }) {
   const copy = useCopy();
   const { uiStyles } = useMobileTheme();
+  const machine = useActiveMachine();
+  const [picked, setPicked] = useState<CreationDraft>();
+  // Until the owner picks, start from the last model used on this computer if it is still offered.
+  const remembered = rememberedDraft(useLastCreationChoice(machine?.id), useModelCatalog(project.id).data);
+  const draft = picked ?? remembered ?? { model: "" };
+  const [settings, setSettings] = useState<Record<string, string>>({});
   const { catalog, command, locked, canStart, create, selection, choices } = useCreateSession(
     project.id,
+    { draft },
   );
-  const [unavailable, setUnavailable] = useState(false);
   const submit = useSingleFlight<boolean>();
   const receiptTarget = useRef<typeof onCreated | null>(null);
   const mounted = useRef(false);
@@ -317,48 +321,71 @@ function QuickStart({
   const active = () => mounted.current && isCurrent();
   const run = useLatestCallback(() => {
     if (!active() || locked || submit.isPending()) return;
-    setUnavailable(false);
     command.reset();
     if (!canStart) {
-      setUnavailable(true);
       void catalog.refetch().catch(() => {});
       return;
     }
-    const complete: typeof onCreated = (id) => { if (active()) onCreated(id); };
+    const remember = machine && selectedProvider && selectedModel
+      ? { machineId: machine.id, choice: { provider: selectedProvider, accountId: selectedAccountId, model: selectedModel } }
+      : undefined;
+    const complete: typeof onCreated = (id) => {
+      if (!active()) return;
+      if (remember) void lastCreationChoices.getState().remember(remember.machineId, remember.choice);
+      onCreated(id);
+    };
     receiptTarget.current = complete;
-    void submit.run(() => active() ? create(complete) : Promise.resolve(false)).catch(() => false);
+    void submit.run(() => active() ? create(complete, { settings }) : Promise.resolve(false)).catch(() => false);
   });
-  const ready = !catalog.isPending || catalog.fetchStatus === "idle";
+  // A paused (offline) first load is not "loading": it needs a reason and Retry.
+  const ready = !catalog.isPending || catalog.fetchStatus !== "fetching";
   // Keep dismissal and project changes blocked while a command is pending or uncertain.
   useEffect(() => {
     onLocked(locked);
     return () => onLocked(false);
   }, [locked, onLocked]);
-  const account = choices.find(
-    (choice) =>
-      choice.provider === selection.selectedProvider &&
-      choice.accountId === selection.selectedAccountId,
-  );
-  const modelName = selection.selectedModelValue?.name || selection.selectedModel || "—";
+  const { selectedProvider, selectedAccountId, selectedModel, models } = selection;
   const recoveryTarget = receiptTarget.current;
   return (
     <View style={{ gap: space.sm }}>
-      <Body>{project.name}</Body>
-      <Body muted style={uiStyles.caption}>
-        {ready && selection.selectedProvider
-          ? `${providerName(selection.selectedProvider)} · ${account?.label ?? copy("Varsayılan hesap", "Default account")} · ${modelName} · ${copy("Onay iste", "Ask for approval")}`
-          : ready
-            ? copy("Kullanılabilir ajan veya model yok.", "No agent or model available.")
-            : copy("Model yükleniyor…", "Loading model…")}
-      </Body>
-      {unavailable ? (
-        <Body>
-          {copy(
-            "Bu bilgisayarda kullanılabilir bir ajan veya model yok.",
-            "No agent or model is available on this computer.",
-          )}
+      {showProjectName ? <Body>{project.name}</Body> : null}
+      {ready && (selectedProvider || choices.length > 0) ? (
+        <ModelPickerField
+          hideLabel
+          catalog={catalog.data}
+          choices={choices}
+          choice={selectedChoice(choices, selectedProvider, selectedAccountId)}
+          models={models}
+          model={selectedModel}
+          settings={settings}
+          sparseSettings
+          disabled={locked}
+          onChooseProvider={(next) => {
+            if (!active() || locked || submit.isPending()) return;
+            const changedProvider = next.provider !== selectedProvider;
+            setPicked({ provider: next.provider, accountId: next.accountId, model: changedProvider ? "" : draft.model });
+            if (changedProvider) setSettings((previous) => carryCrossDelegation(previous, {}));
+          }}
+          onChange={(model, nextSettings) => {
+            if (!active() || locked || submit.isPending()) return;
+            setPicked({ ...draft, model });
+            setSettings(nextSettings);
+          }}
+        />
+      ) : (
+        <Body muted>
+          {!ready
+            ? copy("Model yükleniyor…", "Loading model…")
+            : catalog.isPending
+              ? copy("Model listesi için bağlantı bekleniyor.", "Waiting for a connection to load models.")
+              : catalog.error
+                ? copy("Model listesi yüklenemedi.", "Models could not be loaded.")
+                : copy("Kullanılabilir ajan veya model yok.", "No agent or model available.")}
         </Body>
-      ) : null}
+      )}
+      <Body muted style={uiStyles.caption}>
+        {`${copy("İzinler", "Permissions")}: ${copy("Onay iste", "Ask for approval")}`}
+      </Body>
       <CommandError
         error={command.error}
         onDismiss={() => {
@@ -374,8 +401,12 @@ function QuickStart({
         }}
       />
       <Button
-        label={copy("Oturumu başlat", "Start session")}
+        label={ready && !canStart && !locked
+          ? copy("Yeniden dene", "Retry")
+          : copy("Oturumu başlat", "Start session")}
         tone="primary"
+        fullWidth
+        reserveTouchTarget
         onPress={run}
         disabled={!ready || locked}
         busy={command.isPending}

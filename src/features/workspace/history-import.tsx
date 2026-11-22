@@ -361,6 +361,8 @@ export function HistoryImport({
     ) : status?.state === "complete" || status?.state === "failed" ? (
       <Button
         tone="primary"
+        fullWidth
+        reserveTouchTarget
         label={copy("Yeni geçmiş incelemesi", "New history review")}
         disabled={!readable || busy}
         busy={busy && pendingAction === "secondary-2"}
@@ -369,6 +371,8 @@ export function HistoryImport({
     ) : (
       <Button
         tone="primary"
+        fullWidth
+        reserveTouchTarget
         label={copy("İçe aktarma durumunu kontrol et", "Check import status")}
         disabled={!supported || !sameEnvironment || busy || statusQuery.isFetching}
         busy={statusQuery.isFetching}
@@ -378,6 +382,8 @@ export function HistoryImport({
   ) : review && !expired ? (
     <Button
       tone="primary"
+      fullWidth
+      reserveTouchTarget
       label={copy("Geçmişi içe aktar", "Import history")}
       disabled={disabled || !selected.size}
       busy={busy && pendingAction === "primary"}
@@ -386,6 +392,8 @@ export function HistoryImport({
   ) : (
     <Button
       tone="primary"
+      fullWidth
+      reserveTouchTarget
       label={copy("Bu projenin geçmişini tara", "Scan this project's history")}
       disabled={disabled || previewQuery.isFetching}
       busy={busy && pendingAction === "secondary-3"}

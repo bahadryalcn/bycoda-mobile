@@ -55,6 +55,8 @@ vi.mock("@/ui/record-card", () => ({
   }: PropsWithChildren<{ details: ReactNode; footer: ReactNode; status: ReactNode; menu: ReactNode }>) =>
     createElement("div", null, status, details, children, createElement("nav", null, menu), createElement("footer", null, footer)),
 }));
+vi.mock("@/ui/limit-presets", async () =>
+  (await import("@/ui/limit-presets.fixture")).limitFieldDoubles((await import("@/ui/primitives")).NumberField as never));
 vi.mock("@/ui/primitives", () => {
   const Box = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Action = ({ label, disabled, onPress, tone }: { label: string; disabled?: boolean; onPress: () => void; tone?: string }) =>
@@ -147,10 +149,10 @@ it("guards an invalid minute draft and blocks saving its previous numeric value"
   );
   expect(fixture.dirty).toBe(false);
   await act(async () =>
-    fixture.fields.get("Run limit (minutes, 0 = unlimited)")!.onChangeText("invalid"),
+    fixture.fields.get("Run limit")!.onChangeText("invalid"),
   );
   expect(fixture.dirty).toBe(true);
-  expect(fixture.fields.get("Run limit (minutes, 0 = unlimited)")!.value).toBe("invalid");
+  expect(fixture.fields.get("Run limit")!.value).toBe("invalid");
   expect(container.querySelector("button")!.disabled).toBe(true);
   expect(fixture.save).not.toHaveBeenCalled();
 });

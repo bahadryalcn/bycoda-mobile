@@ -34,7 +34,7 @@ import { ShellProfileSettings } from "./shell-profile-settings";
 import { useMobileTheme } from "../../ui/theme";
 import { WorkCapsSettings } from "./work-caps-settings";
 import { AgentDefaultsSettings } from "./agent-defaults-settings";
-import { LimitPresets } from "./limit-presets";
+import { LimitPresets } from "@/ui/limit-presets";
 
 const DAILY_TIME_PRESETS = ["0", "30", "60", "120", "240", "480"] as const;
 

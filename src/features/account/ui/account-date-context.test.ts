@@ -6,6 +6,7 @@ const fixture = vi.hoisted(() => ({
   timeZone: "UTC", locale: "tr", queries: [] as Array<{ queryKey: readonly unknown[] }>,
   active: "active", listener: undefined as undefined | ((state: string) => void), removed: vi.fn(),
 }));
+vi.mock("./use-graced-read-error", () => ({ useGracedReadError: (query: { error: unknown }) => query.error ?? null }));
 vi.mock("react-native", () => ({ AppState: { get currentState() { return fixture.active; }, addEventListener: (_event: string, listener: (state: string) => void) => { fixture.listener = listener; return { remove: fixture.removed }; } } }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: { queryKey: readonly unknown[] }) => { fixture.queries.push(options); return options.queryKey[1] === "me" ? { data: { user: { deletion: { purgeAfter: "2026-12-01T12:00:00Z" } } } } : { data: undefined, isError: false }; },

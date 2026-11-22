@@ -11,7 +11,7 @@ import { ActionMenu, Body, Button, ErrorText, Notice, QueryState, ScreenList, Se
 import { space } from "@/ui/tokens";
 import type { GitScope } from "./git-types";
 import { stableGitReview } from "./git-selective-query";
-import { conflictParts, readConflictStages, resolveConflictParts, type ConflictChoice, type ConflictPart } from "./conflict-review-model";
+import { conflictParts, conflictWriteRefused, readConflictStages, resolveConflictParts, type ConflictChoice, type ConflictPart } from "./conflict-review-model";
 import { GitDiffViewer } from "./git-diff-viewer";
 import type { HostConflictStages } from "../../../../host/git/git-conflicts";
 import { FeatureUnavailable } from "./unavailable-state";
@@ -76,6 +76,8 @@ export function ConflictReview({ scope, path, onClose, onBusyChange, onChanged, 
     void query.refetch().then(value => {
       if (current() && latest.current.review === captured.review && latest.current.choices === captured.choices && value.data && !value.error) {
         setReview(value.data); setChoices({}); setVersion("ours");
+        // The fresh snapshot is what the next write must match, so the previous send no longer holds it.
+        submitted.current = false; setSent(false); setError(null);
       }
     });
   };
@@ -83,7 +85,7 @@ export function ConflictReview({ scope, path, onClose, onBusyChange, onChanged, 
   const approval = useGitWriteReview<{ command: string; args: Record<string, unknown> }>(owner, disabled, current, request => {
     if (submitted.current || !current()) return;
     submitted.current = true; setSent(true); setBusy(true); onBusyChange(true); setError(null);
-    void mutation.mutateAsync(request).then(() => { if (current()) { onChanged(); onClose(); } }, reason => { if (scopeAccess.attached()) setError(reason); }).finally(() => { setBusy(false); onBusyChange(false); });
+    void mutation.mutateAsync(request).then(() => { if (current()) { onChanged(); onClose(); } }, reason => { if (!scopeAccess.attached()) return; setError(reason); if (conflictWriteRefused(reason)) { submitted.current = false; setSent(false); } }).finally(() => { setBusy(false); onBusyChange(false); });
   });
   const close = useCallback(() => {
     if (!scopeAccess.attached() || busy || latest.current.choices !== choices) return;
@@ -97,7 +99,7 @@ export function ConflictReview({ scope, path, onClose, onBusyChange, onChanged, 
     discardTitle={copy("Blok seçimlerini bırak?", "Discard block choices?")}
     discardMessage={copy("Dosyalar değiştirilmez.", "Files are not changed.")}
     footer={readAccess.allowed ? <View style={{ gap: space.sm }}>
-      <Button tone="primary" label={copy("İncelenen çözümü uygula", "Apply reviewed resolution")} disabled={disabled || resolved === null} busy={busy} onPress={() => send("reviewed")} />
+      <Button tone="primary" fullWidth reserveTouchTarget label={copy("İncelenen çözümü uygula", "Apply reviewed resolution")} disabled={disabled || resolved === null} busy={busy} onPress={() => send("reviewed")} />
       <ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
         { key: "ours", label: copy("Bizim sürümü kullan", "Use our version"), disabled, onPress: () => send("ours") },
         { key: "theirs", label: copy("Gelen sürümü kullan", "Use incoming version"), disabled, onPress: () => send("theirs") },

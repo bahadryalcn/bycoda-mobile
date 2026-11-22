@@ -7,11 +7,11 @@ import {
   MutationState,
   ErrorNotice,
   NavigationGroup,
-  NumberField,
   Stack,
   SelectField,
   ToggleField,
 } from "@/ui/primitives";
+import { MinuteLimitField } from "@/ui/limit-presets";
 import { haptic } from "@/ui/motion";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useCopy } from "@/ui/copy";
@@ -159,20 +159,16 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
           />
         </NavigationGroup>
         {!draft.inheritMaxRunMinutes && (
-          <NumberField
-            editable={!busy}
-            label={copy(
-              "Çalışma sınırı (dakika, 0 = sınırsız)",
-              "Run limit (minutes, 0 = unlimited)",
-            )}
-            unit={copy("dk", "min")}
+          <MinuteLimitField
+            disabled={busy}
+            label={copy("Çalışma sınırı", "Run limit")}
             value={minutes}
             error={
               !minutesValid
                 ? copy("0 ile 10080 arasında dakika girin.", "Enter minutes from 0 to 10080.")
                 : undefined
             }
-            onChangeText={(text) => {
+            onChange={(text) => {
               setMinutes(text);
               if (validAgentRunMinutes(text)) set({ maxRunMinutes: Number(text) });
             }}

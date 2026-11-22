@@ -21,7 +21,7 @@ import { haptic } from "@/ui/motion";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { automationEventLabel, automationTriggerValid, integerInRange, validScheduleTime } from "./schedule-model";
 import { useCopy } from "@/ui/copy";
-import { NumberField } from "@/ui/number-field";
+import { LimitPresets, MinuteLimitField } from "@/ui/limit-presets";
 import { useFormDraft } from "@/state/form-draft";
 import { useSingleFlight } from "@/state/actions";
 import { useConnectionScope } from "@/state/connection-scope";
@@ -162,7 +162,7 @@ export function AutomationEditor({ initial, save, busy, readSaved, onClose }: Au
           options={[{ value: "scheduled", label: copy("Zamanlanmış", "Scheduled") }, { value: "continuous", label: copy("Sürekli", "Continuous") }, { value: "event", label: copy("Olay", "Event") }]}
           onChange={kind => update({ trigger: kind === "continuous" ? { kind, minimumGapMinutes: Number(gap) } : kind === "event" ? { kind, event: "task.finished" } : undefined })} />
         {!draft.projectId ? <Body muted>{copy("Bu otomasyon Room içinde çalışır.", "This automation runs in Room.")}</Body> : null}
-        {draft.trigger?.kind === "continuous" ? <NumberField label={copy("En az bekleme (dakika)", "Minimum gap (minutes)")} value={gap} editable={!formLocked} onChangeText={setGap}
+        {draft.trigger?.kind === "continuous" ? <MinuteLimitField label={copy("En az bekleme", "Minimum gap")} min={1} value={gap} disabled={formLocked} onChange={setGap}
           error={gapValid ? undefined : copy("1 ile 10080 arasında dakika girin.", "Enter minutes from 1 to 10080.")} /> : null}
         {draft.trigger?.kind === "event" ? <SelectField label={copy("Olay", "Event")} value={draft.trigger.event} disabled={formLocked}
           options={(["task.finished", "task.blocked", "session.waiting", "automation.failed"] as const).map(value => ({ value, label: automationEventLabel(value, copy) }))}
@@ -176,14 +176,16 @@ export function AutomationEditor({ initial, save, busy, readSaved, onClose }: Au
           disabled={formLocked}
         />
         </> : null}
-        <NumberField
-          editable={!formLocked}
+        <LimitPresets
+          disabled={formLocked}
           label={copy("Günlük çalıştırma sınırı", "Daily run limit")}
+          customLabel={copy("Özel", "Custom")}
           unit={copy("çalıştırma", "runs")}
-          hint={copy("0 = sınırsız", "0 = unlimited")}
           error={limitValid ? undefined : copy("0 ile 1000 arasında bir sınır girin.", "Enter a limit from 0 to 1000.")}
           value={limit}
-          onChangeText={setLimit}
+          values={["0", "1", "3", "5", "10", "24", "50", "100"]}
+          format={(runs) => runs === "0" ? copy("Sınırsız", "Unlimited") : runs}
+          onChange={setLimit}
         />
         {!draft.trigger ? <SchedulePreview disabled={formLocked} valid={draft.scheduleKind === "hourly" ? minuteValid : timeValid}
           schedule={{ scheduleKind: draft.scheduleKind, time: draft.time, minute: Number(minute), dayOfWeek: draft.dayOfWeek }} />

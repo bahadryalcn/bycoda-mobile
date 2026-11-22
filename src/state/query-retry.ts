@@ -22,6 +22,12 @@ export function isTransientConnectionError(error: unknown): boolean {
   return kind === "network" || kind === "timeout" || kind === "aborted" || failure?.transient === true;
 }
 
+/** A brief link failure stays hidden until its grace ends; a lasting or uncertain failure shows at once. */
+export function visibleReadError<T>(error: T, graceElapsed: boolean): T | null {
+  if (!error) return null;
+  return !isTransientConnectionError(error) || graceElapsed ? error : null;
+}
+
 /** Two quiet retries (about 1 s, 2 s) so one dropped request never shows an error. */
 export const TRANSIENT_RETRY_LIMIT = 2;
 /** A busy Host (a burst of reads over its per-device limit) clears within seconds: ~11 s quietly. */

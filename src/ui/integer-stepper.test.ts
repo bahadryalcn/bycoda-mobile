@@ -90,6 +90,16 @@ it("repeats on hold, stops on release and never exceeds the maximum", () => {
   expect(vi.getTimerCount()).toBe(0);
 });
 
+it("reads a text draft inside the range and starts unreadable text from the lower bound", async () => {
+  const { stepperValue } = await import("./integer-stepper");
+  expect(stepperValue("7", 1, 10)).toBe(7);
+  expect(stepperValue("99", 1, 10)).toBe(10);
+  expect(stepperValue("-4", 1, 10)).toBe(1);
+  expect(stepperValue("", 1, 10)).toBe(1);
+  expect(stepperValue("abc", 1, 10)).toBe(1);
+  expect(stepperValue("2.5", 1, 10)).toBe(1);
+});
+
 it("cancels a hold when the setting becomes unavailable", () => {
   vi.useFakeTimers();
   render();

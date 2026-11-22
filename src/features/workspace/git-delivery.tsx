@@ -8,6 +8,7 @@ import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { Body, ConfirmationCard, Disclosure, ErrorNotice, MutationState, Notice, QueryState, Sheet, Button } from "@/ui/primitives";
 import type { GitScope } from "./git-types";
+import { useProjectRefresh } from "./shared";
 import {
   planMergeBlocker,
   parseTaskDeliveryPlan,
@@ -56,6 +57,7 @@ export function GitDeliverySheet({
   const [uncertainKey, setUncertainKey] = useState<string>();
   const [now, setNow] = useState(() => performance.now());
   const inFlight = useRef(false);
+  const refreshProject = useProjectRefresh(scope.projectId);
   const busy = review.isPending || merge.isPending;
   const blocker = plan ? planMergeBlocker(plan, now) : null;
   const current = () => opening.isCurrent();
@@ -94,6 +96,7 @@ export function GitDeliverySheet({
         merge.reset();
         setPlan(null);
         setMerged(true);
+        void refreshProject();
         return;
       }
       const sentAt = performance.now();
@@ -124,6 +127,7 @@ export function GitDeliverySheet({
       setUncertainKey(undefined);
       setPlan(null);
       setMerged(true);
+      void refreshProject();
     } catch (error) {
       if (!current()) return;
       if (error instanceof RemoteHostError && error.uncertain) setUncertainKey(key);
@@ -156,7 +160,10 @@ export function GitDeliverySheet({
         {shortBranch(branch)}
         {workspace ? ` → ${shortBranch(workspace.targetBranchRef)}` : ""}
       </Body> : null}
-      {merged ? <Notice tone="success" message={copy("Teslim edildi.", "Delivered.")} />
+      {merged ? <>
+        <Notice tone="success" message={copy("Teslim edildi.", "Delivered.")} />
+        <Button label={copy("Tamam", "Done")} tone="primary" fullWidth reserveTouchTarget onPress={onClose} />
+      </>
         : !scoped ? <Body>{copy("İncelenen içerik değişti. Yenileyip tekrar inceleyin.", "Reviewed contents changed. Refresh and review again.")}</Body> : <>
       <QueryState
         query={workspaces}
@@ -170,6 +177,8 @@ export function GitDeliverySheet({
         <Button
           label={readError || merge.error ? copy("Yeniden incele", "Review again") : copy("Teslimi incele", "Review delivery")}
           tone="primary"
+          fullWidth
+          reserveTouchTarget
           busy={review.isPending}
           disabled={busy || workspaces.isFetching}
           onPress={() => { void startReview(); }}

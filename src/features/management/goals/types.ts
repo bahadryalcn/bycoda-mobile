@@ -28,6 +28,8 @@ export type ReplanEditorProps = {
 export type GoalCardProps = {
   goal: HostGoal;
   projects: HostProject[];
+  /** The list is already filtered to this project, so a single-project card does not repeat it. */
+  scopedProjectId?: string;
   /** Finished/total tasks created from the plan; absent until the task list loads. */
   progress?: { done: number; total: number };
   /** Tasks created from this epic's plan, shown as its children when loaded. */

@@ -114,6 +114,10 @@ function knownConnectionMessage(message: string, copy: ErrorCopy): string | unde
       return copy("Bilgisayar bu isteği reddetti. Ayrıntılarını kontrol edip yeniden dene.", "The computer rejected this request. Check its details and try again.");
     case "Connection interrupted. Check this command's result before trying again.":
       return copy("Bağlantı kesildi. Yeniden denemeden önce bu komutun sonucunu kontrol et.", "Connection interrupted. Check this command's result before trying again.");
+    case "Wait for running sessions in this project to finish, then try again.":
+      return copy("Bu projede çalışan oturumlar bitince yeniden dene.", "Wait for running sessions in this project to finish, then try again.");
+    case "A branch switch is already in progress":
+      return copy("Dal değişikliği zaten sürüyor.", "A branch switch is already in progress");
     default:
       return undefined;
   }

@@ -7,7 +7,7 @@ import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type Host
 import { createContext, useContext, useId, useLayoutEffect, useSyncExternalStore, useCallback, useMemo, useRef, useState } from "react";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import X from "lucide-react-native/icons/x";
-import { Card, Row } from "./layout";
+import { Card } from "./layout";
 import { Button, IconButton } from "./buttons";
 import { metrics, radii } from "./tokens";
 import { space } from "./tokens";
@@ -113,17 +113,19 @@ export function ConfirmationCard({
     <Card>
       {message ? <Body>{message}</Body> : null}
       {children}
-      <Row>
-        <Button label={cancelLabel} onPress={onCancel} disabled={busy} tone="quiet" />
+      {/* Same action stack as FormActionRow: long labels and large text keep their full width. */}
+      <View style={{ gap: space.xs, alignItems: "stretch" }}>
         <Button
           label={confirmLabel}
           onPress={onConfirm}
           busy={busy}
           disabled={disabled}
           tone={tone}
+          fullWidth
         />
         {additionalActions}
-      </Row>
+        <Button label={cancelLabel} onPress={onCancel} disabled={busy} tone="quiet" style={{ alignSelf: "center" }} />
+      </View>
     </Card>
   );
 }

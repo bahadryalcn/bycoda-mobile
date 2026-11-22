@@ -1,11 +1,30 @@
 import type { AgentEntry } from "./agents-model";
 
 type Copy = (tr: string, en: string) => string;
-type Colors = { info: string; danger: string; warning: string; success: string };
+type Colors = { info: string; danger: string; warning: string; success: string; muted: string };
 
-export const agentStateLabel = (state: AgentEntry["state"], copy: Copy) =>
-  state === "running" ? copy("Çalışıyor", "Working") : state === "failed" ? copy("Başarısız", "Failed")
-    : state === "stopped" || state === "interrupted" ? copy("Durduruldu", "Interrupted") : copy("Tamamlandı", "Done");
+export function agentStateLabel(state: AgentEntry["state"], copy: Copy) {
+  switch (state) {
+    case "running": return copy("Çalışıyor", "Working");
+    case "queued": return copy("Sırada", "Queued");
+    case "failed": return copy("Başarısız", "Failed");
+    case "cancelled": return copy("İptal edildi", "Cancelled");
+    case "stopped": return copy("Durduruldu", "Stopped");
+    case "interrupted": return copy("Durduruldu", "Interrupted");
+    case "neutral": return copy("Bilinmiyor", "Unknown");
+    case "completed": return copy("Tamamlandı", "Done");
+  }
+}
 
-export const agentStateTone = (state: AgentEntry["state"], colors: Colors) =>
-  state === "running" ? colors.info : state === "failed" ? colors.danger : state === "stopped" || state === "interrupted" ? colors.warning : colors.success;
+export function agentStateTone(state: AgentEntry["state"], colors: Colors) {
+  switch (state) {
+    case "running": return colors.info;
+    case "failed": return colors.danger;
+    case "stopped":
+    case "interrupted": return colors.warning;
+    case "completed": return colors.success;
+    case "queued":
+    case "cancelled":
+    case "neutral": return colors.muted;
+  }
+}

@@ -32,6 +32,7 @@ vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/chevron-left", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/laptop", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/ellipsis", () => ({ default: () => null }));
 vi.mock("@/state/security", () => ({ assertAppAccess: vi.fn() }));
 vi.mock("../workspace/draft-guard", () => ({ flushWorkspaceDrafts: vi.fn() }));
 vi.mock("./recovery", async importOriginal => ({ ...await importOriginal<typeof import("./recovery")>(), reloadSavedConnections: vi.fn() }));
@@ -198,7 +199,7 @@ it("passes exclusive current-computer selection to the shared accessible row wit
   expect(html).not.toContain("Connected");
 });
 
-it("closes computer details and shows the new selection without navigating", async () => {
+it("selects an inactive computer with one tap and shows the new selection without navigating", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   fixture.navigate.mockClear();
   const container = document.createElement("div");
@@ -207,7 +208,6 @@ it("closes computer details and shows the new selection without navigating", asy
   try {
     await act(async () => root.render(createElement(MachinesScreen)));
     await act(async () => button("Second computer")!.click());
-    await act(async () => button("Use computer")!.click());
     expect(fixture.state.activeId).toBe("second");
     expect(button("Use computer")).toBeUndefined();
     await act(async () => root.render(createElement(MachinesScreen)));

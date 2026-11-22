@@ -12,7 +12,6 @@ import MoreHorizontal from "lucide-react-native/icons/ellipsis";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Home from "lucide-react-native/icons/house";
-import ArrowUp from "lucide-react-native/icons/arrow-up";
 import { ScrollFade } from "panelui-native/components/scroll-fade";
 import { useFormDraft } from "@/state/form-draft";
 import { useHostMutation, useHostQuery } from "@/state/queries";
@@ -204,14 +203,7 @@ export function ProjectFiles({
         header={
           <View style={{ gap: space.sm, paddingBottom: space.sm }}>
             <Row style={{ flexWrap: "nowrap" }}>
-              {path ? (
-                <IconButton
-                  label={copy("Üst klasör", "Parent folder")}
-                  onPress={() => navigate(fileParentPath(path))}
-                >
-                  <ArrowUp size={19} color={colors.muted} />
-                </IconButton>
-              ) : null}
+              {/* The breadcrumb, Back and the swipe already go up a level; no separate parent arrow. */}
               <ScrollFade edges="both" size={24} color={colors.background} style={uiStyles.grow}>
               <ScrollView
                 horizontal
@@ -278,14 +270,6 @@ export function ProjectFiles({
                   }
                   actions={[
                     {
-                      key: "refresh",
-                      label: copy("Yenile", "Refresh"),
-                      disabled: activeQuery.isFetching || (searchContent && !query),
-                      onPress: () => {
-                        void activeQuery.refetch();
-                      },
-                    },
-                    {
                       key: "hidden",
                       label: copy("Gizli dosyaları göster", "Show hidden files"),
                       selected: options.showHidden,
@@ -325,6 +309,15 @@ export function ProjectFiles({
                       disabled: searchContent,
                       onPress: () =>
                         setOptions((current) => ({ ...current, order: "descending" })),
+                    },
+                    {
+                      // Pull-to-refresh is a gesture; assistive technology needs this equivalent.
+                      key: "refresh",
+                      label: copy("Yenile", "Refresh"),
+                      disabled: activeQuery.isFetching || (searchContent && !query),
+                      onPress: () => {
+                        void activeQuery.refetch();
+                      },
                     },
                     {
                       key: "reset",
@@ -506,6 +499,8 @@ function CreateFileSheet({
           <MutationState mutation={mutation} />
           <Button
             tone="primary"
+            fullWidth
+            reserveTouchTarget
             label={copy("Oluştur", "Create")}
             disabled={!form.values.name.trim()}
             busy={mutation.isPending}

@@ -36,25 +36,22 @@ describe("agent model selection", () => {
     expect(selectAgentModel(initial, "second")).toMatchObject({ model: "second", modelSettings: {} });
   });
 
-  it("keeps typed custom IDs and saved custom settings across catalogue arrival and failure", () => {
+  it("keeps a saved model and its settings across catalogue arrival and failure", () => {
     const saved = { ...initial, model: "private/custom", modelSettings: { customFlag: "enabled" } };
     for (const current of [undefined, catalog, { models: {}, errors: { codex: "unavailable" } } as HostModelCatalog]) {
-      agentModelChoices(current, saved.harness, "");
+      expect(agentModelChoices(current, saved.harness, "", "en", saved.model)[0]).toMatchObject({
+        value: "private/custom", selected: true,
+      });
       expect(selectAgentModel(saved, saved.model, current)).toBe(saved);
       expect(saved.model).toBe("private/custom");
       expect(saved.modelSettings).toEqual({ customFlag: "enabled" });
     }
-    let typing = selectAgentModel(initial, "p");
-    agentModelChoices(catalog, typing.harness, "");
-    typing = selectAgentModel(typing, "private/custom", catalog);
-    expect(typing).toMatchObject({ model: "private/custom", modelSettings: {} });
-    const cleared = selectAgentModel(typing, "", catalog);
-    agentModelChoices(catalog, cleared.harness, "");
-    expect(cleared.model).toBe("");
   });
 
   it("searches model names and IDs while catalogue filtering never chooses a model", () => {
-    expect(agentModelChoices(catalog, "codex", "Second")).toEqual([{ value: "second", label: "Second model", detail: "second" }]);
+    expect(agentModelChoices(catalog, "codex", "Second")).toEqual([
+      { value: "second", label: "Second model", searchKeywords: "second", selected: false },
+    ]);
     expect(agentModelChoices(catalog, "claude", "claude-model")[0].value).toBe("claude-model");
     expect(agentModelChoices(catalog, "codex", "no-match")).toEqual([]);
     expect(initial.model).toBe("first");

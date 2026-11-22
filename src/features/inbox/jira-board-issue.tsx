@@ -257,7 +257,9 @@ export function JiraBoardIssueActions({
         />
         {action === "transition" ? (
           <>
-            <QueryState query={transitions} />
+            <QueryState query={transitions} empty={transitions.isSuccess && !transitions.data?.length}
+              emptyTitle={copy("Kullanılabilir geçiş yok", "No transitions available")}
+              emptyDetail={copy("Bu kayıt için Jira geçiş sunmuyor.", "Jira offers no transitions for this issue.")} loading="inline" />
             <SelectField
               label={copy("Jira geçişi", "Jira transition")}
               value={transitionId}

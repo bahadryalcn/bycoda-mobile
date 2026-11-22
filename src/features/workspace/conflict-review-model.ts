@@ -1,4 +1,8 @@
+import { RemoteHostError } from "@/remote/host-error";
 import type { HostConflictStages } from "../../../../host/git/git-conflicts";
+/** Only the Host's own refusal proves nothing was written; any other failure needs a fresh review. */
+export const conflictWriteRefused = (error: unknown) =>
+  error instanceof RemoteHostError && error.kind === "host" && !error.uncertain;
 export type ConflictChoice = "ours" | "theirs" | "both";
 export type ConflictPart = { kind: "text"; text: string } | { kind: "conflict"; id: string; ours: string; theirs: string; base: string | null };
 const kinds = new Set(["both-modified", "both-added", "deleted-by-us", "deleted-by-them", "added-by-us", "added-by-them", "both-deleted"]);

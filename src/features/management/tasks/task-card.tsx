@@ -315,6 +315,7 @@ export function TaskCard({
                 label={isBlocked ? copy("Yeniden dene", "Retry") : copy("Şimdi başlat", "Start now")}
                 busy={starting}
                 tone={isBlocked ? "primary" : "quiet"}
+                flush={!isBlocked}
                 disabled={busy || startUnavailable}
                 onPress={() => start.mutate({ taskId: task.id })}
               />

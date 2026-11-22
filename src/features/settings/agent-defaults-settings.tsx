@@ -6,7 +6,8 @@ import { Button, Disclosure, FormActions, Notice, QueryState, SegmentedControl, 
 import { useLocale } from "@/i18n";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { AUTO_ARCHIVE_CAPABILITY, confirmAgentDefaults, inactiveDays, readAgentDefaults, withoutArchive, type AgentDefaultsRecord } from "./settings-draft";
-import { LimitPresets } from "./limit-presets";
+import { LimitPresets } from "@/ui/limit-presets";
+import { failureText, holdsUnconfirmedSave } from "./work-caps-settings";
 
 const CAPABILITY = "host.settings.behavior.v1";
 const INACTIVE_DAY_PRESETS = ["0", "7", "14", "30", "60", "90", "180", "365"] as const;
@@ -41,7 +42,7 @@ function AgentDefaultsEditor({ initial, current, archive, currentArchive, onRelo
   const locale = useLocale();
   const [opening, setOpening] = useState(initial), [edits, setEdits] = useState<AgentDefaultsRecord | null>(null);
   const [days, setDays] = useState(String(initial.archiveInactiveDays));
-  const [held, setHeld] = useState(false), [busy, setBusy] = useState(false);
+  const [held, setHeld] = useState(false), [busy, setBusy] = useState(false), [failure, setFailure] = useState<string>();
   const flight = useRef(false);
   const save = useHostMutation("host.settings.save", ["agentDefaults"]);
   const value = edits ?? opening;
@@ -52,23 +53,26 @@ function AgentDefaultsEditor({ initial, current, archive, currentArchive, onRelo
   const blocked = busy || held || !current();
   const submit = async () => {
     if (flight.current || blocked || !dirty || !valid) return;
-    flight.current = true; setBusy(true);
+    flight.current = true; setBusy(true); setFailure(undefined);
     // Archive fields are sent only when the computer advertises the archive capability; saving defaults never touches them otherwise.
     const submitted = archive && currentArchive() ? { ...value, archiveInactiveDays: inactiveDays(days)! } : withoutArchive(value);
     try {
       const result = confirmAgentDefaults(await save.mutateAsync({ settings: { agentDefaults: submitted, expectedAgentDefaultsVersion: opening.version } }), submitted);
       if (!current()) return;
       setOpening(result); setEdits(null); setDays(String(result.archiveInactiveDays));
-    } catch { if (current()) setHeld(true); }
-    finally { flight.current = false; if (current()) setBusy(false); }
+    } catch (error) {
+      if (!current()) return;
+      if (holdsUnconfirmedSave(error)) setHeld(true);
+      else setFailure(failureText(error, copy));
+    } finally { flight.current = false; if (current()) setBusy(false); }
   };
   const reload = async () => {
     if (flight.current || !current()) return;
-    flight.current = true; setBusy(true);
+    flight.current = true; setBusy(true); setFailure(undefined);
     try {
       const result = await onReload();
       if (current()) { setOpening(result); setEdits(null); setDays(String(result.archiveInactiveDays)); setHeld(false); }
-    } catch { if (current()) setHeld(true); }
+    } catch (error) { if (current()) setFailure(failureText(error, copy)); }
     finally { flight.current = false; if (current()) setBusy(false); }
   };
   return <Stack>
@@ -99,6 +103,7 @@ function AgentDefaultsEditor({ initial, current, archive, currentArchive, onRelo
       />
     </> : null}
     {!valid ? <Notice tone="warning" message={copy("0 ile 3650 arasında tam gün girin.", "Enter a whole number of days from 0 to 3650.")} /> : null}
+    {failure ? <Notice tone="danger" message={failure} /> : null}
     {held ? <Notice tone="warning" message={copy("Kaydetme doğrulanamadı. Tekrar göndermeden güncel ayarları yükleyin; düzenlemeler sıfırlanır.", "Save was not confirmed. Load current settings before sending again; edits will reset.")} /> : null}
     <FormActions placement="inline" submitLabel={copy("Ajan varsayılanlarını kaydet", "Save agent defaults")} busy={busy} disabled={blocked || !dirty || !valid} onSubmit={() => void submit()} />
     {held ? <Button label={copy("Güncel ayarları yükle", "Load current settings")} busy={busy} disabled={busy} onPress={() => void reload()} /> : null}

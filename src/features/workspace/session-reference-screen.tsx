@@ -192,7 +192,7 @@ export function SessionReferenceScreen({ link }: { link: string }) {
             {switcher.busy ? (
               <Loading label={copy("Bağlantı kontrol ediliyor…", "Checking connection…")} />
             ) : switcher.operation.error ? (
-              <ErrorNotice error={switcher.operation.error} />
+              <ErrorNotice error={switcher.operation.error} onRetry={chosen ? () => choose(chosen.id) : undefined} />
             ) : showOffline ? (
               <QueryState query={{ fetchStatus: "paused" }} loading="inline" />
             ) : repairConnection ? (

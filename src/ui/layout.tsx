@@ -273,7 +273,7 @@ export function Card({ children, style, variant = "plain" }: CardProps) {
         className={surface ? surfaceClasses : "min-w-0 rounded-none border-0 bg-transparent shadow-none p-0 gap-ui-sm"}
         style={StyleSheet.flatten([
           uiStyles.card,
-          !surface && { backgroundColor: "transparent", borderRadius: 0, paddingHorizontal: 0,
+          !surface && { backgroundColor: "transparent", borderWidth: 0, borderRadius: 0, paddingHorizontal: 0,
             paddingVertical: depth ? 0 : space.sm },
           style,
         ])}

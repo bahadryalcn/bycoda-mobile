@@ -33,7 +33,6 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
     return (
       <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
         <Stack style={{ gap: space.xs }}>
-          <Heading>{copy("Bilgisayarına bağlan", "Connect your computer")}</Heading>
           <Body muted>{copy(
             "Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
             "In bycoda on your computer, choose “Connect your phone” and scan the QR code.",

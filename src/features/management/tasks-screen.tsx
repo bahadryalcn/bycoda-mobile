@@ -282,7 +282,7 @@ export function TasksScreen() {
       renderItem={({ item: task }) => (
         <TaskCard
           task={task}
-          projectName={projects.data?.find((project) => project.id === task.projectId)?.name}
+          projectName={linkedTaskId || !projectId ? projects.data?.find((project) => project.id === task.projectId)?.name : undefined}
           busy={busy}
           editorOpen={!!draft || !!deliveryTask || !!reviewTask}
           move={move}

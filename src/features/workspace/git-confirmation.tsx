@@ -1,6 +1,8 @@
 import { Body, CodePanel, CodeText, ConfirmationCard } from "@/ui/primitives";
+import { useLocale } from "@/i18n";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
+import { gitAheadCount } from "./git-commit-model";
 import type { GitConfirmationCardProps } from "./git-types";
 
 export function GitConfirmationCard({
@@ -15,6 +17,7 @@ export function GitConfirmationCard({
 }) {
   useMobileTheme();
   const copy = useCopy();
+  const numbers = new Intl.NumberFormat(useLocale());
   let message: string;
   let label: string;
   // The reviewed action is the sheet's one primary step; destructive choices stay danger.
@@ -96,6 +99,11 @@ export function GitConfirmationCard({
           <Body mono muted selectable>
             {confirmation.context.root}
           </Body>
+          {confirmation.kind === "push" && confirmation.context.pushTarget ? (
+            <Body selectable>
+              {`${confirmation.context.pushTarget} · ${gitAheadCount(confirmation.context.ahead ?? 0, copy, numbers.format)}`}
+            </Body>
+          ) : null}
           {confirmation.kind === "commit" ? (
             <>
               <CodePanel>

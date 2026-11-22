@@ -1,5 +1,6 @@
 import { backoffDelayMs } from "./backoff";
 import { BulkBase64Error, bulkDigestHex, decodeBase64Into, parseBulkJson } from "./bulk-transfer";
+import { safeHostMessage } from "./transport-validation";
 import {
   InboundRpcResponseSchema,
   InboundSubscriptionEventSchema,
@@ -99,6 +100,7 @@ function rpcFailure(code: number, category?: string): HostWsFailure {
     case RPC_ERROR_CODES.invalidRequest:
       return "schema";
     case RPC_ERROR_CODES.invalidParams:
+    case RPC_ERROR_CODES.conflict:
       return "validation";
     default:
       return "internal";
@@ -113,11 +115,13 @@ export class HostWsError extends Error {
     readonly hostDeadline = false,
     /** The Host's stable refusal code, e.g. CONTEXT_CHANGED after a Host restart. */
     readonly code?: string,
+    /** The reason of a typed Host refusal that ran nothing. */
+    refusal?: string,
   ) {
     super(
       uncertain
         ? "Connection interrupted. Check this command's result before trying again."
-        : failureMessages[category],
+        : refusal || failureMessages[category],
     );  }
 }
 export type HostWsRequestOptions = { signal?: AbortSignal; timeoutMs?: number };
@@ -414,14 +418,16 @@ export class MobileHostWsConnection {
       });
     });
   }
-  private pendingError(pending: Pending, category: HostWsFailure, fromHost = false, data?: { delivery?: string; code?: string }): HostWsError {
+  private pendingError(pending: Pending, category: HostWsFailure, fromHost = false, data?: { delivery?: string; code?: string }, message?: string): HostWsError {
+    const notSent = fromHost && data?.delivery === "not-sent";
     return new HostWsError(
       category,
       // A Host refusal that says nothing ran is a known outcome, not "check the result".
-      pending.sent && getHostRpcMethod(pending.method)?.retry !== "safe-query" && !(fromHost && data?.delivery === "not-sent"),
+      pending.sent && getHostRpcMethod(pending.method)?.retry !== "safe-query" && !notSent,
       pending.commandId,
       fromHost && category === "deadline",
       fromHost ? data?.code : undefined,
+      notSent && data?.code && message ? safeHostMessage(message) : undefined,
     );
   }
   private take(id: string): Pending | undefined {
@@ -553,7 +559,7 @@ export class MobileHostWsConnection {
     if ("error" in response) {
       const rejected = this.take(response.id)!;
       rejected.reject(
-        this.pendingError(rejected, rpcFailure(response.error.code, response.error.data?.category), true, response.error.data),
+        this.pendingError(rejected, rpcFailure(response.error.code, response.error.data?.category), true, response.error.data, response.error.message),
       );
       return;
     }

@@ -1,6 +1,7 @@
 import Copy from "lucide-react-native/icons/copy";
 import Flag from "lucide-react-native/icons/flag";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
+import Pencil from "lucide-react-native/icons/pencil";
 import Quote from "lucide-react-native/icons/quote";
 import Share2 from "lucide-react-native/icons/share-2";
 import { IconTile } from "@/ui/icon-tile";
@@ -21,7 +22,7 @@ function Feedback({ error, notice, children }: PropsWithChildren<{ error?: unkno
 
 const glyph = (G: typeof Copy, color: string) => <IconTile><G size={18} strokeWidth={2} color={color} /></IconTile>;
 
-export function TranscriptActions(props: TranscriptActionsProps) {
+export function TranscriptActions(props: TranscriptActionsProps & { onRewind?: () => void }) {
   const { colors } = useMobileTheme(), copy = useCopy(), bridge = useComposerTransfer(), actions = useTranscriptActions(props), anchor = useRef<HostInstance>(null);
   const { note } = actions;
   if (actions.selecting && actions.opening.context?.sessionId) return <SelectedText text={actions.opening.text}
@@ -29,6 +30,7 @@ export function TranscriptActions(props: TranscriptActionsProps) {
   return <Sheet visible title={copy("Mesaj seçenekleri", "Message options")} size="compact" dismissible={!actions.busy} onClose={actions.close}>
     {actions.changed ? <Notice tone="warning" message={copy("Seçim veya kaynak değişti. Devam etmeden önce bağlamı yeniden inceleyin.", "The selection or source changed. Review the context again before continuing.")} /> : null}
     <NavigationGroup>
+      {props.onRewind ? <NavigationRow intent="command" icon={glyph(Pencil, colors.muted)} label={copy("Buradan düzenle", "Edit from here")} disabled={actions.disabled} onPress={() => { actions.close(); props.onRewind?.(); }} /> : null}
       {bridge && actions.opening.context?.sessionId ? <NavigationRow intent="navigate" icon={glyph(Quote, colors.muted)} label={copy("Alıntıla veya çevir", "Quote or translate")} disabled={actions.disabled} onPress={actions.select} /> : null}
       <Feedback error={actions.messageCopy.error}><NavigationRow intent="command" icon={glyph(Copy, colors.muted)} label={copy("Mesajı kopyala", "Copy message")} disabled={actions.disabled} busy={actions.messageCopy.inFlight} onPress={actions.messageCopy.copy} /></Feedback>
       {actions.hasResponse ? <Feedback error={actions.responseCopy.error}><NavigationRow intent="command" icon={glyph(Copy, colors.muted)} label={copy("Yanıtın tamamını kopyala", "Copy complete response")} disabled={actions.disabled} busy={actions.responseCopy.inFlight} onPress={actions.responseCopy.copy} /></Feedback> : null}

@@ -1,11 +1,11 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import ArrowDownToLine from "lucide-react-native/icons/arrow-down-to-line";
 import Check from "lucide-react-native/icons/check";
 import Download from "lucide-react-native/icons/download";
 import FileText from "lucide-react-native/icons/file-text";
 import GitCompare from "lucide-react-native/icons/git-compare";
+import Plus from "lucide-react-native/icons/plus";
 import Animated from "react-native-reanimated";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
@@ -231,7 +231,7 @@ export function GitConflictsPanel({
                 {
                   key: "stage",
                   label: copy("Düzenlenmiş dosyayı stage’e al", "Stage edited file"),
-                  icon: <ArrowDownToLine size={18} color={colors.muted} />,
+                  icon: <Plus size={18} color={colors.muted} />,
                   disabled: busy,
                   onPress: () => onStageFile(file.relative),
                 },

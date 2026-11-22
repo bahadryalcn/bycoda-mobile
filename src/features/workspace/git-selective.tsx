@@ -60,7 +60,7 @@ export function GitSelective({ scope, path, visible, busy: parentBusy, onBusyCha
     discardTitle={copy("Satır seçimlerini bırak?", "Discard line selections?")}
     discardMessage={copy("Dosyalar değiştirilmez.", "Files are not changed.")}
     onClose={() => { if (scopeAccess.attached() && !occupied.current && latest.current.selected === selected) { setSelected(new Set()); onClose(); } }}
-    footer={readAccess.allowed ? <Button tone="primary" label={copy("Seçili satırları stage’e al", "Stage selected lines")} disabled={disabled || !selected.size} busy={busy} onPress={submit} /> : undefined}>
+    footer={readAccess.allowed ? <Button tone="primary" fullWidth reserveTouchTarget label={copy("Seçili satırları stage’e al", "Stage selected lines")} disabled={disabled || !selected.size} busy={busy} onPress={submit} /> : undefined}>
     <ScreenList data={readAccess.allowed ? rows : []} keyExtractor={(row) => row.kind === "hunk" ? `hunk:${row.hunk.id}` : row.line.id}
       header={readAccess.allowed ? <View style={{ gap: space.sm }}><Body mono>{`${machineName}\n${opening.root}\n${path}`}</Body>
         <Notice message={copy("Yalnız seçilen ekleme ve silmeler Git index’ine yazılır. Çalışma dosyası korunur.", "Only selected additions and deletions are written to the Git index. The working file is preserved.")} />

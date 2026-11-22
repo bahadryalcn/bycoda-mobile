@@ -3,7 +3,7 @@ import type { HostStewardInput } from "@/remote/types";
 import { useFormDraft } from "@/state/form-draft";
 import type { useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { NumberField } from "@/ui/number-field";
+import { IntegerTextStepper } from "@/ui/limit-presets";
 import {
   Disclosure,
   ErrorText,
@@ -96,22 +96,24 @@ export function StewardEditor({
       </Section>
       <Disclosure label={copy("Gelişmiş seçenekler", "Advanced options")}
         feedback={!integerInRange(proposals, 1, 10) || !integerInRange(open, 1, 30) ? <>
-          {!integerInRange(proposals, 1, 10) ? <ErrorText error={`${copy("Çalışma başına öneri (1–10)", "Proposals per run (1–10)")}: ${copy("1 ile 10 arasında bir sayı girin.", "Enter a number from 1 to 10.")}`} /> : null}
-          {!integerInRange(open, 1, 30) ? <ErrorText error={`${copy("Açık görev sınırı (1–30)", "Open task limit (1–30)")}: ${copy("1 ile 30 arasında bir sayı girin.", "Enter a number from 1 to 30.")}`} /> : null}
+          {!integerInRange(proposals, 1, 10) ? <ErrorText error={`${copy("Çalışma başına öneri", "Proposals per run")}: ${copy("1 ile 10 arasında bir sayı girin.", "Enter a number from 1 to 10.")}`} /> : null}
+          {!integerInRange(open, 1, 30) ? <ErrorText error={`${copy("Açık görev sınırı", "Open task limit")}: ${copy("1 ile 30 arasında bir sayı girin.", "Enter a number from 1 to 30.")}`} /> : null}
         </> : null}>
-        <NumberField
-          label={copy("Çalışma başına öneri (1–10)", "Proposals per run (1–10)")}
-          unit={copy("görev", "tasks")}
+        <IntegerTextStepper
+          label={copy("Çalışma başına öneri", "Proposals per run")}
           value={proposals}
+          min={1}
+          max={10}
           onChangeText={setProposals}
-          editable={!save.isPending}
+          disabled={save.isPending}
         />
-        <NumberField
-          label={copy("Açık görev sınırı (1–30)", "Open task limit (1–30)")}
-          unit={copy("görev", "tasks")}
+        <IntegerTextStepper
+          label={copy("Açık görev sınırı", "Open task limit")}
           value={open}
+          min={1}
+          max={30}
           onChangeText={setOpen}
-          editable={!save.isPending}
+          disabled={save.isPending}
         />
         <NavigationGroup>
           <ToggleField

@@ -92,7 +92,7 @@ export type GitCommitPanelProps = {
   generation?: ReturnType<typeof import("./use-git-commit-generation").useGitCommitGeneration>;
   fetching: boolean;
   onFetch: () => void;
-  onChoose: (confirmation: GitConfirmation) => void;
+  onChoose: (confirmation: GitConfirmation, stageAll?: boolean) => void;
   children?: ReactNode;
 };
 

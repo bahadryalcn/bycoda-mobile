@@ -87,6 +87,8 @@ export function GitBranchesPanel({
           />
           <Button
             tone="primary"
+            fullWidth
+            reserveTouchTarget
             label={copy("Yeni dal oluştur", "Create branch")}
             disabled={!!problem}
             busy={creating}

@@ -5,6 +5,7 @@ import { captureSessionAuthority } from "@/domain/session-authority";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine } from "@/state/machines";
 import { useModelCatalog } from "@/state/model-catalog";
+import { RemoteHostError } from "@/remote/host-error";
 import { Notice, QueryState } from "@/ui/primitives";
 import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
@@ -60,6 +61,10 @@ export function ComposerModelChip({
     (!sameFormValue(draftOf(session), draftOf(reviewed)) ||
       session.authorityGeneration !== reviewed.authorityGeneration ||
       session.session.runtimeMode !== reviewed.session.runtimeMode);
+  const failure = configure.error;
+  // A save whose reply was lost may have landed: hold it until the owner rechecks the current model.
+  const uncertain =
+    !!failure && (!(failure instanceof RemoteHostError) || failure.uncertain || failure.kind === "timeout");
   const running = session.status === "running";
   const providers = [...new Set([harness, ...catalogProviders(machine?.providers, catalog.data)])];
   const available = sessionCatalog(catalog.data, providers);
@@ -93,6 +98,7 @@ export function ComposerModelChip({
       configure.isPending ||
       unavailableAccount ||
       conflict ||
+      uncertain ||
       !model
     )
       return;
@@ -150,7 +156,7 @@ export function ComposerModelChip({
         onSave={() => {
           void save();
         }}
-        saveDisabled={conflict || !model}
+        saveDisabled={conflict || uncertain || !model}
         catalog={available}
         choices={choices}
         choice={choice}
@@ -198,8 +204,27 @@ export function ComposerModelChip({
                   "The model can change after the current run finishes.",
                 )}
               />
-            ) : configure.error ? (
-              <Notice tone="danger" message={configure.error.message} />
+            ) : uncertain ? (
+              <Notice
+                tone="warning"
+                message={copy(
+                  "Değişikliğin kaydedilip kaydedilmediği bilinmiyor. Otomatik olarak yeniden denenmeyecek.",
+                  "It is unknown whether the change was saved. It will not be retried automatically.",
+                )}
+                action={{
+                  label: copy("Geçerli modeli kontrol et", "Check current model"),
+                  onPress: () => {
+                    configure.reset();
+                    form.reset(draftOf(session));
+                    setReviewed(session);
+                  },
+                }}
+              />
+            ) : failure ? (
+              <Notice
+                tone="danger"
+                message={`${failure.message} ${copy("Seçimin korundu; Kaydet ile yeniden dene.", "Your choice is kept; press Save to try again.")}`}
+              />
             ) : unavailableAccount ? (
               <Notice
                 tone="warning"

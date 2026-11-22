@@ -35,14 +35,14 @@ import { stamp } from "../management/shared/format";
 import { FeatureUnavailable } from "./unavailable-state";
 import { Status, statusLabel } from "../management/shared/status";
 import { agentStateLabel } from "./agent-state";
-import { activityState } from "./transcript-model";
+import { agentRunState } from "./transcript-model";
 
 type Step = NonNullable<TranscriptBlockProps["block"]["agentRun"]>["steps"][number];
 
 function AgentTrailStep({ step, context, live }: { step: Step; context: TranscriptBlockProps["context"]; live: boolean }) {
   const copy = useCopy();
   const nested = step.agentRun;
-  const state = nested ? activityState({ id: step.id, role: "tool", text: step.text, tool: { status: step.status }, agentRun: nested }) : undefined;
+  const state = nested ? agentRunState({ id: step.id, role: "tool", text: step.text, tool: { status: step.status }, agentRun: nested }) : undefined;
   const content = (
     <Stack style={{ gap: space.xs }}>
       {!nested ? (
@@ -59,7 +59,7 @@ function AgentTrailStep({ step, context, live }: { step: Step; context: Transcri
     </Stack>
   );
   if (!nested || !state) return content;
-  const meta = [state === "neutral" ? undefined : agentStateLabel(state === "running" && !live ? "interrupted" : state, copy), nested.model].filter(Boolean).join(" · ");
+  const meta = [state === "neutral" ? undefined : agentStateLabel((state === "running" || state === "queued") && !live ? "interrupted" : state, copy), nested.model].filter(Boolean).join(" · ");
   return (
     <Disclosure label={nested.name || step.text} detail={meta || undefined}>
       {content}

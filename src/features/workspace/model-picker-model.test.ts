@@ -1,24 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { AgentModel } from "../../../../src/features/sessions/model/models";
-import { contextLabel, modelRows, settingsSummary } from "./model-picker-model";
+import { modelRows, settingsSummary } from "./model-picker-model";
 import { settingControl, toggleSides } from "./model-picker-model";
+import { filterSelection } from "@/ui/selection-model";
 
 const model = (extra: Partial<AgentModel> = {}): AgentModel => ({ id: "claude:a", harness: "claude", name: "Opus", nativeId: "claude-a", ...extra });
 
 describe("model picker model", () => {
-  it("formats context windows", () => {
-    expect(contextLabel(200_000)).toBe("200K");
-    expect(contextLabel(1_000_000)).toBe("1M");
-    expect(contextLabel(1_500_000)).toBe("1.5M");
-    expect(contextLabel(undefined)).toBeUndefined();
-  });
-  it("lists rows with id and context, marking the selection", () => {
-    const rows = modelRows([model({ contextWindow: 200_000 }), model({ id: "b", name: "same", nativeId: "SAME" })], "claude-a", "context");
-    expect(rows[0]).toMatchObject({ detail: "claude-a · 200K context", selected: true });
-    expect(rows[1]).toMatchObject({ detail: undefined, selected: false });
+  it("shows the catalog name while matching both model IDs in search", () => {
+    const rows = modelRows([model({ contextWindow: 200_000 }), model({ id: "b", name: "Other" })], "claude-a");
+    expect(rows[0]).toEqual({ value: "claude:a", label: "Opus", searchKeywords: "claude:a claude-a", selected: true });
+    expect(rows[1]?.selected).toBe(false);
+    expect(filterSelection(rows, "claude:a")).toEqual([rows[0]]);
+    expect(filterSelection(rows, "opus")).toEqual([rows[0]]);
   });
   it("keeps an unknown saved id first", () => {
-    const rows = modelRows([model()], "custom", "context");
+    const rows = modelRows([model()], "custom");
     expect(rows[0]).toMatchObject({ value: "custom", selected: true });
     expect(rows).toHaveLength(2);
   });

@@ -166,3 +166,28 @@ it("expands options inline inside a Sheet instead of stacking a second sheet", a
   expect(s.changes).toEqual([["a"]]);
   expect(container.textContent).not.toContain("Beta");
 });
+
+it.each([false, true])("closes and reopens an inline select from its trigger (multiple %s)", async (multiple) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  container = document.createElement("div");
+  root = createRoot(container);
+  const guard = { register() {}, requestClose() {}, requestCloseThen() {} };
+  const onChange = vi.fn();
+  const common = { label: "Project", options: s.options, onChange, searchable: true };
+  await act(async () => root!.render(h(SheetGuardContext.Provider, { value: guard },
+    multiple ? h(MultiSelectField, { ...common, values: ["a"] }) : h(SelectField, { ...common, value: "a" }),
+  )));
+  const expanded = () => s.primitives.get("Project: Alpha")?.["aria-expanded"];
+  await call("Open");
+  expect(expanded()).toBe(true);
+  await act(async () => s.search!("Beta"));
+  const retiredOption = s.actions.get("Beta")!;
+  await call("Open");
+  expect(expanded()).toBe(false);
+  expect(container.querySelector("input")).toBeNull();
+  await call("Open");
+  expect(expanded()).toBe(true);
+  expect(container.querySelector("input")?.value).toBe("");
+  await act(async () => retiredOption());
+  expect(onChange).not.toHaveBeenCalled();
+});

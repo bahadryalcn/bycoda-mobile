@@ -38,23 +38,24 @@ export function PullRequestMetadata({ input, canRead, disabled, onCommand }: { i
       <QueryState query={reviewers} />
       {reviewers.data?.reviewRequests.map((reviewer, index) => <Row key={`${reviewer.login ?? reviewer.name}:${index}`}>
         <Body>{reviewer.login ?? reviewer.name}</Body>
-        {reviewer.login ? <Button tone="quiet" disabled={disabled || !!reviewers.error || reviewers.isFetching} label={copy("İnceleyeni kaldır", "Remove reviewer")} onPress={() => confirm({ action: "reviewers", input: { ...input, mode: "remove", logins: [reviewer.login!], confirm: "CHANGE_PR_REVIEWERS" } }, reviewer.login!)} /> : null}
+        {reviewer.login ? <Button tone="quiet" disabled={disabled || !!reviewers.error || reviewers.isFetching} label={copy("İnceleyeni kaldır", "Remove reviewer")} accessibilityLabel={copy("{p0} adlı inceleyeni kaldır", "Remove reviewer {p0}", { p0: reviewer.login })} onPress={() => confirm({ action: "reviewers", input: { ...input, mode: "remove", logins: [reviewer.login!], confirm: "CHANGE_PR_REVIEWERS" } }, copy("İnceleyeni kaldır: {p0}", "Remove reviewer: {p0}", { p0: reviewer.login! }))} /> : null}
       </Row>)}
       {reviewers.data?.latestReviews.map((review, index) => <Row key={`${review.author.login}:${index}`}><Body>{review.author.login}</Body><Badge label={providerStateLabel(review.state, copy)} tone={providerStateTone(review.state)} /></Row>)}
       <Field label={copy("GitHub kullanıcı adı", "GitHub username")} value={login} maxLength={100} editable={!disabled} onChangeText={setLogin} />
       <Button label={copy("İnceleme iste", "Request review")} disabled={disabled || !/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(login) || !reviewers.data || !!reviewers.error || reviewers.isFetching}
-        onPress={() => confirm({ action: "reviewers", input: { ...input, mode: "request", logins: [login], confirm: "CHANGE_PR_REVIEWERS" } }, login)} />
+        onPress={() => confirm({ action: "reviewers", input: { ...input, mode: "request", logins: [login], confirm: "CHANGE_PR_REVIEWERS" } }, copy("İnceleme iste: {p0}", "Request review from: {p0}", { p0: login }))} />
     </Disclosure>
     <Disclosure label={copy("Etiketler", "Labels")}>
       <QueryState query={labels} />
       {labels.data?.labels.map(current => <Row key={current.name}><Badge label={current.name} />
         <Button label={copy("Etiketi kaldır", "Remove label")} tone="quiet" disabled={disabled || !!labels.error || labels.isFetching}
-          onPress={() => confirm({ action: "labels", input: { ...input, mode: "remove", names: [current.name], confirm: "CHANGE_PR_LABELS" } }, current.name)} />
+          accessibilityLabel={copy("{p0} etiketini kaldır", "Remove label {p0}", { p0: current.name })}
+          onPress={() => confirm({ action: "labels", input: { ...input, mode: "remove", names: [current.name], confirm: "CHANGE_PR_LABELS" } }, copy("Etiketi kaldır: {p0}", "Remove label: {p0}", { p0: current.name }))} />
       </Row>)}
       <SelectField label={copy("Depo etiketi", "Repository label")} value={label} disabled={disabled || !labels.data || !!labels.error || labels.isFetching}
         options={(labels.data?.available ?? []).map(current => ({ value: current.name, label: current.name }))} onChange={setLabel} />
       <Button label={copy("Etiket ekle", "Add label")} disabled={disabled || !label || !labels.data?.available.some(current => current.name === label) || !!labels.error || labels.isFetching}
-        onPress={() => confirm({ action: "labels", input: { ...input, mode: "add", names: [label], confirm: "CHANGE_PR_LABELS" } }, label)} />
+        onPress={() => confirm({ action: "labels", input: { ...input, mode: "add", names: [label], confirm: "CHANGE_PR_LABELS" } }, copy("Etiket ekle: {p0}", "Add label: {p0}", { p0: label }))} />
       {labels.data?.truncated ? <Body muted>{copy("Depo etiketlerinin bir bölümü gösteriliyor.", "Part of the repository labels are shown.")}</Body> : null}
     </Disclosure>
   </Stack>;

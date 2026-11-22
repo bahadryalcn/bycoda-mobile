@@ -13,6 +13,7 @@ const fixture = vi.hoisted(() => ({
   data: undefined as NotificationSettings | undefined,
   save: vi.fn(),
 }));
+vi.mock("./use-graced-read-error", () => ({ useGracedReadError: (query: { error: unknown }) => query.error ?? null }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
 vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ isPending: !fixture.data, data: fixture.data }) }));

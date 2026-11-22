@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import { ApprovalCommandRefused, captureApprovalCommand } from "@/domain/approval-command";
 import { RemoteHostError } from "@/remote/host-error";
-import { Badge, Body, Button, ErrorText, Row } from "@/ui/primitives";
+import { hostKey } from "@/state/queries";
+import { Badge, Body, Button, ErrorText } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
 import type { Block } from "./wire";
@@ -30,6 +32,33 @@ function ApprovalOwner({ approval, scope, runId, disabled, onCommand, identity }
   const [delivery, setDelivery] = useState(() => deliveries.get(identity));
   const [error, setError] = useState<unknown>(null);
   const sending = useRef(false);
+  const cache = useQueryClient();
+  const [checking, setChecking] = useState(false);
+  const checkingRef = useRef(false);
+  /** Reads the session again. A still-open approval may then be answered by hand; nothing is resent. */
+  const checkStatus = async () => {
+    if (checkingRef.current) return;
+    const key = hostKey(scope.machineId, ["session", scope.sessionId]);
+    const readBefore = cache.getQueryState(key)?.dataUpdatedAt ?? 0;
+    checkingRef.current = true;
+    setChecking(true);
+    try {
+      await cache.refetchQueries({ queryKey: key, exact: true }, { throwOnError: true });
+      // Without a newer session read there is no evidence, so the hold stays.
+      const refreshed = (cache.getQueryState(key)?.dataUpdatedAt ?? 0) > readBefore;
+      if (refreshed && deliveries.get(identity)?.status === "unknown") {
+        deliveries.delete(identity);
+        sending.current = false;
+        setDelivery(undefined);
+        setError(null);
+      }
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      checkingRef.current = false;
+      setChecking(false);
+    }
+  };
   // Authoritative provider resolution releases the local navigation hold.
   useEffect(() => {
     if (approval.decided) deliveries.delete(identity);
@@ -63,16 +92,18 @@ function ApprovalOwner({ approval, scope, runId, disabled, onCommand, identity }
   const held = disabled || !runId || !!delivery;
   return <View style={{ gap: space.sm }}>
     <Body>{copy("Bu işlem için onayın gerekiyor.", "This action needs your approval.")}</Body>
-    <Row>
-      <Button label={copy("İzin ver", "Allow")} density="compact" tone="success" disabled={held}
+    <View style={{ gap: space.sm }}>
+      <Button label={copy("İzin ver", "Allow")} tone="primary" fullWidth reserveTouchTarget disabled={held}
         busy={delivery?.status === "sending" && delivery.decision === "allow"} onPress={() => { void decide("allow"); }} />
-      <Button label={copy("Reddet", "Deny")} density="compact" tone="danger" disabled={held}
+      <Button label={copy("Reddet", "Deny")} tone="quiet" fullWidth reserveTouchTarget disabled={held}
         busy={delivery?.status === "sending" && delivery.decision === "deny"} onPress={() => { void decide("deny"); }} />
-    </Row>
+    </View>
     {!runId ? <Body muted>{copy("Onay için oturumun güncel durumunu yükle.", "Refresh the session to approve.")}</Body> : null}
     {delivery?.status === "accepted" ? <Body muted>{copy("Karar gönderildi · doğrulama bekleniyor", "Decision sent · waiting for confirmation")}</Body> : null}
     {delivery?.status === "unknown" ? <View accessibilityRole="alert"><Badge tone="warning" label={copy("Onayın teslimi doğrulanamadı", "Approval delivery not confirmed")} /></View> : null}
     {delivery?.status === "unknown" ? <Body muted>{copy("Yeniden denemeden önce konuşmayı kontrol et.", "Check the conversation before trying again.")}</Body> : null}
+    {!runId || delivery?.status === "unknown" ? <Button label={copy("Durumu kontrol et", "Check status")} fullWidth reserveTouchTarget
+      busy={checking} disabled={checking} onPress={() => { void checkStatus(); }} /> : null}
     <ErrorText error={error} />
   </View>;
 }

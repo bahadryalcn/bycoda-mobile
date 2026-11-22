@@ -7,6 +7,7 @@ import { View } from "react-native";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import Laptop from "lucide-react-native/icons/laptop";
 import Plus from "lucide-react-native/icons/plus";
+import MoreHorizontal from "lucide-react-native/icons/ellipsis";
 import { IconTile } from "@/ui/icon-tile";
 import { useLocale } from "@/i18n";
 import { useScreenChrome } from "@/ui/layout";
@@ -70,6 +71,14 @@ export function MachinesScreen() {
   }, [removal, removalMatches, removalWriting]);
   const staleRemoval = !!removal && !removalWriting && (!removalMatches || retiredRemoval.current);
   const closeManagement = () => { if (!busy) { retiredRemoval.current = true; setRemoval(null); setManaging(null); } };
+  const switchToComputer = (id: string) => {
+    void recover(() => selectSavedComputer(id, {
+      flushDrafts: flushWorkspaceDrafts, assertAccess: assertAppAccess,
+      getState: () => useMachines.getState(),
+      selectMachine: (next) => useMachines.getState().selectMachine(next),
+      onSelected: () => setManaging(null),
+    }), copy("Bilgisayar seçildi.", "Computer selected."));
+  };
   useLayoutEffect(() => () => { retiredRemoval.current = true; }, []);
   const adding = controller.form.values.target !== null;
   const unavailable = !hydrated || !!storageError || connectionPending;
@@ -159,14 +168,15 @@ export function MachinesScreen() {
           const duplicateName = (nameCounts.get(normalizeSearch(machine.name, locale)) ?? 0) > 1;
           const address = duplicateName ? machine.endpoint : undefined;
           return <NavigationRow
-            key={machine.id} label={machine.name} selected={active} intent="navigate"
+            key={machine.id} label={machine.name} selected={active} intent={active ? "navigate" : "select"}
             detail={address} detailSelectable={false} detailEllipsizeMode="middle"
             accessibilityLabel={active
               ? [machine.name, address, activeStatus.status, activeStatus.reason].filter(Boolean).join(". ")
               : undefined}
             icon={<IconTile color={colors.muted}><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
             supporting={active ? <ActiveComputerStatus connection={activeStatus} /> : undefined}
-            disabled={unavailable || busy} onPress={() => setManaging(machine.id)}
+            trailing={active ? undefined : <IconButton label={copy("{p0} için seçenekler", "Options for {p0}", { p0: address ? `${machine.name} (${address})` : machine.name })} disabled={unavailable || busy} onPress={() => setManaging(machine.id)}><MoreHorizontal size={20} color={colors.muted} /></IconButton>}
+            disabled={unavailable || busy} onPress={() => active ? setManaging(machine.id) : switchToComputer(machine.id)}
           />;
       }}
     /> : <View style={{ width: "100%", maxWidth: metrics.entryWidth, alignSelf: "center", gap: space.lg, paddingTop: space.sm }}>
@@ -204,14 +214,7 @@ export function MachinesScreen() {
       </> : selected ? <>
       {selected.id === activeId ? <ActiveComputerStatus connection={activeStatus} /> : null}
       <NavigationGroup>
-        {selected.id === activeId ? null : <NavigationRow label={copy("Seç", "Use computer")} disabled={unavailable || busy} onPress={() => {
-          void recover(() => selectSavedComputer(selected.id, {
-            flushDrafts: flushWorkspaceDrafts, assertAccess: assertAppAccess,
-            getState: () => useMachines.getState(),
-            selectMachine: (id) => useMachines.getState().selectMachine(id),
-            onSelected: () => setManaging(null),
-          }), copy("Bilgisayar seçildi.", "Computer selected."));
-        }} />}
+        {selected.id === activeId ? null : <NavigationRow label={copy("Seç", "Use computer")} disabled={unavailable || busy} onPress={() => switchToComputer(selected.id)} />}
         {selected.id === activeId ? <RetryConnectionRow onPair={() => { setManaging(null); controller.begin("scan"); }} /> : null}
       </NavigationGroup>
       <Disclosure label={copy("Gelişmiş seçenekler", "Advanced options")}>

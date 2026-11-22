@@ -11,9 +11,10 @@ const state = vi.hoisted(() => ({
     { id: "other", owner: { kind: "task", id: "other" }, branchRef: "refs/heads/work", targetBranchRef: "refs/heads/main", revision: 1 },
     { id: "owned", owner: { kind: "task", id: "task" }, branchRef: "refs/heads/work", targetBranchRef: "refs/heads/main", revision: 2 },
   ],
-  review: vi.fn(), merge: vi.fn(), refetch: vi.fn(), randomUUID: vi.fn(),
+  review: vi.fn(), merge: vi.fn(), refetch: vi.fn(), randomUUID: vi.fn(), refreshProject: vi.fn(),
 }));
 vi.mock("expo-crypto", () => ({ randomUUID: state.randomUUID }));
+vi.mock("./shared", () => ({ useProjectRefresh: () => state.refreshProject }));
 vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ isCurrent: () => state.current }) }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "pc", name: "Harbor computer" }) }));
 vi.mock("@/state/queries", () => ({
@@ -82,6 +83,8 @@ it("reconciles an unconfirmed review explicitly and submits only the approved to
   ]);
   expect(container.textContent).toContain("Delivered.");
   expect(button("Approve delivery")).toBeUndefined();
+  expect(button("Done")).toBeDefined();
+  expect(state.refreshProject).toHaveBeenCalledOnce();
 });
 
 it("confirms a recorded merge from the exact workspace without sending another approval", async () => {
@@ -101,6 +104,7 @@ it("confirms a recorded merge from the exact workspace without sending another a
   expect(state.review).toHaveBeenCalledOnce();
   expect(container.textContent).toContain("Delivered.");
   expect(button("Retry")).toBeUndefined();
+  expect(state.refreshProject).toHaveBeenCalledOnce();
 });
 
 it("retires the merge action when its connection has changed", async () => {

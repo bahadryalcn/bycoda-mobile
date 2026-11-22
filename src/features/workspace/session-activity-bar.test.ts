@@ -26,7 +26,7 @@ import { SessionActivityBar } from "./session-activity-bar";
 
 const START = 1_000_000;
 const activity = (state: string, extra: object = {}) =>
-  ({ state, startedAt: START, counts: { total: 0, running: 0, done: 0, failed: 0, stopped: 0, interrupted: 0 }, waitingOn: { agents: 0, tasks: 0 }, ...extra }) as never;
+  ({ state, startedAt: START, counts: { total: 0, queued: 0, running: 0, done: 0, failed: 0, stopped: 0, interrupted: 0 }, waitingOn: { agents: 0, tasks: 0 }, ...extra }) as never;
 const render = (a: unknown) => renderToStaticMarkup(h(SessionActivityBar, { activity: a as never, onAgents: () => {}, onDevice: () => {}, onBrowser: () => {} }));
 const live = (html: string) => [...html.matchAll(/<div[^>]*data-live="polite"[^>]*>/g)].map((match) => match[0]);
 beforeEach(() => { clock.now = START + 65_000; });

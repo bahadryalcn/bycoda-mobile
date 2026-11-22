@@ -73,11 +73,11 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
         label={copy("Çalışmayı durdur", "Stop work")}
         disabled={busy || !supported} onPress={stopWork} />}
       {run.status !== "finished" && <Button tone="quiet" busy={pause.isPending || resume.isPending}
-        label={run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Beklet", "Pause")}
-        disabled={busy || !supported} onPress={() => confirm(run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Beklet", "Pause"),
+        label={run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Duraklat", "Pause")}
+        disabled={busy || !supported} onPress={() => confirm(run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Duraklat", "Pause"),
           run.status === "paused" ? copy("Ekip görevleri bilgisayarda yeniden ilerleyebilir; gerekirse koordinatör yeniden başlatılır.", "Crew work may continue on the computer; the coordinator may restart if needed.")
-            : copy("Yeni görevler bekletilir. Çalışan görevleri de durdurmak için Çalışmayı durdur işlemini kullanın.", "New work is paused. Use Stop work to stop currently running tasks too."),
-          run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Beklet", "Pause"),
+            : copy("Yeni görevler duraklatılır. Çalışan görevleri de durdurmak için Çalışmayı durdur işlemini kullanın.", "New work is paused. Use Stop work to stop currently running tasks too."),
+          run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Duraklat", "Pause"),
           () => { if (supported && useMachines.getState().activeId === machineId) (run.status === "paused" ? resume : pause).mutate({ projectId: run.projectId, runId: run.id }, { onError: refreshAfterFailure }); }, "default")} />}
     </Row> : null;
   const card = <RecordCard title={title} status={<Status value={run.status} />}

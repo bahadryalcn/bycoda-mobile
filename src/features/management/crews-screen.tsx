@@ -35,6 +35,8 @@ import { CrewDefinitionCard } from "./crews/definition-card";
 import { CrewProfileCard } from "./crews/profile-card";
 import { newDefinition, newMember, validateCrewDirectory } from "./crews/model";
 import { crewCatalogState, crewRoleOptions } from "./crews/presentation";
+import { useReadRetryNotice } from "@/ui/query-state";
+import { isTransientConnectionError } from "@/state/query-retry";
 import { crewDirectoryPollInterval } from "./crews/runtime-model";
 import { useMobileTheme } from "@/ui/theme";
 
@@ -89,8 +91,11 @@ export function CrewsScreen() {
     { enabled: supported && !!(editor?.projectId ?? projectId) },
   );
   const remove = useHostMutation("crews.delete", ["crews", projectId]);
+  // A dropped link refetches itself; the editor reports the catalog error only after the read grace.
+  const catalogTransient = !!catalog.error && isTransientConnectionError(catalog.error);
+  const catalogGraceElapsed = useReadRetryNotice(catalogTransient, machine?.id ?? null);
   const catalogRead = {
-    state: crewCatalogState(catalog.data, catalog.error),
+    state: crewCatalogState(catalog.data, catalogTransient && !catalogGraceElapsed ? null : catalog.error),
     retry: () => {
       void catalog.refetch();
     },

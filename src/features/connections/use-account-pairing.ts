@@ -37,6 +37,8 @@ export function useAccountPairing() {
   const request = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const decision = useRef<((confirmed: boolean) => void) | null>(null);
+  // Set synchronously so a second tap in the same frame cannot start another request before state updates.
+  const inFlight = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -53,6 +55,7 @@ export function useAccountPairing() {
   const cancel = useCallback(() => {
     request.current?.abort();
     request.current = null;
+    inFlight.current = false;
     setState({ phase: "idle" });
   }, []);
 
@@ -61,7 +64,8 @@ export function useAccountPairing() {
 
   const start = useCallback(
     async (computer: Computer) => {
-      request.current?.abort();
+      if (inFlight.current) return;
+      inFlight.current = true;
       const controller = new AbortController();
       request.current = controller;
       const { signal } = controller;
@@ -134,6 +138,8 @@ export function useAccountPairing() {
               ? pairingErrorMessage(error, copy)
               : accountPairingMessage(error, copy);
         update({ phase: "error", computer, message }, controller);
+      } finally {
+        if (request.current === controller || request.current === null) inFlight.current = false;
       }
     },
     [runtime, copy],
