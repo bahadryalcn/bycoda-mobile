@@ -836,7 +836,7 @@ export function SessionComposer({
             disableFullscreenUI: true,
             submitBehavior: "newline",
             maxLength: 256_000,
-            placeholder: copy("Mesaj yaz…", "Write a message…"),
+            placeholder: copy("Mesaj", "Message"),
             style: { maxHeight: maximumInputHeight },
           }}
           secondarySubmit={
