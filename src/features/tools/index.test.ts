@@ -6,14 +6,16 @@ import { createRoot } from "react-dom/client";
 import { router } from "expo-router";
 import { HostToolScreen } from "./index";
 
-const state = vi.hoisted(() => ({ capabilities: [] as string[], directory: {
+const state = vi.hoisted(() => ({ capabilities: [] as string[] | undefined,
+  connectionPhase: "disconnected",
+  directory: {
   data: [{ id: "project", name: "Project", cwd: "/project" }] as { id: string; name: string; cwd: string }[] | undefined,
   directoryReady: true, privacyUnavailable: false, isPending: false, error: undefined as Error | undefined,
   isProjectVisible: () => state.directory.directoryReady,
 } }));
 vi.mock("expo-router", () => ({ router: { replace: vi.fn(), setParams: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/machine-bar", () => ({ useMachineStatus: () => ({ phase: "disconnected" }) }));
+vi.mock("@/ui/machine-bar", () => ({ useMachineStatus: () => ({ phase: state.connectionPhase, health: {} }) }));
 vi.mock("react-native", () => ({ View: "div" }));
 vi.mock("@/ui/private-content", () => ({ PrivateContentBoundary: ({ visible, children }: { visible: boolean; children: ReactNode }) => createElement("div", { hidden: !visible }, children) }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "machine", capabilities: state.capabilities }) }));
@@ -23,8 +25,11 @@ vi.mock("../workspace/project-picker", () => ({
     createElement("button", { onClick: () => onSelect({ id: "project", cwd: "/project" }) }, "Project"),
 }));
 vi.mock("@/ui/primitives", () => ({
-  Screen: "section", QueryState: ({ query, loadingLabel }: { query: { isPending?: boolean; error?: Error }; loadingLabel?: string }) =>
-    query.error ? createElement("p", null, query.error.message) : query.isPending ? createElement("p", null, loadingLabel) : null,
+  Screen: "section",
+  QueryState: ({ query, loadingLabel }: { query: { isPending?: boolean; error?: Error; fetchStatus?: string }; loadingLabel?: string }) => {
+    const message = query.error?.message ?? (query.fetchStatus === "paused" ? "Waiting for a connection" : query.isPending ? loadingLabel : undefined);
+    return message ? createElement("p", null, message) : null;
+  },
   Empty: ({ title, detail, action }: { title: string; detail?: string; action?: { label: string; onPress(): void } }) =>
     createElement("div", null, title, detail, action ? createElement("button", { onClick: action.onPress }, action.label) : null),
   StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: { message: string }) => createElement("p", null, message),
@@ -43,6 +48,7 @@ vi.mock("./access-center", () => ({ AccessCenter: () => createElement("p", null,
 
 beforeEach(() => {
   state.capabilities = [];
+  state.connectionPhase = "disconnected";
   Object.assign(state.directory, { data: [{ id: "project", name: "Project", cwd: "/project" }], directoryReady: true, privacyUnavailable: false, isPending: false, error: undefined });
 });
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -59,6 +65,21 @@ it("retains host-update guidance for a recognized unsupported tool", () => {
   const html = renderToStaticMarkup(createElement(HostToolScreen, { tool: "logs", projectId: "project" }));
   expect(html).toContain("bycoda may be outdated");
   expect(html).not.toContain("Tool not found");
+});
+it.each([
+  ["checking", "Checking connection…"],
+  ["connected", "Checking connection…"],
+  ["disconnected", "Waiting for a connection"],
+])("shows %s feedback while a restored computer's tool capabilities are unknown", (phase, message) => {
+  state.capabilities = undefined;
+  state.connectionPhase = phase;
+  const tool = createElement(HostToolScreen, { tool: "diagnostics", projectId: "project" });
+  const html = renderToStaticMarkup(tool);
+  expect(html).toContain(message);
+  expect(html).not.toContain("bycoda may be outdated");
+  expect(html).not.toContain("Host resources");
+  state.capabilities = ["resources.diagnostics"];
+  expect(renderToStaticMarkup(tool)).toContain("Host resources");
 });
 it("opens diagnostics only when the host advertises resource diagnostics", () => {
   state.capabilities = ["resources.diagnostics"];

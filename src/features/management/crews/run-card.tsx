@@ -16,7 +16,7 @@ import { joinMeta, RecordTrailing, useMenuGlyph } from "../shared/record-bits";
 import { MemberLines } from "./member-lines";
 import { CrewRuntimePanel } from "./runtime-panel";
 import { canDeleteCrewRun, canStopCrewRun, crewActivityKnown, crewHasRunningWork, crewTaskSessions } from "./runtime-model";
-import { useRecordConfirmation } from "../shared/use-record-confirmation";
+import { RecordConfirmationSheet, useRecordConfirmation } from "../shared/use-record-confirmation";
 
 function CrewTaskRow({ task, model, supported, onOpenSession }: {
   task: CrewRunView["tasks"][number];
@@ -58,7 +58,7 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
   const busy = pause.isPending || resume.isPending || stop.isPending || remove.isPending;
   const supported = machine?.id === machineId && machine?.capabilities?.includes("crews.v1") === true;
   const title = run.title || run.definition.name;
-  const confirm = useRecordConfirmation({ id: run.id, title, status: run.status, updatedAt: run.updatedAt },
+  const { confirm, review } = useRecordConfirmation({ id: run.id, title, status: run.status, updatedAt: run.updatedAt },
     machine?.name || machine?.id, busy || !supported);
   const openSession = (sessionId: string) => {
     if (supported && machineId && useMachines.getState().activeId === machineId)
@@ -68,12 +68,7 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
   const created = `${copy("Oluşturulma", "Created")}: ${stamp(run.createdAt)}`;
   const stopWork = () => confirm(copy("Çalışmayı durdur", "Stop work"), copy("Koordinatör ve çalışan ekip görevleri durdurulur. Dosyalar ve çalışma kaydı korunur.", "The coordinator and active crew tasks will stop. Files and the work record are kept."),
     copy("Durdur", "Stop"), () => { if (supported && useMachines.getState().activeId === machineId) stop.mutate({ projectId: run.projectId, runId: run.id }, { onError: refreshAfterFailure }); });
-  return <RecordCard title={title} status={<Status value={run.status} />}
-    metadata={joinMeta([run.definition.name, run.tasks.length ? copy("{p0}/{p1} görev", "{p0}/{p1} tasks", { p0: done, p1: run.tasks.length }) : "", created])}
-    preview={run.tasks.length ? <Progress value={done} maxValue={run.tasks.length} size="sm"
-      color={run.status === "finished" ? "success" : "primary"}
-      accessibilityLabel={copy("{p0}/{p1} görev tamamlandı", "{p0} of {p1} tasks done", { p0: done, p1: run.tasks.length })} /> : null}
-    footer={canStopCrewRun(run) || run.status !== "finished" ? <Row>
+  const runActions = canStopCrewRun(run) || run.status !== "finished" ? <Row>
       {canStopCrewRun(run) && <Button tone="danger" busy={stop.isPending}
         label={copy("Çalışmayı durdur", "Stop work")}
         disabled={busy || !supported} onPress={stopWork} />}
@@ -84,7 +79,12 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
             : copy("Yeni görevler bekletilir. Çalışan görevleri de durdurmak için Çalışmayı durdur işlemini kullanın.", "New work is paused. Use Stop work to stop currently running tasks too."),
           run.status === "paused" ? copy("Devam ettir", "Resume") : copy("Beklet", "Pause"),
           () => { if (supported && useMachines.getState().activeId === machineId) (run.status === "paused" ? resume : pause).mutate({ projectId: run.projectId, runId: run.id }, { onError: refreshAfterFailure }); }, "default")} />}
-    </Row> : null}
+    </Row> : null;
+  const card = <RecordCard title={title} status={<Status value={run.status} />}
+    metadata={joinMeta([run.definition.name, run.tasks.length ? copy("{p0}/{p1} görev", "{p0}/{p1} tasks", { p0: done, p1: run.tasks.length }) : "", created])}
+    preview={run.tasks.length ? <Progress value={done} maxValue={run.tasks.length} size="sm"
+      color={run.status === "finished" ? "success" : "primary"}
+      accessibilityLabel={copy("{p0}/{p1} görev tamamlandı", "{p0} of {p1} tasks done", { p0: done, p1: run.tasks.length })} /> : null}
     menu={<RecordTrailing>
       <ActionMenu label={copy("Ekip çalışması işlemleri", "Crew work actions")} actions={[
       !!run.coordinatorSessionId && { key: "coordinator", icon: glyph(MessageSquare), label: copy("Koordinatör oturumu", "Coordinator session"),
@@ -108,7 +108,12 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
     {run.status === "paused" && crewActivityKnown(run) && <Body muted>{crewHasRunningWork(run)
       ? copy("Yeni görev atamaları duraklatıldı. Devam eden işler tamamlanabilir.", "New assignments are paused. Running work can still finish.")
       : copy("İş duraklatıldı. Çalışan bir işlem yok.", "Work is paused. Nothing is running.")}</Body>}
+    {runActions}
     <ErrorNotice error={run.error} />
     <MutationState mutation={pause} /><MutationState mutation={resume} /><MutationState mutation={stop} /><MutationState mutation={remove} />
   </RecordCard>;
+  return <>
+    {card}
+    <RecordConfirmationSheet review={review} />
+  </>;
 }

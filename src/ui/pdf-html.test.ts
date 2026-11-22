@@ -37,10 +37,17 @@ it("keeps document bytes and reader restoration values in local runtime configur
   expect(JSON.parse(configuration!)).toMatchObject({ base64: input.base64, channel: input.channel, page: 2, zoom: 1.5, locale: "tr-TR" });
   expect(() => pdfHtml({ ...input, base64: "</script>" })).toThrow("Invalid or oversized PDF data.");
 });
-it.each([[0.5, 16], [2, 32], [10, 64], [NaN, 16], [Infinity, 16]])("bounds system font scale %s while keeping usable controls", (fontScale, size) => {
+it.each([[0.5, 16], [1.5, 24], [2, 32], [10, 64], [NaN, 16], [Infinity, 16]])("bounds system font scale %s while keeping usable controls", (fontScale, size) => {
   const html = pdfHtml({ ...input, fontScale });
   expect(html).toContain(`font-size:${size}px`);
   expect(html).toContain("min-width:48px;min-height:48px");
   expect(html).toContain('for="password"'); expect(html).toContain('type="password"');
   expect(html).toContain('class="textLayer" role="document"');
+});
+
+it("keeps compact page controls named at large text sizes", () => {
+  const html = pdfHtml({ ...input, fontScale: 1.5 });
+  expect(html).toContain('id="previous" type="button" aria-label="Previous">‹</button>');
+  expect(html).toContain('id="next" type="button" aria-label="Next">›</button>');
+  expect(html).toContain("#page-status{flex:1 0 auto;min-width:90px;max-width:100%");
 });

@@ -6,7 +6,7 @@ const fixture=vi.hoisted(()=>({sender:null as import("./report-delivery").Report
 vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));
 vi.mock("./report-config",()=>({get reportSender(){return fixture.sender;}}));
 vi.mock("expo-crypto",()=>({randomUUID:()=>"screen-request"}));
-vi.mock("expo-router",()=>({Stack:{Screen:()=>null},router:{push:vi.fn()}}));
+vi.mock("expo-router",()=>({Stack:{Screen:()=>null},router:{push:vi.fn(),canGoBack:()=>true,back:vi.fn()}}));
 vi.mock("@/state/security",()=>({assertAppAccess:()=>{if(fixture.locked)throw Error("Locked");}}));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string,values?:{p0:string})=>en.replace("{p0}",values?.p0??"{p0}")}));
 vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));
@@ -63,6 +63,16 @@ it("keeps the reviewed draft and offers an explicit retry with the same request 
  await act(async()=>button("Retry").click());
  expect(sender.mock.calls.map(([id])=>id)).toEqual(["screen-request","screen-request"]);
  expect(useContentReport.getState().draft.description).toBe("");
+});
+it("acknowledges the receipt on Done so Report content can be used again", async () => {
+  await act(async () => useContentReport.setState({ status: "sent", receiptId: "receipt-one" }));
+  const done = fixture.submits.filter((action) => action.label === "Done").at(-1)!.run;
+  await act(async () => button("Done").click());
+  expect(useContentReport.getState()).toMatchObject({ status: "idle", receiptId: null });
+  expect(container.querySelector('[data-field="Description"]')).not.toBeNull();
+  await act(async () => updateContentReport({ description: "Next report" }));
+  await act(async () => done());
+  expect(useContentReport.getState().draft.description).toBe("Next report");
 });
 it("keeps description validation with its field",async()=>{
  await act(async()=>updateContentReport({consent:true}));expect(container.querySelector('[data-field="Description"]')?.textContent).toContain("Write a description");

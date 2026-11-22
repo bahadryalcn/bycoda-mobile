@@ -36,3 +36,12 @@ it("does not report clean state for a filter with no matches or invent an empty 
   expect(gitListRows([file("a.ts", false, true)], "missing", "all")).toEqual([]);
   expect(gitListRows([], "", "all")).toEqual([]);
 });
+
+it("collapses one section without hiding its count or the other copy of a partially staged file", () => {
+  const changed = file("src/chat.tsx", true, true);
+  expect(gitListRows([changed], "", "all", ["staged"])).toEqual([
+    { kind: "group", key: "staged", staged: true, count: 1 },
+    { kind: "group", key: "unstaged", staged: false, count: 1 },
+    { kind: "file", key: "unstaged:src/chat.tsx", staged: false, file: changed },
+  ]);
+});

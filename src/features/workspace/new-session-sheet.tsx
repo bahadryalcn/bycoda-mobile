@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import type { HostProject } from "@/domain/types";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
+import { useSingleFlight } from "@/state/actions";
 import {
   rememberOpenedProject,
   useProjectDirectoryPreferences,
@@ -24,7 +26,7 @@ import { matchesSearch } from "@/ui/search-matching";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
-import { matchLaunchProject, useLaunchRequest } from "../sharing/model/launch-request";
+import { matchLaunchProject, useLaunchRequest, type LaunchRequest } from "../sharing/model/launch-request";
 import { appendToDraft } from "./draft-append";
 import { ProjectDirectorySlot } from "./project-directory-feedback";
 import { projectPathLabel } from "./project-directory";
@@ -42,9 +44,18 @@ export function NewSessionSheet({ visible, onClose }: { visible: boolean; onClos
   return visible ? <NewSessionOpening onClose={onClose} /> : null;
 }
 
-type Picked = { project: HostProject; machineId: string; attempt: number };
+type Picked = { id: string; attempt: number };
 
 function NewSessionOpening({ onClose }: { onClose: () => void }) {
+  const connection = useConnectionScope();
+  const [firstConnection] = useState(connection.token);
+  return <NewSessionConnection key={connection.token} connection={connection} onClose={onClose}
+    allowAutomaticSelection={connection.token === firstConnection} />;
+}
+
+function NewSessionConnection({ connection, allowAutomaticSelection, onClose }: {
+  connection: ConnectionScope; allowAutomaticSelection: boolean; onClose: () => void;
+}) {
   const copy = useCopy();
   const locale = useLocale();
   const { colors, uiStyles } = useMobileTheme();
@@ -55,6 +66,14 @@ function NewSessionOpening({ onClose }: { onClose: () => void }) {
   const [showAll, setShowAll] = useState(false);
   const [picked, setPicked] = useState<Picked>();
   const [locked, setLocked] = useState(false);
+  const mounted = useRef(false);
+  const finished = useRef(false);
+  // Retire retained Sheet and Start handlers when this picker leaves the screen.
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const isCurrent = () => mounted.current && !finished.current && connection.isCurrent();
   const readable = activity.directoryReady && !activity.privacyPending;
   const query = search.trim();
   const times = { activity: latestProjectActivity(activity.directory), opened: preferences.recent };
@@ -72,34 +91,25 @@ function NewSessionOpening({ onClose }: { onClose: () => void }) {
   // With "new sessions use the last project", the newest project is ready until another is picked.
   const { preferences: appPrefs } = useAppPreferences();
   const last =
-    appPrefs.newSessionUsesLastProject && readable && machine
+    allowAutomaticSelection && appPrefs.newSessionUsesLastProject && readable && machine
       ? lastUsedProject(ordered, times)
       : undefined;
   // A prompt link or share may name the project; it is only preselected, never started.
   const launch = useLaunchRequest((state) => state.request);
-  const linked = readable && machine ? matchLaunchProject(ordered, launch?.project) : undefined;
-  const current: Picked | undefined =
-    picked ??
-    (linked && machine
-      ? { project: linked, machineId: machine.id, attempt: 0 }
-      : last && machine
-        ? { project: last, machineId: machine.id, attempt: 0 }
-        : undefined);
-  const selected =
-    current &&
-    current.machineId === machine?.id &&
-    ordered.some((project) => project.id === current.project.id)
-      ? current
-      : undefined;
+  const linked = allowAutomaticSelection && readable && machine ? matchLaunchProject(ordered, launch?.project) : undefined;
+  const project = picked ? ordered.find((item) => item.id === picked.id) : linked ?? last;
+  const selected = project ? { project, attempt: picked?.attempt ?? 0 } : undefined;
 
-  const created = useLatestCallback((project: HostProject, sessionId: string) => {
+  const created = (project: HostProject, sessionId: string, reviewedLaunch: LaunchRequest | null) => {
     const machineId = machine?.id;
-    if (!machineId || useMachines.getState().activeId !== machineId) return;
+    if (!machineId || !isCurrent() || !activity.projects.isProjectVisible(project.id, project.cwd)) return;
+    finished.current = true;
     useMachines.getState().selectProject(project.id);
     void rememberOpenedProject(machineId, project.id).catch(() => {});
     // Shared or linked content goes into the new session's composer draft (appended, so an
     // existing draft is kept) and is never sent.
-    const shared = useLaunchRequest.getState().take();
+    const pending = useLaunchRequest.getState();
+    const shared = pending.request === reviewedLaunch ? pending.take() : null;
     if (shared) {
       const target = { machineId, sessionId };
       if (shared.text) appendToDraft(target, { text: shared.text });
@@ -110,18 +120,21 @@ function NewSessionOpening({ onClose }: { onClose: () => void }) {
       params: { id: sessionId, projectId: project.id, machineId },
     });
     onClose();
-  });
-  // Leaving without starting a session drops the queued content; starting one consumes it.
+  };
+  // Leaving discards the shown request. A newer share remains available for its own launch.
   const leave = () => {
-    useLaunchRequest.getState().clear();
+    if (!isCurrent()) return false;
+    finished.current = true;
+    const pending = useLaunchRequest.getState();
+    if (pending.request === launch) pending.clear();
     onClose();
+    return true;
   };
   const close = () => {
     if (!locked) leave();
   };
   const addProject = () => {
-    leave();
-    router.push("/");
+    if (leave()) router.push("/");
   };
   const feedback = {
     query: { ...activity.projects, refetch: activity.refetch },
@@ -148,122 +161,129 @@ function NewSessionOpening({ onClose }: { onClose: () => void }) {
     <Sheet
       visible
       title={copy("Yeni oturum", "New session")}
-      size="form"
+      size="compact"
       scroll={false}
       dismissible={!locked}
       onClose={close}
+      footer={selected ? (
+        <QuickStart
+          key={`${selected.project.id}:${selected.attempt}`}
+          project={selected.project}
+          onLocked={setLocked}
+          isCurrent={isCurrent}
+          onCreated={(sessionId) => created(selected.project, sessionId, launch)}
+        />
+      ) : undefined}
     >
-      <View style={{ gap: space.sm, flex: 1, paddingHorizontal: space.screen }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <SearchField
-              label={copy("Proje ara", "Search projects")}
-              value={readable ? search : ""}
-              editable={readable && !locked}
-              onChangeText={setSearch}
-            />
-          </View>
-          <IconButton
-            label={copy("Asistan", "Assistant")}
-            disabled={locked}
-            onPress={() => {
-              leave();
-              router.push("/assistant");
-            }}
-          >
-            <Mic size={20} color={colors.accent} />
-          </IconButton>
-        </View>
-        {launch ? (
-          <Body muted style={uiStyles.caption}>
-            {launch.files.length
-              ? copy(
-                  "Paylaşılan içerik taslağa eklenecek ({p0} dosya).",
-                  "Shared content will be added to the draft ({p0} files).",
-                  { p0: launch.files.length },
-                )
-              : copy("Metin taslağa eklenecek.", "The text will be added to the draft.")}
-          </Body>
-        ) : null}
-        {selected ? (
-          <QuickStart
-            key={`${selected.project.id}:${selected.attempt}`}
-            project={selected.project}
-            onLocked={setLocked}
-            onCreated={(sessionId) => created(selected.project, sessionId)}
-          />
-        ) : null}
-        <View style={{ flexDirection: "row", gap: space.xs, flexWrap: "wrap" }}>
-          <Button
-            label={
-              showAll ? copy("Son kullanılanlar", "Recent") : copy("Tüm projeler", "All projects")
-            }
-            tone="quiet"
-            flush
-            disabled={!readable || locked}
-            onPress={() => setShowAll(!showAll)}
-          />
-          <Button
-            label={copy("Proje ekle", "Add project")}
-            tone="quiet"
-            disabled={locked}
-            onPress={addProject}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <ScreenChromeProvider nativeTitle bottomSafeArea={false}>
-            <ScreenList
-              grouped
-              data={rows}
-              keyExtractor={(project) => project.id}
-              query={feedback.query}
-              style={{ backgroundColor: "transparent" }}
-              contentContainerStyle={{ paddingStart: 0, paddingEnd: 0 }}
-              ListEmptyComponent={<ProjectDirectorySlot {...feedback} />}
-              header={
-                !query && rows.length ? (
-                  <Body muted style={uiStyles.caption}>
-                    {showAll
-                      ? copy("Tüm projeler", "All projects")
-                      : copy("Son kullanılanlar", "Recent")}
-                  </Body>
-                ) : undefined
-              }
-              renderItem={({ item }) => {
-                const last = projectRecency(item.id, times);
-                const busy = locked && selected?.project.id === item.id;
-                return (
-                  <NavigationRow
-                    variant="plain"
-                    intent="select"
-                    label={item.name}
-                    detail={projectPathLabel(item.cwd)}
-                    detailEllipsizeMode="middle"
-                    icon={<ProjectIcon appearance={item.appearance} />}
-                    trailing={
-                      last ? (
-                        <Body muted style={uiStyles.caption}>
-                          {relativeTime(last, copy)}
-                        </Body>
-                      ) : undefined
-                    }
-                    busy={busy}
-                    disabled={locked && !busy}
-                    onPress={() => {
-                      if (locked) return;
-                      setPicked((current) => ({
-                        project: item,
-                        machineId: machine!.id,
-                        attempt: (current?.attempt ?? 0) + 1,
-                      }));
-                    }}
+      <ScreenChromeProvider nativeTitle bottomSafeArea={false}>
+        <ScreenList
+          grouped
+          data={rows}
+          keyExtractor={(project) => project.id}
+          query={feedback.query}
+          style={{ flex: 0, flexShrink: 1, backgroundColor: "transparent" }}
+          contentContainerStyle={{ flexGrow: 0, paddingStart: space.screen, paddingEnd: space.screen }}
+          ListEmptyComponent={<ProjectDirectorySlot {...feedback} />}
+          ListHeaderComponent={
+            <View style={{ gap: space.sm, paddingTop: space.xs }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <SearchField
+                    label={copy("Proje ara", "Search projects")}
+                    value={readable ? search : ""}
+                    editable={readable && !locked}
+                    onChangeText={setSearch}
                   />
-                );
-              }}
-            />
-          </ScreenChromeProvider>
-        </View>
-      </View>
+                </View>
+                <IconButton
+                  label={copy("Asistan", "Assistant")}
+                  disabled={locked}
+                  onPress={() => {
+                    if (leave()) router.push("/assistant");
+                  }}
+                >
+                  <Mic size={20} color={colors.accent} />
+                </IconButton>
+              </View>
+              {launch ? (
+                <Body muted style={uiStyles.caption}>
+                  {launch.files.length === 1
+                    ? copy(
+                        "Paylaşılan içerik taslağa eklenecek (1 dosya).",
+                        "Shared content will be added to the draft (1 file).",
+                      )
+                    : launch.files.length
+                      ? copy(
+                          "Paylaşılan içerik taslağa eklenecek ({p0} dosya).",
+                          "Shared content will be added to the draft ({p0} files).",
+                          { p0: launch.files.length },
+                        )
+                      : copy("Metin taslağa eklenecek.", "The text will be added to the draft.")}
+                </Body>
+              ) : null}
+              {!allowAutomaticSelection && !selected && readable ? (
+                <Body muted style={uiStyles.caption}>
+                  {copy("Bilgisayar bağlantısı değişti.", "Computer connection changed.")}
+                </Body>
+              ) : null}
+              <View style={{ flexDirection: "row", gap: space.xs, flexWrap: "wrap" }}>
+                <Button
+                  label={
+                    showAll ? copy("Son kullanılanlar", "Recent") : copy("Tüm projeler", "All projects")
+                  }
+                  tone="quiet"
+                  flush
+                  disabled={!readable || locked}
+                  onPress={() => setShowAll(!showAll)}
+                />
+                <Button
+                  label={copy("Proje ekle", "Add project")}
+                  tone="quiet"
+                  disabled={locked}
+                  onPress={addProject}
+                />
+              </View>
+              {!query && rows.length > 0 ? (
+                <Body muted style={uiStyles.caption}>
+                  {showAll
+                    ? copy("Tüm projeler", "All projects")
+                    : copy("Son kullanılanlar", "Recent")}
+                </Body>
+              ) : null}
+            </View>
+          }
+          renderItem={({ item }) => {
+            const last = projectRecency(item.id, times);
+            const busy = locked && selected?.project.id === item.id;
+            return (
+              <NavigationRow
+                variant="plain"
+                intent="select"
+                label={item.name}
+                detail={projectPathLabel(item.cwd)}
+                detailEllipsizeMode="middle"
+                icon={<ProjectIcon appearance={item.appearance} />}
+                trailing={
+                  last ? (
+                    <Body muted style={uiStyles.caption}>
+                      {relativeTime(last, copy)}
+                    </Body>
+                  ) : undefined
+                }
+                busy={busy}
+                disabled={locked && !busy}
+                onPress={() => {
+                  if (locked || !isCurrent() || !activity.projects.isProjectVisible(item.id, item.cwd)) return;
+                  setPicked((current) => ({
+                    id: item.id,
+                    attempt: (current?.attempt ?? 0) + 1,
+                  }));
+                }}
+              />
+            );
+          }}
+        />
+      </ScreenChromeProvider>
     </Sheet>
   );
 }
@@ -273,10 +293,12 @@ function QuickStart({
   project,
   onCreated,
   onLocked,
+  isCurrent,
 }: {
   project: HostProject;
   onCreated: (sessionId: string) => void;
   onLocked: (locked: boolean) => void;
+  isCurrent: () => boolean;
 }) {
   const copy = useCopy();
   const { uiStyles } = useMobileTheme();
@@ -284,7 +306,17 @@ function QuickStart({
     project.id,
   );
   const [unavailable, setUnavailable] = useState(false);
+  const submit = useSingleFlight<boolean>();
+  const receiptTarget = useRef<typeof onCreated | null>(null);
+  const mounted = useRef(false);
+  // A recovered receipt can outlive the project selection that started it.
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const active = () => mounted.current && isCurrent();
   const run = useLatestCallback(() => {
+    if (!active() || locked || submit.isPending()) return;
     setUnavailable(false);
     command.reset();
     if (!canStart) {
@@ -292,7 +324,9 @@ function QuickStart({
       void catalog.refetch().catch(() => {});
       return;
     }
-    void create(onCreated);
+    const complete: typeof onCreated = (id) => { if (active()) onCreated(id); };
+    receiptTarget.current = complete;
+    void submit.run(() => active() ? create(complete) : Promise.resolve(false)).catch(() => false);
   });
   const ready = !catalog.isPending || catalog.fetchStatus === "idle";
   // Keep dismissal and project changes blocked while a command is pending or uncertain.
@@ -305,12 +339,14 @@ function QuickStart({
       choice.provider === selection.selectedProvider &&
       choice.accountId === selection.selectedAccountId,
   );
+  const modelName = selection.selectedModelValue?.name || selection.selectedModel || "—";
+  const recoveryTarget = receiptTarget.current;
   return (
     <View style={{ gap: space.sm }}>
       <Body>{project.name}</Body>
       <Body muted style={uiStyles.caption}>
         {ready && selection.selectedProvider
-          ? `${providerName(selection.selectedProvider)} · ${account?.label ?? copy("Varsayılan hesap", "Default account")} · ${selection.selectedModel || "—"} · ${copy("Onay iste", "Ask for approval")}`
+          ? `${providerName(selection.selectedProvider)} · ${account?.label ?? copy("Varsayılan hesap", "Default account")} · ${modelName} · ${copy("Onay iste", "Ask for approval")}`
           : ready
             ? copy("Kullanılabilir ajan veya model yok.", "No agent or model available.")
             : copy("Model yükleniyor…", "Loading model…")}
@@ -325,10 +361,16 @@ function QuickStart({
       ) : null}
       <CommandError
         error={command.error}
-        onDismiss={() => command.reset()}
-        onRecovered={(receipt) => {
+        onDismiss={() => {
+          if (!active() || receiptTarget.current !== recoveryTarget) return;
+          receiptTarget.current = null;
           command.reset();
-          onCreated(receipt.sessionId);
+        }}
+        onRecovered={(receipt) => {
+          if (!active() || !recoveryTarget || receiptTarget.current !== recoveryTarget) return;
+          receiptTarget.current = null;
+          command.reset();
+          recoveryTarget(receipt.sessionId);
         }}
       />
       <Button

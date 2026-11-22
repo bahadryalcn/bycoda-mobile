@@ -105,7 +105,8 @@ function BarItem({
         ...(fixedWidth ? { width: metrics.tabletRailWidth } : { flex: 1 }),
         minHeight: metrics.touchTarget + space.md,
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "flex-start",
+        paddingVertical: space.sm,
         gap: space.xxs,
       }}
     >
@@ -124,11 +125,13 @@ function BarItem({
       </View>
       <Text
         accessible={false}
-        numberOfLines={1}
+        numberOfLines={2}
         style={{
           color: focused ? colors.text : colors.muted,
           fontSize: largeLabel ? fontSize.small : fontSize.caption,
           fontWeight: focused ? "600" : "400",
+          maxWidth: "100%",
+          textAlign: "center",
         }}
       >
         {label}
@@ -411,34 +414,40 @@ export function FloatingTabBar({
       {more && overflow ? (
         <Sheet
           visible
-          title={copy("Gezinme", "Navigation")}
+          title={moreLabel}
           size="compact"
           onClose={() => setMore(false)}
         >
-          {hidden.map((route) => (
-            <NavigationRow
-              key={route.key}
-              label={String(label(route))}
-              accessibilityLabel={String(badgeLabel(route))}
-              trailing={
-                descriptors[route.key]!.options.tabBarBadge === TAB_BADGE_DOT ? (
-                  <View
-                    accessible={false}
-                    style={{ width: space.row, height: space.row, borderRadius: radii.pill, backgroundColor: colors.accentSolid }}
-                  />
-                ) : descriptors[route.key]!.options.tabBarBadge ? (
-                  <Text
-                    accessible={false}
-                    style={{ color: colors.text, fontSize: fontSize.caption, fontVariant: ["tabular-nums"] }}
-                  >
-                    {String(descriptors[route.key]!.options.tabBarBadge)}
-                  </Text>
-                ) : undefined
-              }
-              selected={state.routes[state.index]?.key === route.key}
-              onPress={() => navigate(route)}
-            />
-          ))}
+          {hidden.map((route) => {
+            const options = descriptors[route.key]!.options;
+            const selected = state.routes[state.index]?.key === route.key;
+            const badge = options.tabBarBadge;
+            return (
+              <NavigationRow
+                key={route.key}
+                label={String(label(route))}
+                accessibilityLabel={String(badgeLabel(route))}
+                icon={options.tabBarIcon?.({ focused: selected, color: selected ? colors.text : colors.muted, size: 24 })}
+                trailing={
+                  badge === TAB_BADGE_DOT ? (
+                    <View
+                      accessible={false}
+                      style={{ width: space.row, height: space.row, borderRadius: radii.pill, backgroundColor: colors.accentSolid }}
+                    />
+                  ) : badge ? (
+                    <Text
+                      accessible={false}
+                      style={{ color: colors.text, fontSize: fontSize.caption, fontVariant: ["tabular-nums"] }}
+                    >
+                      {String(badge)}
+                    </Text>
+                  ) : undefined
+                }
+                selected={selected}
+                onPress={() => navigate(route)}
+              />
+            );
+          })}
         </Sheet>
       ) : null}
     </>

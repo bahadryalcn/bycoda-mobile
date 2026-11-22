@@ -2,6 +2,14 @@ import type { MobileMachine } from "@/remote/types";
 
 export type ReviewedMachine = Pick<MobileMachine, "id" | "endpoint" | "environmentId" | "lanKey">;
 
+/** A credential or route change only suspends its own computer unless it is account-wide. */
+export function isMachinePending(
+  state: { accountPending?: boolean; pendingMachineIds?: readonly string[] },
+  id: string | null | undefined,
+): boolean {
+  return !!(state.accountPending || (id != null && state.pendingMachineIds?.includes(id)));
+}
+
 export function reviewedMachine(
   machine: MobileMachine | null | undefined,
 ): ReviewedMachine | undefined {

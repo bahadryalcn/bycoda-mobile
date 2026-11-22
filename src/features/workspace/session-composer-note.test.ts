@@ -3,6 +3,7 @@ import { act, createElement, type PropsWithChildren, type ReactNode } from "reac
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionComposer } from "./session-composer";
+import { SessionKeyboardSpace } from "./session-keyboard-frame";
 import { emptyComposerDraft, type ComposerDraft } from "./composer-draft";
 import type { ComposerTransfer } from "./composer-transfer-model";
 vi.mock("../../../modules/bycoda-key-commands", () => ({ useKeyCommand: () => null }));
@@ -16,14 +17,17 @@ vi.mock("../outbox/runtime/store", () => ({ sendOutbox: { read: async () => [] }
 vi.mock("../outbox/runtime/custody", () => ({ cleanOutboxFiles: async () => {} }));
 
 const state = vi.hoisted(() => ({ activeId: "machine", supported: true, browserSupported: false, stageBrowser: vi.fn(), removeStaged: vi.fn(), draft: null as ComposerDraft | null,
-  templateInsert: null as null | ((body: string) => void),
+  templateInsert: null as null | ((body: string) => void), draftReady: true,
   selection: { start: 0, end: 0 }, select: null as null | ((selection: { start: number; end: number }) => void),
   receiver: null as null | ((request: ComposerTransfer) => void), renderDraft: null as null | (() => void),
-  onCommand: vi.fn(async () => undefined), persist: vi.fn(async () => undefined), enqueue: vi.fn(), pause: vi.fn(async () => undefined),
+  onCommand: vi.fn(async () => undefined), persist: vi.fn(async () => undefined), enqueue: vi.fn(), pause: vi.fn(async () => undefined), dismissKeyboard: vi.fn(),
   register: (receiver: (request: ComposerTransfer) => void) => { state.receiver = receiver; return () => { state.receiver = null; }; },
 }));
 vi.mock("./composer-model-chip", () => ({ ComposerModelChip: () => null }));
-vi.mock("./composer-mode-controls", () => ({ ComposerModeMenu: () => null }));
+vi.mock("./composer-mode-controls", () => ({
+  ComposerModeMenu: () => null,
+  ComposerModeChip: ({ onRemove }: { onRemove: () => void }) => createElement("button", { onClick: onRemove }, "Turn off mode"),
+}));
 vi.mock("./composer-context-meter", () => ({ ComposerContextMeter: () => null }));
 vi.mock("./composer-access", () => ({ ComposerAccessMenu: () => null }));
 vi.mock("lucide-react-native/icons/send", () => ({ default: () => null }));
@@ -32,7 +36,15 @@ vi.mock("./composer-links", () => ({ ComposerLinks: () => null }));
 vi.mock("./use-dictation", () => ({ useDictation: () => ({ view: {}, error: null, phase: "idle", toggle: () => {}, clearError: () => {} }) }));
 vi.mock("./composer-dictation", () => ({ ComposerDictationButton: () => null, ComposerDictationFeedback: () => null }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
-vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children), useWindowDimensions: () => ({ height: 800, fontScale: 1 }) }));
+vi.mock("react-native", () => ({
+  Keyboard: { dismiss: state.dismissKeyboard },
+  View: ({ children, style }: PropsWithChildren<{ style?: { display?: "none" } }>) =>
+    createElement("div", { hidden: style?.display === "none" }, children),
+  ScrollView: ({ children, style, keyboardShouldPersistTaps }: PropsWithChildren<{
+    style: { maxHeight: number }; keyboardShouldPersistTaps: string;
+  }>) => createElement("div", { "data-prefix-height": style.maxHeight, "data-keep-taps": keyboardShouldPersistTaps }, children),
+  useWindowDimensions: () => ({ height: 800, fontScale: 1 }),
+}));
 vi.mock("lucide-react-native/icons/arrow-up", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/corner-down-right", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/list-plus", () => ({ default: () => null }));
@@ -65,7 +77,7 @@ vi.mock("./use-local-draft", async () => {
       state.draft = typeof update === "function" ? update(state.draft) : update;
       valueRef.current = state.draft; render();
     }, []);
-    return { ready: true, isStored: true, persist: state.persist, load: vi.fn(), setValue, valueRef, value: state.draft, error: null };
+    return { ready: state.draftReady, isStored: true, persist: state.persist, load: vi.fn(), setValue, valueRef, value: state.draft, error: null };
   } };
 });
 vi.mock("./composer-transfer", () => ({ useComposerTransfer: () => ({ register: state.register }) }));
@@ -73,35 +85,41 @@ vi.mock("./draft-guard", () => ({ registerWorkspaceDraft: () => () => {} }));
 vi.mock("./session-keyboard-frame", async () => ({ SessionKeyboardSpace: (await import("react")).createContext(null) }));
 vi.mock("./use-composer-catalog", () => ({ useComposerCatalog: () => ({ data: [] }) }));
 vi.mock("./composer-suggestions", () => ({ ComposerSuggestions: () => null }));
-vi.mock("./composer-attachments", () => ({ ComposerAttachments: () => null }));
+vi.mock("./composer-attachments", () => ({ ComposerAttachments: ({ files }: { files: { id: string; name: string }[] }) =>
+  files.map((file) => createElement("span", { key: file.id }, file.name)) }));
 vi.mock("./attachment-files", () => ({ pickAttachments: vi.fn(), removeStagedFile: state.removeStaged, stageBrowserCapture: state.stageBrowser }));
 vi.mock("./attachment-transfer", () => ({ uploadAttachment: vi.fn() }));
 vi.mock("./attachment-ownership", () => ({ composerDraftKey: () => "key", supportsAttachmentOwnership: () => state.browserSupported,
   attachmentReleases: { stage: vi.fn(async () => undefined), flush: vi.fn(async () => undefined) } }));
 vi.mock("./use-session-queue", () => ({ useSessionQueue: () => ({ supported: true, enqueue: state.enqueue, pause: state.pause }) }));
 vi.mock("./session-queue", () => ({ SessionQueue: () => null }));
-vi.mock("./session-agents", () => ({ SessionAgents: ({ children }: { children: (controls: ReactNode) => ReactNode }) => children(null) }));
+vi.mock("./session-agents", () => ({ SessionAgents: ({ children }: { children: (controls: ReactNode) => ReactNode }) =>
+  children(createElement("button", { "data-agent-controls": true }, "Agents")) }));
 vi.mock("@/features/management/templates/template-library", () => ({ TemplateLibrary: ({ onInsert }: { onInsert: (body: string) => void }) => {
   state.templateInsert = onInsert;
   return createElement("p", null, "Template panel");
 } }));
 vi.mock("@/features/management/templates/template-store", () => ({ useTemplateHydration: () => null, useTemplates: { getState: () => ({ hydrated: false }) } }));
+vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: () => null }));
 vi.mock("./shared", () => ({ ErrorText: () => null }));
 vi.mock("@/ui/chat-controls", () => {
-  const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
+  const Button = ({ label, hint, disabled, onPress }: { label: string; hint?: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress, title: hint }, label);
   return { ChatCircleAction: Button, ChatToolbarAction: Button, ChatAction: Button };
 });
-vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, submit, mode, leading, field, top }: {
+vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, submit, mode, leading, inlineLeading, field, top }: {
   value: string; submit: ReactNode; mode: ReactNode; leading: ReactNode; top?: ReactNode;
+  inlineLeading?: ReactNode;
   field: { selection: { start: number; end: number }; onSelectionChange: (event: unknown) => void };
 }) => {
   state.selection = field.selection;
   state.select = (selection) => field.onSelectionChange({ nativeEvent: { selection } });
-  return createElement("div", null, top, createElement("textarea", { value, readOnly: true }), leading, mode, submit);
+  return createElement("div", null, top, inlineLeading, createElement("textarea", { value, readOnly: true }), leading, mode, submit);
 } }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { ErrorNotice: () => null, Body: Wrap, Stack: Wrap, Row: Wrap, NavigationGroup: Wrap,
+  return { ErrorNotice: ({ error, message, onRetry }: { error?: Error; message?: string; onRetry?: () => void }) =>
+    error ? createElement("p", { "data-has-retry": !!onRetry }, message ?? error.message) : null,
+    Body: Wrap, Stack: Wrap, Row: Wrap, NavigationGroup: Wrap,
     Sheet: ({ children, visible }: PropsWithChildren<{ visible: boolean }>) => visible ? createElement("div", null, children) : null,
     Button: ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),
     NavigationRow: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
@@ -112,9 +130,102 @@ const props = { scope: { machineId: "machine", sessionId: "session" }, session: 
   session: { id: "session", harness: "codex", model: "codex:test", blocks: [] } }, blocked: false, busy: false, onCommand: state.onCommand };
 const container = document.createElement("div");
 let root: ReturnType<typeof createRoot>;
-async function mount() { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); root = createRoot(container); await act(async () => root.render(createElement(SessionComposer, props as never))); }
+async function mount(availableHeight: number | null = null) {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  root = createRoot(container);
+  await act(async () => root.render(createElement(SessionKeyboardSpace.Provider, { value: availableHeight },
+    createElement(SessionComposer, props as never))));
+}
 async function click(label: string) { await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === label)!.click()); }
 afterEach(async () => { await act(async () => root?.unmount()); state.draft = null; state.supported = true; state.browserSupported = false; state.activeId = "machine"; state.receiver = null; state.templateInsert = null; state.select = null; state.stageBrowser.mockReset(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
+
+it("opens a restored draft at its end and preserves a deliberate selection on keyboard resize", async () => {
+  state.draftReady = false;
+  try {
+    await mount();
+    await act(async () => state.select?.({ start: 0, end: 0 }));
+
+    const text = "Recovered draft 🙂";
+    state.draft = { ...emptyComposerDraft(), text };
+    state.draftReady = true;
+    await act(async () => state.renderDraft?.());
+    expect(container.querySelector("textarea")?.value).toBe(text);
+    expect(state.selection).toEqual({ start: text.length, end: text.length });
+
+    const selected = { start: 2, end: 6 };
+    await act(async () => state.select?.(selected));
+    await act(async () => root.render(createElement(SessionKeyboardSpace.Provider, { value: 130 },
+      createElement(SessionComposer, props as never))));
+    expect(container.querySelector("textarea")?.value).toBe(text);
+    expect(state.selection).toEqual(selected);
+    expect(state.onCommand).not.toHaveBeenCalled();
+    expect(state.enqueue).not.toHaveBeenCalled();
+  } finally {
+    state.draftReady = true;
+  }
+});
+
+it("keeps all twenty files in the bounded draft prefix and leaves the editor and Send outside it", async () => {
+  const attachments = Array.from({ length: 20 }, (_, index) => ({
+    id: `file-${index}`, uri: `file:///staged/${index}.txt`, name: `Draft file ${index + 1}`,
+    size: 12, mimeType: "text/plain", kind: "file" as const,
+  }));
+  const original = { ...emptyComposerDraft(), text: "Draft text", attachments, noteCard: note };
+  state.draft = original;
+  await mount();
+
+  const prefix = container.querySelector<HTMLElement>("[data-prefix-height]")!;
+  expect(Number(prefix.dataset.prefixHeight)).toBeLessThan(200);
+  expect(prefix.dataset.keepTaps).toBe("handled");
+  expect(prefix.textContent).toContain("Draft file 20");
+  expect(prefix.textContent).toContain("Reviewed note");
+  expect(prefix.querySelector("textarea")).toBeNull();
+  expect([...prefix.querySelectorAll("button")].some((button) => button.textContent === "Send")).toBe(false);
+  expect(container.querySelector("textarea")?.value).toBe("Draft text");
+  expect(state.draft).toBe(original);
+  expect(state.onCommand).not.toHaveBeenCalled();
+});
+
+it("keeps draft details reachable from Add to message when the inline area is too short", async () => {
+  state.draft = { ...emptyComposerDraft(), text: "Draft text", noteCard: note };
+  await mount(130);
+  expect(container.querySelector("[data-prefix-height]")).toBeNull();
+  expect(container.querySelector("textarea")?.value).toBe("Draft text");
+  await click("Add to message");
+  await click("Draft");
+  expect(container.textContent).toContain("Reviewed note");
+  await click("Remove note context");
+  expect(container.textContent).toContain("No content yet");
+  expect(state.draft?.text).toBe("Draft text");
+  expect(state.onCommand).not.toHaveBeenCalled();
+});
+
+it("explains why Send is disabled when a compact draft hides the conflicting mode and note", async () => {
+  const attachments = [{ id: "file", uri: "file:///staged/checklist.txt", name: "Checklist", size: 12, mimeType: "text/plain", kind: "file" as const }];
+  const original = { ...emptyComposerDraft(), text: "/plan Draft text", noteCard: note, attachments };
+  state.draft = original;
+  await mount(130);
+  await act(async () => state.select!({ start: original.text.length, end: original.text.length }));
+  const send = () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Send");
+  expect(container.querySelector("[data-prefix-height]")).toBeNull();
+  expect(send()?.disabled).toBe(true);
+  expect(container.querySelector("[data-agent-controls]")?.closest("[hidden]")).not.toBeNull();
+  expect(container.querySelector('[data-has-retry="false"]')?.textContent).toContain("Turn off Plan mode");
+  expect(state.draft).toBe(original);
+
+  const review = [...container.querySelectorAll("button")].find((button) => button.textContent === "Review draft");
+  expect(review?.title).toContain("Turn off Plan mode");
+  await click("Review draft");
+  expect(state.dismissKeyboard).toHaveBeenCalledOnce();
+  expect(container.textContent).toContain("Reviewed note");
+  expect(container.textContent).toContain("Turn off Plan mode");
+  await click("Turn off mode");
+  expect(container.querySelector('[data-has-retry="false"]')).toBeNull();
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Review draft")).toBe(false);
+  expect(send()?.disabled).toBe(false);
+  expect(state.draft).toMatchObject({ text: "Draft text", noteCard: note, attachments });
+  expect(state.onCommand).not.toHaveBeenCalled();
+});
 
 it("reports refused template insertion without changing the composer draft or selection, then inserts only at the retained selection", async () => {
   const original = { ...emptyComposerDraft(), text: "x".repeat(256_000), noteCard: note };

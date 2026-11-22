@@ -12,4 +12,5 @@ export type FileEditorProps = WorkspaceTarget & {
   root?: string;
   onBack: () => void;
   onDraftGuard?: (guard: DraftGuard) => void;
+  hideDraftWriteWarning?: boolean;
 };

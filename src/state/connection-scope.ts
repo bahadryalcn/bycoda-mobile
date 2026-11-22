@@ -1,6 +1,6 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { randomUUID } from "expo-crypto";
-import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
+import { isMachinePending, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { MobileMachine } from "@/remote/types";
 import { useMachines } from "@/state/machines";
 
@@ -28,7 +28,8 @@ export function sameConnectionEpoch(a: Pick<ConnectionScope<unknown>, "token">, 
 }
 
 function createScopeOwner<T>(resource: () => T) {
-  let current: ConnectionScope<T> | undefined;
+  let current: { scope: ConnectionScope<T>; blocked: boolean } | undefined;
+  let credentialRevision = 0;
   let subscribers = 0;
   let subscribed = false;
   return {
@@ -42,13 +43,17 @@ function createScopeOwner<T>(resource: () => T) {
         queueMicrotask(() => { if (!subscribers) current = undefined; });
       };
     },
-    sync(machine: MobileMachine | null | undefined): ConnectionScope<T> {
+    sync(machine: MobileMachine | undefined, revision: number, blocked: boolean) {
       const review = reviewedMachine(machine);
-      if (current && sameReviewedMachine(current.review, review)) return current;
-      const next: ConnectionScope<T> = Object.freeze({ token: randomUUID(), review, resource: resource(),
-        isCurrent: () => current === next && (!subscribed || subscribers > 0) });
-      current = next;
-      return next;
+      if (current && revision === credentialRevision && sameReviewedMachine(current.scope.review, review)) {
+        if (current.blocked !== blocked) current = { scope: current.scope, blocked };
+        return current;
+      }
+      credentialRevision = revision;
+      const scope: ConnectionScope<T> = Object.freeze({ token: randomUUID(), review, resource: resource(),
+        isCurrent: () => current?.scope === scope && !current.blocked && (!subscribed || subscribers > 0) });
+      current = { scope, blocked };
+      return current;
     },
   };
 }
@@ -66,12 +71,15 @@ export function useConnectionScope<T = undefined>(
   const [owner] = useState(() => createScopeOwner(resource));
   const snapshot = useCallback(() => {
     const state = useMachines.getState();
-    return owner.sync(state.machines.find(machine => machine.id === state.activeId));
+    const machine = state.machines.find((value) => value.id === state.activeId);
+    const revision = machine ? state.credentialRevisions?.get(machine.id) ?? 0 : 0;
+    const blocked = state.hydrated === false || !!state.storageError || isMachinePending(state, state.activeId);
+    return owner.sync(machine, revision, blocked);
   }, [owner]);
   const subscribe = useCallback((notify: () => void) => {
     const release = owner.connect();
     const unsubscribe = useMachines.subscribe(() => { snapshot(); notify(); });
     return () => { unsubscribe(); release(); };
   }, [snapshot, owner]);
-  return useSyncExternalStore(subscribe, snapshot, snapshot);
+  return useSyncExternalStore(subscribe, snapshot, snapshot).scope;
 }

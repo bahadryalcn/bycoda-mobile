@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { act, createElement, Fragment, type PropsWithChildren } from "react";
+import { act, createElement, createRef, Fragment, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
+import type { HostInstance } from "react-native";
 import { afterEach, expect, it, vi } from "vitest";
 const state=vi.hoisted(()=>({measure:null as null|((event:any)=>void)}));
 vi.mock("react-native",()=>({
@@ -14,7 +15,7 @@ vi.mock("react-native",()=>({
 vi.mock("./theme",()=>({useMobileTheme:()=>null}));
 vi.mock("./copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
 vi.mock("./unsaved-badge",()=>({UnsavedBadge:()=>createElement("i",null,"Unsaved changes")}));
-vi.mock("./buttons",()=>({Button:({label,onPress,busy,disabled}:any)=>createElement("button",{onClick:onPress,disabled:busy||disabled},label)}));
+vi.mock("./buttons",()=>({Button:({label,onPress,busy,disabled,ref}:any)=>createElement("button",{ref,onClick:onPress,disabled:busy||disabled},label)}));
 import { FormActionRow } from "./form-action-row";
 import { FormActionScrollOwner } from "./form-action-context";
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
@@ -30,11 +31,13 @@ it("puts sheet operations before long feedback and leaves standalone feedback be
 });
 it("preserves the action node, focus and current callbacks when feedback changes",()=>{
  const first=vi.fn(),latest=vi.fn(),cancel=vi.fn();
- const props={submitLabel:"Save",onSubmit:first,onCancel:cancel,feedbackPlacement:"after" as const,scrollFeedback:false};
+ const submitRef=createRef<HostInstance>();
+ const props={submitLabel:"Save",submitRef,onSubmit:first,onCancel:cancel,feedbackPlacement:"after" as const,scrollFeedback:false};
  const host=mount({...props,feedback:createElement("span",null,"Failure")});
  const button=host.querySelector("button")!;button.focus();
  act(()=>root!.render(createElement(FormActionRow,{...props,onSubmit:latest,feedback:createElement(Fragment)})));
  expect(host.querySelector("button")).toBe(button);expect(document.activeElement).toBe(button);
+ expect(submitRef.current).toBe(button);
  act(()=>button.click());expect(latest).toHaveBeenCalledOnce();expect(first).not.toHaveBeenCalled();
  act(()=>root!.render(createElement(FormActionRow,{...props,busy:true})));
  expect([...host.querySelectorAll("button")].every(button=>button.disabled)).toBe(true);

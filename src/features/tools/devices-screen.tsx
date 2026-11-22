@@ -31,10 +31,11 @@ export function DevicesScreen({ project }: { project: HostProject }) {
   const machine = useActiveMachine();
   const connection = useConnectionScope();
   const parentAccess = usePrivateContentAccess();
+  const allowed = parentAccess.allowed && connection.isCurrent();
   const windowAccess = useMemo(() => ({
-    allowed: parentAccess.allowed && connection.isCurrent(),
+    allowed,
     check: () => parentAccess.check() && connection.isCurrent(),
-  }), [parentAccess, connection]);
+  }), [parentAccess, connection, allowed]);
   const [search, setSearch] = useState("");
   const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
   const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };

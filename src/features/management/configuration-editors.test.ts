@@ -14,6 +14,7 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestClose: vi.fn() }) }));
 vi.mock("@/state/queries", () => ({ useHostClient: () => ({ request: vi.fn() }), useHostMutation: () => ({ mutate: calls.save, isPending: false }) }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ capabilities: [] }) }));
+vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ isCurrent: () => true }) }));
 vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({ data: [], directoryReady: true, isProjectVisible: () => true }) }));
 vi.mock("./shared/agent", () => ({ useEffectiveAgent: (value: unknown) => value }));
 vi.mock("./shared/schedule-fields", () => ({ ScheduleFields: () => null }));
@@ -40,8 +41,8 @@ it.each([
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const initial = { id: "record", projectId: "project", title: "Title", name: "Name", prompt: "Original prompt", focus: "Original focus", harness: "codex", model: "codex:old", modelSettings: {}, runtimeMode: "auto", maxRunMinutes: 0, enabled: false, scheduleKind: "daily", minute: 0, time: "09:00", dayOfWeek: 1, maxRunsPerDay: 1, maxProposals: 1, maxOpen: 1, autoStart: false, updatedAt: 1 };
   root = createRoot(container);
-  const Component = Editor as unknown as ComponentType<{ initial: typeof initial; save: { mutate: typeof calls.save; isPending: boolean }; busy: boolean; onClose: () => void }>;
-  const render = (record: typeof initial) => root.render(createElement(Component, { initial: record, save: { mutate: calls.save, isPending: false }, busy: false, onClose: vi.fn() }));
+  const Component = Editor as unknown as ComponentType<{ initial: typeof initial; save: { mutate: typeof calls.save; mutateAsync: typeof calls.save; isPending: boolean }; busy: boolean; onClose: () => void }>;
+  const render = (record: typeof initial) => root.render(createElement(Component, { initial: record, save: { mutate: calls.save, mutateAsync: calls.save, isPending: false }, busy: false, onClose: vi.fn() }));
   await act(async () => render(initial));
   await act(async () => render({ ...initial, [remoteField]: "Newer remote configuration" }));
   act(() => {

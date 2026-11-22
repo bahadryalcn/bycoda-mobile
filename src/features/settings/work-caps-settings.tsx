@@ -90,7 +90,7 @@ function WorkCapsEditor({ initial, current, providers, onReload }: { initial: Mo
     {!valid ? <Notice tone="warning" message={copy("Tokenlar güvenli tam sayı, maliyetler sıfır veya pozitif sayı olmalıdır.", "Tokens must be safe integers; costs must be zero or positive numbers.")} /> : null}
     {failure ? <Notice tone="danger" message={failure} /> : null}
     {held ? <Notice tone="warning" message={copy("Kaydetme doğrulanamadı veya ayarlar değişti. Tekrar göndermeden güncel ayarları yükleyin; bu düzenlemeleri sıfırlar.", "Save was not confirmed or settings changed. Load current settings before sending again; this resets these edits.")} /> : null}
-    <FormActions submitLabel={copy("Work sınırlarını kaydet", "Save Work caps")} busy={busy} disabled={held || !dirty || !valid || !current()} onSubmit={() => void submit()} />
+    <FormActions placement="inline" submitLabel={copy("Sınırları kaydet", "Save limits")} busy={busy} disabled={held || !dirty || !valid || !current()} onSubmit={() => void submit()} />
     {held ? <Button label={copy("Güncel ayarları yükle", "Load current settings")} busy={busy} disabled={busy} onPress={() => void reload()} /> : null}
   </Stack>;
 }

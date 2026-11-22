@@ -18,6 +18,7 @@ export type ConnectionEntryState =
   | { kind: "scan" }
   | { kind: "paste" }
   | { kind: "manual" }
+  | { kind: "rejected-code"; message: string }
   | { kind: "preview"; code: MobilePairingCode; claimId: string; receivedAt: number };
 
 export type ComputerConnectionInput = {

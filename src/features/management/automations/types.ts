@@ -9,6 +9,7 @@ export type AutomationEditorProps = {
   initial: HostAutomationInput & { updatedAt?: number };
   save: ReturnType<typeof useHostMutation<HostAutomation>>;
   busy: boolean;
+  readSaved(id: string): Promise<HostAutomation | undefined>;
   onClose: () => void;
 };
 export type AutomationHistoryProps = {

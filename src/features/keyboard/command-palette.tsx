@@ -29,7 +29,7 @@ export function CommandPalette({ onClose }: { onClose(): void }) {
     }
     for (const { session, project } of activity.directory) {
       if (!listedSession(session) || !activity.projects.isProjectVisible(project.id, project.cwd)) continue;
-      entries.push({ id: `session:${session.id}`, label: session.title || copy("Adsız oturum", "Untitled session"), detail: project.name, kind: "session", destination: { pathname: "/session/[id]", params: { id: session.id, projectId: project.id, machineId: machine.id } } });
+      entries.push({ id: `session:${session.id}`, label: session.title || copy("Yeni oturum", "New session"), detail: project.name, kind: "session", destination: { pathname: "/session/[id]", params: { id: session.id, projectId: project.id, machineId: machine.id } } });
     }
   }
   const matches = searchPalette(entries, query, locale);

@@ -3,7 +3,7 @@ import { View } from "react-native";
 import Zap from "lucide-react-native/icons/zap";
 import { RingChart } from "panelui-native/components/ring-chart";
 import { ChatToolbarAction } from "@/ui/chat-controls";
-import { Body, FormActions, Notice, Sheet, Stack, StatusRow } from "@/ui/primitives";
+import { Body, Button, Notice, Sheet, Stack, StatusRow } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import {
@@ -48,11 +48,30 @@ export function ComposerContextMeter({
         label={title}
         accessibilityLabel={`${title}: ${percent}. ${tokens}`}
         hideLabel
+        reserveTouchTarget
         onPress={() => setOpen(true)}
       >
         <ContextRing ratio={reading.ratio ?? 0} tone={tone} tps={reading.tps} bolt={!reading.empty} />
       </ChatToolbarAction>
-      <Sheet visible={open} title={title} size="compact" onClose={() => setOpen(false)}>
+      <Sheet
+        visible={open}
+        title={title}
+        size="compact"
+        onClose={() => setOpen(false)}
+        footer={onCompact ? (
+          <Button
+            label={copy("Şimdi sıkıştır", "Compact now")}
+            tone="primary"
+            fullWidth
+            reserveTouchTarget
+            disabled={compactDisabled}
+            onPress={() => {
+              setOpen(false);
+              onCompact();
+            }}
+          />
+        ) : undefined}
+      >
         <Stack>
           <StatusRow label={copy("Dolu", "Used")}>
             <Body
@@ -113,18 +132,6 @@ export function ComposerContextMeter({
             />
           ) : null}
         </Stack>
-        {onCompact ? (
-          <FormActions
-            submitLabel={copy("Şimdi sıkıştır", "Compact now")}
-            disabled={compactDisabled}
-            onSubmit={() => {
-              setOpen(false);
-              onCompact();
-            }}
-            onCancel={() => setOpen(false)}
-            cancelLabel={copy("Kapat", "Close")}
-          />
-        ) : null}
       </Sheet>
     </>
   );

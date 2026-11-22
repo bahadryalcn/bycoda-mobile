@@ -192,6 +192,7 @@ export function TemplateLibrary({
                     "Ad, tetikleyici veya metinde ara",
                     "Search template names, triggers and text",
                   )}
+                  placeholder={copy("Şablonlarda ara", "Search templates")}
                   value={search}
                   onChangeText={setSearch}
                 />

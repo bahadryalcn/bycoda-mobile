@@ -286,6 +286,7 @@
         {
           "iosAppGroupIdentifier": "group.com.bycoda.mobile",
           "iosActivationRules": {
+            "NSExtensionActivationDictionaryVersion": 2,
             "NSExtensionActivationSupportsText": true,
             "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
             "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
@@ -299,7 +300,8 @@
             "application/*"
           ],
           "androidMultiIntentFilters": [
-            "image/*"
+            "image/*",
+            "application/*"
           ]
         }
       ],

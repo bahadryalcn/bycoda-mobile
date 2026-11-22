@@ -42,7 +42,7 @@ export function useClipboardFeedback(payload: string, enabled = true, sharedFlig
       try {
         const text = prepare ? await prepare() : payload;
         if (!valid()) return;
-        await Clipboard.setStringAsync(text);
+        if (await Clipboard.setStringAsync(text) === false) throw new Error("Clipboard write was not accepted.");
         if (valid()) setOutcome({ owner });
       } catch (cause) {
         if (valid()) setOutcome({ owner, error: cause instanceof Error ? cause : new Error(String(cause)) });

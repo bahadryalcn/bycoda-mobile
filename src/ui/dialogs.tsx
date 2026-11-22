@@ -29,7 +29,8 @@ const SheetActionsContext = createContext<ReturnType<typeof createSheetActionsSt
 
 /** Editors retain their state; only their action presentation moves to the footer. */
 export function FormActions(props: FormActionsProps) {
-  const store = useContext(SheetActionsContext);
+  const sheetActions = useContext(SheetActionsContext);
+  const store = props.placement === "inline" ? null : sheetActions;
   const id = useId();
   useLayoutEffect(() => { store?.set(id, props); }, [store, id, props]);
   useLayoutEffect(() => () => { store?.remove(id); }, [store, id]);
@@ -287,6 +288,7 @@ export function Sheet({
               {headerAction ?? (
                 <IconButton
                   label={copy("Kapat", "Close")}
+                  reserveTouchTarget
                   onPress={requestClose}
                   disabled={!canClose}
                 >

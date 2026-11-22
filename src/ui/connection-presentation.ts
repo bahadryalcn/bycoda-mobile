@@ -5,6 +5,7 @@ export type ConnectionPhase =
   | "permission"
   | "access"
   | "storage"
+  | "startup-failed"
   | "checking"
   | "connected"
   | "disconnected";
@@ -18,6 +19,7 @@ export function connectionPhase(input: {
   unlocked: boolean;
   permitted: boolean;
   storageError?: string | null;
+  startupFailed?: boolean;
   /** The computer refused this device key (revoked or replaced); reconnecting will not fix it. */
   accessDenied?: boolean;
   successAt: number;
@@ -37,6 +39,7 @@ export function connectionPhase(input: {
   if (!input.unlocked) return "locked";
   if (input.storageError) return "storage";
   if (!input.permitted) return "permission";
+  if (input.startupFailed) return "startup-failed";
   switch (input.runtime) {
     case "ready":
       return "connected";

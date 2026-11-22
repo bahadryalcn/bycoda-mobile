@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { useSessionBlock } from "./session-queries";
 
 const state = vi.hoisted(() => ({ request: vi.fn(), resolveSync: vi.fn() }));
+vi.mock("@/state/connection-scope", () => ({ useConnectionScope: vi.fn() }));
 vi.mock("@/state/queries", () => ({
   hostKey: (machine: string, key: unknown[]) => ["machine", machine, ...key],
   useHostClient: () => ({ machine: { id: "machine" }, request: state.request }),

@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-import { act, createElement, forwardRef, type PropsWithChildren } from "react";
+import { act, createElement, forwardRef, useImperativeHandle, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { MobilePty } from "./mobile-pty";
+import type { TerminalViewportHandle } from "@/ui/terminal-viewport";
 const f = vi.hoisted(() => ({
   endpoint: "https://computer.test",
   activeId: "machine",
@@ -12,24 +13,49 @@ const f = vi.hoisted(() => ({
   security: { status: "unlocked", appState: "active", windowFocused: true },
   result: "applied",
   closeConfirmed: false,
+  listError: null as Error | null,
+  listReady: true,
+  listEnabled: false,
+  clientReady: true,
+  offline: false,
+  refetchList: vi.fn(async (_options?: { cancelRefetch: boolean }) => ({ data: { terminals: [] } })),
+  keyboardVisible: false,
+  hideKeyboard: vi.fn(),
+  attachOutput: vi.fn(),
+  showToast: vi.fn(),
   packet:null as null|((packet:Record<string,unknown>)=>void),
 }));
+vi.mock("./mobile-pty-attach", () => ({ attachTerminalOutput: f.attachOutput }));
+vi.mock("@/state/device-network", () => ({ deviceIsOffline: () => f.offline, useDeviceOffline: () => f.offline }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
-  Modal: ({ children }: PropsWithChildren) => createElement("div", null, children),
+  ScrollView: ({ children, horizontal, accessibilityLabel, fadingEdgeLength }: PropsWithChildren<{
+    horizontal?: boolean;
+    accessibilityLabel?: string;
+    fadingEdgeLength?: number;
+  }>) => createElement("div", {
+    "aria-label": accessibilityLabel,
+    "data-horizontal": horizontal,
+    "data-fading-edge": fadingEdgeLength,
+  }, children),
+  Modal: ({ children }: PropsWithChildren) => createElement("div", { "data-native-modal": true }, children),
+}));
+vi.mock("@/ui/overlays", () => ({
+  ScreenOverlay: ({ children, label, onClose }: PropsWithChildren<{ label: string; onClose: () => void }>) =>
+    createElement("section", { "aria-label": label }, createElement("button", { onClick: onClose }, "System back"), children),
 }));
 vi.mock("react-native-keyboard-controller", () => ({
   KeyboardAvoidingView: ({ children }: PropsWithChildren) => createElement("div", null, children),
   KeyboardController: { dismiss: async () => {} },
   useReanimatedKeyboardAnimation: () => ({ progress: { value: 0 } }),
-  useKeyboardState: (select: (state: { isVisible: boolean }) => unknown) => select({ isVisible: false }),
+  useKeyboardState: (select: (state: { isVisible: boolean }) => unknown) => select({ isVisible: f.keyboardVisible }),
 }));
 vi.mock("react-native-reanimated", () => ({
   default: { View: ({ children }: PropsWithChildren) => createElement("div", null, children) },
   useAnimatedStyle: () => ({}),
 }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-vi.mock("@/ui/tokens", () => ({ metrics: { touchTarget: 48 }, space: { xs: 4, sm: 6, screen: 16 } }));
+vi.mock("@/ui/tokens", () => ({ metrics: { touchTarget: 48 }, space: { xs: 4, sm: 6, lg: 16, screen: 16 } }));
 vi.mock("lucide-react-native/icons/keyboard", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/chevron-up", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }));
@@ -75,13 +101,16 @@ vi.mock("@/state/machines", () => ({
   },
 }));
 vi.mock("@/state/queries", () => ({
-  useHostQuery: () => ({
-    data: { terminals: [] },
-    isError: f.private,
-    error: f.private ? new Error("private") : null,
-    refetch: async () => ({ data: { terminals: [] } }),
-  }),
-  useHostClient: () => ({
+  useHostQuery: (_key: unknown, _method: string, _params: unknown, options: { enabled: boolean }) => {
+    f.listEnabled = options.enabled;
+    return {
+      data: f.listReady ? { terminals: [] } : undefined,
+      isError: f.private || !!f.listError,
+      error: f.private ? new Error("private") : f.listError,
+      refetch: f.refetchList,
+    };
+  },
+  useHostClient: () => f.clientReady ? ({
     request: async (method: string, params: Record<string, unknown>) => {
       f.calls.push({ method, params });
       if (method === "terminals.pty.desktop.create") {
@@ -109,7 +138,7 @@ vi.mock("@/state/queries", () => ({
       if (method === "terminals.pty.desktop.close" || method === "terminals.pty.desktop.status") return f.closeConfirmed ? { closed: true } : { state: "unknown" };
       return { state: "unknown" };
     },
-  }),
+  }) : null,
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({
@@ -122,7 +151,13 @@ vi.mock("lucide-react-native/icons/play", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
 vi.mock("@/ui/terminal-viewport", () => ({
-  TerminalViewport: forwardRef(({onPacket}:{onPacket:(packet:Record<string,unknown>)=>void}) => {f.packet=onPacket;return createElement("div", { "data-viewport": true });}),
+  TerminalViewport: forwardRef<TerminalViewportHandle, { onPacket: (packet: Record<string, unknown>) => void }>(
+    ({ onPacket }, ref) => {
+      useImperativeHandle(ref, () => ({ post: () => {}, focusInput: () => {}, hideInput: f.hideKeyboard }));
+      f.packet = onPacket;
+      return createElement("div", { "data-viewport": true });
+    },
+  ),
 }));
 vi.mock("@/ui/primitives", () => {
   const box = ({ children }: PropsWithChildren) => createElement("div", null, children);
@@ -130,17 +165,19 @@ vi.mock("@/ui/primitives", () => {
     label,
     disabled,
     onPress,
+    reserveTouchTarget,
   }: {
     label: string;
     disabled: boolean;
     onPress: () => void;
-  }) => createElement("button", { disabled, onClick: onPress }, label);
+    reserveTouchTarget?: boolean;
+  }) => createElement("button", { disabled, onClick: onPress, "data-touch-target": reserveTouchTarget }, label);
   return {
     Body: box,
     Heading: box,
     HeaderBackButton: ({ onPress }: { onPress: () => void }) => createElement("button", { onClick: onPress }, "Back"),
-    ActionMenu: ({ actions }: { actions: ({ label: string; disabled?: boolean; onPress: () => void } | false)[] }) =>
-      createElement("div", null, ...actions.filter(Boolean).map((a) =>
+    ActionMenu: ({ label, actions, onTriggerPress }: { label: string; actions: ({ label: string; disabled?: boolean; onPress: () => void } | false)[]; onTriggerPress?: () => void }) =>
+      createElement("div", { "data-action-menu": true }, createElement("button", { onClick: onTriggerPress }, label), ...actions.filter(Boolean).map((a) =>
         createElement("button", { disabled: a && a.disabled, onClick: a && a.onPress }, a && a.label))),
     Row: box,
     Stack: box,
@@ -150,7 +187,10 @@ vi.mock("@/ui/primitives", () => {
     IconButton: button,
     Loading: ({ label }: { label: string }) => createElement("p", null, label),
     NavigationRow: button,
-    StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    StateView: ({ title, description, action }: { title: string; description?: string; action?: { label: string; onPress: () => void; reserveTouchTarget?: boolean } }) =>
+      createElement("div", null, title, description, action ? createElement(button, { ...action, disabled: false }) : null),
+    Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    showToast: f.showToast,
     ErrorText: ({ error, message }: { error: unknown; message?: string }) => error ? createElement("p", null, message ?? String(error)) : null,
     ScreenList: ({
       data,
@@ -199,6 +239,161 @@ afterEach(async () => {
   f.security = { status: "unlocked", appState: "active", windowFocused: true };
   f.result = "applied";
   f.closeConfirmed = false;
+  f.listError = null;
+  f.listReady = true;
+  f.listEnabled = false;
+  f.clientReady = true;
+  f.offline = false;
+  f.refetchList.mockClear();
+  f.keyboardVisible = false;
+  f.hideKeyboard.mockClear();
+  f.attachOutput.mockReset();
+  f.showToast.mockClear();
+  props.onClose.mockClear();
+});
+
+const desktopOffline = "Desktop relay is offline. Open the updated bycoda desktop connected to this host.";
+
+it("waits for the network even when the terminal list was already loaded", async () => {
+  await mount();
+  const create = () => [...container.querySelectorAll("button")].find(button => button.textContent === "New interactive terminal");
+  expect(create()?.disabled).toBe(false);
+  f.offline = true;
+  await act(async () => create()!.click());
+  expect(f.calls).toEqual([]);
+  expect(f.raw).toBeNull();
+  await act(async () => root.render(createElement(MobilePty, props)));
+  expect(f.listEnabled).toBe(false);
+  expect(container.textContent).toContain("Waiting for a connection.");
+  expect(create()).toBeUndefined();
+  f.offline = false;
+  await act(async () => root.render(createElement(MobilePty, props)));
+  expect(f.listEnabled).toBe(true);
+  expect(create()?.disabled).toBe(false);
+});
+
+it("replaces the disabled create action with a waiting state until the terminal list is available", async () => {
+  f.security.windowFocused = false;
+  f.listReady = false;
+  await mount();
+  expect(f.listEnabled).toBe(false);
+  expect(container.textContent).toContain("Waiting for a connection. Loading will resume when it returns.");
+  expect(container.textContent).not.toContain("New interactive terminal");
+  expect(f.raw).toBeNull();
+
+  f.security.windowFocused = true;
+  f.clientReady = false;
+  await act(async () => root.render(createElement(MobilePty, props)));
+  expect(f.listEnabled).toBe(false);
+  expect(container.textContent).not.toContain("New interactive terminal");
+
+  f.clientReady = true;
+  await act(async () => root.render(createElement(MobilePty, props)));
+  expect(f.listEnabled).toBe(true);
+  expect(container.textContent).not.toContain("New interactive terminal");
+
+  f.listReady = true;
+  await act(async () => root.render(createElement(MobilePty, props)));
+  expect(container.textContent).not.toContain("Waiting for a connection.");
+  const create = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "New interactive terminal");
+  expect(create?.disabled).toBe(false);
+  expect(f.raw).toBeNull();
+  expect(f.calls).toEqual([]);
+});
+
+it("explains the offline desktop and retries only the terminal list", async () => {
+  f.listError = new Error(desktopOffline);
+  await mount();
+  expect(container.textContent).toContain("Open bycoda on the connected computer, then retry.");
+  expect(container.textContent).not.toContain("New interactive terminal");
+  const retry = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === "Retry")!;
+  expect(retry.dataset.touchTarget).toBe("true");
+  await act(async () => { retry.click(); retry.click(); });
+  expect(f.refetchList).toHaveBeenCalledExactlyOnceWith({ cancelRefetch: false });
+  expect(f.calls).toEqual([]);
+  f.listError = null;
+  await act(async () => root.render(createElement(MobilePty, props)));
+  expect(container.textContent).not.toContain("Desktop app unavailable");
+  expect(container.textContent).toContain("New interactive terminal");
+});
+
+it("does not retry the list from a stale mounted action after the computer changes", async () => {
+  f.listError = new Error(desktopOffline);
+  await mount();
+  f.endpoint = "https://replacement.test";
+  await click("Retry");
+  expect(f.refetchList).not.toHaveBeenCalled();
+  expect(f.calls).toEqual([]);
+});
+
+it("does not replay or clear an uncertain creation while retrying the list", async () => {
+  f.result = "unknown";
+  await mount();
+  await click("New interactive terminal");
+  const receipt = f.raw;
+  expect(receipt).toContain("operation");
+  f.listError = new Error(desktopOffline);
+  await act(async () => root.render(createElement(MobilePty, props)));
+  await click("Retry");
+  expect(f.calls.map((call) => call.method)).toEqual(["terminals.pty.desktop.create"]);
+  expect(f.raw).toBe(receipt);
+});
+
+it("puts Terminal actions in the shared screen layer and Back leaves without closing the PTY", async () => {
+  await mount();
+  const layer = container.querySelector('section[aria-label="Terminal"]');
+  expect(layer).not.toBeNull();
+  expect(container.querySelector("[data-native-modal]")).toBeNull();
+  expect(layer?.textContent).toContain("New interactive terminal");
+  await click("New interactive terminal");
+  expect(layer?.textContent).toContain("Close terminal");
+  await click("System back");
+  expect(props.onClose).toHaveBeenCalledOnce();
+  expect(f.calls.map((call) => call.method)).toEqual(["terminals.pty.desktop.create"]);
+});
+
+it("keeps all seven terminal keys reachable in a scrolling row with reserved touch targets", async () => {
+  f.keyboardVisible = true;
+  await mount();
+  await click("New interactive terminal");
+  const row = container.querySelector('[aria-label="Terminal keys"][data-horizontal="true"]');
+  expect(Number(row?.getAttribute("data-fading-edge"))).toBeGreaterThan(0);
+  const keys = Array.from(row?.querySelectorAll("button") ?? []);
+  expect(keys.map((key) => key.textContent)).toEqual(["Esc", "Tab", "Ctrl-C", "Arrow left", "Arrow down", "Arrow up", "Arrow right"]);
+  expect(keys.every((key) => key.dataset.touchTarget === "true")).toBe(true);
+});
+
+it("keeps the keyboard toggle in the fixed terminal header while Gboard is open", async () => {
+  f.keyboardVisible = true;
+  await mount();
+  await click("New interactive terminal");
+  const buttons = Array.from(container.querySelectorAll("button"));
+  const hide = buttons.find((button) => button.textContent === "Hide keyboard");
+  expect(hide?.dataset.touchTarget).toBe("true");
+  expect(hide?.parentElement?.textContent).toContain("Close terminal");
+  await click("Hide keyboard");
+  expect(f.hideKeyboard).toHaveBeenCalledOnce();
+  expect(props.onClose).not.toHaveBeenCalled();
+});
+
+it("keeps Attach output in Terminal actions and protects the draft from a duplicate tap", async () => {
+  f.keyboardVisible = true;
+  await mount();
+  await click("New interactive terminal");
+  await click("Terminal actions");
+  expect(f.hideKeyboard).toHaveBeenCalledOnce();
+  expect(container.querySelector("[data-action-menu]")?.textContent).toContain("Attach output");
+  expect([...container.querySelectorAll("button")].filter((button) => button.textContent === "Attach output")).toHaveLength(1);
+  f.attachOutput.mockImplementationOnce(() => { throw new Error("There is no terminal output to attach yet."); });
+  await click("Attach output");
+  expect(container.textContent).toContain("There is no terminal output to attach yet.");
+  await click("Attach output");
+  expect(f.showToast).toHaveBeenCalledWith({ message: "Added to draft" });
+  expect(container.textContent).not.toContain("There is no terminal output to attach yet.");
+  const attached = [...container.querySelectorAll<HTMLButtonElement>("[data-action-menu] button")].find((button) => button.textContent === "Added to draft");
+  expect(attached?.disabled).toBe(true);
+  await click("Added to draft");
+  expect(f.attachOutput).toHaveBeenCalledTimes(2);
 });
 
 it("retains its terminal after unknown close and checks the original receipt without replaying close", async () => {
@@ -267,10 +462,10 @@ it("same-id changed endpoint cannot create, and privacy hides an already opened 
   await act(async () => root.render(createElement(MobilePty, props)));
   expect(container.querySelector("[data-viewport]")).toBeNull();
 });
-it("renders no native terminal modal while the app is locked", async () => {
+it.each(["locked", "suspended"])("renders no terminal while the app is %s", async (status) => {
   await mount();
   expect(container.textContent).not.toBe("");
-  f.security.status = "locked";
+  f.security.status = status;
   await act(async () => root.render(createElement(MobilePty, props)));
   expect(container.textContent).toBe("");
 });

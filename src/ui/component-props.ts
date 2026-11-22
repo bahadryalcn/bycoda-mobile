@@ -20,6 +20,7 @@ export type CardProps = ContainerProps & {
 };
 
 export type ButtonProps = PropsWithChildren<{
+  ref?: Ref<HostInstance>;
   label: string;
   accessibilityLabel?: string;
   onPress: () => void;
@@ -29,6 +30,8 @@ export type ButtonProps = PropsWithChildren<{
   tone?: "default" | "primary" | "secondary" | "quiet" | SemanticTone;
   density?: "regular" | "compact";
   fullWidth?: boolean;
+  /** Reserve a full touch target in layout for a button beside other controls. */
+  reserveTouchTarget?: boolean;
   /** Text-style button at the start of a content column: pulls its padding outside the column so the label aligns with the content (touch target unchanged). */
   flush?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -126,6 +129,8 @@ export type IconButtonProps = PropsWithChildren<{
   disabled?: boolean;
   busy?: boolean;
   density?: "regular" | "compact";
+  /** Reserve the full layout target when a parent can clip expanded hit areas. */
+  reserveTouchTarget?: boolean;
   tone?: "default" | "primary" | "danger";
   expanded?: boolean;
 }>;
@@ -133,7 +138,7 @@ export type IconButtonProps = PropsWithChildren<{
 export type BadgeProps = { label: string; tone?: "default" | SemanticTone | "live" | "active"; /** Optional leading glyph (a lucide icon component), drawn 12dp in the badge ink; decorative, the label carries the meaning. */ icon?: ComponentType<{ size?: number; strokeWidth?: number; color?: string }>; };
 
 /** Button-shaped recovery or next step shown by a state. */
-export type StateAction = { label: string; onPress: () => void; busy?: boolean };
+export type StateAction = { label: string; onPress: () => void; busy?: boolean; reserveTouchTarget?: boolean };
 
 export type StateTone = "neutral" | SemanticTone;
 
@@ -194,6 +199,8 @@ export type QueryStateProps = {
   compact?: boolean;
   /** Overrides the default nearest-Sheet guarded close and connection navigation. */
   onManageConnections?: () => void;
+  /** Joins a route-wide connection notice for reads from the same computer. */
+  shareConnectionFeedback?: boolean;
   empty?: boolean | string;
   emptyTitle?: string;
   emptyDetail?: string;
@@ -218,9 +225,13 @@ export type MutationStateProps = {
 };
 
 export type FormActionsProps = {
+  /** Keep actions in a collapsible subsection instead of the parent sheet's footer. */
+  placement?: "inline";
   /** Operation feedback stays beside actions; field errors remain in the form. */
   feedback?: ReactNode;
   submitLabel: string;
+  /** Focus target for a review opened from this submit action. */
+  submitRef?: Ref<HostInstance>;
   onSubmit: () => void;
   onCancel?: () => void;
   cancelLabel?: string;

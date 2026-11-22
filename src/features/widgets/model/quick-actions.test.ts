@@ -84,6 +84,14 @@ describe("quickActionHref", () => {
     expect(recentQuickActionSessions({ machineId: "m", ready: false, sessions }, true)).toEqual([]);
     expect(recentQuickActionSessions({ machineId: null, ready: true, sessions }, true)).toEqual([]);
   });
+
+  it("uses a localized fallback for fresh sessions only when titles may be shown", () => {
+    const feed = { machineId: "m", ready: true, sessions: [session("fresh", 1, { title: "" })] };
+    expect(recentQuickActionSessions(feed, true, 2, "Yeni oturum")).toEqual([
+      expect.objectContaining({ id: "fresh", title: "Yeni oturum" }),
+    ]);
+    expect(recentQuickActionSessions(feed, false, 2, "Yeni oturum")).toEqual([]);
+  });
 });
 
 describe("resolveQuickAction", () => {

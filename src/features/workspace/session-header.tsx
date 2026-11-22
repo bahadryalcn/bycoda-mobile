@@ -54,7 +54,7 @@ export function SessionHeader({
 }: {
   title: string;
   context?: string;
-  status: string;
+  status?: string;
   tone: SessionHeaderTone;
   actions?: ReactNode;
   /** Shown as an icon before the title; a "codex ·" title prefix is dropped. */
@@ -87,20 +87,20 @@ export function SessionHeader({
               {sessionDisplayTitle(title, title)}
             </Body>
           </View>
-          <View accessible accessibilityLabel={[context, status].filter(Boolean).join(", ")} style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+          {context || status ? <View accessible accessibilityLabel={[context, status].filter(Boolean).join(", ")} style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
             {context ? (
               <Body muted numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1, fontSize: fontSize.caption, lineHeight: lineHeight.caption }]}>
                 {context}
               </Body>
             ) : null}
-            <View accessible={false} style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 0, maxWidth: "60%" }}>
+            {status ? <View accessible={false} style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 0, maxWidth: "60%" }}>
               {context ? <Text aria-hidden style={{ color: colors.tertiary, fontSize: fontSize.caption }}>·</Text> : null}
               <View style={{ width: 6, height: 6, borderRadius: radii.pill, backgroundColor: color }} />
               <Body numberOfLines={1} style={{ flexShrink: 1, fontSize: fontSize.caption, lineHeight: lineHeight.caption, fontWeight: "600", color }}>
                 {status}
               </Body>
-            </View>
-          </View>
+            </View> : null}
+          </View> : null}
         </View>
         <View style={{ width: SESSION_HEADER_ACTIONS_WIDTH, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: space.xs }}>
           {actions}

@@ -9,7 +9,6 @@ const fixture = vi.hoisted(() => ({
   dirty: false,
   fields: new Map<string, { value: string; onChangeText(value: string): void }>(),
   save: vi.fn(),
-  confirm: vi.fn(),
 }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
@@ -21,8 +20,9 @@ vi.mock("../../workspace/use-project-directory", () => ({
     isProjectVisible: () => true,
   }),
 }));
-vi.mock("@/ui/confirm", () => ({ confirmAction: fixture.confirm }));
-vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ isCurrent: () => true }) }));
+vi.mock("@/state/connection-scope", () => ({
+  useConnectionScope: () => ({ token: "test-connection", isCurrent: () => true }),
+}));
 vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
 vi.mock("../shared/format", () => ({ stamp: () => "Created" }));
 vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
@@ -78,8 +78,14 @@ vi.mock("@/ui/primitives", () => {
       fixture.fields.set(props.label, props);
       return null;
     },
-    FormActions: ({ disabled, onSubmit }: { disabled?: boolean; onSubmit(): void }) =>
-      createElement("button", { disabled, onClick: onSubmit }, "Save"),
+    FormActions: ({ disabled, submitLabel, onSubmit, cancelLabel, onCancel }: {
+      disabled?: boolean; submitLabel: string; onSubmit(): void; cancelLabel?: string; onCancel?(): void;
+    }) => createElement("div", null,
+      createElement("button", { disabled, onClick: onSubmit }, submitLabel),
+      onCancel && createElement("button", { onClick: onCancel }, cancelLabel),
+    ),
+    Sheet: ({ visible, title, children }: PropsWithChildren<{ visible: boolean; title: string }>) =>
+      visible ? createElement("section", { role: "dialog", "aria-label": title }, children) : null,
     ToggleField: () => null,
     Button: Action,
     IconButton: Action,
@@ -111,7 +117,6 @@ beforeEach(() => {
   fixture.fields.clear();
   fixture.dirty = false;
   fixture.save.mockClear();
-  fixture.confirm.mockClear();
   container = document.createElement("div");
   root = createRoot(container);
 });
@@ -261,6 +266,7 @@ function cardFor(task: Partial<TaskCardProps["task"]>, lifecycleReady = true) {
 }
 const action = (label: string, region: HTMLElement = container) =>
   [...region.querySelectorAll("button")].find(button => button.textContent === label);
+const confirmation = () => container.querySelector<HTMLElement>('[role="dialog"]')!;
 
 it.each(["previous-worker", undefined])("offers one primary Retry for a blocked task with session %s", async sessionId => {
   const props = cardFor({ sessionId });
@@ -287,14 +293,14 @@ it("names the exact task and computer before stopping", async () => {
   const props = cardFor({ status: "running" });
   await act(async () => root.render(createElement(TaskCard, props)));
   await act(async () => action("Stop")!.click());
-  expect(fixture.confirm).toHaveBeenCalledOnce();
-  const [title, message, label, confirm] = fixture.confirm.mock.calls[0]!;
-  expect(title).toBe("Stop task");
-  expect(message).toContain("Harbor checklist");
-  expect(message).toContain("Harbor computer");
-  expect(label).toBe("Stop");
+  expect(confirmation().getAttribute("aria-label")).toBe("Stop task");
+  expect(confirmation().textContent).toContain("Harbor checklist · Harbor computer");
+  expect(confirmation().textContent).toContain("Active work will stop and work files will be retained.");
+  await act(async () => action("Cancel", confirmation())!.click());
+  expect(confirmation()).toBeNull();
   expect(props.move.mutate).not.toHaveBeenCalled();
-  await act(async () => confirm());
+  await act(async () => action("Stop")!.click());
+  await act(async () => action("Stop", confirmation())!.click());
   expect(props.move.mutate).toHaveBeenCalledExactlyOnceWith({ taskId: "task", to: "blocked" });
 });
 
@@ -302,17 +308,16 @@ it("names the reviewed task before completion and discards a stale confirmation"
   const props = cardFor({ status: "todo", sessionId: undefined, updatedAt: 12 });
   await act(async () => root.render(createElement(TaskCard, props)));
   await act(async () => action("Complete")!.click());
-  const [title, message, , confirm] = fixture.confirm.mock.calls[0]!;
-  expect(title).toBe("Complete task");
-  expect(message).toContain("Harbor checklist · Harbor computer");
+  expect(confirmation().getAttribute("aria-label")).toBe("Complete task");
+  expect(confirmation().textContent).toContain("Harbor checklist · Harbor computer");
   await act(async () => root.render(createElement(TaskCard, {
     ...props, task: { ...props.task, updatedAt: 13 },
   })));
-  await act(async () => confirm());
+  await act(async () => action("Complete", confirmation())!.click());
   expect(props.move.mutate).not.toHaveBeenCalled();
   await act(async () => action("Complete")!.click());
-  const acceptCurrent = fixture.confirm.mock.calls[1]![3];
-  await act(async () => { acceptCurrent(); acceptCurrent(); });
+  const acceptCurrent = action("Complete", confirmation())!;
+  await act(async () => { acceptCurrent.click(); acceptCurrent.click(); });
   expect(props.move.mutate).toHaveBeenCalledExactlyOnceWith({ taskId: "task", to: "done" });
 });
 
@@ -324,7 +329,7 @@ it("opens the reviewed merge flow without issuing a task completion request", as
   expect(action("Complete")).toBeUndefined();
   await act(async () => delivery!.click());
   expect(props.onReviewDelivery).toHaveBeenCalledExactlyOnceWith(props.task);
-  expect(fixture.confirm).not.toHaveBeenCalled();
+  expect(confirmation()).toBeNull();
   expect(props.move.mutate).not.toHaveBeenCalled();
 
   await act(async () => root.render(createElement(TaskCard, { ...props, task: { ...props.task, merged: true } })));

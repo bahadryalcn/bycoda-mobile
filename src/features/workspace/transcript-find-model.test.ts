@@ -6,6 +6,8 @@ import {
   findTranscriptAsync,
   TranscriptFindIndex,
   nextTranscriptResult,
+  currentTranscriptFind,
+  matchingTranscriptActivity,
 } from "./transcript-find-model";
 
 const block = (
@@ -80,6 +82,21 @@ describe("loaded transcript find", () => {
       ["a", "activity:a", 0],
       ["b", "activity:a", 0],
     ]);
+  });
+  it("retires a result snapshot immediately when the transcript or query changes", () => {
+    const rows = entries([block("a", "assistant", "needle")]);
+    const snapshot = { entries: rows, query: "needle", results: findTranscript(rows, "needle") };
+    expect(currentTranscriptFind(snapshot, rows, "needle", true)).toBe(snapshot);
+    expect(currentTranscriptFind(snapshot, [...rows], "needle", true)).toBeUndefined();
+    expect(currentTranscriptFind(snapshot, rows, "new query", true)).toBeUndefined();
+    expect(currentTranscriptFind(snapshot, rows, "needle", false)).toBeUndefined();
+  });
+  it("opens the matching activity by identity after a prepend and rejects a missing block", () => {
+    const rows = entries([block("a", "tool", "needle a"), block("b", "tool", "needle b")]);
+    const hit = findTranscript(rows, "needle")[1]!;
+    const olderRows = entries([block("older", "tool", "old command")]);
+    expect(matchingTranscriptActivity([...olderRows, ...rows], hit)?.id).toBe("activity:a");
+    expect(matchingTranscriptActivity(entries([block("a", "tool", "needle a")]), hit)).toBeUndefined();
   });
   it("wraps navigation and preserves active identity after earlier messages load", () => {
     const original = findTranscript(

@@ -1,14 +1,27 @@
 # Connecting the mobile app
 
 In desktop **Settings → Connections → Connect your phone**, choose the computer
-and a connection method. On the phone, open **Computers** and scan the QR code or
-paste its pairing code. If you already have a saved computer, use **Add computer**
-in the header to see those choices. Codes expire after two minutes.
+and a connection method. On the phone, open **Settings → Manage connections**,
+then scan the QR code or paste its pairing code. If you already have a saved
+computer, use **Add computer** in the header to see those choices. Codes expire
+after two minutes.
+
+When pasting a long code, scroll inside the code field to review it. Tap
+**Preview computer** to check the computer before connecting.
+If the code expires or the computer rejects it, choose **Use a new code** to
+scan or paste one from desktop bycoda. If your connection drops temporarily,
+choose **Retry** to continue the same pairing attempt.
 
 If a saved computer disconnects, tap its name in **Computers** to retry. To
 change an old network address, open **Advanced options → Edit connection**, enter
 the address shown by desktop bycoda and tap **Save connection**. You can also
 scan a fresh code from the desktop.
+
+In the **Connections** section of **Settings**, choose **Computer settings** to
+edit task limits or agent defaults for the selected computer. Tap **−** or
+**+** to change the concurrent task limit by one, or press and hold to keep
+changing it. For the daily agent time, choose a preset, **Unlimited**, or
+**Custom** to enter the exact number of minutes.
 
 ## Local network
 

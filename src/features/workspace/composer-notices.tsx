@@ -7,6 +7,7 @@ import type { ComposerDelivery } from "./composer-delivery";
 /** Quiet state lines under the capsule; nothing renders (and nothing is reserved) when idle. */
 export function ComposerNotices({
   error,
+  noteError,
   mode,
   running,
   queueSupported,
@@ -22,6 +23,7 @@ export function ComposerNotices({
   sending,
 }: {
   error: unknown;
+  noteError?: Error;
   mode: ComposerDelivery;
   running: boolean;
   queueSupported: boolean;
@@ -49,6 +51,7 @@ export function ComposerNotices({
         onRetry={draftError ? undefined : onRetrySend}
         retrying={sending}
       />
+      {noteError ? <ErrorNotice error={noteError} message={composerDeliveryError(noteError, copy)} /> : null}
       {mode === "send" && running && !queueSupported ? (
         <Body muted style={uiStyles.caption}>
           {copy("Bu turun bitmesini bekle.", "Wait for this turn to finish.")}

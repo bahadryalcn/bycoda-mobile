@@ -46,6 +46,8 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
   const start = useHostMutation<DevServerStartResult>("devServers.start", ["dev-servers", project.id]);
   const pending = useRef(false);
   const projectRows = projectServers(scan.data?.servers ?? [], project.id);
+  const canStartFromEmptyList = scan.isSuccess && scan.data?.status !== "error" && !projectRows.length;
+  const openStartForm = () => { start.reset(); setResultError(undefined); setCreating(true); };
   const servers = projectRows.filter((server) => matchesSearch(
     `${server.name} ${server.command ?? ""} ${server.endpoints.map((endpoint) => endpoint.port).join(" ")}`, search, locale,
   ));
@@ -87,11 +89,11 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
         data={servers}
         keyExtractor={(server) => server.id}
         query={scan}
-        actions={
-          <IconButton label={copy("Sunucu başlat", "Start server")} disabled={start.isPending} onPress={() => { start.reset(); setResultError(undefined); setCreating(true); }}>
+        actions={!canStartFromEmptyList ? (
+          <IconButton label={copy("Sunucu başlat", "Start server")} disabled={start.isPending} onPress={openStartForm}>
             <Plus size={22} strokeWidth={2.2} color={colors.accent} />
           </IconButton>
-        }
+        ) : undefined}
         header={
           <>
             <Stack.Screen options={{ title: copy("Geliştirme sunucuları", "Dev servers") }} />
@@ -106,7 +108,7 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
               }
               emptyAction={search.trim() && projectRows.length ? {
                 label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
-              } : { label: copy("Sunucu başlat", "Start server"), onPress: () => { start.reset(); setResultError(undefined); setCreating(true); } }}
+              } : { label: copy("Sunucu başlat", "Start server"), onPress: openStartForm, busy: start.isPending }}
             />
             {!scan.error && scan.data?.status === "error" ? <Notice tone="danger" message={scan.data.error ?? copy("Hata", "Error")} retrying={scan.isFetching} onRetry={() => { if (!scan.isFetching) void scan.refetch(); }} /> : null}
 

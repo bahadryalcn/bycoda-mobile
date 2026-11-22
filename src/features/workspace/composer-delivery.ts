@@ -30,10 +30,11 @@ export function validateNoteDelivery(
     throw new Error(
       "Update bycoda on this computer to send note context. Your draft is preserved.",
     );
-  if (mode !== "send" || /^\s*\/(?:plan|draft|compact|build|clear|new)(?:\s|$)/i.test(text))
-    throw new Error(
-      "Note context requires Send without plan, compact or session commands. Change the delivery mode or remove the note.",
-    );
+  const command = /^\s*\/(plan|draft|compact|build|clear|new)(?:\s|$)/i.exec(text)?.[1].toLowerCase();
+  if (command === "plan") throw new Error("Turn off Plan mode or remove the note.");
+  if (command === "draft") throw new Error("Turn off Draft mode or remove the note.");
+  if (command) throw new Error("Remove the command at the start of the message or remove the note.");
+  if (mode !== "send") throw new Error("To keep the note, send this message after the current turn finishes.");
   readNoteContext(noteCard);
 }
 

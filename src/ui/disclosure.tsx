@@ -23,16 +23,15 @@ export function Disclosure({
       <Collapsible.Trigger
         accessibilityLabel={disclosureAccessibleLabel(label, detail, expanded)}
         aria-expanded={expanded}
-        hitSlop={{ top: 5, bottom: 5, left: 0, right: 0 }}
         style={{
           minHeight: metrics.touchTarget,
           flexDirection: "row",
           alignItems: "center",
           gap: space.sm,
-          paddingVertical: 3,
+          paddingVertical: space.sm,
         }}
       >
-        <View style={[uiStyles.grow, { gap: 2 }]}>
+        <View style={[uiStyles.grow, { gap: space.xxs }]}>
           <Body style={[uiStyles.buttonLabel, { fontWeight: "500" }, tone && { color: semanticColors[tone].text }]}>
             {label}
           </Body>
@@ -44,8 +43,8 @@ export function Disclosure({
         </View>
         <Collapsible.Indicator><ChevronDown size={16} color={colors.muted} /></Collapsible.Indicator>
       </Collapsible.Trigger>
-      <Collapsible.Content className="pb-0" style={{ paddingTop: expanded ? space.sm : 0, paddingBottom: space.sm }}>
-        {visited ? children : null}
+      <Collapsible.Content className="pb-0">
+        {visited ? <View style={{ gap: space.md, paddingTop: space.sm, paddingBottom: space.lg }}>{children}</View> : null}
       </Collapsible.Content>
       {feedback ? <View style={{ paddingTop: expanded ? 0 : space.sm }}>{feedback}</View> : null}
     </Collapsible>

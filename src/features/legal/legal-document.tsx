@@ -91,7 +91,7 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
       try { await Linking.openURL(url); }
       catch {
         throw new Error(url === mailUrl
-          ? copy("E-posta uygulaması açılamadı. Destek adresini e-posta uygulamana kopyala.", "The email app could not be opened. Copy the support address into your email app.")
+          ? copy("E-posta uygulaması açılamadı.", "The email app could not be opened.")
           : copy("Bağlantı açılamadı. İnternet bağlantını ve tarayıcını kontrol et.", "The link could not be opened. Check your internet connection and browser."));
       }
     });
@@ -171,8 +171,11 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
             {target === mailUrl && url === mailUrl && action.isError ? (
               <>
                 <Button
-                  label={clipboard.isSuccess ? copy("Kopyalandı", "Copied") : copy("Kopyala", "Copy")}
+                  label={clipboard.isSuccess
+                    ? copy("Kopyalandı", "Copied")
+                    : copy("Destek adresini kopyala", "Copy support address")}
                   tone="quiet"
+                  reserveTouchTarget
                   busy={clipboard.isPending}
                   onPress={copyAddress}
                 />

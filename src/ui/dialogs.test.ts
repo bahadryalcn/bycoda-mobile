@@ -97,6 +97,30 @@ it("renders no decorative drag handle on bottom sheets, since they cannot be swi
   expect(drawnHandle).toBe(false);
 });
 
+it("keeps a mounted subsection's save action inside its collapsed body", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  root = createRoot(container);
+  const render = (expanded: boolean) => act(async () => root!.render(createElement(Sheet, {
+    visible: true, title: "Computer settings", onClose: () => {},
+  }, createElement("section", { hidden: !expanded },
+    createElement("input", { defaultValue: "Draft value" }),
+    createElement(FormActions, { placement: "inline", submitLabel: "Save section", onSubmit: () => {} }),
+  ), createElement(FormActions, { submitLabel: "Save computer settings", onSubmit: () => {} }))));
+
+  await render(true);
+  const field = container.querySelector("input")!;
+  const section = field.parentElement!;
+  expect(section.querySelector("footer")?.textContent).toBe("Save section");
+  field.value = "Edited draft";
+  await render(false);
+  expect(section.hidden).toBe(true);
+  expect(container.querySelector("input")).toBe(field);
+  expect(field.value).toBe("Edited draft");
+  expect([...container.querySelectorAll("footer")].filter(row => !section.contains(row)).map(row => row.textContent))
+    .toEqual(["Save computer settings"]);
+});
+
 it("shows a long sheet title in full inside its bounded scroller, with the close control outside it", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");

@@ -14,7 +14,7 @@ vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}
 vi.mock("@/ui/tokens", () => ({ colors: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (tr: string, en: string) => fixture.locale === "tr" ? tr : en }));
 vi.mock("@/i18n", () => ({ useLocale: () => fixture.locale }));
-vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "machine", capabilities: fixture.capabilities }), useMachines: { getState: () => ({ activeId: fixture.activeId, selectProject: fixture.selectProject }) } }));
+vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "machine", environmentId: "host", capabilities: fixture.capabilities }), useMachines: { getState: () => ({ activeId: fixture.activeId, selectProject: fixture.selectProject }) } }));
 vi.mock("../workspace/project-picker", async () => {
   const { useState } = await import("react");
   return { ProjectPicker: ({ onSelect }: any) => {
@@ -97,4 +97,13 @@ it("lists no Social tool and no tool the dock or Settings already owns", async (
 it("opens Jira boards in the inbox, which owns their project scope", async () => {
   await render(); await click("Jira");
   expect(fixture.push).toHaveBeenCalledWith({ pathname: "/(tabs)/inbox", params: { view: "jira" } });
+});
+
+it.each([null, "project"])("opens management with the explicit Tools project filter %s", async (projectId) => {
+  await render("", projectId);
+  await click("Tasks");
+  expect(fixture.push).toHaveBeenCalledWith({ pathname: "/manage/[section]", params: {
+    section: "tasks", machineId: "machine", environmentId: "host", projectFilter: projectId ? "project" : "all",
+    ...(projectId ? { projectId } : {}),
+  } });
 });

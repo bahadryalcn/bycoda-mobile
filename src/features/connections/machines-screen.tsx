@@ -11,8 +11,9 @@ import { IconTile } from "@/ui/icon-tile";
 import { useLocale } from "@/i18n";
 import { useScreenChrome } from "@/ui/layout";
 import { ScreenList } from "@/ui/screen-list";
-import { matchesSearch } from "@/ui/search-matching";
+import { matchesSearch, normalizeSearch } from "@/ui/search-matching";
 import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
+import { useMachineStatus } from "@/ui/machine-bar";
 import { useMachines } from "@/state/machines";
 import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { assertAppAccess } from "@/state/security";
@@ -28,6 +29,7 @@ import { ActiveComputerStatus, RetryConnectionRow } from "./active-computer-stat
 import { PairingEntry } from "./pairing-entry";
 import { PairingScanner } from "./pairing-scanner";
 import { matchesSavedComputer, removeSavedComputer, reloadSavedConnections, selectSavedComputer } from "./recovery";
+import { selectedComputerFirst } from "./saved-computer-order";
 import { useComputerConnection } from "./use-computer-connection";
 
 export function MachinesScreen() {
@@ -43,30 +45,37 @@ export function MachinesScreen() {
   const storageError = useMachines((store) => store.storageError);
   const connectionPending = useMachines((store) => store.connectionPending);
   const activeId = useMachines((store) => store.activeId);
+  const activeStatus = useMachineStatus();
   const state = { machines, hydrated, storageError, connectionPending };
-  const controller = useComputerConnection();
+  const { start, returnToPrevious } = useLocalSearchParams<{ start?: string; returnToPrevious?: string }>();
+  const controller = useComputerConnection(start === "choices" || returnToPrevious === "1");
   const { operation, busy, recover } = controller;
-  const { start } = useLocalSearchParams<{ start?: string }>();
   const started = useRef(false);
-  // Reason: welcome actions open their entry directly, once per mounted route.
+  // Reason: welcome and conversation recovery open their pairing entry once.
   useEffect(() => {
-    if ((start !== "scan" && start !== "paste") || started.current) return;
+    if (started.current || !hydrated || storageError || connectionPending) return;
+    if (start !== "scan" && start !== "paste" && start !== "choices") return;
     started.current = true;
     controller.begin(start);
-  }, [start, controller]);
+  }, [start, controller, hydrated, storageError, connectionPending]);
   const [managing, setManaging] = useState<string | null>(null);
   const selected = machines.find((machine) => machine.id === managing);
   const [removal, setRemoval] = useState<(ReviewedMachine & { name: string }) | null>(null);
+  const [removalWriting, setRemovalWriting] = useState(false);
   const retiredRemoval = useRef(false);
   const removalMatches = !removal || matchesSavedComputer(removal, state);
-  useLayoutEffect(() => { if (removal && !removalMatches) retiredRemoval.current = true; }, [removal, removalMatches]);
-  const staleRemoval = !!removal && (!removalMatches || retiredRemoval.current);
+  // The store's serialized write sets connectionPending itself. It rechecks the reviewed identity before deleting.
+  useLayoutEffect(() => {
+    if (removal && !removalWriting && !removalMatches) retiredRemoval.current = true;
+  }, [removal, removalMatches, removalWriting]);
+  const staleRemoval = !!removal && !removalWriting && (!removalMatches || retiredRemoval.current);
   const closeManagement = () => { if (!busy) { retiredRemoval.current = true; setRemoval(null); setManaging(null); } };
   useLayoutEffect(() => () => { retiredRemoval.current = true; }, []);
   const adding = controller.form.values.target !== null;
   const unavailable = !hydrated || !!storageError || connectionPending;
   const showPairing = adding || !machines.length;
-  const entryOwnsFeedback = showPairing && (controller.entry.kind === "manual" || controller.entry.kind === "preview");
+  const entryOwnsFeedback = showPairing && (controller.entry.kind === "manual" || controller.entry.kind === "preview" ||
+    controller.entry.kind === "rejected-code");
   const insideEntry = controller.entry.kind !== "choices";
   const entryActive = adding || insideEntry;
   const addComputer = !showPairing ? (
@@ -75,7 +84,15 @@ export function MachinesScreen() {
       <Plus size={20} color={colors.accent} />
     </IconButton>
   ) : undefined;
-  const visible = machines.filter(machine => matchesSearch(`${machine.name} ${machine.endpoint}`, search, locale));
+  const visible = selectedComputerFirst(
+    machines.filter(machine => matchesSearch(`${machine.name} ${machine.endpoint}`, search, locale)),
+    activeId,
+  );
+  const nameCounts = new Map<string, number>();
+  for (const machine of machines) {
+    const name = normalizeSearch(machine.name, locale);
+    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+  }
   const listMemory = useFilteredListScrollMemory<(typeof machines)[number]>(search, !showPairing, visible.length, { suspended: showPairing });
   const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
   const cancelEntry = () => {
@@ -139,10 +156,16 @@ export function MachinesScreen() {
       footer={search.trim() ? undefined : help}
       renderItem={({item:machine}) => {
           const active = machine.id === activeId;
+          const duplicateName = (nameCounts.get(normalizeSearch(machine.name, locale)) ?? 0) > 1;
+          const address = duplicateName ? machine.endpoint : undefined;
           return <NavigationRow
             key={machine.id} label={machine.name} selected={active} intent="navigate"
+            detail={address} detailSelectable={false} detailEllipsizeMode="middle"
+            accessibilityLabel={active
+              ? [machine.name, address, activeStatus.status, activeStatus.reason].filter(Boolean).join(". ")
+              : undefined}
             icon={<IconTile color={colors.muted}><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
-            supporting={active ? <ActiveComputerStatus /> : undefined}
+            supporting={active ? <ActiveComputerStatus connection={activeStatus} /> : undefined}
             disabled={unavailable || busy} onPress={() => setManaging(machine.id)}
           />;
       }}
@@ -166,12 +189,20 @@ export function MachinesScreen() {
             await removeSavedComputer(removal, {
               assertAccess: assertAppAccess, flushDrafts: flushWorkspaceDrafts,
               getState: () => useMachines.getState(), reviewValid: () => !retiredRemoval.current,
-              remove: (id, expected) => useMachines.getState().removeMachine(id, expected),
+              remove: async (id, expected) => {
+                setRemovalWriting(true);
+                try {
+                  await useMachines.getState().removeMachine(id, expected);
+                  setRemoval(null);
+                  setManaging(null);
+                } finally {
+                  setRemovalWriting(false);
+                }
+              },
             });
-            setRemoval(null); setManaging(null);
           }, copy("Bilgisayar bağlantısı kaldırıldı.", "Computer connection removed.")); }} />
       </> : selected ? <>
-      {selected.id === activeId ? <ActiveComputerStatus /> : null}
+      {selected.id === activeId ? <ActiveComputerStatus connection={activeStatus} /> : null}
       <NavigationGroup>
         {selected.id === activeId ? null : <NavigationRow label={copy("Seç", "Use computer")} disabled={unavailable || busy} onPress={() => {
           void recover(() => selectSavedComputer(selected.id, {

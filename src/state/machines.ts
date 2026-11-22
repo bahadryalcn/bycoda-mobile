@@ -12,6 +12,7 @@ import {
   type MobileLanguage,
 } from "./machine-model";
 import { assertAppAccess } from "./security";
+export { isMachinePending } from "./reviewed-machine";
 
 const key = "bycoda.mobile.remote-machines.v1";
 const validId = (id: string) => /^[a-zA-Z0-9-]{1,80}$/.test(id);
@@ -108,6 +109,8 @@ type MachineState = {
   connectionPending: boolean;
   /** Computers whose own connection (credential, route or removal) is changing right now. */
   pendingMachineIds: readonly string[];
+  /** In-memory revisions of committed credential replacements, without storing credentials in state. */
+  credentialRevisions: ReadonlyMap<string, number>;
   /** A change that is not tied to one computer is running; it affects every computer. */
   accountPending: boolean;
   hydrate(): Promise<void>;
@@ -131,16 +134,6 @@ function publishPending() {
     accountPending: pendingAccountMutations > 0,
     pendingMachineIds: [...changingCredentials.keys()],
   });
-}
-/**
- * Whether this computer's connection must be treated as changing: its own mutation is running, or
- * an account-wide one is. A change to another computer never makes this one pending.
- */
-export function isMachinePending(
-  state: Pick<MachineState, "accountPending" | "pendingMachineIds">,
-  id: string | null | undefined,
-): boolean {
-  return state.accountPending || (id != null && state.pendingMachineIds.includes(id));
 }
 function serializeMutation<T>(id: string | null, operation: () => Promise<T>): Promise<T> {
   if (id !== null) changingCredentials.set(id, (changingCredentials.get(id) ?? 0) + 1);
@@ -199,6 +192,7 @@ export const useMachines = create<MachineState>((set, get) => ({
   storageError: null,
   connectionPending: false,
   pendingMachineIds: [],
+  credentialRevisions: new Map(),
   accountPending: false,
   async hydrate() {
     if (pendingMutations) {
@@ -307,6 +301,11 @@ export const useMachines = create<MachineState>((set, get) => ({
         }
         throw new Error("Computer could not be saved. Check available device storage.");
       }
+      if (oldToken !== token) set((state) => {
+        const credentialRevisions = new Map(state.credentialRevisions);
+        credentialRevisions.set(machine.id, (credentialRevisions.get(machine.id) ?? 0) + 1);
+        return { credentialRevisions };
+      });
     });
   },
   async removeMachine(id, expected) {
@@ -357,6 +356,11 @@ export const useMachines = create<MachineState>((set, get) => ({
         }
         throw new Error("Computer could not be removed from device storage.");
       }
+      set((state) => {
+        const credentialRevisions = new Map(state.credentialRevisions);
+        credentialRevisions.delete(id);
+        return { credentialRevisions };
+      });
     });
   },
   switchRoute(id, route) {

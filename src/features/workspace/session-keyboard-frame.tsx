@@ -1,6 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
-import { createContext, useCallback, useContext, useRef, useState, type PropsWithChildren, type ReactNode } from "react";
-import { View, type HostInstance, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type PropsWithChildren, type ReactNode } from "react";
+import { ScrollView, TextInput, View, type HostInstance, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { useKeyboardState, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -64,6 +64,29 @@ export function SessionKeyboardFrame({
   // The IME replaces the fold split while open.
   const split = tabletop && keyboardHeight === 0 ? tabletopFrameSplit(frameTop, frameHeight, tabletop) : null;
   const availableHeight = frameHeight > 0 ? Math.max(0, frameHeight - keyboardHeight) : null;
+  const composerScroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const composerViewport = useRef(0);
+  const revealEditor = useCallback(() => {
+    const viewport = composerViewport.current;
+    if (!viewport) return;
+    const scroll = composerScroll.current;
+    const content = scroll?.getInnerViewRef();
+    const editor = TextInput.State?.currentlyFocusedInput?.();
+    if (!scroll || !content || !editor) return;
+    editor.measureLayout(content, (_x, top, _width, editorHeight) => {
+      if (composerViewport.current !== viewport || TextInput.State.currentlyFocusedInput() !== editor) return;
+      const y = Math.max(0, Math.min(top, top + editorHeight - viewport));
+      scroll.scrollTo({ y, animated: false });
+    }, () => { /* The focused field belongs to a different scroll surface. */ });
+  }, []);
+  // Reveal after the keyboard state or measured viewport changes. Keep offset at zero when closed.
+  useEffect(() => {
+    if (keyboardHeight > 0) revealEditor();
+    else {
+      composerViewport.current = 0;
+      composerScroll.current?.scrollTo({ y: 0, animated: false });
+    }
+  }, [keyboardHeight, revealEditor]);
   const columnStyle = useAnimatedStyle(() => ({ paddingBottom: Math.max(0, -height.value) }));
   const safeBottomStyle = useAnimatedStyle(
     () => ({
@@ -79,10 +102,35 @@ export function SessionKeyboardFrame({
         const next = event.nativeEvent.layout.height;
         if (Number.isFinite(next) && next > 0) reportComposerHeight?.(next);
       }}
-      style={[{ backgroundColor: transparent ? "transparent" : colors.background, paddingTop: space.sm, paddingBottom: 0 }, safeBottomStyle]}
+      style={[
+        {
+          backgroundColor: transparent ? "transparent" : colors.background,
+          flexShrink: 1,
+          minHeight: 0,
+          paddingTop: space.sm,
+          maxHeight: keyboardHeight > 0 ? availableHeight ?? undefined : undefined,
+        },
+        safeBottomStyle,
+      ]}
     >
       <SessionKeyboardSpace.Provider value={availableHeight}>
-        <View style={{ paddingBottom: space.sm }}>{composer}</View>
+        <ScrollView
+          ref={composerScroll}
+          style={{ flexGrow: 0, flexShrink: 1 }}
+          contentContainerStyle={{ paddingBottom: space.sm }}
+          scrollEnabled={keyboardHeight > 0}
+          scrollsToTop={false}
+          keyboardDismissMode="none"
+          keyboardShouldPersistTaps="always"
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustKeyboardInsets={false}
+          onLayout={({ nativeEvent: { layout } }) => {
+            composerViewport.current = layout.height;
+            if (keyboardHeight > 0) revealEditor();
+          }}
+        >
+          {composer}
+        </ScrollView>
       </SessionKeyboardSpace.Provider>
     </Animated.View>
   );
@@ -90,8 +138,10 @@ export function SessionKeyboardFrame({
     <View ref={frameRef} onLayout={onFrameLayout} style={[{ flex: 1, minHeight: 0 }, style]}>
       <Animated.View style={[{ flex: 1, minHeight: 0 }, columnStyle]}>
         <View style={split ? { height: split.contentHeight, minHeight: 0 } : { flex: 1, minHeight: 0 }}>{children}</View>
-        {split ? <View style={{ height: split.hingeHeight }} /> : null}
-        {split ? <View style={{ flex: 1, minHeight: 0, justifyContent: "flex-end" }}>{composerBlock}</View> : composerBlock}
+        <View style={{ height: split?.hingeHeight ?? 0 }} />
+        <View style={split ? { flex: 1, minHeight: 0, justifyContent: "flex-end" } : { flexShrink: 1, minHeight: 0 }}>
+          {composerBlock}
+        </View>
       </Animated.View>
     </View>
   );

@@ -58,6 +58,13 @@ export function GitActionsSheet({
   const numbers = new Intl.NumberFormat(useLocale());
   const additions = index.additions ? ` · +${numbers.format(index.additions)}` : "";
   const deletions = index.deletions ? ` · −${numbers.format(index.deletions)}` : "";
+  const actions = gitSheetActions(index, { busy, canRunWorkspace, linkPr }, copy);
+  const groups: readonly (readonly GitSheetKey[])[] = [
+    ["commit", "push", "pull", "fetch"],
+    ["branches", "history", "stashes", "management"],
+    ["createPr", "linkPr", "refresh"],
+  ];
+  const destinations: readonly GitSheetKey[] = ["commit", "branches", "history", "stashes", "management", "createPr", "linkPr"];
   return (
     <Sheet
       visible={visible}
@@ -69,22 +76,25 @@ export function GitActionsSheet({
         <Body selectable style={{ fontWeight: "600" }}>{index.branch || "Git"}</Body>
         <Body muted>{gitFileCount(index.files.length, copy, numbers)}{additions}{deletions}</Body>
       </Stack>
-      <NavigationGroup>
-        {gitSheetActions(index, { busy, canRunWorkspace, linkPr }, copy).map((action) => (
+      {groups.map((group) => (
+        <NavigationGroup key={group[0]}>
+          {actions.filter((action) => group.includes(action.key)).map((action) => (
           <NavigationRow
             key={action.key}
             label={action.label}
             detail={action.detail}
             detailLines={2}
             icon={glyphs[action.key]}
+            intent={destinations.includes(action.key) ? "navigate" : "command"}
             disabled={action.disabled}
             onPress={() => {
               onClose();
               handlers[action.key]();
             }}
           />
-        ))}
-      </NavigationGroup>
+          ))}
+        </NavigationGroup>
+      ))}
     </Sheet>
   );
 }

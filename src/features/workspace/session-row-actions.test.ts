@@ -20,6 +20,8 @@ const f = vi.hoisted(() => ({
   confirm: undefined as (() => void) | undefined,
   cancel: undefined as (() => void) | undefined,
   changeTitle: undefined as ((value: string) => void) | undefined,
+  copyCurrent: undefined as (() => boolean) | undefined,
+  privateAccess: undefined as { allowed: boolean; check(): boolean } | undefined,
   actions: new Map<string, () => void>(),
 }));
 vi.mock("lucide-react-native/icons/clock", () => ({ default: () => null }));
@@ -29,7 +31,10 @@ vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
 vi.mock("./session-row-copy-menu", async () => {
   const { SessionActionList } = await import("./session-action-list");
-  return { SessionRowCopyMenu: ({ actions }: { actions: Action[] }) => createElement(SessionActionList, { actions }) };
+  return { SessionRowCopyMenu: ({ actions, current }: { actions: Action[]; current(): boolean }) => {
+    f.copyCurrent = current;
+    return createElement(SessionActionList, { actions });
+  } };
 });
 vi.mock("lucide-react-native/icons/archive", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/archive-restore", () => ({ default: () => null }));
@@ -81,7 +86,10 @@ vi.mock("@/state/queries", () => {
 });
 vi.mock("@/ui/private-access", () => ({
   usePrivateContentAccess: () => ({ allowed: f.allowed, check: () => f.allowed }),
-  PrivateContentAccessProvider: ({ children }: PropsWithChildren) => children,
+  PrivateContentAccessProvider: ({ children, value }: PropsWithChildren<{ value: NonNullable<typeof f.privateAccess> }>) => {
+    f.privateAccess = value;
+    return children;
+  },
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({
@@ -212,6 +220,8 @@ beforeEach(async () => {
   f.capabilities = ["sessions"];
   session = initial();
   f.actions.clear();
+  f.copyCurrent = undefined;
+  f.privateAccess = undefined;
   f.update.mockReset().mockResolvedValue({});
   f.remove.mockReset().mockResolvedValue({ deleted: true });
   f.command.mockReset().mockResolvedValue({});
@@ -229,6 +239,43 @@ afterEach(() => {
   act(() => root.unmount());
   node.remove();
   vi.unstubAllGlobals();
+});
+
+it("keeps the reviewed copy opening stable during ordinary session refresh", async () => {
+  await act(() => (node.querySelector("button") as HTMLButtonElement).click());
+  const access = f.privateAccess!;
+  const current = f.copyCurrent!;
+  expect(current()).toBe(true);
+  session = { ...session, revision: 4, updatedAt: 22 };
+  await render();
+  expect(f.privateAccess).toBe(access);
+  expect(f.copyCurrent).toBe(current);
+  expect(current()).toBe(true);
+
+  f.epoch = false;
+  expect(access.check()).toBe(false);
+  expect(current()).toBe(false);
+});
+
+it("retires a closing sheet's copy authority before the next render and keeps it retired after reopening", async () => {
+  const open = () => (node.querySelector("button") as HTMLButtonElement).click();
+  await act(open);
+  const current = f.copyCurrent!;
+  const check = f.privateAccess!.check;
+  const close = f.cancel!;
+  expect(current()).toBe(true);
+
+  await act(() => {
+    close();
+    expect(current()).toBe(false);
+    expect(check()).toBe(false);
+  });
+  await act(open);
+  await act(close);
+  expect(node.querySelector("aside")).not.toBeNull();
+  expect(f.copyCurrent!()).toBe(true);
+  expect(current()).toBe(false);
+  expect(check()).toBe(false);
 });
 
 it("gives a current reply request warning meaning even while the session is running", async () => {

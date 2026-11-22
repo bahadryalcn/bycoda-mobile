@@ -4,6 +4,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { AccountContext, useAccount, type AccountState } from "./features/account/ui/account-context";
 import { AppProviders } from "./app-providers";
+import { logDiagnostic } from "./features/diagnostics/diagnostic-log";
+import { installMobileHostRuntime } from "./state/host-runtime";
+import { useHostRuntimeStartupFailed } from "./state/host-runtime-state";
+import { startRouteSelection } from "./state/route-selection-runtime";
 import { ScreenOverlay } from "./ui/overlays";
 
 const fixture = vi.hoisted(() => ({ status: "signedIn", overlayStatus: "", portalStatus: "" }));
@@ -76,6 +80,24 @@ afterEach(() => {
   fixture.portalStatus = "";
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+
+it("publishes native startup rejection without exposing exception details", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubEnv("EXPO_OS", "android");
+  vi.mocked(startRouteSelection).mockReturnValueOnce({
+    runtimeState: vi.fn(),
+    dispose: vi.fn(),
+  });
+  vi.mocked(installMobileHostRuntime).mockRejectedValueOnce(new Error("private module path"));
+  const container = document.createElement("div");
+  root = createRoot(container);
+  function StartupStatus() {
+    return useHostRuntimeStartupFailed() ? "startup failed" : "starting";
+  }
+  await act(async () => root!.render(createElement(AppProviders, null, createElement(StartupStatus))));
+  expect(container.textContent).toContain("startup failed");
+  expect(logDiagnostic).toHaveBeenCalledWith("warn", "mobile.host", "host runtime startup failed");
 });
 
 it("keeps account context available to portal roots and reparented privacy settings", async () => {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSingleFlight } from "@/state/actions";
 import type { PreferenceStorageError } from "@/state/preference-store";
 import { useCopy } from "@/ui/copy";
 import { Notice } from "@/ui/primitives";
@@ -9,19 +10,23 @@ import { Notice } from "@/ui/primitives";
  */
 export function PreferenceStorageNotice({ error, retry }: { error: PreferenceStorageError | null; retry: () => Promise<void> }) {
   const copy = useCopy();
+  const flight = useSingleFlight<void>();
   const [retrying, setRetrying] = useState(false);
   if (!error) return null;
   return (
     <Notice
       tone="warning"
       message={error.operation === "read"
-        ? copy("Kaydedilmiş tercihler okunamadı. Seçimlerin korunur; yeniden dene.", "Saved preferences could not be read. Your choices are kept; retry.")
-        : copy("Tercih değişti, ancak bu telefona kaydedilemedi. Bu seçimi kaydetmek için yeniden dene.", "The preference changed but could not be saved on this phone. Retry to keep this choice.")}
+        ? copy("Kayıtlı tercihler okunamadı. Seçimlerin ekranda kalır.", "Saved preferences couldn’t load. Your choices stay on screen.")
+        : copy("Seçimin bu telefona kaydedilemedi.", "Your choice couldn’t be saved on this phone.")}
       retrying={retrying}
       onRetry={() => {
-        if (retrying) return;
+        if (flight.isPending()) return;
         setRetrying(true);
-        void retry().finally(() => setRetrying(false));
+        void flight.run(retry).then(
+          () => setRetrying(false),
+          () => setRetrying(false),
+        );
       }}
     />
   );

@@ -1,18 +1,19 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { HostInstance } from "react-native";
 import type { HostGoal } from "@/domain/types";
 import { useHostMutation } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { useFormDraft } from "@/state/form-draft";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useCopy } from "@/ui/copy";
-import { confirmAction } from "@/ui/confirm";
 import { NumberField } from "@/ui/number-field";
 import { Body, FormActions, MutationState, Notice, NavigationGroup, Section, Stack, ToggleField } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
 import { integerInRange } from "../automations/schedule-model";
 import { goalSettings, validGoalSettings } from "./settings-model";
+import { RecordConfirmationSheet, useRecordConfirmation } from "../shared/use-record-confirmation";
 
-export function GoalSettingsEditor({ initial, onClose }: { initial: HostGoal; onClose: () => void }) {
+export function GoalSettingsEditor({ initial, onClose, accessDenied }: { initial: HostGoal; onClose: () => void; accessDenied?: boolean }) {
   const copy = useCopy();
   const { uiStyles } = useMobileTheme();
   // Keep both the draft and conflict token from the opening record across polling.
@@ -24,20 +25,24 @@ export function GoalSettingsEditor({ initial, onClose }: { initial: HostGoal; on
   const [openingMachineId] = useState(machine?.id);
   const supported = machine?.id === openingMachineId && machine?.capabilities?.includes("goals.settings") === true;
   const save = useHostMutation<HostGoal>("goals.update", ["goals"]);
+  const saveButton = useRef<HostInstance>(null);
+  const { confirm, review } = useRecordConfirmation(opening, machine?.name, save.isPending, accessDenied);
   const dirty = form.dirty || concurrency !== String(opening.maxRunningTasks ?? 0) || minutes !== String(opening.maxRunMinutes);
   const { requestClose } = useSheetGuard({ dirty, pending: save.isPending, onClose });
   const concurrencyValid = integerInRange(concurrency, 0, Number.MAX_SAFE_INTEGER);
   const minutesValid = integerInRange(minutes, 0, 10_080);
   const valid = validGoalSettings(opening, form.values, concurrency, minutes);
   const submit = () => {
-    if (!supported || !valid || save.isPending) return;
+    if (accessDenied || !supported || !valid || save.isPending) return;
     save.mutate({ goalId: opening.id, expectedUpdatedAt: opening.updatedAt,
       settings: { ...form.values, maxRunningTasks: Number(concurrency), maxRunMinutes: Number(minutes) } },
     { onSuccess: onClose });
   };
-  return <Stack>
+  return <>
+  <Stack>
     <Body style={uiStyles.title}>{opening.title}</Body>
-    {!supported && <Notice tone="warning" message={copy("Epic ayarları için bilgisayardaki bycoda uygulamasını güncelleyin.", "Update bycoda on this computer to edit epic settings.")} />}
+    {accessDenied ? <Notice tone="warning" message={copy("Bilgisayara erişim reddedildi. Bu bilgisayarı yeniden bağla.", "Computer access was denied. Reconnect this computer.")} />
+      : !supported && <Notice tone="warning" message={copy("Epic ayarları için bilgisayardaki bycoda uygulamasını güncelleyin.", "Update bycoda on this computer to edit epic settings.")} />}
     <Section title={copy("Çalışma", "Execution")}>
       <NavigationGroup>
         <ToggleField label={copy("Tamamlanana kadar devam et", "Continue until done")} value={form.values.continueUntilDone}
@@ -57,11 +62,13 @@ export function GoalSettingsEditor({ initial, onClose }: { initial: HostGoal; on
         value={minutes} onChangeText={setMinutes} editable={supported && !save.isPending && opening.status !== "planning"} />
     </Section>
     {!valid && concurrencyValid && minutesValid && <Notice tone="warning" message={copy("Süre sınırı 0–10080 olmalıdır. Planlama sırasında süre değiştirilemez.", "Time limit must be 0–10080. The time limit cannot change during planning.")} />}
-    <FormActions feedback={<MutationState mutation={save} />} submitLabel={copy("Kaydet", "Save")}
-      busy={save.isPending} disabled={!supported || !dirty || !valid || save.isPending} onSubmit={() => {
-        if (form.values.autoMerge && !opening.autoMerge) confirmAction(copy("Otomatik birleştir", "Auto merge"),
+    <FormActions feedback={<MutationState mutation={save} />} submitLabel={copy("Kaydet", "Save")} submitRef={saveButton}
+      busy={save.isPending} disabled={accessDenied || !supported || !dirty || !valid || save.isPending} onSubmit={() => {
+        if (form.values.autoMerge && !opening.autoMerge) confirm(copy("Otomatik birleştir", "Auto merge"),
           copy("Denetimleri geçen epic görevleri ayrıca onay beklemeden birleştirilecek.", "Epic tasks that pass checks will merge without waiting for another approval."), copy("Onayla", "Approve"), submit);
         else submit();
       }} cancelLabel={copy("Vazgeç", "Cancel")} cancelDisabled={save.isPending} onCancel={requestClose} />
-  </Stack>;
+  </Stack>
+  <RecordConfirmationSheet review={review} returnFocusRef={saveButton} />
+  </>;
 }

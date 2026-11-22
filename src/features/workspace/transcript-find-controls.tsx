@@ -2,7 +2,7 @@ import { View } from "react-native";
 import X from "lucide-react-native/icons/x";
 import ChevronUp from "lucide-react-native/icons/chevron-up";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
-import { Body, Button, Disclosure, IconButton, Row, SearchField } from "@/ui/primitives";
+import { Body, Button, Disclosure, ErrorText, IconButton, Row, SearchField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
@@ -19,6 +19,7 @@ export function TranscriptFindControls({
   hasEarlier,
   busy,
   searching = false,
+  searchError,
   onEarlier,
   onNavigate,
   failed,
@@ -35,6 +36,7 @@ export function TranscriptFindControls({
   hasEarlier: boolean;
   busy: boolean;
   searching?: boolean;
+  searchError?: Error;
   onEarlier: () => void;
   onNavigate: (direction: 1 | -1) => void;
   failed: boolean;
@@ -76,7 +78,7 @@ export function TranscriptFindControls({
             >
               <ChevronDown size={18} color={colors.muted} />
             </IconButton>
-            <Body style={[uiStyles.caption, uiStyles.grow]} accessibilityLiveRegion="polite">
+            {searchError ? <ErrorText error={searchError} /> : <Body style={[uiStyles.caption, uiStyles.grow]} accessibilityLiveRegion="polite">
               {!query.trim()
                 ? copy("Aranacak metni gir", "Enter text to find")
                 : searching
@@ -87,7 +89,7 @@ export function TranscriptFindControls({
                         p2: count,
                       })
                     : copy("Yüklenen görünümde sonuç yok", "No results in the loaded view")}
-            </Body>
+            </Body>}
             {hasEarlier ? (
               <Button
                 tone="quiet"

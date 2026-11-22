@@ -1,7 +1,7 @@
 import { readableColumn } from "@/ui/readable-width";
 import { scrollKeyboardDismissMode } from "@/ui/scroll-keyboard";
 import { useMobileTheme } from "@/ui/theme";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, View } from "react-native";
 import type { ReactNode } from "react";
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
@@ -31,6 +31,7 @@ import {
   awaitingFirstOutput,
   canContinueInterruptedTurn,
   completeResponseText,
+  transcriptTailStamp,
   TranscriptPresentation,
   type TranscriptEntry,
 } from "./transcript-model";
@@ -42,9 +43,12 @@ import { ChatConversation } from "@/ui/chat";
 import { TranscriptFindControls } from "./transcript-find-controls";
 import {
   findTranscriptAsync,
+  currentTranscriptFind,
+  matchingTranscriptActivity,
   TranscriptFindIndex,
   nextTranscriptResult,
   type TranscriptFindResult,
+  type TranscriptFindSnapshot,
 } from "./transcript-find-model";
 import { citedTurnEntry } from "./session-reference-target";
 import { TranscriptJumpPill } from "./transcript-jump-pill";
@@ -128,7 +132,7 @@ export function SessionTranscript({
   const [findQuery, setFindQuery] = useState("");
   const deferredQuery = useDeferredValue(findQuery);
   const [activeFindId, setActiveFindId] = useState<string | null>(null);
-  const [findScrollFailed, setFindScrollFailed] = useState(false);
+  const [failedFindScroll, setFailedFindScroll] = useState<TranscriptFindResult>();
   const inspectedBlocks = useMemo(() => {
     const ids = new Set(inspection?.ids);
     return (blocks ?? []).filter((block) => ids.has(block.id));
@@ -200,8 +204,9 @@ export function SessionTranscript({
       return;
     }
     targetPages.current.add(before);
+    applyScroll({ type: "release" });
     void earlier.mutateAsync().catch(() => setTargetState("failed"));
-  }, [targetState, targetEntry, session, scope.sessionId, earlier.isPending]);
+  }, [targetState, targetEntry, session, scope.sessionId, earlier.isPending, applyScroll]);
   // Wait until the virtual list mounts before locating the cited entry.
   useEffect(() => {
     if (targetState !== "ready" || !targetEntry || !listRef.current) return;
@@ -223,16 +228,13 @@ export function SessionTranscript({
   }, [targetState, targetEntry, applyScroll, reduceMotion]);
 
   // Content that arrives while the user reads earlier messages raises the "new" marker.
-  const last = visibleBlocks.at(-1);
-  const tail = `${visibleBlocks.length}:${last?.id}:${
-    last?.kind === "message" ? (last.block.text?.length ?? 0) : (last?.blocks.length ?? 0)
-  }`;
+  const tail = transcriptTailStamp(visibleBlocks);
   const seenTail = useRef(tail);
   useEffect(() => {
     if (seenTail.current === tail) return;
-    const hadContent = !seenTail.current.startsWith("0:");
+    const hadContent = seenTail.current !== undefined;
     seenTail.current = tail;
-    if (hadContent && !scrollPosition.current.following) setUnseen(true);
+    if (hadContent && tail !== undefined && !scrollPosition.current.following) setUnseen(true);
   }, [tail]);
 
   // A session that hydrates after the list mounted still opens at its newest message.
@@ -247,41 +249,51 @@ export function SessionTranscript({
     }
   }, [visibleBlocks.length, restoreOffset]);
 
-  const [findResults, setFindResults] = useState<TranscriptFindResult[]>([]);
-  const [findPending, setFindPending] = useState(false);
+  const [findSnapshot, setFindSnapshot] = useState<TranscriptFindSnapshot>();
   const findIndex = useRef(new TranscriptFindIndex());
+  // Scan the loaded presentation, and cancel when another presentation or query replaces it.
   useEffect(() => {
-    const controller = new AbortController();
-    // Do not navigate results from the previous query or transcript revision.
-    setFindResults([]);
-    setFindPending(findOpen && !!deferredQuery.trim());
-    if (findOpen && deferredQuery.trim()) {
-      void findTranscriptAsync(visibleBlocks, deferredQuery, {
-        signal: controller.signal,
-        index: findIndex.current,
-      }).then((results) => {
-        if (!controller.signal.aborted) {
-          setFindResults(results);
-          setFindPending(false);
-        }
-      });
+    if (!findOpen || !deferredQuery.trim()) {
+      setFindSnapshot(undefined);
+      return;
     }
+    const controller = new AbortController();
+    const scan = { entries: visibleBlocks, query: deferredQuery };
+    void findTranscriptAsync(visibleBlocks, deferredQuery, {
+      signal: controller.signal,
+      index: findIndex.current,
+    }).then((results) => {
+      if (!controller.signal.aborted) setFindSnapshot({ ...scan, results });
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setFindSnapshot({ ...scan, results: [], error: error instanceof Error ? error : new Error(String(error)) });
+    });
     return () => controller.abort();
   }, [visibleBlocks, deferredQuery, findOpen]);
+  const currentFind = currentTranscriptFind(findSnapshot, visibleBlocks, findQuery, findOpen);
+  const findResults = currentFind?.results ?? [];
   const activeFind = findResults.find((result) => result.blockId === activeFindId);
-  const scrollToFind = useCallback(
-    (result: TranscriptFindResult) => {
-      Keyboard.dismiss();
-      setFindScrollFailed(false);
-      setActiveFindId(result.blockId);
-      // Searching owns the scroll until Jump to latest or an explicit user scroll.
-      applyScroll({ type: "release" });
-      void listRef.current
-        ?.scrollToKey({ key: result.entryId, viewPosition: 0.5, animated: !reduceMotion })
-        .catch(() => setFindScrollFailed(true));
-    },
-    [applyScroll, reduceMotion],
-  );
+  const committedFind = useRef<TranscriptFindSnapshot | undefined>(undefined);
+  const scrollAttempt = useRef(0);
+  // A queued action may only navigate a scan that still belongs to the committed view.
+  useLayoutEffect(() => {
+    committedFind.current = currentFind;
+    return () => { committedFind.current = undefined; };
+  }, [currentFind]);
+  const scrollToFind = (result: TranscriptFindResult) => {
+    if (!currentFind || committedFind.current !== currentFind) return;
+    const attempt = ++scrollAttempt.current;
+    Keyboard.dismiss();
+    setFailedFindScroll(undefined);
+    setActiveFindId(result.blockId);
+    // Searching owns the scroll until Jump to latest or an explicit user scroll.
+    applyScroll({ type: "release" });
+    const failed = () => {
+      if (committedFind.current === currentFind && scrollAttempt.current === attempt) setFailedFindScroll(result);
+    };
+    const list = listRef.current;
+    if (!list) { failed(); return; }
+    void list.scrollToKey({ key: result.entryId, viewPosition: 0.5, animated: !reduceMotion }).catch(failed);
+  };
   const navigateFind = (direction: 1 | -1) => {
     const result = nextTranscriptResult(findResults, activeFindId, direction);
     if (result) scrollToFind(result);
@@ -317,6 +329,7 @@ export function SessionTranscript({
       }),
     [],
   );
+  const matchingActivity = activeFind ? matchingTranscriptActivity(visibleBlocks, activeFind) : undefined;
   const revision = session?.revision ?? 0;
   const revisionRef = useRef(revision);
   revisionRef.current = revision;
@@ -415,6 +428,8 @@ export function SessionTranscript({
     ],
   );
   const loadEarlier = () => {
+    if (earlier.isPending || session?.history?.before === undefined) return;
+    applyScroll({ type: "release" });
     void earlier.mutateAsync().catch(() => {});
   };
 
@@ -447,36 +462,35 @@ export function SessionTranscript({
         open={findOpen}
         onToggle={() => {
           if (findOpen) Keyboard.dismiss();
+          scrollAttempt.current++;
           onFindOpenChange(!findOpen);
           setActiveFindId(null);
-          setFindScrollFailed(false);
+          setFailedFindScroll(undefined);
         }}
         query={findQuery}
         onQuery={(value) => {
+          if (value === findQuery) return;
+          scrollAttempt.current++;
           setFindQuery(value);
           setActiveFindId(null);
-          setFindScrollFailed(false);
+          setFailedFindScroll(undefined);
         }}
-        count={findQuery === deferredQuery ? findResults.length : 0}
-        searching={findPending || findQuery !== deferredQuery}
+        count={findResults.length}
+        searching={!!findQuery.trim() && !currentFind}
+        searchError={currentFind?.error}
         active={activeFind}
         activeIndex={findResults.findIndex((result) => result.blockId === activeFindId)}
         hasEarlier={session?.history?.before !== undefined}
         busy={earlier.isPending}
         onEarlier={loadEarlier}
         onNavigate={navigateFind}
-        failed={findScrollFailed}
+        failed={!!activeFind && failedFindScroll === activeFind}
         onRetry={() => {
           if (activeFind) scrollToFind(activeFind);
         }}
-        onInspect={
-          activeFind && visibleBlocks[activeFind.index]?.kind === "activity"
-            ? () => {
-                const entry = visibleBlocks[activeFind.index];
-                if (entry?.kind === "activity") onInspect(entry, activeFind.blockId);
-              }
-            : undefined
-        }
+        onInspect={activeFind && matchingActivity && currentFind ? () => {
+          if (committedFind.current === currentFind) onInspect(matchingActivity, activeFind.blockId);
+        } : undefined}
       />
       {findOpen ? <MutationState mutation={earlier} /> : null}
       <ChatConversation style={{ flex: 1, minHeight: 0 }} collapsable={false}>
@@ -579,7 +593,7 @@ export function SessionTranscript({
           <ActivityInspector
             blocks={inspectedBlocks}
             inspection={inspection}
-            onChange={setInspection}
+            onChange={(next) => setInspection((current) => current === inspection ? next : current)}
             live={live}
             context={context}
             author={inspection.author}

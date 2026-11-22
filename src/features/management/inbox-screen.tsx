@@ -4,7 +4,7 @@ import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useInboxSeen } from "../inbox/inbox-seen-store";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActionMenu, Body, Button, Notice, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, Sheet, StateView } from "@/ui/primitives";
+import { ActionMenu, Body, Button, Notice, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, Sheet, Stack, StateView } from "@/ui/primitives";
 import { CollectionToolbar } from "@/ui/search-field";
 import { useCopy } from "@/ui/copy";
 import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
@@ -37,26 +37,31 @@ export function InboxScreen() {
   const copy = useCopy();
   const { view } = useLocalSearchParams<{ view?: string }>();
   const [mode, setMode] = useState<"attention" | "providers">(view === "jira" || view === "issues" ? "providers" : "attention");
+  const issuesLabel = copy("Issue ve PR", "Issues & PRs");
   return (
     <InboxBrowseMemoryProvider><Screen scroll={false} title={copy("Gelen kutusu", "Inbox")}>
       <ScreenHeader>
-        <Button label={copy("Pull request’ler", "Pull requests")} tone="quiet" flush onPress={() => router.push("/pull-requests" as Href)} />
         <SegmentedControl
           hideLabel
           label={copy("Gelen kutusu", "Inbox")}
           value={mode}
           options={[
             { value: "attention", label: copy("Bekleyen işler", "Attention") },
-            { value: "providers", label: copy("Issue ve PR", "Issues & PRs") },
+            { value: "providers", label: issuesLabel },
           ]}
           onChange={setMode}
         />
+        {mode === "providers" ? (
+          <Button label={copy("Pull request’ler", "Pull requests")} tone="quiet" flush onPress={() => router.push("/pull-requests" as Href)} />
+        ) : null}
       </ScreenHeader>
-      {mode === "providers" ? <ProviderInboxScreen embedded openJira={view === "jira"} /> : <AttentionInboxScreen />}
+      {mode === "providers"
+        ? <ProviderInboxScreen embedded openJira={view === "jira"} />
+        : <AttentionInboxScreen issuesLabel={issuesLabel} onOpenIssues={() => setMode("providers")} />}
     </Screen></InboxBrowseMemoryProvider>
   );
 }
-function AttentionInboxScreen() {
+function AttentionInboxScreen({ issuesLabel, onOpenIssues }: { issuesLabel: string; onOpenIssues: () => void }) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const { projectId, setProjectId, matches } = useInboxLocalScope();
@@ -163,10 +168,14 @@ function AttentionInboxScreen() {
       }}
     />
     {help === lease && readable ? <Sheet visible title={copy("Yardım", "Help")} size="compact" onClose={() => setHelp(null)}>
-      <Body muted>{copy(
-        "GitHub, GitLab, Jira, Linear ve Azure için üstteki issue ve PR kutusunu açın.",
-        "Open the issues and pull requests tab above for GitHub, GitLab, Jira, Linear and Azure.",
-      )}</Body>
+      <Stack>
+        <Body muted>GitHub, GitLab, Jira, Linear, Azure</Body>
+        <Button label={issuesLabel} onPress={() => {
+          if (!lease.active || !latest.current.readable || !current()) return;
+          setHelp(null);
+          onOpenIssues();
+        }} />
+      </Stack>
     </Sheet> : null}
   </>;
 }

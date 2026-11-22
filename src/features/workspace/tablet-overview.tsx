@@ -1,9 +1,10 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { router } from "expo-router";
 import { StyleSheet, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useConnectionScope } from "@/state/connection-scope";
 import { useSecurity } from "@/state/security";
 import { hostRuntimeState, subscribeHostRuntimeStates } from "@/state/host-runtime-state";
 import { useHostClient, useHostReadActive } from "@/state/queries";
@@ -12,6 +13,7 @@ import { Body, Heading } from "@/ui/typography";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { metrics, radii, space } from "@/ui/tokens";
+import { SwipeActionsGroup } from "@/ui/swipe-actions";
 import { connectionPhase } from "@/ui/connection-presentation";
 import { remoteErrorKind } from "@/ui/error-message";
 import { machineSuccessStore } from "@/ui/machine-success-store";
@@ -27,17 +29,19 @@ import { tabletDirectoryIsEmpty, tabletOverviewModel, tabletOverviewWakes } from
 export function TabletOverview() {
   const copy = useCopy();
   const machine = useActiveMachine();
+  const connection = useConnectionScope();
   const activity = useProjectActivity();
   const machineId = machine?.id;
-  const canReadProject = useLatestCallback((projectId: string) => activity.projects.isProjectVisible(projectId));
-  const openSession = useLatestCallback((id: string, projectId: string) => {
-    if (machineId && useMachines.getState().activeId === machineId)
+  const projectVisible = useLatestCallback((projectId: string) => activity.projects.isProjectVisible(projectId));
+  const canReadProject = useCallback((projectId: string) => connection.isCurrent() && projectVisible(projectId), [connection, projectVisible]);
+  const openSession = useCallback((id: string, projectId: string) => {
+    if (machineId && canReadProject(projectId))
       router.navigate({ pathname: "/session/[id]", params: { id, projectId, machineId } });
-  });
-  const openNewSession = useLatestCallback(() => {
-    if (machineId && useMachines.getState().activeId === machineId)
+  }, [machineId, canReadProject]);
+  const openNewSession = useCallback(() => {
+    if (machineId && connection.isCurrent())
       router.navigate({ pathname: "/sessions", params: { new: "1" } });
-  });
+  }, [machineId, connection]);
   const query = {
     data: activity.directory.length ? activity.directory : undefined,
     isPending: activity.pending,
@@ -127,7 +131,8 @@ function TabletOverviewBoard({ directory, machineId, canReadProject, onOpenSessi
     { label: copy("Bilgisayar", "Computers"), value: `${model.connected}/${model.total}` },
   ];
   return (
-    <View style={{ width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center", gap: space.xxl, paddingTop: space.lg }}>
+    <SwipeActionsGroup>
+      <View style={{ width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center", gap: space.xxl, paddingTop: space.lg }}>
       <View style={{ flexDirection: "row", borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: radii.card }}>
         {counters.map((counter, index) => <View key={counter.label} style={{
           flex: 1, minWidth: 0, padding: space.md, gap: space.xs,
@@ -148,6 +153,7 @@ function TabletOverviewBoard({ directory, machineId, canReadProject, onOpenSessi
           canRead={canReadProject} snoozed={false} onPress={onOpenSession}
         /> : null)}
       </View> : null)}
-    </View>
+      </View>
+    </SwipeActionsGroup>
   );
 }

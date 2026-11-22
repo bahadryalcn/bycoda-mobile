@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useState } from "react";
+import { useState, type PropsWithChildren } from "react";
 import { router, type Href } from "expo-router";
 import Laptop from "lucide-react-native/icons/laptop";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
@@ -24,15 +24,15 @@ import { useAppearance } from "../../state/appearance";
 import { busySendStore, useBusySend } from "../../state/busy-send";
 import { dataSaverStore, useDataSaver } from "../../state/data-saver";
 import {
+  Body,
   NavigationGroup,
   NavigationRow,
   Notice,
   Screen,
-  Section,
-  SegmentedRow,
   SelectField,
   Sheet,
   StateView,
+  Stack,
 } from "../../ui/primitives";
 import { useCopy } from "../../ui/copy";
 import { SecuritySettings } from "../security/security-settings";
@@ -46,10 +46,20 @@ import { LocalDataControls } from "./local-data-controls";
 import { DiagnosticsSettings } from "../diagnostics/DiagnosticsSettings";
 import { AppearanceSettings } from "./appearance-settings";
 import { appearanceSummary, themeModeOptions } from "./appearance-settings-model";
-import { PALETTES } from "@/ui/tokens";
+import { PALETTES, space } from "@/ui/tokens";
 import { WidgetSettings } from "../widgets";
 import { DevicePermissionSettings } from "../permissions/device-permission-settings";
 import { leaveSheetThen } from "./sheet-navigation";
+
+function SettingsGroup({ title, children }: PropsWithChildren<{ title: string }>) {
+  const { uiStyles } = useMobileTheme();
+  return (
+    <Stack style={{ gap: space.xs, marginBottom: space.xs }}>
+      <Body accessibilityRole="header" muted style={uiStyles.sectionLabel}>{title}</Body>
+      {children}
+    </Stack>
+  );
+}
 
 export function SettingsScreen() {
   const { colors } = useMobileTheme();
@@ -94,25 +104,25 @@ export function SettingsScreen() {
   );
   return (
     <Screen title={copy("Ayarlar", "Settings")}>
-      <NavigationGroup>
-        <NavigationRow
-          label={copy("bycoda hesabı", "bycoda account")}
-          icon={tile(UserRound)}
-          onPress={() => router.navigate("/account" as Href)}
-        />
-      </NavigationGroup>
-      <Section title={copy("Bilgisayar", "Computer")}>
+      <SettingsGroup title={copy("Bağlantılar", "Connections")}>
         <NavigationGroup>
           <NavigationRow
-            label={copy("Bilgisayarlar", "Computers")}
-            detailLines={0}
+            label={copy("bycoda hesabı", "bycoda account")}
+            icon={tile(UserRound)}
+            onPress={() => router.navigate("/account" as Href)}
+          />
+          <NavigationRow
+            label={copy("Bağlantıları yönet", "Manage connections")}
             detail={machine?.name ?? copy("Bilgisayar bağla", "Connect a computer")}
             icon={tile(Laptop)}
+            separator={!!machine}
             onPress={() => router.navigate("/machines")}
           />
           {machine ? (
             <NavigationRow
               label={titles.host}
+              detail={`${copy("Görev sınırları", "Task limits")} · ${copy("Ajan varsayılanları", "Agent defaults")}`}
+              separator={false}
               icon={tile(SlidersHorizontal)}
               onPress={() => {
                 setHostTarget({
@@ -141,8 +151,8 @@ export function SettingsScreen() {
             }}
           />
         ) : null}
-      </Section>
-      <Section title={copy("Tercihler", "Preferences")}>
+      </SettingsGroup>
+      <SettingsGroup title={copy("Tercihler", "Preferences")}>
         <NavigationGroup>
           <NavigationRow
             label={titles.visual}
@@ -166,25 +176,33 @@ export function SettingsScreen() {
             options={[{ value: "system" as const, label: copy("Sistem", "System") }, ...LANGUAGES]}
             onChange={setLanguage}
           />
-          <SegmentedRow
+          <SelectField
+            variant="row"
             icon={tile(Gauge)}
             label={copy("Veri tasarrufu", "Data saver")}
-            help={copy(
-              "Açıkken görseller dokununca yüklenir ve bilgisayar tarayıcısı daha düşük kalitede akar. Otomatik: mobil veride açılır.",
-              "When on, images load on tap and the computer browser streams at lower quality. Auto turns it on over mobile data.",
-            )}
             value={dataSaver}
             disabled={!dataSaverHydrated}
             options={[
-              { value: "auto" as const, label: copy("Otomatik", "Auto") },
-              { value: "on" as const, label: copy("Her zaman", "Always") },
+              {
+                value: "auto" as const,
+                label: copy("Otomatik", "Auto"),
+                detail: copy("Mobil veride tasarruf et.", "Save data on cellular."),
+              },
+              {
+                value: "on" as const,
+                label: copy("Her zaman", "Always"),
+                detail: copy(
+                  "Görseller dokununca yüklenir. Tarayıcı yayını daha az veri kullanır.",
+                  "Load images on tap and use less data for browser streaming.",
+                ),
+              },
               { value: "off" as const, label: copy("Kapalı", "Off") },
             ]}
             onChange={(value) => { void dataSaverStore.getState().setDataSaver(value); }}
           />
           {dataSaverError ? <Notice tone="warning" message={copy("Veri tasarrufu tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The data saver preference could not be read or saved. Select it again to retry.")} /> : null}
           <KeyboardSettings />
-          <NavigationRow label={titles.widgets} icon={tile(LayoutGrid)} onPress={() => setPanel("widgets")} />
+          <NavigationRow label={titles.widgets} icon={tile(LayoutGrid)} separator={false} onPress={() => setPanel("widgets")} />
         </NavigationGroup>
         {appearanceError ? (
           <Notice
@@ -200,32 +218,37 @@ export function SettingsScreen() {
             <AppearanceSettings />
           </Sheet>
         ) : null}
-      </Section>
-      <Section title={copy("Sohbet", "Chat")}>
+      </SettingsGroup>
+      <SettingsGroup title={copy("Sohbet", "Chat")}>
         <NavigationGroup>
-          <SegmentedRow
+          <SelectField
+            variant="row"
             icon={tile(MessageSquare)}
             label={copy("Ajan çalışırken gönder", "Send while agent is running")}
-            help={copy(
-              "Yönlendir: mesaj çalışan ajana hemen iletilir. Sıraya al: ajan bitince gönderilir.",
-              "Steer sends the message to the running agent now. Queue sends it after the agent finishes.",
-            )}
             value={busySend}
             disabled={!busySendHydrated}
             options={[
-              { value: "steer" as const, label: copy("Yönlendir", "Steer") },
-              { value: "queue" as const, label: copy("Sıraya al", "Queue") },
+              {
+                value: "steer" as const,
+                label: copy("Yönlendir", "Steer"),
+                detail: copy("Mesajı çalışan ajana hemen ilet.", "Send to the running agent now."),
+              },
+              {
+                value: "queue" as const,
+                label: copy("Sıraya al", "Queue"),
+                detail: copy("Ajan bitirdiğinde gönder.", "Send after the agent finishes."),
+              },
             ]}
             onChange={(value) => { void busySendStore.getState().setMode(value); }}
           />
           <VoiceSettings />
         </NavigationGroup>
         {busySendError ? <Notice tone="warning" message={copy("Gönderim tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The send preference could not be read or saved. Select it again to retry.")} /> : null}
-      </Section>
-      <Section title={copy("Gezinme", "Navigation")}>
+      </SettingsGroup>
+      <SettingsGroup title={copy("Gezinme", "Navigation")}>
         <NavigationSettings />
-      </Section>
-      <Section title={copy("Erişim ve gizlilik", "Access & privacy")}>
+      </SettingsGroup>
+      <SettingsGroup title={copy("Erişim ve gizlilik", "Access & privacy")}>
         <NavigationGroup>
           <NavigationRow
             label={titles.security}
@@ -240,11 +263,12 @@ export function SettingsScreen() {
           <NavigationRow
             label={titles.privacy}
             icon={tile(LockKeyhole)}
+            separator={false}
             onPress={() => setPanel("privacy")}
           />
         </NavigationGroup>
-      </Section>
-      <Section title={copy("Destek", "Support")}>
+      </SettingsGroup>
+      <SettingsGroup title={copy("Destek", "Support")}>
         <NavigationGroup>
           <NavigationRow
             label={copy("Yardım ve destek", "Help & support")}
@@ -257,9 +281,9 @@ export function SettingsScreen() {
             onPress={() => router.navigate("/report")}
           />
           <NavigationRow label={titles.about} icon={tile(Info)} onPress={() => setPanel("about")} />
-          <NavigationRow label={copy("Açık kaynak lisansları", "Open-source licenses")} icon={tile(Scale)} onPress={() => router.navigate("/licenses")} />
+          <NavigationRow label={copy("Açık kaynak lisansları", "Open-source licenses")} icon={tile(Scale)} separator={false} onPress={() => router.navigate("/licenses")} />
         </NavigationGroup>
-      </Section>
+      </SettingsGroup>
       {panel && panel !== "visual" ? (
         <Sheet
           visible

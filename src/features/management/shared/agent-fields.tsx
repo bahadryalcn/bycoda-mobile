@@ -1,6 +1,7 @@
 import { Cpu } from "@/ui/duotone-icon";
 import { useCopy } from "@/ui/copy";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { HostInstance } from "react-native";
 import { catalogProviders } from "@/features/workspace/catalog";
 import { ErrorText } from "@/ui/primitives";
 import { NumberField } from "@/ui/number-field";
@@ -22,6 +23,7 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
   const [minutes, setMinutes] = useState(String(value.maxRunMinutes));
 
   const [choosingModel, setChoosingModel] = useState(false);
+  const modelTrigger = useRef<HostInstance>(null);
   const minutesValid = validAgentRunMinutes(minutes);
   const models = useHostQuery<HostModelCatalog>(
     ["models", projectId],
@@ -53,6 +55,7 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
         </Body>
       )}
       <NavigationRow
+        ref={modelTrigger}
         label={copy("Model", "Model")}
         detail={selectedModel?.name || value.model || copy("Model seç", "Choose model")}
         detailLines={2}
@@ -71,7 +74,7 @@ export function AgentFields({ value, onChange, projectId, disabled, onValidityCh
         />
       </Disclosure>
       {choosingModel ? <AgentModelPicker catalog={models.data} query={models} harness={value.harness}
-        selected={value.model} disabled={disabled} returnFocusRef={undefined}
+        selected={value.model} disabled={disabled} returnFocusRef={modelTrigger}
         onSelect={model => onChange(selectAgentModel(value, model, models.data))}
         onClose={() => setChoosingModel(false)} /> : null}
       <Disclosure label={copy("Ajan ayarları", "Agent settings")}

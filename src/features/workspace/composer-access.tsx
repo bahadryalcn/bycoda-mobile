@@ -91,6 +91,7 @@ export function ComposerAccessMenu({
   return (
     <ActionMenu
       label={`${copy("Erişim", "Access")}: ${label(current)}`}
+      reserveTouchTarget
       busy={pending}
       trigger={
         <Icon

@@ -21,6 +21,8 @@ vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "computer", 
 vi.mock("@/state/queries", () => ({ useHostMutation: () => ({ mutate: fixture.writes, isPending: false }) }));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: ({ onClose }: { onClose: () => void }) => ({ requestClose: onClose }) }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
+vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ isCurrent: () => true }) }));
+vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
 vi.mock("./shared/record-bits", () => ({ useRelativeTime: () => () => "Yesterday" }));
 vi.mock("@/ui/message-text", () => ({ MessageText: ({ text }: { text: string }) => h("p", null, text) }));
 vi.mock("@/ui/number-field", () => ({ NumberField: ({ label, error, value }: { label: string; error?: string; value: string }) => h("label", { "data-field": label }, value, error ? h("span", { role: "alert" }, error) : null) }));
@@ -55,6 +57,32 @@ it("keeps a note preview emoji intact without changing its saved body", () => {
   render(h(NoteSummaryRow, { note, disabled: false, onPress: vi.fn() }));
   expect(hasLoneSurrogate(container.textContent ?? "")).toBe(false);
   expect(note.body).toBe(body);
+});
+it("shows readable note excerpts without repeating the leading title", () => {
+  const body = "## **Planning**\n\nReview the [release checklist](https://example.com/checklist).\n\n- Verify `Android`.";
+  const note = { id: "note", title: "Planning", body, tags: [], updatedAt: 1 } as unknown as Note;
+  render(h(NoteSummaryRow, { note, disabled: false, onPress: vi.fn() }));
+  const text = container.textContent ?? "";
+  expect(text).toContain("Review the release checklist. Verify Android.");
+  expect(text.match(/Planning/g)).toHaveLength(1);
+  expect(text).not.toContain("https://example.com/checklist");
+  expect(note.body).toBe(body);
+});
+it("continues a note excerpt after a generated title that ends mid-word", () => {
+  const start = "Release planning for İstanbul and Android. ".repeat(5).slice(0, 197);
+  const body = `${start} Android check. Verify the release checklist.`;
+  const title = body.slice(0, 200);
+  const note = { id: "long-note", title, body, tags: [], updatedAt: 1 } as unknown as Note;
+  render(h(NoteSummaryRow, { note, disabled: false, onPress: vi.fn() }));
+  expect(container.textContent).toContain("check. Verify the release checklist.");
+  expect(container.textContent).not.toContain("droid check.");
+  expect((container.textContent ?? "").split(start)).toHaveLength(2);
+  expect(note.body).toBe(body);
+});
+it("keeps a short title word when it begins a sentence in the note", () => {
+  const note = { id: "note", title: "Planning", body: "Planning starts on Monday.", tags: [], updatedAt: 1 } as unknown as Note;
+  render(h(NoteSummaryRow, { note, disabled: false, onPress: vi.fn() }));
+  expect(container.textContent).toContain("Planning starts on Monday.");
 });
 it("shows the project on a note row only when one is supplied", () => {
   const note = { id: "note", title: "Planning", body: "Body", tags: [], updatedAt: 1 } as unknown as Note;

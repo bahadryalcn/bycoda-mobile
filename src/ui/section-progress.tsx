@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { View } from "react-native";
+import { useRef, useState } from "react";
+import { View, type HostInstance } from "react-native";
 import { useAnimatedReaction } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import type { ScrollSectionsPosition } from "panelui-native/hooks/use-scroll-sections";
@@ -27,6 +27,7 @@ export function SectionNavigator({ sections, active, scroll, onSelect, label }: 
 }) {
   const [open, setOpen] = useState(false);
   const [progress, setProgress] = useState(0);
+  const trigger = useRef<HostInstance>(null);
   const locale = useLocale();
   const insets = useScreenContentInsets();
   const currentTitle = sections.find(({ id }) => id === active)?.title;
@@ -50,12 +51,13 @@ export function SectionNavigator({ sections, active, scroll, onSelect, label }: 
         {currentTitle ? `${percent} · ${currentTitle}` : percent}
       </Body>
       <Button
+        ref={trigger}
         label={label}
         accessibilityLabel={[label, currentTitle, percent].filter(Boolean).join(". ")}
         style={{ minHeight: metrics.touchTarget }}
         onPress={() => setOpen(true)}
       />
-      <Sheet title={label} visible={open} onClose={() => setOpen(false)}>
+      <Sheet title={label} visible={open} onClose={() => setOpen(false)} returnFocusRef={trigger}>
         <Stack>
           {sections.map(({ id, title }) => (
             <SelectRow key={id} label={title} selected={id === active} onPress={() => {

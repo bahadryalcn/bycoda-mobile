@@ -2,7 +2,7 @@ import { useSnoozeNow } from "./session-clock";
 import { useHostReadActive } from "@/state/queries";
 import { sessionIsSnoozed } from "./session-attention-model";
 import { router, Stack } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useHostQuery } from "@/state/queries";
 import { NewSessionSheet } from "./new-session-sheet";
 import { useLatestCallback } from "./use-latest-callback";
@@ -23,6 +23,7 @@ import { queryOwnsRegion } from "./query-region";
 import { ProjectDirectoryFeedback } from "./project-directory-feedback";
 import { useCopy } from "@/ui/copy";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useConnectionScope } from "@/state/connection-scope";
 import { useProjectActivity } from "./use-project-activity";
 import { SessionListRow } from "./session-list-row";
 import { filterProjectSessionDirectory, listedSession, type SessionShelfId } from "./session-collection";
@@ -34,6 +35,7 @@ import { SessionFolderRow } from "./session-folder-row";
 import { HierarchyFrame, HierarchyWidthProvider } from "@/ui/hierarchy-frame";
 import { View } from "react-native";
 import { space } from "@/ui/tokens";
+import { SwipeActionsGroup } from "@/ui/swipe-actions";
 import { providerName } from "./provider-choices";
 import {
   activeSessionFilterCount,
@@ -53,6 +55,7 @@ export function ActiveSessionsScreen({
   initialCreate = false,
   createRequest,
   urgency = false,
+  shareConnectionFeedback,
   selectedSessionId,
   onOpenSession,
 }: {
@@ -63,6 +66,7 @@ export function ActiveSessionsScreen({
   createRequest?: string;
   /** Tablet list column: sessions needing attention first, then running, then the rest. */
   urgency?: boolean;
+  shareConnectionFeedback?: boolean;
   /** Highlights the session shown beside the list. */
   selectedSessionId?: string;
   /** Replaces the default push, e.g. to swap the detail pane in place. */
@@ -75,14 +79,20 @@ export function ActiveSessionsScreen({
   const connectionPending = useMachines((state) => state.connectionPending);
   const activity = useProjectActivity();
   const machineId = machine?.id;
-  const canReadProject = useLatestCallback((projectId: string) => activity.projects.isProjectVisible(projectId));
-  const openSession = useLatestCallback((sessionId: string, projectId: string) => {
+  const connection = useConnectionScope();
+  const canReadCurrentProject = useLatestCallback((projectId: string) => activity.projects.isProjectVisible(projectId));
+  // A queued row action stays with the connection that supplied its session IDs.
+  const canReadProject = useCallback((projectId: string) => connection.isCurrent() && canReadCurrentProject(projectId), [connection, canReadCurrentProject]);
+  const openCurrentSession = useLatestCallback((sessionId: string, projectId: string) => {
     if (!machineId || useMachines.getState().activeId !== machineId) return;
     if (onOpenSession) onOpenSession(sessionId, projectId, machineId);
     else router.navigate({ pathname: "/session/[id]", params: { id: sessionId, projectId, machineId } });
   });
+  const openSession = useCallback((sessionId: string, projectId: string) => {
+    if (canReadProject(projectId)) openCurrentSession(sessionId, projectId);
+  }, [canReadProject, openCurrentSession]);
   const retry = useAsyncAction();
-  const retryActivity = () => { void retry.run(() => activity.refetch()); };
+  const retryActivity = () => retry.run(() => activity.refetch());
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [archived, setArchived] = useState(false);
@@ -127,7 +137,7 @@ export function ActiveSessionsScreen({
         filter === "all" ||
         (filter === "reply" ? session.needsInput : session.status === "running")),
   );
-  const visible = filterProjectSessionDirectory(activity.projects.data ?? [], filtered, search);
+  const visible = filterProjectSessionDirectory(activity.projects.data ?? [], filtered, search, copy("Yeni oturum", "New session"));
   // Desktop Last sessions shows the last seven days; archive, search and a Time filter reach older sessions.
   const windowed = overview && !snoozed && !archived && !search.trim() && listFilters.time === "recent";
   const rows: GlobalSessionRow[] = overview
@@ -214,9 +224,9 @@ export function ActiveSessionsScreen({
   const canCreate = overview && !!projectOptions.length && !activity.privacyPending;
   const olderSessions = windowed && visible.length > 0;
   const emptyState = waitingForConnection ? (
-    <ProjectDirectoryFeedback query={listQuery} readiness={activity.readiness} privacyUnavailable={activity.privacyUnavailable} />
+    <ProjectDirectoryFeedback query={listQuery} readiness={activity.readiness} privacyUnavailable={activity.privacyUnavailable} shareConnectionFeedback={shareConnectionFeedback} />
   ) : queryOwnsRegion(listQuery) ? (
-    <QueryState query={listQuery} loading="list" loadingLabel={listLabel} />
+    <QueryState query={listQuery} loading="list" loadingLabel={listLabel} shareConnectionFeedback={shareConnectionFeedback} />
   ) : showEmpty ? (
     narrowed || search.trim() ? (
       <StateView
@@ -245,7 +255,7 @@ export function ActiveSessionsScreen({
     )
   ) : null;
   const list = (
-    <HierarchyWidthProvider><ScreenList<GlobalSessionRow>
+    <HierarchyWidthProvider><SwipeActionsGroup fill><ScreenList<GlobalSessionRow>
       data={rows}
       grouped
       keyExtractor={(row) => row.key}
@@ -327,7 +337,7 @@ export function ActiveSessionsScreen({
           </View>}</HierarchyFrame>
         );
       }}
-    /></HierarchyWidthProvider>
+    /></SwipeActionsGroup></HierarchyWidthProvider>
   );
   return list;
 }

@@ -38,10 +38,15 @@ it("derives progress and tasks per epic from one index of the task list", () => 
   expect(views.get("c")).toEqual({ progress: { done: 0, total: 0 }, tasks: [] });
 });
 
-it("lists a task once when the plan repeats its id", () => {
-  const view = goalTaskViews([goal("a", "running", ["t1", "t1"])], [task("t1", "done")]).get("a");
-  expect(view?.tasks).toEqual([task("t1", "done")]);
-  expect(view?.progress).toEqual({ done: 2, total: 2 });
+it("counts each planned task id once and lists available tasks in plan order", () => {
+  const view = goalTaskViews(
+    [goal("a", "running", ["t2", "gone", "t1", "t2", "t1", "gone"])],
+    [task("t1", "done"), task("t2", "running"), task("other", "done")],
+  ).get("a");
+  expect(view).toEqual({
+    progress: { done: 1, total: 3 },
+    tasks: [task("t2", "running"), task("t1", "done")],
+  });
 });
 
 it("scales with the planned ids, not epics times tasks", () => {

@@ -15,6 +15,7 @@ import { pairingCodeExpired } from "./connection-lifecycle";
 import {
   pairingClaimId,
   pairingErrorMessage,
+  pairingNeedsNewCode,
   parseDesktopPairingCode,
   PairingFailure,
 } from "./pairing-code";
@@ -30,13 +31,14 @@ import type { MobileMachine } from "@/remote/types";
 const emptyDraft: ConnectionDraft = { name: "", endpoint: "", token: "", target: null };
 const phoneName = "Bycoda phone";
 
-export function useComputerConnection() {
+export function useComputerConnection(returnToPreviousAfterConnect = false) {
   const copy = useCopy();
   const form = useFormDraft<ConnectionDraft>(emptyDraft);
   const operation = useAsyncAction<{ message?: string }>();
   const [entry, setEntry] = useState<ConnectionEntryState>({ kind: "choices" });
   const [connectionMode, setConnectionMode] = useState<"lan" | "tailscale">("lan");
   const request = useRef<AbortController | null>(null);
+  const rejectedClaim = useRef<string | null>(null);
   const mounted = useRef(true);
   const generation = useRef(0);
   const foreground = useRef(AppState.currentState === "active");
@@ -161,8 +163,9 @@ export function useComputerConnection() {
     });
   };
 
-  const connect = async () =>
-    operation.run(async () => {
+  const connect = async () => {
+    if (entry.kind === "preview" && rejectedClaim.current === entry.claimId) return;
+    return operation.run(async () => {
       request.current?.abort();
       const controller = new AbortController();
       request.current = controller;
@@ -218,7 +221,8 @@ export function useComputerConnection() {
         check();
         form.reset(emptyDraft);
         setEntry({ kind: "choices" });
-        router.replace("/");
+        if (returnToPreviousAfterConnect && router.canGoBack()) router.back();
+        else router.replace("/");
         return { message: copy("Bilgisayar bağlandı.", "Computer connected.") };
       } catch (error) {
         if (
@@ -227,13 +231,19 @@ export function useComputerConnection() {
           (error instanceof RemoteHostError &&
             (entry.kind === "preview" || error.kind === "identity"))
         ) {
-          throw new Error(pairingErrorMessage(error, copy));
+          const message = pairingErrorMessage(error, copy);
+          if (entry.kind === "preview" && !controller.signal.aborted && pairingNeedsNewCode(error)) {
+            rejectedClaim.current = entry.claimId;
+            setEntry(current => current === entry ? { kind: "rejected-code", message } : current);
+          }
+          throw new Error(message);
         }
         throw error;
       } finally {
         if (request.current === controller) request.current = null;
       }
     });
+  };
 
   const recover = async (action: () => Promise<void>, message: string) =>
     operation.run(async () => {

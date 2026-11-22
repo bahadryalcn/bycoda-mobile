@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   pairingClaimId,
   pairingErrorMessage,
+  pairingNeedsNewCode,
   parseDesktopPairingCode,
   parseMobilePairingCode,
   PairingFailure,
@@ -60,4 +61,14 @@ describe("mobile pairing code adapters", () => {
       "a".repeat(43),
     );
   });
+
+  it.each(["expired", "used", "code-unavailable", "identity"] as const)(
+    "requires a fresh code after a %s rejection",
+    (kind) => expect(pairingNeedsNewCode(new PairingFailure(kind))).toBe(true),
+  );
+
+  it.each(["network", "timeout", "rate-limit", "access", "aborted"] as const)(
+    "keeps the current claim for %s",
+    (kind) => expect(pairingNeedsNewCode(new PairingFailure(kind))).toBe(false),
+  );
 });

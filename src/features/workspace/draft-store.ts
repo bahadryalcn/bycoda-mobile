@@ -1,4 +1,5 @@
-import { createDraftStorageOwner, publishDraftPresence, RetiredDraftError } from "@/state/local-draft-storage";
+import { createDraftStorageOwner, DraftWriteError, publishDraftPresence, RetiredDraftError } from "@/state/local-draft-storage";
+export { DraftWriteError } from "@/state/local-draft-storage";
 
 type Storage = {
   getItem(key: string): Promise<string | null>;
@@ -53,8 +54,12 @@ export class DraftStore<T> {
       // Checked when the write runs, after earlier queued writes: only this store's own successful write sets the mark.
       if (this.synced && Object.is(this.synced.value, value)) return;
       const raw = this.encode(value);
-      if (raw === null) await this.storage.removeItem(this.key);
-      else await this.storage.setItem(this.key, raw);
+      try {
+        if (raw === null) await this.storage.removeItem(this.key);
+        else await this.storage.setItem(this.key, raw);
+      } catch (cause) {
+        throw new DraftWriteError(cause);
+      }
       this.synced = { value };
       if (this.owner.current()) publishDraftPresence(this.storage, this.key, raw !== null);
     });

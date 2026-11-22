@@ -80,6 +80,13 @@ it("shows loading until local bytes resolve, then opens one inline frame", async
   expect(latest().fill).toBe(false); expect(options().position).toEqual({ page: 1, zoom: 1 });
 });
 
+it("places the full-screen action before the embedded reader", async () => {
+  await render();
+  const expand = [...container.querySelectorAll("button")].find(button => button.textContent === "Expand PDF")!;
+  const reader = container.querySelector("[data-frame='inline']")!;
+  expect(expand.compareDocumentPosition(reader) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 it("keeps a failed local load recoverable and reloads only on retry", async () => {
   fixture.read.mockRejectedValueOnce(new Error("Local file unavailable"));
   await render(); expect(container.textContent).toContain("Local file unavailable"); expect(fixture.frames).toHaveLength(0);

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useConnectionScope } from "@/state/connection-scope";
 import { createSingleFlight } from "@/state/single-flight";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import { useModelCatalog } from "@/state/model-catalog";
 import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
@@ -19,7 +19,7 @@ export function useCreateSession(
 ) {
   const copy = useCopy();
   const machine = useActiveMachine();
-  const [creation] = useState(() => createSingleFlight<boolean>());
+  const connection = useConnectionScope(() => createSingleFlight<boolean>());
   const catalog = useModelCatalog(projectId, catalogEnabled);
   const command = useCommands(["sessions", projectId]);
   const uncertain = command.error instanceof Error && command.error.name === "UncertainCommand";
@@ -35,8 +35,9 @@ export function useCreateSession(
     onCreated: (sessionId: string) => void,
     { settings = {}, runtimeMode = "supervised" }: { settings?: Record<string, string>; runtimeMode?: RuntimeMode } = {},
   ): Promise<boolean> => {
-    if (!canStart || !machine || useMachines.getState().activeId !== machine.id) return Promise.resolve(false);
-    return creation.run(async () => {
+    if (!canStart || !machine || !connection.isCurrent()) return Promise.resolve(false);
+    return connection.resource.run(async () => {
+      if (!connection.isCurrent()) return false;
       const receipt = await command.mutateAsync({
         type: "create",
         projectId,
@@ -47,8 +48,10 @@ export function useCreateSession(
         modelSettings: creationSettings(selectedModelValue, settings, selectedProvider, models),
         runtimeMode,
       });
-      haptic.success();
-      onCreated(receipt.sessionId);
+      if (connection.isCurrent()) {
+        haptic.success();
+        onCreated(receipt.sessionId);
+      }
       return true;
     }).catch(() => false);
   };

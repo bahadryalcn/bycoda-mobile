@@ -3,9 +3,9 @@ import { createElement as h, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import { WelcomeScreen } from "./welcome-screen";
-const layout = vi.hoisted(() => ({ inset: 140, content: {} as Record<string, number> }));
+const layout = vi.hoisted(() => ({ inset: 140, fontScale: 1, content: {} as Record<string, number>, artHeight: 0 }));
 const passThrough = vi.hoisted(() => ({ children }: { children?: unknown }) => children);
-vi.mock("react-native", () => ({ useWindowDimensions: () => ({ width: 390, height: 844 }), View: passThrough, ScrollView: ({ children, contentContainerStyle }: PropsWithChildren<{ contentContainerStyle: Record<string, number> }>) => { layout.content = contentContainerStyle; return h("main", null, children); } }));
+vi.mock("react-native", () => ({ useWindowDimensions: () => ({ width: 390, height: 844, fontScale: layout.fontScale }), View: passThrough, ScrollView: ({ children, contentContainerStyle }: PropsWithChildren<{ contentContainerStyle: Record<string, number> }>) => { layout.content = contentContainerStyle; return h("main", null, children); } }));
 vi.mock("react-native-reanimated", () => {
   const animation = { duration: () => animation, delay: () => animation, reduceMotion: () => animation };
   return { default: { View: passThrough }, FadeIn: animation, FadeInDown: animation, ReduceMotion: { System: "system" }, useReducedMotion: () => false };
@@ -18,8 +18,8 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/layout", () => ({ useBottomInset: () => layout.inset }));
 vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("./account-computers-section", () => ({ AccountComputersSection: ({ others }: { others: unknown }) => others }));
-vi.mock("@/ui/primitives", () => ({ Row: passThrough, Body: ({ children }: PropsWithChildren) => h("p", null, children), Heading: ({ children }: PropsWithChildren) => h("h2", null, children), Button: () => null }));
-vi.mock("@/ui/code-art", () => ({ CodeArt: () => null, codeArtWidth: () => 200 }));
+vi.mock("@/ui/primitives", () => ({ Row: passThrough, Body: ({ children }: PropsWithChildren) => h("p", null, children), Heading: ({ children }: PropsWithChildren) => h("h2", null, children), Button: ({ label }: { label: string }) => h("button", null, label) }));
+vi.mock("@/ui/code-art", () => ({ CodeArt: () => null, codeArtWidth: (_name: string, box: { height: number }) => { layout.artHeight = box.height; return 200; } }));
 vi.mock("@/ui/dot-field", () => ({ DotField: () => null }));
 it("reserves measured navigation once and respects each landscape safe edge", () => {
   expect(renderToStaticMarkup(h(WelcomeScreen))).toContain("Connect your computer");
@@ -27,4 +27,17 @@ it("reserves measured navigation once and respects each landscape safe edge", ()
   expect(layout.content.paddingEnd).toBe(44);
   layout.inset = 0; renderToStaticMarkup(h(WelcomeScreen));
   expect(layout.content.paddingBottom).toBe(34 + 16);
+});
+it("reserves less decorative space when text is large while showing pairing actions", () => {
+  expect(renderToStaticMarkup(h(WelcomeScreen))).toContain("Scan QR code");
+  expect(layout.artHeight).toBe(200);
+  layout.fontScale = 2;
+  try {
+    const markup = renderToStaticMarkup(h(WelcomeScreen));
+    expect(markup).toContain("Scan QR code");
+    expect(markup).toContain("Paste pairing code");
+    expect(layout.artHeight).toBe(100);
+  } finally {
+    layout.fontScale = 1;
+  }
 });

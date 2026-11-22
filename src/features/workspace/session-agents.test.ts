@@ -33,7 +33,7 @@ beforeEach(() => Object.assign(state, { calls: [], capabilities: [], devices: un
 it("virtualizes delegated session rows and announces their section label only once", () => {
   const source = readFileSync(new URL("./agents-sheet.tsx", import.meta.url), "utf8");
   expect(source.match(/Runs on its own/g)).toHaveLength(1);
-  expect(source).toMatch(/children\.map\(\(child\): ListItem => \(\{ kind: "child"/);
+  expect(source).toMatch(/childRows\.map\(\(child\): ListItem => \(\{ kind: "child"/);
   expect(source).toMatch(/<FlatList data=\{items\}/);
   expect(source).toMatch(/item\.kind === "child"\) return <ChildRow/);
 });

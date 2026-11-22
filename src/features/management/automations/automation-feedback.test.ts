@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import type { HostAutomation, HostAutomationRun } from "@/domain/types";
 import { AutomationCard } from "./automation-card";
-import { summarizedAutomationRun } from "./automation-feedback";
+import { savedAutomation, summarizedAutomationRun } from "./automation-feedback";
 import type { AutomationCardProps } from "./types";
 
 const query = vi.hoisted(() => ({ data: [] as HostAutomationRun[] | undefined, error: null as Error | null, isPending: false }));
@@ -65,6 +65,13 @@ const latest: HostAutomationRun = {
   id: "latest", automationId: item.id, trigger: "scheduled", scheduledFor: 100,
   createdAt: 100, completedAt: 1000, status: "failed", error: item.lastRunError,
 };
+
+it("does not treat invalid or ambiguous saved automation rows as an absent record", () => {
+  expect(savedAutomation([item], item.id)).toEqual(item);
+  expect(savedAutomation([], item.id)).toBeUndefined();
+  expect(() => savedAutomation([item, item], item.id)).toThrow();
+  expect(() => savedAutomation([{ id: item.id }], item.id)).toThrow();
+});
 
 it("identifies only one exact completion already summarized by its automation", () => {
   expect(summarizedAutomationRun(item, [latest])).toBe(latest.id);

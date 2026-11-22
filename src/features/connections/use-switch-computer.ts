@@ -9,12 +9,15 @@ import { ConnectionRecoveryError, selectSavedComputer } from "./recovery";
 export function useSwitchComputer() {
   const copy = useCopy();
   const operation = useAsyncAction<{ message?: string }>();
-  const switchTo = (id: string, onDone: () => void) =>
+  const switchTo = (id: string, onDone: () => void, isCurrent?: () => boolean) =>
     operation.run(async () => {
       try {
         await selectSavedComputer(id, {
           flushDrafts: flushWorkspaceDrafts,
-          assertAccess: assertAppAccess,
+          assertAccess: () => {
+            assertAppAccess();
+            if (isCurrent && !isCurrent()) throw new ConnectionRecoveryError();
+          },
           getState: () => useMachines.getState(),
           selectMachine: (next) => useMachines.getState().selectMachine(next),
           onSelected: onDone,

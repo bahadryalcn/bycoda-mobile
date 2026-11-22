@@ -31,22 +31,26 @@ let root:ReturnType<typeof createRoot>|undefined,container:HTMLDivElement,client
 const render=(document:"help"|"privacy"|"terms"|"engagement"="help")=>act(async()=>root!.render(createElement(QueryClientProvider,{client},document==="engagement"?createElement(EngagementSettings):createElement(LegalDocument,{document}))));
 const settle=()=>act(async()=>{await new Promise(resolve=>setTimeout(resolve,15));});
 const button=(name:string)=>[...container.querySelectorAll("button")].find(item=>item.textContent?.startsWith(name))!;
-it("lets the reader copy the public support address only after email handoff fails", async () => {
+it.each(["declines", "rejects"])("keeps the support address retryable when the clipboard %s the write", async (failure) => {
   await render();
-  expect(button("Copy")).toBeUndefined();
+  const copySupport = "Copy support address";
+  expect(button(copySupport)).toBeUndefined();
   fixture.open.mockRejectedValueOnce(new Error("No email handler"));
-  fixture.copy.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  if (failure === "declines") fixture.copy.mockResolvedValueOnce(false);
+  else fixture.copy.mockRejectedValueOnce(new Error("Native clipboard write failed"));
+  fixture.copy.mockResolvedValueOnce(true);
   await act(async () => button("Open email app").click());
   await settle();
-  expect(button("Copy")).toBeDefined();
-  await act(async () => button("Copy").click());
+  expect(button(copySupport)).toBeDefined();
+  await act(async () => button(copySupport).click());
   await settle();
   expect(container.textContent).toContain("Could not copy. Try again.");
-  await act(async () => button("Copy").click());
+  await act(async () => button(copySupport).click());
   await settle();
   expect(fixture.copy.mock.calls).toEqual([[supportEmail], [supportEmail]]);
   expect(fixture.open).toHaveBeenCalledOnce();
   expect(button("Copied")).toBeDefined();
+  expect(container.textContent).not.toContain("Could not copy. Try again.");
   fixture.open.mockRejectedValueOnce(new Error("No browser handler"));
   await act(async () => button("bycoda website").click());
   await settle();

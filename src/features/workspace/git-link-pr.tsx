@@ -116,7 +116,7 @@ export function GitLinkPullRequestSheet({
     >
       <Stack>
         {link.session ? (
-          <Body muted>{copy("Oturum: {p0}", "Session: {p0}", { p0: link.session.title })}</Body>
+          <Body muted>{copy("Oturum: {p0}", "Session: {p0}", { p0: link.session.title || copy("Yeni oturum", "New session") })}</Body>
         ) : null}
         {current ? (
           <Stack>

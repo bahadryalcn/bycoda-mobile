@@ -1,3 +1,5 @@
+import type { MobileHostRuntimeState } from "./host-runtime";
+
 /**
  * Reads that fail because the link is briefly down (Host restart, network switch) are retried quietly.
  * A deadline the Host itself reported is not: the Host is reachable but too slow, so every automatic
@@ -56,7 +58,15 @@ type RecoverableCache = {
  * Once the computer answers again, reads that gave up during the outage (their quiet retries
  * ran out) load at once instead of leaving "Can't reach your computer" beside a connected pill.
  */
-export function refetchRecoveredReads(cache: RecoverableCache, machineId: string, successAt: number) {
+export function refetchRecoveredReads(
+  cache: RecoverableCache,
+  machineId: string,
+  successAt: number,
+  runtime: MobileHostRuntimeState | undefined,
+) {
+  // Socket recovery already has a dedicated owner. Unrelated successful reads can arrive while a
+  // different endpoint times out, and must not restart that endpoint's automatic retry window.
+  if (runtime !== undefined) return;
   for (const query of cache.getQueryCache().findAll({ queryKey: ["machine", machineId] })) {
     const { status, error, errorUpdatedAt } = query.state;
     if (status !== "error" || errorUpdatedAt >= successAt || !isTransientConnectionError(error))

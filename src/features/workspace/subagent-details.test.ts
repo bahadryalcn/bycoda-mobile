@@ -328,6 +328,42 @@ it("shows the final report once in a full reader and retains other activity", as
   expect(container.textContent!.split("Full final report")).toHaveLength(2);
 });
 
+it.each(["Assignment", "Report"] as const)("keeps the %s reader clear while its text is unavailable", async (label) => {
+  await mount();
+  const value = label === "Assignment"
+    ? { ...block, agentRun: { ...block.agentRun!, prompt: "Original assignment" } }
+    : { ...block, tool: { ...block.tool!, status: "completed", detail: "Original report" } };
+  const text = label === "Assignment" ? "Original assignment" : "Original report";
+  await render({ block: value });
+  await press(label);
+  expect(container.querySelector("article")?.textContent).toContain(text);
+
+  await render({ block });
+  const reader = container.querySelector("article");
+  expect(reader?.getAttribute("aria-label")).toBe(label);
+  expect(reader?.textContent).toContain("Unavailable");
+  expect(reader?.textContent).not.toContain(text);
+
+  await render({ block: value });
+  expect(container.querySelector("article")?.textContent).toContain(text);
+});
+
+it("rejects a retained reader action after its text disappears and returns", async () => {
+  await mount();
+  const value = { ...block, agentRun: { ...block.agentRun!, prompt: "Current assignment" } };
+  await render({ block: value });
+  const oldOpen = state.commands.get("Assignment")!;
+  await render({ block });
+  await act(async () => oldOpen());
+  expect(container.querySelector("article")).toBeNull();
+
+  await render({ block: value });
+  await act(async () => oldOpen());
+  expect(container.querySelector("article")).toBeNull();
+  await press("Assignment");
+  expect(container.querySelector("article")?.textContent).toContain("Current assignment");
+});
+
 it("conceals cached assignment/activity and retires the reader after access loss", async () => {
   await mount();
   const value = {

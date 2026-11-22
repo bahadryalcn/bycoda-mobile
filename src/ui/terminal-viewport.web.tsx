@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import { KeyboardController } from "react-native-keyboard-controller";
 import { terminalDocument, readTerminalPacket, type TerminalPacket } from "./terminal-document";
 import type { TerminalViewportHandle } from "./terminal-viewport";
 import { useCopy } from "./copy";
@@ -16,6 +17,8 @@ export const TerminalViewport = forwardRef<
     () => ({
       post: (packet) =>
         frame.current?.contentWindow?.postMessage(JSON.stringify({ ...packet, nonce }), "*"),
+      focusInput: () => frame.current?.contentWindow?.postMessage(JSON.stringify({ type: "focus", nonce }), "*"),
+      hideInput: () => { void KeyboardController.dismiss().catch(() => undefined); },
     }),
     [nonce],
   );
@@ -23,7 +26,7 @@ export const TerminalViewport = forwardRef<
     const listener = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow || typeof event.data !== "string") return;
       const packet = readTerminalPacket(event.data, nonce);
-      if (packet) callback.current(packet);
+      if (packet && packet.type !== "focused") callback.current(packet);
     };
     window.addEventListener("message", listener);
     return () => window.removeEventListener("message", listener);

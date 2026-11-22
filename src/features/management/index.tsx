@@ -5,8 +5,9 @@ import { View } from "react-native";
 import { useCopy } from "@/ui/copy";
 import { Empty, QueryState, SearchField, Screen, Skeleton } from "@/ui/primitives";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useConnectionScope } from "@/state/connection-scope";
 import { Scope } from "./shared/scope";
-import { useLocalProjectScope } from "./shared/local-project-scope";
+import { InitialProjectFilter, useLocalProjectScope } from "./shared/local-project-scope";
 import { TasksScreen } from "./tasks-screen";
 import { GoalsScreen } from "./goals-screen";
 import { CrewsScreen } from "./crews-screen";
@@ -49,8 +50,8 @@ export function ManagementHome() {
   const { projectId: selectedProjectId, setProjectId } = useLocalProjectScope();
   const projects = useProjectList();
   const [search, setSearch] = useState("");
-  const projectId = projects.directoryReady && projects.data?.some((project) => project.id === selectedProjectId)
-    ? selectedProjectId : null;
+  const projectId = selectedProjectId && (!projects.directoryReady || !projects.data?.some((project) => project.id === selectedProjectId))
+    ? undefined : selectedProjectId;
   return (
     <Screen title={copy("Araçlar", "Tools")} context={machine ? <Scope allowAll projectId={selectedProjectId} onChange={setProjectId} /> : undefined} scroll={!!machine}>
       {!machine ? (
@@ -68,8 +69,9 @@ export function ManagementHome() {
     </Screen>
   );
 }
-export function ManagementScreen({ section }: ManagementScreenProps) {
+export function ManagementScreen({ section, initialProjectId }: ManagementScreenProps) {
   const machine = useActiveMachine();
+  const connection = useConnectionScope();
   const copy = useCopy();
   const labels = isManagementSection(section) ? managementSections[section] : undefined;
   const title = labels ? copy(labels[0], labels[1]) : copy("Bölüm bulunamadı", "Section not found");
@@ -90,7 +92,9 @@ export function ManagementScreen({ section }: ManagementScreenProps) {
   };
   const Component = isManagementSection(section) ? screens[section] : undefined;
   return Component ? (
-    <Component key={`${machine.id}:${section}`} />
+    <InitialProjectFilter value={initialProjectId}>
+      <Component key={`${connection.token}:${section}`} />
+    </InitialProjectFilter>
   ) : (
     <Screen title={title} scroll={false}>
       <View style={{ flex: 1 }}>

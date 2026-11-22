@@ -45,7 +45,10 @@ export async function dispatchCommand(
     try {
       const receipt = await client.request<CommandReceipt | null>("commands.status", { commandId });
       if (receipt) return receipt;
-    } catch {
+    } catch (statusError) {
+      const refusal = statusError as { code?: string; uncertain?: boolean; message?: string };
+      if (original.type === "steer" && refusal?.code === "COMMAND_BUSY" && !refusal.uncertain && refusal.message === "The active turn is not ready for steering.")
+        throw statusError;
       /* Explicit recovery remains bound to the original computer. */
     }
     // The durable outbox owns idempotent message recovery; retain the transport kind.

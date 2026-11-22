@@ -9,6 +9,7 @@ const fixture = vi.hoisted(() => ({
   focused: true,
   request: vi.fn(),
   machine: { id: "pc", endpoint: "https://pc.example", environmentId: "env", capabilities: [], providers: [] },
+  consentScopes: {} as Record<string, boolean>,
   guard: undefined as undefined | (() => void),
 }));
 vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => fixture.focused }));
@@ -37,17 +38,17 @@ vi.mock("./security", () => ({
   assertAppAccess: vi.fn(),
 }));
 vi.mock("../features/privacy/consent-access", () => ({
-  useProviderPermission: (selector: (state: unknown) => unknown) => selector({ scopes: { scope: true } }),
+  useProviderPermission: (selector: (state: unknown) => unknown) => selector({ scopes: fixture.consentScopes }),
   isScopePermitted: (scopes: Record<string, boolean>, scope: string) => scopes[scope] === true,
   assertProviderPermission: vi.fn(),
   readPermittedCredential: vi.fn(),
 }));
-vi.mock("../features/privacy/consent-store", () => ({ consentScope: () => "scope" }));
+vi.mock("../features/privacy/consent-store", () => ({ consentScope: (environmentId: string) => environmentId }));
 vi.mock("../features/workspace/attachment-ownership", () => ({ attachmentReleases: { flush: vi.fn() } }));
 
 import { useSecurity } from "./security";
 import { useMachines } from "./machines";
-import { hostKey, useHostClient, useHostQuery } from "./queries";
+import { hostKey, useConsentPending, useHostClient, useHostQuery } from "./queries";
 import { PrivateContentAccessProvider } from "../ui/private-access";
 import { useModelCatalog } from "./model-catalog";
 
@@ -62,10 +63,30 @@ function Probe() {
 }
 const render = () => root.render(createElement(QueryClientProvider, { client: cache }, createElement(Probe)));
 
+it("keeps checking the selected computer until its own consent has loaded", async () => {
+  function ConsentProbe() {
+    return useConsentPending() ? "checking" : "settled";
+  }
+  const renderConsent = () => act(async () => root.render(createElement(ConsentProbe)));
+
+  fixture.consentScopes = { "another-environment": true };
+  await renderConsent();
+  expect(element.textContent).toBe("checking");
+
+  fixture.consentScopes.env = false;
+  await renderConsent();
+  expect(element.textContent).toBe("settled");
+
+  fixture.consentScopes.env = true;
+  await renderConsent();
+  expect(element.textContent).toBe("settled");
+});
+
 beforeEach(() => {
   vi.useFakeTimers();
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   fixture.focused = true;
+  fixture.consentScopes = { env: true };
   enabled = true;
   visibleData = undefined;
   fixture.guard = undefined;

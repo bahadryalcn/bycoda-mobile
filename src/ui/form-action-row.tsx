@@ -10,7 +10,7 @@ import type { FormActionsProps } from "./component-props";
 
 /** Presentation only: the editor keeps its values, guards and current callbacks. */
 export function FormActionRow({
-  feedback, submitLabel, onSubmit, onCancel, cancelLabel, cancelDisabled, allowCancelWhileBusy = false,
+  feedback, submitLabel, submitRef, onSubmit, onCancel, cancelLabel, cancelDisabled, allowCancelWhileBusy = false,
   busy, disabled, tone = "primary", dirty, scrollFeedback,
   feedbackPlacement,
 }: FormActionsProps & { scrollFeedback?: boolean; feedbackPlacement?: "before" | "after" }) {
@@ -42,7 +42,7 @@ export function FormActionRow({
       {dirty ? <View style={{ marginBottom: space.sm }}><UnsavedBadge /></View> : null}
       {/* Mobile action stack: full-width primary, centered quiet cancel below it. */}
       <View style={{ gap: space.xs, alignItems: "stretch" }}>
-        <Button label={submitLabel} onPress={onSubmit} busy={busy} disabled={disabled} tone={tone} fullWidth />
+        <Button ref={submitRef} label={submitLabel} onPress={onSubmit} busy={busy} disabled={disabled} tone={tone} fullWidth />
         {onCancel ? <Button label={cancelLabel ?? copy("Vazgeç", "Cancel")} onPress={onCancel}
           disabled={cancelDisabled || busy && !allowCancelWhileBusy} tone="quiet"
           style={{ alignSelf: "center" }} /> : null}

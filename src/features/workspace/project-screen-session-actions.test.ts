@@ -6,12 +6,25 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { getQueryPresentation, type QueryLike } from "@/ui/query-presentation";
 import { ProjectSessions } from "./sessions-panel";
 
+vi.mock("@/ui/swipe-actions", () => ({
+  SwipeActionsGroup: ({ children }: { children: ReactNode }) => children,
+}));
+
 const fixture = vi.hoisted(() => ({
   query: {} as QueryLike,
   locked: false,
+  epoch: 1,
+  navigate: vi.fn(),
+  create: vi.fn<(created: (id: string) => void) => Promise<boolean>>(),
 }));
 
-vi.mock("expo-router", () => ({ router: {} }));
+vi.mock("expo-router", () => ({ router: { navigate: fixture.navigate } }));
+vi.mock("@/state/connection-scope", () => ({
+  useConnectionScope: () => {
+    const epoch = fixture.epoch;
+    return { token: String(epoch), isCurrent: () => fixture.epoch === epoch };
+  },
+}));
 vi.mock("react-native", () => ({ View: ({ children }: { children: ReactNode }) => h("div", null, children) }));
 vi.mock("@/state/form-draft", () => ({ useFormDraft: () => ({ values: {} }) }));
 vi.mock("@/state/machines", () => ({
@@ -30,6 +43,9 @@ vi.mock("@/ui/hierarchy-frame", () => ({ HierarchyWidthProvider: ({ children }: 
 vi.mock("@/ui/primitives", () => ({
   Body: ({ children }: { children: ReactNode }) => h("h2", null, children),
   Button: ({ label, onPress }: { label: string; onPress: () => void }) => h("button", { onClick: onPress }, label),
+  Sheet: ({ title, children }: { title: string; children: ReactNode }) => h("section", { "aria-label": title }, children),
+  FormActions: ({ submitLabel, onSubmit, disabled }: { submitLabel: string; onSubmit: () => void; disabled?: boolean }) =>
+    h("button", { onClick: onSubmit, disabled }, submitLabel),
   ScreenList: ({ data, ListEmptyComponent, ListHeaderComponent }: { data: unknown[]; ListEmptyComponent?: ReactNode; ListHeaderComponent?: ReactNode }) =>
     h("div", null, ListHeaderComponent, data.length ? h("p", null, "Session rows") : ListEmptyComponent),
   QueryState: ({ query, empty, emptyAction, loadingLabel }: {
@@ -46,16 +62,18 @@ vi.mock("@/ui/primitives", () => ({
     }
   },
 }));
-vi.mock("./agent-model-fields", () => ({}));
-vi.mock("./agent-option-icons", () => ({}));
+vi.mock("./agent-model-fields", () => ({ AgentModelFields: () => null }));
+vi.mock("./agent-option-icons", () => ({ PermissionField: () => null }));
 vi.mock("./session-clock", () => ({ useSnoozeNow: () => 0 }));
 vi.mock("./session-done-store", () => ({ useUnseenDoneIds: () => new Set() }));
 vi.mock("./session-folder-row", () => ({}));
 vi.mock("./session-list-row", () => ({}));
 vi.mock("./session-shelf-header", () => ({}));
-vi.mock("./shared", () => ({}));
+vi.mock("./shared", () => ({ CommandError: () => null }));
 vi.mock("./use-create-session", () => ({
-  useCreateSession: () => ({ selection: {}, locked: fixture.locked }),
+  useCreateSession: () => ({
+    selection: {}, choices: [], command: {}, catalog: {}, locked: fixture.locked, canStart: !fixture.locked, create: fixture.create,
+  }),
 }));
 
 function renderProjectSessions() {
@@ -73,6 +91,9 @@ function renderProjectSessions() {
 beforeEach(() => {
   fixture.query = { status: "success", data: [] };
   fixture.locked = false;
+  fixture.epoch = 1;
+  fixture.navigate.mockClear();
+  fixture.create.mockReset().mockResolvedValue(true);
 });
 
 it("shows one New session action, in the empty state of a loaded project", () => {
@@ -129,6 +150,33 @@ it("identifies the project archive and returns to active sessions directly from 
     await act(async () => button("Active sessions")!.click());
     expect(button("Active sessions")).toBeUndefined();
     expect(container.textContent).toContain("No sessions yet.");
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("retires a project creation panel and old callbacks after same-row re-pairing", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const panel = () => h(ProjectSessions, {
+    projectId: "project", initialCreating: true, canReadProject: () => true,
+    renderFrame: (content) => content,
+  });
+  const start = () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Start session");
+  try {
+    await act(async () => root.render(panel()));
+    await act(async () => start()!.click());
+    const lateCreated = fixture.create.mock.calls[0][0];
+    await act(async () => root.render(panel()));
+    expect(start()).toBeDefined();
+
+    fixture.epoch++;
+    await act(async () => root.render(panel()));
+    expect(start()).toBeUndefined();
+    await act(async () => lateCreated("old-session"));
+    expect(fixture.navigate).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

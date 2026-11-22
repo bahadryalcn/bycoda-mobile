@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement, type PropsWithChildren } from "react";
+import { act, createElement, type PropsWithChildren, type RefObject } from "react";
 import { readFileSync } from "node:fs";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -12,10 +12,13 @@ import { ReviewNotes } from "./tasks/review-notes";
 
 const state = vi.hoisted(() => ({
   machine: { id: "pc", name: "Harbor computer", capabilities: ["goals.settings", "automations"] },
-  confirm: vi.fn(),
   currentConnection: true,
+  epoch: "first",
   mutation: { mutate: vi.fn(), isPending: false, isSuccess: false, error: null as Error | null, data: undefined as unknown },
   fields: new Map<string, (value: string) => void>(), submit: undefined as undefined | (() => void),
+  autoMerge: undefined as undefined | ((value: boolean) => void),
+  reviewSubmit: undefined as undefined | (() => void),
+  reviewReturnFocus: undefined as RefObject<HTMLButtonElement | null> | undefined,
   actions: [] as Array<{ key: string; disabled?: boolean; onPress: () => void } | false | null>,
 }));
 vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
@@ -60,23 +63,49 @@ vi.mock("@/ui/copy", () => ({
     en.replace(/\{(\w+)\}/g, (token, key: string) => String(values?.[key] ?? token)),
 }));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestClose: vi.fn() }) }));
-vi.mock("@/ui/confirm", () => ({ confirmAction: state.confirm }));
-vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ isCurrent: () => state.currentConnection }) }));
+vi.mock("@/state/connection-scope", () => ({
+  useConnectionScope: () => {
+    const token = state.epoch;
+    return { token, isCurrent: () => state.currentConnection && state.epoch === token };
+  },
+}));
 vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
 vi.mock("./shared/format", () => ({ stamp: (value: number) => `date:${value}` }));
 vi.mock("@/ui/number-field", async () => ({ NumberField: (await import("@/ui/primitives")).Field }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Section: wrapper, NavigationGroup: wrapper, NumberField: () => null,
+    Sheet: ({ children, title, returnFocusRef }: PropsWithChildren<{
+      title: string; returnFocusRef?: RefObject<HTMLButtonElement | null>;
+    }>) => {
+      state.reviewReturnFocus = returnFocusRef;
+      return createElement("section", { role: "dialog", "aria-label": title }, children);
+    },
     Disclosure: ({ label, detail, children }: PropsWithChildren<{ label: string; detail?: string }>) =>
       createElement("details", { open: true }, createElement("summary", null, label, detail), children),
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
-    IconButton: wrapper, Stack: wrapper, Row: wrapper, Body: wrapper, ErrorText: () => null, ErrorNotice: () => null, ToggleField: () => null, MutationState: () => null,
+    IconButton: wrapper, Stack: wrapper, Row: wrapper, Body: wrapper, ErrorText: () => null, ErrorNotice: () => null,
+    ToggleField: ({ label, onChange }: { label: string; onChange: (value: boolean) => void }) => {
+      if (label === "Auto merge") state.autoMerge = onChange;
+      return null;
+    }, MutationState: () => null,
     ActionMenu: ({ actions }: { actions: typeof state.actions }) => { state.actions = actions; return null; },
     Notice: ({ message }: { message: string }) => createElement("div", null, message),
     Button: ({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),
     Field: ({ label, onChangeText }: { label: string; onChangeText: (value: string) => void }) => { state.fields.set(label, onChangeText); return null; },
-    FormActions: ({ disabled, onSubmit }: { disabled: boolean; onSubmit: () => void }) => { state.submit = disabled ? undefined : onSubmit; return null; },
+    FormActions: ({ disabled, submitLabel, onSubmit, onCancel, submitRef }: {
+      disabled: boolean; submitLabel: string; onSubmit: () => void; onCancel: () => void;
+      submitRef?: RefObject<HTMLButtonElement | null>;
+    }) => {
+      if (submitLabel === "Save") {
+        state.submit = disabled ? undefined : onSubmit;
+        return createElement("button", { ref: submitRef, disabled, onClick: onSubmit }, submitLabel);
+      }
+      state.reviewSubmit = onSubmit;
+      return createElement("div", null,
+        createElement("button", { onClick: onCancel }, "Cancel"),
+        createElement("button", { onClick: onSubmit }, submitLabel));
+    },
   };
 });
 const container = document.createElement("div");
@@ -85,7 +114,9 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.machine = { id: "pc", name: "Harbor computer", capabilities: ["goals.settings", "automations"] };
   state.currentConnection = true;
-  state.confirm.mockImplementation((_title: string, _message: string, _action: string, run: () => void) => run());
+  state.epoch = "first";
+  state.reviewSubmit = undefined;
+  state.reviewReturnFocus = undefined;
   Object.assign(state.mutation, { isPending: false, isSuccess: false, error: null, data: undefined });
   root = createRoot(container);
 });
@@ -113,7 +144,6 @@ it.each([
 });
 
 it("names the reviewed epic and only cancels after confirmation", async () => {
-  state.confirm.mockImplementation(() => undefined);
   const goal = { id: "goal", title: "Harbor plan", status: "awaiting-approval", updatedAt: 12, projectIds: [], taskIds: [] } as unknown as HostGoal;
   const props = { goal, projects: [], busy: false, editorOpen: false, onReplan: vi.fn(), onSettings: vi.fn(),
     approve: state.mutation, cancel: state.mutation, remove: state.mutation,
@@ -122,16 +152,17 @@ it("names the reviewed epic and only cancels after confirmation", async () => {
   const cancel = state.actions.find((item) => item && item.key === "cancel");
   if (!cancel) throw new Error("Cancel action not found");
   await act(async () => cancel.onPress());
-  const [title, message, , confirm] = state.confirm.mock.calls[0]!;
-  expect(title).toBe("Cancel epic");
-  expect(message).toContain("Harbor plan · Harbor computer");
+  const sheet = container.querySelector('[role="dialog"][aria-label="Cancel epic"]');
+  expect(sheet?.textContent).toContain("Harbor plan · Harbor computer");
+  expect(sheet?.textContent).toContain("The goal and its active tasks will stop");
   expect(state.mutation.mutate).not.toHaveBeenCalled();
+  const acceptStale = state.reviewSubmit!;
   state.currentConnection = false;
-  await act(async () => confirm());
+  await act(async () => acceptStale());
   expect(state.mutation.mutate).not.toHaveBeenCalled();
   state.currentConnection = true;
   await act(async () => cancel.onPress());
-  const acceptCurrent = state.confirm.mock.calls[1]![3];
+  const acceptCurrent = state.reviewSubmit!;
   await act(async () => { acceptCurrent(); acceptCurrent(); });
   expect(state.mutation.mutate).toHaveBeenCalledExactlyOnceWith({ goalId: "goal" });
 });
@@ -150,6 +181,63 @@ it("preserves goal draft and conflict token when a newer goal arrives, closes on
   state.machine = { ...state.machine, id: "other" };
   await act(async () => render(initial));
   expect(state.submit).toBeUndefined();
+});
+
+it("rejects a delayed auto-merge confirmation after the pairing changes under the same saved row", async () => {
+  const initial = { id: "goal", title: "Goal", status: "running", updatedAt: 12, maxRunMinutes: 30, isolate: true } as HostGoal;
+  const render = () => root.render(createElement(GoalSettingsEditor, { initial, onClose: vi.fn() }));
+  await act(async () => render());
+  await act(async () => state.autoMerge!(true));
+  await act(async () => state.submit!());
+  const sheet = container.querySelector('[role="dialog"][aria-label="Auto merge"]');
+  expect(sheet?.textContent).toContain("Goal · Harbor computer");
+  expect(sheet?.textContent).toContain("without waiting for another approval");
+  const accept = state.reviewSubmit!;
+  state.epoch = "repaired";
+  await act(async () => render());
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  await act(async () => accept());
+  expect(state.mutation.mutate).not.toHaveBeenCalled();
+});
+
+it("returns an auto-merge review to the same Save control with the settings still unsaved", async () => {
+  const initial = { id: "goal", title: "Goal", status: "running", updatedAt: 12, maxRunMinutes: 30, isolate: true } as HostGoal;
+  await act(async () => root.render(createElement(GoalSettingsEditor, { initial, onClose: vi.fn() })));
+  await act(async () => state.autoMerge!(true));
+  const save = container.querySelector("button")!;
+  expect(save.textContent).toBe("Save");
+  await act(async () => save.click());
+  const sheet = container.querySelector('[role="dialog"][aria-label="Auto merge"]')!;
+  expect(state.reviewReturnFocus?.current).toBe(save);
+  await act(async () => sheet.querySelector<HTMLButtonElement>("button")!.click());
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(container.querySelector("button")).toBe(save);
+  expect(save.disabled).toBe(false);
+  expect(state.mutation.mutate).not.toHaveBeenCalled();
+});
+
+it("retires an auto-merge review when the Host refuses access and keeps the settings draft", async () => {
+  const initial = { id: "goal", title: "Goal", status: "running", updatedAt: 12, maxRunMinutes: 30, isolate: true } as HostGoal;
+  const close = vi.fn();
+  const render = (accessDenied: boolean) => root.render(createElement(GoalSettingsEditor, { initial, onClose: close, accessDenied }));
+  await act(async () => render(false));
+  await act(async () => state.autoMerge!(true));
+  await act(async () => state.submit!());
+  const accept = state.reviewSubmit!;
+  expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+
+  await act(async () => render(true));
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(container.textContent).toContain("Computer access was denied. Reconnect this computer.");
+  expect(state.submit).toBeUndefined();
+
+  await act(async () => render(false));
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  await act(async () => accept());
+  expect(state.mutation.mutate).not.toHaveBeenCalled();
+  expect(close).not.toHaveBeenCalled();
+  await act(async () => state.submit!());
+  expect(container.querySelector('[role="dialog"]')).not.toBeNull();
 });
 
 it("previews without running work and hides late results after a schedule or computer change", async () => {
@@ -200,6 +288,7 @@ it("declines only a steward to-do suggestion and never invokes ordinary task del
   const current = action();
   expect(current).toBeTruthy();
   if (current) act(() => current.onPress());
+  act(() => state.reviewSubmit!());
   expect(decline).toHaveBeenCalledExactlyOnceWith({ taskId: "proposal" });
   expect(remove).not.toHaveBeenCalled();
   props.task = { ...props.task, status: "queued" };
@@ -222,6 +311,7 @@ it("deletes a task card only against the revision the user confirmed", async () 
   const current = state.actions.find((entry) => entry && entry.key === "delete");
   expect(current).toBeTruthy();
   if (current) act(() => current.onPress());
+  act(() => state.reviewSubmit!());
   expect(remove).toHaveBeenCalledExactlyOnceWith({ taskId: "task-fake", discard: false, expectedUpdatedAt: 12 });
 });
 

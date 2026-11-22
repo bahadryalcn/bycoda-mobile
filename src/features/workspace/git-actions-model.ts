@@ -13,6 +13,7 @@ export function gitSheetActions(
 ): { key: GitSheetKey; label: string; detail: string; disabled: boolean }[] {
   const staged = index.files.filter((file) => file.staged).length;
   const blocked = !!index.conflicts?.length || !!index.operation;
+  const draftOnly = index.files.length === 0 && !blocked;
   const remoteReason = !index.remote ? copy("Bu dalın uzak deposu yok.", "This branch has no remote.") : "";
   const workspace = opts.busy || !opts.canRunWorkspace;
   const prReason = !index.remote ? remoteReason
@@ -27,8 +28,9 @@ export function gitSheetActions(
     detail: linkReason || (opts.linkPr.linked ? copy("#{p0} bağlı", "#{p0} linked", { p0: opts.linkPr.linked.number })
       : copy("Mevcut bir pull request’i bu oturuma bağla", "Attach an existing pull request to this session")) }] : [];
   return [
-    { key: "commit", label: copy("Commit", "Commit"), disabled: opts.busy,
+    { key: "commit", label: draftOnly ? copy("Commit mesajı", "Commit message") : copy("Commit", "Commit"), disabled: opts.busy,
       detail: blocked ? copy("Çakışmaları veya devam eden işlemi önce bitir.", "Finish conflicts or the running operation first.")
+        : draftOnly ? copy("Kaydedilecek değişiklik yok.", "Nothing to commit.")
         : copy("{p0} dosya değişti, {p1} stage’de", "{p0} files changed, {p1} staged", { p0: index.files.length, p1: staged }) },
     { key: "push", label: copy("Push", "Push"), disabled: opts.busy || !index.remote || index.ahead === 0,
       detail: remoteReason || (index.ahead === 0 ? copy("Gönderilecek yerel commit yok.", "No local commits to push.")

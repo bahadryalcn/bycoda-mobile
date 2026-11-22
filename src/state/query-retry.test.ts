@@ -53,7 +53,9 @@ describe("refetchRecoveredReads", () => {
       }),
       refetchQueries,
     };
-    refetchRecoveredReads(cache, "pc", 200);
+    refetchRecoveredReads(cache, "pc", 200, "ready");
+    expect(refetchQueries).not.toHaveBeenCalled();
+    refetchRecoveredReads(cache, "pc", 200, undefined);
     expect(refetchQueries).toHaveBeenCalledTimes(1);
     expect(refetchQueries).toHaveBeenCalledWith({
       queryKey: ["machine", "pc", "projects"],

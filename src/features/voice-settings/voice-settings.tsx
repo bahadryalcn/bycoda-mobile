@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useConnectionScope } from "@/state/connection-scope";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { PreferenceStorageNotice } from "@/ui/preference-storage-notice";
@@ -42,6 +43,7 @@ function VoiceSettingsBody() {
   const copy = useCopy();
   const { requestCloseThen } = useSheetGuard({});
   const machine = useActiveMachine();
+  const connection = useConnectionScope();
   const hydratedMachines = useMachines((state) => state.hydrated);
   const connectionPending = useMachines((state) => state.connectionPending);
   const storageError = useMachines((state) => state.storageError);
@@ -60,8 +62,8 @@ function VoiceSettingsBody() {
         />
       ) : (
       <>
-      <VoiceChoices />
-      <LocalModels key={machine.id} supported={localSupported} computer={machine.name} />
+      <VoiceChoices showStorageNotice={false} />
+      <LocalModels key={connection.token} supported={localSupported} computer={machine.name} current={connection.isCurrent} />
       </>
       )}
       <MicrophonePriority order={preferences.micOrder} disabled={!hydrated} />
@@ -69,7 +71,7 @@ function VoiceSettingsBody() {
   );
 }
 
-function LocalModels({ supported, computer }: { supported: boolean; computer: string }) {
+function LocalModels({ supported, computer, current }: { supported: boolean; computer: string; current(): boolean }) {
   const copy = useCopy();
   const [confirming, setConfirming] = useState<LocalVoiceModel | null>(null);
   const models = useHostQuery<LocalVoiceModel[]>(["voice", "models"], "voice.local.models", {}, { enabled: supported,
@@ -92,10 +94,13 @@ function LocalModels({ supported, computer }: { supported: boolean; computer: st
   }, [working, models]);
   // A quick removal or test can finish before any poll sees it working: read the job once after the
   // Host accepts the action and refresh the list when it has already settled.
-  const run = (model: LocalVoiceModel, kind: ModelAction) => void action.mutateAsync({ action: kind, id: model.id })
-    .then(() => status.refetch())
-    .then((result) => { if (!modelBusy(parseModelJob(result.data))) return models.refetch(); })
-    .catch(() => undefined);
+  const run = (model: LocalVoiceModel, kind: ModelAction) => {
+    if (!current()) return;
+    void action.mutateAsync({ action: kind, id: model.id })
+      .then(() => current() ? status.refetch() : undefined)
+      .then((result) => { if (current() && result && !modelBusy(parseModelJob(result.data))) return models.refetch(); })
+      .catch(() => undefined);
+  };
   const label = (model: LocalVoiceModel) => {
     switch (modelRowState(model, job)) {
       case "downloading": {
@@ -125,7 +130,9 @@ function LocalModels({ supported, computer }: { supported: boolean; computer: st
                   value={modelRowState(model, job) === "installed" ? copy("{p0} üzerinde yüklü", "Installed on {p0}", { p0: computer }) : label(model)} />
               </NavigationGroup>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, paddingTop: space.sm }}>
-                {working ? <Button label={copy("İptal", "Cancel")} tone="quiet" busy={cancel.isPending} onPress={() => void cancel.mutateAsync({}).catch(() => undefined)} />
+                {working ? <Button label={copy("İptal", "Cancel")} tone="quiet" busy={cancel.isPending} onPress={() => {
+                  if (current()) void cancel.mutateAsync({}).catch(() => undefined);
+                }} />
                   : model.installed ? <>
                     <Button label={copy("Sına", "Test")} tone="quiet" disabled={busy} onPress={() => run(model, "test")} />
                     <Button label={copy("Kaldır", "Remove")} tone="danger" disabled={busy} onPress={() => setConfirming(model)} />

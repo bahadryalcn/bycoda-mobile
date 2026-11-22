@@ -8,6 +8,7 @@ import { ProjectPicker } from "../workspace/project-picker";
 import { useActiveMachine } from "@/state/machines";
 import { Empty, QueryState, Screen } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { useMachineStatus } from "@/ui/machine-bar";
 import { space } from "@/ui/tokens";
 import { DevServersScreen } from "./dev-servers-screen";
 import { RuntimeLogsScreen } from "./runtime-logs-screen";
@@ -37,6 +38,7 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
   const project = visibleProject ?? (remembered?.machineId === machine?.id && remembered?.projectId === projectId ? remembered?.project : undefined);
   const capability = tool === "servers" ? "dev.servers" : tool === "devices" ? "device.host" : tool === "browser" ? "browser.shared" : tool === "terminals" ? "terminals.v1" : tool === "logs" ? "runtime.logs" : tool === "diagnostics" ? "resources.diagnostics" : tool === "usage" ? "usage.sessions.read" : null;
   const supported = !!capability && machine?.capabilities?.includes(capability);
+  const needsCapabilities = !!visibleProject && !!machine && !machine.capabilities;
   const canChooseProject = supported && !!projects.data?.length;
   const toolName = ({ servers: copy("Geliştirme sunucuları", "Dev servers"), logs: copy("Çalışma günlükleri", "Runtime logs"), devices: copy("Cihazlar", "Devices"), browser: copy("Tarayıcı", "Browser"), terminals: copy("Terminaller", "Terminals"), diagnostics: copy("Tanılama", "Diagnostics"), usage: copy("Oturum kullanımı", "Session usage") } as Record<string, string>)[tool] ?? copy("Araçlar", "Tools");
   if (!capability) return (
@@ -50,9 +52,11 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
   return (
     <View style={{ flex: 1 }}>
       {!visibleProject || !supported ? <Screen title={toolName} scroll={false}><View style={{ flex: 1, paddingHorizontal: space.screen }}>
-        <ProjectDirectoryFeedback query={projects} readiness={projects.readiness}
-          privacyUnavailable={projects.privacyUnavailable}
-          loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
+        {needsCapabilities ? <ToolAvailabilityFeedback /> : (
+          <ProjectDirectoryFeedback query={projects} readiness={projects.readiness}
+            privacyUnavailable={projects.privacyUnavailable}
+            loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
+        )}
         {projects.directoryReady && machine?.capabilities && !supported ? <Empty compact={false} illustration="permission"
           title={copy("Kullanılamıyor", "Unavailable")}
           detail={copy("Bu bilgisayar bu aracı sunmuyor: bycoda eski olabilir veya araç bu sistemde yok.", "This computer doesn't offer this tool: bycoda may be outdated or the tool is unavailable here.")}
@@ -78,6 +82,20 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
       </PrivateContentBoundary>
     </View>
   );
+}
+
+function ToolAvailabilityFeedback() {
+  const copy = useCopy();
+  const { health, phase } = useMachineStatus();
+  // Capabilities are still being applied to the paired machine after the descriptor arrives.
+  const query = {
+    ...health,
+    data: undefined,
+    isEnabled: undefined,
+    isPending: true,
+    fetchStatus: phase === "connected" || phase === "checking" ? "fetching" as const : "paused" as const,
+  };
+  return <QueryState query={query} loading="centered" loadingLabel={copy("Bağlantı kontrol ediliyor…", "Checking connection…")} />;
 }
 
 function ProjectToolContent({ tool, project }: { tool: string; project: HostProject }) {

@@ -11,6 +11,7 @@ import {
   Row,
   Sheet,
   Stack,
+  StateView,
 } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
 import { CollectionToolbar } from "@/ui/search-field";
@@ -221,8 +222,14 @@ export function SubagentDetails({
     }
   };
   const { steps, report } = subagentSteps(block);
+  const assignment = block.agentRun?.prompt;
+  const hasAssignment = !!assignment?.trim();
+  const hasReport = !!report;
   const [reader, setReader] = useState<"assignment" | "report">();
-  const readerLease = useMemo(() => ({ active: false }), [readable, reader]);
+  const readerLease = useMemo(
+    () => ({ active: false }),
+    [readable, reader, hasAssignment, hasReport],
+  );
   useLayoutEffect(() => {
     readerLease.active = true;
     return () => {
@@ -233,12 +240,15 @@ export function SubagentDetails({
     if (!readable) setReader(undefined);
   }, [readable]);
   const read = (value: "assignment" | "report") => {
-    if (current() && readerLease.active) setReader(value);
+    const available = value === "assignment" ? hasAssignment : hasReport;
+    if (available && current() && readerLease.active)
+      setReader((openReader) => openReader ?? value);
   };
   const closeReader = () => {
     if (mounted.current && readerLease.active) setReader(undefined);
   };
   const showStopAction = readable && canStop && (!attempted || pending);
+  const readerText = reader === "assignment" ? (hasAssignment ? assignment : undefined) : report;
   const feedback = (
     <>
       <ErrorText error={error} />
@@ -283,7 +293,7 @@ export function SubagentDetails({
                     {[block.agentRun?.agentType, block.agentRun?.model].filter(Boolean).join(" · ")}
                   </Body>
                 ) : null}
-                {block.agentRun?.prompt ? (
+                {hasAssignment ? (
                   <NavigationRow
                     label={copy("Görev", "Assignment")}
                     onPress={() => read("assignment")}
@@ -371,11 +381,11 @@ export function SubagentDetails({
             size="form"
             onClose={closeReader}
           >
-            <MessageText
-              text={reader === "assignment" ? block.agentRun?.prompt || "" : report || ""}
-              context={context}
-              compactMedia
-            />
+            {readerText ? (
+              <MessageText text={readerText} context={context} compactMedia />
+            ) : (
+              <StateView compact title={copy("Kullanılamıyor", "Unavailable")} />
+            )}
           </Sheet>
         ) : null}
       </PrivateContentAccessProvider>

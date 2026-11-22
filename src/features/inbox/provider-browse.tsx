@@ -85,9 +85,11 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
   const scopedAvailability = { ...availability, isEnabled: available, isSuccess: available && availability.isSuccess,
     error: availability.error ?? privateRead?.error ?? null, refetch: refresh };
   const rows = available ? items.data?.items.slice(0, limit) ?? [] : [];
-  const empty = items.data?.items.length === 0 && Object.keys(items.data.errors).length === 0;
   const hasFilters = assigned || all;
-  const searching = search.trim().length > 0;
+  const searching = committedSearch.length > 0;
+  const awaitingSearch = search.trim() !== committedSearch;
+  const empty = !awaitingSearch && items.data?.items.length === 0 &&
+    Object.keys(items.data.errors).length === 0 && !items.data.omittedProjects?.length;
   const scrollMemory = useInboxScrollMemory<(typeof rows)[number]>(memory, origin, initialView?.offset ?? 0,
     available && items.data !== undefined, rows.length, { suspended: !available });
   const dispatch = useCallback((action: InboxBrowseAction) => {
@@ -96,6 +98,7 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
     reduce(action);
   }, [scrollMemory.cancelRestore, canBrowse]);
   const clearFilters = { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => dispatch({ type: "clear-filters" }) };
+  const clearSearch = { label: copy("Aramayı temizle", "Clear search"), onPress: () => dispatch({ type: "clear-search" }) };
   const closeFilters = () => { filterOwner.current = null; setFilterDraft(null); };
   const changeFilters = (next: Filters) => { filterOwner.current = next; setFilterDraft(next); };
   useLayoutEffect(() => { if (!available) closeFilters(); }, [available]);
@@ -140,25 +143,30 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
         {available && notice ? <Notice tone="success" message={notice} /> : null}
         {view.kind === "browse" && !connectionsOpen ? accessFeedback : null}
         {available ? <>
-          {machine?.capabilities?.includes("inbox.jiraBoard.v1") ? <Button tone="quiet" flush
-            label={origin.projectId ? copy("Jira panoları", "Jira boards") : copy("Jira için proje seç", "Select a project for Jira")}
-            disabled={!origin.projectId} onPress={() => { if (canBrowse() && origin.projectId) setJiraBoards(true); }} /> : null}
           <SearchToolbar search={<SearchField label={copy("Ara", "Search")} value={search}
             onChangeText={value => dispatch({type:"search",value})} autoCorrect={false} placeholder={copy("Issue veya PR ara", "Search issues or PRs")} />}
             actions={<>
               <FilterButton count={Number(assigned)+Number(all)} onPress={() => { if(canBrowse()) changeFilters({assigned,all}); }} />
               <ActionMenu label={copy("Diğer işlemler", "More actions")} busy={items.isFetching && items.data !== undefined} actions={[
+                machine?.capabilities?.includes("inbox.jiraBoard.v1") && {
+                  key: "jira-boards",
+                  label: copy("Jira panoları", "Jira boards"),
+                  detail: origin.projectId ? undefined : copy("Jira için proje seç", "Select a project for Jira"),
+                  disabled: !origin.projectId,
+                  opens: true,
+                  onPress: () => { if (canBrowse() && origin.projectId) setJiraBoards(true); },
+                },
+                hasFilters && rows.length > 0 && { key: "clear-filters", ...clearFilters },
                 {key:"connections",label:copy("Bağlı servisler","Connected services"),onPress:()=>{if(canBrowse())setConnectionsOpen(true);}},
                 {key:"refresh",label:copy("Yenile","Refresh"),disabled:items.isFetching,onPress:()=>{void retryItems();}},
               ]} />
             </>} />
-          <AppliedFilters result={items.data ? copy("Kayıtlar: {p0}", "Items: {p0}", { p0: new Intl.NumberFormat(locale).format(items.data.items.length) }) : undefined}
+          <AppliedFilters result={!awaitingSearch && items.data ? copy("Kayıtlar: {p0}", "Items: {p0}", { p0: new Intl.NumberFormat(locale).format(items.data.items.length) }) : undefined}
             filters={[assigned&&copy("Yalnız bana atananlar","Assigned to me only"),all&&copy("Kapalı kayıtları da göster","Include closed items")]} />
-          {hasFilters && !empty ? <Button tone="quiet" {...clearFilters} /> : null}
           <QueryState query={{...items,refetch:retryItems}} empty={empty} searching={searching || hasFilters} emptyIllustration="inbox-empty"
-            emptyTitle={hasFilters ? copy("Bu filtrede kayıt yok", "No items match these filters") : searching
-              ? copy("Eşleşen sonuç yok", "No matching results") : copy("Açık kayıt yok", "No open items")}
-            emptyAction={hasFilters ? clearFilters : undefined} />
+            emptyTitle={searching ? copy("Eşleşen sonuç yok", "No matching results") : hasFilters
+              ? copy("Bu filtrede kayıt yok", "No items match these filters") : copy("Açık kayıt yok", "No open items")}
+            emptyAction={searching ? clearSearch : hasFilters ? clearFilters : undefined} />
           {items.data ? <ProviderInboxFeedback result={items.data} retrying={items.isFetching} onRetry={retryItems} /> : null}
         </> : null}
       </>} />

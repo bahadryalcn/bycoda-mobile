@@ -2,14 +2,17 @@ import { useLocalDraftEpoch } from "@/state/use-local-draft-epoch";
 import { useMobileTheme } from "@/ui/theme";
 import { useLocale } from "@/i18n";
 import { ScreenList } from "@/ui/screen-list";
+import { SwipeActionsGroup } from "@/ui/swipe-actions";
 import { Sheet } from "@/ui/primitives";
+import { getQueryPresentation } from "@/ui/query-presentation";
 import { useProjectList } from "../workspace/use-project-directory";
 import { useLayoutEffect, useMemo, useReducer, useRef, useState, type ComponentRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
+import History from "lucide-react-native/icons/history";
 import Plus from "lucide-react-native/icons/plus";
 import {
-  Button,
+  ActionMenu,
   Body,
   SectionHeader,
   IconButton,
@@ -35,7 +38,7 @@ import type { Note } from "@/domain/types";
 export type { Note } from "@/domain/types";
 import type { NoteList } from "./notes/types";
 import { ExistingNote, NoteEditor } from "./notes/note-editor";
-import { NoteSummaryRow } from "./notes/note-summary-row";
+import { NoteLibraryRow } from "./notes/note-library-row";
 import { noteDirectory, type NoteDirectoryRow, type NoteGrouping, type NoteOrdering } from "./notes/note-directory";
 
 const draftStore = createNoteDraftStore(AsyncStorage);
@@ -81,6 +84,7 @@ export function NotesScreen() {
   const busy = save.isPending || remove.isPending || recovery.isPending;
   const visible = useMemo(() => noteDirectory(query.data?.notes ?? [], search, grouping, ordering, locale), [query.data?.notes, search, grouping, ordering, locale]);
   const canCreate = !editorOpen && !busy && !(!!projectId && !sourceCwd);
+  const offersFirstNote = canCreate && !search.trim() && getQueryPresentation(query, visible.length === 0) === "empty";
   const startNew = () => {
     recovery.reset();
     save.reset();
@@ -98,17 +102,34 @@ export function NotesScreen() {
     });
   };
   return (
-    <ScreenList<NoteDirectoryRow> title={copy("Notlar", "Notes")} query={query} data={visible} keyExtractor={(row) => row.key}
+    <SwipeActionsGroup fill><ScreenList<NoteDirectoryRow> title={copy("Notlar", "Notes")} query={query} data={visible} keyExtractor={(row) => row.key}
       context={!editorOpen ? <Scope allowAll projectId={projectId} onChange={setProjectId} /> : undefined}
       actions={!editorOpen ? (
         <>
-          <IconButton
+          {!offersFirstNote ? <IconButton
             label={copy("Yeni not", "New note")}
             disabled={!canCreate}
             onPress={startNew}
           >
             <Plus size={22} strokeWidth={2.2} color={colors.accent} />
-          </IconButton>
+          </IconButton> : null}
+          <ActionMenu
+            label={copy("Diğer işlemler", "More actions")}
+            busy={recovery.isPending}
+            actions={[{
+              key: "recover-draft",
+              label: copy("Kaydedilmemiş taslağı aç", "Recover unsaved draft"),
+              icon: <History size={18} />,
+              disabled: busy,
+              onPress: () => {
+                void recovery.run(async () => {
+                  const draft = localDraft ? await localDraft.recover() : null;
+                  if (draft) dispatch({ type: "recover", initial: draft, expected: flow });
+                  return draft;
+                });
+              },
+            }]}
+          />
         </>
       ) : undefined}
       header={<>
@@ -145,26 +166,19 @@ export function NotesScreen() {
             />
           </FilterSheet>
           <SearchToolbar
-            search={<SearchField ref={searchInput} label={copy("Başlık, metin veya etikette ara", "Search note titles, text and tags")} value={search} onChangeText={setSearch} />}
+            search={<SearchField
+              ref={searchInput}
+              label={copy("Başlık, metin veya etikette ara", "Search note titles, text and tags")}
+              placeholder={copy("Notlarda ara", "Search notes")}
+              value={search}
+              onChangeText={setSearch}
+            />}
             actions={<FilterButton count={(grouping !== "none" ? 1 : 0) + (ordering !== "updated" ? 1 : 0)} onPress={() => setViewDraft({ grouping, ordering })} />}
           />
           <AppliedFilters filters={[grouping !== "none" && (grouping === "project" ? copy("Projeye göre grupla", "Group by project") : copy("Etikete göre grupla", "Group by tag")),
             ordering !== "updated" && (ordering === "created" ? copy("Son oluşturulanlar", "Recently created") : copy("Başlığa göre sırala", "Sort by title"))]} />
         </>
       ) : null}
-      {!editorOpen ? <Button
-        tone="quiet"
-        label={copy("Kaydedilmemiş taslağı aç", "Recover unsaved draft")}
-        busy={recovery.isPending}
-        disabled={save.isPending || remove.isPending || recovery.isPending}
-        onPress={() => {
-          void recovery.run(async () => {
-            const draft = localDraft ? await localDraft.recover() : null;
-            if (draft) dispatch({ type: "recover", initial: draft, expected: flow });
-            return draft;
-          });
-        }}
-      /> : null}
       <MutationState mutation={recovery} />
       {flow.kind === "closed" && recovery.isSuccess && recovery.data === null && (
         <Notice
@@ -175,11 +189,13 @@ export function NotesScreen() {
           )}
         />
       )}
-      <MutationState
-        mutation={save}
-        success={copy("Not bilgisayara kaydedildi.", "Note saved to computer.")}
-      />
-      <MutationState mutation={remove} success={copy("Not silindi.", "Note deleted.")} />
+      {!editorOpen ? <>
+        <MutationState
+          mutation={save}
+          success={copy("Not bilgisayara kaydedildi.", "Note saved to computer.")}
+        />
+        <MutationState mutation={remove} success={copy("Not silindi.", "Note deleted.")} />
+      </> : null}
       <Sheet visible={editorOpen} size="full" title={flow.kind === "draft" && flow.initial.expectedUpdatedAt === 0 ? copy("Yeni not", "New note") : copy("Notu düzenle", "Edit note")} onClose={close}>
         {flow.kind === "draft" && <NoteEditor key={flow.initial.id} initial={flow.initial} {...editorProps} />}
         {flow.kind === "existing" && <ExistingNote key={flow.id} id={flow.id} {...editorProps} />}
@@ -195,7 +211,7 @@ export function NotesScreen() {
             emptyAction={
               search.trim() && query.data?.notes.length
                 ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
-                : !search.trim() && canCreate
+                : offersFirstNote
                   ? { label: copy("Yeni not", "New note"), onPress: startNew }
                   : undefined
             }
@@ -209,7 +225,16 @@ export function NotesScreen() {
       ) : null}
     </>}
       renderItem={({ item }) => item.kind === "heading" ? <SectionHeader count={item.count} title={item.group === null ? (item.grouping === "tag" ? copy("Etiketsiz", "Untagged") : copy("Projesiz notlar", "Notes without a project")) : item.grouping === "tag" ? `#${item.group}` : projects.data?.find((project) => project.cwd === item.group)?.name ?? item.group} />
-        : <NoteSummaryRow note={item.note} projectName={!projectId && grouping !== "project" ? projects.data?.find((project) => project.cwd === item.note.sourceCwd)?.name : undefined} disabled={editorOpen || busy} onPress={() => { recovery.reset(); save.reset(); remove.reset(); dispatch({ type: "open", id: item.note.id }); }} />}
-    />
+        : <NoteLibraryRow
+            note={item.note}
+            projectName={!projectId && grouping !== "project" ? projects.data?.find((project) => project.cwd === item.note.sourceCwd)?.name : undefined}
+            machineName={machine?.name}
+            projectId={projectId}
+            busy={editorOpen || busy}
+            canDelete={!!machine && query.isEnabled !== false && query.fetchStatus !== "paused" && !query.error}
+            onOpen={() => { recovery.reset(); save.reset(); remove.reset(); dispatch({ type: "open", id: item.note.id }); }}
+            onDelete={(id, expectedUpdatedAt) => remove.mutate({ id, expectedUpdatedAt })}
+          />}
+    /></SwipeActionsGroup>
   );
 }

@@ -7,21 +7,34 @@ import { useComposerDelivery } from "./use-composer-delivery";
 
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 
-const client = { machine: { capabilities: ["sessions.steer"] } } as never;
+const client = { machine: { capabilities: ["sessions.steer", "sessions.steer.claude"] } } as never;
 const session = (status: string, extra: Record<string, unknown> = {}) =>
-  ({ status, runId: "run", session: {}, ...extra }) as unknown as HostSession;
+  ({ status, runId: "run", session: { harness: "claude" }, ...extra }) as unknown as HostSession;
 let latest: ReturnType<typeof useComposerDelivery>;
 let root: ReturnType<typeof createRoot> | undefined;
 const props = { client, queueSupported: true };
 
-function Probe(input: { session?: HostSession; queueSupported: boolean; busyPreferred?: "steer" | "queue" }) {
-  const delivery = useComposerDelivery({ client, session: input.session, queueSupported: input.queueSupported, busyPreferred: input.busyPreferred });
+function Probe(input: {
+  session?: HostSession;
+  queueSupported: boolean;
+  busyPreferred?: "steer" | "queue";
+}) {
+  const delivery = useComposerDelivery({
+    client,
+    session: input.session,
+    queueSupported: input.queueSupported,
+    busyPreferred: input.busyPreferred,
+  });
   useLayoutEffect(() => {
     latest = delivery;
   });
   return null;
 }
-async function render(input: { session?: HostSession; queueSupported?: boolean; busyPreferred?: "steer" | "queue" }) {
+async function render(input: {
+  session?: HostSession;
+  queueSupported?: boolean;
+  busyPreferred?: "steer" | "queue";
+}) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   root ??= createRoot(document.createElement("div"));
   await act(async () => root!.render(createElement(Probe, { ...props, ...input })));
@@ -57,6 +70,11 @@ it("has no composer override for the Settings preference", async () => {
   expect(latest).not.toHaveProperty("choose");
   expect(latest).not.toHaveProperty("showModeChip");
   expect(latest).not.toHaveProperty("options");
+});
+
+it("queues on a running provider without advertised steering", async () => {
+  await render({ session: session("running", { session: { harness: "acp" } }) });
+  expect(latest.mode).toBe("queue");
 });
 
 it("returns to Send after a queued busy preference, without a sticky local mode", async () => {

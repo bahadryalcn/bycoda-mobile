@@ -1,5 +1,6 @@
 import type AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
+import { createSingleFlight } from "./single-flight";
 
 type PreferenceStorage = Pick<typeof AsyncStorage, "getItem" | "setItem">;
 export type PreferenceStorageOperation = "read" | "save";
@@ -39,6 +40,7 @@ type PreferenceOptions<P> = {
  */
 export function createPreferenceStore<P>({ key, storage, defaults, normalize }: PreferenceOptions<P>) {
   let hydration: Promise<void> | undefined;
+  const retryFlight = createSingleFlight<void>();
   let persistence: Promise<unknown> = Promise.resolve();
   let loaded = false;
   let selection = 0;
@@ -64,13 +66,18 @@ export function createPreferenceStore<P>({ key, storage, defaults, normalize }: 
       if (loaded) return Promise.resolve();
       hydration ??= Promise.resolve()
         .then(() => storage.getItem(key))
-        .then((raw) => {
+        .then(async (raw) => {
           let stored: unknown = {};
           try { stored = raw ? JSON.parse(raw) : {}; } catch { stored = {}; }
           const base = stored && typeof stored === "object" ? stored : {};
+          const preferences = normalize({ ...base, ...unsaved });
           loaded = true;
-          set({ preferences: normalize({ ...base, ...unsaved }), storageError: null });
-          if (Object.keys(unsaved).length > 0) void save();
+          if (Object.keys(unsaved).length > 0) {
+            set({ preferences });
+            await save();
+          } else {
+            set({ preferences, storageError: null });
+          }
         })
         .catch(() => {
           set({ storageError: new PreferenceStorageError("read") });
@@ -86,11 +93,11 @@ export function createPreferenceStore<P>({ key, storage, defaults, normalize }: 
       hydrated: false,
       storageError: null,
       hydrate: () => read(),
-      retry: () => {
+      retry: () => retryFlight.run(async () => {
         const error = get().storageError;
-        if (!error) return Promise.resolve();
-        return error.operation === "read" ? read() : save();
-      },
+        if (!error) return;
+        await (error.operation === "read" ? hydration ?? read() : save());
+      }),
       update: async (patch) => {
         await read();
         const current = get().preferences;

@@ -18,7 +18,7 @@ vi.mock("lucide-react-native/icons/eye", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/git-pull-request", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/shield-check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: () => null }));
-vi.mock("expo-router",()=>({router:{navigate:state.push},useLocalSearchParams:()=>({})}));
+vi.mock("expo-router",()=>({router:{navigate:state.push,push:state.push},useLocalSearchParams:()=>({})}));
 vi.mock("expo-router/react-navigation",()=>({useIsFocused:()=>true}));
 vi.mock("../inbox/inbox-seen-store",()=>({useInboxSeen:{getState:()=>({markSeen:async()=>undefined})}}));
 vi.mock("expo-localization",()=>({getLocales:()=>[{languageTag:"en-US"}]}));
@@ -40,7 +40,7 @@ vi.mock("../inbox/attention-row",()=>({AttentionRow:({item,onPress}:{item:{title
 vi.mock("@/ui/primitives",()=>{
  const Wrap=({children}:PropsWithChildren)=>createElement("div",null,children);
  const Button=({label,onPress}:any)=>createElement("button",{onClick:onPress},label);
- return{Button,Body:Wrap,Row:Wrap,SectionHeader:({title}:{title:string})=>createElement("h3",null,title),Badge:({label}:{label:string})=>createElement("span",null,label),
+ return{Button,Body:Wrap,Row:Wrap,Stack:Wrap,SectionHeader:({title}:{title:string})=>createElement("h3",null,title),Badge:({label}:{label:string})=>createElement("span",null,label),
  ActionMenu:({actions}:any)=>{state.actions=actions.filter(Boolean);return createElement("div",null,...state.actions.map(a=>createElement("button",{key:a.key,onClick:a.onPress},a.key)));},
  Sheet:({visible,children,onClose}:any)=>visible?createElement("aside",null,children,createElement("button",{onClick:onClose},"Close help")):null,Screen:Wrap,ScreenHeader:Wrap,StateView:({title,description}:{title:string;description?:string})=>createElement("p",null,title,description),
  QueryState:({query,empty}:{query:{error?:Error;data?:unknown};empty?:boolean})=>query.error && query.data === undefined?createElement("p",null,query.error.message):empty?createElement("p",null,"Nothing needs your attention"):null,
@@ -106,9 +106,20 @@ it("shows computer recovery without reading or navigating when no machine is sel
 
 it("opens reachable secondary help without a permanent help row and retains refresh",async()=>{
  await mount();expect(host.querySelector("aside")).toBeNull();await act(async()=>state.actions.find(a=>a.key==="help")!.onPress());
- expect(host.querySelector("aside")!.textContent).toContain("GitHub, GitLab, Jira, Linear and Azure");
- await act(async()=>host.querySelector("aside button")!.dispatchEvent(new MouseEvent("click",{bubbles:true})));expect(host.querySelector("aside")).toBeNull();
+ expect(host.querySelector("aside")!.textContent).toContain("GitHub, GitLab, Jira, Linear, Azure");
+ await act(async()=>[...host.querySelectorAll<HTMLButtonElement>("aside button")].find(b=>b.textContent==="Close help")!.click());expect(host.querySelector("aside")).toBeNull();
  await act(async()=>state.actions.find(a=>a.key==="refresh")!.onPress());expect(state.refetch).toHaveBeenCalledOnce();
+});
+it("opens the provider inbox from help and keeps the dedicated pull request route there",async()=>{
+ await mount();
+ const button=(label:string,selector="button")=>[...host.querySelectorAll<HTMLButtonElement>(selector)].find(b=>b.textContent===label);
+ expect(button("Pull requests")).toBeUndefined();
+ await act(async()=>state.actions.find(a=>a.key==="help")!.onPress());
+ await act(async()=>button("Issues & PRs","aside button")!.click());
+ expect(host.querySelector("aside")).toBeNull();
+ expect(host.textContent).toContain("Provider mode");
+ await act(async()=>button("Pull requests")!.click());
+ expect(state.push).toHaveBeenCalledExactlyOnceWith("/pull-requests");
 });
 it("retires open help and its trigger across access loss and restoration",async()=>{
  await mount();const old=state.actions.find(a=>a.key==="help")!.onPress;await act(async()=>old());expect(host.querySelector("aside")).not.toBeNull();

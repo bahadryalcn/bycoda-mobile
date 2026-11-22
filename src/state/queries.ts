@@ -48,13 +48,18 @@ export function useHostReadActive() {
   return focused && available && privateAccess.allowed && privateAccess.check();
 }
 
-/** The saved provider consent for the active computer has not been read yet (app start). */
+/** The active computer's provider scope has no result from storage yet. */
 export function useConsentPending() {
   const machine = useActiveMachine();
   const scope = machine ? consentScope(machine.environmentId, machine.providers ?? []) : "";
   return useProviderPermission(
-    (state) => !!scope && !Object.keys(state.scopes).length,
+    (state) => !!scope && !Object.hasOwn(state.scopes, scope),
   );
+}
+
+export function useHostConsentGranted(machine: MobileMachine | null) {
+  const scope = machine ? consentScope(machine.environmentId, machine.providers ?? []) : "";
+  return useProviderPermission((state) => isScopePermitted(state.scopes, scope));
 }
 
 export function useHostClient() {
@@ -72,7 +77,7 @@ export function useHostClient() {
     (s) => s.hydrated && !s.storageError && !isMachinePending(s, machine?.id),
   );
   const scope = machine ? consentScope(machine.environmentId, machine.providers ?? []) : "";
-  const consented = useProviderPermission((state) => isScopePermitted(state.scopes, scope));
+  const consented = useHostConsentGranted(machine);
   const usable =
     !!machine &&
     unlocked &&

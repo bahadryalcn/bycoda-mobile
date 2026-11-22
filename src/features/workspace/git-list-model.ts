@@ -1,6 +1,7 @@
 import type { GitChangedFile } from "./wire";
 
 export type GitListFilter = "all" | "unstaged" | "staged";
+export type GitChangeGroup = Exclude<GitListFilter, "all">;
 export type GitListRow =
   | { kind: "group"; key: string; staged: boolean; count: number }
   | { kind: "file"; key: string; staged: boolean; file: GitChangedFile };
@@ -10,6 +11,7 @@ export function gitListRows(
   files: readonly GitChangedFile[],
   query: string,
   filter: GitListFilter,
+  collapsed: readonly GitChangeGroup[] = [],
 ): GitListRow[] {
   const search = query.trim().replaceAll("\\", "/").toLocaleLowerCase();
   return (["staged", "unstaged"] as const).flatMap((group): GitListRow[] => {
@@ -22,12 +24,12 @@ export function gitListRows(
     const staged = group === "staged";
     return [
       { kind: "group", key: group, staged, count: matches.length },
-      ...matches.map((file) => ({
+      ...(collapsed.includes(group) ? [] : matches.map((file) => ({
         kind: "file" as const,
         key: group + ":" + file.relative,
         staged,
         file,
-      })),
+      }))),
     ];
   });
 }

@@ -15,7 +15,7 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: "IconTile" }));
 vi.mock("@/ui/info-hint", () => ({ HintLabel: "HintLabel" }));
-vi.mock("@/ui/primitives", () => ({ Body: "Body", Button: "Button", Heading: "Heading", NavigationGroup: "NavigationGroup", NavigationRow: "NavigationRow", Row: "Row", Stack: "Stack" }));
+vi.mock("@/ui/primitives", () => ({ Body: "Body", Button: "Button", Heading: "Heading", FormActions: "FormActions", Notice: "Notice", NavigationGroup: "NavigationGroup", NavigationRow: "NavigationRow", Row: "Row", Stack: "Stack" }));
 vi.mock("./manual-connection-form", () => ({ ManualConnectionForm: "ManualConnectionForm" }));
 vi.mock("./pairing-preview", () => ({ PairingPreview: "PairingPreview" }));
 vi.mock("./pairing-paste", () => ({ PairingPaste: "PairingPaste" }));
@@ -38,4 +38,20 @@ it("opens QR scanning directly without asking users to choose a network first", 
   expect(paste).toBeDefined();
   paste!.props.onPress();
   expect(begin).toHaveBeenCalledWith("paste");
+});
+
+it("offers a new code instead of submitting a rejected ticket again", () => {
+  const begin = vi.fn();
+  const cancel = vi.fn();
+  const connect = vi.fn();
+  const message = "This code is no longer available. Create a new code on your computer.";
+  const controller = { entry: { kind: "rejected-code", message }, busy: false, begin, cancel, connect } as unknown as PairingEntryProps["controller"];
+  const nodes = elements(PairingEntry({ controller, disabled: false }));
+  expect(nodes.find(node => node.type === "Notice")?.props.message).toBe(message);
+  const actions = nodes.find(node => node.type === "FormActions")!;
+  expect(actions.props.submitLabel).toBe("Use a new code");
+  expect(actions.props.onCancel).toBe(cancel);
+  actions.props.onSubmit();
+  expect(begin).toHaveBeenCalledExactlyOnceWith("choices");
+  expect(connect).not.toHaveBeenCalled();
 });

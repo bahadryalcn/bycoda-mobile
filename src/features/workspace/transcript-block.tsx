@@ -64,21 +64,27 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   const locale = useLocale();
   const { colors, semanticColors, uiStyles } = useMobileTheme();
   const [reviewPlan, setReviewPlan] = useState(false);
-  const [orchestrationOpen, setOrchestrationOpen] = useState(false);
+  const [orchestrationOpening, setOrchestrationOpening] = useState<{ key: string }>();
   const typography = useChatTextStyles(useChatAppearance((state) => state.textSize));
   const [open, setOpen] = useState(false);
   const [actions, setActions] = useState(false);
   const [requested, setRequested] = useState(false);
+  const readFullContent =
+    !!block.remoteContent && (requested || open || activityDetail || !!block.plan || !!block.taskList);
   const detail = useSessionBlock({
     scope,
     blockId: block.id,
     getRevision,
     digest: block.remoteContent?.digest,
-    enabled:
-      (requested || open || activityDetail || !!block.plan || !!block.taskList) &&
-      !!block.remoteContent,
+    enabled: readFullContent,
   });
   const value = detail.data ?? block;
+  const proposal = value.orchestration;
+  const proposalKey = proposal ? JSON.stringify([
+    scope.machineId, scope.sessionId, value.id, proposal.leadId, proposal.cwd, proposal.checkoutCwd,
+  ]) : undefined;
+  const reviewedProposal = orchestrationOpening?.key === proposalKey ? proposal : undefined;
+  const closeOrchestration = () => setOrchestrationOpening((current) => current === orchestrationOpening ? undefined : current);
   const conversational = value.role === "user" || value.role === "assistant";
   const state = activityState(value);
   const isError =
@@ -196,20 +202,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           />
         ) : null}
       </Sheet>
-      {(open || activityDetail || requested || value.plan || value.taskList) &&
-      value.remoteContent ? (
-        <QueryState query={detail} />
-      ) : null}
-      {(open || activityDetail || requested || value.plan || value.taskList) && detail.error ? (
-        <Button
-          busy={detail.isFetching}
-          label={copy("İçeriği yeniden yükle", "Retry loading content")}
-          tone="quiet"
-          onPress={() => {
-            void detail.refetch();
-          }}
-        />
-      ) : null}
+      {readFullContent ? <QueryState query={detail} loading="inline" compact /> : null}
       {text && value.role === "tool" && !value.agentRun ? (
         <MessageCode code={text} output compact error={isError} allowPreview={false} context={context} readerTitle={inputBlock ? copy("Komut", "Command") : undefined} copyLabel={inputBlock ? copy("Komutu kopyala", "Copy command") : undefined} />
       ) : text && value.role === "user" ? (
@@ -246,25 +239,29 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           detailsDisabled={!!value.remoteContent && !detail.data}
         />
       ) : null}
-      {value.orchestration ? (
+      {proposalKey ? (
         <Button
           label={copy("Koordinasyon ayrıntıları", "Coordination details")}
           tone="quiet"
           disabled={!!value.remoteContent && !detail.data}
-          onPress={() => setOrchestrationOpen(true)}
+          onPress={() => setOrchestrationOpening({ key: proposalKey })}
         />
       ) : null}
       <Sheet
-        visible={orchestrationOpen}
-        title={
-          value.orchestration?.title || copy("Koordinasyon ayrıntıları", "Coordination details")
-        }
+        visible={!!orchestrationOpening}
+        title={reviewedProposal?.title || copy("Koordinasyon ayrıntıları", "Coordination details")}
         size="full"
         scroll={false}
-        onClose={() => setOrchestrationOpen(false)}
+        onClose={closeOrchestration}
       >
-        {orchestrationOpen && value.orchestration ? (
-          <OrchestrationDetails block={value} scope={scope} context={context} onClose={() => setOrchestrationOpen(false)} />
+        {orchestrationOpening ? (
+          <OrchestrationDetails
+            key={reviewedProposal ? orchestrationOpening.key : "unavailable"}
+            block={reviewedProposal ? value : { ...value, orchestration: undefined }}
+            scope={scope}
+            context={context}
+            onClose={closeOrchestration}
+          />
         ) : null}
       </Sheet>
       <TranscriptStructured block={value} context={context} compactAgent compactOrchestration />

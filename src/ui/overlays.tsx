@@ -50,6 +50,7 @@ function OverlayLayer({
   id,
   entry,
   active,
+  topmost,
   contents,
   onHidden,
   onElement,
@@ -57,6 +58,7 @@ function OverlayLayer({
   id: string;
   entry: OverlayState<OverlayEntry>;
   active: boolean;
+  topmost: boolean;
   contents: OverlayContentStore;
   onHidden(id: string, generation: number): void;
   onElement(id: string, value: unknown): void;
@@ -91,7 +93,7 @@ function OverlayLayer({
       accessibilityElementsHidden={!active || !permitted}
       aria-hidden={!active || !permitted}
       importantForAccessibility={active && permitted ? "auto" : "no-hide-descendants"}
-      pointerEvents={active && permitted && entry.visible ? "auto" : "none"}
+      pointerEvents={topmost && permitted && entry.visible ? "auto" : "none"}
     >
       <RouteFocusContext.Provider value={entry.value.routeFocused !== false}>
       <LayerPriority.Provider value={entry.value.priority}>
@@ -154,8 +156,8 @@ export function OverlayProvider({ children }: PropsWithChildren) {
     ? [...entries.entries()].sort((a, b) => a[1].value.priority - b[1].value.priority)
     : [];
   const accessibleLayers = layers.filter(([, entry]) => entry.value.routeFocused !== false && (entry.value.privateAccess?.check() ?? true));
-  const active = accessibleLayers.at(-1)?.[1];
-  // A closing layer stays mounted until its fade ends; only a visible layer may consume Android back.
+  const topmost = accessibleLayers.at(-1)?.[1];
+  // The closing layer still blocks pointer input during its fade. The visible layer owns Back and accessibility.
   const backOwner = accessibleLayers.filter(([, entry]) => entry.visible).at(-1)?.[1];
   useLayoutEffect(() => {
     if (process.env.EXPO_OS !== "web" || typeof document === "undefined") return;
@@ -189,10 +191,12 @@ export function OverlayProvider({ children }: PropsWithChildren) {
       <View style={uiStyles.screen}>
         <View
           ref={background}
+          // Keep native screen stacks parented while modal accessibility and touch blocking change.
+          collapsable={false}
           style={uiStyles.screen}
-          pointerEvents={active ? "none" : "auto"}
-          accessibilityElementsHidden={!!active}
-          importantForAccessibility={active ? "no-hide-descendants" : "auto"}
+          pointerEvents={topmost ? "none" : "auto"}
+          accessibilityElementsHidden={!!backOwner}
+          importantForAccessibility={backOwner ? "no-hide-descendants" : "auto"}
         >
           {children}
         </View>
@@ -201,7 +205,8 @@ export function OverlayProvider({ children }: PropsWithChildren) {
             key={id}
             id={id}
             entry={entry}
-            active={entry === active}
+            active={entry === backOwner}
+            topmost={entry === topmost}
             contents={contents}
             onHidden={finishClose}
             onElement={captureElement}

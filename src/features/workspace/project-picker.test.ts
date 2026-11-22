@@ -40,6 +40,8 @@ vi.mock("@/ui/primitives", () => {
     StateView: ({ title, description, action }: any) => createElement("div", null, title, description, action ? createElement(Button, { label: action.label, onPress: action.onPress }) : null),
     QueryState: ({ query, empty, emptyTitle, emptyAction, onManageConnections }: any) => query.error
       ? createElement("div", null, query.error.message, createElement(Button, { label: "Manage connections", onPress: onManageConnections }))
+      : query.fetchStatus === "paused"
+        ? createElement("div", null, "Waiting for a connection", createElement(Button, { label: "Manage connections", onPress: onManageConnections }))
       : empty ? createElement("div", null, emptyTitle, emptyAction ? createElement(Button, { label: emptyAction.label, onPress: emptyAction.onPress }) : null) : null,
   };
 });

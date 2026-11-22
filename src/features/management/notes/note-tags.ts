@@ -10,6 +10,8 @@ export function noteTagIssue(tags: readonly string[]): "count" | "length" | unde
   if (tags.length > 20) return "count";
 }
 
+export const NOTE_TITLE_LIMIT = 200;
+
 export function noteTitleTooLong(title: string): boolean {
-  return Array.from(title.trim()).length > 200;
+  return Array.from(title.trim()).length > NOTE_TITLE_LIMIT;
 }

@@ -1,6 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
-import { createContext, use, type ReactNode } from "react";
-import { StyleSheet, View, useWindowDimensions, type TextProps } from "react-native";
+import { createContext, use, type ReactNode, type Ref } from "react";
+import { StyleSheet, View, useWindowDimensions, type HostInstance, type TextProps } from "react-native";
 import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
 import { Separator as PanelSeparator } from "panelui-native/components/separator";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
@@ -52,6 +52,7 @@ export function NavigationRow({
   emphasized,
   separator,
   accessibilityLabel,
+  ref,
   intent = selected === undefined ? "navigate" : "select",
   compact = false,
 }: {
@@ -65,6 +66,7 @@ export function NavigationRow({
   /** Optional preview limit when the full label has an explicit reader. */
   labelLines?: number;
   accessibilityLabel?: string;
+  ref?: Ref<HostInstance>;
   detail?: string;
   /** Secondary context gets its own space rather than displacing the main description. */
   metadata?: string;
@@ -98,6 +100,7 @@ export function NavigationRow({
   const grows = useWindowDimensions().fontScale > 1;
   const row = (
     <AnimatedPressable
+      ref={ref}
       accessibilityRole="button"
       pressScale={0.99}
       pressOpacity={0.85}

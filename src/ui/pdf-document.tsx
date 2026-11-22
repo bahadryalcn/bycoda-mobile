@@ -61,8 +61,10 @@ function PdfOpening({ uri, name, context }: { uri: string; name: string; context
       if (!valid()) return; setFailed(false); setAttempt(value => value + 1); if (query.error) void query.refetch({ cancelRefetch: false });
     }} /> : null}
     {data && !failed ? <>
-      {!expanded ? frame(false) : null}
-      <Button tone="quiet" label={copy("PDF'yi büyüt", "Expand PDF")} onPress={() => { if (valid()) setExpanded(true); }} />
+      {!expanded ? <>
+        <Button tone="quiet" label={copy("PDF'yi büyüt", "Expand PDF")} onPress={() => { if (valid()) setExpanded(true); }} />
+        {frame(false)}
+      </> : null}
       <Sheet visible={expanded} size="full" scroll={false} title={name} onClose={() => { if (valid()) setExpanded(false); }}>
         {expanded ? frame(true) : null}
       </Sheet>

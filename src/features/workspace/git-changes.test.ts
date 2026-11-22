@@ -6,8 +6,13 @@ vi.mock("lucide-react-native/icons/circle-check", () => ({ default: "CheckCircle
 vi.mock("lucide-react-native/icons/download", () => ({ default: "Download" }));
 vi.mock("lucide-react-native/icons/arrow-down-to-line", () => ({ default: "ArrowDownToLine" }));
 vi.mock("lucide-react-native/icons/arrow-up-from-line", () => ({ default: "ArrowUpFromLine" }));
+vi.mock("lucide-react-native/icons/wand-sparkles", () => ({ default: "WandSparkles" }));
+vi.mock("lucide-react-native/icons/square", () => ({ default: "Square" }));
+vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: "ChevronDown" }));
+vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: "ChevronRight" }));
 vi.mock("lucide-react-native/icons/git-commit-horizontal", () => ({ default: "GitCommitHorizontal" }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
+vi.mock("@/ui/info-hint", () => ({ HintLabel: "HintLabel" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: Record<string, string | number>) => en.replace(/\{p(\d)\}/g, (_m, n: string) => String(values?.[`p${n}`])) }));
 vi.mock("@/i18n", () => ({ useLocale: () => "de" }));
 vi.mock("@/ui/primitives", () => ({ Body: "Body", Button: "Button", Disclosure: "Disclosure", Field: "Field", Row: "Row" }));

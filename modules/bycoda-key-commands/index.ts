@@ -8,8 +8,17 @@ export type { KeyCommandSpec } from "./src/commands";
 type NativeCommands = {
   setCommands(commands: RegisteredKeyCommand[]): Promise<void>;
   addListener(name: "onKeyCommand", listener: (event: { id: string }) => void): { remove(): void };
+  showTerminalKeyboard?(viewTag: number): Promise<boolean>;
+  hideTerminalKeyboard?(viewTag: number): Promise<boolean>;
 };
 const native = Platform.OS === "web" ? null : requireOptionalNativeModule<NativeCommands>("BycodaKeyCommands");
+
+export function showTerminalKeyboard(viewTag: number) {
+  return native?.showTerminalKeyboard?.(viewTag) ?? Promise.resolve(false);
+}
+export function hideTerminalKeyboard(viewTag: number) {
+  return native?.hideTerminalKeyboard?.(viewTag);
+}
 const registry = createKeyCommandRegistry(native && {
   setCommands: (commands) => native.setCommands(commands),
   subscribe: (listener) => native.addListener("onKeyCommand", ({ id }) => listener(id)),

@@ -66,6 +66,15 @@ it("checks a revoked report capability at invocation and latches report navigati
 it("updates the complete-response copy target without replaying an older write",async()=>{
  let done!:()=>void;f.clipboard.mockImplementationOnce(()=>new Promise<void>(resolve=>{done=resolve;}));await render();await click("Copy complete response");props={...props,responseText:"New complete response"};await render();await act(async()=>done());expect(f.close).not.toHaveBeenCalled();await click("Copy complete response");expect(f.clipboard.mock.calls.map(call=>call[0])).toEqual(["Complete response","New complete response"]);expect(f.close).toHaveBeenCalledTimes(1);
 });
+it("keeps message actions open when the clipboard declines a copy", async () => {
+  f.clipboard.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  await render();
+  await click("Copy message");
+  expect(f.close).not.toHaveBeenCalled();
+  expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  await click("Copy message");
+  expect(f.close).toHaveBeenCalledOnce();
+});
 it("keeps share cancellation quiet and anchors the iOS handoff",async()=>{
  vi.stubEnv("EXPO_OS","ios");f.share.mockResolvedValue({action:"dismissedAction"});await render();await click("Share");expect(f.share).toHaveBeenCalledWith({message:props.text},{anchor:73});expect(container.textContent).toContain("Sharing was cancelled.");expect(container.querySelector('[role="alert"]')).toBeNull();expect(f.close).not.toHaveBeenCalled();
 });

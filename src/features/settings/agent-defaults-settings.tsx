@@ -2,11 +2,14 @@ import { useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { Button, Disclosure, FormActions, Notice, NumberField, QueryState, SegmentedControl, SelectField, Stack, ToggleField } from "@/ui/primitives";
+import { Button, Disclosure, FormActions, Notice, QueryState, SegmentedControl, SelectField, Stack, ToggleField } from "@/ui/primitives";
+import { useLocale } from "@/i18n";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { AUTO_ARCHIVE_CAPABILITY, confirmAgentDefaults, inactiveDays, readAgentDefaults, withoutArchive, type AgentDefaultsRecord } from "./settings-draft";
+import { LimitPresets } from "./limit-presets";
 
 const CAPABILITY = "host.settings.behavior.v1";
+const INACTIVE_DAY_PRESETS = ["0", "7", "14", "30", "60", "90", "180", "365"] as const;
 export function AgentDefaultsSettings({ current, enabled }: { current(): boolean; enabled: boolean }) {
   const copy = useCopy(), machine = useActiveMachine();
   const supported = enabled && machine?.capabilities?.includes(CAPABILITY) === true;
@@ -35,6 +38,7 @@ export function AgentDefaultsSettings({ current, enabled }: { current(): boolean
 }
 function AgentDefaultsEditor({ initial, current, archive, currentArchive, onReload }: { initial: AgentDefaultsRecord; current(): boolean; archive: boolean; currentArchive(): boolean; onReload(): Promise<AgentDefaultsRecord> }) {
   const copy = useCopy();
+  const locale = useLocale();
   const [opening, setOpening] = useState(initial), [edits, setEdits] = useState<AgentDefaultsRecord | null>(null);
   const [days, setDays] = useState(String(initial.archiveInactiveDays));
   const [held, setHeld] = useState(false), [busy, setBusy] = useState(false);
@@ -83,12 +87,20 @@ function AgentDefaultsEditor({ initial, current, archive, currentArchive, onRelo
     ]} onChange={next => update("streamingTextMode", next as AgentDefaultsRecord["streamingTextMode"])} />
     {archive ? <>
       <ToggleField label={copy("PR birleştirilince konuşmayı arşivle", "Archive conversation when linked PR is merged")} value={value.archiveMergedSessions} disabled={blocked} onChange={next => update("archiveMergedSessions", next)} />
-      <NumberField label={copy("Hareketsiz gün sonunda arşivle", "Archive after inactive days")} hint={copy("0 kapalı. Çalışan konuşmalar, taslaklar ve bekleyen sorular korunur.", "0 disables. Running conversations, drafts and pending questions are protected.")}
-        value={days} editable={!blocked} onChangeText={setDays} />
+      <LimitPresets
+        label={copy("Hareketsiz gün sonunda arşivle", "Archive after inactive days")}
+        customLabel={copy("Hareketsiz gün sayısı", "Inactive days")}
+        hint={copy("0 kapalı. Çalışan konuşmalar, taslaklar ve bekleyen sorular korunur.", "0 disables. Running conversations, drafts and pending questions are protected.")}
+        value={days}
+        values={INACTIVE_DAY_PRESETS}
+        format={(value) => value === "0" ? copy("Kapalı", "Off") : copy("{p0} g", "{p0} d", { p0: new Intl.NumberFormat(locale).format(Number(value)) })}
+        disabled={blocked}
+        onChange={setDays}
+      />
     </> : null}
     {!valid ? <Notice tone="warning" message={copy("0 ile 3650 arasında tam gün girin.", "Enter a whole number of days from 0 to 3650.")} /> : null}
     {held ? <Notice tone="warning" message={copy("Kaydetme doğrulanamadı. Tekrar göndermeden güncel ayarları yükleyin; düzenlemeler sıfırlanır.", "Save was not confirmed. Load current settings before sending again; edits will reset.")} /> : null}
-    <FormActions submitLabel={copy("Ajan varsayılanlarını kaydet", "Save agent defaults")} busy={busy} disabled={blocked || !dirty || !valid} onSubmit={() => void submit()} />
+    <FormActions placement="inline" submitLabel={copy("Ajan varsayılanlarını kaydet", "Save agent defaults")} busy={busy} disabled={blocked || !dirty || !valid} onSubmit={() => void submit()} />
     {held ? <Button label={copy("Güncel ayarları yükle", "Load current settings")} busy={busy} disabled={busy} onPress={() => void reload()} /> : null}
   </Stack>;
 }

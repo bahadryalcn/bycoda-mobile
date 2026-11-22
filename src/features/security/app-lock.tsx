@@ -21,9 +21,40 @@ import { fontSize, lineHeight, metrics, space } from "../../ui/tokens";
 
 import { Illustration } from "../../ui/illustrations";
 import { useCopy } from "../../ui/copy";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ScreenFrameInsets } from "../../ui/screen-content-insets";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LegalLinks, type LegalLinkTarget } from "../../ui/brand";
 import { LegalDocument, legalDocumentTitle } from "../legal/legal-document";
+
+function LockedLegalDocument({ document, onClose }: { document: LegalLinkTarget | null; onClose: () => void }) {
+  const { colors, uiStyles } = useMobileTheme();
+  const copy = useCopy();
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[uiStyles.screen, { paddingBottom: insets.bottom }]}>
+      <View style={{ paddingTop: insets.top, backgroundColor: colors.panel }}>
+        <Row
+          style={{
+            paddingLeft: Math.max(space.screen, insets.left),
+            paddingRight: Math.max(space.screen, insets.right),
+            paddingVertical: space.xs,
+            flexWrap: "nowrap",
+          }}
+        >
+          <IconButton label={copy("Geri dön", "Go back")} reserveTouchTarget onPress={onClose}>
+            <ArrowLeft size={20} color={colors.text} />
+          </IconButton>
+          <Heading style={[uiStyles.title, uiStyles.grow]}>
+            {document ? legalDocumentTitle(document, copy) : undefined}
+          </Heading>
+        </Row>
+      </View>
+      <ScreenFrameInsets value>
+        <Screen>{document ? <LegalDocument document={document} /> : null}</Screen>
+      </ScreenFrameInsets>
+    </View>
+  );
+}
 
 export function useSecurityError() {
   const copy = useCopy();
@@ -151,35 +182,14 @@ export function SecurityGate({ children }: PropsWithChildren) {
         visible={document !== null && security.status === "locked"}
         animationType="none"
         presentationStyle="fullScreen"
+        supportedOrientations={["portrait", "portrait-upside-down", "landscape"]}
         statusBarTranslucent
         navigationBarTranslucent
         onRequestClose={() => setDocument(null)}
       >
-        <View style={uiStyles.screen}>
-          <View
-            style={{
-              paddingTop: insets.top,
-              backgroundColor: colors.panel,
-            }}
-          >
-            <Row
-              style={{
-                paddingLeft: Math.max(space.screen, insets.left),
-                paddingRight: Math.max(space.screen, insets.right),
-                paddingVertical: space.xs,
-                flexWrap: "nowrap",
-              }}
-            >
-              <IconButton label={copy("Geri dön", "Go back")} onPress={() => setDocument(null)}>
-                <ArrowLeft size={20} color={colors.text} />
-              </IconButton>
-              <Heading style={[uiStyles.title, uiStyles.grow]}>
-                {document ? legalDocumentTitle(document, copy) : undefined}
-              </Heading>
-            </Row>
-          </View>
-          <Screen>{document ? <LegalDocument document={document} /> : null}</Screen>
-        </View>
+        <SafeAreaProvider style={uiStyles.screen}>
+          <LockedLegalDocument document={document} onClose={() => setDocument(null)} />
+        </SafeAreaProvider>
       </Modal>
     </View>
   );

@@ -1,5 +1,10 @@
 type Copy = (tr: string, en: string) => string;
 
+export function isPtyDesktopOffline(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : error;
+  return message === "Desktop relay is offline. Open the updated bycoda desktop connected to this host.";
+}
+
 /** Exact known guard errors only; other host validation reasons remain diagnostic evidence. */
 export function ptyRecoveryMessage(error: unknown, copy: Copy): string | undefined {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : undefined;

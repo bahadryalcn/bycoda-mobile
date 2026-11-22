@@ -31,7 +31,7 @@ import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite"
 
 import { AutomationEditor } from "./automations/automation-editor";
 import { AutomationCard } from "./automations/automation-card";
-import { savedAutomationId } from "./automations/automation-feedback";
+import { savedAutomation, savedAutomationId } from "./automations/automation-feedback";
 import type { AutomationEditorFlow } from "./automations/types";
 import { useMobileTheme } from "@/ui/theme";
 
@@ -184,6 +184,11 @@ export function AutomationsScreen() {
                 initial={draft}
                 save={save}
                 busy={busy}
+                readSaved={async (id) => {
+                  const result = await query.refetch({ cancelRefetch: true });
+                  if (!result.isSuccess) throw result.error ?? new Error("Automation read failed");
+                  return savedAutomation(result.data, id);
+                }}
                 onClose={() => setEditor(null)}
               />
             </Sheet>

@@ -23,4 +23,26 @@ describe("connection feedback store", () => {
     store.release("a");
     expect(store.owner()).toBeUndefined();
   });
+
+  it("retries each affected pane once and lets either recover independently", async () => {
+    const store = createConnectionFeedbackStore();
+    const list = vi.fn().mockResolvedValue(undefined);
+    const detail = vi.fn().mockRejectedValue(new Error("Still disconnected"));
+    const dismissed = vi.fn();
+    store.claim("list", 1, list);
+    store.claim("detail", 2, detail);
+    store.claim("dismissed", 3, dismissed);
+    store.release("dismissed");
+
+    await Promise.all([store.retry(), store.retry()]);
+
+    expect(list).toHaveBeenCalledOnce();
+    expect(detail).toHaveBeenCalledOnce();
+    expect(dismissed).not.toHaveBeenCalled();
+    store.release("list");
+    expect(store.owner()).toBe("detail");
+    await store.retry();
+    expect(list).toHaveBeenCalledOnce();
+    expect(detail).toHaveBeenCalledTimes(2);
+  });
 });

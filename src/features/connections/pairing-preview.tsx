@@ -42,8 +42,8 @@ export function PairingPreview({ code, operation, disabled, busy, onConnect, onC
           </Body>
         ) : null}
         <FormActions
-          feedback={<ConnectionFeedback operation={operation} onRetry={disabled ? undefined : () => { void onConnect(); }} />}
-          submitLabel={copy("Bağlan", "Connect")}
+          feedback={<ConnectionFeedback operation={operation} />}
+          submitLabel={operation.isError ? copy("Yeniden dene", "Retry") : copy("Bağlan", "Connect")}
           disabled={disabled || process.env.EXPO_OS === "web"}
           busy={busy}
           onSubmit={() => {

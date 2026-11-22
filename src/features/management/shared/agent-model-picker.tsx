@@ -3,10 +3,10 @@ import { View } from "react-native";
 import type { HostModelCatalog, RemoteProvider } from "@/domain/types";
 import { useLocale } from "@/i18n";
 import { useCopy } from "@/ui/copy";
-import { Body, Button, NavigationRow, QueryState, ScreenList, SearchField, Sheet } from "@/ui/primitives";
+import { Body, NavigationRow, QueryState, ScreenList, SearchField, Sheet } from "@/ui/primitives";
 import { ScreenChromeProvider } from "@/ui/layout";
 import type { QueryLike } from "@/ui/query-presentation";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import { normalizeSearch } from "@/ui/search-matching";
 import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
 import { agentModelChoices } from "./agent-model-selection";
@@ -37,9 +37,9 @@ export function AgentModelPicker({ catalog, harness, selected, disabled, query, 
   const filter = search.trim() ? JSON.stringify([locale, normalizeSearch(search, locale)]) : "";
   const position = useFilteredListScrollMemory<(typeof choices)[number]>(filter, !!catalog, choices.length, { suspended: !catalog });
   return <Sheet visible={!retired.current} title={copy("Model seç", "Choose model")} size="full" scroll={false}
-    onClose={close} returnFocusRef={returnFocusRef}
-    footer={<Button tone="quiet" label={copy("Kapat", "Close")} onPress={close} />}>
-    <View style={{ paddingHorizontal: space.screen, paddingVertical: space.sm }}>
+    onClose={close} returnFocusRef={returnFocusRef}>
+    <View style={{ width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center",
+      paddingHorizontal: space.screen, paddingVertical: space.sm }}>
       <SearchField label={copy("Model ara", "Search models")} value={search}
         onChangeText={text => { if (active()) setSearch(text); }} />
     </View>

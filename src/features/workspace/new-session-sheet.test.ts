@@ -14,4 +14,14 @@ describe("new session sheet", () => {
       /showAll\s*\?\s*ordered\s*:\s*ordered\.slice\(0, RECENT_PROJECT_LIMIT\)/,
     );
   });
+  it("shows the catalog name for the model that will start the session", () => {
+    expect(source).toContain('selection.selectedModelValue?.name || selection.selectedModel || "—"');
+    expect(source).toContain("${modelName}");
+  });
+  it("fits short lists and keeps the controls inside the only scrollable list", () => {
+    expect(source).toContain('size="compact"');
+    expect(source).toContain('ListHeaderComponent={');
+    expect(source).toContain('flex: 0, flexShrink: 1');
+    expect(source).toMatch(/footer=\{selected \? \(\s*<QuickStart/);
+  });
 });

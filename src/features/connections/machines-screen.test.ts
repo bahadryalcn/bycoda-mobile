@@ -17,8 +17,9 @@ vi.mock("@/ui/tokens", () => ({ colors: {}, metrics: {}, space: {} }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
 vi.mock("@/ui/brand", () => ({ LegalLinks: () => null }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: () => null }));
+vi.mock("@/ui/machine-bar", () => ({ useMachineStatus: () => ({ phase: "disconnected", status: "Disconnected", reason: "Computer is offline." }) }));
 vi.mock("./active-computer-status", () => ({ ActiveComputerStatus: () => createElement("span", null, "Active"), RetryConnectionRow: () => null }));
-vi.mock("expo-router", () => ({ router: { canDismiss: () => true, back: fixture.navigate, dismissAll: fixture.navigate, dismissTo: fixture.navigate, replace: fixture.navigate, navigate: fixture.navigate }, useLocalSearchParams: () => ({ start: fixture.start }), Stack: { Screen: ({options}: {options: {gestureEnabled: boolean; headerLeft?: () => import("react").ReactNode; headerRight?: () => import("react").ReactNode}}) => { fixture.options = options; return createElement("header", null, options.headerLeft?.(), options.headerRight?.()); } } }));
+vi.mock("expo-router", () => ({ router: { canDismiss: () => true, back: fixture.navigate, dismissAll: fixture.navigate, dismissTo: fixture.navigate, replace: fixture.navigate, navigate: fixture.navigate }, useLocalSearchParams: () => ({ start: fixture.start, returnToPrevious: fixture.returnToPrevious }), Stack: { Screen: ({options}: {options: {gestureEnabled: boolean; headerLeft?: () => import("react").ReactNode; headerRight?: () => import("react").ReactNode}}) => { fixture.options = options; return createElement("header", null, options.headerLeft?.(), options.headerRight?.()); } } }));
 vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => true }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
@@ -39,6 +40,7 @@ vi.mock("./pairing-entry", () => ({ PairingEntry: () => createElement("p", null,
 vi.mock("./pairing-scanner", () => ({ PairingScanner: () => null }));
 const fixture = vi.hoisted(() => ({ kind: "choices", adding: false, reset: vi.fn(), remove: vi.fn(),
   start: undefined as string | undefined, begin: vi.fn(),
+  returnToPrevious: undefined as string | undefined,
   navigate: vi.fn(), message: undefined as string | undefined,
   busy: false, dirty: false, cancel: vi.fn(), hardwareBack: null as (() => boolean) | null,
   options: undefined as {gestureEnabled:boolean; headerLeft?: () => import("react").ReactNode} | undefined,
@@ -46,13 +48,16 @@ const fixture = vi.hoisted(() => ({ kind: "choices", adding: false, reset: vi.fn
     machines: [{ id: "first", name: "First computer", endpoint: "https://first.invalid" }, { id: "second", name: "Second computer", endpoint: "https://second.invalid" }] },
 }));
 vi.mock("./use-computer-connection", () => ({
-  useComputerConnection: () => ({
+  useComputerConnection: vi.fn(() => ({
     form: { values: { target: fixture.adding ? { kind: "new" } : null }, dirty: fixture.dirty },
     entry: { kind: fixture.kind },
     operation: { reset: fixture.reset, data: { message: fixture.message } },
-    recover: async (callback: () => Promise<void>, message: string) => { await callback(); fixture.message = message; },
+    recover: async (callback: () => Promise<void>, message: string) => {
+      try { await callback(); fixture.message = message; }
+      catch (error) { fixture.message = (error as Error).message; }
+    },
     busy: fixture.busy, cancel: fixture.cancel, begin: fixture.begin,
-  }),
+  })),
 }));
 vi.mock("@/state/machines", () => ({ useMachines: Object.assign((select?: (state: unknown) => unknown) => (select ? select(fixture.state) : fixture.state), {
   getState: () => ({ ...fixture.state, removeMachine: fixture.remove, selectMachine: (id: string) => { fixture.state.activeId = id; } }),
@@ -78,11 +83,12 @@ vi.mock("@/ui/primitives", () => {
     HeaderBackButton: ({disabled, onPress}: {disabled?:boolean; onPress:()=>void}) => createElement("button", {disabled, onClick:onPress}, "Back"),
     Button: () => null,
     Sheet: Wrapper, FormActions: ({ submitLabel, disabled, onSubmit, cancelLabel, onCancel }: { submitLabel: string; disabled: boolean; onSubmit: () => void; cancelLabel: string; onCancel: () => void }) => createElement("div", null, createElement("button", { disabled, onClick: onSubmit }, submitLabel), createElement("button", { onClick: onCancel }, cancelLabel)), Notice: ({ message }: { message: string }) => createElement("p", null, message),
-    NavigationRow: ({ label, selected, onPress, supporting }: { label: string; selected?: boolean; onPress: () => void; supporting?: PropsWithChildren["children"] }) =>
-      createElement("div", null, createElement("button", { "aria-pressed": selected, onClick: onPress }, label), supporting),
+    NavigationRow: ({ label, detail, accessibilityLabel, selected, onPress, supporting }: { label: string; detail?: string; accessibilityLabel?: string; selected?: boolean; onPress: () => void; supporting?: PropsWithChildren["children"] }) =>
+      createElement("div", null, createElement("button", { "aria-pressed": selected, "aria-label": accessibilityLabel, onClick: onPress }, label, detail), supporting),
   };
 });
 import { MachinesScreen } from "./machines-screen";
+import { useComputerConnection } from "./use-computer-connection";
 import { confirmAction } from "@/ui/confirm";
 
 it("waits for saved connections before presenting the pairing choices", () => {
@@ -112,7 +118,36 @@ it("keeps the add action in the header of the saved-computer list", () => {
   expect(html).toMatch(/<header>.*Add computer.*<\/header>/);
 });
 
-it.each(["scan", "paste"])("opens welcome's %s entry only once", async start => {
+it("disambiguates same-name computers and announces the selected computer's connection status", () => {
+  const original = fixture.state.machines;
+  try {
+    fixture.state.machines = [
+      { ...original[0], name: "Workshop" },
+      { ...original[1], name: "workshop" },
+      { id: "unique", name: "Studio", endpoint: "https://studio.invalid" },
+    ];
+    const html = renderToStaticMarkup(createElement(MachinesScreen));
+    expect(html).toContain('aria-label="Workshop. https://first.invalid. Disconnected. Computer is offline."');
+    expect(html).toContain("workshophttps://second.invalid");
+    expect(html).not.toContain("https://studio.invalid");
+  } finally {
+    fixture.state.machines = original;
+  }
+});
+
+it("keeps the computer list visible and returns to a conversation after pairing in recovery", () => {
+  fixture.returnToPrevious = "1";
+  try {
+    expect(renderToStaticMarkup(createElement(MachinesScreen))).toContain("First computer");
+    expect(useComputerConnection).toHaveBeenLastCalledWith(true);
+  } finally {
+    fixture.returnToPrevious = undefined;
+  }
+  renderToStaticMarkup(createElement(MachinesScreen));
+  expect(useComputerConnection).toHaveBeenLastCalledWith(false);
+});
+
+it.each(["scan", "paste", "choices"])("opens the linked %s pairing entry only once", async start => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div"), root = createRoot(container);
   fixture.start = start; fixture.begin.mockClear();
@@ -157,7 +192,7 @@ it("owns Back from the initial Add choices, blocks busy exit and restores route 
 
 it("passes exclusive current-computer selection to the shared accessible row without claiming a live connection", () => {
   const html = renderToStaticMarkup(createElement(MachinesScreen));
-  expect(html).toContain('aria-pressed="true">First computer</button><span>Active</span>');
+  expect(html).toContain('aria-pressed="true" aria-label="First computer. Disconnected. Computer is offline.">First computer</button><span>Active</span>');
   expect(html).toContain('aria-pressed="false">Second computer');
   expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
   expect(html).not.toContain("Connected");
@@ -178,6 +213,8 @@ it("closes computer details and shows the new selection without navigating", asy
     await act(async () => root.render(createElement(MachinesScreen)));
     expect(button("First computer")?.getAttribute("aria-pressed")).toBe("false");
     expect(button("Second computer")?.getAttribute("aria-pressed")).toBe("true");
+    expect([...container.querySelectorAll("button[aria-pressed]")].map(row => row.textContent))
+      .toEqual(["Second computer", "First computer"]);
     expect(button("Second computer")?.parentElement?.textContent).toContain("Active");
     expect(container.textContent).toContain("Computer selected.");
     expect(fixture.options?.headerLeft).toBeUndefined();
@@ -190,12 +227,12 @@ it("closes computer details and shows the new selection without navigating", asy
   }
 });
 
-it("leaves feedback with manual/preview forms and restores screen fallback outside those forms", () => {
-  for (const kind of ["manual", "preview", "paste", "choices"]) {
+it("leaves feedback with the connection form or rejected code and restores the screen fallback elsewhere", () => {
+  for (const kind of ["manual", "preview", "rejected-code", "paste", "choices"]) {
     fixture.kind = kind;
     fixture.adding = true;
     const html = renderToStaticMarkup(createElement(MachinesScreen));
-    expect(html.includes("Connection error")).toBe(!["manual", "preview"].includes(kind));
+    expect(html.includes("Connection error")).toBe(!["manual", "preview", "rejected-code"].includes(kind));
   }
   fixture.kind = "manual";
   fixture.adding = false;
@@ -226,4 +263,40 @@ it("keeps removal inside the management sheet and retires review across replacem
     await act(async () => button("Remove").click());
     expect(fixture.remove).toHaveBeenCalledExactlyOnceWith("first", { id: "first", endpoint: original.endpoint, environmentId: undefined, lanKey: undefined });
   } finally { await act(async () => root.unmount()); fixture.state.machines = [original, { id: "second", name: "Second computer", endpoint: "https://second.invalid" }]; vi.unstubAllGlobals(); }
+});
+
+it("keeps a removal review valid while its own credential write is pending or rolls back", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const render = () => act(async () => root.render(createElement(MachinesScreen)));
+  const button = (name: string) => [...container.querySelectorAll("button")].find(item => item.textContent === name)!;
+  let finishWrite: () => void = () => {};
+  fixture.remove.mockImplementationOnce(() => new Promise<void>((_, reject) => {
+    fixture.state.connectionPending = true;
+    finishWrite = () => {
+      fixture.state.connectionPending = false;
+      reject(new Error("Credential storage failed"));
+    };
+  }));
+  try {
+    await render();
+    await act(async () => button("First computer").click());
+    await act(async () => button("Remove").click());
+    await act(async () => button("Remove").click());
+    await render();
+    expect(button("Remove").disabled).toBe(true);
+    expect(container.textContent).not.toContain("Saved computers changed");
+
+    await act(async () => finishWrite());
+    await render();
+    expect(button("Remove").disabled).toBe(false);
+    expect(container.textContent).not.toContain("Saved computers changed");
+  } finally {
+    await act(async () => { finishWrite(); root.unmount(); });
+    fixture.state.connectionPending = false;
+    fixture.message = undefined;
+    fixture.remove.mockReset();
+    vi.unstubAllGlobals();
+  }
 });

@@ -62,14 +62,23 @@ export function pairingClaimId(bytes: Uint8Array): string {
   return value;
 }
 
-export function pairingErrorMessage(error: unknown, copy: PairingCopy): string {
-  const kind =
-    error instanceof MobilePairingCodeError ||
+function pairingErrorKind(error: unknown) {
+  return error instanceof MobilePairingCodeError ||
     error instanceof PairingFailure ||
     error instanceof RemoteHostError
-      ? error.kind
-      : undefined;
-  switch (kind) {
+    ? error.kind
+    : undefined;
+}
+
+/** A fresh ticket is needed after the Host refuses this code or its computer identity. */
+export function pairingNeedsNewCode(error: unknown): boolean {
+  const kind = pairingErrorKind(error);
+  return kind === "expired" || kind === "used" || kind === "code-unavailable" ||
+    kind === "identity" || kind === "auth";
+}
+
+export function pairingErrorMessage(error: unknown, copy: PairingCopy): string {
+  switch (pairingErrorKind(error)) {
     case "expired":
       return copy(
         "Kodun süresi doldu. Bilgisayarında yeni bir kod oluştur.",

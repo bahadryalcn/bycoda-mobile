@@ -65,7 +65,7 @@ export function GitHeader({
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text numberOfLines={1} ellipsizeMode="middle" style={[uiStyles.label, { fontWeight: "700" }]}>{name}</Text>
           <GitSyncSummary index={index} />
-          <Row style={{ gap: space.sm }}>
+          <Row style={{ gap: space.sm, flexWrap: "wrap" }}>
             {linkedPr ? <PullRequestStateBadge state={linkedPr.state} label={`#${linkedPr.number} · ${pullRequestStateLabel(linkedPr.state, copy)}`} /> : null}
             {index.ahead ? <Text style={[uiStyles.caption, { color: colors.muted }]}>{`↑${numbers.format(index.ahead)}`}</Text> : null}
             {index.behind ? <Text style={[uiStyles.caption, { color: colors.muted }]}>{`↓${numbers.format(index.behind)}`}</Text> : null}
@@ -146,7 +146,7 @@ export function GitOperationPanel({
           "Edit conflicts, stage resolved files, then continue. Aborting returns to the state before this operation.",
         )}
       </Body>
-      <Row>
+      <Row style={{ flexWrap: "wrap" }}>
         <Button
           label={copy("İşlemi devam ettir", "Continue operation")}
           disabled={hasConflicts || busy}

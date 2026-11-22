@@ -1,6 +1,7 @@
 import { RemoteHostError } from "../remote/host-error";
 import { ApprovalCommandRefused } from "../domain/approval-command";
 import { catalogs } from "../localization";
+import { DraftWriteError } from "../state/local-draft-storage";
 
 type ErrorCopy = (turkish: string, english: string) => string;
 
@@ -120,6 +121,8 @@ function knownConnectionMessage(message: string, copy: ErrorCopy): string | unde
 
 /** Presentation only: retain the original error object and any caller-supplied context. */
 export function errorMessage(error: unknown, copy: ErrorCopy, override?: string, options?: { read?: boolean }): string {
+  if (override === undefined && error instanceof DraftWriteError)
+    return copy("Taslak kaydedilemedi. Düzenlemelerin açık.", "Couldn’t save the draft. Your edits are still open.");
   const fallback = () => copy("İşlem tamamlanamadı.", "Could not complete this action.");
   const text =
     override ??

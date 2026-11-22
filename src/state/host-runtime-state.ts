@@ -8,6 +8,19 @@ import type { MobileHostRuntimeState } from "./host-runtime";
  */
 const states = new Map<string, MobileHostRuntimeState>();
 const listeners = new Set<() => void>();
+let startupFailed = false;
+
+/** An app-wide installation failure, separate from an individual computer's link. */
+export function recordHostRuntimeStartupFailed(failed: boolean): void {
+  if (startupFailed === failed) return;
+  startupFailed = failed;
+  for (const listener of [...listeners]) listener();
+}
+
+const readStartupFailure = () => startupFailed;
+export function useHostRuntimeStartupFailed(): boolean {
+  return useSyncExternalStore(subscribeHostRuntimeStates, readStartupFailure, readStartupFailure);
+}
 
 export function recordHostRuntimeState(machineId: string, state: MobileHostRuntimeState): void {
   if (states.get(machineId) === state) return;
@@ -60,10 +73,20 @@ export function useActiveHostLinkDown(): boolean {
   return useSyncExternalStore(subscribeHostRuntimeStates, read, read);
 }
 
+/** The current live socket is actively attempting to recover. */
+export function useActiveHostRecoveryMachine(): string | null {
+  const read = () => {
+    const state = hostRuntimeState(activeMachineId);
+    return state === "backoff" || state === "connecting" ? activeMachineId : null;
+  };
+  return useSyncExternalStore(subscribeHostRuntimeStates, read, read);
+}
+
 /** Test seam: forget every recorded state. */
 export function resetHostRuntimeStates(): void {
   activeMachineId = null;
   activeDisconnected = false;
+  startupFailed = false;
   states.clear();
   for (const listener of [...listeners]) listener();
 }

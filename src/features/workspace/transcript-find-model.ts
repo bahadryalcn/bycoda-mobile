@@ -8,6 +8,28 @@ export type TranscriptFindResult = {
   snippet: string;
 };
 
+export type TranscriptFindSnapshot = {
+  entries: readonly TranscriptEntry[];
+  query: string;
+  results: readonly TranscriptFindResult[];
+  error?: Error;
+};
+
+/** A scan is usable only for the query and presentation that produced it. */
+export function currentTranscriptFind(
+  snapshot: TranscriptFindSnapshot | undefined,
+  entries: readonly TranscriptEntry[],
+  query: string,
+  open: boolean,
+) {
+  return open && snapshot?.entries === entries && snapshot.query === query ? snapshot : undefined;
+}
+
+export function matchingTranscriptActivity(entries: readonly TranscriptEntry[], result: TranscriptFindResult) {
+  const entry = entries.find((candidate) => candidate.id === result.entryId);
+  return entry?.kind === "activity" && entry.blocks.some((block) => block.id === result.blockId) ? entry : undefined;
+}
+
 /** Only loaded display text is indexed. Never recursively scan provider/internal metadata. */
 function blockText(block: Block) {
   return [

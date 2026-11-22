@@ -12,7 +12,8 @@ vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "host-a", providers: fixture.providers }), useMachines: (selector: (state: unknown) => unknown) => selector({ selectedProjectId: fixture.projectId }) }));
 vi.mock("@/state/queries", () => ({ useHostQuery: (key: unknown[], method: string, _params: unknown, options: never) => {
   fixture.queries.push({ key, method, options });
-  return { data: method === "models.list" ? fixture.catalog : method === "goals.list" ? fixture.goals : method === "tasks.list" ? fixture.tasks : [], isSuccess: true, refetch: method === "tasks.list" ? fixture.taskRefetch : vi.fn() };
+  if (method === "tasks.list") return { data: fixture.tasks, isSuccess: true, refetch: fixture.taskRefetch, ...taskState };
+  return { data: method === "models.list" ? fixture.catalog : method === "goals.list" ? fixture.goals : [], isSuccess: true, refetch: vi.fn() };
 }, useHostMutation: () => ({ isPending: false, mutate: fixture.mutate, reset: vi.fn() }) }));
 vi.mock("./shared/use-editor-record", () => ({ useEditorRecord: () => undefined }));
 vi.mock("./shared/format", () => ({ identifier: () => "fixture-automation" }));
@@ -32,12 +33,23 @@ vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, actions, data, rende
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Group, Heading: Group, Button: () => null, Sheet: Group, MutationState: () => null, SelectField: () => null, SearchField: () => null, SearchToolbar: () => null,
-    QueryState: ({ query, empty, emptyAction }: { query: QueryLike; empty?: boolean; emptyAction?: { label: string; onPress(): void } }) =>
-      getQueryPresentation(query, empty) === "empty" && emptyAction ? createElement("button", { onClick: emptyAction.onPress }, emptyAction.label) : null,
+    QueryState: ({ query, empty, emptyAction }: { query: QueryLike; empty?: boolean; emptyAction?: { label: string; onPress(): void } }) => {
+      const state = getQueryPresentation(query, empty);
+      if (state === "empty" && emptyAction)
+        return createElement("button", { onClick: emptyAction.onPress }, emptyAction.label);
+      if (state === "loading") return createElement("span", null, "Loading…");
+      if ((query.error as { kind?: string } | undefined)?.kind === "auth")
+        return createElement("span", null, "Access needed");
+      if (state === "error" || state === "stale-error")
+        return createElement("button", { onClick: query.refetch }, state === "error" ? "Retry" : "Refresh");
+      return null;
+    },
     IconButton: ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),
     Notice: ({ message, retryLabel, onRetry }: { message: string; retryLabel?: string; onRetry?(): void }) => createElement("aside", null, message, retryLabel ? createElement("button", { onClick: onRetry }, retryLabel) : null) };
 });
 import { GoalsScreen } from "./goals-screen";
+let taskState: QueryLike = {};
+beforeEach(() => { taskState = {}; });
 beforeEach(() => { fixture.push.mockReset(); fixture.mutate.mockReset(); fixture.projectId = null; fixture.providers = []; fixture.visible = true; fixture.catalog = undefined; fixture.goals = []; fixture.tasks = undefined; fixture.taskRefetch.mockClear(); fixture.queries = []; fixture.cards = []; });
 const epic = (id: string, status: string, taskIds: string[], updatedAt = 1) => ({ id, title: id, prompt: "", status, taskIds, projectIds: [], updatedAt });
 const taskQuery = () => fixture.queries.filter(query => query.method === "tasks.list").at(-1)!;
@@ -99,6 +111,34 @@ it("shows epics without progress until the task list loads", async () => {
   try {
     await renderScreen(root);
     expect(fixture.cards.at(-1)).toMatchObject({ goal: { id: "a" }, progress: undefined, tasks: undefined });
+  } finally { await act(async () => root.unmount()); vi.unstubAllGlobals(); }
+});
+it("shows one task recovery action and withholds cached progress when access is denied", async () => {
+  fixture.goals = [epic("a", "running", ["t1"]), epic("b", "running", ["t2"])];
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const buttons = (label: string) => [...container.querySelectorAll("button")].filter(button => button.textContent === label);
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  try {
+    taskState = { isLoading: true };
+    await renderScreen(root);
+    expect(container.textContent?.match(/Loading…/g)).toHaveLength(1);
+
+    taskState = { error: new Error("Unable to load tasks") };
+    await renderScreen(root);
+    expect(buttons("Retry")).toHaveLength(1);
+    await act(async () => buttons("Retry")[0]!.click());
+    expect(fixture.taskRefetch).toHaveBeenCalledOnce();
+
+    fixture.tasks = [{ id: "t1", title: "One", status: "blocked" }];
+    await renderScreen(root);
+    expect(buttons("Refresh")).toHaveLength(1);
+    expect(fixture.cards.at(-2)).toMatchObject({ tasks: [{ status: "blocked" }], progress: { done: 0, total: 1 } });
+
+    taskState = { error: Object.assign(new Error("Access denied"), { kind: "auth" }) };
+    await renderScreen(root);
+    expect(container.textContent).toContain("Access needed");
+    expect(fixture.cards.at(-2)).toMatchObject({ tasks: undefined, progress: undefined });
   } finally { await act(async () => root.unmount()); vi.unstubAllGlobals(); }
 });
 it("re-reads tasks once when an epic record changes, not on every render", async () => {

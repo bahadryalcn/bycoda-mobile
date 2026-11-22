@@ -18,6 +18,7 @@ import {
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { remoteErrorKind } from "@/ui/error-message";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import type { HostGoal, HostTask } from "@/domain/types";
@@ -66,6 +67,8 @@ export function GoalsScreen() {
   const { projectId, setProjectId } = useLocalProjectScope();
   const { providers, query: providerQuery } = useAgentProviders(projectId);
   const query = useHostQuery<HostGoal[]>(["goals"], "goals.list", {}, { interval: goalsPollInterval });
+  const connectionError = remoteErrorKind(query.error);
+  const accessDenied = connectionError === "auth" || connectionError === "identity";
   const projects = useProjectList();
   const create = useHostMutation<HostGoal>("goals.create", ["goals"]);
   const approve = useHostMutation<HostGoal>("goals.approve", ["goals"]);
@@ -86,7 +89,8 @@ export function GoalsScreen() {
     (presentation === "ready" || presentation === "stale-error");
   const visible = scoped?.filter((goal) => goalFilterMatches(goal.status, filter) && matchesSearch(goal.title + " " + goal.prompt, search, locale));
   // Same key as the Tasks screen, so the cached list is shared; it only loads for epics that own tasks.
-  const taskScope = goalTaskScope(visible);
+  const canReadTasks = presentation === "ready" || presentation === "stale-error" || presentation === "paused";
+  const taskScope = goalTaskScope(canReadTasks ? visible : undefined);
   const taskQuery = useHostQuery<HostTask[]>(["tasks", null], "tasks.list", {}, {
     enabled: taskScope.enabled,
     interval: () => taskScope.interval,
@@ -100,7 +104,9 @@ export function GoalsScreen() {
     stampRef.current = tasksStamp;
     if (taskScope.enabled) void refetchTasks().catch(() => undefined);
   }, [tasksStamp, taskScope.enabled, refetchTasks]);
-  const taskViews = taskQuery.data ? goalTaskViews(visible ?? [], taskQuery.data) : undefined;
+  const taskViews = taskScope.enabled && taskQuery.data && getQueryPresentation(taskQuery) !== "error"
+    ? goalTaskViews(visible ?? [], taskQuery.data)
+    : undefined;
   const replanGoal =
     flow.kind === "replan" ? query.data?.find((goal) => goal.id === flow.goalId) : undefined;
   const projectReady = projects.directoryReady && (!projectId || projects.isProjectVisible(projectId));
@@ -137,10 +143,17 @@ export function GoalsScreen() {
         />
       </FilterSheet>
       <SearchToolbar
-        search={<SearchField ref={searchInput} label={copy("Başlık veya epicte ara", "Search epic titles and outcomes")} value={search} onChangeText={setSearch} />}
+        search={<SearchField
+          ref={searchInput}
+          label={copy("Başlık veya epicte ara", "Search epic titles and outcomes")}
+          placeholder={copy("Epiclerde ara", "Search epics")}
+          value={search}
+          onChangeText={setSearch}
+        />}
         actions={<FilterButton count={filter !== "all" ? 1 : 0} onPress={() => setFilterDraft(filter)} />}
       />
       <AppliedFilters filters={[filter !== "all" && `${copy("Durum", "Status")}: ${filterOptions.find((option) => option.value === filter)?.label}`]} />
+      {taskScope.enabled && <QueryState query={taskQuery} loading="inline" compact shareConnectionFeedback />}
       {flow.kind === "closed" && <MutationState
         mutation={create}
         success={copy("Epic planlaması istendi.", "Epic planning requested.")}
@@ -170,7 +183,7 @@ export function GoalsScreen() {
         </Sheet>
       )}
       {flow.kind === "settings" && <Sheet visible size="form" title={copy("Epic ayarları", "Epic settings")} onClose={close}>
-        <GoalSettingsEditor key={flow.goal.id} initial={flow.goal} onClose={close} />
+        <GoalSettingsEditor key={flow.goal.id} initial={flow.goal} onClose={close} accessDenied={accessDenied} />
       </Sheet>}
       {flow.kind === "replan" && (
         <Sheet

@@ -7,6 +7,7 @@ import type { HostSession } from "./wire";
 
 const fixture = vi.hoisted(() => ({
   switchAllowed: false,
+  summary: "",
   accounts: [{ id: "default", label: "Default account", color: "fixture" }],
   command: vi.fn(async () => ({ commandId: "fixture-command", sessionId: "session", revision: 1 })),
   run: vi.fn(async (action: () => Promise<unknown>) => action()),
@@ -26,8 +27,9 @@ vi.mock("@/ui/primitives", () => ({
   Notice: ({ message }: { message: string }) => createElement("div", null, message),
 }));
 vi.mock("@/ui/chat-controls", () => ({
-  ChatToolbarAction: ({ onPress, children }: PropsWithChildren<{ onPress: () => void }>) =>
-    createElement("button", { onClick: onPress }, children, "Open model"),
+  ChatToolbarAction: ({ onPress, children, label, accessibilityLabel }: PropsWithChildren<{
+    onPress: () => void; label: string; accessibilityLabel: string;
+  }>) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel }, children, label),
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./composer-model-mark", () => ({ ComposerModelMark: () => null }));
@@ -37,7 +39,7 @@ vi.mock("./model-picker", () => ({
     return null;
   },
 }));
-vi.mock("./model-picker-model", () => ({ settingsSummary: () => "" }));
+vi.mock("./model-picker-model", () => ({ settingsSummary: () => fixture.summary }));
 vi.mock("./setting-labels", () => ({ settingLabels: () => ({}) }));
 vi.mock("./catalog", () => ({
   catalogProviders: () => fixture.switchAllowed ? ["claude", "codex"] : ["claude"],
@@ -71,6 +73,7 @@ const render = (blocked = false, value = session) =>
   );
 beforeEach(() => {
   fixture.switchAllowed = false;
+  fixture.summary = "";
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   fixture.command.mockClear();
   fixture.run.mockClear();
@@ -78,6 +81,14 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+});
+
+it("keeps the model name visible and includes reasoning in the spoken label", async () => {
+  fixture.summary = "High";
+  await render();
+  const button = container.querySelector("button")!;
+  expect(button.textContent).toBe("Research model");
+  expect(button.getAttribute("aria-label")).toBe("Model and reasoning: Research model · High");
 });
 
 it("keeps advisor, subagent and tool restrictions when changing provider", async () => {

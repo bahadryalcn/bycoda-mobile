@@ -12,7 +12,6 @@ const state = vi.hoisted(() => ({
   writes: vi.fn(),
   invalidate: vi.fn(),
   push: vi.fn(),
-  confirm: vi.fn(),
 }));
 vi.mock("expo-router", () => ({ router: { navigate: state.push } }));
 vi.mock("lucide-react-native/icons/message-square", () => ({ default: () => null }));
@@ -45,10 +44,9 @@ vi.mock("../shared/record-bits", () => ({
 vi.mock("../shared/format", () => ({
   stamp: (value?: number) => (value === undefined ? "—" : `DATE:${value}`),
 }));
-vi.mock("@/ui/confirm", () => ({
-  confirmAction: state.confirm,
+vi.mock("@/state/connection-scope", () => ({
+  useConnectionScope: () => ({ token: state.activeId, isCurrent: () => state.activeId === "pc" }),
 }));
-vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ isCurrent: () => state.activeId === "pc" }) }));
 vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
 vi.mock("./runtime-panel", () => ({
   CrewRuntimePanel: ({ children }: PropsWithChildren) => createElement("div", null, children),
@@ -66,7 +64,7 @@ vi.mock("@/ui/record-card", () => ({
     menu,
     metadata,
   }: PropsWithChildren<Record<string, any>>) =>
-    createElement("div", null, metadata, children, footer, typeof details === "function" ? details(true) : details, menu),
+    createElement("div", null, metadata, children, typeof details === "function" ? details(true) : details, footer, menu),
 }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
@@ -80,7 +78,7 @@ vi.mock("@/ui/primitives", () => {
     onPress: () => void;
   }) => {
     state.actions.set(label, { disabled, onPress });
-    return null;
+    return createElement("span", { "data-command": label });
   };
   return {
     Body: wrapper,
@@ -119,6 +117,24 @@ vi.mock("@/ui/primitives", () => {
     ErrorText: ({ error }: { error?: string }) =>
       error ? createElement("p", { role: "alert" }, error) : null,
     MutationState: () => null,
+    Sheet: ({ title, visible, children }: PropsWithChildren<{ title: string; visible: boolean }>) =>
+      visible ? createElement("section", { role: "dialog", "aria-label": title }, children) : null,
+    FormActions: ({
+      submitLabel,
+      onSubmit,
+      cancelLabel,
+      onCancel,
+    }: {
+      submitLabel: string;
+      onSubmit: () => void;
+      cancelLabel: string;
+      onCancel: () => void;
+    }) => createElement(
+      "div",
+      null,
+      createElement("button", { onClick: onCancel }, cancelLabel),
+      createElement("button", { onClick: onSubmit }, submitLabel),
+    ),
     ActionMenu: ({
       actions,
     }: {
@@ -148,10 +164,16 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.activeId = "pc";
   state.machine = { id: "pc", capabilities: ["crews.v1", "crews.run-delete.v1"] };
-  state.confirm.mockImplementation((_title: string, _detail: string, _label: string, action: () => void) => action());
   container = document.createElement("div");
   root = createRoot(container);
 });
+
+async function pressReviewAction(label: string) {
+  const buttons = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')];
+  const button = buttons.find((candidate) => candidate.textContent === label);
+  expect(button).toBeDefined();
+  await act(async () => button!.click());
+}
 afterEach(async () => {
   await act(async () => root.unmount());
   state.actions.clear();
@@ -159,26 +181,39 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+it("keeps Resume before the expanded work details", async () => {
+  await act(async () => root.render(createElement(CrewRunCard, { run: value() })));
+  const resume = container.querySelector('[data-command="Resume"]')!;
+  const details = [...container.querySelectorAll("div")].find((node) =>
+    node.textContent === "No crew tasks have been created yet.")!;
+  expect(resume.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 it("offers deletion with a conflict token instead of a redundant Stop for idle paused work", async () => {
   await act(async () => root.render(createElement(CrewRunCard, { run: value() })));
   expect(state.actions.has("Stop work")).toBe(false);
   expect(state.actions.get("Delete work")?.disabled).toBe(false);
-  state.actions.get("Delete work")!.onPress();
-  expect(state.writes).toHaveBeenCalledWith("crews.deleteRun", {
+  await act(async () => state.actions.get("Delete work")!.onPress());
+  expect(state.writes).not.toHaveBeenCalled();
+  await pressReviewAction("Delete");
+  expect(state.writes).toHaveBeenCalledExactlyOnceWith("crews.deleteRun", {
     projectId: "project",
     runId: "run",
     expectedUpdatedAt: 42,
   });
 });
 
-it("names the crew work and computer before resuming", async () => {
-  state.confirm.mockImplementation(() => undefined);
+it("names the crew work and computer before resuming and lets the reader cancel", async () => {
   await act(async () => root.render(createElement(CrewRunCard, { run: { ...value(), title: "Harbor work" } })));
-  state.actions.get("Resume")!.onPress();
-  const [, detail, , confirm] = state.confirm.mock.calls[0]!;
-  expect(detail).toContain("Harbor work · pc");
+  await act(async () => state.actions.get("Resume")!.onPress());
+  const review = container.querySelector('[role="dialog"]');
+  expect(review?.textContent).toContain("Harbor work · pc");
+  expect(review?.textContent).toContain("the coordinator may restart if needed");
+  await pressReviewAction("Cancel");
   expect(state.writes).not.toHaveBeenCalled();
-  confirm();
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  await act(async () => state.actions.get("Resume")!.onPress());
+  await pressReviewAction("Resume");
   expect(state.writes).toHaveBeenCalledExactlyOnceWith("crews.resume", { projectId: "project", runId: "run" }, expect.anything());
 });
 
@@ -186,7 +221,8 @@ it("refreshes a failed Stop against its original machine without repeating it", 
   await act(async () =>
     root.render(createElement(CrewRunCard, { run: { ...value(), coordinatorStatus: "running" } })),
   );
-  state.actions.get("Stop work")!.onPress();
+  await act(async () => state.actions.get("Stop work")!.onPress());
+  await pressReviewAction("Stop");
   const options = state.writes.mock.calls[0][2];
   state.activeId = "other";
   options.onError(new Error("Partial stop"));

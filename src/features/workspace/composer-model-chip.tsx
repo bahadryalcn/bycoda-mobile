@@ -129,7 +129,8 @@ export function ComposerModelChip({
   return (
     <>
       <ChatToolbarAction
-        label={shown}
+        label={name}
+        multiline
         accessibilityLabel={copy("Model ve akıl yürütme", "Model and reasoning") + ": " + shown}
         disabled={blocked}
         onPress={() => {

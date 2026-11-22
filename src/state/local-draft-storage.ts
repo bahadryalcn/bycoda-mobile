@@ -20,6 +20,11 @@ export function subscribeDraftEpoch(storage: object, key: string, listener: () =
   return () => { listeners.delete(listener); if (!listeners.size) state.listeners.delete(key); };
 }
 export class RetiredDraftError extends Error { constructor() { super("This saved draft was cleared. Reopen its editor before changing it."); } }
+export class DraftWriteError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+  }
+}
 function enqueue<T>(state: State, key: string, operation: () => Promise<T>): Promise<T> {
   const job = Promise.all([state.barrier.catch(() => {}), state.pending.get(key)?.catch(() => {})]).then(operation);
   state.pending.set(key, job);

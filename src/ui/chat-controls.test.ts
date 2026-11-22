@@ -117,6 +117,15 @@ it("keeps the same accessible toolbar target and callback when its visible label
   await act(async () => trigger.click());
   expect(state.action).toHaveBeenCalledTimes(1);
 });
+it("reserves a full target for an icon-only action that sits beside other buttons", async () => {
+  await render(createElement(ChatToolbarAction, {
+    label: "Context usage", hideLabel: true, reserveTouchTarget: true, onPress: state.action,
+  }));
+  const action = container.querySelector("button")!;
+  expect(action.dataset.height).toBe("48");
+  expect(action.dataset.width).toBe("48");
+  expect(action.getAttribute("aria-label")).toBe("Context usage");
+});
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = undefined;
@@ -126,12 +135,12 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 it.each([ChatCircleAction, ChatToolbarAction])(
-  "subtle feedback keeps a compact visual with a 48dp hit slop and and stops spatial feedback on live reduced-motion changes",
+  "keeps the action target and stops spatial feedback on live reduced-motion changes",
   async (Component) => {
     await render(createElement(Component, { label: "Action", onPress: state.action }));
-    const visual = Component === ChatCircleAction ? "32" : "28";
-    expect(container.querySelector("button")!.dataset.height).toBe(visual);
-    expect(container.querySelector("button")!.dataset.width).toBe(visual);
+    const target = Component === ChatCircleAction ? "48" : "28";
+    expect(container.querySelector("button")!.dataset.height).toBe(target);
+    expect(container.querySelector("button")!.dataset.width).toBe(target);
     expect(container.querySelector("button")!.dataset.pressScale).toBe("0.97");
     state.reduced = true;
     await render(createElement(Component, { label: "Action", onPress: state.action }));

@@ -15,7 +15,7 @@ import { useCopy } from "@/ui/copy";
 import { useActiveMachine } from "@/state/machines";
 import { Status } from "../shared/status";
 import type { GoalCardProps } from "./types";
-import { useRecordConfirmation } from "../shared/use-record-confirmation";
+import { RecordConfirmationSheet, useRecordConfirmation } from "../shared/use-record-confirmation";
 
 export function GoalCard({
   goal,
@@ -33,7 +33,7 @@ export function GoalCard({
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
-  const confirm = useRecordConfirmation(goal, machine?.name || machine?.id, busy);
+  const { confirm, review } = useRecordConfirmation(goal, machine?.name || machine?.id, busy);
   const glyph = useMenuGlyph();
   const relative = useRelativeTime();
   const canCancel = !["done", "cancelled"].includes(goal.status);
@@ -93,11 +93,11 @@ export function GoalCard({
         ),
     },
   ];
-  const taskCount = goal.plan?.tasks.length ?? goal.taskIds.length;
+  const taskCount = goal.plan?.tasks.length ?? new Set(goal.taskIds).size;
   const taskSummary = taskCount === 1
     ? copy("1 görev", "1 task")
     : copy("{p0} görev", "{p0} tasks", { p0: taskCount });
-  return (
+  return (<>
     <RecordCard
       title={goal.title}
       status={<Status value={goal.status} />}
@@ -181,5 +181,6 @@ export function GoalCard({
       {cancel.variables?.goalId === goal.id ? <MutationState mutation={cancel} /> : null}
       {remove.variables?.goalId === goal.id ? <MutationState mutation={remove} /> : null}
     </RecordCard>
-  );
+    <RecordConfirmationSheet review={review} />
+  </>);
 }

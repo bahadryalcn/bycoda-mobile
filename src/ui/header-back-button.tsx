@@ -22,7 +22,7 @@ export function HeaderBackButton({ label, onPress, disabled }: {
   const copy = useCopy();
   const text = label ?? copy("Geri", "Back");
   return (
-    <IconButton label={text} disabled={disabled} onPress={onPress}>
+    <IconButton label={text} disabled={disabled} reserveTouchTarget onPress={onPress}>
       <BackGlyph size={24} strokeWidth={Platform.OS === "android" ? 2 : 2.2} color={colors.text} />
     </IconButton>
   );

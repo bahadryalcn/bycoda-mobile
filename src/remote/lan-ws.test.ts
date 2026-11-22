@@ -6,18 +6,11 @@ import {
   selectMobileHostTransport,
   mobileWsMethodEnabled,
 } from "./lan-ws";
-import {
-  HOST_RPC_METHODS,
-  nativeProfileRecoveryMethod,
-} from "../../../src/shared/model/host-contracts";
+import { HOST_RPC_METHODS } from "../../../src/shared/model/host-contracts";
 
 describe("mobile WSS route and paired public trust", () => {
   it("never advertises private Native or bridge operations as a mobile method cohort", () => {
-    const desktopCapabilities = [
-      "native.buffers.recovery.v1",
-      "native.workspaces.v1",
-      "native.buffers.upload.v1",
-    ];
+    const desktopCapabilities = ["native.workspaces.v1", "native.services.upload.v1"];
     const capabilities = ["transport.ws.v2", "transport.ws.devServers.v2", ...desktopCapabilities];
     const methods = Object.keys(HOST_RPC_METHODS).filter(
       (method) => method.startsWith("native.") || method.startsWith("devServers.bridge"),
@@ -32,10 +25,6 @@ describe("mobile WSS route and paired public trust", () => {
       "workspaces.cleanup.status",
     ])
       expect(mobileWsMethodEnabled(["transport.ws.workspaces.cleanup.v1"], method)).toBe(true);
-    expect(nativeProfileRecoveryMethod("native.buffers.recovery.read")).toBe(true);
-    expect(nativeProfileRecoveryMethod("native.buffers.upload.commit")).toBe(false);
-    expect(nativeProfileRecoveryMethod("native.turn.begin")).toBe(false);
-    expect(nativeProfileRecoveryMethod("devServers.bridgeCheck")).toBe(false);
     expect(mobileWsMethodEnabled(["transport.ws.devServers.v2"], "devServers.list")).toBe(true);
     expect(mobileWsMethodEnabled(capabilities, "sessions.list")).toBe(false);
     expect(

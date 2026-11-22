@@ -7,7 +7,7 @@ import { useRestoreLastSession } from "../workspace/last-session";
 
 const fixture = vi.hoisted(() => ({
   navigate: vi.fn(), push: vi.fn(), toast: vi.fn(), selectMachine: vi.fn(), initial: vi.fn(),
-  stored: vi.fn(),
+  stored: vi.fn(), persist: vi.fn(),
   listen: vi.fn(), cached: vi.fn(), clear: vi.fn(),
   security: { status: "unlocked", appState: "active" },
   machines: {
@@ -18,7 +18,7 @@ const fixture = vi.hoisted(() => ({
 }));
 vi.mock("expo-router", () => ({ router: { navigate: fixture.navigate, push: fixture.push }, useRootNavigationState: () => ({ key: "ready" }) }));
 vi.mock("react-native", () => ({ Linking: { getInitialURL: async () => null } }));
-vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: fixture.stored } }));
+vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: fixture.stored, setItem: fixture.persist } }));
 vi.mock("@/state/queries", () => ({}));
 vi.mock("@/state/security", () => ({ useSecurity: (select: (state: unknown) => unknown) => select(fixture.security) }));
 vi.mock("@/state/machines", () => ({
@@ -39,9 +39,9 @@ vi.mock("../permissions/device-permissions", () => ({
 }));
 vi.mock("./push-registration", () => ({}));
 
-const response = (sessionId: string) => ({
+const response = (sessionId: string, date = 100) => ({
   actionIdentifier: "default",
-  notification: { request: { identifier: sessionId, content: { data: { kind: "finished", sessionId, environmentId: "origin" } } } },
+  notification: { date, request: { identifier: sessionId, content: { data: { kind: "finished", sessionId, environmentId: "origin" } } } },
 });
 function Receiver() {
   usePushResponses();
@@ -56,6 +56,7 @@ let tap: (event: ReturnType<typeof response>) => void;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.resetAllMocks();
+  fixture.persist.mockResolvedValue(undefined);
   Object.assign(fixture.security, { status: "unlocked", appState: "active" });
   Object.assign(fixture.machines, { hydrated: false, connectionPending: false, storageError: null, activeId: null, machines: [] });
   fixture.listen.mockImplementation((receive: typeof tap) => { tap = receive; return { remove: vi.fn() }; });
@@ -92,8 +93,8 @@ it("does not let a late cold response replace a newer live tap", async () => {
   fixture.initial.mockReturnValue(new Promise((done) => { resolve = done; }));
   Object.assign(fixture.machines, { hydrated: true, activeId: "computer", machines: [{ id: "computer", environmentId: "origin" }] });
   await render();
-  await act(() => tap(response("new")));
-  await act(() => resolve(response("old")));
+  await act(async () => tap(response("new")));
+  await act(async () => resolve(response("old")));
   expect(fixture.navigate).toHaveBeenCalledExactlyOnceWith({
     pathname: "/session/[id]", params: { id: "new", machineId: "computer" },
   });
@@ -126,7 +127,7 @@ it("acknowledges only the response it handles and leaves a newer native response
   Object.assign(fixture.machines, { hydrated: true, activeId: "computer", machines: [{ id: "computer", environmentId: "origin" }] });
   await render();
   expect(fixture.clear).not.toHaveBeenCalled();
-  await act(() => tap(second));
+  await act(async () => tap(second));
   expect(fixture.clear).toHaveBeenCalledOnce();
   expect(fixture.navigate).toHaveBeenLastCalledWith({
     pathname: "/session/[id]", params: { id: "second", machineId: "computer" },
@@ -145,6 +146,77 @@ it("does not replay the consumed response when the receiver starts again", async
   await render();
   expect(fixture.navigate).toHaveBeenCalledOnce();
   expect(fixture.clear).toHaveBeenCalledOnce();
+});
+
+it("acknowledges a second live delivery of an already opened notification without opening it again", async () => {
+  const event = response("live-duplicate");
+  fixture.cached.mockReturnValue(event);
+  Object.assign(fixture.machines, { hydrated: true, activeId: "computer", machines: [{ id: "computer", environmentId: "origin" }] });
+  await render();
+  await act(async () => tap(event));
+  await act(async () => tap(event));
+  expect(fixture.navigate).toHaveBeenCalledOnce();
+  expect(fixture.clear).toHaveBeenCalledTimes(2);
+  expect(fixture.persist).toHaveBeenCalledOnce();
+});
+
+it("routes duplicate responses only once when the phone unlocks", async () => {
+  const event = response("duplicate-while-locked");
+  fixture.cached.mockReturnValue(event);
+  fixture.security.status = "locked";
+  Object.assign(fixture.machines, { hydrated: true, activeId: "computer",
+    machines: [{ id: "computer", environmentId: "origin" }] });
+  await render();
+  await act(async () => tap(event));
+  await act(async () => tap(event));
+  expect(fixture.navigate).not.toHaveBeenCalled();
+  expect(fixture.clear).not.toHaveBeenCalled();
+
+  fixture.security.status = "unlocked";
+  await render();
+  expect(fixture.navigate).toHaveBeenCalledExactlyOnceWith({
+    pathname: "/session/[id]", params: { id: "duplicate-while-locked", machineId: "computer" },
+  });
+  expect(fixture.clear).toHaveBeenCalledOnce();
+  expect(fixture.persist).toHaveBeenCalledOnce();
+});
+
+it("clears a native cold-start replay already recorded before the app process started", async () => {
+  const event = response("cold-recreated");
+  fixture.initial.mockResolvedValue(event);
+  fixture.cached.mockReturnValue(event);
+  fixture.stored.mockResolvedValue(JSON.stringify([JSON.stringify(["cold-recreated", "default", 100])]));
+  Object.assign(fixture.machines, { hydrated: true, activeId: "computer", machines: [{ id: "computer", environmentId: "origin" }] });
+  await render();
+  expect(fixture.clear).toHaveBeenCalledOnce();
+  expect(fixture.navigate).not.toHaveBeenCalled();
+  expect(fixture.toast).not.toHaveBeenCalled();
+});
+
+it("opens the notification when receipt storage fails and still ignores another delivery in this run", async () => {
+  const event = response("receipt-storage-failure");
+  fixture.cached.mockReturnValue(event);
+  fixture.stored.mockRejectedValueOnce(new Error("Read failed"));
+  fixture.persist.mockRejectedValueOnce(new Error("Write failed"));
+  Object.assign(fixture.machines, { hydrated: true, activeId: "computer", machines: [{ id: "computer", environmentId: "origin" }] });
+  await render();
+  await act(async () => tap(event));
+  await act(async () => tap(event));
+  expect(fixture.navigate).toHaveBeenCalledOnce();
+  expect(fixture.clear).toHaveBeenCalledTimes(2);
+});
+
+it("opens the newer notification when the platform reuses its request identifier", async () => {
+  const first = response("replacement", 100);
+  const second = response("replacement", 101);
+  fixture.cached.mockReturnValue(second);
+  Object.assign(fixture.machines, { hydrated: true, activeId: "computer", machines: [{ id: "computer", environmentId: "origin" }] });
+  await render();
+  await act(async () => tap(first));
+  expect(fixture.clear).not.toHaveBeenCalled();
+  await act(async () => tap(second));
+  expect(fixture.clear).toHaveBeenCalledOnce();
+  expect(fixture.navigate).toHaveBeenCalledTimes(2);
 });
 
 it("does not restore a stored session over a notification already consumed before the workspace mounts", async () => {

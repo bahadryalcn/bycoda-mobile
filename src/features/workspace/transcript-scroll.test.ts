@@ -38,8 +38,24 @@ describe("transcript follow state machine", () => {
     expect(nextFollowState(state, { type: "endMomentum", distance: 4 }).following).toBe(true);
     expect(nextFollowState(state, { type: "endMomentum", distance: 300 }).following).toBe(false);
   });
-  it("releases on list navigation such as find results", () => {
-    expect(nextFollowState(initialFollowState, { type: "release" }).following).toBe(false);
+  it("does not follow again when a find or citation jump scrolls near the end", () => {
+    const released = run([{ type: "release" }]);
+    expect(released.following).toBe(false);
+    expect(nextFollowState(released, { type: "scroll", distance: 0 }).following).toBe(false);
+    expect(run([
+      { type: "beginMomentum" },
+      { type: "scroll", distance: 0 },
+      { type: "endMomentum", distance: 0 },
+    ], released).following).toBe(false);
+  });
+  it("allows an explicit drag or Jump to latest to resume following after list navigation", () => {
+    const released = run([{ type: "release" }]);
+    const dragged = run([
+      { type: "beginDrag" },
+      { type: "endDrag", distance: 0 },
+    ], released);
+    expect(dragged.following).toBe(true);
+    expect(nextFollowState(released, { type: "jump" })).toEqual(initialFollowState);
   });
   it("measures distance from the end including the bottom inset", () => {
     const native = {

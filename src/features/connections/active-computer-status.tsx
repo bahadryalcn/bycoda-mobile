@@ -14,9 +14,9 @@ const tones = { connected: "success", checking: "info", disconnected: "danger", 
  * The selected computer's row marker: "Selected" identifies the current computer, the status text
  * beside it says whether it is reachable, and one reason line says why not.
  */
-export function ActiveComputerStatus() {
+export function ActiveComputerStatus({ connection }: { connection: Pick<ReturnType<typeof useMachineStatus>, "phase" | "status" | "reason"> }) {
   const copy = useCopy();
-  const { phase, status, reason } = useMachineStatus();
+  const { phase, status, reason } = connection;
   const tone = phase === "connected" || phase === "checking" || phase === "disconnected" || phase === "offline"
     ? tones[phase] : "warning";
   return <View style={{ gap: space.xs }}>

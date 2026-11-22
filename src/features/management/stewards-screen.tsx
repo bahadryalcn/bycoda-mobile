@@ -126,6 +126,7 @@ export function StewardsScreen() {
                 value={search}
                 onChangeText={setSearch}
                 label={copy("Odak veya modelde ara", "Search steward focus and model")}
+                placeholder={copy("Sorumlularda ara", "Search stewards")}
               />
               {!rows.some(
                 (item) => item.id === savedStewardId(save.variables),

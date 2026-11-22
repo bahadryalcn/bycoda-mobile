@@ -12,6 +12,7 @@ export type DeliveryWorkspace = {
   targetBranchRef: string;
   revision: number;
   state: string;
+  deliveredCommit?: string;
 };
 
 const reviewText = z.string().refine(value => value.trim().length > 0);

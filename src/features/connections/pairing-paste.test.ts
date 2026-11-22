@@ -10,13 +10,13 @@ vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
 vi.mock("@/ui/info-hint", () => ({ HintLabel: ({label}: {label: string}) => createElement("h2", null, label) }));
 vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));
-vi.mock("@/ui/tokens",()=>({space:{}}));vi.mock("@/ui/styles",()=>({uiStyles:{}}));
+vi.mock("@/ui/tokens",()=>({space:{},metrics:{multilineHeight:96}}));vi.mock("@/ui/styles",()=>({uiStyles:{}}));
 vi.mock("react-native",()=>({Text:({children}:PropsWithChildren)=>createElement("p",null,children),View:({children}:PropsWithChildren)=>createElement("div",null,children)}));
 vi.mock("react-native-reanimated",()=>({default:{View:({children}:PropsWithChildren)=>createElement("div",null,children)}}));
 vi.mock("@/ui/primitives",()=>({
  Body:({children}:PropsWithChildren)=>createElement("p",null,children),
  Heading:({children}:PropsWithChildren)=>createElement("h2",null,children),
- IdentifierField:({value,onChangeText,editable}:{value:string;onChangeText:(value:string)=>void;editable:boolean})=>createElement("textarea",{value,disabled:!editable,onChange:event=>onChangeText((event.currentTarget as HTMLTextAreaElement).value)}),
+ IdentifierField:({value,onChangeText,editable,style}:{value:string;onChangeText:(value:string)=>void;editable:boolean;style?:{maxHeight?:number}})=>createElement("textarea",{value,style,disabled:!editable,onChange:event=>onChangeText((event.currentTarget as HTMLTextAreaElement).value)}),
  MutationState:({mutation}:{mutation:{error?:Error}})=>mutation.error?createElement("p",null,mutation.error.message):null,
  FormActions:({onSubmit,onCancel,disabled,submitLabel,cancelLabel,feedback}:{onSubmit:()=>void;onCancel:()=>void;disabled:boolean;submitLabel:string;cancelLabel:string;feedback:import("react").ReactNode})=>{fixture.submit=onSubmit;return createElement("div",null,feedback,createElement("button",{onClick:onSubmit,disabled},submitLabel),createElement("button",{onClick:onCancel},cancelLabel));},
 }));
@@ -33,6 +33,14 @@ it("fills the empty field from a copied valid pairing code",async()=>{
 });
 it("leaves the field empty when the copied text is not a pairing code",async()=>{
  await remount("hello");expect(container.querySelector("textarea")!.value).toBe("");
+});
+it("bounds the long-code field and submits the complete multiline value", async () => {
+ const code = `valid-code\n${"synthetic-layout-".repeat(34)}`;
+ await fill(code);
+ expect(container.querySelector("textarea")?.style.maxHeight).toBe("96px");
+ await act(async () => click("Preview computer"));
+ await settle();
+ expect(fixture.code).toHaveBeenCalledExactlyOnceWith(code);
 });
 it("retains invalid input for correction and clears stale validation feedback when edited",async()=>{
  await fill("synthetic-code-one");await act(async()=>click("Preview computer"));await settle();expect(container.textContent).toContain("Synthetic invalid code");expect(container.querySelector("textarea")!.value).toBe("synthetic-code-one");

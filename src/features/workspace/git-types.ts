@@ -11,6 +11,7 @@ export type GitScope = {
 export type ProjectGitProps = GitScope & {
   onOpenFile: (path: string) => void;
   onDraftGuard?: (guard: import("./file-editor-types").DraftGuard) => void;
+  hideDraftWriteWarning?: boolean;
 };
 
 export type GitFileAction = "stage" | "unstage" | "stageAll" | "unstageAll";
@@ -88,6 +89,7 @@ export type GitCommitPanelProps = {
   canRunWorkspace: boolean;
   message: string;
   onMessageChange: (value: string) => void;
+  generation?: ReturnType<typeof import("./use-git-commit-generation").useGitCommitGeneration>;
   fetching: boolean;
   onFetch: () => void;
   onChoose: (confirmation: GitConfirmation) => void;

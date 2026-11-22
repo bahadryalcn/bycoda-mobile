@@ -130,7 +130,10 @@ describe("compact file drafts", () => {
     const retry = new DraftStore(failing, "machine:retry", parseFileDraft, encodeFileDraft);
     await retry.load();
     const pending = edited("unsaved");
-    await expect(retry.persist(pending)).rejects.toThrow("Storage full");
+    await expect(retry.persist(pending)).rejects.toMatchObject({
+      message: "Storage full",
+      cause: expect.objectContaining({ message: "Storage full" }),
+    });
     await retry.persist(pending);
     expect(failing.setItem).toHaveBeenCalledTimes(2);
   });

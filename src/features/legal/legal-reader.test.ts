@@ -18,9 +18,17 @@ vi.mock("@/ui/section-progress", () => ({
     createElement("nav", null, sections.map(({ id, title }) => createElement("span", { key: id }, title))),
 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
+vi.mock("@/ui/dialogs", () => ({
+  Sheet: ({ children, visible, title, scroll }: PropsWithChildren<{ visible: boolean; title: string; scroll: boolean }>) =>
+    visible ? createElement("section", { "aria-label": title, "data-scroll": scroll }, children) : null,
+}));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("./legal-document", () => ({ LegalDocument: () => null, legalSectionId: (index: number) => `section-${index}` }));
-import { LegalReader } from "./legal-reader";
+vi.mock("./legal-document", () => ({
+  LegalDocument: () => null,
+  legalDocumentTitle: (document: string) => document,
+  legalSectionId: (index: number) => `section-${index}`,
+}));
+import { LegalDocumentSheet, LegalReader } from "./legal-reader";
 it.each([[0, 44, false], [44, 0, false], [0, 44, true], [44, 0, true]] as const)("reserves physical safe edges left=%s right=%s in RTL=%s", async (left, right, rtl) => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); fixture.left = left; fixture.right = right; fixture.rtl = rtl;
   const container = document.createElement("div"), root = createRoot(container);
@@ -46,6 +54,25 @@ it.each([
     await act(async () => root.render(createElement(LegalReader, { document })));
     expect(fixture.tracked.slice(-ids.length)).toEqual(ids);
     expect(container.querySelector("nav")?.textContent?.endsWith(titles)).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("gives long public documents a section list and one scroll owner inside the sheet", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const onClose = vi.fn();
+  try {
+    await act(async () => root.render(createElement(LegalDocumentSheet, { document: "terms", onClose })));
+    expect(container.querySelector("section[aria-label=terms]")?.getAttribute("data-scroll")).toBe("false");
+    expect(container.querySelector("nav")?.textContent).toContain("MIT license");
+
+    await act(async () => root.render(createElement(LegalDocumentSheet, { document: "help", onClose })));
+    expect(container.querySelector("section[aria-label=help]")?.getAttribute("data-scroll")).toBe("true");
+    expect(container.querySelector("nav")).toBeNull();
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

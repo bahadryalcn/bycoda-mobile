@@ -8,14 +8,25 @@ import { RemoteHostError } from "@/remote/host-error";
 const state = vi.hoisted(() => ({
   request: vi.fn(), active: true, directoryReady: true, verifying: false, privacyUnavailable: false,
   refetch: vi.fn(),
+  streaming: false,
+  streamFailed: undefined as ((error: Error) => void) | undefined,
   project: { id: "project", name: "Project", cwd: "/project" },
   machine: { id: "machine", capabilities: [] as string[] },
 }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => state.machine }));
-vi.mock("@/state/queries", () => ({
-  hostKey: (id: string, key: unknown[]) => ["machine", id, ...key],
-  useHostClient: () => ({ request: state.request }),
-  useHostReadActive: () => state.active,
+vi.mock("@/state/queries", () => {
+  const client = { request: state.request, supportsStreams: () => state.streaming };
+  return {
+    hostKey: (id: string, key: unknown[]) => ["machine", id, ...key],
+    useHostClient: () => client,
+    useHostReadActive: () => state.active,
+  };
+});
+vi.mock("@/remote/project-stream-hub", () => ({
+  retainProjectStream: (_client: unknown, _projectId: string, listener: { onError: (error: Error) => void }) => {
+    state.streamFailed = listener.onError;
+    return () => { state.streamFailed = undefined; };
+  },
 }));
 vi.mock("./use-project-directory", () => ({ useProjectList: () => ({
   data: state.directoryReady ? [state.project] : undefined,
@@ -42,7 +53,7 @@ async function load() {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  Object.assign(state, { active: true, directoryReady: true, verifying: false, privacyUnavailable: false });
+  Object.assign(state, { active: true, directoryReady: true, verifying: false, privacyUnavailable: false, streaming: false });
   state.request.mockReset().mockResolvedValue([session]);
   state.refetch.mockReset().mockResolvedValue(undefined);
   focusManager.setFocused(true);
@@ -81,6 +92,21 @@ it("retains ordinary refresh failures and resumes background updates after the n
   expect(state.request.mock.calls.length).toBeGreaterThan(count);
   expect(result.error).toBeUndefined();
   expect(result.complete).toBe(true);
+});
+
+it("lets the typed fallback read drive recovery after a transient project stream failure", async () => {
+  state.streaming = true;
+  const timeout = new RemoteHostError("machine", "timeout", "Fallback timed out");
+  state.request.mockRejectedValue(timeout);
+  await load();
+  const streamTimeout = Object.assign(new Error("Stream timed out"), { category: "deadline" });
+  await act(async () => state.streamFailed?.(streamTimeout));
+  expect(result.error).toBe(timeout);
+
+  state.request.mockResolvedValue([session]);
+  await act(async () => { await result.refetch(); await vi.advanceTimersByTimeAsync(1); });
+  expect(result.error).toBeUndefined();
+  expect(result.directory).toHaveLength(1);
 });
 
 it.each(["auth", "identity"] as const)("conceals cached session rows after %s failure", async (kind) => {

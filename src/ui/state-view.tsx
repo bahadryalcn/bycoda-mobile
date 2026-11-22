@@ -29,6 +29,7 @@ function ActionButton({ action, tone, primary, inline = false }: { action: State
       label={action.label}
       onPress={action.onPress}
       busy={action.busy}
+      reserveTouchTarget={action.reserveTouchTarget}
       tone={tone}
       style={inline ? undefined : primary ? uiStyles.stateAction : uiStyles.stateSecondaryAction}
     />

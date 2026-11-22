@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { hostKey, useHostClient, useHostReadActive } from "@/state/queries";
+import { useConnectionScope } from "@/state/connection-scope";
 import { readEarlier, readSession, resolveSync } from "./wire";
 import type { HostSession } from "./wire";
 import type { SessionBlockRequest, SessionScope } from "./session-types";
@@ -236,6 +237,7 @@ export function useSessionSnapshot(
       const kind = (query.state.error as { kind?: string } | null)?.kind;
       if (query.state.error instanceof SessionProjectMismatch) return false;
       if (kind === "auth" || kind === "identity" || kind === "unsupported") return false;
+      if (query.state.data === undefined && isTransientConnectionError(query.state.error)) return 30_000;
       return sessionReadSchedule(query, identity).delay(
         query.state.data?.status === "running",
         !!query.state.error,
@@ -271,16 +273,31 @@ export function useSessionSnapshot(
 
 export function useEarlierSession(scope: SessionScope, session?: HostSession) {
   const client = useHostClient();
+  const active = useHostReadActive();
+  const connection = useConnectionScope();
   const cache = useQueryClient();
   const key = hostKey(scope.machineId, ["session", scope.sessionId]);
+  const live = useRef({ active, client, machineId: scope.machineId, sessionId: scope.sessionId, projectId: session?.projectId });
+  live.current = { active, client, machineId: scope.machineId, sessionId: scope.sessionId, projectId: session?.projectId };
 
   return useMutation({
+    mutationKey: [...key, "earlier", connection.token],
     mutationFn: async () => {
-      if (!client || !session) return;
+      const before = session?.history?.before;
+      if (!client || !session || before === undefined || client.machine.id !== scope.machineId || session.session.id !== scope.sessionId) return;
+      const currentScope = () => connection.isCurrent() && live.current.active && live.current.client === client &&
+        live.current.machineId === scope.machineId && live.current.sessionId === scope.sessionId && live.current.projectId === session.projectId;
+      const matchesCursor = (current: HostSession | undefined): current is HostSession =>
+        current?.session.id === scope.sessionId && current.projectId === session.projectId &&
+        current.revision === session.revision && current.history?.before === before;
+      if (!currentScope() || !matchesCursor(cache.getQueryData<HostSession>(key))) return;
+      client.assertCurrentAccess();
       const loaded = await readEarlier(client, session);
-      // A poll can advance during paging. Never replace its newer revision.
+      if (!currentScope()) return;
+      client.assertCurrentAccess();
+      // Another reader can page backward without changing the transcript revision.
       cache.setQueryData<HostSession>(key, (current) =>
-        current?.revision === loaded.revision ? retainSessionAuthority(current, loaded) : current,
+        matchesCursor(current) && loaded.revision === current.revision ? retainSessionAuthority(current, loaded) : undefined,
       );
     },
   });

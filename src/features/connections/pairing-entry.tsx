@@ -4,7 +4,7 @@ import Animated from "react-native-reanimated";
 import QrCode from "lucide-react-native/icons/qr-code";
 import ClipboardPaste from "lucide-react-native/icons/clipboard-paste";
 import PencilLine from "lucide-react-native/icons/pencil-line";
-import { Body, Button, Heading, NavigationGroup, NavigationRow, Row, Stack } from "@/ui/primitives";
+import { Body, Button, FormActions, Heading, NavigationGroup, NavigationRow, Notice, Row, Stack } from "@/ui/primitives";
 import { IconTile } from "@/ui/icon-tile";
 import { enterItem } from "@/ui/motion";
 import { space } from "@/ui/tokens";
@@ -69,6 +69,15 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
   if (entry.kind === "paste")
     return (
       <PairingPaste disabled={disabled} onCode={controller.readCode} onCancel={controller.cancel} />
+    );
+  if (entry.kind === "rejected-code")
+    return (
+      <Stack>
+        <Heading>{copy("Bağlantı kodu", "Pairing code")}</Heading>
+        <Notice tone="danger" message={entry.message} />
+        <FormActions submitLabel={copy("Yeni kod kullan", "Use a new code")} disabled={disabled || busy}
+          onSubmit={() => controller.begin("choices")} cancelLabel={copy("Vazgeç", "Cancel")} onCancel={controller.cancel} />
+      </Stack>
     );
   if (entry.kind === "preview")
     return <PairingPreview code={entry.code} operation={controller.operation} disabled={disabled}

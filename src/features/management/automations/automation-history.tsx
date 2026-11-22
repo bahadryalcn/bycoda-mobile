@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { Body, Button, ErrorText, QueryState, Row, ScreenList, Sheet, Stack, StateView } from "@/ui/primitives";
 import { ScreenChromeProvider } from "@/ui/layout";
 import { useCopy } from "@/ui/copy";
+import { remoteErrorKind } from "@/ui/error-message";
 import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
@@ -29,16 +30,19 @@ export function AutomationHistory({ automationId, projectId, summary, automation
   );
   const runs = readable ? query.data : undefined;
   const current = useRef(runs); current.current = runs;
-  const summarized = summarizedAutomationRun(summary, runs ?? []);
+  const errorKind = remoteErrorKind(query.error);
+  const showSummary = errorKind !== "auth" && errorKind !== "identity";
+  const visibleSummary = showSummary ? summary : undefined;
+  const summarized = summarizedAutomationRun(visibleSummary, runs ?? []);
   const close = () => { if (!mounted.current || retired.current) return; retired.current = true; onClose(); };
   return <Sheet visible title={copy("Geçmiş", "History")} size="full" scroll={false} onClose={close}>
     {!readable ? <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")} description={copy(...RECORD_ACCESS_UNAVAILABLE)} /> :
       <ScreenChromeProvider nativeTitle bottomSafeArea={false}>
         <ScreenList data={runs ?? []} keyExtractor={run => run.id}
           header={<>
-            {automationName ? <Body style={uiStyles.title}>{automationName}</Body> : null}
+            {showSummary && automationName ? <Body style={uiStyles.title}>{automationName}</Body> : null}
             {opening.machineName ? <Body muted style={uiStyles.caption}>{opening.machineName}</Body> : null}
-            <ErrorText error={summary?.lastRunError} />
+            <ErrorText error={visibleSummary?.lastRunError} />
             <QueryState query={query} empty={!runs?.length} />
           </>}
           renderItem={({ item: run }) => <Stack>

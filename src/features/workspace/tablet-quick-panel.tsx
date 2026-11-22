@@ -83,7 +83,7 @@ export function TabletQuickPanel({ bottomInset }: { bottomInset: number }) {
   // Voice assistant while a computer is active, so the panel keeps only what the rail cannot reach.
   const actions = quickPanelActions(
     appCommands(copy),
-    recentQuickActionSessions(feed, true, QUICK_PANEL_RECENTS),
+    recentQuickActionSessions(feed, true, QUICK_PANEL_RECENTS, copy("Yeni oturum", "New session")),
     copy,
     { session: Boolean(machineId) },
   );

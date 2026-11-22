@@ -23,13 +23,13 @@ import {
   Loading,
   Row,
   Screen,
-  Sheet,
 } from "../../ui/primitives";
 import { IconTile } from "../../ui/icon-tile";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
-import { LegalDocument, legalDocumentTitle, type LegalDocumentId } from "../legal/legal-document";
+import type { LegalDocumentId } from "../legal/legal-document";
+import { LegalDocumentSheet } from "../legal/legal-reader";
 import { consentScope, createConsentStore } from "./consent-store";
 import { useProviderPermission } from "./consent-access";
 import { ScreenOverlay } from "../../ui/overlays";
@@ -112,6 +112,8 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
   return (
     <View style={{ flex: 1 }}>
       <View
+        // Keep the native navigator parent stable when consent restores accessibility.
+        collapsable={false}
         style={{ flex: 1 }}
         accessibilityElementsHidden={visible}
         importantForAccessibility={visible ? "no-hide-descendants" : "auto"}
@@ -253,14 +255,7 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
               </>
             )}
           </Screen>
-          <Sheet
-            visible={document !== null}
-            size="full"
-            title={document ? legalDocumentTitle(document, copy) : ""}
-            onClose={() => setDocument(null)}
-          >
-            {document ? <LegalDocument document={document} /> : null}
-          </Sheet>
+          <LegalDocumentSheet document={document} onClose={() => setDocument(null)} />
         </View>
       </ScreenOverlay>
     </View>

@@ -55,7 +55,7 @@ export function quickPanelActions(
     { id: "palette", label: copy("Ara ve komutlar", "Search and commands"), icon: "search", kind: "palette" },
     ...recents.slice(0, QUICK_PANEL_RECENTS).map((session): QuickPanelAction => ({
       id: `session:${session.id}`,
-      label: session.title,
+      label: session.title || copy("Yeni oturum", "New session"),
       icon: "message",
       kind: "session",
       href: sessionHref(session),

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement as h, type ReactNode } from "react";
+import { act, createElement as h, useState, type PropsWithChildren, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
@@ -11,6 +11,7 @@ const fixture = vi.hoisted(() => ({ search: "", empty: false, discovering: false
 
 vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => undefined }));
 vi.mock("@/state/queries", () => ({ useHostQuery: () => ({
   isSuccess: true,
   data: { pending: fixture.discovering ? ["codex"] : [], models: fixture.empty ? {} : {
@@ -24,7 +25,8 @@ vi.mock("@/ui/provider-identity", () => ({
 }));
 vi.mock("@/ui/primitives", () => ({
   Loading: ({ label }: { label: string }) => h("p", { role: "status" }, label),
-  Notice: ({ message }: { message: string }) => h("p", null, message), QueryState: () => null,
+  Notice: ({ message, children }: PropsWithChildren<{ message: string }>) => h("section", null, message, children), QueryState: () => null,
+  Button: ({ label, onPress }: { label: string; onPress: () => void }) => h("button", { onClick: onPress }, label),
   SelectField: ({ disabled, value, options, onChange }: { disabled: boolean; value?: string; options: { value: string; label: string; group: string; icon: ReactNode }[]; onChange: (value: string) => void }) =>
     h("div", { "aria-disabled": disabled }, filterSelection(options, fixture.search, "tr").map(row => h("p", {
       key: row.value, "data-group": row.group, "data-selected": row.value === value,
@@ -35,6 +37,7 @@ vi.mock("@/ui/primitives", () => ({
 function render() {
   return renderToStaticMarkup(h(AssistantReplyModel, {
     client: {} as Parameters<typeof AssistantReplyModel>[0]["client"], projectId: "", disabled: false, onSaved: vi.fn(),
+    current: () => true, reviewRequired: false, onReviewRequired: vi.fn(), onRefresh: vi.fn(),
     profile: { ...assistantProfileDefaults, replyExecution: {
       harness: "claude", model: "claude:Older", runtimeMode: "supervised", modelSettings: {}, maxRunMinutes: 5,
     } },
@@ -92,6 +95,7 @@ it("offers a first reply model and saves it only after an explicit selection", a
     await act(async () => root.render(h(AssistantReplyModel, {
       client: { updateProfile } as unknown as Parameters<typeof AssistantReplyModel>[0]["client"],
       projectId: "", disabled: false, onSaved, profile: assistantProfileDefaults,
+      current: () => true, reviewRequired: false, onReviewRequired: vi.fn(), onRefresh: vi.fn(),
     })));
     expect(container.querySelector('[aria-disabled="false"]')).not.toBeNull();
     expect(container.querySelector('[data-selected="true"]')).toBeNull();
@@ -100,6 +104,59 @@ it("offers a first reply model and saves it only after an explicit selection", a
     await act(async () => option.click());
     expect(updateProfile).toHaveBeenCalledExactlyOnceWith(0, { replyExecution });
     expect(onSaved).toHaveBeenCalledExactlyOnceWith(profile);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("requires a fresh Host profile before another explicit selection after a failed save", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const refreshedProfile = { ...assistantProfileDefaults, version: 2, replyExecution: {
+    harness: "codex" as const, model: "two", runtimeMode: "supervised" as const, modelSettings: {}, maxRunMinutes: 60,
+  } };
+  const refresh = vi.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(refreshedProfile);
+  const updateProfile = vi.fn().mockRejectedValueOnce(new Error("Profile changed")).mockResolvedValueOnce({ ...assistantProfileDefaults, version: 3 });
+  let open = true;
+  function Workspace() {
+    const [reviewRequired, onReviewRequired] = useState(false);
+    return open ? h(AssistantReplyModel, {
+      client: { updateProfile } as unknown as Parameters<typeof AssistantReplyModel>[0]["client"],
+      profile: assistantProfileDefaults, projectId: "", disabled: false, current: () => true,
+      reviewRequired, onReviewRequired, onRefresh: refresh, onSaved: vi.fn(),
+    }) : null;
+  }
+  const render = () => act(async () => root.render(h(Workspace)));
+  const choose = (model = "GPT-2") => act(async () => [...container.querySelectorAll("p")].find(row => row.textContent === model)!.click());
+  const refreshRow = (count = 1) => act(async () => {
+    const button = [...container.querySelectorAll("button")].find(row => row.textContent === "Refresh")!;
+    for (let taps = 0; taps < count; taps++) button.click();
+  });
+  try {
+    await render();
+    await choose();
+    expect(updateProfile).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain("Refresh");
+    open = false;
+    await render();
+    open = true;
+    await render();
+    await choose();
+    expect(updateProfile).toHaveBeenCalledOnce();
+    await refreshRow(2);
+    expect(refresh).toHaveBeenCalledOnce();
+    await choose();
+    expect(updateProfile).toHaveBeenCalledOnce();
+    await refreshRow();
+    expect(updateProfile).toHaveBeenCalledOnce();
+    await choose();
+    expect(updateProfile).toHaveBeenCalledOnce();
+    expect(container.querySelector('[data-selected="true"]')?.textContent).toBe("GPT-2");
+    await choose("GPT-10");
+    expect(updateProfile).toHaveBeenCalledTimes(2);
+    expect(updateProfile.mock.calls[1][0]).toBe(2);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

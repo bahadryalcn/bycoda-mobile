@@ -36,6 +36,7 @@ export function ComposerModeMenu({
   return (
     <ActionMenu
       label={copy("Mod", "Mode")}
+      reserveTouchTarget
       active={!!active}
       trigger={<SlidersHorizontal size={18} strokeWidth={2.2} color={active ? colors.accent : colors.muted} />}
       actions={[
@@ -75,6 +76,7 @@ export function ComposerModeChip({
       accessibilityLabel={`${label}. ${copy("Kapatmak için dokun", "Tap to turn off")}`}
       tone="secondary"
       density="compact"
+      reserveTouchTarget
       disabled={disabled}
       onPress={onRemove}
     >

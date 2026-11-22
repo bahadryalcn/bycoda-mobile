@@ -163,6 +163,7 @@ function AssistantWorkspace({
     >(null),
     [issue, setIssue] = useState(false),
     [presenceUnknown, setPresenceUnknown] = useState(false);
+  const [replyReviewRequired, setReplyReviewRequired] = useState(false);
   const busy = busyKind !== null;
   // Expanded and minimized views share one captured Room selection without keeping a route stack alive.
   useEffect(() => {
@@ -528,7 +529,12 @@ function AssistantWorkspace({
           copy("Görüşmeyi bitir", "End voice call"), select);
       }} />
     <AssistantReplyModel client={client} profile={state.profile} projectId={projectId}
-      disabled={!writable || busy} onSaved={(profile) => {
+      disabled={!writable || busy} current={current} reviewRequired={replyReviewRequired} onReviewRequired={setReplyReviewRequired}
+      onRefresh={async () => {
+        if (!current()) return;
+        const result = await snapshot.refetch({ cancelRefetch: false });
+        return current() && result.isSuccess ? result.data.snapshot?.profile : undefined;
+      }} onSaved={(profile) => {
         if (!current()) return;
         const key = hostKey(machineId, ["assistant", sourceKey, "snapshot"]);
         cache.setQueryData<AssistantResponse>(key, previous => previous?.snapshot &&

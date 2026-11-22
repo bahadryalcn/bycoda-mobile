@@ -42,6 +42,7 @@ export function ComposerNoteCard({
         <ChatAction
           label={copy("Not bağlamını kaldır", "Remove note context")}
           disabled={disabled}
+          reserveTouchTarget
           onPress={onRemove}
         >
           <X size={16} color={colors.muted} />

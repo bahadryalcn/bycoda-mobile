@@ -86,6 +86,54 @@ it("retires the physical camera even when blur and focus updates are batched",as
  await act(async()=>fixture.camera!.onBarcodeScanned!({data:"new-frame"}));await settle();expect(fixture.code).toHaveBeenCalledExactlyOnceWith("new-frame");
 });
 
+it("waits for a fresh grant before reopening the camera after batched foreground events", async () => {
+  await render();
+  await settle();
+  expect(container.textContent).toContain("Synthetic camera");
+  let resolve!: (value: typeof fixture.permission) => void;
+  fixture.refresh.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+  await act(async () => {
+    fixture.listeners.get("blur")?.forEach(callback => callback(""));
+    fixture.listeners.get("focus")?.forEach(callback => callback(""));
+  });
+  expect(fixture.refresh).toHaveBeenCalledTimes(2);
+  expect(container.textContent).not.toContain("Synthetic camera");
+  await act(async () => resolve({ granted: false, canAskAgain: false, status: "denied" }));
+  expect(container.textContent).toContain("Open camera settings");
+  expect(container.textContent).not.toContain("Synthetic camera");
+});
+
+it("rereads access after returning from Settings even while the open action is pending", async () => {
+  fixture.permission = { granted: false, canAskAgain: false, status: "denied" };
+  let finish!: () => void;
+  fixture.settings.mockImplementationOnce(() => new Promise<void>(done => { finish = done; }));
+  await render();
+  await click("Open camera settings");
+  await settle();
+  fixture.refresh.mockResolvedValueOnce({ granted: true, canAskAgain: true, status: "granted" });
+  await event("change", "background");
+  await event("change", "active");
+  await settle();
+  expect(fixture.refresh).toHaveBeenCalledTimes(2);
+  expect(container.textContent).toContain("Synthetic camera");
+  await click("Paste pairing code");
+  expect(fixture.paste).toHaveBeenCalledOnce();
+  await act(async () => finish());
+});
+
+it("discards a grant from an older read after the foreground owner verifies a denial", async () => {
+  let older!: (value: typeof fixture.permission) => void;
+  fixture.refresh.mockImplementationOnce(() => new Promise(done => { older = done; }));
+  await render();
+  fixture.refresh.mockResolvedValueOnce({ granted: false, canAskAgain: false, status: "denied" });
+  await event("blur");
+  await event("focus");
+  expect(container.textContent).toContain("Open camera settings");
+  await act(async () => older({ granted: true, canAskAgain: true, status: "granted" }));
+  expect(container.textContent).toContain("Open camera settings");
+  expect(container.textContent).not.toContain("Synthetic camera");
+});
+
 it("requests camera access on first entry and keeps paste with the content", async () => {
  fixture.permission={granted:false,canAskAgain:true,status:"undetermined"};
  await render();await settle();

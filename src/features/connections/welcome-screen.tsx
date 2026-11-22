@@ -1,6 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
 import { ScrollView, View, useWindowDimensions } from "react-native";
-import Animated, { FadeIn, FadeInDown, ReduceMotion } from "react-native-reanimated";
+import Animated, { FadeIn, ReduceMotion } from "react-native-reanimated";
 import { stillMotion } from "@/ui/motion";
 import { router, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,9 +21,8 @@ export function WelcomeScreen() {
   const copy = useCopy();
   const insets = useSafeAreaInsets();
   const bottomInset = useBottomInset();
-  const { width, height } = useWindowDimensions();
-  // "Remove animations" left the delayed section (heading and Scan QR code) invisible; mount it still.
-  const still = stillMotion;
+  const { width, height, fontScale } = useWindowDimensions();
+  const artworkHeight = Math.min(200, height * 0.26) / Math.max(1, fontScale);
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen options={{ title: copy("Projeler", "Projects") }} />
@@ -35,6 +34,7 @@ export function WelcomeScreen() {
           width: "100%",
           maxWidth: metrics.entryWidth,
           alignSelf: "center",
+          justifyContent: "center",
           paddingStart: Math.max(insets.left, space.screen),
           paddingEnd: Math.max(insets.right, space.screen),
           paddingTop: space.lg,
@@ -42,11 +42,17 @@ export function WelcomeScreen() {
           gap: space.xl,
         }}
       >
-        <Animated.View entering={still ? undefined : FadeIn.duration(700).reduceMotion(ReduceMotion.System)}
-          style={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
-          <CodeArt name="guideTip" active width={codeArtWidth("guideTip", { width: Math.min(width * 0.8, metrics.entryWidth - 2 * space.screen), height: height * 0.5 })} />
+        <Animated.View
+          entering={stillMotion ? undefined : FadeIn.duration(300).reduceMotion(ReduceMotion.System)}
+          style={{ alignItems: "center" }}
+        >
+          <CodeArt
+            name="guideTip"
+            active
+            width={codeArtWidth("guideTip", { width: Math.min(width * 0.8, metrics.entryWidth - 2 * space.screen), height: artworkHeight })}
+          />
         </Animated.View>
-        <Animated.View entering={still ? undefined : FadeInDown.duration(600).delay(300).reduceMotion(ReduceMotion.System)}>
+        <View>
           <AccountComputersSection others={
             <View style={{ gap: space.lg }}>
               <View style={{ gap: space.sm }}>
@@ -68,7 +74,7 @@ export function WelcomeScreen() {
               </View>
             </View>
           } />
-        </Animated.View>
+        </View>
       </ScrollView>
     </View>
   );

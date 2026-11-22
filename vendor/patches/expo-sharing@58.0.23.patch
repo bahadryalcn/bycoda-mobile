@@ -1,0 +1,113 @@
+diff --git a/android/src/main/java/expo/modules/sharing/SharingFileProvider.kt b/android/src/main/java/expo/modules/sharing/SharingFileProvider.kt
+index dde8cc06c4d6efc37a4b79bb1e27eb5f563381a8..1348ca80faeee6ab091d88626d2fa88f1bf0b2a5 100644
+--- a/android/src/main/java/expo/modules/sharing/SharingFileProvider.kt
++++ b/android/src/main/java/expo/modules/sharing/SharingFileProvider.kt
+@@ -1,5 +1,18 @@
+ package expo.modules.sharing
+ 
++import android.net.Uri
+ import androidx.core.content.FileProvider
+ 
+-class SharingFileProvider : FileProvider()
++class SharingFileProvider : FileProvider() {
++  override fun getType(uri: Uri): String? {
++    // Let FileProvider resolve and validate the file within its configured roots.
++    val detectedType = super.getType(uri)
++    val offeredType = uri.getQueryParameter(MIME_TYPE_QUERY_PARAMETER)
++    return offeredType?.takeIf { MIME_TYPE.matches(it) } ?: detectedType
++  }
++
++  companion object {
++    const val MIME_TYPE_QUERY_PARAMETER = "expoSharingMimeType"
++    private val MIME_TYPE = Regex("[a-z0-9!#$&^_.+%-]+/[a-z0-9!#$&^_.+%-]+")
++  }
++}
+diff --git a/android/src/main/java/expo/modules/sharing/SharingModule.kt b/android/src/main/java/expo/modules/sharing/SharingModule.kt
+index 471b34050e7e6859cd2432b3d4cc4f21bc8fb8da..137292141a55f50593528e019d3e93bfce08e084 100644
+--- a/android/src/main/java/expo/modules/sharing/SharingModule.kt
++++ b/android/src/main/java/expo/modules/sharing/SharingModule.kt
+@@ -28,16 +28,28 @@ class SharingModule : Module() {
+       }
+       try {
+         val fileToShare = getLocalFileFoUrl(url)
+-        val contentUri = FileProvider.getUriForFile(
+-          context,
+-          context.applicationInfo.packageName + ".SharingFileProvider",
+-          fileToShare
+-        )
+-        val mimeType = params.mimeType
+-          ?: URLConnection.guessContentTypeFromName(fileToShare.name)
++        val displayName = params.displayName
++          ?.substringAfterLast('/')
++          ?.substringAfterLast('\\')
++          ?.filterNot { it.isISOControl() }
++          ?.trim()
++          ?.takeIf { it.isNotEmpty() && it != "." && it != ".." }
++        val authority = context.applicationInfo.packageName + ".SharingFileProvider"
++        val explicitType = params.mimeType?.let(Intent::normalizeMimeType)
++        val mimeType = explicitType
++          ?: URLConnection.guessContentTypeFromName(displayName ?: fileToShare.name)
+           ?: "*/*"
++        // The staged filename may lack an extension. Receivers can query the URI for its type.
++        val sharedUri = if (displayName != null) {
++          FileProvider.getUriForFile(context, authority, fileToShare, displayName)
++            .buildUpon()
++            .appendQueryParameter(SharingFileProvider.MIME_TYPE_QUERY_PARAMETER, mimeType)
++            .build()
++        } else {
++          FileProvider.getUriForFile(context, authority, fileToShare)
++        }
+         val intent = Intent.createChooser(
+-          createSharingIntent(contentUri, mimeType),
++          createSharingIntent(sharedUri, mimeType),
+           params.dialogTitle
+         )
+         val resInfoList = context.packageManager.queryIntentActivities(
+@@ -46,7 +58,7 @@ class SharingModule : Module() {
+         )
+         resInfoList.forEach {
+           val packageName = it.activityInfo.packageName
+-          context.grantUriPermission(packageName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
++          context.grantUriPermission(packageName, sharedUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+         }
+         pendingPromise = promise
+         appContext.throwingActivity.startActivityForResult(intent, REQUEST_CODE)
+diff --git a/android/src/main/java/expo/modules/sharing/SharingOptions.kt b/android/src/main/java/expo/modules/sharing/SharingOptions.kt
+index 99926bf59ab20237bcad538bca5d2ace37f8e1c8..370860114165e1a10cbc1b3be565a983f2b9dec3 100644
+--- a/android/src/main/java/expo/modules/sharing/SharingOptions.kt
++++ b/android/src/main/java/expo/modules/sharing/SharingOptions.kt
+@@ -8,5 +8,6 @@ import expo.modules.kotlin.types.OptimizedRecord
+ data class SharingOptions(
+   @Field val mimeType: String?,
+   @Field val UTI: String?,
+-  @Field val dialogTitle: String?
++  @Field val dialogTitle: String?,
++  @Field val displayName: String?
+ ) : Record
+diff --git a/build/Sharing.types.d.ts b/build/Sharing.types.d.ts
+index 213447a18257338804e5adc911d8e035d5c10f23..4e291ad77c2c581f781c3632d23735ccd59ca0f7 100644
+--- a/build/Sharing.types.d.ts
++++ b/build/Sharing.types.d.ts
+@@ -39,6 +39,8 @@ export type SharingOptions = {
+      * @platform web
+      */
+     dialogTitle?: string;
++    /** Display name supplied to receiving apps for the shared file on Android. */
++    displayName?: string;
+     /**
+      * Sets the anchor point for iPad
+      * @platform ios
+diff --git a/src/Sharing.types.ts b/src/Sharing.types.ts
+index 1393ffaf5857bc2972f6138a1909b5ce294e4a8f..89e7c89634c11c95f466e15aee474f847b9fb5ed 100644
+--- a/src/Sharing.types.ts
++++ b/src/Sharing.types.ts
+@@ -40,6 +40,9 @@ export type SharingOptions = {
+    * @platform web
+    */
+   dialogTitle?: string;
++
++  /** Display name supplied to receiving apps for the shared file on Android. */
++  displayName?: string;
+   /**
+    * Sets the anchor point for iPad
+    * @platform ios

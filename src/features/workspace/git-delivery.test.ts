@@ -29,9 +29,10 @@ vi.mock("@/ui/primitives", () => {
   return {
     Body: Group, Disclosure: Group, Sheet: Group, Button, ErrorNotice: Group, QueryState: Group, MutationState: Group,
     Notice: ({ message }: { message: string }) => createElement("div", null, message),
-    ConfirmationCard: ({ children, confirmLabel, cancelLabel, onConfirm, onCancel, disabled }: PropsWithChildren<{
+    ConfirmationCard: ({ children, message, confirmLabel, cancelLabel, onConfirm, onCancel, disabled }: PropsWithChildren<{
+      message: string;
       confirmLabel: string; cancelLabel: string; onConfirm: () => void; onCancel: () => void; disabled?: boolean;
-    }>) => createElement("div", null, children, createElement(Button, { label: confirmLabel, onPress: onConfirm, disabled }),
+    }>) => createElement("div", null, message, children, createElement(Button, { label: confirmLabel, onPress: onConfirm, disabled }),
       createElement(Button, { label: cancelLabel, onPress: onCancel })),
   };
 });
@@ -71,7 +72,7 @@ it("reconciles an unconfirmed review explicitly and submits only the approved to
   expect(state.merge).not.toHaveBeenCalled();
   await click("Approve delivery");
   expect(button("Retry")).toBeDefined();
-  await click("Review again");
+  await click("Check status");
   expect(state.refetch).toHaveBeenCalledOnce();
   expect(state.merge).toHaveBeenCalledOnce();
   await click("Approve delivery");
@@ -81,6 +82,25 @@ it("reconciles an unconfirmed review explicitly and submits only the approved to
   ]);
   expect(container.textContent).toContain("Delivered.");
   expect(button("Approve delivery")).toBeUndefined();
+});
+
+it("confirms a recorded merge from the exact workspace without sending another approval", async () => {
+  state.review.mockResolvedValue(plan("first"));
+  state.merge.mockRejectedValueOnce(new RemoteHostError("pc", "network", "Connection lost", true));
+  state.refetch.mockResolvedValueOnce({ data: [state.workspaces[0], {
+    ...state.workspaces[1], state: "merged", revision: 3, deliveredCommit: "c".repeat(40),
+  }] });
+  await render();
+  await click("Review delivery");
+  await click("Approve delivery");
+  expect(container.textContent).toContain("The action may have been applied.");
+  expect(container.textContent).not.toContain("will be merged");
+  await click("Check status");
+  expect(state.refetch).toHaveBeenCalledOnce();
+  expect(state.merge).toHaveBeenCalledOnce();
+  expect(state.review).toHaveBeenCalledOnce();
+  expect(container.textContent).toContain("Delivered.");
+  expect(button("Retry")).toBeUndefined();
 });
 
 it("retires the merge action when its connection has changed", async () => {

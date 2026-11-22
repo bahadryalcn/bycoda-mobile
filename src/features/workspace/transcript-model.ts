@@ -25,6 +25,13 @@ export type TranscriptEntry =
   | ({ id: string; kind: "activity"; blocks: Block[]; author?: string } & TurnChrome);
 export type TranscriptView = "messages" | "details";
 
+/** Older rows can grow or regroup the list without adding anything at its live end. */
+export function transcriptTailStamp(entries: readonly TranscriptEntry[]) {
+  const last = entries.at(-1);
+  const block = last?.kind === "message" ? last.block : last?.blocks.at(-1);
+  return block ? JSON.stringify([block.id, block.text?.length ?? 0, block.tool?.output?.length ?? 0]) : undefined;
+}
+
 /** Presentation only: folded into the turn's work row. User commands, results, notices and decisions stay separate. */
 export function isTransientActivity(block: Block) {
   return (

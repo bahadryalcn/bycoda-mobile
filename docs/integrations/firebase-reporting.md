@@ -43,6 +43,9 @@ background. Editing the report creates a new identity. Requests omit cookies,
 reject redirects and time out after 20 seconds. No host credential is reusable
 as Firebase authentication.
 
+The confirmation shows the report reference. Choosing **Done** acknowledges
+that receipt. The next visit opens a blank report form.
+
 ## Receiver and release work
 
 Before enabling the endpoint:

@@ -19,6 +19,8 @@ export function ChatToolbarAction({
   busy,
   tone = "muted",
   hideLabel = false,
+  multiline = false,
+  reserveTouchTarget = false,
   children,
 }: PropsWithChildren<{
   label: string;
@@ -29,11 +31,14 @@ export function ChatToolbarAction({
   tone?: "muted" | "accent" | "danger";
   /** Bounded navigator accessories retain their spoken label and icon target. */
   hideLabel?: boolean;
+  multiline?: boolean;
+  reserveTouchTarget?: boolean;
 }>) {
   const { colors } = useMobileTheme();
   const reducedMotion = useReducedMotionPreference();
   const color = colors[tone];
   const off = !!(disabled || busy);
+  const fullTarget = multiline || reserveTouchTarget;
   return (
     <PanelButton
       variant="ghost"
@@ -48,10 +53,10 @@ export function ChatToolbarAction({
       onPress={onPress}
       aria-disabled={off}
       aria-busy={busy || undefined}
-      hitSlop={hitSlopFor(metrics.chipHeight)}
+      hitSlop={fullTarget ? undefined : hitSlopFor(metrics.chipHeight)}
       style={{
-        minHeight: metrics.chipHeight,
-        minWidth: metrics.chipHeight,
+        minHeight: fullTarget ? metrics.touchTarget : metrics.chipHeight,
+        minWidth: fullTarget ? metrics.touchTarget : metrics.chipHeight,
         maxWidth: "100%",
         flexShrink: 1,
         paddingHorizontal: space.sm,
@@ -66,7 +71,7 @@ export function ChatToolbarAction({
     >
         {!hideLabel ? <Body
           selectable={false}
-          numberOfLines={1}
+          numberOfLines={multiline ? 2 : 1}
           style={{
             color,
             fontSize: fontSize.small,
@@ -88,6 +93,7 @@ export function ChatAction({
   disabled,
   busy,
   primary,
+  reserveTouchTarget,
   children,
 }: PropsWithChildren<{
   label: string;
@@ -95,6 +101,7 @@ export function ChatAction({
   disabled?: boolean;
   busy?: boolean;
   primary?: boolean;
+  reserveTouchTarget?: boolean;
 }>) {
   useMobileTheme();
   return (
@@ -103,6 +110,7 @@ export function ChatAction({
       disabled={disabled}
       busy={busy}
       tone={primary ? "primary" : "default"}
+      reserveTouchTarget={reserveTouchTarget}
       onPress={onPress}
     >
       {children}
@@ -112,7 +120,7 @@ export function ChatAction({
 
 /**
  * Circular composer action: a 32dp visual (filled when it can act; danger for Stop) with the
- * touch area grown to 48dp through hit slop, a spring press and a busy spinner.
+ * 48dp layout target, a spring press and a busy spinner.
  */
 export function ChatCircleAction({
   label,
@@ -145,44 +153,63 @@ export function ChatCircleAction({
   const reducedMotion = useReducedMotionPreference();
   const off = !!(disabled || busy);
   const filled = danger ? colors.danger : active ? colors.accentSolid : undefined;
+  const visualInset = (metrics.touchTarget - metrics.visualControl) / 2;
   return (
-    <PanelButton
-      variant="ghost"
-      size="icon"
-      loading={busy}
-      spinnerProps={{ size: "sm", color: filled ? colors.primaryText : colors.muted }}
-      startContent={children}
-      pressScale={reducedMotion ? 1 : 0.97}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityHint={hint}
-      accessibilityActions={onLongPress && longPressLabel ? [{ name: "longpress", label: longPressLabel }] : undefined}
-      onAccessibilityAction={(event) => {
-        if (event.nativeEvent.actionName === "longpress") onLongPress?.();
-      }}
-      accessibilityState={{ disabled: off, busy: !!busy }}
-      aria-disabled={off}
-      aria-busy={busy || undefined}
-      disabled={off}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={350}
-      hitSlop={hitSlopFor(metrics.visualControl)}
-      style={{
-        width: metrics.visualControl,
-        height: metrics.visualControl,
-        minWidth: metrics.visualControl,
-        minHeight: metrics.visualControl,
-        alignItems: "center",
-        justifyContent: "center",
+    <View>
+      {filled || surface ? (
+        <View
+          accessible={false}
+          importantForAccessibility="no"
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: visualInset,
+            left: visualInset,
+            width: metrics.visualControl,
+            height: metrics.visualControl,
             borderRadius: radii.pill,
-            backgroundColor: filled ?? (surface ? colors.panel : "transparent"),
-            borderWidth: surface && !filled ? StyleSheet.hairlineWidth : 0,
+            backgroundColor: filled ?? colors.panel,
+            borderWidth: filled ? 0 : StyleSheet.hairlineWidth,
             borderColor: colors.border,
             opacity: disabled && !busy ? opacity.disabled : 1,
-            padding: 0,
-      }}
-    />
+          }}
+        />
+      ) : null}
+      <PanelButton
+        variant="ghost"
+        size="icon"
+        loading={busy}
+        spinnerProps={{ size: "sm", color: filled ? colors.primaryText : colors.muted }}
+        startContent={children}
+        pressScale={reducedMotion ? 1 : 0.97}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityHint={hint}
+        accessibilityActions={onLongPress && longPressLabel ? [{ name: "longpress", label: longPressLabel }] : undefined}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === "longpress") onLongPress?.();
+        }}
+        accessibilityState={{ disabled: off, busy: !!busy }}
+        aria-disabled={off}
+        aria-busy={busy || undefined}
+        disabled={off}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={350}
+        style={{
+          width: metrics.touchTarget,
+          height: metrics.touchTarget,
+          minWidth: metrics.touchTarget,
+          minHeight: metrics.touchTarget,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: radii.pill,
+          backgroundColor: "transparent",
+          opacity: disabled && !busy ? opacity.disabled : 1,
+          padding: 0,
+        }}
+      />
+    </View>
   );
 }
 

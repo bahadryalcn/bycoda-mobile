@@ -50,15 +50,14 @@ it.each(["web", "ios"])(
       const p = provider();
       const f = transport([
         "transport.ws.v2",
-        "native.buffers.recovery.v1",
         "native.workspaces.v1",
-        "native.buffers.upload.v1",
+        "native.services.upload.v1",
         "transport.ws.devServers.v2",
       ]);
       const methods = Object.keys(HOST_RPC_METHODS).filter(
         (method) => method.startsWith("native.") || method.startsWith("devServers.bridge"),
       );
-      expect(methods).toContain("native.buffers.upload.commit");
+      expect(methods).toContain("native.services.upload.commit");
       expect(methods).toContain("native.turn.begin");
       expect(methods).toEqual(
         expect.arrayContaining([

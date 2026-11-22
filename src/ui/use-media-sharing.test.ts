@@ -9,13 +9,27 @@ vi.mock("./copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
 import { useMediaSharing } from "./use-media-sharing";
 let api:ReturnType<typeof useMediaSharing>,root:ReturnType<typeof createRoot>|undefined;
 function Harness(props:Parameters<typeof useMediaSharing>[0]){api=useMediaSharing(props);return null;}
-const render=(uri="file:///a.pdf",enabled=true)=>act(async()=>root!.render(createElement(Harness,{uri,name:uri,mimeType:"application/pdf",enabled})));
+const render=(uri="file:///a.pdf",enabled=true,name=uri,mimeType:string|null="application/pdf")=>act(async()=>root!.render(createElement(Harness,{uri,name,mimeType:mimeType??undefined,enabled})));
 const settle=()=>act(async()=>{await new Promise(resolve=>setTimeout(resolve,10));});
 beforeEach(()=>{vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);f.allowed=true;f.state={appState:"active",windowFocused:true};f.available.mockResolvedValue(true);f.share.mockResolvedValue(undefined);root=createRoot(document.createElement("div"));});
 afterEach(async()=>{await act(async()=>root?.unmount());root=undefined;f.listeners.clear();vi.resetAllMocks();vi.unstubAllGlobals();});
 it("claims one handoff before availability resolves and exposes truthful pending state",async()=>{
  let done!:(value:boolean)=>void;f.available.mockImplementationOnce(()=>new Promise(resolve=>{done=resolve;}));await render();await act(async()=>{api.share();api.share();});expect(f.available).toHaveBeenCalledTimes(1);expect(api.busy).toBe(true);expect(f.share).not.toHaveBeenCalled();
- await act(async()=>done(true));expect(f.share).toHaveBeenCalledExactlyOnceWith("file:///a.pdf",{dialogTitle:"file:///a.pdf",mimeType:"application/pdf"});expect(api.busy).toBe(false);expect(api.error).toBeNull();
+ await act(async()=>done(true));expect(f.share).toHaveBeenCalledExactlyOnceWith("file:///a.pdf",{dialogTitle:"file:///a.pdf",displayName:"file:///a.pdf",mimeType:"application/pdf"});expect(api.busy).toBe(false);expect(api.error).toBeNull();
+});
+
+it("shares a staged document with its visible name and MIME without changing the source URI",async()=>{
+ await render("file:///attachment-store/f996170e",true,"İstanbul bütçe.pdf");
+ await act(async()=>api.share());
+ expect(f.share).toHaveBeenCalledExactlyOnceWith("file:///attachment-store/f996170e",{
+   dialogTitle:"İstanbul bütçe.pdf",displayName:"İstanbul bütçe.pdf",mimeType:"application/pdf"
+ });
+});
+
+it("leaves filename resolution to the current source when the MIME is unknown",async()=>{
+ await render("file:///crop.png",true,"original.jpeg",null);
+ await act(async()=>api.share());
+ expect(f.share).toHaveBeenCalledExactlyOnceWith("file:///crop.png",{dialogTitle:"original.jpeg"});
 });
 it("retires old file callbacks without blocking a new explicitly chosen file",async()=>{
  let done!:(value:boolean)=>void;f.available.mockImplementationOnce(()=>new Promise(resolve=>{done=resolve;}));await render();const old=api.share;await act(async()=>old());await render("file:///b.pdf");await act(async()=>{old();api.share();});await settle();

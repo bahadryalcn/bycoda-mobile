@@ -12,6 +12,15 @@ const layout: SessionLayout = {
 };
 
 describe("mobile session organization", () => {
+  it("finds a fresh session by its localized label and keeps literal titles searchable", () => {
+    const fresh = session("fresh", 10, { title: "" });
+    const named = session("named", 20, { title: "New remote session" });
+    const values = [fresh, named];
+    expect(filterSessionDirectory(values, undefined, "Yeni oturum", "", "Yeni oturum")).toEqual([fresh]);
+    expect(filterSessionDirectory(values, undefined, "New remote session", "", "Yeni oturum")).toEqual([named]);
+    expect(fresh.title).toBe("");
+  });
+
   it("finds every visible descendant of a folder name and preserves its expanded search ancestry", () => {
     const before = JSON.stringify(layout);
     const visible = filterSessionDirectory(sessions, layout, "  parent  ");

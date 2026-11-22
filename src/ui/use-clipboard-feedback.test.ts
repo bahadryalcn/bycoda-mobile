@@ -4,9 +4,12 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const security = vi.hoisted(() => ({ allowed: true, state: { appState: "active", windowFocused: true }, listeners: new Set<() => void>() }));
 vi.mock("@/state/security", () => ({ isAppAccessAllowed: () => security.allowed, useSecurity: { getState: () => security.state, subscribe: (listener: () => void) => { security.listeners.add(listener); return () => security.listeners.delete(listener); } } }));
-const clip = vi.hoisted(() => ({ calls: [] as string[], pending: [] as { resolve: () => void; reject: (error: unknown) => void }[] }));
+const clip = vi.hoisted(() => ({ calls: [] as string[], pending: [] as { resolve: (accepted?: boolean) => void; reject: (error: unknown) => void }[] }));
 vi.mock("expo-clipboard", () => ({
-  setStringAsync: (text: string) => new Promise<void>((resolve, reject) => { clip.calls.push(text); clip.pending.push({ resolve, reject }); }),
+  setStringAsync: (text: string) => new Promise<boolean>((resolve, reject) => {
+    clip.calls.push(text);
+    clip.pending.push({ resolve: (accepted = true) => resolve(accepted), reject });
+  }),
 }));
 import { createSingleFlight } from "@/state/single-flight";
 import { flushSync } from "react-dom";
@@ -51,6 +54,20 @@ it("shows preparation failures and allows an explicit retry", async () => {
 const state = () => container.querySelector("#state")!.textContent;
 const press = () => container.querySelector("button")!.click();
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; container?.remove(); clip.calls = []; clip.pending = []; vi.unstubAllGlobals(); });
+
+it("keeps the copy action retryable when the clipboard declines the write", async () => {
+  await render("conversation text");
+  await act(async () => press());
+  await act(async () => clip.pending[0]!.resolve(false));
+  expect(api.copied).toBe(false);
+  expect(api.busy).toBe(false);
+  expect(api.error).toBeInstanceOf(Error);
+
+  await act(async () => press());
+  await act(async () => clip.pending[1]!.resolve(true));
+  expect(clip.calls).toEqual(["conversation text", "conversation text"]);
+  expect(state()).toBe("copied|free|");
+});
 
 it("repeated presses before a render start at most one in-flight copy of the exact payload", async () => {
   const payload = "line one\n\t  trailing  \n🙂";

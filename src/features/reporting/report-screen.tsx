@@ -61,8 +61,13 @@ export function ContentReportScreen() {
   const doneLabel = copy("Tamam", "Done");
   const close = () => { if (router.canGoBack()) router.back(); else router.replace("/settings"); };
   if (status === "sent") {
+    const acknowledge = () => {
+      if (!active.current) return;
+      try { assertAppAccess(); } catch { return; }
+      if (discardReviewedContentReport({ draft, status, requestId, receiptId, revision })) close();
+    };
     return (
-      <Screen footer={<FormActions submitLabel={doneLabel} onSubmit={close} />}>
+      <Screen footer={<FormActions submitLabel={doneLabel} onSubmit={acknowledge} />}>
         <RouterStack.Screen options={{ title }} />
         <StateView
           illustration="success"

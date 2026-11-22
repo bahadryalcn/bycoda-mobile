@@ -1,5 +1,6 @@
 import { logDiagnostic } from "../diagnostics/diagnostic-log";
 import { useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { withTimeout } from "../../../../src/shared/lib/withTimeout";
 import { router, useRootNavigationState, type Href } from "expo-router";
 import type { NotificationResponse } from "expo-notifications";
@@ -15,7 +16,49 @@ import { expoProjectId, expoPushToken, onPushTokenRotated, pushRegistration } fr
 
 /** What each computer last accepted in this app run, so focus changes do not re-send it. */
 const accepted = new Map<string, string>();
-type PendingPushResponse = { target: PushTarget; acknowledge: () => void };
+type PendingPushResponse = { target: PushTarget; receipt: string | null; acknowledge: () => void };
+const pushReceiptsKey = "bycoda.mobile.handled-push-responses.v1";
+const pushReceiptLimit = 32;
+const handledResponses = new Set<string>();
+let receiptWrites = Promise.resolve();
+
+function pushReceipt(response: NotificationResponse): string | null {
+  const { request, date } = response.notification;
+  const action = response.actionIdentifier;
+  return request.identifier ? JSON.stringify([request.identifier, action, date]) : null;
+}
+
+function rememberResponse(receipt: string) {
+  handledResponses.add(receipt);
+  if (handledResponses.size > pushReceiptLimit) {
+    const oldest = handledResponses.values().next().value;
+    if (oldest !== undefined) handledResponses.delete(oldest);
+  }
+}
+
+async function loadPushReceipts() {
+  try {
+    await receiptWrites;
+    const raw = await withTimeout(AsyncStorage.getItem(pushReceiptsKey), 2000, "Notification receipt read");
+    const entries: unknown = raw && JSON.parse(raw);
+    if (!Array.isArray(entries)) return;
+    for (const entry of entries.slice(-pushReceiptLimit)) {
+      if (typeof entry === "string") rememberResponse(entry);
+    }
+  } catch {
+    // Continue with receipts from this app run if storage is unavailable.
+  }
+}
+
+function acknowledgePushResponse({ receipt, acknowledge }: PendingPushResponse) {
+  if (!receipt) return;
+  rememberResponse(receipt);
+  const stored = JSON.stringify([...handledResponses]);
+  receiptWrites = receiptWrites.then(() =>
+    withTimeout(AsyncStorage.setItem(pushReceiptsKey, stored), 2000, "Notification receipt write"),
+  ).catch(() => {});
+  void receiptWrites.then(acknowledge);
+}
 
 /**
  * Keeps the active computer's registration in step with this phone's
@@ -90,30 +133,37 @@ export function usePushResponses() {
     let subscription: { remove: () => void } | undefined;
     let disposed = false;
     let receivedLive = false;
+    const receiptsReady = loadPushReceipts();
     void notifications().then(async (api) => {
       if (disposed) return;
       const capture = (response: NotificationResponse): boolean => {
         const target = pushTarget(response.notification.request.content.data);
         if (!target) return false;
         suppressLastSessionRestore();
-        const identifier = response.notification.request.identifier;
-        const action = response.actionIdentifier;
-        setPending({ target, acknowledge: () => {
+        const receipt = pushReceipt(response);
+        const acknowledge = () => {
           try {
             // Compare without a JS async gap so a newer cached response stays available.
             const latest = api.getLastNotificationResponse();
-            if (identifier && latest?.notification.request.identifier === identifier &&
-                latest.actionIdentifier === action) api.clearLastNotificationResponse();
+            if (receipt && latest && pushReceipt(latest) === receipt) api.clearLastNotificationResponse();
           } catch {
             // A missing native cache API must not interrupt navigation.
           }
-        } });
+        };
+        if (receipt && handledResponses.has(receipt)) {
+          void receiptWrites.then(acknowledge);
+          return false;
+        }
+        setPending({ target, receipt, acknowledge });
         return true;
       };
       subscription = api.addNotificationResponseReceivedListener((response) => {
-        if (!disposed && capture(response)) receivedLive = true;
+        void receiptsReady.then(() => {
+          if (!disposed && capture(response)) receivedLive = true;
+        });
       });
       const initial = await api.getLastNotificationResponseAsync();
+      await receiptsReady;
       if (!disposed && !receivedLive && initial) capture(initial);
     }).catch(() => {
       // Without the native module (Expo Go, web) taps simply open the app.
@@ -125,18 +175,19 @@ export function usePushResponses() {
     if (!routerReady || !unlocked || !connectionsReady || !pending) return;
     const machines = useMachines.getState();
     if (!machines.hydrated || machines.connectionPending) return;
-    const { target, acknowledge } = pending;
+    const { target, receipt } = pending;
     setPending(null);
+    if (receipt && handledResponses.has(receipt)) return;
     const machine = machines.storageError ? undefined :
       machines.machines.find((entry) => entry.environmentId === target.environmentId);
     // A computer this phone no longer pairs with (or cannot read) opens nothing; say why, without naming it.
     if (!machine) {
       showToast({ tone: "warning", message: unmatchedPushNotice(machines.storageError, copy) });
-      acknowledge();
+      acknowledgePushResponse(pending);
       return;
     }
     if (machines.activeId !== machine.id) machines.selectMachine(machine.id);
     router.navigate(pushRoute(target, machine.id) as Href);
-    acknowledge();
+    acknowledgePushResponse(pending);
   }, [routerReady, unlocked, connectionsReady, pending, copy]);
 }

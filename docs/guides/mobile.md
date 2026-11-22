@@ -26,14 +26,21 @@ the selected conversation on the right. Selecting another session swaps the
 conversation in place. Without a selected session, Sessions shows running,
 attention and computer counters with the sessions that need attention. In
 portrait or a narrower multitasking window, tablets keep the dock and a
-conversation's header button opens the same urgency-ordered list. Phones are
-unchanged.
+conversation's header button opens the same urgency-ordered list. If a lost
+connection prevents both panes from loading, the split view shows one notice.
+When the notice offers **Retry**, it retries both affected panes.
+If the computer connection changes while the portrait session picker is open,
+the picker shows the connection change. Close it and reopen the picker to see
+the current computer’s sessions.
 
 ## Read and control your workspace
 
 When changing the **Working folder** from Files or Changes, bycoda saves any
 open draft before switching. If the save fails, the picker stays open with the
 error and the current folder remains selected.
+When pairing updates the connection, the project opens at its main folder and
+closes any file preview from the previous connection. Choose the previous worktree
+again to access its saved drafts.
 
 The Sessions tab opens with **Recent sessions**. Pick **All time** in the time
 filter to include older conversations. When the recent list is empty and older
@@ -43,8 +50,31 @@ If a project tool opens without a visible project, use **Choose a project** to
 open that same tool for a project on the connected computer.
 
 **Settings → Chat** contains the send behavior for busy agents and voice settings.
+If the phone can’t save a tab or voice preference, your choice stays on screen.
+Select **Retry** to finish saving it. The notice clears once the save succeeds.
+
+Re-pairing the computer closes the project’s **New session** form. If the previous
+computer already accepted a session, open that session from its list when you
+return to that computer.
 
 Long-press a session in project lists, active sessions or search results for grouped actions: Rename, Pin, Copy link, Copy session ID, Copy conversation as text, Details, Settle, Archive and Delete. Stop appears for running sessions on supported Hosts and requires confirmation. Rename keeps its draft on failure. Conversation copy includes committed user and assistant text only, excludes tools and private internal blocks, and rejects incomplete text or exports over 256 Ki UTF-16 code units. Host permissions and session authority checks still apply.
+
+In **Session options → Find in messages**, only the loaded transcript is searched.
+Use **Load earlier messages** to search more history. Loading earlier messages
+and opening a match pause live following. Scroll yourself or use **Jump to latest**
+to return to normal following.
+
+In **Work details**, the selected action stays selected while its record is
+temporarily unavailable. Use **Action list** to choose another action. If a refresh
+fails, the last loaded command output stays visible alongside the retry action.
+
+In **Agents**, an independently running child opens as its own session. An open
+agent’s assignment or report stays selected if its text is temporarily unavailable.
+Use the reader’s close control to return to the same agent.
+
+In **Coordination details**, **Request** and **Summary** remain available when
+there are no tasks to show. If the reviewed proposal disappears, the panel shows
+that it is unavailable and closes any open reader.
 
 Terminal output has its own scrolling reader, literal line search, full-output copy
 and a follow-latest control. Scrolling back pauses following. Commands stay in the
@@ -54,6 +84,20 @@ If the computer cannot confirm that a terminal closed, its viewport remains and
 input is paused. Use **Check status** to read the original close receipt; this
 does not send another Close command. The view is released only after closure is
 confirmed. This receipt is retained for the current terminal view's lifetime.
+
+In a conversation, **Session options → Computer → Interactive terminal** opens the terminal
+full screen. **Terminal actions** holds its secondary controls. On narrow
+screens, swipe across the extra terminal keys above the keyboard to reach the
+arrow keys. Use the keyboard button in the terminal header to show or hide the
+keyboard. System Back also hides the keyboard before leaving the terminal.
+To add recent terminal output to your conversation draft, choose **Attach output**
+from **Terminal actions**.
+When the terminal list is waiting for a connection, the screen explains the wait
+and shows the create action once the list is available. Losing the phone's network
+connection pauses new terminal requests until the connection returns.
+If the desktop app is unavailable, open bycoda on the connected computer and
+tap **Retry** to refresh the terminal list. A pending terminal operation keeps
+its own status check.
 
 Files exposes Name and Content search directly. File review keeps its full location
 under Details. Git places branch identity before totals and formats counts using the
@@ -72,6 +116,7 @@ GitHub or an email verification code before opening computers, projects or
 conversations. A build without account configuration keeps the workspace
 unavailable. Privacy, terms and help remain readable from the sign-in screen.
 The **Sections** menu in Privacy and Terms jumps to headings and contact links.
+It is available from Settings, the welcome screen, and the provider consent prompt.
 Terms also includes a **MIT license** entry.
 Desktop use remains available without an account.
 
@@ -91,13 +136,24 @@ reference only offers computers with its exact environment identity. Native
 references keep their original store and profile identity and are resolved by the
 selected computer; an unrelated conversation with the same ID is never substituted.
 The computer must advertise `sessions.references.v1`; update its Host if prompted.
+If the link uses another computer, bycoda saves pending workspace drafts before
+switching. If the save fails, the current computer stays selected and you can
+choose the link's computer again after resolving the error.
+If the computer is unpaired, **Connect a computer** opens the pairing options.
+After you connect the computer, bycoda returns to the original link.
+If the phone is offline, keep the link open and reconnect to Wi-Fi or mobile
+data. The conversation opens automatically when it can be reached.
 If **Waiting for a connection** appears, open **Manage connections** to repair
 the paired computer. Returning to the link keeps the original conversation target.
+For a temporary read failure, **Retry** tries the same link on the selected
+computer. If an update is required, update Bycoda on that computer and reopen the link.
+If the computer denies access or its identity changes, use **Manage connections**
+to repair the pairing. After you connect, bycoda returns to the original link.
 Opening a link does not migrate, unarchive, send a message or start an agent.
 
-Links citing a specific message offer **Open conversation** before opening the
-full conversation; mobile does not yet jump to that cited turn. Existing widget
-links retain their computer/project route and continue to work.
+If a link points to a specific message, bycoda highlights that message when it
+is available in the conversation. Existing widget links retain their computer
+and project route.
 
 Domain configuration alone does not prove installed-app acceptance. The website's
 Apple association needs the real signing Team ID and bundle ID; Android association
@@ -114,12 +170,21 @@ id or exact unique name when it is visible on the active computer. Other paramet
 make the link invalid and it opens the session list only. The prompt is placed in the
 composer draft of the new session; nothing is sent, and an existing draft is never
 replaced. Starting the session is still your choice in the sheet, and closing the
-sheet discards the queued prompt.
+sheet discards the prompt shown there. If the computer reconnects with new
+pairing details, choose the project again. A share that arrives after you select
+**Start session** stays queued with the earlier content for another explicit start.
 
 Sharing text, a link, images or files to bycoda from another app (iOS share extension,
 Android share target) works the same way: the content is queued for the new-session
 sheet and arrives as the draft text and composer attachments, never sent
-automatically. Android `content://` files are copied into the app cache first.
+automatically. On Android, choose multiple PDFs or images in Files to add
+them to the same draft. Android `content://` files are copied into the app cache first.
+On iOS, Safari can share a link when viewing a PDF. To attach the PDF itself,
+save it to Files and share it from there.
+Tap an attached file in the draft to open its preview. For formats without an
+in-app preview, use **Share / save** to open the file in another app. Android
+shows the document's filename and extension in the share sheet. Closing the
+preview keeps the attachment in your draft.
 
 ## Crew settings
 
@@ -144,6 +209,9 @@ including a known zero. Viewing or refreshing these values consumes no reset cre
 Open **Model and reasoning** from the conversation composer. The picker names the
 provider and account even when there is only one choice. A renamed default account
 keeps its name; the generic default label follows the app language.
+
+The composer shows the selected model. At narrow widths or larger text sizes,
+the model can use its own row. Open the picker to check the reasoning setting.
 
 If the saved account is no longer available, its state remains explicit. Choose an
 available account before changing the model. Opening or closing the picker does
@@ -228,7 +296,9 @@ Search always matches full paths and group names. Grouped view offers expand and
 collapse controls, and searching temporarily opens matching groups. These choices
 are saved on the phone separately for each computer and do not reorder the desktop.
 The project picker shares sorting and path display preferences. Projects with
-different host IDs remain distinct even when names or folders match. Projects
+different host IDs remain distinct even when names or folders match. When you
+switch or re-pair a computer, open project panels close. Open project details,
+tools or the working-folder picker again on the current computer. Projects
 pinned on the desktop rail stay on top (their own **Pinned** section in grouped
 view); running sessions never reorder projects. As on the desktop, session lists
 leave out internal orchestration workers, and a project's session list leaves
@@ -238,8 +308,9 @@ conversations owned by a crew run to **Crews**.
 
 Open **Settings → Phone permissions** to inspect camera, microphone and notification access.
 Opening **Scan QR code** requests camera access the first time. A denied request
-can be retried; a permanent denial offers phone settings. Returning from phone
-settings refreshes permission state without restarting the app. Photo and document
+can be retried; a permanent denial offers phone settings. When you return from
+phone settings, the camera waits for a fresh permission check. You can paste the
+pairing code if the camera is unavailable. Photo and document
 attachments use system pickers with access limited to the selected items.
 
 Tap **Notifications** to request system notification access, then **Test
@@ -257,6 +328,8 @@ recording or a call. Granted access can also be reviewed in phone settings.
 
 After you tap a notification, bycoda waits for the app to unlock and its saved
 computers to load before opening the original destination.
+If Android or iOS delivers an already handled tap again, bycoda keeps the current
+screen. A newer notification can still open its destination.
 
 With notification access allowed, the phone registers an Expo push token with
 the active computer (Hosts that advertise `push.expo.v1`). The computer then
@@ -310,7 +383,7 @@ numeric App Store ID; the Android listing must match `com.bycoda.mobile`. This
 explicit action does not schedule review prompts or claim that a rating occurred.
 
 In **Help & support**, **Open email app** uses the device's email handler.
-If the handler cannot open, use **Copy** beside the support address.
+If the handler cannot open, choose **Copy support address**.
 
 Use **Report** on an AI answer, or **Settings → Help & support → Report AI
 content**, to review a description and an optional excerpt. Reports use the
@@ -356,8 +429,11 @@ on the host to remove its authorization.
 - **Files:** browse/search, create files and folders, and edit text. Saving uses
   the original content as an optimistic concurrency check; another computer's
   edit remains protected.
-- **Changes:** inspect staged and unstaged diffs, stage/unstage files and work
-  with branches. Destructive Git actions and publication have explicit controls
+- **Changes:** expand staged and unstaged files independently to inspect diffs
+  or stage and unstage files. Tap the wand inside the commit message field to
+  generate a suggestion on the connected computer. Review it before applying it
+  to your draft.
+  Destructive Git actions and publication have explicit controls
   and confirmations; opening Changes never performs them automatically.
 - **Inbox:** host approvals, questions, task reviews, failed work
   and linked PR watches. Social attention items the host sends are not shown on the phone. The provider inbox uses the connected desktop's existing
@@ -366,12 +442,20 @@ on the host to remove its authorization.
   store. Explicit comment and PR actions run through the active desktop bridge.
   When the desktop is unavailable, the provider view reports that state while
   host attention remains accessible.
+  Clear an unsuccessful search with **Clear search** to keep the selected
+  filters. The provider list's **More actions** menu contains Jira boards for
+  the selected project.
 - **Manage:** tasks, goals, automations and notes. Social media management stays a
   desktop feature; the phone only follows the computer. Notes use the
   existing desktop note database and reject saves after concurrent edits. A
   missing desktop database is an error, not an empty notebook.
-- **Settings:** local language and connections, and the selected host's task
-  concurrency and daily agent time limits.
+  The Notes library and session Notes show plain-text excerpts. Opening a note
+  shows its original Markdown. In the library, swipe a row or open its **More
+  actions** menu to review deletion. The library menu contains **Recover unsaved draft**.
+- **Settings:** open the focused controls for appearance, data saver and how chat
+  sends to a running agent. In **Computer settings**, adjust concurrent tasks with
+  the plus and minus buttons. Hold either button to keep changing the limit.
+  Daily agent time offers presets and accepts a custom value.
 
 Approval replies retain the identity of the request you saw, including delegated
 Crew approvals. A reused request number cannot redirect an old reply. Unsupported
@@ -446,9 +530,10 @@ behavior, sign an app-store build or verify platform account authorization.
 
 ## Privacy, first use and store releases
 
-The welcome, secure unlock and pairing entry points use the bycoda brand and
-provide access to privacy, terms and connection help before a computer is
-connected. The offline example tour at `/demo` uses fictional, read-only content;
+The welcome, secure unlock and pairing entry points provide access to privacy,
+terms and connection help before a computer is connected. The lock screen opens
+these documents in portrait or landscape and returns to the locked screen when
+you close them. The offline example tour at `/demo` uses fictional, read-only content;
 it does not pair a computer or run host actions.
 
 The app explains host and AI-provider data transfers before relevant use.
@@ -471,6 +556,12 @@ The bottom navigation keeps Projects, Sessions, Inbox, Tools and Settings within
 reach. Tools groups destinations by Project, Work, Communication, Development and
 Computer; search also finds a group name. Settings separates preferences, access
 and privacy, computer controls and support.
+The project filter in Tools carries into the work screens it opens, including an
+explicit **All projects** selection. If the selected project is still loading or
+is no longer visible, Tools opens the project picker before opening a work
+screen. Each opened screen has its own filter.
+When the computer is connected and project visibility still needs a sync,
+the filter offers **Refresh** and explains how to sync from desktop Bycoda.
 
 With a connected computer, tap the center **New session** action to choose a
 project, or hold it for quick actions. The separate project action adds a project.
@@ -494,8 +585,9 @@ saved choices. **Reset typography** resets only general size, font, weight and
 spacing; theme, palette and message text size remain selected. Changes preserve
 drafts and navigation. A failed save retains the chosen value and shows recovery.
 **Settings > Send while agent is running** defaults to **Steer**. Hold Send to use
-the alternate **Queue** action. Hosts without Steer support retain their supported
-queue action. The composer does not expose another delivery-mode selector.
+the alternate **Queue** action. Steer is available when the connected Host
+advertises support for the provider running the turn. Otherwise Send queues the
+message until the turn ends.
 
 ## Assistant and voice
 
@@ -504,6 +596,15 @@ then return to the same Room conversation from the floating assistant window.
 Drag its handle to reposition it, or expand it to return to the full conversation.
 Closing the floating window ends its phone audio and active voice call. Work
 already accepted by the computer may continue.
+
+In **Assistant → Settings → Reply model**, if a change cannot be confirmed,
+tap **Refresh** to read the current selection from the computer. Choose a
+different model only after that check finishes.
+
+While voice settings are open, an unsaved ElevenLabs voice ID stays with the
+computer where you entered it. A connection change closes any open Whisper
+model removal confirmation. If the phone cannot save a voice preference, use
+**Retry** in the same settings panel.
 
 **Dictate message** records up to 30 seconds through the phone microphone and
 uses the connected computer's local speech setup. Finish recording, review the
@@ -598,6 +699,13 @@ the session on the computer before attempting the operation again.
 
 The message composer gives text a full-width editing row and keeps attachment,
 mode and send controls together below it. Its surface stays steady while typing.
+Scroll the draft details above the editor to reach additional files, notes and
+links. The editor and Send stay outside that scrolling area. When the keyboard
+leaves little room, open **Add to message**, then **Draft** to see those details.
+In a very short area above the keyboard, Add, Send and Stop sit beside the
+editor. If a note prevents sending, **Review draft** opens the draft with the
+reason and the controls to resolve it. Opening the draft or attachment menu
+hides the keyboard so the sheet's controls are reachable.
 Long forms and operation reviews use a scrolling body with a shared action area;
 errors and recovery remain beside those actions. Closing an editor retains its
 existing draft or unsaved-change behavior. Use Previous and Next or swipe to
@@ -640,6 +748,9 @@ Elapsed time appears only when the Host supplies a valid turn start. Open the
 working control for tool details or the agent control for agent details. Queued
 drafts do not reset the active turn. Queue states and delivery errors remain
 visible beside their controls.
+
+When a saved composer draft first loads, the insertion point starts at the end.
+Changing the keyboard layout keeps any selection you make in that draft.
 
 An edited queued message uses its existing persistent editor, separate from the
 main composer draft. **Editing queued message** reopens a parked edit;
@@ -684,11 +795,33 @@ while the confirmation is open, reopen it and review the current action.
 For an unmerged review branch, **Review delivery** shows the planned merge,
 including the source, target and blockers. Confirm **Approve delivery** to merge that plan.
 If the Host rejects a stale plan, choose **Review again** for a fresh one.
+If the connection drops before delivery is confirmed, choose **Check status**.
+Bycoda can show a recorded merge without submitting another approval. A fresh
+review still requires your approval before it can merge.
 
 Single-project epics can select an Agent or saved Crew. Automations support
 scheduled, continuous and event triggers; projectless automations run in Room.
+With a screen reader active, closing **Choose model** returns focus to the Model
+row in the task, goal, automation or steward editor.
+The Epics screen shows one loading or recovery message for its task list.
+Previously loaded progress stays visible if a refresh fails while access is valid.
 Project scan templates retain their Steward definition, and automation history
-opens the canonical Task when one exists.
+opens the canonical Task when one exists. Tap **Show all** there to return to
+the normal task list with project, search and status controls.
+If the active computer changes while a linked task is open, choose the original
+computer to return to that task. **New task** is available once the project scope
+is verified.
+Rapid taps on **Save** in the automation editor start one save. The button shows
+**Saving…** until the request returns. If the result is uncertain, choose
+**Check status** in the editor. The app reads the saved
+settings and keeps your draft open if the result differs. Another save needs
+an explicit tap after the computer reports a state that allows it.
+
+If the computer refuses access while **Auto merge** is open, the confirmation
+closes. Epic settings keeps the unsaved edits visible and disables **Save**.
+Re-pairing the active computer closes open management editors on the old
+connection. Open the task or epic again before editing. A confirmation from
+the old connection cannot apply changes to the new one.
 
 Room offers confirmed Stop and owner permission preferences, including project
 scope and critical exclusions. Mobile saves the Host preference mirror only;

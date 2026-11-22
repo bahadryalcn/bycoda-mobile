@@ -3,7 +3,7 @@ import { act, createElement, useState, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({
-  id: "machine", endpoint: "https://synthetic.invalid", environmentId: "host", lanKey: "synthetic", projectId: "project", hideHeader: false,
+  id: "machine", endpoint: "https://synthetic.invalid", environmentId: "host", lanKey: "synthetic", projectId: "project", hideHeader: false, empty: false,
   start: vi.fn(async (_params: unknown): Promise<any> => ({})), submit: undefined as any,
 }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
@@ -20,7 +20,7 @@ vi.mock("@/state/machines", () => {
   return { useActiveMachine: machine, useMachines: { getState: () => ({ activeId: fixture.id, machines: [machine()] }) } };
 });
 vi.mock("@/state/queries", () => ({
-  useHostQuery: () => ({ data: { status: "ok", servers: [{ id: "web", projectId: fixture.projectId, name: "Web", state: "running", endpoints: [] }] }, isSuccess: true }),
+  useHostQuery: () => ({ data: { status: "ok", servers: fixture.empty ? [] : [{ id: "web", projectId: fixture.projectId, name: "Web", state: "running", endpoints: [] }] }, isSuccess: true }),
   useHostMutation: () => ({ mutateAsync: fixture.start, reset: vi.fn() }),
 }));
 function Detail() {
@@ -30,7 +30,9 @@ vi.mock("./dev-server-detail", () => ({ DevServerDetail: Detail }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: any) => createElement("button", { onClick: onPress, disabled }, label);
-  return { Body: Group, Row: Group, Disclosure: Group, StatusText: () => null, MutationState: () => null, QueryState: () => null, Notice: () => null, IconButton: Button, NavigationRow: Button,
+  return { Body: Group, Row: Group, Disclosure: Group, StatusText: () => null, MutationState: () => null,
+    QueryState: ({ empty, emptyAction }: any) => empty && emptyAction ? createElement(Button, emptyAction) : null,
+    Notice: () => null, IconButton: Button, NavigationRow: Button,
     ErrorText: ({ error }: any) => error ? createElement("p", null, error.message) : null,
     SearchField: () => null,
     Field: ({ label, value, onChangeText }: any) => createElement("input", { "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) }),
@@ -45,10 +47,19 @@ const render = () => act(() => root.render(createElement(DevServersScreen, { pro
 const click = async (label: string) => { const b = [...node.querySelectorAll("button")].find(e => e.textContent === label)!; expect(b).toBeTruthy(); await act(() => b.click()); };
 const input = async (label: string, value: string) => { const field = node.querySelector(`input[aria-label="${label}"]`)!; await act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, value); field.dispatchEvent(new Event("input", { bubbles: true })); }); };
 beforeEach(() => {
+  fixture.empty = false;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); fixture.id = "machine"; fixture.endpoint = "https://synthetic.invalid"; fixture.environmentId = "host"; fixture.lanKey = "synthetic"; fixture.projectId = "project"; fixture.hideHeader = false;
   fixture.start.mockReset().mockResolvedValue({}); node = document.createElement("div"); document.body.append(node); root = createRoot(node);
 });
 afterEach(() => { act(() => root.unmount()); node.remove(); vi.unstubAllGlobals(); });
+it("offers one Start server action when the project has no servers", async () => {
+  fixture.empty = true;
+  await render();
+  const start = [...node.querySelectorAll("button")].filter(button => button.textContent === "Start server");
+  expect(start).toHaveLength(1);
+  await act(() => start[0]!.click());
+  expect(node.querySelector("aside")).toBeTruthy();
+});
 it.each(["create", "detail"])("keeps %s state and native-field identity outside a removed list header", async kind => {
   await render(); await click(kind === "create" ? "Start server" : "Web"); const label = kind === "create" ? "Name" : "Detail draft";
   await input(label, "Retained editor state"); const field = node.querySelector(`input[aria-label="${label}"]`) as HTMLInputElement; field.focus();

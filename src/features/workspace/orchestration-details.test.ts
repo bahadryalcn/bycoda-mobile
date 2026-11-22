@@ -18,7 +18,7 @@ vi.mock("@/ui/primitives",()=>{
  return{Body:content,Stack:content,Row:content,Badge:({label}:any)=>createElement("span",null,label),Notice:({message}:any)=>createElement("p",null,message), StateView: ({ title }:any) => createElement("p",null,title),Sheet:({title,children}:any)=>createElement("article",{"aria-label":title},children),NavigationRow:button,
  FormActions:({submitLabel,onSubmit}:any)=>button({label:submitLabel,onPress:onSubmit}),ActionMenu:({actions}:any)=>createElement("nav",null,...actions.map((action:any)=>createElement("section",{key:action.key},button(action))))};
 });
-vi.mock("@/ui/screen-list",()=>({ScreenList:({data,renderItem,header,footer}:any)=>createElement("main",null,header,...data.map((item:any,index:number)=>createElement("section",{key:index},renderItem({item}))),footer)}));
+vi.mock("@/ui/screen-list",()=>({ScreenList:({data,renderItem,header,footer,ListEmptyComponent}:any)=>createElement("main",null,header,...data.map((item:any,index:number)=>createElement("section",{key:index},renderItem({item}))),data.length?null:ListEmptyComponent,footer)}));
 const block = { id: "proposal", role: "plan", text: "", orchestration: {
     version: 1, leadId: "lead", cwd: "/project", checkoutCwd: "/worktree", title: "Implementation", summary: "Summary",
     request: "Original request", author: { harness: "claude", model: "model", name: "Model" }, status: "ready",
@@ -49,4 +49,39 @@ it("rejects a stale row callback after the task was removed",async()=>{await mou
 it("rejects a former reader's close after a new reader has opened",async()=>{await mount();await press("Request");const close=state.commands.get("Close")!;await press("Close");await press("Summary");await act(async()=>close());expect(container.querySelector("article")!.getAttribute("aria-label")).toBe("Summary");});
 it("shows desktop controller guidance without any execution controls",async()=>{await mount();await press("Help");expect(container.querySelector("article")!.textContent).toContain("Manage this coordination's actions on your computer.");expect([...container.querySelectorAll("button")].some(button=>/^(Run|Start|Approve|Stop|Retry)$/.test(button.textContent!))).toBe(false);});
 it("shows errors without hiding task inspection",async()=>{await mount();await render({block:{...block,orchestration:{...block.orchestration!,status:"invalid",error:"Proposal needs repair"}}});expect(container.textContent).toContain("Proposal needs repair");await press("Inspect");expect(container.querySelector("article")).not.toBeNull();});
+
+it("keeps an unavailable proposal closable and retires its reader across a refresh", async () => {
+  await mount();
+  const oldRequest = state.commands.get("Request")!;
+  await press("Request");
+  expect(container.querySelector("article")?.textContent).toContain("Original request");
+
+  await render({ block: { ...block, orchestration: undefined } });
+  expect(container.textContent).toContain("Unavailable");
+  expect(container.textContent).not.toContain("Original request");
+  expect(container.querySelector("article")).toBeNull();
+  expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Close"]);
+  await press("Close");
+  expect(state.closed).toHaveBeenCalledOnce();
+
+  await render();
+  await act(async () => oldRequest());
+  expect(container.querySelector("article")).toBeNull();
+  await press("Request");
+  expect(container.querySelector("article")?.textContent).toContain("Original request");
+});
+
+it("explains an empty readable task list without hiding the request or summary", async () => {
+  await mount();
+  await render({ block: { ...block, orchestration: { ...block.orchestration!, tasks: [] } } });
+  expect(container.textContent).toContain("No tasks in this view");
+  await press("Summary");
+  expect(container.querySelector("article")?.textContent).toContain("Summary");
+
+  state.allowed = false;
+  await render({ block: { ...block, orchestration: { ...block.orchestration!, tasks: [] } } });
+  expect(container.textContent).toContain("Record access is unavailable");
+  expect(container.textContent).not.toContain("No tasks in this view");
+});
+
 it("ignores retained callbacks after unmount",async()=>{await mount();const open=state.commands.get("Request")!;await act(async()=>root.unmount());await act(async()=>open());expect(container.querySelector("article")).toBeNull();});

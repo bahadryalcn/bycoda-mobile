@@ -4,6 +4,7 @@ import { isConnectionLevelError } from "@/ui/error-message";
 import { isTransientConnectionError } from "@/state/query-retry";
 import { useActiveHostLinkDown } from "@/state/host-runtime-state";
 import { useProjectList } from "../../workspace/use-project-directory";
+import { ProjectDirectoryFeedback } from "../../workspace/project-directory-feedback";
 
 import type { ScopeProps } from "./types";
 import { deduplicateProjects } from "../../workspace/activity-model";
@@ -15,14 +16,18 @@ export function Scope({ allowAll = false, projectId, onChange }: ScopeProps) {
   const projects = useProjectList();
   // A computer whose socket is down is the screen's state to report, not a second notice in the toolbar.
   const linkDown = useActiveHostLinkDown();
-  // Loading is announced in the field itself: a sibling line would grow the toolbar row and drop its actions.
-  // Until the directory is ready the field is disabled, so "Choose a project" would ask for the impossible.
-  const loading = (projects.data === undefined && projects.isLoading) || !projects.directoryReady;
-  const options = deduplicateProjects(projects.data ?? [], projectId).map((project) => ({
+  if (projects.privacyUnavailable && !linkDown && !projects.error)
+    return <ProjectDirectoryFeedback compact query={projects} readiness={projects.readiness} privacyUnavailable />;
+  const options = projects.directoryReady ? deduplicateProjects(projects.data ?? [], projectId).map((project) => ({
     value: project.id,
     label: project.name,
     detail: project.cwd,
-  }));
+  })) : [];
+  const placeholder = projects.directoryReady ? copy("Proje seçin", "Choose a project")
+    : linkDown ? copy("Bağlantı bekleniyor", "Waiting for a connection")
+    : projects.error ? copy("Kullanılamıyor", "Unavailable")
+    : projects.readiness === "loading" ? copy("Projeler yükleniyor…", "Loading projects…")
+    : copy("Proje doğrulanıyor…", "Verifying project…");
   return (
     <>
       <SelectField
@@ -31,15 +36,16 @@ export function Scope({ allowAll = false, projectId, onChange }: ScopeProps) {
         hideLabel
         disabled={!projects.directoryReady}
         value={
-          projectId && options.some((option) => option.value === projectId)
+          !projects.directoryReady ? undefined
+          : projectId && options.some((option) => option.value === projectId)
             ? projectId
             : !projectId && allowAll
               ? ""
               : undefined
         }
-        placeholder={loading ? copy("Projeler yükleniyor…", "Loading projects…") : copy("Proje seçin", "Choose a project")}
+        placeholder={placeholder}
         options={
-          allowAll
+          projects.directoryReady && allowAll
             ? [{ value: "", label: copy("Tüm projeler", "All projects") }, ...options]
             : options
         }

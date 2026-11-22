@@ -13,15 +13,16 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { notifyManager, useQueryClient } from "@tanstack/react-query";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useActiveMachine, useMachines } from "../state/machines";
-import { useConsentPending, useHostClient, useHostQuery } from "../state/queries";
+import { useConsentPending, useHostClient, useHostConsentGranted, useHostQuery } from "../state/queries";
+import { selectMobileHostTransport } from "../remote/lan-ws";
 import { useSecurity } from "../state/security";
 import type { HostDescriptor } from "../remote/types";
 import { hitSlopFor, metrics, radii, space } from "./tokens";
-import { Body, NavigationGroup, NavigationRow, Sheet } from "./primitives";
+import { Body, Button, NavigationGroup, NavigationRow, Sheet } from "./primitives";
 import { IconTile } from "./icon-tile";
 import HardDrive from "lucide-react-native/icons/hard-drive";
-import Settings2 from "lucide-react-native/icons/settings-2";
 import { ConnectionFeedback } from "../features/connections/connection-feedback";
+import { selectedComputerFirst } from "../features/connections/saved-computer-order";
 import { useSwitchComputer } from "../features/connections/use-switch-computer";
 import { useCopy } from "./copy";
 import { CONNECTED_WINDOW_MS, connectionPhase } from "./connection-presentation";
@@ -32,7 +33,7 @@ import { decorativeSvgProps } from "./accessibility";
 import { remoteErrorKind } from "./error-message";
 import { machineSuccessStore } from "./machine-success-store";
 import { refetchRecoveredReads } from "../state/query-retry";
-import { recordActiveHostDisconnected, useHostRuntimeState } from "../state/host-runtime-state";
+import { recordActiveHostDisconnected, useHostRuntimeStartupFailed, useHostRuntimeState } from "../state/host-runtime-state";
 
 const PROBE_STALL_MS = 5_000;
 
@@ -70,6 +71,8 @@ export function useMachineStatus() {
   const network = useNetInfo();
   const cache = useQueryClient();
   const client = useHostClient();
+  const consented = useHostConsentGranted(machine);
+  const startupFailed = useHostRuntimeStartupFailed();
   // Until the saved consent is read, a missing client means "still checking", not "permission required".
   const consentPending = useConsentPending();
   const storageError = useMachines((state) => state.storageError);
@@ -107,7 +110,9 @@ export function useMachineStatus() {
     paired: !!machine,
     networkConnected: network.isConnected,
     unlocked,
-    permitted: !!client || consentPending,
+    permitted: !!client || consentPending || consented,
+    startupFailed: !client && consented && startupFailed &&
+      selectMobileHostTransport(machine?.capabilities ?? [], true) === "native-wss",
     storageError,
     accessDenied: ["auth", "identity"].includes(remoteErrorKind(health.error) ?? ""),
     successAt,
@@ -123,6 +128,7 @@ export function useMachineStatus() {
     permission: copy("İzin gerekiyor", "Permission required"),
     access: copy("Erişim gerekli", "Access needed"),
     storage: copy("Yerel depolama hatası", "Local storage error"),
+    "startup-failed": copy("Bağlantı başlatılamadı", "Connection couldn’t start"),
     checking: copy("Bağlantı kontrol ediliyor…", "Checking connection…"),
     connected: copy("Bağlı", "Connected"),
     disconnected: copy("Bağlantı kesildi", "Disconnected"),
@@ -138,7 +144,7 @@ export function useMachineStatus() {
         ? semanticColors.info.text
         : phase === "offline" || phase === "disconnected"
           ? semanticColors.danger.text
-          : phase === "permission" || phase === "access" || phase === "locked" || phase === "storage"
+          : phase === "permission" || phase === "access" || phase === "locked" || phase === "storage" || phase === "startup-failed"
             ? semanticColors.warning.text
             : colors.muted;
   return { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError, reason, needsPairing };
@@ -148,14 +154,16 @@ export function useMachineStatus() {
 export function MachineHealthMonitor() {
   const { machine, successAt, phase } = useMachineStatus();
   const cache = useQueryClient();
+  const runtime = useHostRuntimeState(machine?.id);
   // Shared loading states read this verdict so they agree with the pill instead of spinning.
   useEffect(() => {
     recordActiveHostDisconnected(phase === "disconnected");
     return () => recordActiveHostDisconnected(false);
   }, [phase]);
+  // The socket runtime refreshes its own reads when it reconnects.
   useEffect(() => {
-    if (machine && successAt) refetchRecoveredReads(cache, machine.id, successAt);
-  }, [cache, machine?.id, successAt]);
+    if (machine && successAt) refetchRecoveredReads(cache, machine.id, successAt, runtime);
+  }, [cache, machine?.id, successAt, runtime]);
   return null;
 }
 
@@ -186,6 +194,7 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
   }
   if (!unlocked && menuOpen) setMenuOpen(false);
   const machines = useMachines((state) => state.machines);
+  const orderedComputers = selectedComputerFirst(machines, machine?.id);
   const switcher = useSwitchComputer();
   // The active computer only closes the menu; another one is switched in place, and the menu stays open on failure.
   const selectComputer = (id: string) => {
@@ -194,7 +203,16 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
     void switcher.switchTo(id, closeMenu);
   };
   const name = machine?.name ?? copy("Bilgisayar bağla", "Connect a computer");
+  const activeConnection = [status, reason].filter(Boolean).join(". ");
+  const manageLabel = copy("Bilgisayarları yönet", "Manage computers");
+  const manageComputers = () => { closeMenu(); router.navigate("/machines"); };
+  const computerChoiceLabel = (saved: (typeof machines)[number], active: boolean) =>
+    [saved.name, saved.endpoint, active ? status : undefined,
+      active ? copy("Seçili", "Selected") : copy("Bu bilgisayara geç", "Switch to this computer"),
+      active ? reason : undefined].filter(Boolean).join(". ");
   const degraded = phase !== "unpaired" && phase !== "connected" && phase !== "checking" && unlocked;
+  const pillStatus = phase === "startup-failed" ? copy("Hata", "Error")
+    : phase === "offline" ? copy("Çevrimdışı", "Offline") : status;
   const StatusIcon = phase === "offline" || phase === "disconnected" ? WifiOff : CircleAlert;
   const pill = (
           <PanelButton
@@ -246,7 +264,7 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
             </Text>
             {degraded ? (
               <Text numberOfLines={1} style={[uiStyles.caption, { color: statusColor, flexShrink: 0 }]}>
-                {status}
+                {pillStatus}
               </Text>
             ) : null}
             <ChevronDown size={12} strokeWidth={2.6} color={colors.muted} style={{ flexShrink: 0 }} />
@@ -274,32 +292,40 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
               <Body>{copy("Depolamayı kurtar", "Recover saved connections")}</Body>
             </View>
           </Menu.Item> : null}
-          {machines.map((saved) => {
+          <Menu.Item
+            key="manage"
+            accessibilityLabel={manageLabel}
+            onPress={manageComputers}
+            className="gap-ui-sm"
+            trailing={<ChevronRight size={16} color={colors.muted} />}
+          >
+            <Body style={uiStyles.caption}>{manageLabel}</Body>
+          </Menu.Item>
+          {orderedComputers.map((saved) => {
             const active = saved.id === machine?.id;
             return <Menu.Item
               key={saved.id}
-              accessibilityLabel={active
-                ? [saved.name, status, reason, copy("Seçili", "Selected")].filter(Boolean).join(". ")
-                : [saved.name, copy("Bu bilgisayara geç", "Switch to this computer")].join(". ")}
+              accessibilityLabel={computerChoiceLabel(saved, active)}
               onPress={() => selectComputer(saved.id)}
               className="gap-ui-sm"
             >
               <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
                 <Body style={uiStyles.buttonLabel}>{saved.name}</Body>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                  {active ? (health.isFetching && !successAt ? (
+                <Body muted style={uiStyles.caption}>{saved.endpoint}</Body>
+                {active ? <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                  {health.isFetching && !successAt ? (
                     <Spinner size="sm" color={statusColor} />
                   ) : (
                     <View style={{ width: 5, height: 5, borderRadius: radii.badge, backgroundColor: statusColor }} />
-                  )) : null}
-                  <Text style={[uiStyles.caption, { flex: 1, color: active ? statusColor : colors.muted }]}>
-                    {active ? (reason ? `${status}. ${reason}` : status) : saved.endpoint}
+                  )}
+                  <Text style={[uiStyles.caption, { flex: 1, color: statusColor }]}>
+                    {activeConnection}
                   </Text>
-                </View>
+                </View> : null}
               </View>
             </Menu.Item>;
           })}
-          {machine && health.error && !needsPairing ? (
+          {machine && health.error && !needsPairing && phase !== "startup-failed" ? (
             <Menu.Item
               key="retry"
               accessibilityLabel={copy("Bağlantıyı yeniden dene", "Retry connection")}
@@ -315,21 +341,18 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
               </Body>
             </Menu.Item>
           ) : null}
-          <Menu.Item
-            key="manage"
-            accessibilityLabel={copy("Bilgisayarları yönet", "Manage computers")}
-            onPress={() => { closeMenu(); router.navigate("/machines"); }}
-            className="gap-ui-sm"
-            trailing={<ChevronRight size={16} color={colors.muted} />}
-          >
-            <Body style={uiStyles.caption}>{copy("Bilgisayarları yönet", "Manage computers")}</Body>
-          </Menu.Item>
         </Menu.Content>
       </Menu>
       ) : (
         <>
           {pill}
-          <Sheet visible={menuOpen && unlocked} title={copy("Bilgisayar", "Computer")} size="compact" onClose={closeMenu}>
+          <Sheet
+            visible={menuOpen && unlocked}
+            title={copy("Bilgisayar", "Computer")}
+            size="compact"
+            onClose={closeMenu}
+            footer={<Button tone="quiet" label={manageLabel} onPress={manageComputers} />}
+          >
             <NavigationGroup>
               {storageError ? (
                 <NavigationRow
@@ -342,7 +365,7 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
                   onPress={() => { closeMenu(); router.navigate("/machines"); }}
                 />
               ) : null}
-              {machines.map((saved) => {
+              {orderedComputers.map((saved) => {
                 const active = saved.id === machine?.id;
                 return <NavigationRow
                   key={saved.id}
@@ -351,16 +374,16 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
                   disabled={switcher.busy}
                   icon={<IconTile><Laptop size={18} strokeWidth={2} color={active ? statusColor : colors.muted} /></IconTile>}
                   label={saved.name}
-                  detail={active ? (reason ? `${status}. ${reason}` : status) : saved.endpoint}
+                  detail={saved.endpoint}
+                  metadata={active ? activeConnection : undefined}
                   detailLines={0}
+                  metadataLines={0}
                   detailSelectable={false}
-                  accessibilityLabel={active
-                    ? [saved.name, status, reason, copy("Seçili", "Selected")].filter(Boolean).join(". ")
-                    : [saved.name, copy("Bu bilgisayara geç", "Switch to this computer")].join(". ")}
+                  accessibilityLabel={computerChoiceLabel(saved, active)}
                   onPress={() => selectComputer(saved.id)}
                 />;
               })}
-              {machine && health.error && !needsPairing ? (
+              {machine && health.error && !needsPairing && phase !== "startup-failed" ? (
                 <NavigationRow
                   intent="command"
                   icon={<IconTile><RefreshCw size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
@@ -368,13 +391,6 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
                   onPress={() => { closeMenu(); void health.refetch(); }}
                 />
               ) : null}
-              <NavigationRow
-                intent="navigate"
-                separator={false}
-                icon={<IconTile><Settings2 size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
-                label={copy("Bilgisayarları yönet", "Manage computers")}
-                onPress={() => { closeMenu(); router.navigate("/machines"); }}
-              />
             </NavigationGroup>
             <ConnectionFeedback operation={switcher.operation} />
 

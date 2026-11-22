@@ -8,6 +8,7 @@ import { useMachines } from "../../src/state/machines";
 import { WorkspaceRouteScope } from "../../src/features/workspace/route-scope";
 import { useAdaptiveLayout } from "../../src/ui/adaptive-layout";
 import { ScreenChromeProvider } from "../../src/ui/layout";
+import { ConnectionFeedbackScope } from "../../src/ui/connection-feedback-scope";
 import { SplitView } from "../../src/ui/split-view";
 import { TabletQuickPanel } from "../../src/features/workspace/tablet-quick-panel";
 import { SessionComposerHeightProvider } from "../../src/features/workspace/session-keyboard-frame";
@@ -52,27 +53,30 @@ export default function SessionRoute() {
     <WorkspaceRouteScope machineId={machineId}>
       {/* The split keeps the list in place, so switching sessions must not slide the whole screen. */}
       {split ? <Stack.Screen options={{ animation: "none" }} /> : null}
-      <SplitView
-        // Portrait tablets keep the same rail as the tab roots beside the session.
-        rail={tablet ? <TabletRail /> : null}
-        list={
-          split ? (
-            // The list column has no native header above it; it draws its own title.
-            <ScreenChromeProvider>
-              <View style={{ flex: 1, paddingTop: insets.top }}>
-                <ActiveSessionsScreen
-                  overview
-                  urgency
-                  selectedSessionId={id}
-                  onOpenSession={(sessionId, nextProjectId, nextMachineId) =>
-                    router.setParams({ id: sessionId, projectId: nextProjectId, machineId: nextMachineId, targetTurnId: undefined })}
-                />
-              </View>
-            </ScreenChromeProvider>
-          ) : null
-        }
-        detail={session}
-      />
+      <ConnectionFeedbackScope sharedReads>
+        <SplitView
+          // Portrait tablets keep the same rail as the tab roots beside the session.
+          rail={tablet ? <TabletRail /> : null}
+          list={
+            split ? (
+              // The list column has no native header above it; it draws its own title.
+              <ScreenChromeProvider>
+                <View style={{ flex: 1, paddingTop: insets.top }}>
+                  <ActiveSessionsScreen
+                    overview
+                    urgency
+                    shareConnectionFeedback
+                    selectedSessionId={id}
+                    onOpenSession={(sessionId, nextProjectId, nextMachineId) =>
+                      router.setParams({ id: sessionId, projectId: nextProjectId, machineId: nextMachineId, targetTurnId: undefined })}
+                  />
+                </View>
+              </ScreenChromeProvider>
+            ) : null
+          }
+          detail={session}
+        />
+      </ConnectionFeedbackScope>
     </WorkspaceRouteScope>
   );
 }

@@ -16,6 +16,7 @@ export function filterSessionDirectory(
   layout: SessionLayout | undefined,
   search: string,
   projectLabel = "",
+  defaultTitle = "",
 ): HostSessionSummary[] {
   const query = search.trim().toLocaleLowerCase();
   if (!query || projectLabel.toLocaleLowerCase().includes(query)) return [...sessions];
@@ -44,7 +45,7 @@ export function filterSessionDirectory(
     if (path.join(" / ").toLocaleLowerCase().includes(query)) include(folder);
   }
   return sessions.filter((session) => matching.has(session.id) ||
-    `${session.title} ${session.harness} ${session.branch ?? ""} ${session.model ?? ""}`
+    `${session.title || defaultTitle} ${session.harness} ${session.branch ?? ""} ${session.model ?? ""}`
       .toLocaleLowerCase().includes(query));
 }
 

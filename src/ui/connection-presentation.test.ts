@@ -11,6 +11,12 @@ const state = {
   now: 100_000,
 };
 describe("connection presentation", () => {
+  it("separates a failed connection startup from access and network gates", () => {
+    expect(connectionPhase({ ...state, startupFailed: true })).toBe("startup-failed");
+    expect(connectionPhase({ ...state, startupFailed: true, permitted: false })).toBe("permission");
+    expect(connectionPhase({ ...state, startupFailed: true, networkConnected: false })).toBe("offline");
+    expect(connectionPhase({ ...state, startupFailed: true, unlocked: false })).toBe("locked");
+  });
   it("identifies local storage failures before permission or cached successful traffic", () => {
     expect(connectionPhase({ ...state, permitted: false, storageError: "Connection preference could not be saved." })).toBe("storage");
     expect(connectionPhase({ ...state, storageError: "Language preference could not be saved." })).toBe("storage");

@@ -4,19 +4,139 @@ import CheckCircle from "lucide-react-native/icons/circle-check";
 import Download from "lucide-react-native/icons/download";
 import ArrowDownToLine from "lucide-react-native/icons/arrow-down-to-line";
 import ArrowUpFromLine from "lucide-react-native/icons/arrow-up-from-line";
+import WandSparkles from "lucide-react-native/icons/wand-sparkles";
+import Square from "lucide-react-native/icons/square";
+import ChevronDown from "lucide-react-native/icons/chevron-down";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
 import GitCommitHorizontal from "lucide-react-native/icons/git-commit-horizontal";
-import { Body, Button, Disclosure, Field, Input, Row } from "@/ui/primitives";
-import { space, fontSize, lineHeight } from "@/ui/tokens";
+import { ActionMenu, Body, Button, Disclosure, ErrorNotice, IconButton, Input, Notice, PressableCard, Row } from "@/ui/primitives";
+import { HintLabel } from "@/ui/info-hint";
+import { decorativeSvgProps } from "@/ui/accessibility";
+import { metrics, space, fontSize, lineHeight } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
 import { GitFileRow } from "./git-file-row";
 import { gitCommitBlock, gitPrimaryAction, type GitCommitBlock } from "./git-commit-model";
 import type { GitChangesPanelProps, GitCommitPanelProps } from "./git-types";
+import type { GitChangeGroup } from "./git-list-model";
 
 function commitBlockText(block: GitCommitBlock, copy: (tr: string, en: string) => string) {
   if (block === "operation") return copy("Çakışmaları veya devam eden işlemi önce bitir.", "Finish conflicts or the running operation first.");
   if (block === "staged") return copy("Önce kaydedilecek dosyaları stage’e al.", "Stage the files you want to record first.");
   return copy("Önce commit mesajı yaz.", "Write a commit message first.");
+}
+
+export function GitChangeGroupHeader({ group, count, expanded, onToggle, onBulkAction, busy }: {
+  group: GitChangeGroup;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  onBulkAction?: () => void;
+  busy: boolean;
+}) {
+  const { colors, uiStyles } = useMobileTheme();
+  const copy = useCopy();
+  const countText = new Intl.NumberFormat(useLocale()).format(count);
+  const staged = group === "staged";
+  const title = staged ? copy("Stage’deki değişiklikler", "Staged changes") : copy("Değişiklikler", "Changes");
+  const Chevron = expanded ? ChevronDown : ChevronRight;
+  return (
+    <Row style={{ alignItems: "center", gap: space.xs, marginTop: space.sm }}>
+      <PressableCard
+        label={`${title} (${countText})`}
+        expanded={expanded}
+        onPress={onToggle}
+        style={{
+          flex: 1, minWidth: 0, minHeight: metrics.touchTarget, marginHorizontal: 0,
+          flexDirection: "row", alignItems: "center", gap: space.sm,
+        }}
+      >
+        <Chevron color={colors.muted} size={16} />
+        <Body selectable={false} style={[uiStyles.grow, { fontWeight: "600" }]}>{title}</Body>
+        <Body muted selectable={false}>{countText}</Body>
+      </PressableCard>
+      {onBulkAction ? (
+        <ActionMenu
+          label={`${title}. ${copy("Diğer işlemler", "More actions")}`}
+          reserveTouchTarget
+          actions={[{
+            key: "bulk",
+            label: staged ? copy("Tümünü çıkar", "Unstage all") : copy("Tümünü stage’e al", "Stage all"),
+            disabled: busy,
+            onPress: onBulkAction,
+          }]}
+        />
+      ) : null}
+    </Row>
+  );
+}
+
+function CommitMessageField({ message, generation, busy, onChange, placeholder }: {
+  message: string;
+  generation?: GitCommitPanelProps["generation"];
+  busy?: boolean;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const { colors } = useMobileTheme();
+  const copy = useCopy();
+  const label = copy("Commit mesajı", "Commit message");
+  const cancelLabel = copy("İptal", "Cancel");
+  const active = generation?.available ? generation : undefined;
+  const pending = !!active?.pending;
+  const showAction = !!active && !active.suggestion;
+  return (
+    <View style={{ gap: space.xs }}>
+      {!placeholder ? <HintLabel label={label} /> : null}
+      <View>
+        <Input
+          label={label}
+          placeholder={placeholder}
+          value={message}
+          editable={!busy}
+          onChangeText={onChange}
+          multiline
+          style={{
+            minHeight: 66,
+            maxHeight: 120,
+            fontSize: fontSize.control,
+            ...(showAction ? { paddingEnd: metrics.touchTarget + space.sm } : undefined),
+          }}
+        />
+        {showAction ? (
+          <View pointerEvents="box-none" style={{ position: "absolute", top: space.xxs, end: space.xxs }}>
+            <IconButton
+              label={pending
+                ? `${copy("Commit mesajı üretiliyor…", "Generating commit message…")} ${cancelLabel}`
+                : copy("Commit mesajı üret", "Generate commit message")}
+              disabled={!pending && busy}
+              reserveTouchTarget
+              onPress={pending ? active.cancel : active.start}
+            >
+              {pending
+                ? <Square size={16} color={colors.accent} {...decorativeSvgProps} />
+                : <WandSparkles size={18} color={colors.accent} {...decorativeSvgProps} />}
+            </IconButton>
+          </View>
+        ) : null}
+      </View>
+      {active?.error ? <ErrorNotice error={active.error} /> : null}
+      {active?.suggestion ? (
+        <Notice
+          message={copy("Önerilen commit mesajı", "Suggested commit message")}
+          action={{ label: cancelLabel, onPress: active.cancel }}
+        >
+          <Body selectable>{active.suggestion}</Body>
+          <Button
+            tone="secondary"
+            label={copy("Öneriyi kullan", "Use suggestion")}
+            disabled={busy}
+            onPress={() => active.useSuggestion(onChange)}
+          />
+        </Notice>
+      ) : null}
+    </View>
+  );
 }
 
 export function GitChangesPanel({ files, busy, onSelect, onAction }: GitChangesPanelProps) {
@@ -97,6 +217,7 @@ export function GitCommitPanel({
   canRunWorkspace,
   message,
   onMessageChange,
+  generation,
   fetching,
   onFetch,
   onChoose,
@@ -114,9 +235,13 @@ export function GitCommitPanel({
     hasOperation: !!index.operation,
   });
   const commitReason = commitBlock ? commitBlockText(commitBlock, copy) : undefined;
+  const draftOnly = index.files.length === 0 && commitBlock === "staged";
+  const messageField = (
+    <CommitMessageField message={message} onChange={onMessageChange} busy={busy} generation={generation} />
+  );
   return (
     <View style={{ gap: space.sm }}>
-      <Disclosure
+      {draftOnly ? messageField : <Disclosure
         label={copy("Commit oluştur", "Create commit")}
         detail={
           stagedCount
@@ -128,14 +253,7 @@ export function GitCommitPanel({
         }
         defaultExpanded={stagedCount > 0}
       >
-        <Field
-          label={copy("Commit mesajı", "Commit message")}
-          value={message}
-          editable={!busy}
-          onChangeText={onMessageChange}
-          multiline
-          style={{ minHeight: 66, maxHeight: 120, fontSize: fontSize.control }}
-        />
+        {messageField}
         <Button
           label={copy("Commit", "Commit")}
           accessibilityLabel={
@@ -148,10 +266,10 @@ export function GitCommitPanel({
         >
           <GitCommitHorizontal size={18} color={colors.primaryText} />
         </Button>
-      </Disclosure>
+      </Disclosure>}
       {index.remote ? (
         <>
-          <Row style={{ gap: space.sm }}>
+          <Row style={{ gap: space.sm, flexWrap: "wrap" }}>
             {canRunWorkspace ? (
               <Button
                 label={copy("Fetch", "Fetch")}
@@ -186,13 +304,15 @@ export function GitCommitPanel({
             >
               <ArrowUpFromLine size={16} color={colors.text} />
             </Button>
-            <Body
-              muted
-              numberOfLines={1}
-              selectable={false}
-              style={[uiStyles.caption, uiStyles.grow]}
-            >{`${numbers.format(index.ahead)} ↑  ${numbers.format(index.behind)} ↓`}</Body>
           </Row>
+          {index.ahead || index.behind ? (
+            <Body muted selectable={false} style={uiStyles.caption}>
+              {[
+                index.ahead ? copy("{p0} commit gönderilecek", "{p0} commits to push", { p0: numbers.format(index.ahead) }) : null,
+                index.behind ? copy("{p0} yeni commit al", "Get {p0} new commits", { p0: numbers.format(index.behind) }) : null,
+              ].filter(Boolean).join(" · ")}
+            </Body>
+          ) : null}
         </>
       ) : null}
       {children}
@@ -210,6 +330,7 @@ export function GitCommitBar({
   index,
   message,
   onMessageChange,
+  generation,
   busy,
   onCommit,
   onPush,
@@ -217,6 +338,7 @@ export function GitCommitBar({
   index: GitCommitBarIndex;
   message: string;
   onMessageChange: (value: string) => void;
+  generation?: GitCommitPanelProps["generation"];
   busy: boolean;
   onCommit: (stageAll: boolean) => void;
   onPush: () => void;
@@ -234,32 +356,29 @@ export function GitCommitBar({
   });
   const label =
     primary.kind === "push"
-      ? copy("Push ↑{p0}", "Push ↑{p0}", { p0: numbers.format(primary.ahead) })
+      ? `${copy("Push", "Push")} (${numbers.format(primary.ahead)})`
       : primary.stageAll
         ? copy("Tümünü stage’e al ve commit et", "Stage all & commit")
         : copy("Commit", "Commit");
-  const reason =
-    primary.kind === "commit" && primary.block
-      ? primary.block === "clean"
-        ? copy("Kaydedilecek değişiklik yok.", "Nothing to commit.")
-        : commitBlockText(primary.block, copy)
-      : undefined;
+  const clean = primary.kind === "commit" && primary.block === "clean";
+  if (clean && !message) return null;
+  const reason = primary.kind === "commit" && primary.block && primary.block !== "clean"
+    ? commitBlockText(primary.block, copy)
+    : undefined;
   return (
     <View style={{ gap: space.sm }}>
-      {primary.kind === "commit" ? (
-        <Input
-          label={copy("Commit mesajı", "Commit message")}
+      {primary.kind === "commit" || message ? (
+        <CommitMessageField
           placeholder={copy("Mesaj ({p0} dalına commit)", "Message (commit on {p0})", {
             p0: index.branch || "HEAD",
           })}
-          value={message}
-          editable={!busy}
-          onChangeText={onMessageChange}
-          multiline
-          style={{ minHeight: 66, maxHeight: 120, fontSize: fontSize.control }}
+          message={message}
+          busy={busy}
+          onChange={onMessageChange}
+          generation={generation}
         />
       ) : null}
-      <Button
+      {!clean ? <Button
         label={label}
         accessibilityLabel={reason && !busy ? `${label}. ${reason}` : undefined}
         tone="primary"
@@ -272,7 +391,7 @@ export function GitCommitBar({
         ) : (
           <GitCommitHorizontal size={18} color={colors.primaryText} />
         )}
-      </Button>
+      </Button> : null}
     </View>
   );
 }

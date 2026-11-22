@@ -67,7 +67,7 @@ vi.mock("@/state/queries", () => ({
   }),
 }));
 vi.mock("../workspace/use-project-directory", () => ({
-  useProjectList: () => ({ data: [] }),
+  useProjectList: () => ({ data: [], directoryReady: true, isProjectVisible: () => true }),
 }));
 vi.mock("./shared/local-project-scope", () => ({ useLocalProjectScope: () => ({ projectId: state.projectId, setProjectId: vi.fn(), current: { current: { machineId: "machine", projectId: state.projectId, revision: 0 } }, revision: 0 }) }));
 vi.mock("./shared/scope", () => ({ Scope: () => null }));

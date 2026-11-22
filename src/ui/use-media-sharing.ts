@@ -31,7 +31,10 @@ export function useMediaSharing({ uri, name, mimeType, enabled = true }: {
         const available = await Sharing.isAvailableAsync();
         if (!valid()) return;
         if (!available) throw new Error(copy("Bu cihazda paylaşım kullanılamıyor.", "Sharing is unavailable on this device."));
-        await Sharing.shareAsync(uri, { dialogTitle: name, ...(mimeType ? { mimeType } : {}) });
+        await Sharing.shareAsync(uri, {
+          dialogTitle: name,
+          ...(mimeType ? { mimeType, displayName: name } : {}),
+        });
       } catch (cause) {
         if (valid()) error = cause;
       } finally {

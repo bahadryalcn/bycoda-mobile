@@ -23,6 +23,11 @@ describe("git sheet actions", () => {
     expect(find(base, "commit").detail).toBe("2 files changed, 1 staged");
     expect(find(base, "commit", true).disabled).toBe(true);
   });
+  it("offers the draft editor on a clean branch", () => {
+    expect(find({ ...base, files: [] }, "commit")).toMatchObject({
+      label: "Commit message", detail: "Nothing to commit.", disabled: false,
+    });
+  });
   it("gates the pull request row on pushed commits beyond the default branch", () => {
     const pr = { ...base, branch: "feat", defaultBranch: "main", aheadOfDefault: 2, headPushed: true };
     expect(find(pr, "createPr")).toMatchObject({ disabled: false });

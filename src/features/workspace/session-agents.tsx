@@ -89,7 +89,7 @@ export function SessionAgents({ session, children: operations, ...props }: Props
   return (
     <>
       {operations(bar)}
-      {sheet === "agents" ? <View><AgentsSheet blocks={blocks} childRuns={children} live={!!live} onClose={close} {...props} runId={session?.runId} parentProvider={session?.session.harness} context={context} /></View> : null}
+      {sheet === "agents" ? <View><AgentsSheet blocks={blocks} childRuns={children} childrenQuery={siblings} live={!!live} onClose={close} {...props} runId={session?.runId} parentProvider={session?.session.harness} context={context} /></View> : null}
       {sheet === "device" && projectId ? <SessionDeviceSheet projectId={projectId} deviceId={holders.device?.deviceId} onClose={close} /> : null}
       {sheet === "browser" && projectId ? <SessionBrowser key={`${scope.machineId}:${projectId}:${scope.sessionId}`} scope={scope} projectId={projectId} onClose={close} /> : null}
     </>

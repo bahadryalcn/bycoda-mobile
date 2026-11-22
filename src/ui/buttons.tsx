@@ -23,6 +23,7 @@ import type {
 
 
 export function Button({
+  ref,
   label,
   accessibilityLabel,
   onPress,
@@ -32,6 +33,7 @@ export function Button({
   tone = "default",
   density = "regular",
   fullWidth,
+  reserveTouchTarget = false,
   flush,
   style,
   children,
@@ -51,6 +53,7 @@ export function Button({
         : (semantic?.text ?? colors.text);
   return (
     <PanelButton
+      ref={ref}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: off, busy: !!busy, selected: !!selected }}
@@ -75,7 +78,7 @@ export function Button({
               ? "secondary"
               : "outline"
       }
-      hitSlop={hitSlopFor(density === "compact" ? metrics.chipHeight : metrics.buttonHeight)}
+      hitSlop={reserveTouchTarget ? undefined : hitSlopFor(density === "compact" ? metrics.chipHeight : metrics.buttonHeight)}
       className={controlClasses({ tone, density, selected })}
       labelClassName={
         tone === "primary"
@@ -89,6 +92,7 @@ export function Button({
         fullWidth && { width: "100%" },
         flush && { marginStart: -(density === "compact" ? space.sm : space.md) },
         style,
+        reserveTouchTarget && { minWidth: metrics.touchTarget, minHeight: metrics.touchTarget },
         disabled && !busy && tone === "primary" && { backgroundColor: colors.accentSolid },
       ]}
     >
@@ -206,6 +210,7 @@ export function IconButton({
   onPress,
   onLongPress,
   density = "regular",
+  reserveTouchTarget = false,
   tone = "default",
   expanded,
 }: IconButtonProps) {
@@ -233,7 +238,7 @@ export function IconButton({
           ? "min-h-visual min-w-visual rounded-full border-0 shadow-none bg-primary p-ui-xs active:opacity-75"
           : "min-h-visual min-w-visual rounded-full border-0 shadow-none bg-transparent p-ui-xs active:bg-fill active:opacity-75"
       }
-      hitSlop={hitSlopFor(density === "compact" ? metrics.chipHeight : metrics.visualControl)}
+      hitSlop={reserveTouchTarget ? undefined : hitSlopFor(density === "compact" ? metrics.chipHeight : metrics.visualControl)}
       onPress={onPress}
       onLongPress={onLongPress}
       style={[
@@ -243,6 +248,7 @@ export function IconButton({
           minHeight: metrics.chipHeight,
           padding: space.xxs,
         },
+        reserveTouchTarget && { minWidth: metrics.touchTarget, minHeight: metrics.touchTarget },
         { opacity: disabled && !busy ? opacity.disabled : 1 },
       ]}
     />

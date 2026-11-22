@@ -14,6 +14,12 @@ const mockClient = (request: ReturnType<typeof vi.fn>) => ({
 });
 
 describe("mobile command recovery", () => {
+  it("preserves confirmed pre-write steer refusal when the dispatch reply was lost", async () => {
+    const refusal = { kind: "conflict", code: "COMMAND_BUSY", uncertain: false, message: "The active turn is not ready for steering." };
+    const request = vi.fn().mockRejectedValueOnce({ kind: "network", uncertain: true }).mockRejectedValueOnce(refusal);
+    await expect(dispatchCommand(mockClient(request), "command", { type: "steer", runId: "run" })).rejects.toBe(refusal);
+    expect(request.mock.calls.map(call => call[0])).toEqual(["commands.dispatch", "commands.status"]);
+  });
   it("reconciles durable outbox identity without replacing its transport error or replaying", async () => {
     const id = "8CA190F8-9E1B-477D-9565-2FB1283AC578";
     const failure = { kind: "network", uncertain: true };

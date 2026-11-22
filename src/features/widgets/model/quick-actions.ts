@@ -30,18 +30,19 @@ export function recentQuickActionSessions(
   feed: { machineId: string | null; ready: boolean; sessions: readonly WidgetSessionInput[] },
   showTitles: boolean,
   limit = RECENT_QUICK_ACTION_SESSIONS,
+  defaultTitle = "",
 ): QuickActionSession[] {
   const machineId = feed.machineId;
   if (!showTitles || !feed.ready || !machineId) return [];
   return feed.sessions
-    .filter((session) => !session.archived && !session.child && !session.draft && session.title.trim())
+    .filter((session) => !session.archived && !session.child && !session.draft && (session.title.trim() || defaultTitle))
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, limit)
     .map((session) => ({
       id: session.id,
       projectId: session.projectId,
       machineId,
-      title: [...session.title.trim().replace(/\s+/g, " ")].slice(0, TITLE_LIMIT).join(""),
+      title: [...(session.title.trim().replace(/\s+/g, " ") || defaultTitle)].slice(0, TITLE_LIMIT).join(""),
     }));
 }
 

@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   privacyUnavailable: false,
   projectError: null as unknown,
   snapshotError: null as unknown,
+  snapshotFailureCount: 0,
   projectRefetch: vi.fn(),
   snapshotRefetch: vi.fn(),
   navigate: vi.fn(),
@@ -102,6 +103,7 @@ vi.mock("./session-queries", async () => {
         parked: state.parked,
         refetch: state.snapshotRefetch,
         error: state.snapshotError,
+        failureCount: state.snapshotFailureCount,
         isPending: !data && !state.snapshotError,
         isFetching: !data && !state.snapshotError,
       };
@@ -192,7 +194,7 @@ vi.mock("./session-list-sheet", () => ({ SessionListSheet: () => null }));
 vi.mock("./use-session-viewed", () => ({ useSessionViewed: () => {} }));
 vi.mock("./transcript-skeleton", () => ({
   TranscriptSkeleton: ({ label }: { label?: string }) =>
-    createElement("div", { "data-query": "loading" }, label ?? "Loading"),
+    createElement("div", { "data-query": "loading", "data-transcript-placeholder": true }, label ?? "Loading"),
 }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
@@ -228,14 +230,17 @@ vi.mock("@/ui/primitives", () => {
     QueryState: ({
       query,
       loadingLabel,
+      renderLoading,
     }: {
       query: { isPending?: boolean; error?: unknown };
       loadingLabel?: string;
+      renderLoading?: (label: string) => import("react").ReactNode;
     }) =>
       query.error
         ? createElement("div", { "data-query": "error" }, "Query error")
         : query.isPending
-          ? createElement("div", { "data-query": "loading" }, loadingLabel ?? "Loading")
+          ? (renderLoading?.(loadingLabel ?? "Loading") ??
+            createElement("div", { "data-query": "loading" }, loadingLabel ?? "Loading"))
           : null,
   };
 });
@@ -279,6 +284,7 @@ afterEach(async () => {
   state.privacyUnavailable = false;
   state.projectError = null;
   state.snapshotError = null;
+  state.snapshotFailureCount = 0;
   state.parked = false;
   state.projectRefetch.mockClear();
   state.snapshotRefetch.mockClear();
@@ -328,6 +334,20 @@ it("opens find from the header without replacing the transcript or composer draf
   expect(state.mounted).toBe(1);
   expect(state.command).not.toHaveBeenCalled();
 });
+
+it.each([["", "New session"], ["New remote session", "New remote session"]])(
+  "displays the expected title for a visible session named %j",
+  async (title, expected) => {
+    cache = new QueryClient();
+    const snapshot = session();
+    cache.setQueryData(["machine", "machine", "session", "session"], {
+      ...snapshot,
+      session: { ...snapshot.session, title },
+    });
+    await render();
+    expect(state.title).toBe(expected);
+  },
+);
 
 it("wrong-project cached deep links never display a private title/transcript or enable fetching", async () => {
   cache = new QueryClient();
@@ -433,6 +453,14 @@ it("verified project identity loads the transcript with a single labelled state"
   expect(container.textContent).toContain("Loading session…");
   expect(container.querySelectorAll('[data-query="loading"]')).toHaveLength(1);
   expect(container.textContent).not.toMatch(/hidden|not found|sync/i);
+});
+it("hands the transcript placeholder over to visible progress after a failed read", async () => {
+  await render();
+  expect(container.querySelector("[data-transcript-placeholder]")).not.toBeNull();
+  state.snapshotFailureCount = 1;
+  await render();
+  expect(container.querySelector("[data-transcript-placeholder]")).toBeNull();
+  expect(container.querySelectorAll('[data-query="loading"]')).toHaveLength(1);
 });
 it("an explicit unsynchronized directory gives an in-place directory retry", async () => {
   state.privacyUnavailable = true;

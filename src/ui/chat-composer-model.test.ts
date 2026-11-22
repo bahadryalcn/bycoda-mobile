@@ -1,5 +1,25 @@
 import { expect, it } from "vitest";
-import { COMPOSER_FIELD_PADDING, COMPOSER_LINE_HEIGHT, COMPOSER_MAX_LINES, composerInputLimits, composerSuggestionLimits } from "./chat-composer-model";
+import { COMPOSER_FIELD_PADDING, COMPOSER_LINE_HEIGHT, COMPOSER_MAX_LINES, composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "./chat-composer-model";
+
+it("places primary actions beside the editor when the measured controls cannot fit above Gboard", () => {
+  expect(composerNeedsInlineActions(152, 1, 100, 48)).toBe(true);
+  expect(composerNeedsInlineActions(152, 1.5, 100, 0)).toBe(true);
+  expect(composerNeedsInlineActions(200, 1, 48, 48)).toBe(false);
+  expect(composerNeedsInlineActions(null, 1.5, 100, 48)).toBe(false);
+});
+
+it("shrinks the draft details after the keyboard opens while keeping the editor and toolbar reachable", () => {
+  const expanded = composerPrefixMaximum(760, 720, 1.5, 0, 0, 100);
+  const keyboard = composerPrefixMaximum(760, 290, 1.5, 0, 0, 152);
+  const input = composerInputLimits(760, 290, 1.5, keyboard, 0, 152);
+  expect(expanded).toBeGreaterThan(keyboard);
+  expect(keyboard).toBeGreaterThanOrEqual(48);
+  expect(input.chrome + input.minimum).toBeLessThanOrEqual(290);
+  const veryShort = composerPrefixMaximum(760, 240, 1.5, 0, 0, 152);
+  expect(veryShort).toBeLessThan(48);
+  const shortInput = composerInputLimits(760, 240, 1.5, veryShort, 0, 152);
+  expect(shortInput.chrome + shortInput.minimum).toBeLessThanOrEqual(240);
+});
 it("reserves a header and readable conversation after measured toolbar chrome",()=>{
  const short=composerInputLimits(844,280,1,0,0,48);expect(short.minimum).toBe(48);expect(short.maximum).toBe(60);expect(short.chrome).toBe(60);expect(280-short.chrome-short.maximum).toBe(short.reserved);
  expect(composerInputLimits(844,640,1,0,0,48).maximum).toBe(131);

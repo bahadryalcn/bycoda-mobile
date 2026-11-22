@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createPreferenceStore } from "./preference-store";
 
 type Prefs = { on: boolean; order: string[] };
@@ -78,4 +78,46 @@ it("clears a save error when a later save succeeds", async () => {
   await store.getState().update({ order: ["b"] });
   expect(store.getState().storageError).toBeNull();
   expect(JSON.parse(storage.data.get(key)!)).toEqual({ on: true, order: ["b"] });
+});
+
+it("shares a failed save retry across settings surfaces", async () => {
+  const storage = fakeStorage();
+  const write = vi.spyOn(storage, "setItem");
+  const store = createStore(storage);
+  storage.fault.write = true;
+  await store.getState().update({ on: true });
+  write.mockClear();
+  storage.fault.write = false;
+
+  const first = store.getState().retry();
+  const second = store.getState().retry();
+  await Promise.all([first, second]);
+
+  expect(write).toHaveBeenCalledTimes(1);
+  expect(store.getState().storageError).toBeNull();
+});
+
+it("keeps recovery visible until held choices are written after a failed read", async () => {
+  const storage = fakeStorage(JSON.stringify({ on: false, order: ["x"] }));
+  const store = createStore(storage);
+  storage.fault.read = true;
+  await store.getState().update({ on: true });
+  storage.fault.read = false;
+  const writeReceipt = Promise.withResolvers<void>();
+  const write = vi.spyOn(storage, "setItem").mockReturnValueOnce(writeReceipt.promise);
+
+  const recovery = store.getState().retry();
+  try {
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+    expect(store.getState().preferences).toEqual({ on: true, order: ["x"] });
+    expect(store.getState().storageError?.operation).toBe("read");
+  } finally {
+    writeReceipt.reject(new Error("write failed"));
+    await recovery;
+  }
+
+  expect(store.getState().storageError?.operation).toBe("save");
+  await store.getState().retry();
+  expect(store.getState().storageError).toBeNull();
+  expect(JSON.parse(storage.data.get(key)!)).toEqual({ on: true, order: ["x"] });
 });

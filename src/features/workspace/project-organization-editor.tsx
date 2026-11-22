@@ -215,7 +215,7 @@ export function OrganizationEditorSheet({
             disabled={disabled}
             searchable
             options={
-              visible?.sessions.map((row) => ({ value: row.id, label: row.title || row.id })) ??
+              visible?.sessions.map((row) => ({ value: row.id, label: row.title || copy("Yeni oturum", "New session") })) ??
               []
             }
             onChange={(value) => form.setField("ids", value)}
@@ -259,7 +259,7 @@ export function OrganizationEditorSheet({
               options={
                 visible?.sessions.map((row) => ({
                   value: row.id,
-                  label: row.title || row.id,
+                  label: row.title || copy("Yeni oturum", "New session"),
                 })) ?? []
               }
               onChange={(value) => form.setField("sessionId", value)}

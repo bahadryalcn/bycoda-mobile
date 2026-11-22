@@ -9,6 +9,8 @@ import FolderPlus from "lucide-react-native/icons/folder-plus";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
+import { useSingleFlight } from "@/state/actions";
 import {
   Button,
   IconButton,
@@ -27,7 +29,9 @@ import { useScreenContentInsets } from "@/ui/screen-content-insets";
 import { metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { haptic } from "@/ui/motion";
+import { SwipeActionsGroup } from "@/ui/swipe-actions";
 import type { HostProject } from "@/domain/types";
+import type { MobileMachine } from "@/remote/types";
 import {
   directorySections,
   directoryRows,
@@ -67,11 +71,20 @@ import {
 import { modelRoutingProjectKey } from "../../../../src/shared/model/modelRoutingPools";
 
 export function ProjectsScreen() {
+  const machine = useActiveMachine();
+  const connection = useConnectionScope();
+  if (!machine) return <WelcomeScreen />;
+  return <ProjectsConnectionScreen key={connection.token} machine={machine} connection={connection} />;
+}
+
+function ProjectsConnectionScreen({ machine, connection }: {
+  machine: MobileMachine;
+  connection: ConnectionScope;
+}) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
   // Horizontal gutters only; this component renders the Screen frame that owns the bottom inset.
   const gutter = useScreenContentInsets();
-  const machine = useActiveMachine();
   const selectProject = useMachines((state) => state.selectProject);
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
@@ -116,6 +129,7 @@ export function ProjectsScreen() {
   });
   const projectKinds = routing.data?.projectKinds;
   const open = useHostMutation<HostProject>("projects.open", ["projects"]);
+  const openFlight = useSingleFlight<void>();
   const showGroups =
     (preferences.view === "grouped" || byRepository) &&
     (groups.length > 0 || projects.some((project) => project.pinned));
@@ -156,53 +170,65 @@ export function ProjectsScreen() {
     [reordering, buildSections, groups],
   );
   const moveOrder = useLatestCallback((move: ProjectOrderMove) => {
+    if (!connection.isCurrent()) return;
     const next = moveInOrder(orderFromSections(reorderSections, showGroups), move);
-    if (machine)
-      void projectDirectoryPreferences
-        .getState()
-        .update(machine.id, (current) => ({
-          sort: "custom",
-          order: { ...current.order, ...next },
-        }));
+    void projectDirectoryPreferences
+      .getState()
+      .update(machine.id, (current) => ({
+        sort: "custom",
+        order: { ...current.order, ...next },
+      }));
   });
   const rows = useMemo(() => directoryRows(sections, showGroups), [sections, showGroups]);
   const updatePreferences = useCallback(
     (patch: Partial<ProjectDirectoryPreferences>) => {
-      if (machine) void projectDirectoryPreferences.getState().update(machine.id, patch);
+      if (connection.isCurrent()) void projectDirectoryPreferences.getState().update(machine.id, patch);
     },
-    [machine],
+    [connection, machine.id],
   );
   const matching = sections.reduce((count, section) => count + section.count, 0);
   const go = (project: HostProject, view?: ProjectRowView) => {
-    if (!machine || useMachines.getState().activeId !== machine.id) return;
+    if (!connection.isCurrent()) return;
     selectProject(project.id);
     router.navigate({
       pathname: "/project/[id]",
       params: { id: project.id, machineId: machine.id, ...(view ? { view } : {}) },
     });
   };
+  const openFolder = (cwd: string, row?: { id: string; view?: ProjectRowView }) => {
+    if (!connection.isCurrent() || openFlight.isPending()) return;
+    if (row) setOpeningId(row.id);
+    void openFlight.run(async () => {
+      try {
+        if (!connection.isCurrent()) return;
+        const opened = await open.mutateAsync({ cwd });
+        if (!connection.isCurrent()) return;
+        haptic.success();
+        if (!row) setAdding(false);
+        go(opened, row?.view);
+      } catch {
+        // The mutation owns failure feedback for both entry points.
+      } finally {
+        if (row && connection.isCurrent()) setOpeningId(undefined);
+      }
+    });
+  };
   const choose = useLatestCallback((project: DirectoryProject, view?: ProjectRowView) => {
-    if (open.isPending || !directoryReady) return;
+    if (!connection.isCurrent() || openFlight.isPending() || !directoryReady) return;
     if (project.registered) {
       if (!isProjectVisible(project.id)) return;
       go(project, view);
       return;
     }
-    setOpeningId(project.id);
-    void open
-      .mutateAsync({ cwd: project.cwd })
-      .then((opened) => {
-        haptic.success();
-        go(opened, view);
-      })
-      .catch(() => {})
-      .finally(() => setOpeningId(undefined));
+    openFolder(project.cwd, { id: project.id, view });
   });
   const openView = useLatestCallback((id: string, view: ProjectRowView) => {
     const project = projects.find((item) => item.id === id);
     if (project) choose(project, view);
   });
-  const showDetails = useLatestCallback((id: string) => setDetailsId(id));
+  const showDetails = useLatestCallback((id: string) => {
+    if (connection.isCurrent()) setDetailsId(id);
+  });
   const details = detailsId ? projects.find((item) => item.id === detailsId) : undefined;
   const chooseById = useLatestCallback((id: string) => {
     const project = projects.find((item) => item.id === id);
@@ -360,10 +386,10 @@ export function ProjectsScreen() {
       openView,
     ],
   );
-  if (!machine) return <WelcomeScreen />;
   return (
     <Screen scroll={false}>
       <Stack.Screen options={{ title: copy("Projeler", "Projects") }} />
+      <SwipeActionsGroup fill>
       <FlatList<DirectoryRow>
         data={matching ? rows : []}
         keyExtractor={keyExtractor}
@@ -394,6 +420,7 @@ export function ProjectsScreen() {
         automaticallyAdjustKeyboardInsets={false}
         contentInsetAdjustmentBehavior="never"
       />
+      </SwipeActionsGroup>
       <Sheet
         visible={optionsOpen}
         title={copy("Proje görünümü", "Project view")}
@@ -499,16 +526,7 @@ export function ProjectsScreen() {
           key={machine.id}
           onClose={() => setAdding(false)}
           mutation={open}
-          onOpen={(path) => {
-            void open
-              .mutateAsync({ cwd: path })
-              .then((project) => {
-                haptic.success();
-                setAdding(false);
-                go(project);
-              })
-              .catch(() => {});
-          }}
+          onOpen={openFolder}
         />
       ) : null}
     </Screen>

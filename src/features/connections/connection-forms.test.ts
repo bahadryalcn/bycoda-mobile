@@ -6,15 +6,18 @@ vi.mock("react-native", () => ({ Text: "Text", View: "View" }));
 vi.mock("react-native-reanimated", () => ({ default: { View: "AnimatedView" } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
+vi.mock("@/ui/duotone-icon", () => ({ Laptop: "Laptop" }));
+vi.mock("@/ui/icon-tile", () => ({ IconTile: "IconTile" }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/tokens", () => ({ space: {} }));
 vi.mock("@/ui/primitives", () => ({
   Body: "Body", ErrorNotice: "ErrorNotice", FormActions: "FormActions", Disclosure: "Disclosure",
-  Field: "Field", IdentifierField: "IdentifierField", Stack: "Stack", Heading: "Heading",
+  Field: "Field", IdentifierField: "IdentifierField", Stack: "Stack", Heading: "Heading", Row: "Row",
 }));
 import { ManualConnectionForm } from "./manual-connection-form";
 import { ConnectionFeedback } from "./connection-feedback";
-import type { ManualConnectionFormProps } from "./connection-types";
+import { PairingPreview } from "./pairing-preview";
+import type { ConnectionOperation, ManualConnectionFormProps } from "./connection-types";
 
 function find(node: ReactNode, type: unknown): ReactElement<Record<string, any>> | undefined {
   if (!isValidElement<Record<string, any>>(node)) return undefined;
@@ -24,6 +27,19 @@ function find(node: ReactNode, type: unknown): ReactElement<Record<string, any>>
     if (match) return match;
   }
 }
+
+it("offers one retry on a temporary preview failure", () => {
+  const connect = vi.fn(async () => undefined);
+  const operation = { isError: true, error: new Error("The computer could not be reached.") } as ConnectionOperation;
+  const form = find(PairingPreview({
+    code: { name: "Test computer", endpoint: "https://qa.invalid" } as Parameters<typeof PairingPreview>[0]["code"],
+    operation, disabled: false, busy: false, onConnect: connect, onCancel: vi.fn(),
+  }), "FormActions")!;
+  expect(form.props.submitLabel).toBe("Retry");
+  expect(form.props.feedback.props.onRetry).toBeUndefined();
+  form.props.onSubmit();
+  expect(connect).toHaveBeenCalledOnce();
+});
 
 it("keeps connection feedback with the guarded action, without submitting or cancelling on render", () => {
   const connect = vi.fn(), cancel = vi.fn(), operation = { error: new Error("Connection refused") };

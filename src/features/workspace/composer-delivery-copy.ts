@@ -9,9 +9,21 @@ export function composerDeliveryError(error: unknown, copy: (tr: string, en: str
       "Not bağlamını göndermek için bilgisayardaki bycoda’yı güncelle. Taslağın korunuyor.",
       "Update bycoda on this computer to send note context. Your draft is preserved.",
     ],
-    "Note context requires Send without plan, compact or session commands. Change the delivery mode or remove the note.": [
-      "Not bağlamını göndermek için turun bitmesini bekle ve plan, sıkıştırma veya oturum komutlarını kaldır. Ya da notu kaldır.",
-      "Wait for the turn to finish and remove plan, compact or session commands before sending note context. Or remove the note.",
+    "Turn off Plan mode or remove the note.": [
+      "Plan modunu kapat veya notu kaldır.",
+      "Turn off Plan mode or remove the note.",
+    ],
+    "Turn off Draft mode or remove the note.": [
+      "Taslak modunu kapat veya notu kaldır.",
+      "Turn off Draft mode or remove the note.",
+    ],
+    "Remove the command at the start of the message or remove the note.": [
+      "Mesajın başındaki komutu sil veya notu kaldır.",
+      "Remove the command at the start of the message or remove the note.",
+    ],
+    "To keep the note, send this message after the current turn finishes.": [
+      "Notu korumak için bu mesajı mevcut tur bitince gönder.",
+      "To keep the note, send this message after the current turn finishes.",
     ],
     "Delivery is unconfirmed. Review this message on the sending computer before resuming the queue.": [
       "Teslimat doğrulanamadı. Sırayı sürdürmeden önce mesajı gönderen bilgisayarda kontrol et.",

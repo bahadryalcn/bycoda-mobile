@@ -15,10 +15,13 @@ const state = vi.hoisted(() => ({
   lists: [] as unknown[][],
   availability: "ready" as "ready" | "loading" | "error",
   hasProvider: true,
+  projectVerified: true,
   refetch: vi.fn(),
+  linked: {} as { taskId?: string; machineId?: string; projectId?: string },
+  replace: vi.fn(),
 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({}) }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => state.linked, router: { replace: state.replace } }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("react-native", () => ({ View: "div" }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
@@ -48,9 +51,11 @@ vi.mock("@/state/queries", () => ({
   },
   useHostMutation: () => ({ mutate: vi.fn(), isPending: false, reset: vi.fn() }),
 }));
-vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({ data: [] }) }));
+vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({
+  data: [], directoryReady: true, isProjectVisible: () => state.projectVerified,
+}) }));
 vi.mock("./shared/local-project-scope", () => ({ useLocalProjectScope: () => ({ projectId: state.projectId, setProjectId: vi.fn() }) }));
-vi.mock("./shared/scope", () => ({ Scope: () => null }));
+vi.mock("./shared/scope", () => ({ Scope: () => createElement("span", { "data-project-picker": true }) }));
 vi.mock("./shared/use-editor-record", () => ({ useEditorRecord: (_id: unknown, value: unknown) => value }));
 vi.mock("./shared/agent", () => ({ initialAgent: () => ({}), useAgentProviders: () => ({ providers: state.hasProvider ? [{}] : [], query: { isSuccess: true, isFetching: false, error: null } }) }));
 vi.mock("./shared/format", () => ({ identifier: () => "new" }));
@@ -72,8 +77,8 @@ vi.mock("./tasks/bulk-actions", () => ({
   },
 }));
 vi.mock("@/ui/screen-list", () => ({
-  ScreenList: ({ header, actions, data, renderItem }: { header: unknown; actions: unknown; data: unknown[]; renderItem: (entry: { item: unknown }) => unknown }) =>
-    createElement("div", null, createElement("nav", null, actions as never), header as never, data.map((item, index) => createElement("div", { key: index }, renderItem({ item }) as never))),
+  ScreenList: ({ header, actions, context, data, renderItem }: { header: unknown; actions: unknown; context: ReactNode; data: unknown[]; renderItem: (entry: { item: unknown }) => unknown }) =>
+    createElement("div", null, createElement("nav", null, actions as never), context, header as never, data.map((item, index) => createElement("div", { key: index }, renderItem({ item }) as never))),
 }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: { children?: unknown }) => createElement("div", null, children as never);
@@ -109,6 +114,28 @@ vi.mock("@/ui/primitives", () => {
 const container = document.createElement("div");
 let root: ReturnType<typeof createRoot>;
 const task = (id: string, projectId: string) => ({ id, projectId, title: id, prompt: id, status: "todo" });
+it("shows a linked task without inactive filters and opens the regular listing on request", async () => {
+  state.linked = { taskId: "linked", machineId: "machine", projectId: "linked-project" };
+  state.all = [task("linked", "linked-project"), task("other", "project")];
+  try {
+    await act(async () => root.render(createElement(TasksScreen)));
+    expect(state.cards.at(-1)?.id).toBe("linked");
+    expect(container.querySelector("[data-project-picker]")).toBeNull();
+    expect(container.querySelector("input")).toBeNull();
+    expect(container.textContent).not.toContain("Filters");
+    const showAll = [...container.querySelectorAll("button")].find(row => row.textContent === "Show all")!;
+    await act(async () => showAll.click());
+    expect(state.replace).toHaveBeenCalledExactlyOnceWith({ pathname: "/manage/[section]", params: { section: "tasks" } });
+    state.linked = {};
+    await act(async () => root.render(createElement(TasksScreen)));
+    expect(state.cards.at(-1)?.id).toBe("other");
+    expect(container.querySelector("[data-project-picker]")).not.toBeNull();
+    expect(container.querySelector("input")).not.toBeNull();
+  } finally {
+    state.linked = {};
+    state.replace.mockClear();
+  }
+});
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   root = createRoot(container);
@@ -120,6 +147,7 @@ beforeEach(() => {
   state.lists = [];
   state.availability = "ready";
   state.hasProvider = true;
+  state.projectVerified = true;
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -130,6 +158,19 @@ const render = () => act(async () => root.render(createElement(TasksScreen)));
 const polled = () => state.calls.filter((call) => call.method === "tasks.list" && call.options.interval !== undefined && call.options.enabled !== false);
 const createButtons = () => [...container.querySelectorAll("button")].filter((button) => button.textContent === "New task");
 const button = (label: string) => [...container.querySelectorAll("button")].find((control) => control.textContent === label);
+
+it("disables New task if the selected project can no longer be verified", async () => {
+  await render();
+  expect(button("New task")?.disabled).toBe(false);
+  state.projectVerified = false;
+  await act(async () => button("New task")!.click());
+  expect(container.querySelector('section[aria-label="New task"]')).toBeNull();
+  await render();
+  expect(button("New task")?.disabled).toBe(true);
+  state.projectVerified = true;
+  await render();
+  expect(button("New task")?.disabled).toBe(false);
+});
 
 async function applyStatusFilter(status: string) {
   await act(async () => button("Filters")!.click());

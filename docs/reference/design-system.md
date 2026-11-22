@@ -159,7 +159,7 @@ system scaling.
 | Type (size/line) | `micro` 11/14; `caption`/`badge` 12/16; `small` 13/17; `control` 14/19; `body` 15/21 (chat `lineHeight.message` 22); `input` 16/21; `title` 16/21; `heading` 18/24; `hero` 24/30; `display` 28/34. Use the paired `lineHeight` map |
 | Radius | `badge` 6; `control` 10; `card` 12; `preview` 14; `bubble` 18; `composer` 24; `sheet` 24; `pill` 999 |
 | Visible sizes | `controlHeight`/`buttonHeight` 40; `inputHeight`/`composerFieldMin` 48; `visualControl` 32 (icon buttons, send); `chipHeight` 28; `toolRowHeight` 28; `sectionHeaderHeight` 28; `rowHeightSession` 56; `rowHeightProject` 52; `headerHeight` 48; `tabBarHeight` 52 |
-| Hit areas | `touchTarget`/`iconTarget` 48. Smaller visible controls add `hitSlop={hitSlopFor(visual)}`; the actual target never drops below 48 |
+| Hit areas | `touchTarget`/`iconTarget` 48. Header Back, Sheet Close and composer toolbar controls reserve 48 dp in layout. Compact visible controls can expand into space their parent leaves available. |
 | Other | Multiline input minimum 96 |
 | Width | Content 760; entry surfaces 520 |
 | Motion | Press 120ms; reveal 220ms; sheet 280ms |
@@ -301,7 +301,7 @@ One language for every state; use the shared owners in `src/ui/`, never ad hoc t
 | Initial load | `QueryState` `loading`: `"list"`/`"content"` skeleton of the content shape (rows with tile, title and meta; or heading and lines), `"centered"` spinner plus label only when the shape is unknown. Never both, and no visible "Loading…" text above a skeleton: `loadingLabel` is announced only. Placeholders appear after 250 ms (`useDelayedVisible`), so fast or cached loads never flash. A quiet reconnect without data keeps the same skeleton; the computer pill shows the link. A field-level control (project scope) never renders a `StateView`: it would stretch its toolbar row and slide the row's actions. Spinners stay for in-place actions (button, row, connecting). |
 | Refresh | Pull-to-refresh or progress line; no blocking UI. |
 | Failed load, no data | `QueryState` renders `StateView` with art from the error kind (network/timeout unreachable, offline, auth/identity locked, else error) and Retry or the repair action. |
-| Failed or paused refresh, data shown | Nothing: keep the data; the computer pill carries the connection (`QueryState` renders null). |
+| Failed or paused refresh, data shown | Keep the data. The computer pill carries link outages. If a reachable computer fails the read, `QueryState` offers Refresh after the retry finishes. |
 | Waiting for a connection, no data | `QueryState` renders a centered `StateView` "Waiting for a connection" with Manage connections; reconnecting without data is a centered loading. |
 | Feedback tied to a user action (form, sheet, dialog) or a contextual explanation to read before acting | `Notice`/`ErrorNotice` with tone, never for connection, loading, availability or "not available yet" (use `StateView`), and never stacked with a `StateView` in one region: tinted surface, hairline border, 16px icon, quiet recovery action. |
 | Field validation | `Field`/`ErrorText` use `FieldError`: 13/17 danger text with a 14px icon; the input border turns danger. |

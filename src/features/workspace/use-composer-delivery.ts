@@ -1,4 +1,5 @@
 import type { HostSession } from "./wire";
+import { providerSteerCapability } from "../../../../src/features/connections/model/protocol";
 import type { useHostClient } from "@/state/queries";
 import { desktopOwnsTurn, type ComposerDelivery } from "./composer-delivery";
 import { busyPrimaryMode } from "./busy-send";
@@ -20,11 +21,15 @@ export function useComposerDelivery({
   busyPreferred?: BusySendMode;
 }) {
   const running = session?.status === "running";
-  const supportsSteer = !!client?.machine.capabilities?.includes("sessions.steer");
+  const supportsSteer =
+    !!session &&
+    !!client?.machine.capabilities?.includes(providerSteerCapability(session.session.harness));
   const desktopOwned = !!session && desktopOwnsTurn(session);
   const canSteer = supportsSteer && running && !!session?.runId && !desktopOwned;
   const available = { queue: queueSupported, steer: canSteer };
-  const mode: ComposerDelivery = running ? busyPrimaryMode(busyPreferred, available) ?? "send" : "send";
+  const mode: ComposerDelivery = running
+    ? (busyPrimaryMode(busyPreferred, available) ?? "send")
+    : "send";
   return {
     mode,
     running,

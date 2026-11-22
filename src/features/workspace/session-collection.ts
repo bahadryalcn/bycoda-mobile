@@ -69,6 +69,7 @@ export function filterProjectSessionDirectory(
   projects: readonly DirectoryProject[],
   directory: readonly ActiveSession[],
   search: string,
+  defaultTitle?: string,
 ): { project: DirectoryProject; session: ActiveSession["session"] }[] {
   const byId = new Map(projects.map((project) => [project.id, project]));
   const members = new Map<string, ActiveSession["session"][]>();
@@ -78,7 +79,7 @@ export function filterProjectSessionDirectory(
     members.set(project.id, sessions);
   }
   const matches = new Map(projects.map((project) => [project.id, new Set(
-    filterSessionDirectory(members.get(project.id) ?? [], project.sessionLayout, search, `${project.name} ${project.cwd}`)
+    filterSessionDirectory(members.get(project.id) ?? [], project.sessionLayout, search, `${project.name} ${project.cwd}`, defaultTitle)
       .map((session) => session.id),
   )]));
   return directory.flatMap(({ project, session }) => {

@@ -9,6 +9,7 @@ import {
   TranscriptPresentation,
   isBlockStreaming,
   transcriptEntries,
+  transcriptTailStamp,
   transcriptSenderName,
   toolResultTexts,
 } from "./transcript-model";
@@ -20,6 +21,17 @@ const block = (id: string, role: Block["role"], fields: Partial<Block> = {}): Bl
   ...fields,
 });
 describe("readable transcript", () => {
+  it("ignores earlier history even when prepending it regroups the last activity row", () => {
+    const tail = block("latest", "tool", { tool: { output: "running" } });
+    const visible = transcriptEntries([tail]);
+    const prepended = transcriptEntries([block("older", "tool"), tail]);
+    expect(prepended.at(-1)?.id).not.toBe(visible.at(-1)?.id);
+    expect(transcriptTailStamp(prepended)).toBe(transcriptTailStamp(visible));
+    const streamed = transcriptEntries([{ ...tail, tool: { output: "running now" } }]);
+    expect(transcriptTailStamp(streamed)).not.toBe(transcriptTailStamp(visible));
+    expect(transcriptTailStamp(transcriptEntries([tail, block("answer", "assistant")]))).not.toBe(transcriptTailStamp(visible));
+    expect(transcriptTailStamp([])).toBeUndefined();
+  });
   it("retains separate full outputs without repeating the command or the same result twice", () => {
     expect(
       toolResultTexts(

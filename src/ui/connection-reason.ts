@@ -13,6 +13,8 @@ export function connectionReason(
   name: string,
   copy: Copy,
 ): string | undefined {
+  if (phase === "startup-failed")
+    return copy("Bycoda’yı kapatıp yeniden aç.", "Close and reopen Bycoda.");
   if (phase !== "disconnected" && phase !== "access") return undefined;
   const values = { p0: name };
   if (phase === "access" || kind === "auth")

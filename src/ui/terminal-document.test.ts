@@ -9,6 +9,12 @@ it("has a trusted offline renderer without remote resources or HTML output inter
   expect(html).toContain("allowProposedApi:false");
   expect(html).not.toMatch(/maximum-scale|user-scalable\s*=\s*no/);
 });
+it("lets the unused terminal grid space inherit the live terminal theme", () => {
+  const html = terminalDocument("theme-nonce");
+  expect(html.includes("html{background:#111;color:#eee}")).toBe(true);
+  expect(/html,body,#terminal\{[^}]*background:/.test(html)).toBe(false);
+  expect(html.includes("document.body.style.background=p.theme.background")).toBe(true);
+});
 it("rejects foreign documents, arbitrary bridge actions, invalid resize and oversized input", () => {
   expect(
     readTerminalPacket(JSON.stringify({ type: "input", nonce: "n", dataBase64: "Aw==" }), "n")
@@ -21,4 +27,8 @@ it("rejects foreign documents, arbitrary bridge actions, invalid resize and over
     { type: "input", nonce: "n", dataBase64: "A".repeat(6000) },
   ])
     expect(readTerminalPacket(JSON.stringify(packet), "n")).toBeNull();
+});
+it("accepts the explicit keyboard focus acknowledgement only from this terminal document", () => {
+  expect(readTerminalPacket(JSON.stringify({ type: "focused", nonce: "n" }), "n")?.type).toBe("focused");
+  expect(readTerminalPacket(JSON.stringify({ type: "focused", nonce: "other" }), "n")).toBeNull();
 });

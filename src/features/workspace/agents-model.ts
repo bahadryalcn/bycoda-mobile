@@ -22,7 +22,7 @@ export function listAgents(blocks: readonly Block[] | undefined): AgentEntry[] {
   const entries: AgentEntry[] = [];
   for (const block of blocks ?? []) {
     const run = block.agentRun;
-    if (!run) continue;
+    if (!run || block.internal) continue;
     const state = activityState(block);
     const report = state === "running" ? undefined : squash(block.tool?.detail);
     entries.push({

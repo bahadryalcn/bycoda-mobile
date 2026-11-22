@@ -1,14 +1,18 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
-import { useActiveHostLinkDown } from "@/state/host-runtime-state";
+import { useDeviceOffline } from "@/state/device-network";
+import { useActiveHostLinkDown, useActiveHostRecoveryMachine } from "@/state/host-runtime-state";
+import { useMachineStatus } from "@/ui/machine-bar";
 import { reviewedMachine, isReviewedMachine } from "@/state/reviewed-machine";
 import { getQueryPresentation } from "@/ui/query-presentation";
+import { useReadRetryNotice } from "@/ui/query-state";
 import { router } from "expo-router";
 import Animated from "react-native-reanimated";
 import type { HostSettingsState } from "../../remote/types";
 import { hostKey, useHostMutation, useHostQuery } from "../../state/queries";
-import { Body, Disclosure, FormActions, NumberField, QueryState, MutationState, Notice, SectionHeader, Stack, StateView, ErrorText } from "../../ui/primitives";
+import { Body, Disclosure, FormActions, QueryState, MutationState, Notice, SectionHeader, Stack, StateView, ErrorText, Loading } from "../../ui/primitives";
+import { IntegerStepper } from "@/ui/integer-stepper";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
 import { useSheetGuard } from "@/ui/sheet-guard";
@@ -30,6 +34,9 @@ import { ShellProfileSettings } from "./shell-profile-settings";
 import { useMobileTheme } from "../../ui/theme";
 import { WorkCapsSettings } from "./work-caps-settings";
 import { AgentDefaultsSettings } from "./agent-defaults-settings";
+import { LimitPresets } from "./limit-presets";
+
+const DAILY_TIME_PRESETS = ["0", "30", "60", "120", "240", "480"] as const;
 
 export function HostSettingsEditor({ machineId, machineName, target }: HostSettingsEditorProps) {
   const { uiStyles } = useMobileTheme();
@@ -37,7 +44,13 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
   const locale = useLocale();
   const cache = useQueryClient();
   const machine = useActiveMachine();
-  const linkDown = useActiveHostLinkDown();
+  const { phase } = useMachineStatus();
+  const deviceOffline = useDeviceOffline() || phase === "offline";
+  const linkDown = useActiveHostLinkDown() || deviceOffline || phase === "disconnected";
+  const recoveringMachine = useActiveHostRecoveryMachine();
+  const recovering = !deviceOffline && recoveringMachine === machineId;
+  const showLinkWarning = useReadRetryNotice(recovering, recoveringMachine);
+  const quietLinkDown = linkDown && recovering && !showLinkWarning;
   const [opening] = useState(() => ({ machineId, name: machineName ?? machine?.name, target: target ?? reviewedMachine(machine) }));
   const latest = useRef(machineId); latest.current = machineId;
   const mounted = useRef(true), retired = useRef(false);
@@ -61,29 +74,44 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
   const accessError = errorKind === "auth" || errorKind === "identity";
   const snapshot = accessError ? undefined : received.current;
   const showSections = useRef(false);
-  if (validScope && !linkDown && !accessError) showSections.current = true;
+  // Keep sections after a proven connection so open child forms survive interruptions.
+  if (validScope && !linkDown && !accessError && (phase === "connected" || snapshot)) showSections.current = true;
   const save = useHostMutation<HostSettingsState>("host.settings.save", ["settings"]);
   const action = useAsyncAction<HostSettingsState>();
+  const saveFlight = useRef(false);
   const [uncertain, setUncertain] = useState(false), [reading, setReading] = useState(false);
   const [observed, setObserved] = useState<HostSettingsState>();
   const readFlight = useRef(false);
   const draft = useFormDraft<SettingsDraft>({ override: null });
-  const fields = {
-    ...(snapshot ? settingsFields(snapshot) : { maxRunning: "", dailyMinutes: "" }),
-    ...draft.values.override,
-  };
+  const savedFields = snapshot ? settingsFields(snapshot) : { maxRunning: "", dailyMinutes: "" };
+  const fields = { ...savedFields, ...draft.values.override };
   const dirty = draft.values.override !== null;
   const { requestCloseThen } = useSheetGuard({ dirty, pending: action.isPending || save.isPending || reading });
   const writable = supported && !linkDown && getQueryPresentation(settings) === "ready" && !uncertain;
-  const validMax = /^\d+$/.test(fields.maxRunning) && Number(fields.maxRunning) >= 1 && Number.isSafeInteger(Number(fields.maxRunning));
   const validMinutes = /^\d+$/.test(fields.dailyMinutes) && Number.isSafeInteger(Number(fields.dailyMinutes));
+  const mayEditLimits = supported && !linkDown && !uncertain && !reading;
+  const formatMinutes = (value: string) => {
+    if (value === "0") return copy("Sınırsız", "Unlimited");
+    const minutes = Number(value);
+    return minutes % 60 === 0
+      ? copy("{p0} sa", "{p0} h", { p0: new Intl.NumberFormat(locale).format(minutes / 60) })
+      : copy("{p0} dk", "{p0} min", { p0: new Intl.NumberFormat(locale).format(minutes) });
+  };
   const update = (key: keyof typeof fields, value: string) =>
-    draft.patch((current) => ({ override: { ...current.override, [key]: value } }));
+    draft.patch((current) => {
+      const override = { ...current.override };
+      // An in-flight save may change the baseline, so keep corrections made while it runs.
+      if (!saveFlight.current && value === savedFields[key]) delete override[key];
+      else override[key] = value;
+      return { override: Object.keys(override).length ? override : null };
+    });
   const submit = () => {
     const submitted = draft.values.override;
-    if (!submitted || !validSettingsFields(fields) || !writable || !current()) return;
+    if (saveFlight.current || !submitted || !validSettingsFields(fields) || !writable || !current()) return;
+    saveFlight.current = true;
     const sent = editedLimits(submitted);
     setObserved(undefined);
+    const finishSave = () => { saveFlight.current = false; };
     void action.run(async () => {
       if (!current() || !useMachines.getState().machines.find(value => value.id === opening.machineId)?.capabilities?.includes("host.settings")) throw new Error("This computer connection changed. Reopen its current route.");
       let result: HostSettingsState;
@@ -102,7 +130,7 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
       );
       draft.reset((current) => acknowledgeSettingsDraft(current, submitted));
       return result;
-    });
+    }).then(finishSave, finishSave);
   };
   const refreshSettings = async () => {
     if (readFlight.current || !current() || !supported) return;
@@ -114,52 +142,59 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
     finally { readFlight.current = false; if (mounted.current) setReading(false); }
   };
   const manageConnections = () => requestCloseThen(() => router.navigate("/machines"));
+  const checkingConnection = copy("Bağlantı kontrol ediliyor…", "Checking connection…");
+  if (validScope && accessError && supported) return (
+    <Stack><Body muted>{opening.name}</Body>
+      <QueryState query={settings} loading="inline" compact onManageConnections={manageConnections} />
+    </Stack>
+  );
+  if (validScope && !showSections.current && (quietLinkDown || (!linkDown && phase === "checking"))) {
+    return <Loading label={checkingConnection} />;
+  }
   if (validScope && linkDown && !showSections.current && opening.name) return (
     <StateView compact tone="warning"
       title={copy("{p0} bu ağda erişilemiyor.", "Can't reach {p0} on this network.", { p0: opening.name })}
       action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: manageConnections }} />
   );
-  if (validScope && !linkDown && accessError && supported) return (
-    <Stack><Body muted>{opening.name}</Body>
-      <QueryState query={settings} loading="inline" compact onManageConnections={manageConnections} />
-    </Stack>
-  );
   return (
     <Stack style={{ gap: space.lg }}>
       <Body>{opening.name}</Body>
       {validScope && !linkDown && !snapshot && supported ? <SectionHeader title={copy("Görev sınırları", "Task limits")} /> : null}
-      {!validScope ? <Notice tone="warning" message={copy("Seçili bilgisayar değişti. Ayarları yeniden açın.", "The selected computer changed. Reopen the settings.")} /> : linkDown ? <Notice tone="warning" message={copy("{p0} bu ağda erişilemiyor.", "Can't reach {p0} on this network.", { p0: opening.name ?? "" })} action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: manageConnections }} /> : !supported ? <StateView compact illustration="error" title={copy("Görev sınırları kullanılamıyor", "Task limits unavailable")} description={copy("Görev sınırlarını düzenlemek için bu bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to edit task limits.")} /> : <QueryState query={uncertain ? { ...settings, refetch: undefined } : settings} loading="inline" compact onManageConnections={manageConnections} />}
+      {!validScope ? <Notice tone="warning" message={copy("Seçili bilgisayar değişti. Ayarları yeniden açın.", "The selected computer changed. Reopen the settings.")} /> : quietLinkDown ? null : linkDown ? <Notice tone="warning" message={copy("{p0} bu ağda erişilemiyor.", "Can't reach {p0} on this network.", { p0: opening.name ?? "" })} action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: manageConnections }} /> : !supported ? <StateView compact illustration="error" title={copy("Görev sınırları kullanılamıyor", "Task limits unavailable")} description={copy("Görev sınırlarını düzenlemek için bu bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to edit task limits.")} /> : <QueryState query={uncertain ? { ...settings, refetch: undefined } : settings} loading="inline" compact onManageConnections={manageConnections} />}
       {snapshot ? (
         <>
           <Animated.View entering={enterItem(0)}>
-            <Stack>
+            <Stack style={{ gap: space.lg }}>
               <SectionHeader title={copy("Görev sınırları", "Task limits")} />
-              <NumberField
+              <IntegerStepper
                 label={copy("Aynı anda çalışan görev", "Concurrent tasks")}
-                value={fields.maxRunning}
-                onChangeText={(value) => update("maxRunning", value)}
-                editable={supported && !linkDown && !uncertain && !reading}
+                value={Number(fields.maxRunning)}
+                min={1}
+                max={Number.MAX_SAFE_INTEGER}
+                onValueChange={(value) => update("maxRunning", String(value))}
+                disabled={!mayEditLimits}
               />
-              {!validMax ? (
-                <ErrorText error={copy("Pozitif bir tam sayı girin.", "Enter a positive whole number.")} />
-              ) : null}
-              <NumberField
-                label={copy("Günlük ajan süresi (dakika)", "Daily agent time (minutes)")}
-                hint={copy("0 sınırsız", "0 unlimited")}
-                value={fields.dailyMinutes}
-                onChangeText={(value) => update("dailyMinutes", value)}
-                editable={supported && !linkDown && !uncertain && !reading}
-              />
-              {!validMinutes ? (
-                <ErrorText error={copy("Sıfır veya pozitif bir tam dakika girin.", "Enter zero or a positive whole number of minutes.")} />
-              ) : null}
+              <Stack style={{ gap: space.xs }}>
+                <LimitPresets
+                  label={copy("Günlük ajan süresi", "Daily agent time")}
+                  customLabel={copy("Günlük ajan süresi (dakika)", "Daily agent time (minutes)")}
+                  values={DAILY_TIME_PRESETS}
+                  value={fields.dailyMinutes}
+                  format={formatMinutes}
+                  onChange={(value) => update("dailyMinutes", value)}
+                  disabled={!mayEditLimits}
+                />
+                {!validMinutes ? (
+                  <ErrorText error={copy("Sıfır veya pozitif bir tam dakika girin.", "Enter zero or a positive whole number of minutes.")} />
+                ) : null}
+                <Body muted style={uiStyles.caption}>
+                  {copy("Bugün {p0} dakika kullanıldı.", "{p0} minutes used today.", {
+                    p0: new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }).format(snapshot.usedMinutes),
+                  })}
+                </Body>
+              </Stack>
             </Stack>
           </Animated.View>
-          <Body muted style={uiStyles.caption}>
-            {copy("Bugün {p0} dakika kullanıldı.", "{p0} minutes used today.", {
-              p0: new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }).format(snapshot.usedMinutes),
-            })}
-          </Body>
           {snapshot.limitReached ? (
             <Notice
               tone="warning"
@@ -185,9 +220,11 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
           /> : null}</>} />
         </>
       ) : null}
-      <WorkCapsSettings current={current} enabled={validScope} />
-      <AgentDefaultsSettings current={current} enabled={validScope} />
-      <ShellProfileSettings target={opening.target} enabled={validScope} />
+      {validScope ? <>
+        <WorkCapsSettings current={current} enabled />
+        <AgentDefaultsSettings current={current} enabled />
+        <ShellProfileSettings target={opening.target} enabled />
+      </> : null}
     </Stack>
   );
 }

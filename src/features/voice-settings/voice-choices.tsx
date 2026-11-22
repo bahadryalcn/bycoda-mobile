@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { useActiveMachine } from "@/state/machines";
+import { sameReviewedMachine, useConnectionScope } from "@/state/connection-scope";
+import type { ReviewedMachine } from "@/state/reviewed-machine";
 import { useHostQuery } from "@/state/queries";
 import { useActiveHostLinkDown } from "@/state/host-runtime-state";
 import { useCopy } from "@/ui/copy";
 import { Button, Input, Notice, QueryState, SectionHeader, SelectField, SelectRow, Stack } from "@/ui/primitives";
+import { PreferenceStorageNotice } from "@/ui/preference-storage-notice";
 import { parseLocalModels, type LocalVoiceModel } from "./voice-models-model";
 import { DICTATION_MODELS } from "../../../../src/features/voice/model/dictationModels";
 import { SUPERTONIC_SPEAKERS, useVoicePreferences, voicePreferences, type SpeechEngine, type SupertonicSpeaker, type VoicePreferences } from "./voice-preferences";
@@ -24,11 +27,13 @@ export function speechSummary(speech: SpeechEngine, speaker: SupertonicSpeaker, 
  * recognition on the computer or in the cloud) and how the assistant sounds (engine and speaker).
  * The Host still decides availability; a missing key only greys out its row.
  */
-export function VoiceChoices() {
+export function VoiceChoices({ showStorageNotice = true }: { showStorageNotice?: boolean }) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const linkDown = useActiveHostLinkDown();
-  const { preferences, hydrated, storageError } = useVoicePreferences();
+  const { preferences, hydrated, storageError, retry } = useVoicePreferences();
+  const scope = useConnectionScope();
+  const review = scope.review;
   const localSupported = machine?.capabilities?.includes("voice.local.v1") === true;
   const cloudSupported = machine?.capabilities?.includes("voice.cloud.v1") === true;
   const selectableModels = machine?.capabilities?.includes("voice.transcription-models.v1") === true;
@@ -40,8 +45,8 @@ export function VoiceChoices() {
   });
   const vox = useHostQuery<{ ready?: boolean }>(["voice", "voxcpm2"], "voice.local.inspect",
     { config: { engine: "voxcpm2" } }, { enabled: localSupported });
-  const [elevenDraft, setElevenDraft] = useState<string>();
-  if (!machine) return null;
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, { review: ReviewedMachine; value: string }>>(() => new Map());
+  if (!machine || !review) return null;
   const openrouter = cloudSupported && keys.data?.openrouter === true;
   const openai = cloudSupported && keys.data?.openai === true;
   const xai = cloudSupported && keys.data?.xai === true;
@@ -52,13 +57,20 @@ export function VoiceChoices() {
     ? localSupported && models.isSuccess
     : preferences.engine === "cloud" && keys.isSuccess && openrouter;
   const installed = models.data?.filter(model => model.installed && (model.id === "small" || model.id === "turbo")) ?? [];
-  const update = (patch: Partial<VoicePreferences>) => void voicePreferences.getState().update(patch).catch(() => {});
+  const update = (patch: Partial<VoicePreferences>, onApplied?: () => void) => {
+    if (!scope.isCurrent()) return;
+    void voicePreferences.getState().update(() => {
+      if (!scope.isCurrent()) throw new Error("Voice settings connection changed");
+      return patch;
+    }).then(onApplied).catch(() => {});
+  };
   const engines: { value: SpeechEngine; label: string; detail?: string; disabled?: boolean }[] = [
     { value: "supertonic", label: "Supertonic", detail: copy("Bilgisayarda", "On the computer"), disabled: !localSupported },
     { value: "voxcpm2", label: "VoxCPM2", detail: vox.data?.ready === false ? copy("Bilgisayarda kurulum gerekiyor", "Needs setup on the computer") : undefined, disabled: !localSupported || vox.data?.ready === false },
     { value: "elevenlabs", label: "ElevenLabs", detail: copy("Bulutta", "In the cloud"), disabled: !elevenlabs },
   ];
-  const elevenValue = elevenDraft ?? preferences.elevenVoice ?? "";
+  const draft = drafts.get(review.id);
+  const elevenValue = (draft && sameReviewedMachine(draft.review, review) ? draft.value : preferences.elevenVoice) ?? "";
   return (
     <Stack>
       <SectionHeader title={copy("Seni anlama", "Understanding you")} />
@@ -116,12 +128,21 @@ export function VoiceChoices() {
       ) : null}
       {preferences.speech === "elevenlabs" && elevenlabs ? <>
         <Input label={copy("ElevenLabs ses kimliği", "ElevenLabs voice ID")} value={elevenValue}
-          onChangeText={setElevenDraft} autoCapitalize="none" autoCorrect={false} />
+          onChangeText={(value) => {
+            if (scope.isCurrent()) setDrafts((previous) => new Map(previous).set(review.id, { review, value }));
+          }} autoCapitalize="none" autoCorrect={false} />
         <Button label={copy("Kaydet", "Save")}
           disabled={!hydrated || elevenValue === (preferences.elevenVoice ?? "") || !/^[A-Za-z0-9]{0,64}$/.test(elevenValue)}
-          onPress={() => update({ elevenVoice: elevenValue || undefined })} />
+          onPress={() => update({ elevenVoice: elevenValue || undefined }, () => {
+            setDrafts((previous) => {
+              if (!draft || previous.get(review.id) !== draft) return previous;
+              const next = new Map(previous);
+              next.delete(review.id);
+              return next;
+            });
+          })} />
       </> : null}
-      {storageError ? <Notice tone="warning" message={copy("Ses ayarları kaydedilemedi.", "Could not save voice settings.")} /> : null}
+      {showStorageNotice ? <PreferenceStorageNotice error={storageError} retry={retry} /> : null}
     </Stack>
   );
 }

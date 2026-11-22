@@ -5,8 +5,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { FloatingTabBar } from "./floating-tab-bar";
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./dialogs", () => ({
-  Sheet: ({ visible, children }: PropsWithChildren<{ visible: boolean }>) =>
-    visible ? createElement("section", { role: "dialog" }, children) : null,
+  Sheet: ({ visible, title, children }: PropsWithChildren<{ visible: boolean; title: string }>) =>
+    visible ? createElement("section", { role: "dialog", "aria-label": title }, children) : null,
 }));
 vi.mock("./navigation-row", () => ({
   NavigationRow: ({
@@ -14,12 +14,14 @@ vi.mock("./navigation-row", () => ({
     selected,
     onPress,
     accessibilityLabel,
+    icon,
     trailing,
   }: {
     label: string;
     selected?: boolean;
     onPress(): void;
     accessibilityLabel?: string;
+    icon?: import("react").ReactNode;
     trailing?: import("react").ReactNode;
   }) =>
     createElement(
@@ -30,6 +32,7 @@ vi.mock("./navigation-row", () => ({
         "aria-selected": selected,
         onClick: onPress,
       },
+      icon,
       label,
       trailing,
     ),
@@ -201,6 +204,7 @@ const props = {
       {
         options: {
           title: route.name,
+          tabBarIcon: () => createElement("i", { "data-destination-icon": route.name }),
           ...(route.name === "sessions" ? { tabBarBadge: "99+" } : {}),
         },
       },
@@ -266,7 +270,8 @@ it("keeps large-text destinations reachable while the quick action owns a slot",
     tab.getAttribute("aria-label")?.startsWith("More"),
   ) as HTMLElement;
   await act(async () => more.click());
-  expect(container.querySelector('[data-destination="settings"]')).not.toBeNull();
+  const sheet = container.querySelector('[role="dialog"][aria-label="More"]');
+  expect(sheet?.querySelector('[data-destination="settings"] [data-destination-icon="settings"]')).toBeTruthy();
 });
 it("closes the overflow sheet when a window resize makes every destination visible", async () => {
   state.fontScale = 2;
@@ -521,7 +526,7 @@ it("shows labels in a wider dock on tablets and landscape large phones", async (
     expect(tabs).toHaveLength(5);
     expect(tabs.map((tab) => tab.textContent)).toEqual(["projects", "99+sessions", "inbox", "tools", "settings"]);
     expect(JSON.parse(tabs[0]!.getAttribute("data-style")!).width).toBe(88);
-    expect(container.querySelector("[data-lines='1']")).not.toBeNull();
+    expect(container.querySelector("[data-lines='2']")).not.toBeNull();
   }
 });
 it("keeps the icon-only dock on a portrait phone", async () => {

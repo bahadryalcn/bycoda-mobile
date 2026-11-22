@@ -93,7 +93,7 @@ export function useQuickActions() {
   const feed = useWidgetFeedStore((state) => state.feed);
   const showTitles = useWidgetPreferences((state) => state.showTitles);
   const itemsKey = JSON.stringify(
-    quickActionItems(copy, recentQuickActionSessions(feed, showTitles)),
+    quickActionItems(copy, recentQuickActionSessions(feed, showTitles, undefined, copy("Yeni oturum", "New session"))),
   );
   useEffect(() => {
     const ios = Platform.OS === "ios";

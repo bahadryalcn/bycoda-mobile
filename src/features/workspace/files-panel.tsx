@@ -69,6 +69,7 @@ export function ProjectFiles({
   initialPath,
   onClearInitialPath,
   onDraftGuard,
+  hideDraftWriteWarning,
 }: ProjectFilesProps) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
@@ -143,6 +144,7 @@ export function ProjectFiles({
           onClearInitialPath?.();
         }}
         onDraftGuard={onDraftGuard}
+        hideDraftWriteWarning={hideDraftWriteWarning}
       />
     ) : null;
   const crumbs = path.split("/").filter(Boolean);

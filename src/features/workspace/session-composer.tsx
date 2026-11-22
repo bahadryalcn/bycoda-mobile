@@ -1,13 +1,14 @@
 import { useMobileTheme } from "@/ui/theme";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
+import { Keyboard, ScrollView, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import Plus from "lucide-react-native/icons/plus";
 import X from "lucide-react-native/icons/x";
 import Square from "lucide-react-native/icons/square";
+import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import { randomUUID } from "expo-crypto";
 import { useHostClient } from "@/state/queries";
 import { useMachines } from "@/state/machines";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { registerWorkspaceDraft } from "./draft-guard";
 import { useLocalDraft } from "./use-local-draft";
@@ -47,7 +48,7 @@ import { activeComposerMode, setComposerMode, type ComposerMode } from "./compos
 import { ChatComposer } from "@/ui/chat-composer";
 import { ComposerModelChip } from "./composer-model-chip";
 import { ComposerActionsProvider } from "@/ui/composer-actions";
-import { composerInputLimits, composerSuggestionLimits } from "@/ui/chat-composer-model";
+import { composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "@/ui/chat-composer-model";
 import { haptic } from "@/ui/motion";
 import {
   composerCommand,
@@ -111,8 +112,9 @@ export function SessionComposer({
   const queuedDraft = useRef<QueuedComposerDraft | null>(null);
   const { height: windowHeight, fontScale } = useWindowDimensions();
   const availableHeight = use(SessionKeyboardSpace);
-  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [selectedRange, setSelection] = useState<{ start: number; end: number } | null>(null);
   const [picker, setPicker] = useState(false);
+  const [draftDetailsOpen, setDraftDetailsOpen] = useState(false);
   const [templatePicker, setTemplatePicker] = useState(false);
   const templateDestination = useRef<{ machineId: string; sessionId: string } | null>(null);
   const [retryingDraft, setRetryingDraft] = useState(false);
@@ -120,25 +122,30 @@ export function SessionComposer({
   const [localError, setLocalError] = useState<unknown>(null);
   const mounted = useMounted();
   const [prefixHeight, measurePrefix] = useComposerHeight();
-  const [operationsHeight, measureOperations] = useComposerHeight();
+  const [measuredOperationsHeight, measureOperations] = useComposerHeight();
   const [footerHeight, measureFooter] = useComposerHeight();
   const [toolbarHeight, measureToolbar] = useComposerHeight();
+  const shortFrame = composerNeedsInlineActions(availableHeight, fontScale, toolbarHeight, measuredOperationsHeight);
+  const operationsHeight = shortFrame ? 0 : measuredOperationsHeight;
   const [suggestionsHeight, measureSuggestions] = useComposerHeight();
-  const suggestionLimits = composerSuggestionLimits(
-    windowHeight,
-    availableHeight,
-    fontScale,
-    prefixHeight + operationsHeight,
-    footerHeight,
-    toolbarHeight,
-  );
   const draftKey = composerDraftKey(scope.machineId, scope.sessionId);
   const draft = useLocalDraft(draftKey, decodeComposerDraft, encodeComposerDraft);
   const { ready, isStored, persist, load, setValue, valueRef, error } = draft;
   const composerTransfer = useComposerTransfer();
   const value = draft.value ?? emptyComposerDraft();
   const prompt = value.text;
+  const selection = selectedRange ?? { start: prompt.length, end: prompt.length };
   const links = useMemo(() => composerLinks(prompt), [prompt]);
+  const activeMode = activeComposerMode(prompt);
+  const hasPrefix = !!(value.noteCard || value.attachments.length || links.length || activeMode);
+  const prefixMaximum = composerPrefixMaximum(
+    windowHeight, availableHeight, fontScale, operationsHeight, footerHeight, toolbarHeight,
+  );
+  const showInlinePrefix = hasPrefix && !shortFrame && !draftDetailsOpen && prefixMaximum >= metrics.touchTarget;
+  const measuredPrefix = showInlinePrefix ? prefixHeight : 0;
+  const suggestionLimits = composerSuggestionLimits(
+    windowHeight, availableHeight, fontScale, measuredPrefix + operationsHeight, footerHeight, toolbarHeight,
+  );
   const busyPreferred = useBusySend((state) => state.mode);
   const delivery = useComposerDelivery({
     session,
@@ -168,12 +175,12 @@ export function SessionComposer({
     setValue,
   });
   const { token } = suggestions;
-  const suggestionPrefix = token ? suggestionsHeight + (prefixHeight > 0 ? space.xs : 0) : 0;
+  const suggestionPrefix = token ? suggestionsHeight + (measuredPrefix > 0 ? space.xs : 0) : 0;
   const inputLimits = composerInputLimits(
     windowHeight,
     availableHeight,
     fontScale,
-    prefixHeight + operationsHeight + suggestionPrefix,
+    measuredPrefix + operationsHeight + suggestionPrefix,
     footerHeight,
     toolbarHeight,
   );
@@ -522,7 +529,7 @@ export function SessionComposer({
     (target === "send" && running) ||
     (target === "steer" && !canSteer);
   const sendDisabled = sendDisabledFor(mode);
-  const keyboardActive = routeFocused && inputFocused && !palette.visible && !picker && !templatePicker;
+  const keyboardActive = routeFocused && inputFocused && !palette.visible && !picker && !templatePicker && !draftDetailsOpen;
   const hardwareSend = () => { if (!sendDisabled) void submit().catch(setLocalError); };
   useKeyCommand({ key: "Enter", primary: true, title: copy("Gönder", "Send"), enabled: keyboardActive, textInput: true }, hardwareSend);
   useKeyCommand({ key: "Enter", title: copy("Gönder", "Send"), enabled: keyboardActive && enterSends && !token, textInput: true }, hardwareSend);
@@ -588,7 +595,6 @@ export function SessionComposer({
       if (mounted.current) setLocalError(cause);
     });
   };
-  const activeMode = activeComposerMode(prompt);
   const hostDraftExists = !!session?.session.blocks.some((block) => block.draft);
   const modeBlockedReasons: Partial<Record<ComposerMode, string>> = {
     ...(value.noteCard || mode === "steer"
@@ -617,6 +623,38 @@ export function SessionComposer({
     setValue((current) => ({ ...(current ?? emptyComposerDraft()), text }));
     setSelection({ start: text.length, end: text.length });
   };
+  const openDraftDetails = () => {
+    Keyboard.dismiss();
+    setPicker(false);
+    setDraftDetailsOpen(true);
+  };
+  const noteErrorMessage = noteError ? (composerDeliveryError(noteError, copy) ?? noteError.message) : undefined;
+  const draftDetails = hasPrefix ? (
+    <View style={{ gap: space.xs }}>
+      {value.noteCard ? (
+        <ComposerNoteCard
+          card={value.noteCard}
+          error={noteErrorMessage}
+          disabled={unavailable}
+          onRemove={() => setValue((current) => current ? { ...current, noteCard: undefined } : current)}
+        />
+      ) : null}
+      {activeMode ? (
+        <ComposerModeChip mode={activeMode} disabled={unavailable} onRemove={() => chooseMode(activeMode)} />
+      ) : null}
+      {links.length ? <ComposerLinks links={links} /> : null}
+      {value.attachments.length ? (
+        <ComposerAttachments
+          files={value.attachments}
+          scope={`${scope.machineId}:${scope.sessionId}`}
+          transfers={transfers}
+          disabled={unavailable}
+          onRetry={(file) => { void uploads.retry(file); }}
+          onRemove={uploads.remove}
+        />
+      ) : null}
+    </View>
+  ) : null;
   return (
     <ComposerActionsProvider>
       <View style={{ gap: space.xs }}>
@@ -642,8 +680,10 @@ export function SessionComposer({
         <SessionAgents session={session} scope={scope} disabled={blocked} onCommand={onCommand}>
           {(controls) => (
             <View
-              onLayout={measureOperations}
+              // A hidden row reports zero. Keep its expanded height for the next layout decision.
+              onLayout={shortFrame ? undefined : measureOperations}
               style={{
+                display: shortFrame ? "none" : "flex",
                 flexDirection: "row",
                 flexWrap: "wrap",
                 alignItems: "center",
@@ -663,6 +703,12 @@ export function SessionComposer({
         </SessionAgents>
         <ChatComposer
           onToolbarLayout={measureToolbar}
+          inlineSubmit={shortFrame}
+          inlineLeading={shortFrame && !showInlinePrefix && !compactSuggestions && noteErrorMessage ? (
+            <ChatCircleAction label={copy("Taslağı incele", "Review draft")} hint={noteErrorMessage} onPress={openDraftDetails}>
+              <TriangleAlert size={19} color={colors.warning} />
+            </ChatCircleAction>
+          ) : undefined}
           value={prompt}
           onValueChange={(text) => {
             const templates = useTemplates.getState();
@@ -679,49 +725,16 @@ export function SessionComposer({
           }}
           disabled={!ready}
           top={
-            value.noteCard || value.attachments.length || links.length || activeMode ? (
-              <View
+            showInlinePrefix ? (
+              <ScrollView
                 onLayout={measurePrefix}
-                style={{ gap: space.xs, paddingHorizontal: space.md, paddingTop: space.sm }}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+                style={{ flexGrow: 0, maxHeight: prefixMaximum }}
+                contentContainerStyle={{ paddingHorizontal: space.md, paddingTop: space.sm }}
               >
-                {value.noteCard ? (
-                  <ComposerNoteCard
-                    card={value.noteCard}
-                    error={
-                      noteError
-                        ? (composerDeliveryError(noteError, copy) ?? noteError.message)
-                        : undefined
-                    }
-                    disabled={unavailable}
-                    onRemove={() =>
-                      setValue((current) =>
-                        current ? { ...current, noteCard: undefined } : current,
-                      )
-                    }
-                  />
-                ) : null}
-                {activeMode ? (
-                  <View style={{ flexDirection: "row" }}>
-                    <ComposerModeChip
-                      mode={activeMode}
-                      disabled={unavailable}
-                      onRemove={() => chooseMode(activeMode)}
-                    />
-                  </View>
-                ) : null}
-                {links.length ? <ComposerLinks links={links} /> : null}
-                {value.attachments.length ? (
-                  <ComposerAttachments
-                    files={value.attachments}
-                    transfers={transfers}
-                    disabled={unavailable}
-                    onRetry={(file) => {
-                      void uploads.retry(file);
-                    }}
-                    onRemove={uploads.remove}
-                  />
-                ) : null}
-              </View>
+                {draftDetails}
+              </ScrollView>
             ) : null
           }
           mode={
@@ -754,7 +767,10 @@ export function SessionComposer({
               }
               disabled={compactSuggestions ? false : unavailable}
               busy={compactSuggestions ? false : picking}
-              onPress={compactSuggestions ? suggestions.close : () => setPicker(true)}
+              onPress={compactSuggestions ? suggestions.close : () => {
+                Keyboard.dismiss();
+                setPicker(true);
+              }}
             >
               {compactSuggestions ? (
                 <X size={19} strokeWidth={2.2} color={colors.text} />
@@ -768,7 +784,9 @@ export function SessionComposer({
             onBlur: () => setInputFocused(false),
             accessibilityLabel: copy("Mesaj", "Message"),
             selection,
-            onSelectionChange: (event) => setSelection(event.nativeEvent.selection),
+            onSelectionChange: (event) => {
+              if (ready) setSelection(event.nativeEvent.selection);
+            },
             onKeyPress: suggestions.onKeyPress,
             disableFullscreenUI: true,
             submitBehavior: "newline",
@@ -776,7 +794,7 @@ export function SessionComposer({
             placeholder: copy("Mesaj yaz…", "Write a message…"),
             style: { maxHeight: maximumInputHeight },
           }}
-          submit={
+          secondarySubmit={
             <>
               {contextReading ? (
                 <ComposerContextMeter
@@ -785,6 +803,11 @@ export function SessionComposer({
                   onCompact={contextReading.empty ? undefined : compact}
                 />
               ) : null}
+              <ComposerDictationButton dictation={dictation} />
+            </>
+          }
+          submit={
+            <>
               {canStop ? (
                 <ChatCircleAction
                   label={copy("Durdur", "Stop")}
@@ -801,7 +824,6 @@ export function SessionComposer({
                   />
                 </ChatCircleAction>
               ) : null}
-              <ComposerDictationButton dictation={dictation} />
               {canStop && !hasContent ? null : (
                 <ComposerSendButton
                   mode={mode}
@@ -820,6 +842,7 @@ export function SessionComposer({
           <ComposerDictationFeedback dictation={dictation} />
           <ComposerNotices
             error={error || localError}
+            noteError={!showInlinePrefix && !draftDetailsOpen ? noteError : undefined}
             mode={mode}
             running={running}
             queueSupported={queue.supported}
@@ -853,6 +876,10 @@ export function SessionComposer({
         projectId={session?.projectId}
         pickerOpen={picker}
         onPickerClose={() => setPicker(false)}
+        draftDetails={draftDetailsOpen ? draftDetails : undefined}
+        draftDetailsOpen={draftDetailsOpen}
+        onDraftDetailsOpen={hasPrefix ? openDraftDetails : undefined}
+        onDraftDetailsClose={() => setDraftDetailsOpen(false)}
         templateOpen={templatePicker}
         onTemplateOpen={() => {
           templateDestination.current = { ...scope };

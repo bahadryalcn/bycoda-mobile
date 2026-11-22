@@ -1,5 +1,5 @@
 import { FlatList } from "react-native";
-import { Sheet } from "@/ui/primitives";
+import { Sheet, StateView } from "@/ui/primitives";
 import { ChatSummary, ChatToolbarAction } from "@/ui/chat-controls";
 import Terminal from "lucide-react-native/icons/terminal";
 import { useCopy } from "@/ui/copy";
@@ -21,8 +21,10 @@ export function ActivityInspector({ blocks, inspection, onChange, live, ...props
 }) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
-  const selected = blocks.find((block) => block.id === inspection.selectedId);
-  const index = selected ? blocks.indexOf(selected) : -1;
+  const available = blocks.filter((block) => !block.internal);
+  const index = available.findIndex((block) => block.id === inspection.selectedId);
+  const selected = available[index];
+  const inspectingAction = inspection.selectedId !== undefined;
   const stateLabel = (block: Block) => {
     const state = activityState(block);
     return state === "failed" ? copy("Başarısız", "Failed")
@@ -32,13 +34,15 @@ export function ActivityInspector({ blocks, inspection, onChange, live, ...props
             : copy("İşlem kaydı", "Action record");
   };
   return <Sheet visible title={selected
-    ? copy("İşlem {p0} / {p1}", "Action {p0} / {p1}", { p0: index + 1, p1: blocks.length })
+    ? copy("İşlem {p0} / {p1}", "Action {p0} / {p1}", { p0: index + 1, p1: available.length })
     : copy("Çalışma ayrıntıları", "Work details")}
-    size="full" scroll={!!selected} onClose={() => onChange(null)}
-    headerAction={selected ? <ChatToolbarAction label={copy("İşlem listesi", "Action list")}
+    size="full" scroll={inspectingAction} onClose={() => onChange(null)}
+    headerAction={inspectingAction && available.length > 0 ? <ChatToolbarAction label={copy("İşlem listesi", "Action list")}
       onPress={() => onChange({ ...inspection, selectedId: undefined })} /> : undefined}>
     {selected ? <TranscriptBlock key={selected.id} block={selected} {...props} activityDetail />
-      : <FlatList data={blocks} keyExtractor={(block) => block.id} style={{ flex: 1 }} contentContainerStyle={{ width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
+      : inspectingAction ? <StateView compact title={copy("İşlem gösterilemiyor", "Action unavailable")} />
+      : <FlatList data={available} keyExtractor={(block) => block.id} style={{ flex: 1 }} contentContainerStyle={{ width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
+        ListEmptyComponent={<StateView compact title={copy("Gösterilecek işlem yok", "No actions to show")} />}
         initialNumToRender={12} maxToRenderPerBatch={12} windowSize={7}
         renderItem={({ item, index: position }) => <ChatSummary
           label={`${position + 1}. ${activityTitle(item) || copy("Araç işlemi", "Tool action")}`}

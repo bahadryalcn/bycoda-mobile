@@ -120,7 +120,8 @@
   "expo": {
     "autolinking": {
       "buildFromSource": [
-        "expo-secure-store"
+        "expo-secure-store",
+        "expo-sharing"
       ]
     }
   }

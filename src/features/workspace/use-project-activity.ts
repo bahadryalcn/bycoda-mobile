@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { backoffMs } from "./session-read-schedule";
 import { retainProjectStream } from "@/remote/project-stream-hub";
 import { RemoteHostError } from "@/remote/host-error";
+import { isTransientConnectionError } from "@/state/query-retry";
 
 /** 5s while healthy; doubles per consecutive failure up to 60s. Resets when a read succeeds. */
 export function activityPollDelay(failures: number) {
@@ -95,11 +96,14 @@ export function useProjectActivity() {
         enabled: !!client && active && projects.directoryReady,
         retry: false,
         staleTime: 5_000,
-        refetchInterval: (query: { state: { error: unknown; fetchFailureCount?: number } }) =>
+        refetchInterval: (query: { state: { data?: unknown; error: unknown; fetchFailureCount?: number } }) =>
           (liveGroup && !streamFailing.current) ||
           ["auth", "identity", "unsupported"].includes(remoteErrorKind(query.state.error) ?? "")
             ? false
-            : activityPollDelay(query.state.fetchFailureCount ?? 0),
+            : query.state.data === undefined && isTransientConnectionError(query.state.error)
+              // Leave room for the visible reader's quiet reconnect before the background poll.
+              ? 30_000
+              : activityPollDelay(query.state.fetchFailureCount ?? 0),
         networkMode: "always" as const,
         queryFn: ({ signal }: { signal: AbortSignal }) =>
           readProjectSummaries(
@@ -124,6 +128,8 @@ export function useProjectActivity() {
     projects.data ?? [],
     accessError ? [] : queries.map((query) => query.data),
   );
+  // The fallback read owns transient recovery, including the split view's shared retry.
+  const reportedStreamError = isTransientConnectionError(streamError) ? undefined : streamError;
   return {
     projects,
     directory,
@@ -147,7 +153,7 @@ export function useProjectActivity() {
     verifying: projects.verifying,
     readiness: projects.readiness,
     error:
-      projects.error ?? accessError ?? streamError ?? queries.find((query) => query.error)?.error,
+      projects.error ?? accessError ?? reportedStreamError ?? queries.find((query) => query.error)?.error,
     refetch: async () => {
       await projects.refetch();
       await Promise.all(queries.map((query) => query.refetch()));

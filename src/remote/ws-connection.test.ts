@@ -165,9 +165,8 @@ describe("mobile single-attempt native WS", () => {
     const f = await connected(undefined, {
       methods: [...methods, ...cleanup, "devServers.list"],
       capabilities: [
-        "native.buffers.recovery.v1",
         "native.workspaces.v1",
-        "native.buffers.upload.v1",
+        "native.services.upload.v1",
         "transport.ws.v2",
         "transport.ws.workspaces.cleanup.v1",
         "transport.ws.devServers.v2",

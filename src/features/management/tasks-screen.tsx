@@ -40,7 +40,7 @@ import { TaskDeclineFeedback } from "./tasks/task-feedback";
 import { TaskBulkActions } from "./tasks/bulk-actions";
 import type { TaskEditorFlow } from "./tasks/types";
 import { useMobileTheme } from "@/ui/theme";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useProjectList } from "../workspace/use-project-directory";
 import { GitDeliverySheet } from "../workspace/git-delivery";
 
@@ -106,8 +106,9 @@ export function TasksScreen() {
   );
   const [filter, setFilter] = useState<string>("active");
   const [filterDraft, setFilterDraft] = useState<string | null>(null);
+  const canCreateInScope = () => projects.directoryReady && (!projectId || projects.isProjectVisible(projectId));
   const start = () => {
-    if (!canCreate) return;
+    if (!canCreate || !canCreateInScope()) return;
     save.reset();
     setEditor({
       kind: "new",
@@ -147,7 +148,7 @@ export function TasksScreen() {
     finish.isPending ||
     manualStart.isPending ||
     reorder.isPending;
-  const canCreate = providers.length > 0 && !busy && !editor && !deliveryTask && !reviewTask;
+  const canCreate = canCreateInScope() && providers.length > 0 && !busy && !editor && !deliveryTask && !reviewTask;
   const presentation = getQueryPresentation(query);
   const hasScopedTasks = !!query.data?.length;
   const showCreateInHeader = hasScopedTasks &&
@@ -170,18 +171,22 @@ export function TasksScreen() {
   const filterContext = <AppliedFilters filters={[filter !== "active" && `${copy("Durum", "Status")}: ${filterOptions.find(option => option.value === filter)?.label ?? filter}`]} />;
   return (
     <ScreenList<HostTask>
-      title={copy("Görevler", "Tasks")}
+      title={linkedTaskId ? copy("Görev", "Task") : copy("Görevler", "Tasks")}
       query={query}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
-      context={<Scope allowAll projectId={selectedProjectId} onChange={setProjectId} />}
-      actions={showCreateInHeader ? (
+      context={linkedTaskId ? undefined : <Scope allowAll projectId={selectedProjectId} onChange={setProjectId} />}
+      actions={linkedTaskId ? (
+        <Button label={copy("Tümü", "Show all")} tone="quiet" reserveTouchTarget disabled={busy || !!editor || !!deliveryTask || !!reviewTask}
+          onPress={() => router.replace({ pathname: "/manage/[section]", params: { section: "tasks" } })} />
+      ) : showCreateInHeader ? (
         <IconButton label={copy("Yeni görev", "New task")} disabled={!canCreate} onPress={start}>
           <Plus size={22} strokeWidth={2.2} color={colors.accent} />
         </IconButton>
       ) : undefined}
       header={
         <>
+          {!linkedTaskId ? <>
           <FilterSheet
             visible={filterDraft !== null}
             onClose={() => setFilterDraft(null)}
@@ -203,6 +208,7 @@ export function TasksScreen() {
           {machine ? <TaskBulkActions key={`${machine.id}:${projectId ?? "all"}`} tasks={presentation === "error" ? [] : visible ?? []} machineId={machine.id} disabled={busy && !bulkBusy || !!editor || !!deliveryTask || !!reviewTask}
             context={filterContext} onBusy={setBulkBusy} onComplete={async () => { await listQuery.refetch(); }} /> : filterContext}
           {!providers.length ? <>{providerQuery.isLoading || providerQuery.error ? <QueryState query={providerQuery} loading="inline" /> : <AgentProviderPrerequisite />}</> : null}
+          </> : null}
           {!editor && (
             <MutationState mutation={save} success={copy("Görev kaydedildi.", "Task saved.")} />
           )}
@@ -265,8 +271,9 @@ export function TasksScreen() {
           <QueryState
             query={query}
             empty={visible?.length === 0}
-            emptyTitle={searchActive ? copy("Eşleşen sonuç yok", "No matching results") : copy("Bu görünümde görev yok", "No tasks in this view")}
-            emptyDetail={searchActive || statusHidesTasks ? undefined
+            emptyTitle={linkedTaskId ? copy("Görev artık bulunamadı.", "The task is no longer available.")
+              : searchActive ? copy("Eşleşen sonuç yok", "No matching results") : copy("Bu görünümde görev yok", "No tasks in this view")}
+            emptyDetail={linkedTaskId || searchActive || statusHidesTasks ? undefined
               : copy("Görevler bağlı bilgisayarında çalışır.", "Tasks run on your connected computer.")}
             emptyAction={emptyAction}
           />

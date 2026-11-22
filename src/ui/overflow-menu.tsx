@@ -47,6 +47,8 @@ export function ActionMenu({
   trigger,
   active,
   busy,
+  reserveTouchTarget,
+  onTriggerPress,
 }: {
   label: string;
   /** Record the menu acts on; shown under the sheet title. */
@@ -57,6 +59,10 @@ export function ActionMenu({
   active?: boolean;
   /** Pending work initiated by a menu item stays visible after the menu closes. */
   busy?: boolean;
+  /** Reserve layout space when the trigger sits next to other controls. */
+  reserveTouchTarget?: boolean;
+  /** Runs when the trigger is pressed, for example to dismiss an overlapping keyboard. */
+  onTriggerPress?: () => void;
 }) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
@@ -73,7 +79,11 @@ export function ActionMenu({
   return (
     <Menu open={open} onOpenChange={onOpenChange}>
       <Menu.Trigger>
-        <IconButton label={menuLabel} busy={busy} expanded={open} onPress={() => haptic.select()}>
+        <IconButton label={menuLabel} busy={busy} expanded={open}
+          reserveTouchTarget={reserveTouchTarget} onPress={() => {
+            haptic.select();
+            onTriggerPress?.();
+          }}>
           <View ref={anchor} collapsable={false}>
             {trigger ?? <MoreHorizontal size={22} strokeWidth={2} color={colors.accent} />}
             {active ? (

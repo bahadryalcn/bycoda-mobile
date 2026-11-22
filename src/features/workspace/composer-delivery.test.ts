@@ -106,13 +106,13 @@ describe("mobile composer delivery", () => {
       noteCard: note,
     });
     expect(() => composerCommand(session("running"), "steer", "Next", [], note)).toThrow(
-      /requires Send/,
+      /keep the note/,
     );
     expect(() => queuedComposerMessage("queued", session(), "Next", [], note)).toThrow(
-      /requires Send/,
+      /keep the note/,
     );
     for (const text of ["/compact", " /plan Investigate", "/build", "/clear", "/new project"])
-      expect(() => composerCommand(session(), "send", text, [], note)).toThrow(/requires Send/);
+      expect(() => composerCommand(session(), "send", text, [], note)).toThrow(/or remove the note/);
     expect(() => validateNoteDelivery(note, "send", "Original prose", false)).toThrow(
       /draft is preserved/,
     );

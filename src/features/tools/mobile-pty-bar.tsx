@@ -1,20 +1,16 @@
-import { useEffect, useState } from "react";
-import { View } from "react-native";
-import { KeyboardController, useKeyboardState } from "react-native-keyboard-controller";
-import Keyboard from "lucide-react-native/icons/keyboard";
+import { ScrollView, View } from "react-native";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import ChevronUp from "lucide-react-native/icons/chevron-up";
-import { Button, ErrorText, IconButton } from "@/ui/primitives";
+import { Button, IconButton } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import { PTY_KEYS } from "./mobile-pty-model";
 
 /**
- * Bottom bar of the full-screen terminal: Resume when input is paused, a
- * keyboard toggle, and, while the keyboard is open, a row of keys a phone keyboard lacks.
+ * Terminal keys a phone keyboard lacks and the resume action for a paused terminal.
  */
 export function MobilePtyBar({
   paused,
@@ -23,8 +19,7 @@ export function MobilePtyBar({
   disabled,
   onResume,
   onKey,
-  onShowKeyboard,
-  onAttachOutput,
+  keyboardVisible,
 }: {
   paused: boolean;
   busyResume: boolean;
@@ -33,20 +28,11 @@ export function MobilePtyBar({
   disabled: boolean;
   onResume: () => void;
   onKey: (dataBase64: string) => void;
-  onShowKeyboard: () => void;
-  /** Appends the recent output to the session draft; throws when there is nothing to attach. */
-  onAttachOutput?: () => void;
+  keyboardVisible: boolean;
 }) {
   const copy = useCopy();
-  const [attached, setAttached] = useState(false);
-  const [attachError, setAttachError] = useState<unknown>(null);
-  useEffect(() => {
-    if (!attached) return;
-    const timer = setTimeout(() => setAttached(false), 2000);
-    return () => clearTimeout(timer);
-  }, [attached]);
   const { colors } = useMobileTheme();
-  const keyboard = useKeyboardState((state) => state.isVisible);
+  if (!keyboardVisible && !paused) return null;
   const icon = (Glyph: typeof ChevronUp) => <Glyph size={20} color={colors.text} />;
   const keys: { id: string; label: string; data: string; glyph?: typeof ChevronUp }[] = [
     { id: "esc", label: "Esc", data: PTY_KEYS.escape },
@@ -59,45 +45,35 @@ export function MobilePtyBar({
   ];
   return (
     <View style={{ borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background }}>
-      {keyboard ? (
-        <View
+      {keyboardVisible ? (
+        <ScrollView
+          horizontal
+          fadingEdgeLength={space.lg}
+          keyboardShouldPersistTaps="always"
           accessibilityLabel={copy("Terminal tuşları", "Terminal keys")}
-          style={{ flexDirection: "row", gap: space.xs, paddingHorizontal: space.sm, paddingTop: space.xs }}
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={{ flexGrow: 1, gap: space.xs, paddingHorizontal: space.sm, paddingTop: space.xs }}
         >
           {keys.map((key) => (
-            <View key={key.id} style={{ flex: 1 }}>
+            <View key={key.id} style={{ flexGrow: 1, minWidth: metrics.touchTarget }}>
               {key.glyph ? (
-                <IconButton label={key.label} disabled={!canType} onPress={() => onKey(key.data)}>
+                <IconButton label={key.label} reserveTouchTarget disabled={!canType} onPress={() => onKey(key.data)}>
                   {icon(key.glyph)}
                 </IconButton>
               ) : (
-                <Button label={key.label} density="compact" tone="secondary" disabled={!canType}
+                <Button label={key.label} density="compact" tone="secondary" reserveTouchTarget disabled={!canType}
                   onPress={() => onKey(key.data)} />
               )}
             </View>
           ))}
+        </ScrollView>
+      ) : null}
+      {paused ? (
+        <View style={{ alignItems: "flex-start", paddingHorizontal: space.screen, paddingVertical: space.xs }}>
+          <Button label={copy("Sürdür", "Resume")} density="compact" tone="secondary" reserveTouchTarget
+            busy={busyResume} disabled={disabled} onPress={onResume} />
         </View>
       ) : null}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.screen, paddingVertical: space.xs }}>
-        {paused ? (
-          <Button label={copy("Sürdür", "Resume")} density="compact" tone="secondary"
-            busy={busyResume} disabled={disabled} onPress={onResume} />
-        ) : null}
-        {onAttachOutput ? (
-          <Button label={attached ? copy("Taslağa eklendi", "Added to draft") : copy("Çıktıyı ekle", "Attach output")} density="compact" tone="quiet"
-            disabled={attached}
-            onPress={() => { try { onAttachOutput(); setAttachError(null); setAttached(true); } catch (error) { setAttachError(error); } }} />
-        ) : null}
-        <View style={{ flex: 1 }} />
-        <IconButton
-          label={keyboard ? copy("Klavyeyi gizle", "Hide keyboard") : copy("Klavyeyi göster", "Show keyboard")}
-          disabled={!keyboard && !canType}
-          onPress={() => (keyboard ? void KeyboardController.dismiss() : onShowKeyboard())}
-        >
-          <Keyboard size={22} color={colors.accent} />
-        </IconButton>
-      </View>
-      {attachError ? <View style={{ paddingHorizontal: space.screen, paddingBottom: space.xs }}><ErrorText error={attachError} /></View> : null}
     </View>
   );
 }

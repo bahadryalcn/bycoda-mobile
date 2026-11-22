@@ -1,9 +1,9 @@
 import { WorkspaceFrame } from "@/ui/workspace-frame";
 import { ProjectDirectoryFeedback } from "./project-directory-feedback";
 import type { ProjectScreenProps, ProjectWorktrees } from "./project-screen-types";
-import { useCallback, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { rememberOpenedProject } from "@/state/project-directory-preferences";
-import { useConnectionScope } from "@/state/connection-scope";
+import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { ScrollView, Text, View } from "react-native";
 import MoreHorizontal from "lucide-react-native/icons/ellipsis";
 import Archive from "lucide-react-native/icons/archive";
@@ -20,7 +20,7 @@ import Grid2x2 from "lucide-react-native/icons/grid-2x2";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import GitPullRequest from "lucide-react-native/icons/git-pull-request";
 import { router, Stack, type Href } from "expo-router";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
 import { useAsyncAction } from "@/state/actions";
 import {
@@ -32,6 +32,7 @@ import {
   SelectField,
   StateView,
   MutationState,
+  Notice,
   PressableCard,
   QueryState,
   Screen,
@@ -42,6 +43,7 @@ import { ProjectSessions } from "./sessions-panel";
 import { ProjectFiles } from "./files-panel";
 import { ProjectGit } from "./git-panel";
 import type { DraftGuard } from "./file-editor-types";
+import { DraftWriteError } from "./draft-store";
 import { projectViewReducer } from "./workspace-state";
 import { useProjectList } from "./use-project-directory";
 import { ToolDirectory } from "../management/tool-directory";
@@ -64,25 +66,36 @@ function ProjectTitle({ name, appearance, onPress }: { name: string; appearance?
   </PressableCard>;
 }
 
-export function ProjectScreen({
+type ProjectPanel = "menu" | "details" | "tools" | "worktree" | "create-worktree" | "submodules";
+
+export function ProjectScreen(props: ProjectScreenProps) {
+  const connection = useConnectionScope();
+  const firstConnection = useRef<string | undefined>(undefined);
+  if (connection.review && firstConnection.current === undefined) firstConnection.current = connection.token;
+  const initialConnection = firstConnection.current === connection.token;
+  return <ProjectWorkspace key={JSON.stringify([connection.token, props.id])} {...props} connection={connection}
+    initialCwd={initialConnection ? props.initialCwd : undefined}
+    initialCreateSession={initialConnection && props.initialCreateSession} />;
+}
+
+function ProjectWorkspace({
   id,
   initialCwd,
   initialSegment = "sessions",
   initialCreateSession = false,
-}: ProjectScreenProps) {
+  connection,
+}: ProjectScreenProps & { connection: ConnectionScope }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const { nativeTitle } = useScreenChrome();
   // Horizontal gutters only: the Screen frame below pads the dock and home indicator for its own children.
   const gutter = useScreenContentInsets();
   const machine = useActiveMachine();
-  const connection = useConnectionScope();
   const projects = useProjectList();
   const visibleProject = projects.data?.find((value) => value.id === id);
-  const retainedProject = useRef<{ machineId: string; id: string; value: NonNullable<typeof visibleProject> } | undefined>(undefined);
-  if (machine && visibleProject) retainedProject.current = { machineId: machine.id, id, value: visibleProject };
-  const rememberedProject = retainedProject.current;
-  const project = visibleProject ?? (rememberedProject && rememberedProject.machineId === machine?.id && rememberedProject.id === id ? rememberedProject.value : undefined);
+  const retainedProject = useRef(visibleProject);
+  if (machine && visibleProject) retainedProject.current = visibleProject;
+  const project = visibleProject ?? retainedProject.current;
   useEffect(() => {
     if (machine?.id && project?.id) void rememberOpenedProject(machine.id, project.id);
   }, [machine?.id, project?.id]);
@@ -94,24 +107,35 @@ export function ProjectScreen({
   const { cwd, file: fileToOpen } = view;
   // The retired Settings tab now lives in Project options; a stale link lands on Sessions.
   const segment = view.segment === "preferences" ? "sessions" : view.segment;
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [worktreeOpen, setWorktreeOpen] = useState(false);
-  const [createWorktreeOpen, setCreateWorktreeOpen] = useState(false);
-  const [submodulesOpen, setSubmodulesOpen] = useState(false);
+  const panelKey = JSON.stringify([connection.token, id, cwd]);
+  const committedPanelKey = useRef<string | undefined>(undefined);
+  // Retire callbacks from the previous working folder before its panels can run again.
+  useLayoutEffect(() => {
+    committedPanelKey.current = panelKey;
+    return () => { committedPanelKey.current = undefined; };
+  }, [panelKey]);
+  const projectIsCurrent = () => committedPanelKey.current === panelKey && connection.isCurrent() && projects.isProjectVisible(id);
+  const [panel, setPanel] = useState<{ key: string; name: ProjectPanel }>();
+  const activePanel = panel?.key === panelKey && visibleProject ? panel.name : undefined;
+  const toolsOpen = activePanel === "tools";
+  const menuOpen = activePanel === "menu";
+  const worktreeOpen = activePanel === "worktree";
+  const createWorktreeOpen = activePanel === "create-worktree";
+  const hideDraftWriteWarning = worktreeOpen || createWorktreeOpen;
   const [toolSearch, setToolSearch] = useState("");
   const createSessionInitially = useRef(initialCreateSession);
   const changeAction = useAsyncAction<void>();
+  const [requestedWorktree, setRequestedWorktree] = useState<string | null>(null);
   const changingWorkspace = changeAction.isPending;
   const beforeChange = useRef<DraftGuard>(null);
   const registerDraftGuard = useCallback((guard: DraftGuard) => {
     beforeChange.current = guard;
   }, []);
-  const changeWorkspace = (change: () => void) => {
+  const changeWorkspace = (change: () => void, worktree: string | null = null) => {
+    setRequestedWorktree(worktree);
     void changeAction.run(async () => {
       const assertProject = () => {
-        if (!connection.isCurrent() || !projects.isProjectVisible(id))
+        if (!projectIsCurrent())
           throw new Error("The selected project is no longer available.");
       };
       assertProject();
@@ -165,7 +189,26 @@ export function ProjectScreen({
       />
     </>
   );
-  const canUseProject = () => !!machine && useMachines.getState().activeId === machine.id && projects.isProjectVisible(id) && !changingWorkspace;
+  const canUseProject = () => !!machine && projectIsCurrent() && !changingWorkspace;
+  const openPanel = (name: ProjectPanel) => {
+    if (!canUseProject()) return;
+    if (name === "tools") setToolSearch("");
+    if (name === "worktree") {
+      setRequestedWorktree(null);
+      changeAction.reset();
+    }
+    setPanel({ key: panelKey, name });
+  };
+  const closePanel = (name: ProjectPanel) => {
+    setPanel((current) => current?.key === panelKey && current.name === name ? undefined : current);
+  };
+  const selectWorktree = (value: string) => {
+    if (!worktreeOpen || !canUseProject() || !worktreeOptions.some((option) => option.value === value)) return;
+    changeWorkspace(() => {
+      dispatch({ type: "worktree", ...(value ? { cwd: value } : {}) });
+      closePanel("worktree");
+    }, value);
+  };
   const menuSections = (sessionControls?: ProjectSessionControls): ProjectMenuSection[] => project ? [
     { key: "view", title: copy("Liste", "List"), items: [
       sessionControls ? { key: "search", label: copy("Oturum ara", "Search sessions"), icon: <Search size={18} color={colors.muted} />,
@@ -179,16 +222,16 @@ export function ProjectScreen({
       machine ? { key: "pull-requests", label: copy("Pull request’ler", "Pull requests"), icon: <GitPullRequest size={18} color={colors.muted} />,
         onPress: () => { if (canUseProject()) router.push(`/pull-requests?projectId=${encodeURIComponent(id)}&machineId=${encodeURIComponent(machine.id)}` as Href); } } : false,
       { key: "details", label: copy("Proje ayrıntıları", "Project details"),
-        icon: <Info size={18} color={colors.muted} />, onPress: () => setDetailsOpen(true) },
+        icon: <Info size={18} color={colors.muted} />, onPress: () => openPanel("details") },
       { key: "tools", label: copy("Proje araçları", "Project tools"), icon: <Grid2x2 size={18} color={colors.muted} />,
-        disabled: changingWorkspace, onPress: () => { if (canUseProject()) setToolsOpen(true); } },
+        disabled: changingWorkspace, onPress: () => openPanel("tools") },
       { key: "submodules", label: copy("Başlatılmış submodule’ler", "Initialized submodules"), icon: <GitBranch size={18} color={colors.muted} />,
-        disabled: changingWorkspace, onPress: () => { if (canUseProject()) setSubmodulesOpen(true); } },
+        disabled: changingWorkspace, onPress: () => openPanel("submodules") },
     ] },
     { key: "folder", title: copy("Çalışma klasörü", "Working folder"), items: [
       canPickWorktree ? { key: "worktree", label: cwd ? copy("Çalışma ağacı", "Worktree") : copy("Ana proje klasörü", "Main project folder"),
         detail: cwd ?? project.cwd, icon: <FolderTree size={18} color={colors.muted} />,
-        disabled: changingWorkspace || worktrees.isPending, onPress: () => { if (canUseProject()) setWorktreeOpen(true); } } : false,
+        disabled: changingWorkspace || worktrees.isPending, onPress: () => openPanel("worktree") } : false,
     ] },
   ] : [];
   const renderWorkspace = (content: ReactNode, sessionControls?: ProjectSessionControls) => {
@@ -196,7 +239,7 @@ export function ProjectScreen({
     const headerActions = <PrivateContentAccessProvider value={{ allowed: !!visibleProject, check: canUseProject }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
       <IconButton label={copy("Proje seçenekleri", "Project options")} expanded={menuOpen}
-        onPress={() => { if (canUseProject()) setMenuOpen(true); }}>
+        onPress={() => openPanel("menu")}>
         <MoreHorizontal size={20} color={cwd || sessionControls?.archived || sessionControls?.hasSearch ? colors.accent : colors.muted} />
       </IconButton>
       {sessionControls?.showCreateInHeader ? (
@@ -209,10 +252,10 @@ export function ProjectScreen({
     </PrivateContentAccessProvider>;
     return <>
       <Stack.Screen options={{ title: visibleProject?.name || copy("Proje", "Project"),
-        headerTitle: () => <ProjectTitle name={visibleProject?.name || copy("Proje", "Project")} appearance={visibleProject?.appearance} onPress={() => { if (canUseProject()) setDetailsOpen(true); }} />,
+        headerTitle: () => <ProjectTitle name={visibleProject?.name || copy("Proje", "Project")} appearance={visibleProject?.appearance} onPress={() => openPanel("details")} />,
         headerRight: nativeTitle && !!visibleProject ? () => headerActions : undefined }} />
       <WorkspaceFrame toolbar={<>
-        {!nativeTitle ? <ScreenHeading context={<ProjectTitle name={project.name} appearance={project.appearance} onPress={() => { if (canUseProject()) setDetailsOpen(true); }} />} actions={headerActions} /> : null}
+        {!nativeTitle ? <ScreenHeading context={<ProjectTitle name={project.name} appearance={project.appearance} onPress={() => openPanel("details")} />} actions={headerActions} /> : null}
         <MachineConnectionStatus />
         <ProjectSegments
           label={copy("Proje görünümü", "Project view")}
@@ -228,10 +271,10 @@ export function ProjectScreen({
               changeWorkspace(() => dispatch({ type: "segment", segment: value }));
           }}
         />
-      </>} feedback={!worktreeOpen && !toolsOpen && changeAction.error ? <MutationState mutation={changeAction} /> : null}>
+      </>} feedback={requestedWorktree === null && !worktreeOpen && !toolsOpen && changeAction.error ? <MutationState mutation={changeAction} /> : null}>
         {content}
       </WorkspaceFrame>
-      <ProjectMenuSheet visible={menuOpen} sections={menuSections(sessionControls)} onClose={() => setMenuOpen(false)} />
+      <ProjectMenuSheet visible={menuOpen} sections={menuSections(sessionControls)} onClose={() => closePanel("menu")} />
     </>;
   };
   return (
@@ -280,6 +323,7 @@ export function ProjectScreen({
               initialPath={fileToOpen}
               onClearInitialPath={() => dispatch({ type: "close-file" })}
               onDraftGuard={registerDraftGuard}
+              hideDraftWriteWarning={hideDraftWriteWarning}
             />
           ) : renderWorkspace(
             <ProjectGit
@@ -288,20 +332,21 @@ export function ProjectScreen({
               cwd={cwd}
               root={cwd ?? project?.cwd}
               onDraftGuard={registerDraftGuard}
+              hideDraftWriteWarning={hideDraftWriteWarning}
               onOpenFile={(path) => {
                 dispatch({ type: "open-file", path });
               }}
             />
           )}
 
-          <ProjectDetailsSheet visible={detailsOpen} project={{ ...project, cwd: cwd ?? project.cwd }} machineName={machine.name}
-            onClose={() => setDetailsOpen(false)} />
+          <ProjectDetailsSheet visible={activePanel === "details"} project={{ ...project, cwd: cwd ?? project.cwd }} machineName={machine.name}
+            onClose={() => closePanel("details")} />
           <Sheet
             visible={worktreeOpen}
             size="compact"
             dismissible={!changingWorkspace}
             title={copy("Çalışma klasörü", "Working folder")}
-            onClose={() => setWorktreeOpen(false)}
+            onClose={() => closePanel("worktree")}
           >
             <QueryState query={worktrees} loading="inline" />
             <SelectField
@@ -309,25 +354,24 @@ export function ProjectScreen({
               value={cwd ?? ""}
               disabled={changingWorkspace || worktrees.isPending}
               options={worktreeOptions}
-              onChange={(value) => {
-                changeWorkspace(() => {
-                  dispatch({ type: "worktree", ...(value ? { cwd: value } : {}) });
-                  setWorktreeOpen(false);
-                });
-              }}
+              onChange={selectWorktree}
             />
-            <MutationState mutation={changeAction} pending={copy("Taslak kaydediliyor…", "Saving draft…")} />
+            {changeAction.error instanceof DraftWriteError && requestedWorktree !== null
+              ? <Notice tone="warning"
+                  message={copy("Taslak kaydedilemedi. Düzenlemelerin açık.", "Couldn’t save the draft. Your edits are still open.")}
+                  onRetry={() => selectWorktree(requestedWorktree)} />
+              : <MutationState mutation={changeAction} pending={copy("Taslak kaydediliyor…", "Saving draft…")} />}
             <Button tone="quiet" label={copy("Çalışma ağacı oluştur", "Create worktree")} disabled={changingWorkspace || !machine.capabilities?.includes("git.worktreeCreate")}
-              onPress={() => { setWorktreeOpen(false); setCreateWorktreeOpen(true); }} />
+              onPress={() => openPanel("create-worktree")} />
           </Sheet>
-          <WorktreeCreate key={`worktree-create:${machine.id}:${id}:${cwd ?? ""}`} scope={{ machineId: machine.id, projectId: id, ...(cwd ? { cwd } : {}) }} visible={createWorktreeOpen} blocked={changingWorkspace}
+          <WorktreeCreate key={`worktree-create:${panelKey}`} scope={{ machineId: machine.id, projectId: id, ...(cwd ? { cwd } : {}) }} visible={createWorktreeOpen} blocked={changingWorkspace}
             beforeChange={async () => { await beforeChange.current?.(); }}
-            onSelect={(path) => { createSessionInitially.current = false; dispatch({ type: "worktree", cwd: path }); }} onClose={() => setCreateWorktreeOpen(false)} />
-          {submodulesOpen ? <SubmoduleView key={`submodules:${machine.id}:${id}:${cwd ?? ""}`} machineId={machine.id} projectId={id} cwd={cwd ?? project.cwd} onClose={() => setSubmodulesOpen(false)} /> : null}
+            onSelect={(path) => { if (canUseProject()) { createSessionInitially.current = false; dispatch({ type: "worktree", cwd: path }); } }} onClose={() => closePanel("create-worktree")} />
+          {activePanel === "submodules" ? <SubmoduleView key={`submodules:${panelKey}`} machineId={machine.id} projectId={id} cwd={cwd ?? project.cwd} onClose={() => closePanel("submodules")} /> : null}
           <Sheet
             visible={toolsOpen}
             title={copy("Proje araçları", "Project tools")}
-            onClose={() => setToolsOpen(false)}
+            onClose={() => closePanel("tools")}
           >
             <SearchField
               label={copy("Araçlarda ara", "Search tools")}
@@ -339,21 +383,21 @@ export function ProjectScreen({
               query={toolSearch}
               onClearSearch={() => setToolSearch("")}
               onProjectView={(next) => {
-                if (next === segment) setToolsOpen(false);
+                if (next === segment) closePanel("tools");
                 else
                   changeWorkspace(() => {
-                    setToolsOpen(false);
+                    closePanel("tools");
                     dispatch({ type: "segment", segment: next });
                   });
               }}
               onNavigate={(navigate) =>
                 changeWorkspace(() => {
-                  setToolsOpen(false);
+                  closePanel("tools");
                   navigate();
                 })
               }
             />
-            <MutationState mutation={changeAction} />
+            {requestedWorktree === null ? <MutationState mutation={changeAction} /> : null}
           </Sheet>
         </>
       )}

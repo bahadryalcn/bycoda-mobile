@@ -11,7 +11,6 @@ import {
   ErrorNotice,
   QueryState,
   Screen,
-  SectionHeader,
   ScreenList,
   SearchField,
   Sheet,
@@ -23,7 +22,8 @@ import { useCopy } from "@/ui/copy";
 import { useActiveMachine } from "@/state/machines";
 import { useGitActions } from "./git-actions";
 import { GitBranchesPanel } from "./git-branches";
-import { GitCommitBar, GitCommitPanel } from "./git-changes";
+import { GitChangeGroupHeader, GitCommitBar, GitCommitPanel } from "./git-changes";
+import { useGitCommitGeneration } from "./use-git-commit-generation";
 import { GitConfirmationCard } from "./git-confirmation";
 import { GitDiffPanel } from "./git-diff";
 import { GitHistoryPanel } from "./git-history";
@@ -45,8 +45,9 @@ import {
 import { GroupedListRow, rowInset } from "./shared";
 import { gitReducer, initialGitState, type GitConfirmation } from "./workspace-state";
 import type { GitFileAction, GitScope, ProjectGitProps } from "./git-types";
-import { gitListRows, type GitListFilter, type GitListRow } from "./git-list-model";
+import { gitListRows, type GitChangeGroup, type GitListFilter, type GitListRow } from "./git-list-model";
 import { registerWorkspaceDraft } from "./draft-guard";
+import { DraftWriteError } from "./draft-store";
 import { useLocalDraft } from "./use-local-draft";
 import { space } from "@/ui/tokens";
 import { queryOwnsRegion } from "./query-region";
@@ -66,7 +67,7 @@ function decodeDraft(value: string): GitDraft {
 }
 const encodeDraft = (value: GitDraft | null) =>
   value && (value.message || value.branchName) ? JSON.stringify(value) : null;
-export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: ProjectGitProps) {
+export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hideDraftWriteWarning }: ProjectGitProps) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const manageConnections = () => router.push("/machines");
@@ -103,6 +104,16 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
   const hasDraft = !!(message || branchName);
   const busy = actions.busy || (stashWrite?.scope === stashScope && stashWrite.busy);
   const data = index.data;
+  const generation = useGitCommitGeneration(scope, data);
+  const [sections, setSections] = useState<{ scope: string; collapsed: GitChangeGroup[] }>({
+    scope: stashScope, collapsed: [],
+  });
+  const collapsed = sections.scope === stashScope ? sections.collapsed : undefined;
+  const toggleGroup = (group: GitChangeGroup) => setSections((current) => {
+    const groups = current.scope === stashScope ? current.collapsed : [];
+    return { scope: stashScope, collapsed: groups.includes(group)
+      ? groups.filter((value) => value !== group) : [...groups, group] };
+  });
   const branchPicker = state.view.kind === "branches";
   const selection = state.view.kind === "diff" ? state.view.selection : null;
   const showFiles = useCallback(() => dispatch({ type: "view", view: { kind: "files" } }), []);
@@ -256,7 +267,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
   const draftStatus = (
     <>
       <ErrorNotice
-        error={draft.error}
+        error={hideDraftWriteWarning && draft.error instanceof DraftWriteError ? null : draft.error}
         message={
           !draft.ready
             ? copy("Kaydedilmiş Git taslağı okunamadı.", "Saved Git draft could not be read.")
@@ -273,8 +284,8 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
   );
   const filtered = !!fileQuery.trim() || fileFilter !== "all";
   const rows = useMemo(
-    () => (selection ? [] : gitListRows(data?.files ?? [], fileQuery, fileFilter)),
-    [data?.files, fileQuery, fileFilter, selection],
+    () => (selection ? [] : gitListRows(data?.files ?? [], fileQuery, fileFilter, collapsed)),
+    [data?.files, fileQuery, fileFilter, selection, collapsed],
   );
   if (historyOpen && root)
     return <>{edge}<GitHistoryPanel key={JSON.stringify([machine?.id, projectId, cwd, root])} scope={scope} onClose={() => setHistoryOpen(false)} /></>;
@@ -321,6 +332,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
       </Screen>
     );
   }
+  const hasChangedFiles = data.files.some((file) => file.staged || file.unstaged);
   return (
     <>
       {edge}
@@ -341,18 +353,20 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
               onOpenActions={() => setMenuOpen(true)}
             />
             {draftStatus}
+            {index.error ? <QueryState query={index} loading="none" /> : null}
             {!state.confirmation && !branchPicker ? feedback : null}
             {!selection && !data.operation && !data.conflicts?.length ? (
               <GitCommitBar
                 index={data}
                 message={message}
                 onMessageChange={(value) => patchDraft({ message: value })}
+                generation={generation}
                 busy={busy || !draft.ready}
                 onCommit={(stageAll) => choose({ kind: "commit" }, stageAll)}
                 onPush={() => choose({ kind: "push" })}
               />
             ) : null}
-            {!selection ? (
+            {!selection && hasChangedFiles ? (
               <SearchToolbar
                 search={
                   <SearchField
@@ -444,44 +458,34 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
         }
         contentContainerStyle={{ gap: 0 }}
         ListEmptyComponent={
-          selection ? undefined : filtered ? (
+          selection ? undefined : hasChangedFiles && filtered ? (
             <StateView
-              illustration="search-empty"
+              compact
               title={copy("Filtrelere uyan değişiklik yok", "No changes match the filters")}
-              action={{
-                label: copy("Sıfırla", "Reset"),
+              secondaryAction={{
+                label: copy("Filtreleri temizle", "Clear filters"),
                 onPress: () => {
                   setFileQuery("");
                   setFileFilter("all");
                 },
               }}
             />
-          ) : data.conflicts?.length ? undefined : (
+          ) : data.conflicts?.length || data.operation ? undefined : (
             <StateView
-              illustration="success"
-              title={copy("Kaydedilecek bir şey yok", "Nothing to commit")}
-              description={copy("Kaydedilecek dosya değişikliği yok.", "No file changes to record.")}
+              compact
+              title={copy("Kaydedilecek değişiklik yok.", "Nothing to commit.")}
             />
           )
         }
         renderItem={({ item, index }) =>
           item.kind === "group" ? (
-            <SectionHeader
-              title={item.staged ? copy("Stage’deki değişiklikler", "Staged changes") : copy("Değişiklikler", "Changes")}
+            <GitChangeGroupHeader
+              group={item.staged ? "staged" : "unstaged"}
               count={item.count}
-              trailing={!filtered ? (
-                <Button
-                  tone="quiet"
-                  density="compact"
-                  label={
-                    item.staged
-                      ? copy("Tümünü çıkar", "Unstage all")
-                      : copy("Tümünü stage’e al", "Stage all")
-                  }
-                  disabled={busy}
-                  onPress={() => runFileAction(item.staged ? "unstageAll" : "stageAll")}
-                />
-              ) : null}
+              expanded={!collapsed?.includes(item.staged ? "staged" : "unstaged")}
+              onToggle={() => toggleGroup(item.staged ? "staged" : "unstaged")}
+              onBulkAction={filtered ? undefined : () => runFileAction(item.staged ? "unstageAll" : "stageAll")}
+              busy={busy}
             />
           ) : (
             <GroupedListRow
@@ -549,17 +553,18 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard }: P
       >
         {draftStatus}
         {feedback}
-        <Body muted style={uiStyles.caption}>
+        {data.files.length > 0 ? <Body muted style={uiStyles.caption}>
           {copy(
             "Commit, stage’deki tüm dosyaları içerir. Listedeki filtreler yalnızca görünümü etkiler.",
             "A commit includes every staged file. List filters only change what you see.",
           )}
-        </Body>
+        </Body> : null}
         <GitCommitPanel
           index={data}
           canRunWorkspace={!!root}
           message={message}
           onMessageChange={(value) => patchDraft({ message: value })}
+          generation={generation}
           busy={busy || !draft.ready}
           fetching={actions.extended.isPending}
           onFetch={() => {

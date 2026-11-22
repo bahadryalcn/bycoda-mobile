@@ -14,12 +14,14 @@ vi.mock("./use-reduced-motion", () => {
 });
 type NativeProps = PropsWithChildren<Pick<PressableProps,
   "accessibilityLabel" | "accessibilityRole" | "accessibilityState" | "disabled" | "style"
-> & { onPress?: () => void }>;
+> & { onPress?: () => void; hitSlop?: PressableProps["hitSlop"] }>;
 vi.mock("react-native", () => ({
-  Pressable: ({ accessibilityLabel, accessibilityState, disabled, onPress, children }: NativeProps) =>
+  Pressable: ({ accessibilityLabel, accessibilityState, disabled, onPress, children, style, hitSlop }: NativeProps) =>
     createElement("button", { "aria-label": accessibilityLabel, "aria-busy": accessibilityState?.busy,
       "data-native-busy": String(accessibilityState?.busy), "data-native-selected": String(accessibilityState?.selected),
-      "data-native-expanded": String(accessibilityState?.expanded), disabled, onClick: onPress }, children),
+      "data-native-expanded": String(accessibilityState?.expanded),
+      "data-layout": JSON.stringify(Array.isArray(style) ? Object.assign({}, ...style) : style),
+      "data-hit-slop": JSON.stringify(hitSlop), disabled, onClick: onPress }, children),
   useWindowDimensions: () => ({ width: 390, height: 844, scale: 3, fontScale: 1 }),
   View: ({ children, style }: NativeProps) => {
     const width = style && typeof style === "object" && "borderTopColor" in style &&
@@ -41,7 +43,8 @@ vi.mock("./motion", () => ({ haptic: { tap: vi.fn(), select: vi.fn() }, usePress
 vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
 vi.mock("./design-system", () => ({ controlClasses: () => "product-control" }));
-vi.mock("./tokens", () => ({ colors: {}, metrics: {}, fontSize: {}, lineHeight: {}, gapIcon: 8, opacity: {}, radii: {}, space: {}, hitSlopFor: () => undefined }));
+vi.mock("./tokens", () => ({ colors: {}, metrics: { touchTarget: 48, visualControl: 32 }, fontSize: {},
+  lineHeight: {}, gapIcon: 8, opacity: {}, radii: {}, space: {}, hitSlopFor: (visual: number) => (48 - visual) / 2 }));
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
 const loops = vi.hoisted(() => ({ started: 0, stopped: 0 }));
@@ -76,6 +79,15 @@ let focused: boolean;
 let busy: boolean;
 let ownerMounts: number;
 const command = vi.fn();
+
+it("reserves both dimensions of an icon target when its parent can clip hit slop", async () => {
+  await act(async () => root.render(createElement(IconButton, {
+    label: "Close", onPress: command, reserveTouchTarget: true,
+  })));
+  const button = container.querySelector('[aria-label="Close"]')!;
+  expect(JSON.parse(button.getAttribute("data-layout")!)).toMatchObject({ minWidth: 48, minHeight: 48 });
+  expect(button.getAttribute("data-hit-slop")).toBeNull();
+});
 const listeners = new Map<string, Set<() => void>>();
 const navigation = {
   isFocused: () => focused,

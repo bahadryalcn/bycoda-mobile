@@ -11,6 +11,8 @@ export function PdfFrame({ html, title, fill, onMessage, onFailure }: PdfFramePr
   useLayoutEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   return <WebView source={source} accessibilityLabel={title}
     style={fill ? { flex: 1, minHeight: 0 } : { height: 480, flex: 0 }}
+    // The HTML uses React Native's fontScale. Keep Android's WebView from applying it again.
+    textZoom={100}
     originWhitelist={["*"]} javaScriptEnabled domStorageEnabled={false} incognito cacheEnabled={false}
     sharedCookiesEnabled={false} thirdPartyCookiesEnabled={false} allowFileAccess={false}
     allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false} mixedContentMode="never"

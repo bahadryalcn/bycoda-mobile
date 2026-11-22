@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostClient, useHostQuery } from "@/state/queries";
 import { useSecurity } from "@/state/security";
+import { deviceIsOffline, useDeviceOffline } from "@/state/device-network";
+import { useSingleFlight } from "@/state/actions";
 import {
   reviewedMachine,
   isReviewedMachine,
@@ -41,6 +43,7 @@ export function useMobilePtySession({
   const theme = useMobileTheme();
   const machine = useActiveMachine();
   const client = useHostClient();
+  const deviceOffline = useDeviceOffline();
   const unlocked = useSecurity((state) => state.status === "unlocked");
   const foreground = useSecurity((state) => state.appState === "active" && state.windowFocused);
   const security = { unlocked, active: foreground };
@@ -56,7 +59,7 @@ export function useMobilePtySession({
     current() &&
     !!opening.review?.environmentId &&
     !!machine?.capabilities?.includes("terminals.pty.desktop.v1");
-  const available = supported && security.unlocked && security.active;
+  const available = supported && security.unlocked && security.active && !deviceOffline && !!client;
   const params = { projectId: opening.projectId, sessionId: opening.sessionId };
   const list = useHostQuery(
     ["mobile-pty", opening.projectId, opening.sessionId],
@@ -72,6 +75,7 @@ export function useMobilePtySession({
         ),
     },
   );
+  const listReady = available && list.data !== undefined && !list.isError;
   const [lease, setLease] = useState<MobilePtyLease | null>(null);
   const [closePending, setClosePending] = useState(false);
   const closeAttempt = useRef<{ terminalId: string; epoch: string; requestId: string } | null>(null);
@@ -134,23 +138,24 @@ export function useMobilePtySession({
   const { loaded: attempt, setLoaded: setAttempt, error, setError, busy, pendingAction, run } = op;
   const hydrated = !op.loading;
   const allowed = useRef(false);
+  const mounted = useRef(false);
+  const listRetry = useSingleFlight();
   allowed.current = available && !list.isError && !paused && !gap && !lost && synced && !closePending;
-  useEffect(
-    () => () => {
+  // Retire queued input and any retained retry action when the terminal view leaves.
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       generation.current++;
       allowed.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
+  const hasReviewedAccess = () => {
+    const { status, appState, windowFocused } = useSecurity.getState();
+    return available && !deviceIsOffline() && current() && status === "unlocked" && appState === "active" && windowFocused;
+  };
   const request = async (method: string, fields: Record<string, unknown>) => {
-    if (
-      !client ||
-      !available ||
-      !current() ||
-      useSecurity.getState().status !== "unlocked" ||
-      useSecurity.getState().appState !== "active" ||
-      !useSecurity.getState().windowFocused
-    )
+    if (!client || !hasReviewedAccess())
       throw new Error("Mobile PTY source is unavailable");
     const result = await client.request(method, { ...params, ...fields }, { retry: false });
     if (!current()) throw new Error("Mobile PTY source changed; never replay input");
@@ -189,13 +194,9 @@ export function useMobilePtySession({
   const create = () => {
     void run(async () => {
       if (
-        !hydrated || closeAttempt.current ||
+        !listReady || !hydrated || closeAttempt.current ||
         attempt ||
-        !targetMatches ||
-        !current() ||
-        useSecurity.getState().status !== "unlocked" ||
-        useSecurity.getState().appState !== "active" ||
-        !useSecurity.getState().windowFocused
+        !targetMatches || !hasReviewedAccess()
       )
         return;
       const claim = await store.claim({
@@ -206,7 +207,7 @@ export function useMobilePtySession({
       });
       setAttempt(claim.attempt);
       if (!claim.claimed) return;
-      if (!current()) {
+      if (!hasReviewedAccess()) {
         await store.clear(claim.attempt.operationId);
         setAttempt(null);
         return;
@@ -408,6 +409,7 @@ export function useMobilePtySession({
     };
   }, [available, list.isError, lease, ready, paused, gap, lost, client]);
   const controlsDisabled = !available || list.isError || busy || !hydrated || !targetMatches;
+  const visibleListError = deviceOffline ? null : list.error;
   return {
     supported,
     /** Why the terminal cannot start, or null when it can. */
@@ -422,8 +424,17 @@ export function useMobilePtySession({
             : ("unsupported" as const),
     machineName: machine?.name,
     terminals: !lease ? (list.data?.terminals ?? []) : [],
-    listFailed: list.isError,
-    error: error ?? list.error,
+    listError: visibleListError,
+    listLoading: !deviceOffline && list.isLoading,
+    listReady,
+    listWaiting: supported && (deviceOffline || !listReady && !list.isLoading && !list.isError),
+    listRefreshing: list.isFetching,
+    retryList: client && available ? () => {
+      void listRetry.run(async () => {
+        if (mounted.current && hasReviewedAccess()) await list.refetch({ cancelRefetch: false });
+      }).catch(() => undefined);
+    } : undefined,
+    error: error ?? visibleListError,
     lease,
     closePending,
     paused,

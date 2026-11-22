@@ -149,6 +149,7 @@ export const SessionListRow = memo(function SessionListRow({
             selected={selected}
             optionsLabel={optionsLabel}
             onPress={() => {
+              if (!canRead(projectId)) return;
               openSessionSeen(machineId, session.id);
               onPress(session.id, projectId);
             }}

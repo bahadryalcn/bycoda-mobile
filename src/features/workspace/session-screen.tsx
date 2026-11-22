@@ -241,13 +241,13 @@ function SessionWorkspace({
           showBack={layout !== "split"}
           onShowSessions={layout === "tablet" ? () => setSessionsOpen(true) : undefined}
           title={
-            visible
-              ? session?.session.title || copy("Oturum", "Session")
+            visible && session
+              ? session.session.title || copy("Yeni oturum", "New session")
               : copy("Oturum", "Session")
           }
           context={visible ? (projectName ?? machineName) : undefined}
           provider={visible ? session?.session.harness : undefined}
-          status={headerStatus.label}
+          status={layout === "split" && !visible ? undefined : headerStatus.label}
           tone={headerStatus.tone}
           actions={
             visible && session ? (
@@ -292,13 +292,18 @@ function SessionWorkspace({
                 privacyUnavailable={projects.privacyUnavailable}
                 loading="content"
                 loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")}
+                shareConnectionFeedback={layout === "split"}
               />
             ) : privacy.canRead ? (
-              snapshot.data === undefined && !snapshot.error ? (
-                <TranscriptSkeleton label={copy("Oturum yükleniyor…", "Loading session…")} />
-              ) : (
-                <QueryState query={snapshot} loading="none" />
-              )
+              <QueryState
+                query={snapshot}
+                loading="centered"
+                loadingLabel={copy("Oturum yükleniyor…", "Loading session…")}
+                renderLoading={!snapshot.error && !snapshot.failureCount
+                  ? (label) => <TranscriptSkeleton label={label} />
+                  : undefined}
+                shareConnectionFeedback={layout === "split"}
+              />
             ) : privacy.reason === "hidden" ? (
               <Empty
                 compact={false}

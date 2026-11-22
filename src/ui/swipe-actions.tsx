@@ -127,6 +127,7 @@ export function SwipeActions({
   );
 }
 
-export function SwipeActionsGroup({ children }: PropsWithChildren) {
-  return <Swipe.Group>{children}</Swipe.Group>;
+/** Owns one open action rail. Fill is used when the child owns a virtualized viewport. */
+export function SwipeActionsGroup({ children, fill }: PropsWithChildren<{ fill?: boolean }>) {
+  return <Swipe.Group style={fill ? { flex: 1, minHeight: 0 } : undefined}>{children}</Swipe.Group>;
 }

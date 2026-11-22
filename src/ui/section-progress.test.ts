@@ -25,22 +25,25 @@ vi.mock("./typography", () => ({
   Body: ({ children }: PropsWithChildren) => createElement("p", null, children),
 }));
 vi.mock("./buttons", () => ({
-  Button: ({ label, accessibilityLabel, onPress, style }: {
+  Button: ({ label, accessibilityLabel, onPress, style, ref }: {
     label: string; accessibilityLabel: string; onPress: () => void; style: { minHeight: number };
-  }) => createElement("button", { "aria-label": accessibilityLabel, onClick: onPress, style }, label),
+    ref?: import("react").Ref<HTMLButtonElement>;
+  }) => createElement("button", { "aria-label": accessibilityLabel, onClick: onPress, style, ref }, label),
   SelectRow: ({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) =>
     createElement("button", { "aria-pressed": selected, onClick: onPress }, label),
 }));
 vi.mock("./dialogs", () => ({
-  Sheet: ({ title, visible, onClose, children }: PropsWithChildren<{
+  Sheet: ({ title, visible, onClose, children, returnFocusRef }: PropsWithChildren<{
     title: string; visible: boolean; onClose: () => void;
+    returnFocusRef?: { current: HTMLButtonElement | null };
   }>) => visible ? createElement("section", { "aria-label": title },
-    children, createElement("button", { onClick: onClose }, "Dismiss")) : null,
+    children, createElement("button", { onClick: () => { onClose(); returnFocusRef?.current?.focus(); } }, "Dismiss")) : null,
 }));
 
 it("uses a 48 dp trigger, formats Turkish progress, and closes or jumps through the shared sheet", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
+  document.body.append(container);
   const root = createRoot(container);
   const onSelect = vi.fn();
   const scroll = { offset: { value: 100 }, viewport: { value: 400 }, content: { value: 800 } };
@@ -60,6 +63,7 @@ it("uses a 48 dp trigger, formats Turkish progress, and closes or jumps through 
     const dismiss = [...container.querySelectorAll<HTMLButtonElement>("section button")].find((item) => item.textContent === "Dismiss")!;
     await act(() => dismiss.click());
     expect(container.querySelector("section")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
     expect(onSelect).not.toHaveBeenCalled();
     await act(() => trigger.click());
     const contact = [...container.querySelectorAll("section button")].find((item) => item.textContent === "İletişim")!;
@@ -68,6 +72,7 @@ it("uses a 48 dp trigger, formats Turkish progress, and closes or jumps through 
     expect(container.querySelector("section")).toBeNull();
   } finally {
     await act(async () => root.unmount());
+    container.remove();
     vi.unstubAllGlobals();
   }
 });

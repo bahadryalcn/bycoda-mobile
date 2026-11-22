@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { RemoteHostError } from "../remote/host-error";
 import { ApprovalCommandRefused } from "../domain/approval-command";
+import { DraftWriteError } from "../state/local-draft-storage";
 import { errorMessage, remoteErrorKind } from "./error-message";
 
 const tr = (turkish: string, _english: string) => turkish;
 const en = (_turkish: string, english: string) => english;
+it("localizes a draft write failure without showing the native cause", () => {
+  const cause = new Error("QA native draft write blocked");
+  const error = new DraftWriteError(cause);
+  expect(error.cause).toBe(cause);
+  expect(errorMessage(error, en)).toBe("Couldn’t save the draft. Your edits are still open.");
+  expect(errorMessage(error, tr)).toBe("Taslak kaydedilemedi. Düzenlemelerin açık.");
+});
 const remote = (
   kind: RemoteHostError["kind"],
   message = "Raw transport message",

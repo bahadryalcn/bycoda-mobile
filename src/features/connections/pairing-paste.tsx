@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import Animated from "react-native-reanimated";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import { useAsyncAction } from "@/state/actions";
 import { FormActions, IdentifierField, MutationState } from "@/ui/primitives";
 import { HintLabel } from "@/ui/info-hint";
@@ -57,6 +57,7 @@ export function PairingPaste({ disabled, onCode, onCancel }: PairingPasteProps) 
           editable={!disabled && !read.isPending}
           autoComplete="off"
           multiline
+          style={{ maxHeight: metrics.multilineHeight }}
         />
       <FormActions
         feedback={<MutationState mutation={read} />}

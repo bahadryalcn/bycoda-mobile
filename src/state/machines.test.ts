@@ -39,6 +39,7 @@ describe("connection persistence", () => {
       language: "system",
       hydrated: false,
       storageError: null,
+      credentialRevisions: new Map(),
     });
   });
   afterEach(() => {
@@ -242,6 +243,7 @@ describe("connection persistence", () => {
   it("restores prior credential and selected machine if metadata cannot save", async () => {
     await useMachines.getState().hydrate();
     await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
+    const revisions = useMachines.getState().credentialRevisions;
     secrets.getItemAsync.mockResolvedValue(token);
     storage.setItem.mockRejectedValueOnce(new Error("Full disk"));
     await expect(
@@ -249,10 +251,26 @@ describe("connection persistence", () => {
         .getState()
         .saveMachine({ ...machine, name: "Renamed", providers: ["cursor"] }, replacement),
     ).rejects.toThrow("could not be saved");
+    expect(useMachines.getState().credentialRevisions).toBe(revisions);
     expect(useMachines.getState().machines[0].name).toBe("Work");
     expect(secrets.setItemAsync).toHaveBeenLastCalledWith("bycoda.remote.computer-a", token, {
       keychainAccessible: "device-only",
     });
+  });
+  it("advances the in-memory revision only when a different credential is saved for the same computer", async () => {
+    const input = { ...machine, providers: ["cursor"] as ["cursor"] };
+    await useMachines.getState().hydrate();
+    await useMachines.getState().saveMachine(input, token);
+    const revision = useMachines.getState().credentialRevisions.get(machine.id)!;
+    secrets.getItemAsync.mockResolvedValue(token);
+    await useMachines.getState().saveMachine(input, token);
+    expect(useMachines.getState().credentialRevisions.get(machine.id)).toBe(revision);
+    await useMachines.getState().saveMachine(input, replacement);
+    expect(useMachines.getState().machines.map((value) => value.id)).toEqual([machine.id]);
+    expect(useMachines.getState().credentialRevisions.get(machine.id)).toBe(revision + 1);
+    const persisted = JSON.parse(storage.setItem.mock.lastCall![1]);
+    expect(persisted).not.toHaveProperty("credentialRevisions");
+    expect(storage.setItem.mock.lastCall![1]).not.toContain(replacement);
   });
   it("whitelists metadata before saving and keeps legacy credentials out of Zustand", async () => {
     await useMachines.getState().hydrate();

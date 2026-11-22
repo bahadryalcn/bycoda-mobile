@@ -67,11 +67,11 @@ export function ApprovalCard({
   return (
     <Card variant="surface">
       <View style={{ gap: space.sm }}>
+        <Heading>{approval.title}</Heading>
         <Row>
           <Badge label={status[0]} tone={status[1]} />
           {open && left ? <Badge label={copy("{p0} kaldı", "{p0} left", { p0: left })} /> : null}
         </Row>
-        <Heading>{approval.title}</Heading>
         <Body>{approval.message}</Body>
         {approval.details ? <ApprovalDetails details={approval.details} /> : null}
         {expired ? (
@@ -128,7 +128,7 @@ export function ApprovalCard({
           />
         ) : null}
         {actionable && verified && local !== "uncertain" ? (
-          <View style={{ gap: space.xs }}>
+          <View style={{ gap: space.sm, marginTop: space.sm }}>
             {waitingForOther ? (
               <Notice
                 message={copy(
@@ -147,7 +147,8 @@ export function ApprovalCard({
             />
             <Button
               label={copy("Reddet", "Deny")}
-              fullWidth
+              tone="quiet"
+              style={{ alignSelf: "center" }}
               disabled={held}
               onPress={() => onDecide(approval, false)}
             />

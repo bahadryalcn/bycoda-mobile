@@ -102,7 +102,7 @@ export function ScreenList<T>({
       }
       ListHeaderComponent={
         header !== undefined || heading ? (
-          <View style={{ gap: space.xs, paddingBottom: space.xs }}>
+          <View style={{ gap: space.sm, paddingBottom: space.sm }}>
             {heading}
             {header}
             {callerHeader}

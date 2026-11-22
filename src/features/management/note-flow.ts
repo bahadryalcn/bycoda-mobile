@@ -16,6 +16,8 @@ export function noteFlowReducer(state: NoteFlow, event: NoteFlowEvent): NoteFlow
   if ((event.type === "close" || event.type === "recover") && event.expected !== state)
     return state;
   if (event.type === "close") return { kind: "closed" };
+  // A second tap can arrive before the sheet has disabled its underlying list.
+  if (state.kind !== "closed") return state;
   return event.type === "open"
     ? { kind: "existing", id: event.id }
     : { kind: "draft", initial: event.initial };

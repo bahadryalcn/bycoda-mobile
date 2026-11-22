@@ -5,20 +5,22 @@ import { HierarchyFrame, HierarchyWidthProvider } from "@/ui/hierarchy-frame";
 import { useMobileTheme } from "@/ui/theme";
 import { sameSessionListConnectionFailure } from "./session-list-feedback";
 import type { ProjectSessionsProps, SessionCreationDraft } from "./sessions-panel-types";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLatestCallback } from "./use-latest-callback";
 import { View } from "react-native";
 import { carryCrossDelegation } from "../../../../src/shared/model/host-contracts/delegation";
 import { space } from "@/ui/tokens";
 import { router } from "expo-router";
 import { useFormDraft } from "@/state/form-draft";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { useActiveMachine } from "@/state/machines";
+import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { useHostClient, useHostQuery } from "@/state/queries";
 import { useCreateSession } from "./use-create-session";
 import { useScreenContentInsets } from "@/ui/screen-content-insets";
 import { Body, Button, FormActions, Sheet, SearchField, ScreenList, QueryState } from "@/ui/primitives";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { useCopy } from "@/ui/copy";
+import { SwipeActionsGroup } from "@/ui/swipe-actions";
 import { PermissionField } from "./agent-option-icons";
 import { selectedChoice } from "./provider-choices";
 import { SessionListRow } from "./session-list-row";
@@ -34,7 +36,15 @@ import { SessionFolderRow } from "./session-folder-row";
 import { queryOwnsRegion } from "./query-region";
 import { sessionListPollInterval } from "./session-list-poll";
 
-export function ProjectSessions({
+export function ProjectSessions(props: ProjectSessionsProps) {
+  const connection = useConnectionScope();
+  const scopeKey = JSON.stringify([connection.token, props.projectId, props.cwd]);
+  const [firstScopeKey] = useState(scopeKey);
+  return <ProjectSessionsConnection key={scopeKey} {...props} connection={connection}
+    initialCreating={props.initialCreating && scopeKey === firstScopeKey} />;
+}
+
+function ProjectSessionsConnection({
   projectId,
   cwd,
   initialCreating = false,
@@ -44,20 +54,23 @@ export function ProjectSessions({
   projectCwd,
   canReadProject,
   renderFrame,
-}: ProjectSessionsProps) {
+  connection,
+}: ProjectSessionsProps & { connection: ConnectionScope }) {
   const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const insets = useScreenContentInsets();
   const mounted = useRef(true);
-  useEffect(() => {
+  // Retire queued row and form actions as soon as this project pane unmounts.
+  useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
+  const readable = useLatestCallback(() => mounted.current && !!machine && connection.isCurrent() && canReadProject());
   const openSession = useLatestCallback((sessionId: string) => {
-    if (!mounted.current || !machine || useMachines.getState().activeId !== machine.id) return;
+    if (!machine || !readable()) return;
     setCreating(false);
     router.navigate({
       pathname: "/session/[id]",
@@ -79,7 +92,6 @@ export function ProjectSessions({
     "supervised" | "auto-accept-edits" | "auto" | "full-access"
   >("supervised");
   const client = useHostClient();
-  const readable = useLatestCallback(() => canReadProject());
   // Live project streams already deliver session summaries; poll the full list only when they
   // are down. The interval is re-evaluated after each fetch, so a dropped stream resumes 5s polling.
   const sessionPollMs = () =>
@@ -125,6 +137,8 @@ export function ProjectSessions({
     ),
     sessionLayout,
     search,
+    "",
+    copy("Yeni oturum", "New session"),
   );
   const doneIds = useUnseenDoneIds(machine?.id ?? "");
   const rows = projectSessionRows(
@@ -156,13 +170,8 @@ export function ProjectSessions({
   const ownsRegion = queryOwnsRegion(listQuery, !visible.length);
   const presentation = getQueryPresentation(listQuery, !visible.length);
   const showEmptyCreate = presentation === "empty" && !search.trim() && !archived;
-  const current = () =>
-    mounted.current &&
-    !!machine &&
-    useMachines.getState().activeId === machine.id &&
-    canReadProject();
   const openCreate = () => {
-    if (current() && !locked) setCreating(true);
+    if (readable() && !locked) setCreating(true);
   };
   const listState = (
     <QueryState
@@ -193,6 +202,7 @@ export function ProjectSessions({
   );
   const content = (
     <HierarchyWidthProvider>
+      <SwipeActionsGroup fill>
       <ScreenList<ProjectSessionRow>
         grouped
         data={rows}
@@ -210,7 +220,7 @@ export function ProjectSessions({
                 <Button
                   label={copy("Etkin oturumlar", "Active sessions")}
                   tone="quiet"
-                  onPress={() => { if (current()) setArchived(false); }}
+                  onPress={() => { if (readable()) setArchived(false); }}
                 />
               </View>
             ) : null}
@@ -304,6 +314,7 @@ export function ProjectSessions({
                     error={command.error}
                     onDismiss={() => command.reset()}
                     onRecovered={(receipt) => {
+                      if (!readable()) return;
                       command.reset();
                       openSession(receipt.sessionId);
                     }}
@@ -314,7 +325,7 @@ export function ProjectSessions({
                     disabled={!canStart}
                     busy={command.isPending}
                     onSubmit={() => {
-                      void create(openSession, { settings: modelSettings, runtimeMode });
+                      if (readable()) void create(openSession, { settings: modelSettings, runtimeMode });
                     }}
                   />
                 </View>
@@ -368,24 +379,25 @@ export function ProjectSessions({
           );
         }}
       />
+      </SwipeActionsGroup>
     </HierarchyWidthProvider>
   );
   return renderFrame(<View style={{ flex: 1 }}>{content}</View>, {
     searchOpen,
     hasSearch: !!search.trim(),
     toggleSearch: () => {
-      if (current()) setSearchOpen((value) => !value);
+      if (readable()) setSearchOpen((value) => !value);
     },
     showCreateInHeader: !showEmptyCreate && (listQuery.data !== undefined || presentation === "error"),
     createDisabled: locked,
     create: openCreate,
     archived,
     toggleArchived: () => {
-      if (current()) setArchived((value) => !value);
+      if (readable()) setArchived((value) => !value);
     },
     refreshing: sessions.isFetching,
     refresh: () => {
-      if (current() && !sessions.isFetching) void sessions.refetch();
+      if (readable() && !sessions.isFetching) void sessions.refetch();
     },
   });
 }

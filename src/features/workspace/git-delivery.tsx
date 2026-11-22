@@ -72,7 +72,7 @@ export function GitDeliverySheet({
     checks: copy("Başarısız kontroller var.", "Some checks failed."),
   } as const;
   const startReview = async () => {
-    if (!workspace || workspaces.isFetching || busy || inFlight.current || !current()) return;
+    if ((!workspace && !uncertainKey) || workspaces.isFetching || busy || inFlight.current || !current()) return;
     inFlight.current = true;
     setMerged(false);
     setReadError(undefined);
@@ -81,14 +81,21 @@ export function GitDeliverySheet({
       merge.reset();
     }
     try {
-      // After an unconfirmed write, an explicit new review first fetches
-      // authoritative state. The Host refuses reviews while delivery is held.
+      // Check the saved workspace before requesting a fresh plan after a lost reply.
       const refreshed = uncertainKey ? await workspaces.refetch() : undefined;
       if (!current()) return;
       if (refreshed?.isError) throw refreshed.error;
       const source = refreshed ? findWorkspace(refreshed.data) : workspace;
-      if (!source || source.id !== workspace.id)
+      if (!source || source.id !== (uncertainKey ? plan?.workspaceId : workspace?.id))
         throw new Error(copy("İncelenen içerik değişti. Yenileyip tekrar inceleyin.", "Reviewed contents changed. Refresh and review again."));
+      if (uncertainKey && plan && source.state === "merged" && source.deliveredCommit &&
+        source.revision > plan.expectedRevision && shortBranch(source.targetBranchRef) === shortBranch(plan.targetBranchRef)) {
+        setUncertainKey(undefined);
+        merge.reset();
+        setPlan(null);
+        setMerged(true);
+        return;
+      }
       const sentAt = performance.now();
       const payload = await review.mutateAsync({ workspaceId: source.id, expectedRevision: source.revision, action: "merge" });
       if (!current()) return;
@@ -172,16 +179,19 @@ export function GitDeliverySheet({
       {plan ? (
         <ConfirmationCard
           tone="default"
-          message={copy(
+          message={uncertainKey ? copy(
+            "İşlem uygulanmış olabilir. Yeniden denemeden önce sonucu kontrol et.",
+            "The action may have been applied. Check the result before trying again.",
+          ) : copy(
             "{p0} commit, {p1} dosya {p2} dalına birleştirilecek.",
             "{p0} commits and {p1} files will be merged into {p2}.",
             { p0: plan.commits.length, p1: plan.changedPaths.length, p2: shortBranch(plan.targetBranchRef) },
           )}
-          cancelLabel={copy("Yeniden incele", "Review again")}
-          onCancel={() => { void startReview(); }}
-          confirmLabel={uncertainKey ? copy("Yeniden dene", "Retry")
+          cancelLabel={uncertainKey ? copy("Yeniden dene", "Retry") : copy("Yeniden incele", "Review again")}
+          onCancel={() => { void (uncertainKey ? confirmMerge() : startReview()); }}
+          confirmLabel={uncertainKey ? copy("Durumu kontrol et", "Check status")
             : task ? copy("Teslimatı onayla", "Approve delivery") : copy("Birleştir", "Merge")}
-          onConfirm={() => { void confirmMerge(); }}
+          onConfirm={() => { void (uncertainKey ? startReview() : confirmMerge()); }}
           busy={busy || workspaces.isFetching}
           disabled={!uncertainKey && (!!blocker || workspace?.id !== plan.workspaceId || workspace.revision !== plan.expectedRevision)}
         >
@@ -207,10 +217,10 @@ export function GitDeliverySheet({
               {text}
             </Body>
           ))}
-          {blocker ? <Body style={uiStyles.caption}>{blockerText[blocker]}</Body> : null}
+          {blocker && !uncertainKey ? <Body style={uiStyles.caption}>{blockerText[blocker]}</Body> : null}
         </ConfirmationCard>
       ) : null}
-      <MutationState mutation={merge} />
+      {!uncertainKey ? <MutationState mutation={merge} /> : null}
       </>}
     </Sheet>
   );

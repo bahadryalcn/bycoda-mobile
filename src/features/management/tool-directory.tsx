@@ -62,7 +62,8 @@ export function ToolDirectory({
   onProjectView,
   onClearSearch,
 }: {
-  projectId?: string | null;
+  /** null is All projects. undefined means the selected project could not be verified. */
+  projectId: string | null | undefined;
   query?: string;
   onNavigate?: (navigate: () => void) => void;
   onProjectView?: (view: "sessions" | "files" | "git") => void;
@@ -84,7 +85,8 @@ export function ToolDirectory({
   const open = (tool: Tool, targetProjectId = projectId) => {
     if (!machine || !connection.isCurrent() || useMachines.getState().activeId !== machine.id) return;
     const unsupported = tool.hostTool && machine.capabilities && !machine.capabilities.includes(hostCapabilities[tool.hostTool]);
-    if (!unsupported && (tool.hostTool || (tool.projectView && tool.id !== "sessions")) && !targetProjectId) {
+    const needsProject = tool.hostTool || (tool.projectView && tool.id !== "sessions");
+    if ((!unsupported && needsProject && !targetProjectId) || (tool.managementSection && targetProjectId === undefined)) {
       setPendingTool({ tool, connection });
       return;
     }
@@ -104,7 +106,13 @@ export function ToolDirectory({
         });
       else if (tool.hostTool && (targetProjectId || unsupported))
         router.navigate({ pathname: "/tools/[tool]", params: { tool: tool.hostTool, projectId: targetProjectId ?? "", machineId: machine.id } } as Href);
-      else if (tool.managementSection) router.navigate(`/manage/${tool.managementSection}`);
+      else if (tool.managementSection) router.navigate({ pathname: "/manage/[section]", params: {
+        section: tool.managementSection,
+        machineId: machine.id,
+        environmentId: machine.environmentId,
+        projectFilter: targetProjectId ? "project" : "all",
+        ...(targetProjectId ? { projectId: targetProjectId } : {}),
+      } });
       else if (tool.id === "assistant") router.navigate("/assistant" as Href);
       // The inbox owns its project scope and asks for one when Jira has none.
       else if (tool.id === "jira") router.navigate({ pathname: "/(tabs)/inbox", params: { view: "jira" } } as Href);

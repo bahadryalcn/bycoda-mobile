@@ -11,6 +11,11 @@ const draft: LocalNoteDraft = {
   sourceCwd: "/original/project",
 };
 describe("note editor completion ownership", () => {
+  it("keeps the first editor when two row or creation presses land together", () => {
+    const existing = noteFlowReducer(initialNoteFlow, { type: "open", id: "note-a" });
+    expect(noteFlowReducer(existing, { type: "open", id: "note-b" })).toBe(existing);
+    expect(noteFlowReducer(existing, { type: "draft", initial: draft })).toBe(existing);
+  });
   it("does not close a newer draft when an earlier save or delete completes", () => {
     const original = noteFlowReducer(initialNoteFlow, { type: "open", id: "note-a" });
     const closed = noteFlowReducer(original, { type: "close", expected: original });

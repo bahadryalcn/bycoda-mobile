@@ -5,6 +5,7 @@ import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { ActionMenu, Body, Button, Disclosure, ErrorText, Field, FormActions, Notice, QueryState, SelectField, Sheet } from "@/ui/primitives";
+import { DraftWriteError } from "./draft-store";
 import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import type { HostBranches, HostWorktree, HostWorktrees } from "@/remote/types";
@@ -103,7 +104,11 @@ export function WorktreeCreate({ scope, visible, blocked, beforeChange, onSelect
   if (initialUnavailable) return <Sheet visible={visible} title={copy("Çalışma ağacı oluştur", "Create worktree")} size="compact" onClose={close}>
     <FeatureUnavailable message={unavailableMessage} /><Button tone="quiet" label={copy("Kapat", "Close")} onPress={close} />
   </Sheet>;
-  const feedback = <>{!uncertain ? <ErrorText error={error} /> : <Notice tone="warning" message={copy("Oluşturma sonucu belirsiz. Tekrar göndermeden çalışma klasörlerini yenileyip bilgisayarda kontrol et.", "The create result is uncertain. Refresh working folders and check the computer before sending again.")} />}</>;
+  const feedback = uncertain
+    ? <Notice tone="warning" message={copy("Oluşturma sonucu belirsiz. Tekrar göndermeden çalışma klasörlerini yenileyip bilgisayarda kontrol et.", "The create result is uncertain. Refresh working folders and check the computer before sending again.")} />
+    : error instanceof DraftWriteError
+      ? <Notice tone="warning" message={copy("Taslak kaydedilemedi. Düzenlemelerin açık.", "Couldn’t save the draft. Your edits are still open.")} />
+      : <ErrorText error={error} />;
   return <><Sheet visible={visible} title={created ? copy("Çalışma ağacı oluşturuldu", "Worktree created") : copy("Çalışma ağacı oluştur", "Create worktree")} size="form" dismissible={!busy} dirty={!created && (draft.branch !== "" || draft.existing || draft.base !== "HEAD")} onClose={close}>
     {readable ? <>
       <CollectionToolbar field={<Body selectable>{opening.machineName}</Body>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[

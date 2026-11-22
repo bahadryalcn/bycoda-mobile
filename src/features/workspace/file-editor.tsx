@@ -32,14 +32,14 @@ import { View } from "react-native";
 import { DocumentPreview, ProjectMedia } from "@/ui/document-preview";
 import { isFileConflict, isMediaFile } from "./file-preview-model";
 import { useCopy } from "@/ui/copy";
-import { encodeFileDraft, parseFileDraft } from "./draft-store";
+import { DraftWriteError, encodeFileDraft, parseFileDraft } from "./draft-store";
 import { registerWorkspaceDraft } from "./draft-guard";
 import { useLocalDraft } from "./use-local-draft";
 import { ErrorText, useProjectRefresh } from "./shared";
 
 export type { DraftGuard } from "./file-editor-types";
 
-export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }: FileEditorProps) {
+export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard, hideDraftWriteWarning }: FileEditorProps) {
   const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const manageConnections = () => router.push("/machines");
@@ -66,6 +66,7 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
   const refreshProject = useProjectRefresh(projectId);
   const draftKey = `bycoda.mobile.file-draft.v1:${JSON.stringify([machine?.id, projectId, cwd, path])}`;
   const draft = useLocalDraft(draftKey, parseFileDraft, encodeFileDraft);
+  const visibleDraftError = hideDraftWriteWarning && draft.error instanceof DraftWriteError ? null : draft.error;
   const edit =
     draft.value ?? (file.data !== undefined ? { expected: file.data, content: file.data } : null);
   const dirty = !!edit && edit.expected !== edit.content;
@@ -262,9 +263,9 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard }:
       {!draft.ready && !draft.error ? (
         <QueryState query={{ isPending: true }} loading="inline" />
       ) : null}
-      <ErrorText error={draft.error} />
+      <ErrorText error={visibleDraftError} />
       <MutationState mutation={transition} />
-      {draft.error ? (
+      {visibleDraftError ? (
         <Button
           label={
             draft.ready

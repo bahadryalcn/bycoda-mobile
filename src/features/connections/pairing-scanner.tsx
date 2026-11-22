@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Stack } from "expo-router";
 import { AppState, Linking, StyleSheet, View } from "react-native";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { CameraView, useCameraPermissions, type PermissionResponse } from "expo-camera";
 import { duringSystemPrompt } from "@/state/system-prompt";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useAsyncAction } from "@/state/actions";
@@ -39,7 +39,12 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
   const [foreground, setForeground] = useState(AppState.currentState === "active");
   const [cameraRevision, setCameraRevision] = useState(0);
   const [cameraFailed, setCameraFailed] = useState(false);
-  const [permission, requestPermission, refreshPermission] = useCameraPermissions();
+  const [, requestPermission, refreshPermission] = useCameraPermissions({ get: false });
+  const [permissionCheck, setPermissionCheck] = useState<{
+    owner: object;
+    permission?: PermissionResponse;
+    error?: Error;
+  }>();
   const requested = useRef(false);
   const permissionAction = useAsyncAction();
   const scan = useAsyncAction();
@@ -47,7 +52,12 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
   const leaving = useRef(false);
   const session = useRef(0);
   const available = focused && foreground && unlocked;
-  const cameraOwner = useMemo(() => ({}), [available, cameraFailed, permission?.granted, scan.isError, cameraRevision]);
+  const permissionOwner = useMemo(() => ({}), [available, cameraRevision]);
+  const currentPermissionOwner = useRef(permissionOwner);
+  currentPermissionOwner.current = permissionOwner;
+  const checked = permissionCheck?.owner === permissionOwner ? permissionCheck : undefined;
+  const permission = checked?.permission;
+  const cameraOwner = useMemo(() => ({}), [permissionOwner, cameraFailed, permission?.granted, scan.isError]);
   const currentCamera = useRef(cameraOwner);
   currentCamera.current = cameraOwner;
   const active = useRef(available);
@@ -58,22 +68,36 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
     session.current++;
     return () => { active.current = false; session.current++; };
   }, [available]);
-  const refresh = useCallback(() => {
-    const owner = session.current;
-    return permissionAction.run(async () => {
-      if (!active.current || owner !== session.current) return;
-      const current = await refreshPermission();
-      if (!active.current || owner !== session.current) return;
+  const retryPermission = () => setCameraRevision((revision) => revision + 1);
+  const requestAccess = useCallback((owner: object, generation: number) => permissionAction.run(async () => {
+    if (!active.current || generation !== session.current || currentPermissionOwner.current !== owner) return;
+    requested.current = true;
+    const next = await duringSystemPrompt(requestPermission);
+    if (!active.current) return;
+    if (generation === session.current && currentPermissionOwner.current === owner) {
+      setPermissionCheck({ owner, permission: next });
+    } else {
+      // Android may blur for its own permission prompt. Recheck the new foreground owner.
+      setCameraRevision((revision) => revision + 1);
+    }
+  }), [requestPermission, permissionAction.run]);
+  // Reason: a fresh permission read belongs to the current foreground owner, independently of opening Settings.
+  useEffect(() => {
+    if (!available) return;
+    const generation = session.current;
+    const stillOwnsRead = () => active.current && generation === session.current && currentPermissionOwner.current === permissionOwner;
+    void refreshPermission().then((current) => {
+      if (!stillOwnsRead()) return;
+      setPermissionCheck({ owner: permissionOwner, permission: current });
       if (!requested.current && current.status === "undetermined" && current.canAskAgain) {
-        requested.current = true;
-        await duringSystemPrompt(requestPermission);
+        void requestAccess(permissionOwner, generation);
+      }
+    }, (error: unknown) => {
+      if (stillOwnsRead()) {
+        setPermissionCheck({ owner: permissionOwner, error: error instanceof Error ? error : new Error(String(error)) });
       }
     });
-  }, [refreshPermission, requestPermission, permissionAction.run]);
-  // Reason: refresh the native permission after returning from system Settings.
-  useEffect(() => {
-    if (available) void refresh();
-  }, [available, refresh]);
+  }, [available, permissionOwner, refreshPermission, requestAccess]);
   const leave = (next: () => void) => {
     leaving.current = true;
     active.current = false;
@@ -114,7 +138,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
           "Point the camera at the pairing QR code in bycoda on your computer.",
         )} />
       </View>
-      {!permission && !permissionAction.isError ? <Loading label={copy("Kamera hazırlanıyor…", "Preparing camera…")} /> : null}
+      {available && !permission && !checked?.error ? <Loading label={copy("Kamera hazırlanıyor…", "Preparing camera…")} /> : null}
       {permission && !permission.granted ? (
         <StateView
           illustration="permission"
@@ -124,12 +148,17 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
               ? copy("Kameraya izin ver", "Allow camera")
               : copy("Kamera ayarlarını aç", "Open camera settings"),
             busy: permissionAction.isPending,
+            reserveTouchTarget: true,
             onPress: () => {
-              const owner = session.current;
+              const generation = session.current;
+              if (permission.canAskAgain) {
+                void requestAccess(permissionOwner, generation);
+                return;
+              }
               void permissionAction.run(async () => {
-                if (!active.current || owner !== session.current) return;
-                if (permission.canAskAgain) { requested.current = true; await duringSystemPrompt(requestPermission); }
-                else await Linking.openSettings();
+                if (active.current && generation === session.current && currentPermissionOwner.current === permissionOwner) {
+                  await Linking.openSettings();
+                }
               });
             },
           }}
@@ -147,6 +176,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
           }}
         >
           <CameraView
+            key={cameraRevision}
             style={{ flex: 1 }}
             facing="back"
             barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
@@ -192,14 +222,18 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
             : null
         }
       />
-      <ErrorNotice error={permissionAction.error} retrying={permissionAction.isPending} onRetry={() => { void refresh(); }} />
+      <ErrorNotice error={checked?.error ?? (!permission?.granted ? permissionAction.error : undefined)}
+        retrying={permissionAction.isPending} onRetry={() => {
+          permissionAction.reset();
+          retryPermission();
+        }} />
       {scan.isError ? <ErrorNotice error={scan.error}
         retryLabel={copy("Yeniden tara", "Scan again")}
         onRetry={() => { if (active.current && !scan.isPending) { scan.reset(); latched.current = false; } }}
       /> : <MutationState mutation={scan} /> }
       <Button
         label={copy("Kodu yapıştır", "Paste pairing code")}
-        tone="secondary" fullWidth disabled={scan.isPending || permissionAction.isPending}
+        tone="secondary" fullWidth reserveTouchTarget disabled={scan.isPending}
         onPress={() => leave(onPaste)}
       />
       </View>

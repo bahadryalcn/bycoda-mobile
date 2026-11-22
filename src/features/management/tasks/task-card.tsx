@@ -37,7 +37,7 @@ import { ReviewNotes } from "./review-notes";
 import type { TaskCardProps } from "./types";
 import { TaskDeclineFeedback } from "./task-feedback";
 import { stamp } from "../shared/format";
-import { useRecordConfirmation } from "../shared/use-record-confirmation";
+import { RecordConfirmationSheet, useRecordConfirmation } from "../shared/use-record-confirmation";
 import { hasUnmergedBranch } from "../../../../../src/features/tasks/model/taskRules";
 
 export function TaskCard({
@@ -61,7 +61,7 @@ export function TaskCard({
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
-  const confirm = useRecordConfirmation(task, machine?.name || machine?.id, busy);
+  const { confirm, review } = useRecordConfirmation(task, machine?.name || machine?.id, busy);
   const relative = useRelativeTime();
   const moves = taskActions(task, machine?.capabilities);
   const supported = !!machine?.capabilities?.includes("tasks.workspaces");
@@ -284,7 +284,7 @@ export function TaskCard({
       </IconButton>
     </Hint>
   ) : null;
-  return (
+  const card = (
     <RecordCard
       title={task.title}
       status={<Status value={presentedStatus} />}
@@ -423,5 +423,11 @@ export function TaskCard({
         </Body>
       )}
     </RecordCard>
+  );
+  return (
+    <>
+      {card}
+      <RecordConfirmationSheet review={review} />
+    </>
   );
 }

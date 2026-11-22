@@ -127,6 +127,14 @@ it("discloses projects outside the remote Inbox limit while keeping available it
   expect(container.textContent).toContain("Item 1");
 });
 
+it("does not confirm an empty Inbox when some projects were omitted", async () => {
+  fixture.empty = true;
+  fixture.omittedProjects = [{ id: "other", path: "/other" }];
+  await render();
+  expect(container.textContent).toContain("not shown in this list");
+  expect(container.textContent).not.toContain("No open items");
+});
+
 it("passes bounded batches to the virtualized owner and commits search only after debounce", async () => {
   await render(); expect(container.querySelector("main")!.dataset.rowCount).toBe("40");
   await click("Show more"); expect(container.querySelector("main")!.dataset.rowCount).toBe("80");
@@ -149,13 +157,30 @@ it("clears an empty filter result without changing filters before Apply", async 
   expect(fixture.request).toEqual({ assignedToMe: false, state: "open", search: "" });
   expect(buttons("Clear filters")).toHaveLength(0);
 });
-it("uses search recovery without advertising active filters for an empty text search", async () => {
+it("waits for the search before showing no results and offers a direct reset", async () => {
   fixture.empty = true;
   await render();
   await input("Search", "no match");
+  expect(container.textContent).not.toContain("No matching results");
   await act(async () => vi.advanceTimersByTime(350));
   expect(container.textContent).toContain("No matching results");
   expect(buttons("Clear filters")).toHaveLength(0);
+  await click("Clear search");
+  expect(fixture.request.search).toBe("");
+  expect(container.textContent).toContain("No open items");
+});
+
+it("keeps the chosen filters when clearing an unsuccessful text search", async () => {
+  fixture.empty = true;
+  await render();
+  await click("Filters");
+  await click("Assigned to me only");
+  await click("Apply");
+  await input("Search", "missing item");
+  await act(async () => vi.advanceTimersByTime(350));
+  await click("Clear search");
+  expect(fixture.request).toEqual({ assignedToMe: true, state: "open", search: "" });
+  expect(container.textContent).toContain("No items match these filters");
 });
 it("retains independent partial failures and routes each retry to its source without claiming an empty success", async () => {
   fixture.empty = true; fixture.partial = true; await render();

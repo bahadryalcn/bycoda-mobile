@@ -23,6 +23,8 @@ const pureContracts = new Set([
   "shared/model/modelRoutingPools",
   // Assistant wire validation is pure; mobile still uses the paired transport and owner gates.
   "shared/model/host-contracts/assistant",
+  "shared/model/host-contracts/automations",
+  "shared/model/host-contracts/git",
   // Delegation and image-model keys are pure wire contracts (zod and each other only).
   "shared/model/host-contracts/delegation",
   "shared/model/host-contracts/image-models",

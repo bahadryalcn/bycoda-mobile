@@ -83,7 +83,8 @@ function QuestionAttachmentOwner({ client, scope, identity, ...props }: Question
         const item = props.question.questions.find(item => item.id === id);
         if (!item?.allowCustom || item.preserveCustomWhitespace) return null;
         return <Stack>
-          <ComposerAttachments files={owner.draft().attachments?.[id] ?? []} transfers={owner.transferStates()} disabled={held}
+          <ComposerAttachments files={owner.draft().attachments?.[id] ?? []} scope={`${scope.machineId}:${scope.sessionId}`}
+            custody="question" transfers={owner.transferStates()} disabled={held}
             onRemove={file => action(() => owner.remove(id, file))} onRetry={file => action(() => owner.retry(id, file))} />
           <Row>
             <Button label={copy("Dosya ekle", "Attach file")} tone="quiet" density="compact" disabled={held} onPress={() => action(() => owner.choose(id, "document"))} />

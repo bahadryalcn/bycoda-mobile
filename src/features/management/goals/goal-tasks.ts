@@ -37,8 +37,8 @@ export function goalTasksStamp(goals: readonly Pick<HostGoal, "id" | "status" | 
 
 /**
  * One pass over the task list, then one lookup per planned task id, instead of
- * filtering the whole list per epic. Tasks follow the plan's order (`taskIds`);
- * ids the host no longer lists count towards `total` but are not shown.
+ * filtering the whole list per epic. Each id counts once. Available tasks follow
+ * the plan's order (`taskIds`), and missing ids still count towards `total`.
  */
 export function goalTaskViews(
   goals: readonly Pick<HostGoal, "id" | "taskIds">[],
@@ -52,15 +52,14 @@ export function goalTaskViews(
     let done = 0;
     const seen = new Set<string>();
     for (const id of goal.taskIds) {
+      if (seen.has(id)) continue;
+      seen.add(id);
       const task = byId.get(id);
       if (!task) continue;
       if (task.status === "done") done += 1;
-      if (!seen.has(id)) {
-        seen.add(id);
-        owned.push(task);
-      }
+      owned.push(task);
     }
-    views.set(goal.id, { progress: { done, total: goal.taskIds.length }, tasks: owned });
+    views.set(goal.id, { progress: { done, total: seen.size }, tasks: owned });
   }
   return views;
 }

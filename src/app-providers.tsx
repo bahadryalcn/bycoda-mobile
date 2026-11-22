@@ -20,7 +20,7 @@ import { OverlayProvider } from "./ui/overlays";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BycodaUIProvider, MobileThemeController } from "./ui/provider";
 import { installMobileHostRuntime } from "./state/host-runtime";
-import { recordActiveHostMachine, recordHostRuntimeState } from "./state/host-runtime-state";
+import { recordActiveHostMachine, recordHostRuntimeStartupFailed, recordHostRuntimeState } from "./state/host-runtime-state";
 import { retryTransientRead, transientRetryDelay } from "./state/query-retry";
 import { startRouteSelection } from "./state/route-selection-runtime";
 import { observeProjectPrivacy } from "./features/workspace/project-privacy-cache";
@@ -77,11 +77,13 @@ export function AppProviders({ children }: PropsWithChildren) {
         else release = installed.dispose;
       })
       .catch(() => {
-        // Eligible socket calls report their explicit unsupported state. Existing
-        // encrypted HTTP cohorts continue through the compatibility adapter.
+        if (disposed) return;
+        logDiagnostic("warn", "mobile.host", "host runtime startup failed");
+        recordHostRuntimeStartupFailed(true);
       });
     return () => {
       disposed = true;
+      recordHostRuntimeStartupFailed(false);
       reconnect.dispose();
       routes.dispose();
       release?.();

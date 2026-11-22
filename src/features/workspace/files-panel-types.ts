@@ -5,6 +5,7 @@ export type ProjectFilesProps = WorkspaceTarget & {
   initialPath?: string | null;
   onClearInitialPath?: () => void;
   onDraftGuard?: (guard: DraftGuard) => void;
+  hideDraftWriteWarning?: boolean;
 };
 export type FileContentSearch = ProjectSearchResult;
 export type CreateFileFormProps = {

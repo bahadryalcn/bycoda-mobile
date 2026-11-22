@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   onError: undefined as undefined | ((error: Error) => void),
   close: vi.fn(),
 }));
+vi.mock("@/state/connection-scope", () => ({ useConnectionScope: vi.fn() }));
 vi.mock("@/state/queries", () => ({
   hostKey: (machine: string, key: unknown[]) => ["machine", machine, ...key],
   useHostClient: () => client,

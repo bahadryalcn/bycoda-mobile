@@ -3,6 +3,7 @@ import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { WorktreeCreate } from "./worktree-create";
+import { DraftWriteError } from "./draft-store";
 
 const state = vi.hoisted(() => ({ allowed:true,epoch:true,enabled:true,paused:false,error:null as Error|null,treeError:null as Error|null,dismiss:undefined as undefined|(()=>void),commands:new Map<string,()=>void>(),fields:new Map<string,any>(),closed:vi.fn(),branches:{current:"main",branches:["main","available"],remotes:[{remote:"origin",name:"release"}]},trees:{defaultRoot:"/host/worktrees",worktrees:[] as any[]},activeId: "machine", confirmation: undefined as undefined | (() => void), write: vi.fn(), refetch: vi.fn(async () => undefined), beforeChange: vi.fn(async () => undefined), select: vi.fn() }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
@@ -65,7 +66,7 @@ it("keeps an unknown creation latched while allowing read-only reconciliation", 
 });
 it("creates once and preserves the selected checkout when the existing draft guard refuses selection", async () => {
   state.write.mockResolvedValueOnce({ path: "/host/worktrees/wt-new-feature", branch: "new-feature", head: "a".repeat(40), isMain: false, missing: false });
-  state.beforeChange.mockRejectedValueOnce(new Error("Keep current draft"));
+  state.beforeChange.mockRejectedValueOnce(new DraftWriteError(new Error("QA native draft write blocked")));
   await mount();
   expect(container.textContent).toContain("Unsaved changes");
   await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Create worktree")!.click());
@@ -77,6 +78,11 @@ it("creates once and preserves the selected checkout when the existing draft gua
   await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Use this working folder")!.click());
   expect(state.beforeChange).toHaveBeenCalledTimes(1); expect(state.select).not.toHaveBeenCalled();
   expect(container.textContent).toContain("/host/worktrees/wt-new-feature");
+  expect(container.textContent).toContain("Couldn’t save the draft. Your edits are still open.");
+  expect(container.textContent).not.toContain("QA native draft write blocked");
+  await press("Use this working folder");
+  expect(state.select).toHaveBeenCalledExactlyOnceWith("/host/worktrees/wt-new-feature");
+  expect(state.write).toHaveBeenCalledTimes(1);
 });
 
 it("reviews the full source and base while cancellation retains the same input and selection",async()=>{

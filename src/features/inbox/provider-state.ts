@@ -25,6 +25,7 @@ export const initialInboxBrowseState: InboxBrowseState = {
 };
 export type InboxBrowseAction =
   | { type: "clear-filters" }
+  | { type: "clear-search" }
   | { type: "filter"; key: "assigned" | "all"; value: boolean }
   | { type: "search"; value: string }
   | { type: "commit-search"; value: string }
@@ -38,6 +39,8 @@ export function inboxBrowseReducer(
   switch (action.type) {
     case "clear-filters":
       return { ...state, assigned: false, all: false, search: "", committedSearch: "", selected: null, limit: 40, notice: null };
+    case "clear-search":
+      return { ...state, search: "", committedSearch: "", selected: null, limit: 40, notice: null };
     case "filter":
       return { ...state, [action.key]: action.value, selected: null, limit: 40, notice: null };
     case "search":
