@@ -45,6 +45,18 @@ it("explains a disabled Commit with the same blocker the state uses", () => {
   expect(button.props.accessibilityLabel).toBe("Commit. Write a commit message first.");
 });
 
+it("shows no visible hint for an empty message, only for blockers the screen cannot explain", () => {
+  const file = { relative: "a.ts", staged: true, unstaged: false, status: "M" };
+  const captions = (index: unknown) =>
+    nodes(GitCommitPanel({ ...base, index, message: "", busy: false } as never))
+      .filter((node) => node.type === "Body")
+      .map((node) => node.props.children);
+  expect(captions({ files: [file] })).not.toContain("Write a commit message first.");
+  expect(captions({ files: [file], operation: { kind: "merge" } })).toContain(
+    "Finish conflicts or the running operation first.",
+  );
+});
+
 it("keeps a ready Commit enabled without a stale explanation", () => {
   const index = { files: [{ relative: "a.ts", staged: true, unstaged: false, status: "M" }] } as unknown as GitDiffIndex;
   const button = commitButton(GitCommitPanel({ ...base, index, message: "Fix", busy: false } as never));

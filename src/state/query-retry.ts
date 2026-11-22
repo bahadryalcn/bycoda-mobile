@@ -22,6 +22,9 @@ export function isTransientConnectionError(error: unknown): boolean {
   return kind === "network" || kind === "timeout" || kind === "aborted" || failure?.transient === true;
 }
 
+/** How long automatic recovery may run before a dropped link or failed read is shown. */
+export const READ_RETRY_GRACE_MS = 6_000;
+
 /** A brief link failure stays hidden until its grace ends; a lasting or uncertain failure shows at once. */
 export function visibleReadError<T>(error: T, graceElapsed: boolean): T | null {
   if (!error) return null;

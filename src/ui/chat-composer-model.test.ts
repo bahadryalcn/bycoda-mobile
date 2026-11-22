@@ -1,5 +1,12 @@
 import { expect, it } from "vitest";
-import { COMPOSER_FIELD_PADDING, COMPOSER_LINE_HEIGHT, COMPOSER_MAX_LINES, composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "./chat-composer-model";
+import { COMPOSER_FIELD_PADDING, COMPOSER_LINE_HEIGHT, COMPOSER_MAX_LINES, composerCollapsed, composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "./chat-composer-model";
+
+it("collapses only an empty composer with nothing in progress", () => {
+  const idle = { toolbarOpen: false, hasContent: false, hasPrefix: false, suggesting: false, dictating: false };
+  expect(composerCollapsed(idle)).toBe(true);
+  for (const key of ["toolbarOpen", "hasContent", "hasPrefix", "suggesting", "dictating"] as const)
+    expect(composerCollapsed({ ...idle, [key]: true })).toBe(false);
+});
 
 it("places primary actions beside the editor when the measured controls cannot fit above Gboard", () => {
   expect(composerNeedsInlineActions(152, 1, 100, 48)).toBe(true);

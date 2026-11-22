@@ -177,9 +177,7 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
                   onPress: () => { setSource(""); setLevel(""); clearSearch(); },
                 } : query ? {
                   label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
-                } : {
-                  label: copy("Yenile", "Refresh"), onPress: () => { void refresh.onRefresh(); },
-                }}
+                } : undefined}
               />
             ) : null}
             {!filterDraft ? <QueryState query={sources} loading="none" /> : null}

@@ -25,8 +25,9 @@ export function ChatComposer({
   model,
   submit,
   secondarySubmit,
-  inlineSubmit = false,
+  inlineSubmit: shortRow = false,
   inlineLeading,
+  collapsed = false,
   onToolbarLayout,
 }: {
   value: string;
@@ -44,8 +45,11 @@ export function ChatComposer({
   inlineSubmit?: boolean;
   /** Optional recovery action in the short editor row. Add stays in the toolbar in this case. */
   inlineLeading?: ReactNode;
+  /** Idle and empty: one row. The toolbar stays mounted so its open menus and sheets survive. */
+  collapsed?: boolean;
   onToolbarLayout?: (event: LayoutChangeEvent) => void;
 }) {
+  const inlineSubmit = shortRow || collapsed;
   const { colors } = useMobileTheme();
   const { fontScale, width } = useWindowDimensions();
   const [toolbarWidth, setToolbarWidth] = useState(0);
@@ -77,7 +81,7 @@ export function ChatComposer({
       }}
     >
       {top}
-      <View style={inlineSubmit ? { flexDirection: "row", alignItems: "flex-end" } : undefined}>
+      <View style={inlineSubmit ? { flexDirection: "row", alignItems: collapsed ? "center" : "flex-end" } : undefined}>
         {inlineSubmit ? <View style={{ paddingStart: space.xs }}>{inlineLeading ?? leading}</View> : null}
         <AIInput.Field
           placeholderTextColor={colors.muted}
@@ -100,19 +104,23 @@ export function ChatComposer({
               textAlignVertical: "top",
             },
             inlineSubmit ? { flex: 1 } : undefined,
+            collapsed ? { paddingHorizontal: space.sm } : undefined,
             style,
           ]}
         />
         {inlineSubmit ? <View style={{ flexDirection: "row", gap: space.xs, paddingEnd: space.xs }}>
-          {submit}
+          {collapsed ? <>{secondarySubmit}{submit}</> : submit}
         </View> : null}
       </View>
       <AIInput.Toolbar
         onLayout={(event) => {
+          // A hidden toolbar reports zero. Keep its measured size for the next expansion.
+          if (collapsed) return;
           setToolbarWidth(event.nativeEvent.layout.width);
           onToolbarLayout?.(event);
         }}
         style={{
+          display: collapsed ? "none" : "flex",
           minHeight: TOOLBAR_HEIGHT,
           gap: space.xs,
           flexWrap: separateModel ? "wrap" : "nowrap",
@@ -124,7 +132,7 @@ export function ChatComposer({
         {separateModel ? [modelActions, leadingActions] : [leadingActions, modelActions]}
         <View style={{ marginStart: "auto", flexShrink: 0, flexDirection: "row", alignItems: "center", gap: space.xs }}>
           <ComposerActionArea />
-          {secondarySubmit}
+          {collapsed ? null : secondarySubmit}
           {inlineSubmit ? null : submit}
         </View>
       </AIInput.Toolbar>

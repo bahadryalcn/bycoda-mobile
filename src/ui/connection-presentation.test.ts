@@ -53,6 +53,12 @@ describe("connection presentation", () => {
     expect(connectionPhase({ ...state, successAt: 0, runtime: "ready" })).toBe("connected");
     expect(connectionPhase({ ...state, successAt: 1, errorAt: 99_500, probeStalled: true, runtime: "ready" })).toBe("connected");
   });
+  it("keeps a short reconnect quiet, then states the disconnect", () => {
+    expect(connectionPhase({ ...state, runtime: "backoff", recoveringSince: 99_000 })).toBe("checking");
+    expect(connectionPhase({ ...state, runtime: "backoff", recoveringSince: 94_001 })).toBe("checking");
+    expect(connectionPhase({ ...state, runtime: "backoff", recoveringSince: 94_000 })).toBe("disconnected");
+    expect(connectionPhase({ ...state, runtime: "blocked", recoveringSince: 99_000 })).toBe("disconnected");
+  });
   it("keeps device-level gates ahead of the live socket state", () => {
     expect(connectionPhase({ ...state, runtime: "ready", networkConnected: false })).toBe("offline");
     expect(connectionPhase({ ...state, runtime: "ready", unlocked: false })).toBe("locked");

@@ -1,14 +1,14 @@
 import type { ComponentType } from "react";
 import { ScrollView, View } from "react-native";
-import { Spinner } from "panelui-native/components/spinner";
 import Globe from "lucide-react-native/icons/globe";
 import Smartphone from "lucide-react-native/icons/smartphone";
 import Users from "lucide-react-native/icons/users";
+import { ChatStreaming } from "@/ui/chat-activity";
 import { Body } from "@/ui/typography";
 import { PressableCard } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { fontSize, lineHeight, metrics, radii, space } from "@/ui/tokens";
+import { fontSize, hitSlopFor, lineHeight, radii, space } from "@/ui/tokens";
 import { activityStateLabel, agentCountText, type SessionActivity } from "./session-activity-model";
 import { formatElapsed } from "./run-status-model";
 import { useElapsedNow } from "./use-elapsed-now";
@@ -25,9 +25,11 @@ type Props = {
 };
 
 const TIMED = new Set(["working", "waiting", "needs-input"]);
+/** A quiet text line; each segment's hit area still reaches the 48dp target. */
+const BAR_HEIGHT = 32;
 
 /**
- * One strip above the composer: what the session is doing, then labelled segments for the
+ * One borderless line above the composer: what the session is doing, then quiet segments for the
  * agents, device and browser it is using. Segments scroll sideways instead of wrapping.
  */
 export function SessionActivityBar({ activity, device, browser, onAgents, onDevice, onBrowser }: Props) {
@@ -42,26 +44,28 @@ export function SessionActivityBar({ activity, device, browser, onAgents, onDevi
   const busy = activity.state === "working" || activity.state === "waiting" || activity.state === "background";
   const dot = activity.state === "needs-input" ? colors.warning : activity.state === "done" ? colors.success : colors.tertiary;
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", minHeight: metrics.touchTarget, flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0,
-      borderRadius: radii.card, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.separator, paddingLeft: space.md, gap: space.row }}>
+    <View style={{ flexDirection: "row", alignItems: "center", minHeight: BAR_HEIGHT, flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0,
+      paddingHorizontal: space.xs, gap: space.sm }}>
       {label ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.row, flexShrink: 0, maxWidth: "55%" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexShrink: 0, maxWidth: "60%" }}>
           {/* Only the state is a live region: the timer changes every second and must not be re-announced. */}
           <View accessible accessibilityLabel={label} accessibilityLiveRegion="polite"
-            style={{ flexDirection: "row", alignItems: "center", gap: space.row, flexShrink: 1 }}>
-            {busy ? <Spinner size="sm" color={colors.info} trackColor={colors.tertiary} /> : <View style={{ width: 8, height: 8, borderRadius: radii.pill, backgroundColor: dot }} />}
-            <Body style={{ flexShrink: 1, fontSize: fontSize.control, lineHeight: lineHeight.control }}>{label}</Body>
+            style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexShrink: 1 }}>
+            {busy ? <ChatStreaming label={label} /> : <>
+              <View style={{ width: 6, height: 6, borderRadius: radii.pill, backgroundColor: dot }} />
+              <Body muted style={{ flexShrink: 1, fontSize: fontSize.caption, lineHeight: lineHeight.caption }}>{label}</Body>
+            </>}
           </View>
           {/* Read on demand when focused; never announced on its own. */}
           {elapsed ? (
             <View accessible accessibilityRole="timer" accessibilityLabel={elapsed} accessibilityLiveRegion="none" style={{ flexShrink: 0 }}>
-              <Body style={{ fontSize: fontSize.control, lineHeight: lineHeight.control, fontVariant: ["tabular-nums"] }}>{elapsed}</Body>
+              <Body muted style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption, fontVariant: ["tabular-nums"] }}>{elapsed}</Body>
             </View>
           ) : null}
         </View>
       ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}
-        contentContainerStyle={{ alignItems: "center", gap: space.sm, paddingRight: space.sm }}>
+        contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end", alignItems: "center", gap: space.xs }}>
         {hasAgents ? (
           <Segment Icon={Users} text={agentCountText(activity.counts, copy)} a11y={`${agentCountText(activity.counts, copy, true)}. ${copy("Ajanları aç", "Open agents")}`} onPress={onAgents} />
         ) : null}
@@ -81,11 +85,11 @@ export function SessionActivityBar({ activity, device, browser, onAgents, onDevi
 function Segment({ Icon, text, a11y, onPress }: { Icon: ComponentType<{ size?: number; color?: string }>; text: string; a11y: string; onPress: () => void }) {
   const { colors } = useMobileTheme();
   return (
-    <PressableCard label={a11y} onPress={onPress}
-      style={{ minHeight: metrics.touchTarget, flexDirection: "row", alignItems: "center", gap: space.row, paddingHorizontal: space.md, marginHorizontal: 0,
+    <PressableCard label={a11y} onPress={onPress} hitSlop={hitSlopFor(BAR_HEIGHT)}
+      style={{ minHeight: BAR_HEIGHT, flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: 0, paddingHorizontal: space.sm, marginHorizontal: 0,
         borderRadius: radii.pill, flexShrink: 0 }}>
-      <Icon size={16} color={colors.tertiary} />
-      <Body numberOfLines={1} style={{ fontSize: fontSize.control, lineHeight: lineHeight.control, fontVariant: ["tabular-nums"] }}>{text}</Body>
+      <Icon size={14} color={colors.muted} />
+      <Body muted numberOfLines={1} style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption, fontVariant: ["tabular-nums"] }}>{text}</Body>
     </PressableCard>
   );
 }

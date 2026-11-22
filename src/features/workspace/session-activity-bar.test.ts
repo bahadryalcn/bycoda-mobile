@@ -9,7 +9,7 @@ vi.mock("react-native", () => ({
     h("div", { "data-label": accessibilityLabel, "data-live": accessibilityLiveRegion, "data-role": accessibilityRole }, children),
   ScrollView: ({ children }: PropsWithChildren) => h("div", null, children),
 }));
-vi.mock("panelui-native/components/spinner", () => ({ Spinner: () => h("i", null, "spinner") }));
+vi.mock("@/ui/chat-activity", () => ({ ChatStreaming: ({ label }: { label: string }) => h("p", null, label) }));
 vi.mock("lucide-react-native/icons/globe", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/smartphone", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/users", () => ({ default: () => null }));
@@ -20,7 +20,7 @@ vi.mock("@/ui/copy", () => ({
     values?.p0 === undefined ? en : en.replace("{p0}", String(values.p0)),
 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { raised: "r", separator: "s", warning: "w", success: "ok", tertiary: "t", info: "i" } }) }));
-vi.mock("@/ui/tokens", () => ({ fontSize: {}, lineHeight: {}, metrics: {}, radii: {}, space: {} }));
+vi.mock("@/ui/tokens", () => ({ fontSize: {}, hitSlopFor: () => 8, lineHeight: {}, radii: {}, space: {} }));
 vi.mock("./use-elapsed-now", () => ({ useElapsedNow: () => clock.now }));
 import { SessionActivityBar } from "./session-activity-bar";
 

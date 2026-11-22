@@ -32,8 +32,8 @@ import { BusyIndicator as Spinner } from "./busy-indicator";
 import { decorativeSvgProps } from "./accessibility";
 import { remoteErrorKind } from "./error-message";
 import { machineSuccessStore } from "./machine-success-store";
-import { refetchRecoveredReads } from "../state/query-retry";
-import { recordActiveHostDisconnected, useHostRuntimeStartupFailed, useHostRuntimeState } from "../state/host-runtime-state";
+import { READ_RETRY_GRACE_MS, refetchRecoveredReads } from "../state/query-retry";
+import { hostRecoveringSince, recordActiveHostDisconnected, useHostRuntimeStartupFailed, useHostRuntimeState } from "../state/host-runtime-state";
 
 const PROBE_STALL_MS = 5_000;
 
@@ -106,6 +106,10 @@ export function useMachineStatus() {
   const now = Date.now();
   const connectedUntil = successAt + CONNECTED_WINDOW_MS;
   useRerenderAt(successAt > 0 && now < connectedUntil ? connectedUntil : null);
+  const recoveringSince = hostRecoveringSince(machine?.id);
+  const quietUntil = recoveringSince === null ? null : recoveringSince + READ_RETRY_GRACE_MS;
+  // A live socket can stay in backoff without another state change; end the quiet window on time.
+  useRerenderAt(runtime === "backoff" && quietUntil !== null && now < quietUntil ? quietUntil : null);
   const phase = connectionPhase({
     paired: !!machine,
     networkConnected: network.isConnected,
@@ -120,6 +124,7 @@ export function useMachineStatus() {
     now,
     probeStalled,
     runtime,
+    recoveringSince,
   });
   const statuses = {
     unpaired: copy("Bilgisayar bağla", "Connect a computer"),

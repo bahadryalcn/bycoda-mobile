@@ -286,8 +286,9 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
       }
     >
       {!embedded ? <Stack.Screen options={{ title: copy("Tarayıcı", "Browser") }} /> : null}
-      {state?.runtime && !state.runtime.installed && !(review?.method === "browser.setup" && review.scope === visibleScope) ? <Notice message={copy("Tarayıcıyı önce bilgisayardaki bycoda’dan kur.", "Set up the browser in bycoda on your computer first.")} /> : null}
+      {state?.runtime && !state.runtime.installed && !machine?.capabilities?.includes("browser.shared.setup") ? <Notice message={copy("Tarayıcıyı önce bilgisayardaki bycoda’dan kur.", "Set up the browser in bycoda on your computer first.")} /> : null}
       {state?.runtime && !state.runtime.installed && machine?.capabilities?.includes("browser.shared.setup") && !(review?.method === "browser.setup" && review.scope === visibleScope) ? <Button
+        tone="primary" fullWidth
         label={copy("Tarayıcı araçlarını kur", "Set up browser tools")} busy={state.runtime.installing} disabled={busy || state.runtime.installing}
         onPress={() => { if (visibleScope && current(visibleScope)) setReview({ scope: visibleScope, method: "browser.setup" }); }} /> : null}
       {review?.method === "browser.setup" ? reviewCard : null}

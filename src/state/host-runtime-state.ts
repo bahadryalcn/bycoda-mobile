@@ -7,6 +7,7 @@ import type { MobileHostRuntimeState } from "./host-runtime";
  * (legacy HTTP cohort, web, no lease yet) has no live-socket evidence.
  */
 const states = new Map<string, MobileHostRuntimeState>();
+const recoveringSince = new Map<string, number>();
 const listeners = new Set<() => void>();
 let startupFailed = false;
 
@@ -25,11 +26,18 @@ export function useHostRuntimeStartupFailed(): boolean {
 export function recordHostRuntimeState(machineId: string, state: MobileHostRuntimeState): void {
   if (states.get(machineId) === state) return;
   states.set(machineId, state);
+  if (state !== "connecting" && state !== "backoff") recoveringSince.delete(machineId);
+  else if (!recoveringSince.has(machineId)) recoveringSince.set(machineId, Date.now());
   for (const listener of [...listeners]) listener();
 }
 
 export function hostRuntimeState(machineId: string | null | undefined): MobileHostRuntimeState | undefined {
   return machineId ? states.get(machineId) : undefined;
+}
+
+/** When the current unbroken connect/backoff cycle began, shared by every status surface. */
+export function hostRecoveringSince(machineId: string | null | undefined): number | null {
+  return (machineId ? recoveringSince.get(machineId) : undefined) ?? null;
 }
 
 export function subscribeHostRuntimeStates(listener: () => void): () => void {
@@ -88,5 +96,6 @@ export function resetHostRuntimeStates(): void {
   activeDisconnected = false;
   startupFailed = false;
   states.clear();
+  recoveringSince.clear();
   for (const listener of [...listeners]) listener();
 }

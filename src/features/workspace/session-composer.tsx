@@ -48,7 +48,7 @@ import { activeComposerMode, setComposerMode, type ComposerMode } from "./compos
 import { ChatComposer } from "@/ui/chat-composer";
 import { ComposerModelChip } from "./composer-model-chip";
 import { ComposerActionsProvider } from "@/ui/composer-actions";
-import { composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "@/ui/chat-composer-model";
+import { composerCollapsed, composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "@/ui/chat-composer-model";
 import { haptic } from "@/ui/motion";
 import {
   composerCommand,
@@ -89,6 +89,10 @@ import { lockOutbox } from "../outbox/runtime/delivery";
 import { registerOutboxEditor } from "../outbox/runtime/composer-edit";
 import { cleanOutboxFiles } from "../outbox/runtime/custody";
 
+/** A chip tap blurs the field just after the touch; the row must not collapse under its menu. */
+const CAPSULE_TOUCH_MS = 600;
+const touchedRecently = (at: number) => Date.now() - at <= CAPSULE_TOUCH_MS;
+
 export function SessionComposer({
   scope,
   session,
@@ -103,6 +107,22 @@ export function SessionComposer({
   const enterSends = useKeyboardPreferences((state) => state.hydrated && !state.error && state.enterSends);
   const routeFocused = useIsFocused();
   const [inputFocused, setInputFocused] = useState(false);
+  const [toolbarOpen, setToolbarOpen] = useState(false);
+  const fieldFocused = useRef(false);
+  const capsuleTouchedAt = useRef(0);
+  // Android Back hides the keyboard without blurring the field, so the keyboard also drives the row.
+  useEffect(() => {
+    const shown = Keyboard.addListener("keyboardDidShow", () => {
+      if (fieldFocused.current) setToolbarOpen(true);
+    });
+    const hidden = Keyboard.addListener("keyboardDidHide", () => {
+      if (!touchedRecently(capsuleTouchedAt.current)) setToolbarOpen(false);
+    });
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
   const palette = useCommandPalette();
   const client = useHostClient();
   const account = useAccount();
@@ -563,6 +583,13 @@ export function SessionComposer({
   };
   const hasContent = !!prompt.trim() || value.attachments.length > 0 || !!value.noteCard;
   const canStop = running && !!session?.runId;
+  const collapsed = composerCollapsed({
+    toolbarOpen,
+    hasContent,
+    hasPrefix,
+    suggesting: !!token,
+    dictating: dictation.phase !== "idle",
+  });
   const stop = () => {
     if (!session || !session.runId || stopping.current) return;
     const intent = sessionIntent(session, {
@@ -709,8 +736,10 @@ export function SessionComposer({
             </View>
           )}
         </SessionAgents>
+        <View onTouchStart={() => { capsuleTouchedAt.current = Date.now(); }}>
         <ChatComposer
           onToolbarLayout={measureToolbar}
+          collapsed={collapsed}
           inlineSubmit={shortFrame}
           inlineLeading={shortFrame && !showInlinePrefix && !compactSuggestions && noteErrorMessage ? (
             <ChatCircleAction label={copy("Taslağı incele", "Review draft")} hint={noteErrorMessage} onPress={openDraftDetails}>
@@ -788,8 +817,16 @@ export function SessionComposer({
             </ChatCircleAction>
           }
           field={{
-            onFocus: () => setInputFocused(true),
-            onBlur: () => setInputFocused(false),
+            onFocus: () => {
+              fieldFocused.current = true;
+              setInputFocused(true);
+              setToolbarOpen(true);
+            },
+            onBlur: () => {
+              fieldFocused.current = false;
+              setInputFocused(false);
+              if (!touchedRecently(capsuleTouchedAt.current)) setToolbarOpen(false);
+            },
             accessibilityLabel: copy("Mesaj", "Message"),
             selection,
             onSelectionChange: (event) => {
@@ -804,7 +841,7 @@ export function SessionComposer({
           }}
           secondarySubmit={
             <>
-              {contextReading ? (
+              {contextReading && !collapsed ? (
                 <ComposerContextMeter
                   reading={contextReading}
                   compactDisabled={running || unavailable}
@@ -832,7 +869,7 @@ export function SessionComposer({
                   />
                 </ChatCircleAction>
               ) : null}
-              {canStop && !hasContent ? null : (
+              {(canStop || collapsed) && !hasContent ? null : (
                 <ComposerSendButton
                   mode={mode}
                   alternate={alternate}
@@ -846,6 +883,7 @@ export function SessionComposer({
             </>
           }
         />
+        </View>
         <View onLayout={measureFooter} style={{ gap: space.xs }}>
           <ComposerDictationFeedback dictation={dictation} />
           <ComposerNotices

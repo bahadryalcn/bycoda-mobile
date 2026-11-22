@@ -52,6 +52,23 @@ it("keeps the same field mounted alongside the primary actions in a short keyboa
   expect(compact[2].props.children[1].props.children.slice(1)).toEqual(["Dictate", null]);
 });
 
+it("collapses an idle composer to one row without remounting the field or duplicating actions", () => {
+  const layout = vi.fn();
+  const props = { leading: "Add", submit: "Stop", secondarySubmit: "Dictate", model: "Model", mode: "Mode", onToolbarLayout: layout };
+  const normal = render(props).props.children;
+  const collapsed = render({ ...props, collapsed: true }).props.children;
+  const [start, field, end] = collapsed[1].props.children;
+  expect(field.type).toBe(normal[1].props.children[1].type);
+  expect(start.props.children).toBe("Add");
+  expect(end.props.children.props.children).toEqual(["Dictate", "Stop"]);
+  const toolbar = collapsed[2];
+  expect(flatten(toolbar.props.style).display).toBe("none");
+  expect(toolbar.props.children[0][0].props.children[0]).toBeNull();
+  expect(toolbar.props.children[1].props.children.slice(1)).toEqual([null, null]);
+  toolbar.props.onLayout({ nativeEvent: { layout: { width: 0, height: 0 } } });
+  expect(layout).not.toHaveBeenCalled();
+});
+
 it("puts Add beside the field at short heights, or keeps Add below a dedicated draft recovery action", () => {
   const props = { leading: "Add", submit: "Send", inlineSubmit: true };
   const compact = render(props).props.children;

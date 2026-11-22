@@ -1,3 +1,5 @@
+import { READ_RETRY_GRACE_MS } from "../state/query-retry";
+
 export type ConnectionPhase =
   | "unpaired"
   | "offline"
@@ -33,6 +35,8 @@ export function connectionPhase(input: {
    * describe poll below.
    */
   runtime?: string | null;
+  /** Start of the current reconnect cycle; a short drop reads as checking until its grace ends. */
+  recoveringSince?: number | null;
 }): ConnectionPhase {
   if (!input.paired) return "unpaired";
   if (input.networkConnected === false) return "offline";
@@ -46,7 +50,9 @@ export function connectionPhase(input: {
     case "connecting":
       return "checking";
     case "backoff":
-      return "disconnected";
+      return input.recoveringSince != null && input.now - input.recoveringSince < READ_RETRY_GRACE_MS
+        ? "checking"
+        : "disconnected";
     case "blocked":
       return input.accessDenied && input.errorAt >= input.successAt ? "access" : "disconnected";
   }

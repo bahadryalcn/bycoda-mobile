@@ -270,7 +270,7 @@ export function GitCommitPanel({
         >
           <GitCommitHorizontal size={18} color={colors.primaryText} />
         </Button>
-        {commitReason && !busy ? <Body muted selectable={false} style={uiStyles.caption}>{commitReason}</Body> : null}
+        {commitReason && commitBlock !== "message" && !busy ? <Body muted selectable={false} style={uiStyles.caption}>{commitReason}</Body> : null}
       </Disclosure>}
       {index.remote ? (
         <>
@@ -397,7 +397,7 @@ export function GitCommitBar({
           <GitCommitHorizontal size={18} color={colors.primaryText} />
         )}
       </Button> : null}
-      {reason && !busy ? <Body muted selectable={false} style={uiStyles.caption}>{reason}</Body> : null}
+      {reason && !(primary.kind === "commit" && primary.block === "message") && !busy ? <Body muted selectable={false} style={uiStyles.caption}>{reason}</Body> : null}
     </View>
   );
 }

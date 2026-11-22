@@ -11,14 +11,13 @@ import type { QueryStateProps, MutationStateProps } from "./component-props";
 import { SheetGuardContext } from "./sheet-guard-context";
 import { useConnectionFeedbackOwner } from "./connection-feedback-scope";
 import { FormActionBusy } from "./form-action-context";
-import { isTransientConnectionError, reconnectRefetchDelay } from "../state/query-retry";
+import { isTransientConnectionError, READ_RETRY_GRACE_MS, reconnectRefetchDelay } from "../state/query-retry";
 import { useActiveHostLinkDown, useActiveHostRecoveryMachine, useHostRuntimeState } from "../state/host-runtime-state";
 import { useDeviceOffline } from "../state/device-network";
 import { RemoteHostError } from "../remote/host-error";
 
 /** After this many quiet automatic refetches a dropped link is shown as a real, retryable error. */
 const RECONNECT_ATTEMPTS = 4;
-const READ_RETRY_GRACE_MS = 6_000;
 
 /** Delay recovery feedback without changing the caller's read or write gates. */
 export function useReadRetryNotice(recovering: boolean, machineId: string | null) {

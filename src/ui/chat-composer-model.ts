@@ -20,6 +20,17 @@ export function composerNeedsInlineActions(available: number | null, fontScale: 
   return available < Math.max(3 * metrics.touchTarget, composerMinimumHeight(scale) + chrome);
 }
 
+/** An empty, unfocused composer is one row. Any draft, suggestion or recording keeps its controls. */
+export function composerCollapsed(input: {
+  toolbarOpen: boolean;
+  hasContent: boolean;
+  hasPrefix: boolean;
+  suggesting: boolean;
+  dictating: boolean;
+}): boolean {
+  return !input.toolbarOpen && !input.hasContent && !input.hasPrefix && !input.suggesting && !input.dictating;
+}
+
 /** Leave room for Stop and Send together, the other actions, and the model label. */
 export function needsModelRow(width: number, fontScale: number): boolean {
   const scale = positive(fontScale) ? Math.max(1, fontScale) : 1;

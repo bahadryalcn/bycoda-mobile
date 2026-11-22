@@ -37,7 +37,7 @@ vi.mock("./use-dictation", () => ({ useDictation: () => ({ view: {}, error: null
 vi.mock("./composer-dictation", () => ({ ComposerDictationButton: () => null, ComposerDictationFeedback: () => null }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("react-native", () => ({
-  Keyboard: { dismiss: state.dismissKeyboard },
+  Keyboard: { dismiss: state.dismissKeyboard, addListener: () => ({ remove: () => undefined }) },
   View: ({ children, style }: PropsWithChildren<{ style?: { display?: "none" } }>) =>
     createElement("div", { hidden: style?.display === "none" }, children),
   ScrollView: ({ children, style, keyboardShouldPersistTaps }: PropsWithChildren<{
