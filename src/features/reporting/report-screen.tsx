@@ -41,7 +41,7 @@ export function ContentReportScreen() {
   const privacyInfo = useInfoHint(copy(
     "Yalnızca açıklaman ve eklemeyi seçtiğin alıntı incelenmek üzere bycoda’ya gönderilir. Hesap ve bilgisayar bilgilerin eklenmez, bu yüzden bycoda sana yanıt veremez. Bu taslak yalnızca bellekte tutulur; uygulama sonlandırılırsa kaybolur.",
     "Only your description and any excerpt you choose are sent to bycoda for review. Your account and computer details are not attached, so bycoda cannot reply to you. This draft is kept only in memory and is lost if the app process ends.",
-  ));
+  ), "visible");
   const warning = copy(
     "Erişim anahtarı, eşleştirme kodu, özel dosya veya kişisel bilgi ekleme.",
     "Do not add access keys, pairing codes, private files or personal information.",

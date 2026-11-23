@@ -77,6 +77,7 @@ export function SecuritySettings() {
       {security.enabled ? (
         <HintSection
           title={copy("Kilitleme", "Locking")}
+          presentation="inline"
           help={copy(
             "Uygulama arka plana geçtiğinde seçtiğin süre sonunda tekrar giriş gerekir. Bu süre içinde dönersen kaldığın yerden devam edersin. İçerik arka planda hemen gizlenir. Uygulamayı yeniden açtığında veya Şimdi kilitle’yi kullandığında her zaman giriş gerekir.",
             "Authentication is required after the chosen time in the background. Return sooner to continue where you left off. Content is hidden immediately in the background. A fresh app launch or Lock now always requires authentication.",

@@ -74,7 +74,7 @@ export function DevicePermissionSettings() {
   const permissionInfo = useInfoHint(`${labels.camera}: ${reasons.camera}
 ${labels.microphone}: ${reasons.microphone}
 ${labels.notifications}: ${reasons.notifications}
-${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`);
+${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`, "inline");
   const testInfo = useInfoHint(copy("Bu telefonda dene yerel bir bildirim gösterir. Bilgisayardan dene ise bilgisayara bu telefona bildirim göndermesini söyler.", "Test on this phone shows a local notification here. Test from the computer asks the computer to send one to this phone."));
   const issues = failed.map((kind) => {
     const read = reads[kind];

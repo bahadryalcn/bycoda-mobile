@@ -133,7 +133,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
       <Stack.Screen options={{ title: copy("QR kodu tara", "Scan QR code"), headerLeft: () => <HeaderBackButton onPress={() => leave(onClose)} /> }} />
       <Animated.View entering={enterItem(0)} style={{ width: "100%", maxWidth: metrics.entryWidth, alignSelf: "center", gap: space.lg }}>
       <View onLayout={event => setIntroHeight(event.nativeEvent.layout.height)}>
-        <HintLabel label={copy("Bağlantı kodu", "Pairing code")} always help={copy(
+        <HintLabel label={copy("Bağlantı kodu", "Pairing code")} presentation="visible" help={copy(
           "Bilgisayarındaki bycoda bağlantı QR kodunu kameraya göster.",
           "Point the camera at the pairing QR code in bycoda on your computer.",
         )} />

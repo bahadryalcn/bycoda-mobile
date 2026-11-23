@@ -44,7 +44,7 @@ export function PairingPaste({ disabled, onCode, onCancel }: PairingPasteProps) 
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <View style={{ gap: space.sm }}>
-        <HintLabel label={copy("Bağlantı kodunu yapıştır", "Paste pairing code")} style={uiStyles.heading} always help={copy(
+        <HintLabel label={copy("Bağlantı kodunu yapıştır", "Paste pairing code")} style={uiStyles.heading} presentation="visible" help={copy(
             "Bilgisayarındaki bycoda’dan bağlantı kodunu kopyalayıp buraya yapıştır.",
             "Copy the pairing code from bycoda on your computer and paste it here.",
           )} />

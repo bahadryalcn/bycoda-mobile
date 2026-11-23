@@ -19,6 +19,7 @@ vi.mock("../outbox/runtime/custody", () => ({ cleanOutboxFiles: async () => {} }
 const state = vi.hoisted(() => ({ activeId: "machine", supported: true, browserSupported: false, stageBrowser: vi.fn(), removeStaged: vi.fn(), draft: null as ComposerDraft | null,
   templateInsert: null as null | ((body: string) => void), draftReady: true,
   selection: { start: 0, end: 0 }, select: null as null | ((selection: { start: number; end: number }) => void),
+  keyboard: {} as Record<string, () => void>, collapsed: false, focusField: () => {}, blurField: () => {},
   receiver: null as null | ((request: ComposerTransfer) => void), renderDraft: null as null | (() => void),
   onCommand: vi.fn(async () => undefined), persist: vi.fn(async () => undefined), enqueue: vi.fn(), pause: vi.fn(async () => undefined), dismissKeyboard: vi.fn(),
   register: (receiver: (request: ComposerTransfer) => void) => { state.receiver = receiver; return () => { state.receiver = null; }; },
@@ -37,7 +38,7 @@ vi.mock("./use-dictation", () => ({ useDictation: () => ({ view: {}, error: null
 vi.mock("./composer-dictation", () => ({ ComposerDictationButton: () => null, ComposerDictationFeedback: () => null }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("react-native", () => ({
-  Keyboard: { dismiss: state.dismissKeyboard, addListener: () => ({ remove: () => undefined }) },
+  Keyboard: { dismiss: state.dismissKeyboard, addListener: (name: string, listener: () => void) => { state.keyboard[name] = listener; return { remove: () => undefined }; } },
   View: ({ children, style }: PropsWithChildren<{ style?: { display?: "none" } }>) =>
     createElement("div", { hidden: style?.display === "none" }, children),
   ScrollView: ({ children, style, keyboardShouldPersistTaps }: PropsWithChildren<{
@@ -106,11 +107,14 @@ vi.mock("@/ui/chat-controls", () => {
   const Button = ({ label, hint, disabled, onPress }: { label: string; hint?: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress, title: hint }, label);
   return { ChatCircleAction: Button, ChatToolbarAction: Button, ChatAction: Button };
 });
-vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, submit, mode, leading, inlineLeading, field, top }: {
+vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, submit, mode, leading, inlineLeading, field, top, collapsed }: {
   value: string; submit: ReactNode; mode: ReactNode; leading: ReactNode; top?: ReactNode;
-  inlineLeading?: ReactNode;
-  field: { selection: { start: number; end: number }; onSelectionChange: (event: unknown) => void };
+  inlineLeading?: ReactNode; collapsed?: boolean;
+  field: { selection: { start: number; end: number }; onSelectionChange: (event: unknown) => void; onFocus: () => void; onBlur: () => void };
 }) => {
+  state.collapsed = !!collapsed;
+  state.focusField = field.onFocus;
+  state.blurField = field.onBlur;
   state.selection = field.selection;
   state.select = (selection) => field.onSelectionChange({ nativeEvent: { selection } });
   return createElement("div", null, top, inlineLeading, createElement("textarea", { value, readOnly: true }), leading, mode, submit);
@@ -299,6 +303,19 @@ it("rejects wrong browser conversation/project or old host before staging a file
   expect(() => state.receiver!(request)).toThrow(/cannot be added/); state.browserSupported = false;
   expect(() => state.receiver!({ ...request, browserCapture: { ...request.browserCapture, capture: browserCapture() } })).toThrow(/cannot be added/);
   expect(state.stageBrowser).not.toHaveBeenCalled(); expect(state.draft).toBeNull();
+});
+
+it("collapses an empty composer when Back hides the keyboard and reopens when the keyboard returns", async () => {
+  await mount();
+  expect(state.collapsed).toBe(true);
+  await act(async () => state.focusField());
+  expect(state.collapsed).toBe(false);
+  await act(async () => state.keyboard.keyboardDidHide!());
+  expect(state.collapsed).toBe(true);
+  await act(async () => state.keyboard.keyboardDidShow!());
+  expect(state.collapsed).toBe(false);
+  await act(async () => state.blurField());
+  expect(state.collapsed).toBe(true);
 });
 
 it("shows a direct Stop while a run is active and cancels that exact run after pausing the queue", async () => {

@@ -50,7 +50,7 @@ export function AssistantPermissions({
 }) {
   const copy = useCopy();
   const [opening, setOpening] = useState(profile);
-  const [level, setLevel] = useState<"legacy" | "watch" | "projects" | "everything">(
+  const [level, setLevel] = useState<"legacy" | "ask" | "watch" | "projects" | "everything">(
     opening.permissionLevel ?? "legacy",
   );
   const [projectIds, setProjectIds] = useState(opening.permissionProjectIds ?? []);
@@ -213,6 +213,7 @@ export function AssistantPermissions({
                   },
                 ]
               : []),
+            { value: "ask", label: copy("Her işlemde sor", "Ask for each operation") },
             { value: "watch", label: copy("Yalnızca izle", "Watch only") },
             { value: "projects", label: copy("Seçili projeler", "Selected projects") },
             { value: "everything", label: copy("Her şey", "Everything") },

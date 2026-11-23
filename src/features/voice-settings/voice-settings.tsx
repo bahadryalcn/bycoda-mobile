@@ -6,17 +6,15 @@ import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { PreferenceStorageNotice } from "@/ui/preference-storage-notice";
 import { View } from "react-native";
-import ChevronUp from "lucide-react-native/icons/chevron-up";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
 import AudioLines from "lucide-react-native/icons/audio-lines";
-import { Button, ConfirmationCard, ErrorNotice, IconButton, NavigationGroup, NavigationRow, Notice, QueryState, SectionHeader, SegmentedRow, SettingIcon, Sheet, Stack, ValueRow } from "@/ui/primitives";
-import { useMobileTheme } from "@/ui/theme";
+import { Button, ConfirmationCard, ErrorNotice, NavigationGroup, NavigationRow, Notice, QueryState, SectionHeader, SettingIcon, Sheet, Stack, ValueRow } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { space } from "@/ui/tokens";
 import { formatBytes } from "../settings/local-data-sizes";
 import { downloadPercent, modelBusy, modelRowState, parseLocalModels, parseModelJob, type LocalVoiceModel, type ModelAction } from "./voice-models-model";
 import { speechSummary, VoiceChoices } from "./voice-choices";
-import { moveVisibleMic, useVoicePreferences, visibleMics, voicePreferences, type MicKind } from "./voice-preferences";
+import { useVoicePreferences } from "./voice-preferences";
+import { MicrophonePriority } from "./microphone-priority";
 
 /** Settings → Voice: speech recognition, the assistant's voice, this computer's models and microphone priority. */
 export function VoiceSettings() {
@@ -60,17 +58,14 @@ function VoiceSettingsBody() {
           label={copy("Bilgisayar bağla", "Connect a computer")}
           onPress={() => requestCloseThen(() => router.navigate("/machines"))}
         />
-      ) : (
-      <>
-      <VoiceChoices showStorageNotice={false} />
-      <LocalModels key={connection.token} supported={localSupported} computer={machine.name} current={connection.isCurrent} />
-      </>
-      )}
+      ) : <VoiceChoices showStorageNotice={false} />}
       <MicrophonePriority order={preferences.micOrder} disabled={!hydrated} />
+      {machine && !storageError && !waitingForComputer
+        ? <LocalModels key={connection.token} supported={localSupported} computer={machine.name} current={connection.isCurrent} />
+        : null}
     </Stack>
   );
 }
-
 function LocalModels({ supported, computer, current }: { supported: boolean; computer: string; current(): boolean }) {
   const copy = useCopy();
   const [confirming, setConfirming] = useState<LocalVoiceModel | null>(null);
@@ -152,43 +147,6 @@ function LocalModels({ supported, computer, current }: { supported: boolean; com
         })}
         {action.error ? <ErrorNotice error={action.error} /> : null}
       </>}
-    </Stack>
-  );
-}
-
-function MicrophonePriority({ order, disabled }: { order: MicKind[]; disabled: boolean }) {
-  const { colors } = useMobileTheme();
-  const copy = useCopy();
-  const names: Record<MicKind, string> = {
-    wired: copy("Kablolu", "Wired"),
-    bluetooth: copy("Bluetooth", "Bluetooth"),
-    builtin: copy("Yerleşik", "Built-in"),
-    carplay: copy("CarPlay", "CarPlay"),
-  };
-  const os = process.env.EXPO_OS;
-  const visible = visibleMics(order, os);
-  const move = (kind: MicKind, delta: -1 | 1) => void voicePreferences.getState().update({ micOrder: moveVisibleMic(order, os, kind, delta) });
-  return (
-    <Stack>
-      <SectionHeader title={copy("Mikrofon önceliği", "Microphone priority")} />
-      <NavigationGroup>
-        {visible.map((kind, index) => (
-          <ValueRow
-            key={kind}
-            label={`${index + 1}. ${names[kind]}`}
-            trailing={
-              <View style={{ flexDirection: "row" }}>
-                <IconButton label={copy("{p0} yukarı", "Move {p0} up", { p0: names[kind] })} disabled={disabled || index === 0} onPress={() => move(kind, -1)}>
-                  <ChevronUp size={18} color={colors.muted} />
-                </IconButton>
-                <IconButton label={copy("{p0} aşağı", "Move {p0} down", { p0: names[kind] })} disabled={disabled || index === visible.length - 1} onPress={() => move(kind, 1)}>
-                  <ChevronDown size={18} color={colors.muted} />
-                </IconButton>
-              </View>
-            }
-          />
-        ))}
-      </NavigationGroup>
     </Stack>
   );
 }

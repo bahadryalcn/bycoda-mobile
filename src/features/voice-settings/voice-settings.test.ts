@@ -11,10 +11,12 @@ const f = vi.hoisted(() => ({
   eleven: false, draft: undefined as undefined | ((value: string) => void),
   confirm: undefined as undefined | (() => void),
   choice: undefined as undefined | (() => void), persist: vi.fn(), beforePatch: undefined as undefined | Promise<void>,
+  chooseSpeech: undefined as undefined | ((value: string) => void),
   preferenceError: null as { operation: "save" } | null, retryPreferences: vi.fn(async () => {}),
 }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
 vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
+vi.mock("./microphone-priority", () => ({ MicrophonePriority: () => null }));
 vi.mock("lucide-react-native/icons/chevron-up", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/audio-lines", () => ({ default: () => null }));
@@ -29,7 +31,7 @@ vi.mock("./voice-preferences", () => ({
   voicePreferences: { getState: () => ({ update: async (update: Partial<VoicePreferences> | (() => Partial<VoicePreferences>)) => {
     await f.beforePatch;
     f.persist(typeof update === "function" ? update() : update);
-  } }) }, moveVisibleMic: vi.fn(), visibleMics: (order: unknown[]) => order,
+  } }) },
 }));
 vi.mock("@/state/connection-scope", () => ({
   useConnectionScope: () => {
@@ -57,11 +59,14 @@ vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => h("div", null, children);
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress(): void }) => h("button", { onClick: onPress, disabled }, label);
   return {
-    Button, IconButton: Group, Stack: Group, NavigationGroup: Group, SectionHeader: ({ title }: { title: string }) => h("h2", null, title),
+    Body: Group, Button, IconButton: Group, Stack: Group, NavigationGroup: Group, SectionHeader: ({ title }: { title: string }) => h("h2", null, title),
     Notice: ({ message, onRetry }: { message: string; onRetry?: () => void }) => h("div", null, message,
       onRetry ? h(Button, { label: "Retry", onPress: onRetry }) : null), ErrorNotice: () => null, QueryState: () => null,
     SettingIcon: () => null, SegmentedRow: () => null,
-    SelectField: ({ label }: { label: string }) => h("p", null, label),
+    SelectField: ({ label, onChange }: { label: string; onChange(value: string): void }) => {
+      if (label === "Assistant's voice") f.chooseSpeech = onChange;
+      return h("p", null, label);
+    },
     SelectRow: ({ label, detail, disabled, onPress }: { label: string; detail?: string; disabled?: boolean; onPress(): void }) => {
       if (label === "OpenAI") f.choice = onPress;
       return h("p", { "data-choice": label, "aria-disabled": disabled }, label, detail);
@@ -86,7 +91,7 @@ let root: ReturnType<typeof createRoot>;
 afterEach(async () => {
   await act(async () => root?.unmount()); vi.unstubAllGlobals(); vi.clearAllMocks();
   Object.assign(f, { installed: true, job: { state: "idle" }, cloud: undefined, scope: "office-1", pairing: "office",
-    computer: "Office PC", eleven: false, draft: undefined, confirm: undefined, choice: undefined, beforePatch: undefined, preferenceError: null });
+    computer: "Office PC", eleven: false, draft: undefined, confirm: undefined, choice: undefined, chooseSpeech: undefined, beforePatch: undefined, preferenceError: null });
 });
 
 it("shows which computer update or account setup the transcription choice needs", async () => {
@@ -104,6 +109,20 @@ it("shows which computer update or account setup the transcription choice needs"
   expect(find("OpenAI").textContent).toContain("Codex");
   expect(find("Grok").getAttribute("aria-disabled")).toBe("true");
   expect(find("Grok").textContent).toContain("Needs setup on the computer");
+  expect(container.textContent).toContain("Live voice on desktop: OpenAI Realtime");
+  expect(container.textContent).not.toContain("Grok Voice");
+});
+
+it("keeps TTS selection limited to supported engines while naming desktop conversation modes", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div"); root = createRoot(container);
+  f.cloud = { openai: true, xai: true, elevenlabs: false };
+  await act(async () => root.render(h(VoiceChoices)));
+  expect(container.textContent).toContain("OpenAI Realtime · Grok Voice");
+  await act(async () => f.chooseSpeech?.("elevenlabs"));
+  expect(f.persist).not.toHaveBeenCalled();
+  await act(async () => f.chooseSpeech?.("voxcpm2"));
+  expect(f.persist).toHaveBeenCalledExactlyOnceWith({ speech: "voxcpm2" });
 });
 
 it("waits for the computer before prompting for a voice-model update", async () => {

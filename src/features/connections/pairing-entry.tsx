@@ -85,7 +85,7 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <View style={centered}>
         <HintLabel label={controller.connectionMode === "lan" ? copy("Yerel ağ", "Local network") : "Tailscale"} style={uiStyles.heading}
-          always help={copy(
+          presentation="visible" help={copy(
             "Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
             "In bycoda on your computer, choose “Connect your phone” and scan the QR code.",
           )} />

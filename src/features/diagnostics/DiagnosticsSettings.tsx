@@ -77,6 +77,7 @@ export function DiagnosticsSettings() {
   return (
     <HintSection
       title={copy("Tanılama günlükleri", "Diagnostic logs")}
+      presentation="visible"
       help={copy(
         "Tanılama günlükleri uygulama günlükleridir; gizli bilgiler, e-posta adresleri ve kullanıcı adın bu telefonda çıkarılır. Konuşmalarını, istemlerini veya kodunu asla içermez. {p0} gün saklanır.",
         "Diagnostic logs are the app logs, with secrets, e-mail addresses and your user name removed on this phone. They never include your conversations, prompts or code. They are kept {p0} days.",

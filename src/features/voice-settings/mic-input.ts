@@ -3,12 +3,36 @@ import type { MicKind } from "./voice-preferences";
 export type MicInput = { name: string; type: string; uid: string };
 /** Classifies an audio-session input by its port type or name. */
 export function micKind(input: Pick<MicInput, "name" | "type">): MicKind | undefined {
+  if (input.type === "builtin" || input.type === "wired" || input.type === "bluetooth" || input.type === "carplay")
+    return input.type;
+  if (input.type === "other") return undefined;
   const text = `${input.type} ${input.name}`.toLowerCase();
   if (/car/.test(text)) return "carplay";
   if (/bluetooth|hfp|airpods/.test(text)) return "bluetooth";
   if (/wired|headset|usb|headphone|line/.test(text)) return "wired";
   if (/built.?in|iphone|phone/.test(text)) return "builtin";
   return undefined;
+}
+
+/** The native inventory can contain several ports of one kind; capture prioritizes kinds. */
+export function connectedMicKinds(order: readonly MicKind[], inputs: readonly MicInput[]) {
+  const connected = new Set(inputs.map(micKind));
+  return order.filter((kind) => connected.has(kind));
+}
+
+/** Reorder the connected slots without changing saved priorities for unplugged inputs. */
+export function reorderConnectedMics(order: MicKind[], visible: readonly MicKind[], kind: MicKind, to: number): MicKind[] {
+  const from = visible.indexOf(kind);
+  if (from < 0 || to < 0 || to >= visible.length || from === to) return order;
+  const reordered = [...visible];
+  reordered.splice(from, 1);
+  reordered.splice(to, 0, kind);
+  return order.map((item) => visible.includes(item) ? reordered.shift()! : item);
+}
+
+export function readMicInputs(native: { listInputs?(): MicInput[] } | null) {
+  try { return native?.listInputs?.() ?? []; }
+  catch { return []; }
 }
 /** First available input in the owner's order; undefined leaves the system default in charge. */
 export function pickMicInput(order: readonly MicKind[], inputs: readonly MicInput[]): MicInput | undefined {

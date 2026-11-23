@@ -35,8 +35,11 @@ back arrow), and in-screen headings take `onBack` on `Screen`/`ScreenList`, show
 when no native header owns navigation. Entry flows that cancel their own state pass
 `HeaderBackButton` with their callback instead of a hand-made IconButton chevron.
 
-`Hint` adapts PanelUI Tooltip for long-press icon explanations and respects private
-content access. Its trigger must forward onLongPress. Task RecordCard identity
+`Hint` adapts PanelUI Tooltip and respects private content access. An action keeps
+its ordinary tap and explains itself on long press. A dedicated `InfoHint` icon
+shows its explanation as a tooltip on tap. Keep required state, permission and
+consequence text visible. Use inline disclosure for longer reading material.
+The trigger must forward the applicable press handler. Task RecordCard identity
 uses one named interaction target: a short press expands details, a long press
 explains status/provider/model symbols. Full provider/model values remain in the
 expanded details. Stop uses a named 48dp danger IconButton beside the session and

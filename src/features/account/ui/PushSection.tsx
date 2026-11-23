@@ -62,7 +62,7 @@ export function PushSection() {
 
   if (!runtime) return null;
   return (
-    <HintSection title={copy("Bildirimler", "Notifications")} help={!available || !device
+    <HintSection title={copy("Bildirimler", "Notifications")} presentation={(!available || !device || state === "on") ? "visible" : "tooltip"} help={!available || !device
       ? copy("Bu telefonda bildirim gönderimi kullanılamıyor. Uygulama içi bildirimleri yine de ayarlayabilirsin.", "Push notifications are unavailable on this phone. You can still set in-app notifications.")
       : state === "on"
         ? copy("Hesap bildirimleri bu telefonda açık. Kapatmak için sistem ayarlarını kullan.", "Account notifications are on for this phone. Turn them off in system settings.")

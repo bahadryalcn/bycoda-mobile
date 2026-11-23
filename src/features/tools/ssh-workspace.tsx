@@ -166,7 +166,7 @@ export function SshWorkspace({
   const info = useInfoHint(copy(
     "Oturum açma ve sunucu anahtarı onayı bilgisayarın Sunucular görünümündeki terminalde yapılır. Burada yalnızca bu isteğin oluşturduğu çalışma alanını takip edersiniz.",
     "Sign-in and host-key approval happen in the terminal in Servers on the computer. This screen tracks only the workspace this request created.",
-  ));
+  ), "visible");
   const stateLabel = (state: SshWorkspaceStatus["state"]) =>
     state === "opened-on-computer"
       ? copy("Bilgisayarda açıldı", "Opened on the computer")

@@ -58,25 +58,6 @@ export function normalizeVoicePreferences(value: unknown): VoicePreferences {
     ...(typeof data.elevenVoice === "string" && /^[A-Za-z0-9]{1,64}$/.test(data.elevenVoice) ? { elevenVoice: data.elevenVoice } : {}),
   };
 }
-/** CarPlay is an iOS car route; Android never reports it, so it is not offered there. */
-export function visibleMics(order: MicKind[], os: string | undefined): MicKind[] {
-  return os === "ios" ? order : order.filter((kind) => kind !== "carplay");
-}
-
-/** Moves among the visible kinds; kinds this platform cannot report keep their place at the end. */
-export function moveVisibleMic(order: MicKind[], os: string | undefined, kind: MicKind, delta: -1 | 1): MicKind[] {
-  const visible = visibleMics(order, os);
-  return [...moveMic(visible, kind, delta), ...order.filter((entry) => !visible.includes(entry))];
-}
-
-export function moveMic(order: MicKind[], kind: MicKind, delta: -1 | 1): MicKind[] {
-  const from = order.indexOf(kind), to = from + delta;
-  if (from < 0 || to < 0 || to >= order.length) return order;
-  const next = [...order];
-  [next[from], next[to]] = [next[to]!, next[from]!];
-  return next;
-}
-
 export function createVoicePreferenceStore(storage: Pick<typeof AsyncStorage, "getItem" | "setItem">) {
   return createPreferenceStore<VoicePreferences>({
     key: storageKey,

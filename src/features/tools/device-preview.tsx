@@ -65,7 +65,7 @@ export function DevicePreviewSheet({
   const info = useInfoHint(copy(
     "Önizleme cihazı başlatabilir ve uygulamayı açabilir. İşletim sistemi izinleri ayrıca onaylanmalıdır.",
     "Preview may boot the device and open the app. Operating system permissions require separate approval.",
-  ));
+  ), "visible");
   const { colors } = useMobileTheme();
   const machine = useActiveMachine();
   const connection = useConnectionScope();

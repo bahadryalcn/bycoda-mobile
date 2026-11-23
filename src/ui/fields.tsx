@@ -10,18 +10,17 @@ import { haptic } from "./motion";
 import { metrics, opacity, space, gapIcon } from "./tokens";
 import type { ToggleFieldProps, InputProps } from "./component-props";
 import { useInNavigationGroup } from "./navigation-row";
-import { HintLabel, InfoHint, InfoPanel, UnitHint, isUnitHint } from "./info-hint";
+import { HintLabel, InfoHint, UnitHint, isUnitHint } from "./info-hint";
 
 /**
  * The one boolean setting control: a row with a trailing Switch where the whole row toggles
  * (accessibility role `switch`). Inside a NavigationGroup it matches NavigationRow's padding,
- * icon slot and inset separator. An explanation goes in `help` (info icon that reveals on tap),
+ * icon slot and inset separator. An explanation goes in `help` (info tooltip),
  * never as a paragraph under the label; `detail` is only a short status or current value.
  */
 export function ToggleField({ label, labelLines, detail, help, value, onChange, disabled, icon }: ToggleFieldProps) {
   const { uiStyles, pressedFill } = useMobileTheme();
   const grouped = useInNavigationGroup();
-  const [helpOpen, setHelpOpen] = useState(false);
   const toggle = () => {
     if (disabled) return;
     haptic.select();
@@ -58,10 +57,9 @@ export function ToggleField({ label, labelLines, detail, help, value, onChange, 
         <View style={[uiStyles.grow, { gap: space.xxs }]}>
           <Body style={uiStyles.label} numberOfLines={labelLines}>{label}</Body>
           {detail ? <Body muted style={uiStyles.caption}>{detail}</Body> : null}
-          <InfoPanel text={help ?? ""} open={helpOpen} />
         </View>
       </Pressable>
-      {help ? <InfoHint text={help} open={helpOpen} onToggle={() => setHelpOpen((v) => !v)} /> : null}
+      {help ? <InfoHint text={help} /> : null}
       {/* The track accepts touch, but the label is the row's only accessible switch. */}
       <Pressable
         accessible={false}

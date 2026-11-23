@@ -37,6 +37,7 @@ export function ManageAccountSection() {
   return (
     <HintSection
       title={copy("Hesabı yönet veya sil", "Manage or delete account")}
+      presentation="visible"
       help={copy(
         "Silme isteği {p0} günlük bir bekleme süresi başlatır; bu sürede iptal edebilirsin. Veri dışa aktarımı hesap portalında da bulunur.",
         "A deletion request starts a {p0}-day grace period in which you can cancel it. Data export is also available in the account portal.",

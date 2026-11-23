@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { createVoicePreferenceStore, moveVisibleMic, normalizeVoicePreferences, speechConfig, visibleMics } from "./voice-preferences";
+import { createVoicePreferenceStore, normalizeVoicePreferences, speechConfig } from "./voice-preferences";
 
 // The phone always asked for the default voice; the owner could not pick one as on the desktop.
 it("keeps the chosen assistant voice and sends it the way the desktop does", () => {
@@ -11,15 +11,6 @@ it("keeps the chosen assistant voice and sends it the way the desktop does", () 
   expect(speechConfig({ speech: "supertonic", speaker: "F2" })).toEqual({ natural: true, voiceId: "F2" });
   expect(speechConfig({ speech: "voxcpm2", speaker: "F2" })).toEqual({ natural: true, engine: "voxcpm2" });
   expect(speechConfig({ speech: "elevenlabs", speaker: "M1" })).toEqual({ natural: true, engine: "elevenlabs" });
-});
-
-it("offers CarPlay only on iOS and moves Android kinds without touching the hidden one", () => {
-  const order = ["wired", "bluetooth", "builtin", "carplay"] as const;
-  expect(visibleMics([...order], "ios")).toEqual(order);
-  expect(visibleMics([...order], "android")).toEqual(["wired", "bluetooth", "builtin"]);
-  expect(moveVisibleMic([...order], "android", "builtin", -1)).toEqual(["wired", "builtin", "bluetooth", "carplay"]);
-  // The last visible Android kind cannot move past the hidden CarPlay entry.
-  expect(moveVisibleMic([...order], "android", "builtin", 1)).toEqual([...order]);
 });
 
 const key = "bycoda.mobile.voice-preferences.v1";

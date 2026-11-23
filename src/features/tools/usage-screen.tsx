@@ -110,7 +110,7 @@ export function UsageScreen({ project }: { project: HostProject }) {
   const calcInfo = useInfoHint(copy(
     "Bu bilgisayarda gözlemlenen proje oturumları; başlangıcı bu aralıkta olan turlar sayılır. Hesap kotası ve fatura dahil değildir. Eksik değerler sıfır değildir.",
     "Project sessions observed on this computer; turns starting in this range are counted. Account quotas and bills are excluded. Missing values are not zero.",
-  ));
+  ), "inline");
   const refreshControl = (
     <IconButton
       label={copy("Yenile", "Refresh")}

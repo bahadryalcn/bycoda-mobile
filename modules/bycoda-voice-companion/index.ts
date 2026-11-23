@@ -8,7 +8,7 @@ export type NativeVoiceCompanion = {
   /** Foreground-only standalone TTS, without microphone authority or permission. */
   beginPlaybackSession(): Promise<string>;
   getState(): NativeVoiceState;
-  /** Android capture inputs; `type` is a coarse kind (builtin, wired, bluetooth, other) and `uid` the device id. */
+  /** Current native audio inputs and their route types, read without starting capture. */
   listInputs?(): { name: string; type: string; uid: string }[];
   /** The next capture prefers this input (a uid from listInputs); null keeps the system default. */
   setPreferredInput?(uid: string | null): void;

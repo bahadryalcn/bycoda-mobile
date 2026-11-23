@@ -610,6 +610,12 @@ computer where you entered it. A connection change closes any open Whisper
 model removal confirmation. If the phone cannot save a voice preference, use
 **Retry** in the same settings panel.
 
+The microphone section shows inputs the phone reports as available. When
+more than one input type is connected, drag their handles to set the order.
+OpenAI Realtime and Grok Voice are desktop conversation modes. On mobile,
+OpenAI and Grok can be selected for speech recognition when the computer
+reports them as available.
+
 **Dictate message** records up to 30 seconds through the phone microphone and
 uses the connected computer's local speech setup. Finish recording, review the
 recognized text and send it explicitly. **Read reply aloud** uses local speech

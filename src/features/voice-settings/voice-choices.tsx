@@ -6,7 +6,7 @@ import type { ReviewedMachine } from "@/state/reviewed-machine";
 import { useHostQuery } from "@/state/queries";
 import { useActiveHostLinkDown } from "@/state/host-runtime-state";
 import { useCopy } from "@/ui/copy";
-import { Button, Input, Notice, QueryState, SectionHeader, SelectField, SelectRow, Stack } from "@/ui/primitives";
+import { Body, Button, Input, Notice, QueryState, SectionHeader, SelectField, SelectRow, Stack } from "@/ui/primitives";
 import { PreferenceStorageNotice } from "@/ui/preference-storage-notice";
 import { parseLocalModels, type LocalVoiceModel } from "./voice-models-model";
 import { DICTATION_MODELS } from "../../../../src/features/voice/model/dictationModels";
@@ -53,6 +53,7 @@ export function VoiceChoices({ showStorageNotice = true }: { showStorageNotice?:
   const needsCloudSetup = copy("Bilgisayarda kurulum gerekiyor", "Needs setup on the computer");
   const needsHostUpdate = copy("Ses modelleri için bu bilgisayarda bycoda’yı güncelle", "Update bycoda on this computer for voice models.");
   const elevenlabs = cloudSupported && keys.data?.elevenlabs === true;
+  const desktopVoice = [openai && "OpenAI Realtime", xai && "Grok Voice"].filter(Boolean).join(" · ");
   const recognitionReady = preferences.engine === "local"
     ? localSupported && models.isSuccess
     : preferences.engine === "cloud" && keys.isSuccess && openrouter;
@@ -67,7 +68,7 @@ export function VoiceChoices({ showStorageNotice = true }: { showStorageNotice?:
   const engines: { value: SpeechEngine; label: string; detail?: string; disabled?: boolean }[] = [
     { value: "supertonic", label: "Supertonic", detail: copy("Bilgisayarda", "On the computer"), disabled: !localSupported },
     { value: "voxcpm2", label: "VoxCPM2", detail: vox.data?.ready === false ? copy("Bilgisayarda kurulum gerekiyor", "Needs setup on the computer") : undefined, disabled: !localSupported || vox.data?.ready === false },
-    { value: "elevenlabs", label: "ElevenLabs", detail: copy("Bulutta", "In the cloud"), disabled: !elevenlabs },
+    { value: "elevenlabs", label: "ElevenLabs", detail: elevenlabs ? copy("Bulutta", "In the cloud") : needsCloudSetup, disabled: !elevenlabs },
   ];
   const draft = drafts.get(review.id);
   const elevenValue = (draft && sameReviewedMachine(draft.review, review) ? draft.value : preferences.elevenVoice) ?? "";
@@ -114,13 +115,12 @@ export function VoiceChoices({ showStorageNotice = true }: { showStorageNotice?:
       {preferences.engine === "cloud" && keys.isSuccess && !openrouter ? (
         <Notice tone="warning" message={copy("Bulut seçili ama bilgisayarda anahtar yok; konuşman anlaşılamaz. {p0} seç.", "Cloud is selected but the computer has no key, so your speech cannot be understood. Choose {p0}.", { p0: machine.name })} />
       ) : null}
-      <SectionHeader title={copy("Asistanın sesi", "Assistant's voice")} />
-      <View>
-        {engines.map((engine) => (
-          <SelectRow key={engine.value} label={engine.label} detail={engine.detail} selected={preferences.speech === engine.value}
-            disabled={!hydrated || engine.disabled} onPress={() => update({ speech: engine.value })} />
-        ))}
-      </View>
+      <SelectField label={copy("Asistanın sesi", "Assistant's voice")} value={preferences.speech}
+        options={engines} disabled={!hydrated}
+        onChange={(speech) => {
+          if (engines.some((engine) => engine.value === speech && !engine.disabled)) update({ speech });
+        }} />
+      {desktopVoice ? <Body muted>{copy("Masaüstünde canlı sesli görüşme: {p0}", "Live voice on desktop: {p0}", { p0: desktopVoice })}</Body> : null}
       {preferences.speech === "supertonic" ? (
         <SelectField label={copy("Ses", "Voice")} value={preferences.speaker} disabled={!hydrated}
           options={SUPERTONIC_SPEAKERS.map(speaker => ({ value: speaker, label: speakerName(speaker, copy) }))}

@@ -46,7 +46,7 @@ export function PushSettings() {
                   ? copy("Bildirim hizmetinin yanıtı çok uzun sürdü.", "The notification service took too long to respond.")
                   : errorMessage(status.error, copy)
                 : copy("Kontrol ediliyor…", "Checking…");
-  const stateInfo = useInfoHint(status.state === "error" ? undefined : detail);
+  const stateInfo = useInfoHint(status.state === "error" ? undefined : detail, "visible");
   return (
     <View style={{ gap: space.sm }}>
       <SectionHeader flush title={copy("Bilgisayardan bildirimler", "Notifications from your computer")} trailing={stateInfo.button} />

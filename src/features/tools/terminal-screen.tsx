@@ -60,7 +60,7 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
   const confirmedTerminal = terminals.find(entry => entry.id === confirm?.id);
   const [editingCommand, setEditingCommand] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const help = useInfoHint(copy("Satır tabanlı kabuk. Etkileşimli tam ekran uygulamalar desteklenmez. Durdur, kabuğu ve alt işlemlerini sonlandırır.", "Line-based shell. Interactive full-screen apps are unavailable. Stop ends the shell and its child processes."));
+  const help = useInfoHint(copy("Satır tabanlı kabuk. Etkileşimli tam ekran uygulamalar desteklenmez. Durdur, kabuğu ve alt işlemlerini sonlandırır.", "Line-based shell. Interactive full-screen apps are unavailable. Stop ends the shell and its child processes."), "inline");
   const [focused, setFocused] = useState(true);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const output = useTerminalOutput(client, project.id, selected?.id ?? "", autoRefresh, focused);

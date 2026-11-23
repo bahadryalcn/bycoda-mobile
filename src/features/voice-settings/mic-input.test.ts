@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
-import { micKind, pickMicInput } from "./mic-input";
-import { moveMic, normalizeMicOrder, normalizeVoicePreferences } from "./voice-preferences";
+import { connectedMicKinds, micKind, pickMicInput, readMicInputs, reorderConnectedMics } from "./mic-input";
+import { normalizeMicOrder, normalizeVoicePreferences } from "./voice-preferences";
 
 const inputs = [
   { name: "iPhone Microphone", type: "MicrophoneBuiltIn", uid: "b" },
@@ -16,12 +16,25 @@ it("picks the highest priority available input", () => {
   expect(pickMicInput(["wired", "bluetooth", "builtin", "carplay"], inputs)?.uid).toBe("bt");
   expect(pickMicInput(["wired", "carplay"], inputs)).toBeUndefined();
 });
+it("shows only connected microphone kinds and trusts the native route type", () => {
+  const order = normalizeMicOrder([]);
+  const builtIn = { name: "Galaxy", type: "builtin", uid: "1" };
+  expect(connectedMicKinds(order, [builtIn, { ...builtIn, uid: "2" }])).toEqual(["builtin"]);
+  expect(connectedMicKinds(order, [])).toEqual([]);
+  expect(micKind({ name: "phone", type: "other" })).toBeUndefined();
+  expect(readMicInputs({ listInputs() { throw new Error("Device list unavailable"); } })).toEqual([]);
+});
+it("drags connected inputs past each other without moving the saved unplugged slots", () => {
+  const order = normalizeMicOrder(["bluetooth", "carplay", "builtin", "wired"]);
+  const visible = connectedMicKinds(order, inputs);
+  expect(visible).toEqual(["bluetooth", "builtin"]);
+  expect(reorderConnectedMics(order, visible, "builtin", 0)).toEqual(["builtin", "carplay", "bluetooth", "wired"]);
+  expect(reorderConnectedMics(order, visible, "wired", 0)).toBe(order);
+});
 it("normalizes preferences and order", () => {
   expect(normalizeMicOrder(["builtin", "x", "builtin"])).toEqual(["builtin", "wired", "bluetooth", "carplay"]);
   expect(normalizeVoicePreferences({ engine: "cloud" }).engine).toBe("cloud");
   expect(normalizeVoicePreferences({ engine: "x" }).engine).toBe("local");
-  expect(moveMic(["wired", "bluetooth"], "wired", 1)).toEqual(["bluetooth", "wired"]);
-  expect(moveMic(["wired", "bluetooth"], "wired", -1)).toEqual(["wired", "bluetooth"]);
 });
 import { applyAndroidMicPriority, applyMicPriority } from "./mic-input";
 it("applies the Android preferred input, or clears it, and ignores failures", () => {

@@ -171,7 +171,7 @@ export function LocalDataControls() {
     "Kayıtlı bilgisayarlar ve taslaklar yalnız bu telefonda tutulur. Telefondan kaldırmak bilgisayardaki cihaz iznini iptal etmez; telefon kaybolursa onu bilgisayardan ayrıca iptal et.",
     "Saved computers and drafts stay on this phone. Removing them here does not revoke the device on your computer; if this phone is lost, revoke it there.",
   );
-  const sectionInfo = useInfoHint(sectionHelp);
+  const sectionInfo = useInfoHint(sectionHelp, "visible");
   const remainingComputers = confirmation?.machines.filter(machine => state.machines.some(current => current.id === machine.id)) ?? [];
   const reviewIntro = <Stack>{storageIssue}<Body>{consequence}</Body>{stale ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden açın.", "Saved computers changed. Reopen this review to continue.")} /> : null}</Stack>;
   // Friendly identity only: internal computer and environment ids are never shown in this review.
