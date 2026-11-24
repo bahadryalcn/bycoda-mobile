@@ -79,6 +79,7 @@ export function AccessCenter() {
   const { colors } = useMobileTheme();
   const machine = useActiveMachine();
   const supported = !!machine?.environmentId && machine.capabilities?.includes("host.access.read");
+  const scopedAccess = machine?.capabilities?.includes("devices.setManagement") === true;
   const [selected, setSelected] = useState<{
     target: AccessTarget;
     reviewed: ReviewedMachine | undefined;
@@ -95,7 +96,7 @@ export function AccessCenter() {
       enabled: !!supported,
       queryFn: async (client, signal) =>
         readAccessCenter(
-          await client.request("host.access.read", {}, { signal }),
+          await client.request("host.access.read", scopedAccess ? { includeDevicePermissions: true } : {}, { signal }),
           machine!.environmentId!,
         ),
     },
@@ -250,6 +251,7 @@ export function AccessCenter() {
           key={`${selected.target.machineId}:${selected.device.id}`}
           target={selected.target}
           device={selected.device}
+          canManageOtherDevices={!scopedAccess || report?.devices.some((row) => row.isCurrent && row.canManageDevices) === true}
           onClose={() => setSelected(value => value === selected ? undefined : value)}
           onUpdated={() => {
             if (selection.current === selected && isReviewedMachine(selected.reviewed, useMachines.getState())) void query.refetch();

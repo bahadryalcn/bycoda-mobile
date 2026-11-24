@@ -14,7 +14,7 @@ vi.mock("@/ui/primitives", () => { const Wrapper = ({ children }: PropsWithChild
   return { Body: Wrapper, Disclosure: Wrapper, Sheet: Wrapper, ErrorText: () => null, MutationState: () => null, Notice: ({ message }: { message: string }) => createElement("p", null, message), Button,
     FormActions: ({ disabled, busy, onSubmit, submitLabel, feedback }: any) => createElement("div", null, feedback, createElement(Button, { label: submitLabel === "Revoke access" ? "Confirm revoke" : submitLabel, disabled: disabled || busy, onPress: onSubmit })) }; });
 let root: ReturnType<typeof createRoot> | undefined; let container: HTMLDivElement;
-async function render(self = false) { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); root = createRoot(container); await act(async () => root!.render(createElement(AccessDevice, { target: { machineId: "machine", environmentId: "host" }, device: { id: self ? "self" : "other", name: "Device", isCurrent: self }, onClose: vi.fn(), onUpdated: vi.fn() }))); }
+async function render(self = false, canManageOtherDevices = true, isLocalDesktop = false) { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); root = createRoot(container); await act(async () => root!.render(createElement(AccessDevice, { target: { machineId: "machine", environmentId: "host" }, device: { id: self ? "self" : "other", name: "Device", isCurrent: self, isLocalDesktop }, canManageOtherDevices, onClose: vi.fn(), onUpdated: vi.fn() }))); }
 async function click(label: string) { await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === label)!.click()); }
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; state.id = "machine"; state.requests = []; state.uncertain = false; state.denyFlush = false; state.flush.mockClear(); state.remove.mockReset().mockResolvedValue(); vi.unstubAllGlobals(); });
 it("revoke-other needs explicit confirmation and preserves this phone's credential", async () => {
@@ -24,6 +24,11 @@ it("revoke-other needs explicit confirmation and preserves this phone's credenti
 it("revoke-self flushes existing drafts then cleans only the originating local connection", async () => {
   await render(true); await click("Revoke this phone's access"); await click("Confirm revoke");
   expect(state.flush).toHaveBeenCalledOnce(); expect(state.requests).toEqual([{ method: "devices.revokeSelf", params: {} }]); expect(state.remove).toHaveBeenCalledExactlyOnceWith("machine", { id: "machine", environmentId: "host", endpoint: undefined, lanKey: undefined });
+});
+it.each([[false, false], [true, true]])("blocks other-device revocation without authority or for the local desktop", async (manager, localDesktop) => {
+  await render(false, manager, localDesktop);
+  await click("Revoke device access");
+  expect(state.requests).toEqual([]);
 });
 it("failed draft flush prevents self revoke, while uncertain writes never clean or resend", async () => {
   state.denyFlush = true; await render(true); await click("Revoke this phone's access"); await click("Confirm revoke"); expect(state.requests).toEqual([]);

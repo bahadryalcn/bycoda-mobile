@@ -30,7 +30,11 @@ export function readAccessCenter(value: unknown, environmentId: string): HostAcc
   const state = (item: unknown) => record(item) && allowed(item, ["state"]) && accessStates.includes(String(item.state));
   if (!record(value) || !allowed(value, ["environmentId", "sampledAt", "devices", "devicesTruncated", "lan", "privateNetwork", "tunnels"]) || !text(value.environmentId, 256) || value.environmentId !== environmentId ||
     !Number.isSafeInteger(value.sampledAt) || Number(value.sampledAt) < 0 || Number(value.sampledAt) > 8640000000000000 || typeof value.devicesTruncated !== "boolean" || !Array.isArray(value.devices) || value.devices.length > 256 ||
-    !value.devices.every((row) => record(row) && allowed(row, ["id", "name", "isCurrent"]) && text(row.id, 128) && text(row.name, 160) && typeof row.isCurrent === "boolean") ||
+    !value.devices.every((row) =>
+      record(row) && allowed(row, ["id", "name", "isCurrent", "canManageDevices", "isLocalDesktop"]) &&
+      text(row.id, 128) && text(row.name, 160) && typeof row.isCurrent === "boolean" &&
+      (row.canManageDevices === undefined || typeof row.canManageDevices === "boolean") &&
+      (row.isLocalDesktop === undefined || typeof row.isLocalDesktop === "boolean")) ||
     new Set(value.devices.map((row) => row.id)).size !== value.devices.length || !state(value.lan) || !state(value.privateNetwork)) return invalid();
   if (value.tunnels !== null) {
     const tunnels = value.tunnels;
