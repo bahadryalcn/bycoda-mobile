@@ -27,6 +27,7 @@ import {
   transcriptSenderName,
   canCollapseToolFailure,
   isBlockStreaming,
+  readableToolName,
   toolResultTexts,
 } from "./transcript-model";
 import { useMobileTheme } from "@/ui/theme";
@@ -138,7 +139,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   const inputBlock = !!value.shell || (toolResults.length > 0 && !!(value.text || value.tool?.detail));
   const label =
     value.agentRun?.name ||
-    value.tool?.title ||
+    readableToolName(value.tool?.title ?? "") ||
     value.orchestration?.title ||
     value.shell?.command ||
     title;

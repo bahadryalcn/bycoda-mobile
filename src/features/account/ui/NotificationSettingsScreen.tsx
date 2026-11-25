@@ -6,14 +6,15 @@ import { useCopy } from "@/ui/copy";
 import { TimeField } from "@/ui/time-field";
 import { HoursOverview } from "@/ui/week-hours";
 import { windowBlocks } from "@/ui/week-hours-model";
-import { ClockTime, NOTIFICATION_EVENTS, type NotificationChannel, type NotificationEventKey, type NotificationSettings, type QuietHours } from "../contracts";
-import { channelEnabled, setChannel, withQuietHours } from "../model/notification-settings";
+import { AccountApiError, ClockTime, NOTIFICATION_EVENTS, type NotificationChannel, type NotificationEventKey, type NotificationSettings, type QuietHours } from "../contracts";
+import { ACCOUNT_NOTIFICATION_SETTINGS_KEY, channelEnabled, setChannel, withQuietHours } from "../model/notification-settings";
 import type { SaveControl } from "../model/notification-saves";
 import { useAccount } from "./account-context";
 import { useNotificationSaves } from "./use-notification-saves";
 import { useGracedReadError } from "./use-graced-read-error";
+import { accountReadMessage, deviceLimitReached, registrationMessage } from "./account-error-copy";
 
-const KEY = ["account", "notification-settings"] as const;
+const KEY = ACCOUNT_NOTIFICATION_SETTINGS_KEY;
 const CHANNELS: { channel: Extract<NotificationChannel, "push" | "in_app">; tr: string; en: string }[] = [
   { channel: "push", tr: "Hesabından bu telefona", en: "From your account to phones" },
   { channel: "in_app", tr: "Hesabından uygulama içinde", en: "From your account in the app" },
@@ -66,7 +67,9 @@ export function AccountNotificationSettings() {
       saves.adopt(loaded);
       return loaded;
     },
-    enabled: status === "signedIn" && !!runtime && !!device,
+    // Settings are user-scoped on the server: they load and save without this phone's device
+    // registration, which can fail on its own (device limit, offline) and is reported separately.
+    enabled: status === "signedIn" && !!runtime,
   });
   const settingsError = useGracedReadError(settings);
   const labels: Record<NotificationEventKey, string> = {
@@ -105,16 +108,10 @@ export function AccountNotificationSettings() {
 
   const accountTitle = copy("Hesabından", "From your account");
   if (status === "unavailable") return null;
-  if (status === "loading" || (status === "signedIn" && (!runtime || !device))) {
+  if (status === "loading" || (status === "signedIn" && !runtime)) {
     return (
       <Section title={accountTitle}>
-        {registerError ? (
-          <ErrorNotice
-            error={registerError}
-            onRetry={retryRegistration}
-            message={copy("Bu telefon hesaba kaydedilemedi.", "This phone could not be registered to your account.")}
-          />
-        ) : <Loading immediate />}
+        <Loading immediate />
       </Section>
     );
   }
@@ -131,7 +128,21 @@ export function AccountNotificationSettings() {
   // Sections sit directly in the page so they share its group rhythm.
   return (
     <>
-        <ErrorNotice error={settingsError} onRetry={() => void settings.refetch()} message={copy("Ayarlar alınamadı.", "Settings could not be loaded.")} />
+        {/* Without a device record the account cannot reach this phone; the settings still load and save. */}
+        {registerError && !device ? (
+          <ErrorNotice
+            error={registerError}
+            onRetry={deviceLimitReached(registerError) ? undefined : retryRegistration}
+            action={deviceLimitReached(registerError) ? { label: copy("Hesabı aç", "Open account"), onPress: () => router.navigate("/account") } : undefined}
+            message={registrationMessage(registerError, copy, "elsewhere")}
+          />
+        ) : null}
+        <ErrorNotice
+          // A rejected session fails registration and this read alike; the notice above already says so.
+          error={registerError instanceof AccountApiError && registerError.code === "unauthorized" && settingsError instanceof AccountApiError && settingsError.code === "unauthorized" ? null : settingsError}
+          onRetry={() => void settings.refetch()}
+          message={settingsError ? accountReadMessage(settingsError, copy, copy("Bildirim ayarları alınamadı.", "Notification settings could not be loaded.")) : undefined}
+        />
         {failedCount > 0 ? (
           <Notice
             tone="danger"

@@ -47,7 +47,7 @@ describe("account computers", () => {
           { endpoint: "https://a.ts.net" },
         ],
       }),
-    ).toEqual({ lan: true, tailscale: true });
+    ).toEqual({ lan: true, tailscale: true, public: false });
     const saved = { environmentId: "env-1" } as MobileMachine;
     expect(savedComputerFor({ environmentId: "env-1" }, [saved])).toBe(saved);
     expect(savedComputerFor({ environmentId: "env-2" }, [saved])).toBeUndefined();

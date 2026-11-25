@@ -12,7 +12,6 @@ export function appCommands(copy: Copy): PaletteEntry[] {
     { id: "tools", label: copy("Araçlar", "Tools"), kind: "tool", destination: { pathname: "/(tabs)/manage" } },
     ...([
       ["terminals", copy("Terminaller", "Terminals")],
-      ["logs", copy("Çalışma günlükleri", "Runtime logs")],
       ["usage", copy("Oturum kullanımı", "Session usage")],
       ["providers", copy("Sağlayıcı merkezi", "Provider center")],
       ["access", copy("Bilgisayar erişimi", "Host access")],

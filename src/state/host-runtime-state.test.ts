@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  holdHostRecoveryClocks,
   hostRecoveringSince,
   hostRuntimeState,
   recordHostRuntimeState,
   resetHostRuntimeStates,
+  resumeHostRecoveryClocks,
   subscribeHostRuntimeStates,
 } from "./host-runtime-state";
 
@@ -52,5 +54,30 @@ describe("host runtime state store", () => {
     stop();
     recordHostRuntimeState("a", "backoff");
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not count background time against a reconnect grace and restarts it on return", () => {
+    vi.useFakeTimers({ now: 1_000 });
+    try {
+      const listener = vi.fn();
+      const stop = subscribeHostRuntimeStates(listener);
+      holdHostRecoveryClocks();
+      // The OS closed the socket in the background; the runtime retries there.
+      recordHostRuntimeState("a", "backoff");
+      vi.setSystemTime(120_000);
+      expect(hostRecoveringSince("a")).toBe(120_000);
+      vi.setSystemTime(180_000);
+      resumeHostRecoveryClocks();
+      vi.setSystemTime(181_000);
+      expect(hostRecoveringSince("a")).toBe(180_000);
+      expect(hostRecoveringSince("b")).toBeNull();
+      // A second resume without leaving is not a new return.
+      const calls = listener.mock.calls.length;
+      resumeHostRecoveryClocks();
+      expect(listener).toHaveBeenCalledTimes(calls);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -177,6 +177,27 @@ describe("mobile single-attempt native WS", () => {
     f.emit({ jsonrpc: "2.0", id: f.sent.at(-1)!.id, error: { code: RPC_ERROR_CODES.internalError, message: "stack detail" } });
     await rejected;
   });
+  // Phone voice read "This computer is not ready" for every voice refusal; the Host's reason was dropped.
+  it("keeps an untyped not-sent Host reason beside the fixed message, redacted", async () => {
+    const f = await connected();
+    const result = f.connection.request("commands.dispatch", { type: "send", commandId: "command-d", sessionId: "session-a", text: "hello" });
+    const rejected = expect(result).rejects.toMatchObject({
+      category: "unavailable",
+      uncertain: false,
+      message: "This computer is not ready for this request. Try again shortly.",
+      hostReason: "Voice setup is still running. token …",
+    });
+    f.emit({
+      jsonrpc: "2.0",
+      id: f.sent.at(-1)!.id,
+      error: {
+        code: RPC_ERROR_CODES.internalError,
+        message: "Voice setup is still running. token=abc",
+        data: { category: "unavailable", retryable: false, delivery: "not-sent" },
+      },
+    });
+    await rejected;
+  });
   it("preserves native TLS failures for in-flight reads", async () => {
     const f = await connected();
     const result = f.connection.request("projects.list");

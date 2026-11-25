@@ -17,7 +17,13 @@ import {
   requestAccountPairingCode,
 } from "./account-pairing";
 import { connectComputer } from "./computer-connection";
-import { pairingClaimId, pairingErrorMessage, PairingFailure } from "./pairing-code";
+import {
+  pairingClaimId,
+  pairingErrorMessage,
+  PairingFailure,
+  pairingRouteIsPublic,
+} from "./pairing-code";
+import { newProofSeed, proofKeyOf } from "@/remote/device-proof";
 import { redeemMobilePairingCode } from "./pairing-redeem";
 
 const phoneName = "Bycoda phone";
@@ -99,9 +105,12 @@ export function useAccountPairing() {
         }
         update({ phase: "connecting", computer }, controller);
         const claimId = pairingClaimId(await Crypto.getRandomBytesAsync(32));
+        // The phone key exists before the credential does; it is persisted with the credential.
+        const proofSeed = newProofSeed();
         const redeemed = await redeemMobilePairingCode(code, claimId, phoneName, {
           signal,
           assertAccess: assertAppAccess,
+          proofKey: proofKeyOf(proofSeed),
         });
         if (signal.aborted) throw new AccountPairingError("cancelled");
         await connectComputer(
@@ -111,14 +120,21 @@ export function useAccountPairing() {
             lanKey: code.lanKey,
             credential: redeemed.token,
             expectedEnvironmentId: code.environmentId,
+            proofSeed,
+            ...(pairingRouteIsPublic(code) ? { public: true as const } : {}),
           },
           {
-            discover: (endpoint, credential, currentSignal, lanKey, environmentId) =>
-              discoverMachine(endpoint, credential, { signal: currentSignal, lanKey, environmentId }),
+            discover: (endpoint, credential, currentSignal, lanKey, environmentId, seed) =>
+              discoverMachine(endpoint, credential, {
+                signal: currentSignal,
+                lanKey,
+                environmentId,
+                proofSeed: seed,
+              }),
             flushDrafts: flushWorkspaceDrafts,
             getMachines: () => useMachines.getState().machines,
-            saveMachine: (machine, credential) =>
-              useMachines.getState().saveMachine(machine, credential),
+            saveMachine: (machine, credential, seed) =>
+              useMachines.getState().saveMachine(machine, credential, seed),
             createId: () => Crypto.randomUUID(),
             assertAccess: assertAppAccess,
             signal,

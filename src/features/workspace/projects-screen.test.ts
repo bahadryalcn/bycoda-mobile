@@ -42,7 +42,7 @@ vi.mock("@/ui/scroll-keyboard", () => ({ scrollKeyboardDismissMode: () => "on-dr
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/screen-content-insets", () => ({ useScreenContentInsets: () => ({ left: 0, right: 0 }) }));
 vi.mock("@/ui/primitives", () => {
-  const controls = ["Button", "IconButton", "ScreenHeading", "MutationState", "NavigationGroup", "NavigationRow", "Notice", "SearchField", "Row", "SectionHeader", "Sheet", "SegmentedControl", "ToggleField"];
+  const controls = ["Button", "IconButton", "ScreenHeading", "MutationState", "NavigationGroup", "NavigationRow", "Notice", "SearchField", "SearchToolbar", "Row", "SectionHeader", "Sheet", "SegmentedControl", "ToggleField"];
   return {
     Screen: ({ children }: { children: ReactNode }) => h("div", null, children),
     ...Object.fromEntries(controls.map((name) => [name, () => null])),

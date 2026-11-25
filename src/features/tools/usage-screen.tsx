@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { providerName } from "../workspace/provider-choices";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Stack, router, useLocalSearchParams } from "expo-router";
@@ -33,7 +33,14 @@ import { ProjectPicker } from "../workspace/project-picker";
  * Account limits and cost are computer-level and open without a project; only the Tokens tab reads
  * per-project sessions and asks for a project inside the tab.
  */
-export function UsageScreen({ project }: { project?: HostProject }) {
+export function UsageScreen({ project, onSelectProject, scopeControl }: {
+  /** The shared project selection, resolved by the caller; Tokens follows it when it changes. */
+  project?: HostProject;
+  /** Choosing a project for Tokens sets the shared selection. */
+  onSelectProject?: (projectId: string) => void;
+  /** The shared header pill, shown with the per-project Tokens view. */
+  scopeControl?: ReactNode;
+}) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const cache = useQueryClient();
@@ -114,6 +121,22 @@ export function UsageScreen({ project }: { project?: HostProject }) {
       });
     });
   };
+  // One indicator per refresh: the control that started it shows progress; polling stays quiet.
+  const [refreshOrigin, setRefreshOrigin] = useState<"button" | "pull">("button");
+  const [manualRefresh, setManualRefresh] = useState(false);
+  const startRefresh = (origin: "button" | "pull") => async () => {
+    setRefreshOrigin(origin);
+    // Tokens tracks its own refresh flight (`action`).
+    if (tab === "tokens") return refresh();
+    setManualRefresh(true);
+    try { await refresh(); } finally { setManualRefresh(false); }
+  };
+  const refreshing = tab === "tokens" ? action === "refresh" : manualRefresh;
+  // A computer switch remounts this screen; the route keeps the chosen tab.
+  const chooseTab = (next: UsageTab) => {
+    setTab(next);
+    router.setParams({ tab: next });
+  };
   const { colors } = useMobileTheme();
   const calcInfo = useInfoHint(copy(
     "Bu bilgisayarda gözlemlenen proje oturumları; başlangıcı bu aralıkta olan turlar sayılır. Hesap kotası ve fatura dahil değildir. Eksik değerler sıfır değildir.",
@@ -122,9 +145,9 @@ export function UsageScreen({ project }: { project?: HostProject }) {
   const refreshControl = (
     <IconButton
       label={copy("Yenile", "Refresh")}
-      busy={tab === "tokens" ? action === "refresh" : selectedFetching}
-      disabled={!selectedSupported || (tab === "tokens" ? query.isFetching : selectedFetching)}
-      onPress={() => { void refresh(); }}
+      busy={refreshing && refreshOrigin === "button"}
+      disabled={!selectedSupported || refreshing || (tab === "tokens" ? query.isFetching : selectedFetching)}
+      onPress={() => { void startRefresh("button")(); }}
     >
       <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
     </IconButton>
@@ -134,15 +157,16 @@ export function UsageScreen({ project }: { project?: HostProject }) {
     {choosingProject ? (
       <ProjectPicker visible onClose={() => setChoosingProject(false)} onSelect={(selected) => {
         setChoosingProject(false);
-        if (machine && useMachines.getState().activeId === machine.id)
-          router.setParams({ projectId: selected.id, machineId: machine.id, tab: "tokens" });
+        if (machine && useMachines.getState().activeId === machine.id) onSelectProject?.(selected.id);
       }} />
     ) : null}
     <ScreenList
       title={copy(...toolLabels.usage)}
-      scope={{ computer: machine?.name, project: tab === "tokens" ? project?.name : undefined }}
+      // The shared scope row leads with the switchable computer pill; Tokens adds the project pill.
+      computerSwitch
+      scopeControl={tab === "tokens" ? scopeControl : undefined}
       actions={refreshControl}
-      refreshState={selectedSupported ? { refreshing: tab === "tokens" ? action === "refresh" : selectedFetching, onRefresh: refresh } : undefined}
+      refreshState={selectedSupported ? { refreshing: refreshing && refreshOrigin === "pull", onRefresh: startRefresh("pull") } : undefined}
       data={tab === "tokens" ? report?.rows ?? [] : []}
       keyExtractor={(row) => row.sessionId}
       header={
@@ -157,7 +181,7 @@ export function UsageScreen({ project }: { project?: HostProject }) {
               { value: "cost", label: copy("Maliyet", "Cost") },
               { value: "tokens", label: copy("Token", "Tokens") },
             ]}
-            onChange={setTab}
+            onChange={chooseTab}
           />
           {tab === "cost" ? (machine?.capabilities?.includes("usage.cost.read") ? <UsageCost /> : <UsageUnavailable tab="cost" />) : null}
           {tab === "limits" ? (machine?.capabilities?.includes("usage.limits.read") ? <UsageLimits /> : <UsageUnavailable tab="limits" />) : null}

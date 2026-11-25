@@ -5,8 +5,6 @@ import ChevronsUpDown from "lucide-react-native/icons/chevrons-up-down";
 import { FlatList, StyleSheet, View, useWindowDimensions, type HostInstance } from "react-native";
 import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
 import Check from "lucide-react-native/icons/check";
-import Square from "lucide-react-native/icons/square";
-import CheckSquare from "lucide-react-native/icons/square-check-big";
 import { Sheet } from "./dialogs";
 import { Body } from "./typography";
 import { Button } from "./buttons";
@@ -20,14 +18,18 @@ import { useCopy } from "./copy";
 import { useReducedMotionPreference } from "./use-reduced-motion";
 import { InfoHint, UnitHint, isUnitHint } from "./info-hint";
 import { useInNavigationGroup } from "./navigation-row";
-import { SectionHeader } from "./layout";
+import { GroupHeading, SubgroupHeading } from "./group-heading";
 import { metrics, opacity, radii, space, gapIcon } from "./tokens";
 import { filterSelection, selectionLabels, toggleSelection, type SelectionOption } from "./selection-model";
 
 const SEARCH_THRESHOLD = 6;
 const NO_OPTIONS: readonly never[] = [];
 
-type SelectionFieldOption<T extends string> = SelectionOption<T> & { icon?: ReactNode };
+type SelectionFieldOption<T extends string> = SelectionOption<T> & {
+  icon?: ReactNode;
+  /** Mark shown in the group heading (e.g. the provider); also the closed field's mark when `icon` is absent. */
+  groupIcon?: ReactNode;
+};
 
 type CommonProps<T extends string> = {
   label: string;
@@ -119,14 +121,15 @@ function SelectionField<T extends string>({
   const [search, setSearch] = useState("");
   const optionLabels = useMemo(
     () => new Map(options.map((option) => [
-      option.value, option.group ? `${option.group} · ${option.label}` : option.label,
+      option.value, option.summaryLabel ?? (option.group ? `${option.group} · ${option.label}` : option.label),
     ])),
     [options],
   );
   const labels = selectionLabels(values, optionLabels);
-  const selectedIcon = values.length === 1
-    ? options.find((option) => option.value === values[0])?.icon
+  const selectedOption = values.length === 1
+    ? options.find((option) => option.value === values[0])
     : undefined;
+  const selectedIcon = selectedOption?.icon ?? selectedOption?.groupIcon;
   const limit = Math.max(1, summaryLimit);
   const summary = labels.length
     ? `${labels.slice(0, limit).join(", ")}${labels.length > limit ? ` +${labels.length - limit}` : ""}`
@@ -153,7 +156,7 @@ function SelectionField<T extends string>({
   }, [opening, loading, remote, searchKey, options, search, locale]);
   const available = !disabled && access.allowed && access.check() && (!opening || opening.access.allowed && opening.access.check());
   // Only an open panel needs option identity to retire stale events; a closed trigger must not serialise every option on each render.
-  const signature = open ? JSON.stringify([remote ? search : searchKey, locale, values, options.map(option => [option.value, option.label, option.detail, option.disabled, option.group, option.searchKeywords])]) : "";
+  const signature = open ? JSON.stringify([remote ? search : searchKey, locale, values, options.map(option => [option.value, option.label, option.detail, option.disabled, option.group, option.subgroup, option.searchKeywords])]) : "";
   const view = useMemo(() => ({}), [opening, available, signature, multiple, max, loading, freeEntry]);
   const input = useMemo(() => ({}), [opening, available]);
   const live = useRef({ opening, view, input, available, access, values, onChange, filtered });
@@ -233,7 +236,7 @@ function SelectionField<T extends string>({
         pressScale={1}
         pressOpacity={reducedMotion ? 1 : opacity.pressed}
         accessibilityRole={multiple ? "checkbox" : "radio"}
-        accessibilityLabel={[item.label, item.group, item.detail].filter(Boolean).join(". ")}
+        accessibilityLabel={[item.subgroup, item.label, item.group, item.detail].filter(Boolean).join(". ")}
         accessibilityState={{ checked: selected, disabled: off }}
         aria-checked={selected}
         aria-disabled={off}
@@ -245,6 +248,8 @@ function SelectionField<T extends string>({
           alignItems: "center",
           gap: space.md,
           paddingHorizontal: space.md,
+          // Effort variants sit under their model's name.
+          ...(item.subgroup ? { paddingLeft: space.md + space.lg } : {}),
           paddingVertical: space.sm,
           borderRadius: radii.control,
           backgroundColor: selected ? colors.fill : "transparent",
@@ -253,23 +258,35 @@ function SelectionField<T extends string>({
       >
         <SelectionIcon>{item.icon}</SelectionIcon>
         <View style={[uiStyles.grow, { gap: 2 }]}>
-          <Body style={selected ? { color: colors.accent, fontWeight: "600" } : undefined}>{item.label}</Body>
+          {/* The fill and the mark carry the selection; the label keeps its reading colour. */}
+          <Body>{item.label}</Body>
           {item.detail ? <Body muted style={uiStyles.caption}>{item.detail}</Body> : null}
         </View>
         {multiple ? (
-          selected ? <CheckSquare color={colors.accent} size={20} /> : <Square color={colors.muted} size={20} />
+          <View accessible={false} style={{
+            width: 20, height: 20, borderRadius: radii.badge, alignItems: "center", justifyContent: "center",
+            ...(selected ? { backgroundColor: colors.accent } : { borderWidth: 1.5, borderColor: colors.muted }),
+          }}>
+            {selected ? <Check color={colors.primaryText} strokeWidth={3} size={14} /> : null}
+          </View>
         ) : selected ? (
           <Check color={colors.accent} strokeWidth={2.6} size={20} />
         ) : null}
       </AnimatedPressable>
     );
   };
-  const groupHeading = (item: SelectionFieldOption<T>, index: number) =>
-    item.group && item.group !== filtered[index - 1]?.group ? (
+  const groupHeading = (item: SelectionFieldOption<T>, index: number) => {
+    const previous = filtered[index - 1];
+    const newGroup = !!item.group && item.group !== previous?.group;
+    const newSubgroup = !!item.subgroup && (newGroup || item.subgroup !== previous?.subgroup);
+    if (!newGroup && !newSubgroup) return null;
+    return (
       <View style={{ paddingHorizontal: space.md }}>
-        <SectionHeader title={item.group} />
+        {newGroup ? <GroupHeading title={item.group!} icon={item.groupIcon} /> : null}
+        {newSubgroup ? <SubgroupHeading title={item.subgroup!} /> : null}
       </View>
-    ) : null;
+    );
+  };
   const showHint = !row && !hideLabel && !!hint && !isUnitHint(hint);
   return (
     <View style={row ? undefined : [uiStyles.field, (error || isUnitHint(hint)) && { paddingBottom: space.xs }]}>

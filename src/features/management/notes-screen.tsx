@@ -41,7 +41,7 @@ import { useAsyncAction } from "@/state/actions";
 
 import { useActiveMachine } from "@/state/machines";
 import { identifier } from "./shared/format";
-import { Scope } from "./shared/scope";
+import { ProjectScopePill } from "../workspace/project-scope-pill";
 import { useLocalProjectScope } from "./shared/local-project-scope";
 import { createNoteDraftStore, noteDraftKey, type LocalNoteDraft } from "./note-drafts";
 import { initialNoteFlow, noteFlowReducer } from "./note-flow";
@@ -184,6 +184,7 @@ export function NotesScreen() {
     <SwipeActionsGroup fill>
       <ManagementList<NoteDirectoryRow>
         title={copy("Notlar", "Notes")}
+        scopeControl={<ProjectScopePill projectId={projectId} onChange={setProjectId} />}
         query={query}
         ListEmptyComponent={!editorOpen ? listState : undefined}
         data={visible}
@@ -252,7 +253,6 @@ export function NotesScreen() {
                   />
                 </FilterSheet>
                 <ManagementToolbar
-                  project={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
                   search={
                     <SearchField
                       placeholder={copy("Ara", "Search")}

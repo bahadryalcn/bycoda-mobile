@@ -7,7 +7,7 @@ import Plus from "lucide-react-native/icons/plus";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useFormDraft } from "@/state/form-draft";
 import type { HostProject } from "@/domain/types";
-import { Badge, Body, Disclosure, ErrorText, Field, FormActions, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, RowIcon, ScreenList, SearchField, Sheet, StatusText } from "@/ui/primitives";
+import { Badge, Body, Disclosure, ErrorText, Field, FormActions, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, RowIcon, ScreenList, SearchField, Sheet, StatusText, useCollapsibleSearch } from "@/ui/primitives";
 import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
@@ -36,6 +36,7 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
   const [search, setSearch] = useState("");
   const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
   const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
+  const serverSearch = useCollapsibleSearch(<SearchField ref={searchInput} label={copy("Sunucu ara", "Search servers")} value={search} onChangeText={setSearch} />);
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<DevServer>();
   const [validationError, setValidationError] = useState("");
@@ -90,15 +91,18 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
         data={servers}
         keyExtractor={(server) => server.id}
         query={scan}
-        actions={!canStartFromEmptyList ? (
-          <IconButton label={copy("Sunucu başlat", "Start server")} disabled={start.isPending} onPress={openStartForm}>
-            <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
-          </IconButton>
-        ) : undefined}
+        actions={<>
+          {serverSearch.trigger}
+          {!canStartFromEmptyList ? (
+            <IconButton label={copy("Sunucu başlat", "Start server")} disabled={start.isPending} onPress={openStartForm}>
+              <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
+            </IconButton>
+          ) : null}
+        </>}
         header={
           <>
             <Stack.Screen options={{ title: copy("Geliştirme sunucuları", "Dev servers") }} />
-            <SearchField ref={searchInput} label={copy("Sunucu ara", "Search servers")} value={search} onChangeText={setSearch} />
+            {serverSearch.field}
             {!scan.error && scan.data?.status === "error" ? <Notice tone="danger" message={scan.data.error ?? copy("Hata", "Error")} retrying={scan.isFetching} onRetry={() => { if (!scan.isFetching) void scan.refetch(); }} /> : null}
 
           </>

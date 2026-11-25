@@ -60,6 +60,7 @@ vi.mock("@/ui/primitives", () => {
     ToggleField: ({label,value,onChange}:any) => createElement(Button,{label,onPress:()=>onChange(!value)}),
     Field: ({label,value,onChangeText}:any) => { if(label==="Text")f.editText=onChangeText;if(label==="Development server URL")f.editUrl=onChangeText;return createElement("input",{"aria-label":label,value:value??"",onChange:(e:any)=>onChangeText(e.target.value)}); },
     SearchField: ({label,value,onChangeText}:any) => createElement("input",{"aria-label":label,value,onChange:(e:any)=>onChangeText(e.target.value)}),
+    useCollapsibleSearch: (field: unknown) => ({ open: true, trigger: null, field }),
     ActionMenu: ({actions}:any) => createElement("div",null,actions.map((a:any)=>createElement(Button,{key:a.key,label:a.label,onPress:a.onPress}))),
     ScreenList: ({actions,header,data,renderItem}:any) => createElement("div",null,actions,header,data.map((item:any)=>createElement("div",{key:item.id},renderItem({item})))),
   };

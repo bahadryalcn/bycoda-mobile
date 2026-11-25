@@ -108,6 +108,7 @@ const chipVariants = { danger: "destructive", success: "success", warning: "warn
 
 /** Filter/choice pill on PanelUI Chip: the selected state, check icon and toggle semantics come from it. */
 export function ChoiceChip({ label, selected, accessibilityLabel, onPress, disabled, busy, tone, density = "compact", fullWidth, style }: ChoiceChipProps) {
+  const { colors } = useMobileTheme();
   const off = !!(disabled || busy);
   const variant = tone && tone in chipVariants ? chipVariants[tone as keyof typeof chipVariants] : "outline";
   return (
@@ -131,7 +132,9 @@ export function ChoiceChip({ label, selected, accessibilityLabel, onPress, disab
         fullWidth && { alignSelf: "stretch", justifyContent: "center" },
         style,
       ]}
-      start={selected ? <Check size={14} strokeWidth={2.4} /> : undefined}
+      // Lucide ignores PanelUI's icon tint context; colour the mark with the selected chip's
+      // foreground token (`accent-foreground` is `colors.text`) so it follows light and dark.
+      start={selected ? <Check size={14} strokeWidth={2.4} color={colors.text} /> : undefined}
     >
       {label}
     </PanelChip>

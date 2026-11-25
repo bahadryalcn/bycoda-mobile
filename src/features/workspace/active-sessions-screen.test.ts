@@ -39,7 +39,8 @@ vi.mock("@/ui/primitives", () => ({
     renderItem: (entry: { item: { key: string } }) => ReactNode;
   }) => h("div", null, data.map((item) => h("div", { key: item.key }, renderItem({ item })))),
 }));
-vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterSheet: () => null }));
+vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterChipRow: () => null, FilterSheet: () => null }));
+vi.mock("./project-scope-pill", () => ({ ProjectScopePill: () => null }));
 vi.mock("@/ui/hierarchy-frame", () => ({
   HierarchyWidthProvider: ({ children }: { children: ReactNode }) => children,
   HierarchyFrame: ({ children }: { children: (frame: { indent: number; compressed: boolean }) => ReactNode }) =>

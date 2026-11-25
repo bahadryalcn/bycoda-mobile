@@ -1,7 +1,7 @@
-import { errorMessage } from "@/ui/error-message";
 import { HostWsError } from "@/remote/ws-connection";
 import { RemoteHostError } from "@/remote/host-error";
 import { AssistantCallError, assistantCallErrorMessage } from "./assistant-call-error";
+import { voiceNativeMessage } from "./assistant-voice-native-error";
 import type { AssistantVoiceStage } from "./assistant-voice-presentation";
 
 type Copy = (turkish: string, english: string, values?: Record<string, string | number>) => string;
@@ -53,10 +53,12 @@ const known: Record<string, (copy: Copy) => string> = {
 /** A localized sentence for any voice failure; Host errors keep the shared presenter's wording. */
 export function assistantVoiceErrorMessage(error: unknown, copy: Copy, where?: { stage?: AssistantVoiceStage; computer: string }): string {
   if (error instanceof AssistantCallError || error instanceof HostWsError || error instanceof RemoteHostError)
-    return where ? assistantCallErrorMessage(error, copy, where) : error instanceof AssistantCallError ? assistantCallErrorMessage(error, copy) : errorMessage(error, copy);
+    return assistantCallErrorMessage(error, copy, where);
   const text = error instanceof Error ? error.message : typeof error === "string" ? error : "";
   const translate = known[text];
   if (translate) return translate(copy);
+  const phone = voiceNativeMessage(error, copy);
+  if (phone) return phone;
   return copy("Ses kullanılamıyor. Mikrofon iznini ve bilgisayardaki ses kurulumunu kontrol et.",
     "Voice is unavailable. Check microphone permission and voice setup on your computer.");
 }

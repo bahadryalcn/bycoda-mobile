@@ -18,7 +18,9 @@ import {
   pairingNeedsNewCode,
   parseDesktopPairingCode,
   PairingFailure,
+  pairingRouteIsPublic,
 } from "./pairing-code";
+import { newProofSeed, proofKeyOf } from "@/remote/device-proof";
 import { redeemMobilePairingCode } from "./pairing-redeem";
 import { ConnectionRecoveryError, ConnectionRemovalError } from "./recovery";
 import type {
@@ -152,11 +154,17 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
 
   const finish = async (input: ComputerConnectionInput, signal: AbortSignal) => {
     await connectComputer(input, {
-      discover: (endpoint, credential, currentSignal, lanKey, environmentId) =>
-        discoverMachine(endpoint, credential, { signal: currentSignal, lanKey, environmentId }),
+      discover: (endpoint, credential, currentSignal, lanKey, environmentId, proofSeed) =>
+        discoverMachine(endpoint, credential, {
+          signal: currentSignal,
+          lanKey,
+          environmentId,
+          proofSeed,
+        }),
       flushDrafts: flushWorkspaceDrafts,
       getMachines: () => useMachines.getState().machines,
-      saveMachine: (machine, credential) => useMachines.getState().saveMachine(machine, credential),
+      saveMachine: (machine, credential, proofSeed) =>
+        useMachines.getState().saveMachine(machine, credential, proofSeed),
       createId: () => Crypto.randomUUID(),
       assertAccess,
       signal,
@@ -179,9 +187,12 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
           form.values.target?.kind === "existing" ? form.values.target.id : undefined;
         if (entry.kind === "preview") {
           if (pairingCodeExpired(entry.code, entry.receivedAt)) throw new PairingFailure("expired");
+          // The phone key exists before the credential does; it is persisted with the credential.
+          const proofSeed = newProofSeed();
           const redeemed = await redeemMobilePairingCode(entry.code, entry.claimId, phoneName, {
             signal: controller.signal,
             assertAccess,
+            proofKey: proofKeyOf(proofSeed),
           });
           check();
           await finish(
@@ -191,6 +202,8 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
               lanKey: entry.code.lanKey,
               credential: redeemed.token,
               expectedEnvironmentId: entry.code.environmentId,
+              proofSeed,
+              ...(pairingRouteIsPublic(entry.code) ? { public: true as const } : {}),
             },
             controller.signal,
           );
@@ -203,12 +216,20 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
               ? ((await credentials.get(existing.id, existing)) ?? "")
               : form.values.token;
           check();
+          // The same saved credential keeps its bound key; a different pasted one starts unbound.
+          const saved = existing ? await credentials.get(existing.id, existing) : null;
+          const proofSeed =
+            existing && saved && saved === credential
+              ? ((await credentials.getProofSeed(existing.id, existing)) ?? undefined)
+              : undefined;
+          check();
           await finish(
             {
               name: form.values.name,
               endpoint: form.values.endpoint,
               credential,
               editingId,
+              proofSeed,
               ...(existing?.lanKey
                 ? { lanKey: existing.lanKey, expectedEnvironmentId: existing.environmentId }
                 : {}),

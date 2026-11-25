@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { activeAccessTunnels, deviceRevokeIntent, localTunnelUrl, readAccessCenter, visibleAccessDevices } from "./access-center-model";
 const report = () => ({ environmentId: "host", sampledAt: 42, devices: [{ id: "current", name: "Phone", isCurrent: true }], devicesTruncated: false,
-  lan: { state: "ready" }, privateNetwork: { state: "offline" }, tunnels: { providers: [{ provider: "cloudflare", installed: true, credential: "not-required" }],
+  lan: { state: "ready" }, privateNetwork: { state: "unavailable" }, tunnels: { providers: [{ provider: "cloudflare", installed: true, credential: "not-required" }],
     tunnels: [{ id: "tunnel", provider: "cloudflare", target: "host", state: "ready", startedAt: 42, localUrl: "http://127.0.0.1:3000", publicUrl: "https://fixture.trycloudflare.com", canStop: true }], publicReachability: "unverified" } });
 it("finds paired devices by localized name or identity and preserves report order", () => {
   const devices = [{ id: "first-abcd", name: "İş telefonu", isCurrent: false },

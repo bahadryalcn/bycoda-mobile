@@ -10,12 +10,12 @@ import GitPullRequest from "lucide-react-native/icons/git-pull-request";
 import Kanban from "lucide-react-native/icons/square-kanban";
 import Plug from "lucide-react-native/icons/plug";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
-import { ActionMenu, Button, Notice, QueryState, Sheet, StateView, ToggleField, NavigationGroup } from "@/ui/primitives";
+import { ActionMenu, Button, Notice, QueryState, Sheet, StateView, StatusLine, ToggleField, NavigationGroup } from "@/ui/primitives";
+import { useReadRetryNotice } from "@/ui/query-state";
 import { useCopy } from "@/ui/copy";
 import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { useLocale } from "@/i18n";
 import { getQueryPresentation } from "@/ui/query-presentation";
-import { Scope } from "../management/common";
 import { ProviderInboxDetail } from "./provider-detail";
 import { ScreenList } from "@/ui/screen-list";
 import { ProviderConnections, ProviderInboxFeedback, ProviderInboxRow } from "./provider-list";
@@ -94,6 +94,9 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
   const awaitingSearch = search.trim() !== committedSearch;
   const empty = !awaitingSearch && items.data?.items.length === 0 &&
     Object.keys(items.data.errors).length === 0 && !items.data.omittedProjects?.length;
+  // The desktop fetches every connected repository before it answers; say so instead of a mute placeholder.
+  const slowList = useReadRetryNotice(available && items.data === undefined && items.isFetching && !items.error &&
+    (items.failureCount ?? 0) === 0, origin.machineId);
   const scrollMemory = useInboxScrollMemory<(typeof rows)[number]>(memory, origin, initialView?.offset ?? 0,
     available && items.data !== undefined, rows.length, { suspended: !available });
   const dispatch = useCallback((action: InboxBrowseAction) => {
@@ -137,7 +140,7 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
     </Sheet> : null}
     {jiraBoards ? <ProviderJiraBoards origin={origin} canRead={available} canWrite={available} onClose={() => setJiraBoards(false)} /> : null}
     <ScreenList {...scrollMemory.listProps} title={embedded ? undefined : copy("Servis gelen kutusu", "Provider inbox")}
-      query={available ? items : scopedAvailability} refresh={refresh} context={<Scope allowAll projectId={origin.projectId} onChange={inboxScope.setProjectId} />}
+      query={available ? items : scopedAvailability} refresh={refresh}
       data={rows} keyExtractor={inboxItemKey} renderItem={({item}) => <ProviderInboxRow item={item} onOpen={item => {
         if (canBrowse() && latest.current.viewKey === viewKey) dispatch({type:"select",item});
       }} />}
@@ -170,6 +173,8 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
             </>} />
           <AppliedFilters result={!awaitingSearch && items.data ? copy("{p0} kayıt", "{p0} items", { p0: new Intl.NumberFormat(locale).format(items.data.items.length) }) : undefined}
             filters={[assigned&&copy("Yalnız bana atananlar","Assigned to me only"),all&&copy("Kapalı kayıtları da göster","Include closed items")]} />
+          {slowList ? <StatusLine busy label={copy("Bilgisayarındaki Bycoda kayıtları servislerden almaya devam ediyor…",
+            "Bycoda on your computer is still fetching from your services…")} /> : null}
           <QueryState query={{...items,refetch:retryItems}} empty={empty} searching={searching || hasFilters} emptyIllustration="inbox-empty"
             emptyTitle={searching ? copy("Eşleşen sonuç yok", "No matching results") : hasFilters
               ? copy("Bu filtrede kayıt yok", "No items match these filters") : copy("Açık kayıt yok", "No open items")}

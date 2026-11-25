@@ -16,20 +16,20 @@ it("trusts Host holders when the capability is present and ignores other holders
 });
 
 it("does not infer from the transcript when the Host reports holders", () => {
-  const blocks = [user, tool("t", "mcp__t3-code__device_open")];
+  const blocks = [user, tool("t", "mcp__workspace-tools__device_open")];
   expect(resolveHolders({ ...base, capabilities: [DEVICE_HOLDER_CAPABILITY], blocks, devices: [] })).toEqual({});
 });
 
 it("falls back to the latest unclosed open in the running turn on an older Host", () => {
-  const open = tool("t", "mcp__t3-code__device_open"), close = tool("c", "mcp__t3-code__device_close");
+  const open = tool("t", "mcp__workspace-tools__device_open"), close = tool("c", "mcp__workspace-tools__device_close");
   expect(inferHolders([user, open], true)).toEqual({ device: { inferred: true } });
   expect(inferHolders([user, open, close], true)).toEqual({});
   expect(inferHolders([open, user], true)).toEqual({});
   expect(inferHolders([user, open], false)).toEqual({});
   expect(inferHolders([user, tool("f", "device_open", { status: "failed" })], true)).toEqual({});
-  const page = tool("p", "mcp__t3-code__preview_open", { detail: "opened http://localhost:5173/app" });
+  const page = tool("p", "mcp__workspace-tools__preview_open", { detail: "opened http://localhost:5173/app" });
   expect(inferHolders([user, page], true)).toEqual({ browser: { url: "http://localhost:5173/app", inferred: true } });
-  expect(inferHolders([user, page, tool("pc", "mcp__t3-code__t3_preview_close")], true)).toEqual({});
+  expect(inferHolders([user, page, tool("pc", "mcp__workspace-tools__workspace_preview_close")], true)).toEqual({});
   expect(inferHolders([user, tool("x", "my_device_opener")], true)).toEqual({});
 });
 

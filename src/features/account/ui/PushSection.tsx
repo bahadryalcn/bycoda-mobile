@@ -6,6 +6,8 @@ import { useCopy } from "@/ui/copy";
 import { allowDevicePermission, readDevicePermission } from "../../permissions/device-permissions";
 import { accountPushAvailable, enableAccountPush, syncAccountPush } from "../model/push-account";
 import { useAccount } from "./account-context";
+import { pushTokenMessage } from "../../push/push-error-copy";
+import { accountPushMessage, needsReregistration } from "./account-error-copy";
 
 type State = "checking" | "off" | "on" | "blocked" | "read-error" | "error";
 
@@ -17,8 +19,10 @@ type State = "checking" | "off" | "on" | "blocked" | "read-error" | "error";
  */
 export function PushSection() {
   const copy = useCopy();
-  const { runtime, device } = useAccount();
+  const { runtime, device, retryRegistration } = useAccount();
   const [state, setState] = useState<State>("checking");
+  // Why the last attempt failed, so the row names the cause instead of a generic failure.
+  const [lastError, setLastError] = useState<unknown>(null);
   const accountPush = accountPushAvailable() && !!runtime && !!device;
   const owner = useMemo(() => ({ active: false, busy: false, refresh: false }), [accountPush, runtime, device]);
 
@@ -47,8 +51,11 @@ export function PushSection() {
         if (accountPush) await syncAccountPush(runtime!, device!);
         if (owner.active) setState("on");
       }
-    } catch {
-      if (owner.active) setState(failure);
+    } catch (error) {
+      if (owner.active) {
+        setLastError(error);
+        setState(failure);
+      }
     } finally {
       owner.busy = false;
       if (owner.active && owner.refresh) { owner.refresh = false; void update(false); }
@@ -76,7 +83,9 @@ export function PushSection() {
     off: copy("Kapalı. Bildirim almak için izin ver.", "Off. Allow notifications to receive them."),
     blocked: copy("Telefon ayarlarında kapalı.", "Turned off in phone settings."),
     "read-error": copy("Bildirim izni okunamadı.", "Notification permission could not be read."),
-    error: copy("Bildirimler açılamadı.", "Notifications could not be turned on."),
+    error: accountPush
+      ? accountPushMessage(lastError, copy)
+      : pushTokenMessage(lastError, copy) ?? copy("Bildirimler açılamadı.", "Notifications could not be turned on."),
   }[state];
   const label = state === "read-error"
     ? copy("Yenile", "Refresh")
@@ -98,6 +107,9 @@ export function PushSection() {
         separator={false}
         onPress={() => {
           if (state === "blocked" || state === "on") { void Linking.openSettings().catch(() => undefined); return; }
+          // The service lost this phone's device record: registering again gives it a new one, and the
+          // new device re-runs this row's sync.
+          if (state === "error" && needsReregistration(lastError) && retryRegistration) { retryRegistration(); return; }
           void update(state === "off" || state === "error");
         }}
       />

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { activeProjectSessions, deduplicateProjects, projectSessionDirectory, runningProjectCounts } from "./activity-model";
 import type { HostProject, HostSessionSummary } from "./wire";
 
-const project = (id: string, cwd = id): HostProject => ({ id, cwd, name: "monocode" });
+const project = (id: string, cwd = id): HostProject => ({ id, cwd, name: "sampleproject" });
 const session = (id: string, fields: Partial<HostSessionSummary> = {}): HostSessionSummary => ({
   id,
   title: id,
@@ -16,11 +16,11 @@ const session = (id: string, fields: Partial<HostSessionSummary> = {}): HostSess
 describe("workspace activity", () => {
   it("retains distinct host IDs for folder aliases and only removes repeated IDs", () => {
     const rows = [
-      project("a", "G:\\Projects\\MonoCode\\"),
-      project("b", "g:/projects/monocode"),
+      project("a", "G:\\Projects\\SampleProject\\"),
+      project("b", "g:/projects/sampleproject"),
       project("c", "/Projects/App"),
       project("d", "/projects/app"),
-      project("b", "g:/projects/monocode"),
+      project("b", "g:/projects/sampleproject"),
     ];
     expect(deduplicateProjects(rows, "b").map((row) => row.id)).toEqual(["a", "b", "c", "d"]);
   });

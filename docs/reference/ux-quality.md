@@ -29,8 +29,12 @@ improves the product. Generic redesign examples do not override these decisions.
   look actionable. A long row of identical pills cannot express every relationship.
 - Show the essential summary first. Put detailed history, configuration and logs
   behind navigation/disclosure while keeping state and recovery visible.
-- Search growing collections. Put secondary filters in an accessible selection
-  surface, show applied state on the trigger and provide reset. Preserve drafts
+- Search growing collections. Collection search starts as a search icon in the
+  shared `SearchToolbar` row beside the filter trigger; it opens an inline field
+  with Clear and Cancel and stays open while a query is active. Put secondary filters in an accessible selection
+  surface, show applied state on the trigger and provide reset. One quick filter
+  may stay a single `FilterChipRow`; hide filter triggers when there is nothing
+  to narrow and no filter is applied. Preserve drafts
   until apply succeeds when the interaction uses explicit application.
 - Do not reduce noise by removing meaningful data or actions. Reorganize them.
 
@@ -70,9 +74,30 @@ New-session project selection prepares a draft; a separate Start action creates
 the session after its model, account and permission summary is visible. Recent
 projects must also offer access to the full authorized project list.
 
-Management project filters belong to their screen. Creating a task or epic from
-an all-projects list chooses the project in the editor without changing another
-screen's scope. Tool directories explain known support and project requirements
+Exactly one project is managed at a time. Project scope is one shared selection
+shown as a compact, single-line pill in the page identity row; choosing it on one
+page scopes every page. A project is required everywhere except Tasks, Notes,
+Automations and the session overview, which alone offer All projects. Every other
+page (Epics, Crews, Stewards, Inbox, pull requests, the Tools directory and each
+tool) lists only real projects in its pill. When such a page opens while the
+shared selection is All projects it shows, without asking, the last project
+selected on that computer in this run, else the most recently opened project,
+else the computer's first project; the shared selection stays All until the
+person picks a project there. No page shows a different project than its pill:
+opening a project, a project link or notification, or choosing a project sets the
+shared selection, and pages switch when it changes. A session opened while All
+projects is selected keeps All, which already contains it.
+
+The phone can hold several computers, and data reads follow the active one. Each
+computer remembers its own project selection: switching computers restores that
+computer's project (All or a specific one) and required-project pages fall back
+within that computer's proven directory, never to another computer's project. A
+remembered project the directory no longer lists counts as All. Every page that
+reads the active computer shows the switchable computer pill with its status;
+pages bound to one computer show it read-only, and no page offers All computers
+because no read aggregates across computers.
+Creating a task or epic from an all-projects list chooses the project in the
+editor without changing the shared scope. Tool directories explain known support and project requirements
 before asking for a project; destination screens retain their access checks.
 
 Terminal command drafts belong to their captured computer, project and terminal.

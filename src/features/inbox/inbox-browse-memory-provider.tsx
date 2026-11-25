@@ -1,6 +1,6 @@
 import { createContext, Fragment, use, useCallback, useState, useSyncExternalStore, type PropsWithChildren } from "react";
 import { useMachines } from "@/state/machines";
-import { useLocalProjectScope } from "../management/shared/local-project-scope";
+import { useRequiredProjectScope } from "../management/shared/required-project-scope";
 import { InboxLocalScopeContext } from "./inbox-local-scope";
 import { createInboxBrowseScope, type InboxBrowseMemory } from "./inbox-browse-memory";
 
@@ -10,7 +10,8 @@ export const useInboxBrowseMemory = () => use(InboxBrowseMemoryContext);
 /** Lives above the Inbox mode switch. Inactive content still unmounts and stops reads. */
 export function InboxBrowseMemoryProvider({ children }: PropsWithChildren) {
   const [store] = useState(createInboxBrowseScope);
-  const local = useLocalProjectScope();
+  // The Inbox always reads one project; All projects falls back to the last or most recent one.
+  const local = useRequiredProjectScope();
   const snapshot = useCallback(() => {
     const state = useMachines.getState();
     return store.sync(state.machines.find(machine => machine.id === state.activeId), local.current.current.projectId);

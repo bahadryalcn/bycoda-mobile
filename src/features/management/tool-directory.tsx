@@ -1,4 +1,4 @@
-import { FolderOpen, GitBranch, MessagesSquare, CheckSquare, Target, Users, Clock, NotebookPen, Activity, Plug, KeyRound, ShieldCheck, Server, ScrollText, Smartphone, Globe, Terminal, ChartColumn } from "@/ui/duotone-icon";
+import { FolderOpen, GitBranch, MessagesSquare, CheckSquare, Target, Users, Clock, NotebookPen, Activity, Plug, KeyRound, ShieldCheck, Server, Smartphone, Globe, Terminal, ChartColumn } from "@/ui/duotone-icon";
 import { PullRequestIcon } from "./pull-request-icon";
 import { computerTools, toolLabels } from "../tools/tool-labels";
 import { useLocale } from "@/i18n";
@@ -13,7 +13,7 @@ import { useCopy } from "@/ui/copy";
 import { managementSections, type ManagementSection } from "./sections";
 
 type CopyPair = readonly [tr: string, en: string];
-type HostTool = "servers" | "logs" | "devices" | "browser" | "terminals" | "diagnostics" | "usage";
+type HostTool = "servers" | "devices" | "browser" | "terminals" | "diagnostics" | "usage";
 type Tool = {
   id: string;
   label: CopyPair;
@@ -43,7 +43,6 @@ const tools: readonly Tool[] = [
   { id: "pull-requests", label: ["Pull request’ler", "Pull requests"], icon: PullRequestIcon },
   { id: "terminals", label: toolLabels.terminals, icon: Terminal, hostTool: "terminals" },
   { id: "servers", label: toolLabels.servers, icon: Server, hostTool: "servers" },
-  { id: "logs", label: toolLabels.logs, icon: ScrollText, hostTool: "logs" },
   { id: "browser", label: toolLabels.browser, icon: Globe, hostTool: "browser" },
   { id: "devices", label: toolLabels.devices, icon: Smartphone, hostTool: "devices" },
   { id: "usage", label: toolLabels.usage, icon: ChartColumn, hostTool: "usage" },
@@ -52,7 +51,7 @@ const tools: readonly Tool[] = [
   { id: "access", label: toolLabels.access, icon: KeyRound },
 ];
 
-const hostCapabilities = { servers: "dev.servers", devices: "device.host", browser: "browser.shared", terminals: "terminals.v1", logs: "runtime.logs", diagnostics: "resources.diagnostics", usage: "usage.sessions.read" } as const;
+const hostCapabilities = { servers: "dev.servers", devices: "device.host", browser: "browser.shared", terminals: "terminals.v1", diagnostics: "resources.diagnostics", usage: "usage.sessions.read" } as const;
 
 /** Computer-level tools open with any of these capabilities and without a project. */
 const computerCapabilities: Partial<Record<HostTool, readonly string[]>> = {
@@ -66,7 +65,7 @@ const computerCapabilities: Partial<Record<HostTool, readonly string[]>> = {
  */
 const groups: readonly { title: CopyPair; ids: readonly string[] }[] = [
   { title: ["İşler", "Work"], ids: ["tasks", "goals", "crews", "automations", "stewards"] },
-  { title: ["Proje", "Project"], ids: ["sessions", "files", "git", "notes", "pull-requests", "terminals", "servers", "logs", "browser", "devices"] },
+  { title: ["Proje", "Project"], ids: ["sessions", "files", "git", "notes", "pull-requests", "terminals", "servers", "browser", "devices"] },
   { title: ["Bilgisayar", "Computer"], ids: ["usage", "diagnostics", "providers", "access"] },
 ];
 

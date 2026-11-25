@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 const fixture=vi.hoisted(()=>({state:{activeId:"computer",selectedProjectId:"project",machines:[{id:"computer",endpoint:"https://one.invalid",name:"Computer"}]} as any,listeners:new Set<()=>void>()}));
 vi.mock("@/state/machines",()=>({useMachines:Object.assign((selector: (state: any) => unknown) => selector(fixture.state), {getState:()=>fixture.state,subscribe:(listener:()=>void)=>{fixture.listeners.add(listener);return()=>fixture.listeners.delete(listener);}})}));
+vi.mock("../workspace/use-project-directory",()=>({useProjectList:()=>({directoryReady:true,data:[{id:"project"},{id:"other"}]})}));
+vi.mock("@/state/project-directory-preferences",()=>({useProjectDirectoryPreferences:()=>({preferences:{recent:{}}})}));
 import { InboxBrowseMemoryProvider, useInboxBrowseMemory } from "./inbox-browse-memory-provider";
 import { useInboxLocalScope, type InboxLocalScope } from "./inbox-local-scope";
 import { initialInboxBrowseState } from "./provider-state";
@@ -32,7 +34,8 @@ it("does not retire current preferences during StrictMode subscription replay",(
 });
 
 
-it("changes the Inbox filter without changing the workspace and retires captured scope even after A/B/A", () => {
+it("changes the shared project scope from the Inbox and retires captured scope even after A/B/A", () => {
+ fixture.state.selectProject=(id:string|null)=>update({selectedProjectId:id});
  let local: InboxLocalScope;
  function LocalProbe() { local = useInboxLocalScope(); return null; }
  const host = document.createElement("div"); document.body.append(host); root = createRoot(host);
@@ -40,7 +43,10 @@ it("changes the Inbox filter without changing the workspace and retires captured
  const captured = local!;
  expect(captured.matches(origin)).toBe(true);
  act(() => { captured.setProjectId("other"); captured.setProjectId("project"); });
+ // The Inbox writes the one shared scope every page reads.
  expect(fixture.state.selectedProjectId).toBe("project");
  expect(captured.matches(origin)).toBe(false);
+ // Readers re-render from the shared store; this fixture selector is not subscribed.
+ act(() => root!.render(createElement(InboxBrowseMemoryProvider, null, createElement(LocalProbe))));
  expect(local!.matches(origin)).toBe(true);
 });

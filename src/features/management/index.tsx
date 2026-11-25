@@ -3,12 +3,12 @@ import { router } from "expo-router";
 import { useState, type ComponentType } from "react";
 import { View } from "react-native";
 import { useCopy } from "@/ui/copy";
-import { Empty, SearchField, Screen } from "@/ui/primitives";
+import { Empty, SearchField, Screen, useCollapsibleSearch } from "@/ui/primitives";
 import { NoComputerGate } from "@/ui/no-computer";
 import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
-import { Scope } from "./shared/scope";
-import { InitialProjectFilter, useLocalProjectScope } from "./shared/local-project-scope";
+import { ProjectScopePill } from "../workspace/project-scope-pill";
+import { useRequiredProjectScope } from "./shared/required-project-scope";
 import { TasksScreen } from "./tasks-screen";
 import { GoalsScreen } from "./goals-screen";
 import { CrewsScreen } from "./crews-screen";
@@ -23,29 +23,28 @@ import { useProjectList } from "../workspace/use-project-directory";
 export function ManagementHome() {
   const copy = useCopy();
   const machine = useActiveMachine();
-  const { projectId: selectedProjectId, setProjectId } = useLocalProjectScope();
+  const { projectId: selectedProjectId, setProjectId } = useRequiredProjectScope();
   const projects = useProjectList();
   const [search, setSearch] = useState("");
+  // The search icon trails the scope row; the open field takes the row below it.
+  const toolSearch = useCollapsibleSearch(<SearchField label={copy("Araçlarda ara", "Search tools")} value={search} onChangeText={setSearch} />);
   const projectId = selectedProjectId && (!projects.directoryReady || !projects.data?.some((project) => project.id === selectedProjectId))
     ? undefined : selectedProjectId;
   return (
-    <Screen title={copy("Araçlar", "Tools")} context={machine ? <Scope allowAll projectId={selectedProjectId} onChange={setProjectId} /> : undefined} scroll={!!machine}>
+    <Screen title={copy("Araçlar", "Tools")} scopeControl={machine ? <ProjectScopePill allowAll={false} projectId={selectedProjectId} onChange={setProjectId} /> : undefined}
+      actions={machine ? toolSearch.trigger : undefined} scroll={!!machine}>
       {!machine ? (
         <NoComputerGate description={copy("Görevler, ekipler, otomasyonlar ve geliştirme araçları bağlı bilgisayarda çalışır.", "Tasks, crews, automations and developer tools run on a connected computer.")} />
       ) : (
         <>
-          <SearchField
-            label={copy("Araçlarda ara", "Search tools")}
-            value={search}
-            onChangeText={setSearch}
-          />
+          {toolSearch.field}
           <ToolDirectory projectId={projectId} query={search} onClearSearch={() => setSearch("")} />
         </>
       )}
     </Screen>
   );
 }
-export function ManagementScreen({ section, initialProjectId }: ManagementScreenProps) {
+export function ManagementScreen({ section }: ManagementScreenProps) {
   const machine = useActiveMachine();
   const connection = useConnectionScope();
   const copy = useCopy();
@@ -69,9 +68,7 @@ export function ManagementScreen({ section, initialProjectId }: ManagementScreen
   };
   const Component = machine && isManagementSection(section) ? screens[section] : undefined;
   return Component ? (
-    <InitialProjectFilter value={initialProjectId}>
-      <Component key={`${connection.token}:${section}`} />
-    </InitialProjectFilter>
+    <Component key={`${connection.token}:${section}`} />
   ) : (
     <Screen title={title} scroll={false}>
       <View style={{ flex: 1 }}>

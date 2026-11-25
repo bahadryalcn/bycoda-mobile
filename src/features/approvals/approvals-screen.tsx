@@ -95,6 +95,8 @@ function ApprovalsWorkspace({ machine, current, focusId }: {
   return (
     <ScreenList
       title={title}
+      // Approvals belong to the active computer; switching computers lists the other computer's.
+      computerSwitch
       scope={{ computer: machine.name }}
       header={
         <>

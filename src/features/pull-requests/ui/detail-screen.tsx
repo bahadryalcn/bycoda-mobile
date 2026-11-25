@@ -5,6 +5,7 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { hostKey } from "@/state/queries";
 import { Screen, Skeleton, StateView } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { errorMessage } from "@/ui/error-message";
 import { ProviderInboxDetail } from "../../inbox/provider-detail";
 import { useInboxRead, useProviderInboxAvailability } from "../../inbox/provider-queries";
 import { providerInboxAccess } from "../../inbox/provider-model";
@@ -37,10 +38,21 @@ export function PullRequestDetailScreen() {
       router.replace("/");
     }
   };
-  if (coldRead && listRead.data === undefined && !listRead.error) return <>
+  // A cold start (notification, deep link) proves the project and desktop provider access first;
+  // until those reads answer, an "unavailable" verdict would only flash before the PR opens.
+  const directoryLoading = !!machine && machine.id === params.machineId && !!projectId && projects.verifying === true;
+  const availabilityLoading = !!verifiedMachine && !!target && !item && availability.data === undefined && !availability.error && availability.isFetching;
+  if (directoryLoading || availabilityLoading || (coldRead && listRead.data === undefined && !listRead.error)) return <>
     <Stack.Screen options={{ title }} />
     <Screen><Skeleton /></Screen>
   </>;
+  // When the read itself failed or desktop provider access is off, say that instead of a generic hint.
+  const missingCause = !verifiedMachine || !target ? undefined
+    : listRead.error ? errorMessage(listRead.error, copy, undefined, { read: true })
+    : availability.error ? errorMessage(availability.error, copy, undefined, { read: true })
+    : availability.data?.available === false ? copy("GitHub, GitLab, Azure DevOps, Linear ve Jira erişimi bilgisayardaki oturumundan alınır. Bycoda’yı aç veya güncelle; bağlantı otomatik kontrol edilir.",
+      "Provider access uses your desktop session. Open or update Bycoda on this computer; availability is checked automatically.")
+    : undefined;
   if (!verifiedMachine || !item) return <>
     <Stack.Screen options={{ title }} />
     <Screen>
@@ -48,7 +60,7 @@ export function PullRequestDetailScreen() {
         size="region"
         tone="warning"
         title={verifiedMachine ? copy("Pull request açılamadı", "Could not open pull request") : copy("Pull request erişimi kullanılamıyor", "Pull request access unavailable")}
-        description={verifiedMachine && target ? copy("Pull request listesinden aç.", "Open it from the pull request list.") : undefined}
+        description={missingCause ?? (verifiedMachine && target ? copy("Pull request listesinden aç.", "Open it from the pull request list.") : undefined)}
         action={{
           label: router.canGoBack() ? copy("Geri dön", "Go back") : verifiedMachine ? copy("Pull request’ler", "Pull requests") : copy("Projeler", "Projects"),
           onPress: close,

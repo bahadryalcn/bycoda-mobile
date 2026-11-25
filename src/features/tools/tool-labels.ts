@@ -2,7 +2,6 @@
 const labels = {
   terminals: ["Terminaller", "Terminals"],
   servers: ["Geliştirme sunucuları", "Dev servers"],
-  logs: ["Çalışma günlükleri", "Runtime logs"],
   devices: ["Cihazlar", "Devices"],
   browser: ["Tarayıcı", "Browser"],
   diagnostics: ["Bilgisayar kaynakları", "Computer resources"],

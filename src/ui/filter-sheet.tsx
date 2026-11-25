@@ -1,8 +1,8 @@
 import type { ComponentType, PropsWithChildren } from "react";
-import { View } from "react-native";
+import { ScrollView, View, useWindowDimensions } from "react-native";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
-import { IconButton } from "./buttons";
-import { radii, space } from "./tokens";
+import { ChoiceChip, IconButton } from "./buttons";
+import { metrics, radii, space } from "./tokens";
 import { FormActions, Sheet } from "./dialogs";
 import { useCopy } from "./copy";
 import { Body } from "./typography";
@@ -53,6 +53,39 @@ export function FilterSheet({ visible, title, onClose, onApply, onReset, applyDi
       <FormActions submitLabel={copy("Uygula", "Apply")} onSubmit={onApply} disabled={applyDisabled}
         cancelLabel={copy("Sıfırla", "Reset")} onCancel={onReset} />
     </Sheet>
+  );
+}
+
+/**
+ * One quick filter as a single horizontally scrolling chip row: the frequent choice stays one tap
+ * away without a second toolbar row per option. The row is the list's only quick filter; secondary
+ * filters stay in FilterSheet. Chips grow with large text instead of clipping their label.
+ */
+export function FilterChipRow<T extends string>({ label, value, options, onChange, disabled = false }: {
+  /** Spoken name of the filter; not shown, the chips name themselves. */
+  label: string;
+  value: T;
+  options: readonly { value: T; label: string }[];
+  onChange: (value: T) => void;
+  disabled?: boolean;
+}) {
+  useMobileTheme();
+  const { fontScale } = useWindowDimensions();
+  const grow = fontScale > 1 ? { height: "auto" as const, minHeight: metrics.chipHeight, paddingVertical: space.xs } : null;
+  return (
+    <ScrollView
+      horizontal
+      accessibilityLabel={label}
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      style={{ flexGrow: 0 }}
+      contentContainerStyle={{ columnGap: space.sm, alignItems: "center" }}
+    >
+      {options.map((option) => (
+        <ChoiceChip key={option.value} label={option.label} selected={!disabled && value === option.value}
+          disabled={disabled} style={grow} onPress={() => onChange(option.value)} />
+      ))}
+    </ScrollView>
   );
 }
 

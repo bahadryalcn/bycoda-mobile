@@ -22,7 +22,7 @@ vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "host-a", pr
 vi.mock("@/state/queries", () => ({ useHostQuery: (_key: unknown, method: string) => ({ data: method === "automations.list" ? fixture.automations : [], isSuccess: true }), useHostMutation: () => ({ isPending: false, mutate: fixture.mutate, reset: vi.fn() }) }));
 vi.mock("./shared/use-editor-record", () => ({ useEditorRecord: () => undefined }));
 vi.mock("./shared/format", () => ({ identifier: () => "fixture-automation" }));
-vi.mock("./shared/scope", () => ({ Scope: () => null }));
+vi.mock("../workspace/project-scope-pill", () => ({ ProjectScopePill: () => null }));
 vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({
   directoryReady: fixture.directoryReady,
   isProjectVisible: () => fixture.projectVisible,

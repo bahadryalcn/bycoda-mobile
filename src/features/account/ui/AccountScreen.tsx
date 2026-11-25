@@ -16,18 +16,7 @@ import { useAccount } from "./account-context";
 import { useAccountMe } from "./use-account-me";
 import { useGracedReadError } from "./use-graced-read-error";
 import { AccountApiError } from "../contracts/errors";
-
-/** Says why this phone could not join the account when the server gave a reason the owner can act on. */
-function registrationMessage(error: Error, copy: ReturnType<typeof useCopy>) {
-  if (error instanceof AccountApiError && error.code === "conflict" && /device limit/i.test(error.message))
-    return copy(
-      "Hesabındaki cihaz sınırı dolu. Aşağıdan kullanmadığın bir cihazın oturumunu kapat, sonra yeniden dene.",
-      "Your account has reached its device limit. Sign out a device you no longer use below, then retry.",
-    );
-  if (error instanceof AccountApiError && error.code === "forbidden")
-    return copy("Bu hesapta telefon kaydı açık değil.", "Phones are not enabled for this account.");
-  return copy("Bu telefon hesaba kaydedilemedi.", "This phone could not be registered to your account.");
-}
+import { registrationMessage } from "./account-error-copy";
 
 function Profile() {
   const copy = useCopy();
@@ -80,9 +69,14 @@ export function AccountScreen() {
       {account.registerError ? (
         <ErrorNotice error={account.registerError} onRetry={account.retryRegistration} message={registrationMessage(account.registerError, copy)} />
       ) : null}
-      <Profile />
-      <DevicesSection />
-      <ActivitySection />
+      {/* A rejected session fails every account read too; one notice explains it instead of four. */}
+      {account.registerError instanceof AccountApiError && account.registerError.code === "unauthorized" ? null : (
+        <>
+          <Profile />
+          <DevicesSection />
+          <ActivitySection />
+        </>
+      )}
       <ManageAccountSection />
       <ErrorNotice error={signOut.error} message={copy("Çıkış yapılamadı.", "Could not sign out.")} />
       <NavigationGroup>

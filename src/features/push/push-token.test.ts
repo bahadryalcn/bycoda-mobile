@@ -46,6 +46,15 @@ describe("expo push token", () => {
     expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(1);
   });
 
+  it("wraps a native token failure so screens never show the raw native text", async () => {
+    const { expoPushToken } = await load();
+    const { PushTokenError } = await import("./push-token-error");
+    getExpoPushTokenAsync.mockRejectedValueOnce(new Error("Default FirebaseApp is not initialized"));
+    const failure = await expoPushToken("project").catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(PushTokenError);
+    expect((failure as InstanceType<typeof PushTokenError>).buildMisconfigured).toBe(true);
+  });
+
   it("does not cache a failed fetch, so the next call retries", async () => {
     const { expoPushToken } = await load();
     getExpoPushTokenAsync.mockRejectedValueOnce(new Error("offline"));

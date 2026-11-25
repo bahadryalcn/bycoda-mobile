@@ -70,8 +70,10 @@ vi.mock("@/state/queries", () => ({
 vi.mock("../workspace/use-project-directory", () => ({
   useProjectList: () => ({ data: [], directoryReady: true, isProjectVisible: () => true }),
 }));
-vi.mock("./shared/local-project-scope", () => ({ useLocalProjectScope: () => ({ projectId: state.projectId, setProjectId: vi.fn(), current: { current: { machineId: "machine", projectId: state.projectId, revision: 0 } }, revision: 0 }) }));
-vi.mock("./shared/scope", () => ({ Scope: () => null }));
+vi.mock("./shared/local-project-scope", () => ({ useLocalProjectScope: () => ({ projectId: state.projectId, setProjectId: vi.fn(), current: { current: { machineId: "machine", projectId: state.projectId, revision: 0 } }, revision: 0 }), useAdoptProjectScope: () => {} }));
+vi.mock("./shared/required-project-scope", () => ({ useRequiredProjectScope: () => ({ projectId: state.projectId, setProjectId: vi.fn(), current: { current: { machineId: "machine", projectId: state.projectId, revision: 0 } }, revision: 0, fallback: false }) }));
+vi.mock("../workspace/project-scope-pill", () => ({ ProjectScopePill: () => null }));
+vi.mock("../workspace/project-picker", () => ({ ProjectPicker: () => null }));
 vi.mock("./shared/use-editor-record", () => ({
   useEditorRecord: (_id: unknown, value: unknown) => value,
 }));

@@ -26,6 +26,8 @@ import {
   StatusText,
 } from "@/ui/primitives";
 import { errorMessage } from "@/ui/error-message";
+import { accountReadMessage } from "../account/ui/account-error-copy";
+import { routeLabel } from "@/state/route-kind";
 import type { Computer } from "../account/contracts";
 import { isComputerOnline, routeKinds, savedComputerFor, useAccountComputers } from "./account-computers";
 import { useAccountPairing } from "./use-account-pairing";
@@ -91,7 +93,7 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
             tone="danger"
             illustration="error"
             title={copy("Bilgisayarların alınamadı", "Your computers could not be loaded")}
-            description={errorMessage(state.error, copy)}
+            description={accountReadMessage(state.error, copy, errorMessage(state.error, copy, undefined, { read: true }))}
             action={{ label: copy("Yeniden dene", "Retry"), onPress: refetch }}
           />
         ) : null}
@@ -105,12 +107,18 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
                 <NavigationRow
                   key={item.deviceId}
                   label={item.name}
-                  detail={`${platformNames[item.platform]} · ${online ? copy("Çevrimiçi", "Online") : copy("Çevrimdışı", "Offline")}`}
+                  detail={[
+                    platformNames[item.platform],
+                    online ? copy("Çevrimiçi", "Online") : copy("Çevrimdışı", "Offline"),
+                    ...(["lan", "tailscale"] as const).filter((kind) => kinds[kind]).map((kind) => routeLabel(kind, copy)),
+                  ].join(" · ")}
                   icon={<RowIcon glyph={Laptop} />}
                   trailing={
                     <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
                       {kinds.lan ? <Wifi size={iconSize.status} strokeWidth={1.8} color={colors.muted} /> : null}
                       {kinds.tailscale ? <Network size={iconSize.status} strokeWidth={1.8} color={colors.muted} /> : null}
+                      {/* Reachable by anyone on the internet, protected only by the device credential: say so. */}
+                      {kinds.public ? <StatusText label={routeLabel("public", copy)} tone="warning" /> : null}
                       {/* Paired is the normal state (quiet text); an unpaired computer invites a connect. */}
                       <StatusText
                         label={paired ? copy("Eşlenmiş", "Paired") : copy("Bağlan", "Connect")}

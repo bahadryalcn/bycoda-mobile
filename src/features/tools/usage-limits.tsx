@@ -1,11 +1,13 @@
 import { ProviderAccountKind } from "@/ui/provider-account-kind";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { Badge } from "panelui-native/components/badge";
 import { useActiveMachine } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
 import { Body, Button, Card, QueryState, SectionHeader, StatusRow, StatusText } from "@/ui/primitives";
 import { MetricValue } from "@/ui/metric-value";
+import { MetricRow } from "@/ui/metric-row";
+import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
 import { useInfoHint } from "@/ui/info-hint";
@@ -14,6 +16,8 @@ import { radii, space } from "@/ui/tokens";
 import { AccountMeter, RemainingMeter } from "@/ui/usage-meters";
 import {
   latestQuotaObservation,
+  presentLimitsReport,
+  quotaFailure,
   readLimitsReport,
   resetCountdown,
   wholePercent,
@@ -69,10 +73,23 @@ export function UsageLimits() {
         ),
     },
   );
-  const providers = query.data?.providers ?? [];
-  const observedAt = query.data ? latestQuotaObservation(query.data) : null;
+  const defaultLabel = copy("Varsayılan hesap", "Default account");
+  const report = useMemo(() => query.data ? presentLimitsReport(query.data, defaultLabel) : undefined, [query.data, defaultLabel]);
+  const providers = report?.providers ?? [];
+  const observedAt = report ? latestQuotaObservation(report) : null;
   const hasCards = providers.some((provider) => provider.cards.length > 0);
   const refetch = query.refetch;
+  // Only a press of Retry shows its own progress; the page refresh and polling stay quiet here.
+  const retry = usePullRefresh(() => refetch());
+  const failureText = (account: { status: "ok" | "unavailable" | "error"; error: string | null }) => {
+    switch (quotaFailure(account)) {
+      case "renewal": return copy("bu hesap yeniden kullanılınca güncellenir", "updates when this account is used again");
+      case "signedOut": return copy("oturum açılmamış", "not signed in");
+      case "rateLimited": return copy("sağlayıcı okumayı sınırladı; sonra yeniden denenecek", "the provider is limiting reads; it will retry later");
+      case "unavailable": return copy("kullanılamıyor", "unavailable");
+      default: return copy("okunamadı", "could not be read");
+    }
+  };
   const units = { day: copy("gün", "d"), hour: copy("sa", "h"), minute: copy("dk", "min") };
   const title = (card: Card_) => {
     const base =
@@ -103,7 +120,7 @@ export function UsageLimits() {
   };
   return (
     <View style={{ gap: space.md }}>
-      {query.data ? <View style={{ gap: space.xs }}>
+      {report ? <View style={{ gap: space.xs }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
           {observedAt !== null ? <Body muted style={{ flexShrink: 1 }}>
             {copy("Son ölçüm {p0}", "Last reading {p0}", { p0: shortTime(observedAt, now, locale) })}
@@ -128,6 +145,7 @@ export function UsageLimits() {
         const onlyAccount = firstAccount && provider.cards.every((card) =>
           card.accounts.length === 1 && card.accounts[0]!.id === firstAccount.id) ? firstAccount : null;
         const failed = provider.accounts.filter((account) => account.status !== "ok");
+        const credited = provider.accounts.filter((account) => (account.resetCredits ?? 0) > 0);
         return (
         <View key={provider.provider} style={{ gap: space.sm }}>
           <SectionHeader title={PROVIDER_NAMES[provider.provider]} trailing={onlyAccount ? (
@@ -136,12 +154,17 @@ export function UsageLimits() {
               <Body muted numberOfLines={2} style={{ flexShrink: 1 }}>{onlyAccount.label}</Body>
             </View>
           ) : undefined} />
-          {provider.accounts.filter((account) => (account.resetCredits ?? 0) > 0).map((account) => (
-            <StatusRow key={account.id} label={account.label}>
-              <ProviderAccountKind kind={account.kind} />
-              <Body muted>{copy("Sıfırlama hakkı: {p0}", "Reset credits: {p0}", { p0: account.resetCredits!.toLocaleString(locale) })}</Body>
-            </StatusRow>
-          ))}
+          {credited.length === 1 && onlyAccount ? (
+            <MetricRow label={copy("Sıfırlama hakkı", "Reset credits")} value={credited[0]!.resetCredits!.toLocaleString(locale)} />
+          ) : credited.length > 0 ? (
+            // One caption names the measure; each account then reads as name and count.
+            <View style={{ gap: space.xs }}>
+              <Body muted style={uiStyles.caption}>{copy("Sıfırlama hakkı", "Reset credits")}</Body>
+              {credited.map((account) => (
+                <MetricRow key={account.id} label={account.label} value={account.resetCredits!.toLocaleString(locale)} />
+              ))}
+            </View>
+          ) : null}
           {provider.cards.map((card) => {
             const left = wholePercent(card.best.leftPercent);
             return (
@@ -188,14 +211,19 @@ export function UsageLimits() {
                           }}
                         />
                         <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
-                          <StatusRow label={account.label}>
+                          {/* Name and headroom lead; kind and reset sit on a quieter second line. */}
+                          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: space.sm, rowGap: space.xs }}>
+                            <Body style={{ flexGrow: 1, flexShrink: 1, flexBasis: 120, minWidth: 0 }}>{account.label}</Body>
+                            <Body mono style={{ marginStart: "auto" }}>{`${wholePercent(account.reading.leftPercent)}% ${copy("kaldı", "left")}`}</Body>
+                          </View>
+                          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.sm, rowGap: space.xs }}>
                             <ProviderAccountKind kind={account.kind} />
-                            <Body mono>{`${wholePercent(account.reading.leftPercent)}% ${copy("kaldı", "left")}`}</Body>
-                            {countdown ? <Body muted>{countdown}</Body> : null}
-                          </StatusRow>
-                          {account.reading.resetsAt === null
-                            ? <Body muted style={uiStyles.caption}>{copy("Sıfırlanma zamanı bilinmiyor", "Reset time unknown")}</Body>
-                            : null}
+                            {countdown || account.reading.resetsAt === null ? <Body muted style={[uiStyles.caption, { flexShrink: 1 }]}>
+                              {countdown
+                                ? copy("{p0} içinde sıfırlanır", "Resets in {p0}", { p0: countdown })
+                                : copy("Sıfırlanma zamanı bilinmiyor", "Reset time unknown")}
+                            </Body> : null}
+                          </View>
                         </View>
                       </View>
                       <AccountMeter
@@ -211,22 +239,16 @@ export function UsageLimits() {
             );
           })}
           {failed.map((account) => (
-            <View
-              key={account.id}
-              style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }}
-            >
-              <ProviderAccountKind kind={account.kind} />
-              <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 160, minWidth: 0 }}>
-                <StatusText tone="warning" label={`${account.label}: ${account.status === "unavailable" ? copy("kullanılamıyor", "unavailable") : copy("okunamadı", "could not be read")}`} />
-                {account.observedAt != null ? <Body muted>
-                  {copy("Son ölçüm {p0}", "Last reading {p0}", { p0: shortTime(account.observedAt, now, locale) })}
-                </Body> : null}
-              </View>
+            <View key={account.id} style={{ gap: space.xs }}>
+              <StatusText tone="warning" label={`${account.label}: ${failureText(account)}`} />
+              {account.observedAt != null ? <Body muted style={uiStyles.caption}>
+                {copy("Gösterilen değerler {p0} ölçümünden", "Showing the reading from {p0}", { p0: shortTime(account.observedAt, now, locale) })}
+              </Body> : null}
             </View>
           ))}
-          {failed.length > 0 && refetch ? (
-            <Button tone="quiet" density="compact" label={copy("Yeniden dene", "Retry")} busy={query.isFetching === true}
-              onPress={() => void refetch()} style={{ alignSelf: "flex-start" }} />
+          {failed.length > 0 ? (
+            <Button tone="quiet" density="compact" label={copy("Yeniden dene", "Retry")} busy={retry.refreshing}
+              disabled={query.isFetching === true} onPress={() => void retry.onRefresh()} style={{ alignSelf: "flex-start" }} />
           ) : null}
         </View>
         );

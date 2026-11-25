@@ -7,6 +7,7 @@ import { flushQuestionAttachmentDrafts } from "./features/workspace/question-att
 import { useMachines } from "./state/machines";
 import { useSecurity } from "./state/security";
 import { useAttachmentReleaseRetry } from "./state/queries";
+import { holdHostRecoveryClocks, resumeHostRecoveryClocks } from "./state/host-runtime-state";
 import type { LifecycleProps } from "./app-types";
 import { invalidateProjectPrivacy } from "./features/workspace/project-privacy-cache";
 import { WidgetCoordinator } from "./features/widgets";
@@ -30,6 +31,10 @@ export function AppLifecycle({ children, cache }: LifecycleProps) {
     if (process.env.EXPO_OS === "web") return;
     focusManager.setFocused(AppState.currentState === "active");
     const subscription = AppState.addEventListener("change", (state) => {
+      // Background time is not a failed reconnect: the socket is closed there and reopens on return.
+      // Restart the shared feedback graces before the resumed reads refetch on the new socket.
+      if (state === "background") holdHostRecoveryClocks();
+      else if (state === "active") resumeHostRecoveryClocks();
       useSecurity.getState().handleAppState(state);
       focusManager.setFocused(state === "active" && useSecurity.getState().status === "unlocked");
       if (state !== "active") {

@@ -54,10 +54,18 @@ export type InputProps = TextInputProps & {
 export type ScreenProps = PropsWithChildren<{
   title?: string;
   subtitle?: string;
-  /** Which computer/project the page acts on: one quiet glyph-led line beside the heading actions. */
+  /** Which computer/project the page acts on: read-only scope pills at the start of the scope row. */
   scope?: PageScope;
+  /**
+   * The page reads the active computer, so its scope row leads with the switchable computer pill
+   * (status, saved computers). Defaults to true when the page passes its own `scopeControl`.
+   * A page bound to one computer leaves it off and shows `scope.computer` read-only.
+   */
+  computerSwitch?: boolean;
   /** Current task scope in the shared heading, preserved under a native title. */
   context?: ReactNode;
+  /** The shared project scope control (`ProjectScopePill`): one compact pill in the page identity row. */
+  scopeControl?: ReactNode;
   /** Trailing actions in the shared page heading. */
   actions?: ReactNode;
   /** In-screen back control, shown only when no native header owns navigation. */

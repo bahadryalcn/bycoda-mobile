@@ -18,8 +18,8 @@ import {
   Sheet,
 } from "@/ui/primitives";
 import { ManagementList } from "./shared/management-list";
-import { Scope } from "./shared/scope";
-import { useLocalProjectScope } from "./shared/local-project-scope";
+import { ProjectScopePill } from "../workspace/project-scope-pill";
+import { useRequiredProjectScope } from "./shared/required-project-scope";
 import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite";
 import { initialAgent, useAgentProviders } from "./shared/agent";
 import { identifier } from "./shared/format";
@@ -34,7 +34,7 @@ export function StewardsScreen() {
   const copy = useCopy();
   const locale = useLocale();
   const machine = useActiveMachine();
-  const { projectId, setProjectId } = useLocalProjectScope();
+  const { projectId, setProjectId } = useRequiredProjectScope();
   const { providers, query: providerQuery } = useAgentProviders(projectId);
   const supported = machine?.capabilities?.includes("stewards") === true;
   const [search, setSearch] = useState("");
@@ -135,6 +135,7 @@ export function StewardsScreen() {
   return (
     <ManagementList<HostSteward>
       title={copy("Proje sorumluları", "Project stewards")}
+      scopeControl={<ProjectScopePill allowAll={false} projectId={projectId} onChange={setProjectId} />}
       query={supported ? query : undefined}
       ListEmptyComponent={supported ? listState : undefined}
       data={rows}
@@ -180,7 +181,6 @@ export function StewardsScreen() {
                 </>
               ) : null}
               <ManagementToolbar
-                project={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
                 search={
                   <SearchField
                     placeholder={copy("Ara", "Search")}
@@ -196,6 +196,7 @@ export function StewardsScreen() {
                   unfilteredValue: "all",
                   options: filterOptions,
                   onChange: setFilter,
+                  filterable: scoped.length > 0,
                 }}
               />
               {!rows.some((item) => item.id === savedStewardId(save.variables)) ? (

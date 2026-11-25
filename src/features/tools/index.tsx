@@ -1,6 +1,6 @@
 import { ProjectDirectoryFeedback } from "../workspace/project-directory-feedback";
 import { router } from "expo-router";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import type { HostProject } from "@/domain/types";
 import { useProjectList } from "../workspace/use-project-directory";
@@ -11,7 +11,6 @@ import { useCopy } from "@/ui/copy";
 import { useMachineStatus } from "@/ui/machine-bar";
 import { space } from "@/ui/tokens";
 import { DevServersScreen } from "./dev-servers-screen";
-import { RuntimeLogsScreen } from "./runtime-logs-screen";
 import { DevicesScreen } from "./devices-screen";
 import { BrowserScreen } from "./browser-screen";
 import { TerminalScreen } from "./terminal-screen";
@@ -23,18 +22,31 @@ import { PrivateContentBoundary } from "@/ui/private-content";
 import { NoComputerGate } from "@/ui/no-computer";
 import { computerTools, isToolId, toolLabels } from "./tool-labels";
 
-export function HostToolScreen({ tool, projectId }: { tool: string; projectId?: string }) {
+type SharedProjectProps = {
+  /** The shared project selection (`useLocalProjectScope`); never a route-private project. */
+  projectId?: string;
+  /** Picking a project here sets the shared selection. */
+  onSelectProject?: (projectId: string) => void;
+  /** The shared header pill, for pages whose content depends on the project. */
+  scopeControl?: ReactNode;
+};
+
+export function HostToolScreen({ tool, projectId, onSelectProject, scopeControl }: { tool: string } & SharedProjectProps) {
   if (tool === "providers") return <ProviderCenter />;
   if (tool === "access") return <AccessCenter />;
-  // Resources never depend on a project; usage can still be narrowed to one.
-  if (tool === "diagnostics" || (computerTools.has(tool) && !projectId)) return <ComputerToolScreen tool={tool as "usage" | "diagnostics"} />;
-  return <ProjectHostToolScreen tool={tool} projectId={projectId} />;
+  // Resources never depend on a project; usage stays one screen and narrows Tokens to the shared project.
+  if (tool === "diagnostics" || computerTools.has(tool)) return <ComputerToolScreen tool={tool as "usage" | "diagnostics"}
+    projectId={projectId} onSelectProject={onSelectProject} scopeControl={scopeControl} />;
+  return <ProjectHostToolScreen tool={tool} projectId={projectId} onSelectProject={onSelectProject} />;
 }
 
 /** Usage and computer resources read computer-level data, so they open without a project. */
-function ComputerToolScreen({ tool }: { tool: "usage" | "diagnostics" }) {
+function ComputerToolScreen({ tool, projectId, onSelectProject, scopeControl }: { tool: "usage" | "diagnostics" } & SharedProjectProps) {
   const copy = useCopy();
   const machine = useActiveMachine();
+  const projects = useProjectList();
+  const project = projectId && projects.directoryReady && projects.isProjectVisible(projectId)
+    ? projects.data?.find((entry) => entry.id === projectId) : undefined;
   const title = copy(...toolLabels[tool]);
   const capabilities = tool === "usage"
     ? ["usage.limits.read", "usage.cost.read", "usage.sessions.read"]
@@ -51,9 +63,11 @@ function ComputerToolScreen({ tool }: { tool: "usage" | "diagnostics" }) {
       </View>
     </Screen>
   );
-  return tool === "usage" ? <UsageScreen key={machine.id} /> : <DiagnosticsScreen key={machine.id} />;
+  return tool === "usage"
+    ? <UsageScreen key={machine.id} project={project} onSelectProject={onSelectProject} scopeControl={scopeControl} />
+    : <DiagnosticsScreen key={machine.id} />;
 }
-function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: string }) {
+function ProjectHostToolScreen({ tool, projectId, onSelectProject }: { tool: string } & Omit<SharedProjectProps, "scopeControl">) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const projects = useProjectList();
@@ -63,7 +77,7 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
   if (machine && visibleProject) retained.current = { machineId: machine.id, projectId: visibleProject.id, project: visibleProject };
   const remembered = retained.current;
   const project = visibleProject ?? (remembered?.machineId === machine?.id && remembered?.projectId === projectId ? remembered?.project : undefined);
-  const capability = tool === "servers" ? "dev.servers" : tool === "devices" ? "device.host" : tool === "browser" ? "browser.shared" : tool === "terminals" ? "terminals.v1" : tool === "logs" ? "runtime.logs" : tool === "diagnostics" ? "resources.diagnostics" : tool === "usage" ? "usage.sessions.read" : null;
+  const capability = tool === "servers" ? "dev.servers" : tool === "devices" ? "device.host" : tool === "browser" ? "browser.shared" : tool === "terminals" ? "terminals.v1" : tool === "diagnostics" ? "resources.diagnostics" : tool === "usage" ? "usage.sessions.read" : null;
   const supported = !!capability && machine?.capabilities?.includes(capability);
   const needsCapabilities = !!visibleProject && !!machine && !machine.capabilities;
   const canChooseProject = supported && !!projects.data?.length;
@@ -99,9 +113,7 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
       {choosingProject && canChooseProject ? (
         <ProjectPicker visible onClose={() => setChoosingProject(false)} onSelect={(selected) => {
           setChoosingProject(false);
-          if (machine && projects.isProjectVisible(selected.id, selected.cwd)) {
-            router.setParams({ projectId: selected.id, machineId: machine.id });
-          }
+          if (machine && projects.isProjectVisible(selected.id, selected.cwd)) onSelectProject?.(selected.id);
         }} />
       ) : null}
       <PrivateContentBoundary visible={!!visibleProject && !!supported} isAllowed={() => !!project && projects.isProjectVisible(project.id)}>
@@ -127,8 +139,6 @@ function ToolAvailabilityFeedback() {
 
 function ProjectToolContent({ tool, project }: { tool: string; project: HostProject }) {
   if (tool === "servers") return <DevServersScreen project={project} />;
-  if (tool === "logs") return <RuntimeLogsScreen project={project} />;
-  if (tool === "usage") return <UsageScreen project={project} />;
   if (tool === "devices") return <DevicesScreen project={project} />;
   if (tool === "browser") return <BrowserScreen project={project} />;
   if (tool === "terminals") return <TerminalScreen project={project} />;

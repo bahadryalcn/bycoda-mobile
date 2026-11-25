@@ -29,6 +29,8 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/filter-sheet", () => ({
   AppliedFilters: () => null,
   FilterButton: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
+  FilterChipRow: ({ options, onChange }: { options: { value: string; label: string }[]; onChange: (value: string) => void }) =>
+    createElement("div", null, options.map((option) => createElement("button", { key: option.value, onClick: () => onChange(option.value) }, option.label))),
 }));
 vi.mock("@/state/machines", () => ({
   useActiveMachine: () => ({ id: "machine", capabilities: state.capabilities }),
@@ -52,8 +54,8 @@ vi.mock("@/state/queries", () => ({
 vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({
   data: [], directoryReady: true, isProjectVisible: () => state.projectVerified,
 }) }));
-vi.mock("./shared/local-project-scope", () => ({ useLocalProjectScope: () => ({ projectId: state.projectId, setProjectId: vi.fn() }) }));
-vi.mock("./shared/scope", () => ({ Scope: () => createElement("span", { "data-project-picker": true }) }));
+vi.mock("./shared/local-project-scope", () => ({ useLocalProjectScope: () => ({ projectId: state.projectId, setProjectId: vi.fn() }), useAdoptProjectScope: () => {} }));
+vi.mock("../workspace/project-scope-pill", () => ({ ProjectScopePill: () => createElement("span", { "data-project-picker": true }) }));
 vi.mock("./shared/use-editor-record", () => ({ useEditorRecord: (_id: unknown, value: unknown) => value }));
 vi.mock("./shared/agent", () => ({ initialAgent: () => ({}), useAgentProviders: () => ({ providers: state.hasProvider ? [{}] : [], query: { isSuccess: true, isFetching: false, error: null } }) }));
 vi.mock("./shared/format", () => ({ identifier: () => "new" }));
@@ -75,8 +77,8 @@ vi.mock("./tasks/bulk-actions", () => ({
   },
 }));
 vi.mock("@/ui/screen-list", () => ({
-  ScreenList: ({ header, actions, context, data, renderItem, ListEmptyComponent }: { header: unknown; actions: unknown; context: ReactNode; ListEmptyComponent?: ReactNode; data: unknown[]; renderItem: (entry: { item: unknown }) => unknown }) =>
-    createElement("div", null, createElement("nav", null, actions as never), context, header as never, data.length ? null : ListEmptyComponent, data.map((item, index) => createElement("div", { key: index }, renderItem({ item }) as never))),
+  ScreenList: ({ header, actions, context, scopeControl, data, renderItem, ListEmptyComponent }: { header: unknown; actions: unknown; context: ReactNode; scopeControl?: ReactNode; ListEmptyComponent?: ReactNode; data: unknown[]; renderItem: (entry: { item: unknown }) => unknown }) =>
+    createElement("div", null, createElement("nav", null, actions as never), scopeControl, context, header as never, data.length ? null : ListEmptyComponent, data.map((item, index) => createElement("div", { key: index }, renderItem({ item }) as never))),
 }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: { children?: unknown }) => createElement("div", null, children as never);

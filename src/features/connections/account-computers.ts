@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AccountApiError, type Computer } from "../account/contracts";
 import { useAccount } from "../account/ui/account-context";
 import type { MobileMachine } from "@/remote/types";
+import { routeKind } from "@/state/route-kind";
 
 export const COMPUTERS_KEY = ["account", "computers"] as const;
 /** A desktop that has not checked in for this long is shown as offline. */
@@ -20,14 +21,14 @@ export function isComputersUnavailable(error: unknown): boolean {
   );
 }
 
-export function routeKinds(computer: Pick<Computer, "routes">): { lan: boolean; tailscale: boolean } {
-  let lan = false;
-  let tailscale = false;
+export function routeKinds(computer: Pick<Computer, "routes">): { lan: boolean; tailscale: boolean; public: boolean } {
+  const found = { lan: false, tailscale: false, public: false };
   for (const route of computer.routes) {
-    if (route.lanKey) lan = true;
-    else tailscale = true;
+    // An unkeyed HTTPS address with no known kind is a private proxy; it reads as the Tailscale kind.
+    const kind = routeKind(route) ?? "tailscale";
+    found[kind] = true;
   }
-  return { lan, tailscale };
+  return found;
 }
 
 export function savedComputerFor(

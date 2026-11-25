@@ -5,6 +5,7 @@ import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { nativeRandomBytes } from "./native-random";
+import { DEVICE_PROOF_HEADER } from "./device-proof";
 import {
   isLanKey,
   lanContext,
@@ -60,12 +61,15 @@ export function encryptedLanFetch(
     const token = new Headers(init.headers)
       .get("Authorization")
       ?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1];
+    // The signed device proof rides inside the encrypted envelope; the gateway relays it as `DPoP`.
+    const proof = new Headers(init.headers).get(DEVICE_PROOF_HEADER) ?? undefined;
     const payload = utf8ToBytes(
       JSON.stringify({
         epoch: challenge.epoch,
         time: Date.now(),
         path: url.pathname,
         token,
+        ...(proof ? { proof } : {}),
         body: init.body,
       }),
     );

@@ -124,6 +124,7 @@ vi.mock("@/ui/primitives", async () => {
     StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Field: Input,
     SearchField: Input,
+    useCollapsibleSearch: (field: unknown) => ({ open: true, trigger: null, field }),
     Button,
     IconButton: Button,
     ActionMenu: () => null,

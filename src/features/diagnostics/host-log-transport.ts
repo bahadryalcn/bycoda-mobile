@@ -20,6 +20,7 @@ export function collectConnectedHostLogs(): Promise<CollectedHostLogs> {
       () => readPermittedCredential(() => credentials.get(machine.id, machine), assertAccess),
       undefined,
       assertAccess,
+      () => credentials.getProofSeed(machine.id, machine),
     );
     try {
       return await transport.request(HOST_LOGS_METHOD, {}, { timeoutMs: HOST_LOGS_DEADLINE_MS, retry: false });

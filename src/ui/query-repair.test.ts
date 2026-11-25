@@ -494,3 +494,30 @@ it("marks shown data as not current after a minute of failed refreshes, never fo
     await mounted.unmount();
   }
 });
+
+it("restarts the read retry grace when the app returns from the background", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const { useReadRetryNotice } = await import("./query-state");
+  const { holdHostRecoveryClocks, resumeHostRecoveryClocks } = await import("../state/host-runtime-state");
+  const root = createRoot(document.createElement("div"));
+  const seen = { explained: false };
+  function Probe() { seen.explained = useReadRetryNotice(true, "computer"); return null; }
+  try {
+    await act(async () => root.render(createElement(Probe)));
+    // The grace timer ran out while the app was away (timers fire at once on return).
+    holdHostRecoveryClocks();
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(seen.explained).toBe(true);
+    await act(async () => resumeHostRecoveryClocks());
+    expect(seen.explained).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(seen.explained).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+    expect(seen.explained).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});

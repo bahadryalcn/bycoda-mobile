@@ -117,6 +117,12 @@ export class HostWsError extends Error {
     readonly code?: string,
     /** The reason of a typed Host refusal that ran nothing. */
     refusal?: string,
+    /**
+     * The Host's redacted reason for an untyped refusal that ran nothing (for example why voice could
+     * not start). The message stays the category's generic sentence; a feature that knows the Host's
+     * wording may present this instead.
+     */
+    readonly hostReason?: string,
   ) {
     super(
       uncertain
@@ -428,6 +434,7 @@ export class MobileHostWsConnection {
       fromHost && category === "deadline",
       fromHost ? data?.code : undefined,
       notSent && data?.code && message ? safeHostMessage(message) : undefined,
+      notSent && message ? safeHostMessage(message) : undefined,
     );
   }
   private take(id: string): Pending | undefined {

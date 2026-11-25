@@ -37,6 +37,7 @@ export function useHostClient(machineId?: string): HostClient | null {
       undefined,
       () => readPermittedCredential(() => credentials.get(machine.id, machine), assertAccess),
       assertAccess,
+      () => credentials.getProofSeed(machine.id, machine),
     );
   }, [
     machine?.id,

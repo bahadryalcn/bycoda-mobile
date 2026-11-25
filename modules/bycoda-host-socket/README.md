@@ -104,3 +104,10 @@ per-tunnel secret and is shown to users only as `localhost`. The Host contract i
 References: [Expo local modules](https://docs.expo.dev/modules/get-started/),
 [Expo autolinking](https://docs.expo.dev/modules/autolinking/),
 [CryptoKit P256 public key](https://developer.apple.com/documentation/cryptokit/p256/signing/publickey).
+
+Device proof: when SecureStore holds `bycoda.remote.proof.<machineId>` (the 32-byte Ed25519
+seed JavaScript wrote at pairing or bind), every WSS upgrade, bulk chunk request and phone-tunnel
+CONNECT also sends a fresh `DPoP` header (`DeviceProof.swift`, `DeviceProof.kt`; spec in
+`src/integrations/device-proof.ts`). The seed is read natively like the bearer; without it the
+request is sent unsigned and the Host refuses it only for key-bound credentials (HTTP 401, which
+stays an `authentication` failure and never a schema error).

@@ -29,6 +29,86 @@ export function readLimitsReport(value: unknown, environmentId: string): UsageLi
   return { ...value, providers } as UsageLimitsReport;
 }
 
+/** The Host's own CLI profile; it carries the fixed internal label "Host default". */
+const HOST_DEFAULT_ACCOUNT = "default";
+const HOST_DEFAULT_LABEL = "Host default";
+const SAME_RESET_MS = 60_000;
+
+type LimitsProvider = UsageLimitsReport["providers"][number];
+type LimitReading = LimitsProvider["cards"][number]["best"];
+
+/** One account's readings by window key. */
+function accountReadings(provider: LimitsProvider, id: string): Map<string, LimitReading> {
+  const readings = new Map<string, LimitReading>();
+  for (const card of provider.cards) {
+    const entry = card.accounts.find((account) => account.id === id);
+    if (entry) readings.set(card.key, entry.reading);
+  }
+  return readings;
+}
+
+/** Same windows, same whole-percent headroom and the same reset instant: one sign-in seen twice. */
+function sameQuota(a: Map<string, LimitReading>, b: Map<string, LimitReading>): boolean {
+  if (a.size === 0 || a.size !== b.size) return false;
+  let anchored = false;
+  for (const [key, left] of a) {
+    const right = b.get(key);
+    if (!right || wholePercent(left.leftPercent) !== wholePercent(right.leftPercent)) return false;
+    if ((left.resetsAt === null) !== (right.resetsAt === null)) return false;
+    if (left.resetsAt !== null && right.resetsAt !== null) {
+      if (Math.abs(left.resetsAt - right.resetsAt) > SAME_RESET_MS) return false;
+      anchored = true;
+    }
+  }
+  // Without a reset instant two full accounts would look alike; that is not evidence.
+  return anchored;
+}
+
+/**
+ * Presentation of the Host report: the Host's CLI profile gets a person-facing name instead of
+ * its internal label, and is left out when it only repeats a named profile (the same sign-in, so
+ * the same windows and reset instant) or when it is simply not signed in beside named profiles.
+ */
+export function presentLimitsReport(report: UsageLimitsReport, defaultLabel: string): UsageLimitsReport {
+  const providers = report.providers.map((provider): LimitsProvider => {
+    const host = provider.accounts.find((account) => account.id === HOST_DEFAULT_ACCOUNT && account.label === HOST_DEFAULT_LABEL);
+    if (!host) return provider;
+    const named = provider.accounts.filter((account) => account.id !== HOST_DEFAULT_ACCOUNT);
+    const hostReadings = accountReadings(provider, HOST_DEFAULT_ACCOUNT);
+    const duplicate = named.some((account) => sameQuota(hostReadings, accountReadings(provider, account.id)));
+    const signedOut = host.status === "unavailable" && hostReadings.size === 0 && named.length > 0;
+    if (duplicate || signedOut) {
+      return {
+        ...provider,
+        accounts: named,
+        cards: provider.cards.flatMap((card) => {
+          const accounts = card.accounts.filter((account) => account.id !== HOST_DEFAULT_ACCOUNT);
+          // Cards keep the Host's headroom order, so the first remaining account is the best one.
+          return accounts.length ? [{ ...card, best: accounts[0]!.reading, accounts }] : [];
+        }),
+      };
+    }
+    const rename = <T extends { id: string; label: string }>(account: T): T =>
+      account.id === HOST_DEFAULT_ACCOUNT ? { ...account, label: defaultLabel } : account;
+    return {
+      ...provider,
+      accounts: provider.accounts.map(rename),
+      cards: provider.cards.map((card) => ({ ...card, accounts: card.accounts.map(rename) })),
+    };
+  });
+  return { ...report, providers };
+}
+
+/** Known Host failure texts, so a failed account says why instead of only "could not be read". */
+export type QuotaFailure = "renewal" | "signedOut" | "rateLimited" | "unavailable" | "unreadable";
+export function quotaFailure(account: { status: "ok" | "unavailable" | "error"; error: string | null }): QuotaFailure {
+  const error = account.error ?? "";
+  if (/will update when this account is used again/i.test(error)) return "renewal";
+  if (/sign-in expired|not signed in/i.test(error)) return "signedOut";
+  if (/\(429\)/.test(error)) return "rateLimited";
+  return account.status === "unavailable" ? "unavailable" : "unreadable";
+}
+
 export function latestQuotaObservation(report: UsageLimitsReport): number | null {
   const accounts = report.providers.flatMap((provider) => provider.accounts);
   const observed = accounts.flatMap(({ observedAt }) => observedAt == null ? [] : [observedAt]);

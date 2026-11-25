@@ -17,6 +17,20 @@ export type ProviderChoice = {
 };
 
 const DEFAULT_ACCOUNT_ID = "default";
+/** Generic names the Host gives its default login ("Host default"); never shown as an account name. */
+const GENERIC_DEFAULT = /^(host default|host default account|default account|default)$/i;
+
+/** An account's display name; the Host's generic default label becomes the localized default name. */
+export function accountName(
+  account: { id: string; label: string; isDefault?: boolean },
+  defaultLabel: string,
+): string {
+  const label = account.label.trim();
+  return (account.id === DEFAULT_ACCOUNT_ID || account.isDefault === true) && (!label || GENERIC_DEFAULT.test(label))
+    ? defaultLabel
+    : label || account.id;
+}
+
 const NAMES: Readonly<Record<string, string>> = {
   codex: "Codex",
   claude: "Claude",
@@ -73,7 +87,7 @@ export function providerChoices(
         key: choiceKey(provider, account.id),
         provider,
         ...(isDefault ? {} : { accountId: account.id }),
-        label: isDefault && account.label === "Default account" ? defaultAccountLabel : account.label,
+        label: accountName(account, defaultAccountLabel),
         detail: name,
         color: account.color,
         kind: account.kind,

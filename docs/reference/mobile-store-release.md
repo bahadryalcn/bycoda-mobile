@@ -49,6 +49,9 @@ the actual release binary; a source check or browser preview is insufficient.
 
 ### Source configuration check and build profiles
 
+See [Local Store releases](mobile-local-store-release.md) for the Gradle,
+Xcode and Fastlane commands.
+
 Run `pnpm --dir mobile check:release` separately from development checks. It
 validates source identifiers/version baseline, assets, QR-only permission
 configuration, native privacy declarations, EAS profile settings and configured
@@ -113,19 +116,23 @@ clear destination-specific disclosure. See
 
 ## Account and data deletion
 
-bycoda does not create a bycoda service account. Pairing authorizes a phone to
-access an existing host; linking an existing provider/social account is a
-different operation. Explain these distinctions in review notes and answer the
-consoles according to the shipped account flows.
+The mobile workspace requires a Bycoda account and can create one through
+Clerk. Pairing authorizes a phone to access a Host. Linking a provider or
+social account is a separate operation. Explain these flows in review notes
+and account declarations.
 
-If account creation is introduced, implement the applicable deletion flows.
-Apple requires in-app account deletion; Google requires an accessible request
-path both inside and outside the app, with associated data deletion and any
-justified retention explained. See
+Account settings provide a deletion request, cancellation during the grace
+period, and a link to the account portal. Use the public
+[account deletion page](https://account.bycoda.codes/delete) for the Google
+Play console field. Apple requires in-app deletion. Google requires accessible
+request paths inside and outside the app. Explain the data that is deleted and
+any justified retention. See
 [Apple account deletion](https://developer.apple.com/support/offering-account-deletion-in-your-app/)
 and [Google account deletion scope](https://support.google.com/googleplay/android-developer/answer/13327111).
 
-- [ ] Verify local credential/connection/draft deletion and its failure handling.
+- [ ] Verify in-app and portal requests, grace-period cancellation, and deletion
+      completion using a disposable account.
+- [ ] Verify local credential, connection and draft deletion separately.
 - [ ] Document host device revocation and separate host/provider deletion steps.
 - [ ] Check linked social-account disconnection and retained-record behavior.
 - [ ] Do not label disconnection, pausing, archiving or hiding as account deletion.

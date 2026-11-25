@@ -40,6 +40,9 @@ internal class TunnelSession(
   private val bearer: String,
   private val target: TunnelTargetSpec,
   val alias: String,
+  /** Seed of the phone key this credential is bound to; null while the Host has not bound one. */
+  private val proofSeed: ByteArray? = null,
+  private val environmentId: String = "",
   /** `code` is a short machine code; called without holding any module lock. */
   private val onError: (code: String) -> Unit,
   private val onClosed: (code: String) -> Unit,
@@ -131,7 +134,9 @@ internal class TunnelSession(
       val opened = CountDownLatch(1)
       val failure = arrayOfNulls<String>(1)
       val websocket = tunnelClient.newWebSocket(
-        Request.Builder().url(url).header("Authorization", "Bearer $bearer").header("Sec-WebSocket-Protocol", TunnelRules.SUBPROTOCOL).build(),
+        Request.Builder().url(url).header("Authorization", "Bearer $bearer").header("Sec-WebSocket-Protocol", TunnelRules.SUBPROTOCOL)
+          // A fresh proof per CONNECT: every WSS upgrade of this tunnel is its own request.
+          .apply { proofSeed?.let { DeviceProof.sign(it, bearer, "GET", url.encodedPath, environmentId) }?.let { header(DeviceProof.HEADER, it) } }.build(),
         object : WebSocketListener() {
           override fun onOpen(ws: WebSocket, response: Response) {
             if (response.header("Sec-WebSocket-Protocol") != TunnelRules.SUBPROTOCOL) { failure[0] = "schema"; ws.cancel() }

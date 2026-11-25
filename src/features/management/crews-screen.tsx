@@ -24,8 +24,9 @@ import {
   Sheet,
 } from "@/ui/primitives";
 import { ManagementList } from "./shared/management-list";
-import { Scope } from "./shared/scope";
-import { useLocalProjectScope } from "./shared/local-project-scope";
+import { ProjectScopePill } from "../workspace/project-scope-pill";
+import { ProjectPicker } from "../workspace/project-picker";
+import { useRequiredProjectScope } from "./shared/required-project-scope";
 import { identifier } from "./shared/format";
 import { CrewEditor } from "./crews/crew-editor";
 import { ProfileEditor } from "./crews/profile-editor";
@@ -61,10 +62,11 @@ export function CrewsScreen() {
   const roleLabel = (role: SavedCrewAgent["role"]) =>
     roleLabels.find((option) => option.value === role)?.label ?? role;
   const machine = useActiveMachine();
-  const { projectId, setProjectId, current: localScope, revision } = useLocalProjectScope();
+  const { projectId, setProjectId, current: localScope, revision } = useRequiredProjectScope();
   const supported = machine?.capabilities?.includes("crews.v1") === true;
   const executionSupported = machine?.capabilities?.includes("crews.tasks.v1") === true;
   const deleteSupported = machine?.capabilities?.includes("crews.delete.v1") === true;
+  const [choosingProject, setChoosingProject] = useState(false);
   const [tab, setTab] = useState<Tab>("definitions");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -224,19 +226,27 @@ export function CrewsScreen() {
   return (
     <ManagementList<Row>
       title={copy("Ekipler", "Crews")}
+      scopeControl={supported ? <ProjectScopePill allowAll={false} projectId={projectId} onChange={setProjectId} /> : undefined}
       query={supported && projectId ? query : undefined}
       ListEmptyComponent={
         supported && !!projectId ? (
           listState
         ) : supported ? (
-          <StateView
-            size="region"
-            title={copy("Bir proje seç", "Choose a project")}
-            description={copy(
-              "Ekipler proje başına tutulur. Yukarıdan bir proje seç.",
-              "Crews are kept per project. Choose a project above.",
-            )}
-          />
+          // No project is known yet (directory loading or none registered); crews are per project.
+          <>
+            <StateView
+              size="region"
+              title={copy("Bir proje seç", "Choose a project")}
+              description={copy(
+                "Ekipler proje başına tutulur. Yukarıdan bir proje seç.",
+                "Crews are kept per project. Choose a project above.",
+              )}
+              action={{ label: copy("Proje seçin", "Choose a project"), onPress: () => setChoosingProject(true) }}
+            />
+            {choosingProject ? <ProjectPicker key={machine?.id} visible selectedId={projectId}
+              onClose={() => setChoosingProject(false)}
+              onSelect={(selected) => { setChoosingProject(false); setProjectId(selected.id); }} /> : null}
+          </>
         ) : undefined
       }
       data={visible}
@@ -259,9 +269,7 @@ export function CrewsScreen() {
                 "Update bycoda on this computer to use crews.",
               )}
             />
-          ) : !projectId ? (
-            <Scope projectId={projectId} onChange={setProjectId} />
-          ) : (
+          ) : !projectId ? null : (
             <>
               <SegmentedControl
                 hideLabel
@@ -284,7 +292,6 @@ export function CrewsScreen() {
               />
               {tab === "runs" ? <ActiveCrews /> : null}
               <ManagementToolbar
-                project={<Scope projectId={projectId} onChange={setProjectId} />}
                 search={
                   <SearchField
                     placeholder={copy("Ara", "Search")}
@@ -306,6 +313,7 @@ export function CrewsScreen() {
                   unfilteredValue: "all",
                   options: filterOptions,
                   onChange: setFilter,
+                  filterable: rows.length > 0,
                 }}
               />
               {!visible.some(

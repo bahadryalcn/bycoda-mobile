@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { redeemMobilePairingCode } from "./pairing-redeem";
 import type { MobilePairingCode } from "./pairing-code";
 import type { PairingRedeemResult } from "./connection-types";
+import { proofKeyOf } from "@/remote/device-proof";
+
+const proofKey = proofKeyOf(new Uint8Array(32).fill(7));
 
 const now = Date.parse("2026-10-11T12:00:00.000Z");
 const code: MobilePairingCode = {
@@ -29,7 +32,7 @@ describe("short-lived mobile QR redemption", () => {
     await expect(
       redeemMobilePairingCode(code, claim, "Bycoda phone", {
         fetchImpl: fetcher,
-        assertAccess: access,
+        assertAccess: access, proofKey,
         now: () => now,
       }),
     ).resolves.toEqual(result);
@@ -48,6 +51,7 @@ describe("short-lived mobile QR redemption", () => {
       ticket: code.ticket,
       claimId: claim,
       deviceName: "Bycoda phone",
+      proofKey,
     });
   });
 
@@ -56,7 +60,7 @@ describe("short-lived mobile QR redemption", () => {
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new Error("Response lost."))
       .mockResolvedValueOnce(reply());
-    const options = { fetchImpl: fetcher, assertAccess: access, now: () => now };
+    const options = { fetchImpl: fetcher, assertAccess: access, proofKey, now: () => now };
     await expect(
       redeemMobilePairingCode(code, claim, "Bycoda phone", options),
     ).rejects.toMatchObject({ kind: "network" });
@@ -74,7 +78,7 @@ describe("short-lived mobile QR redemption", () => {
     await expect(
       redeemMobilePairingCode(code, claim, "Bycoda phone", {
         fetchImpl: fetcher,
-        assertAccess: access,
+        assertAccess: access, proofKey,
         now: () => now + 60_000,
       }),
     ).resolves.toEqual(result);
@@ -88,7 +92,7 @@ describe("short-lived mobile QR redemption", () => {
     await expect(
       redeemMobilePairingCode(code, claim, "Bycoda phone", {
         fetchImpl: fetcher,
-        assertAccess: access,
+        assertAccess: access, proofKey,
         now: () => now,
       }),
     ).rejects.toMatchObject({ kind: "identity" });
@@ -104,6 +108,7 @@ describe("short-lived mobile QR redemption", () => {
       redeemMobilePairingCode(code, claim, "Bycoda phone", {
         fetchImpl: fetcher,
         now: () => now,
+        proofKey,
         assertAccess: () => {
           if (!unlocked) throw new Error("Locked.");
         },
@@ -118,7 +123,7 @@ describe("short-lived mobile QR redemption", () => {
     await expect(
       redeemMobilePairingCode(code, claim, "Bycoda phone", {
         fetchImpl: fetcher,
-        assertAccess: access,
+        assertAccess: access, proofKey,
         now: () => now,
         signal: controller.signal,
       }),
@@ -131,7 +136,7 @@ describe("short-lived mobile QR redemption", () => {
     await expect(
       redeemMobilePairingCode(code, claim, "Bycoda phone", {
         fetchImpl: oversized,
-        assertAccess: access,
+        assertAccess: access, proofKey,
         now: () => now,
       }),
     ).rejects.toMatchObject({ kind: "invalid-response" });
@@ -139,7 +144,7 @@ describe("short-lived mobile QR redemption", () => {
     await expect(
       redeemMobilePairingCode(code, claim, "Bycoda phone", {
         fetchImpl: invalid,
-        assertAccess: access,
+        assertAccess: access, proofKey,
         now: () => now,
       }),
     ).rejects.toMatchObject({ kind: "invalid-response" });
@@ -152,7 +157,7 @@ describe("short-lived mobile QR redemption", () => {
     await expect(
       redeemMobilePairingCode(code, claim, "Bycoda phone", {
         fetchImpl: fetcher,
-        assertAccess: access,
+        assertAccess: access, proofKey,
         now: () => now,
       }),
     ).rejects.toMatchObject({ kind: "used", message: "used" });
@@ -170,7 +175,7 @@ describe("short-lived mobile QR redemption", () => {
     );
     const pending = redeemMobilePairingCode(code, claim, "Bycoda phone", {
       fetchImpl: fetcher,
-      assertAccess: access,
+      assertAccess: access, proofKey,
       now: () => now,
       signal: controller.signal,
     });
@@ -192,7 +197,7 @@ describe("short-lived mobile QR redemption", () => {
     try {
       const pending = redeemMobilePairingCode(code, claim, "Bycoda phone", {
         fetchImpl: fetcher,
-        assertAccess: access,
+        assertAccess: access, proofKey,
         now: () => now,
         timeoutMs: 10,
       });
@@ -214,7 +219,7 @@ describe("short-lived mobile QR redemption", () => {
     try {
       await expect(
         redeemMobilePairingCode(code, claim, "Bycoda phone", {
-          assertAccess: access,
+          assertAccess: access, proofKey,
           now: () => now,
         }),
       ).resolves.toEqual(result);

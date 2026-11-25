@@ -37,7 +37,7 @@ vi.mock("panelui-native/components/page-header", () => {
 });
 vi.mock("./design-system", () => ({ surfaceClasses: "" }));
 vi.mock("./header-back-button", () => ({ HeaderBackButton: () => null }));
-vi.mock("./scope-line", () => ({ ScopeLine: () => null }));
+vi.mock("./scope-line", () => ({ ScopeLine: () => null, ScopePills: ({ scope }: { scope: { computer?: string; project?: string } }) => createElement("span", { "data-scope-pills": true }, [scope.computer, scope.project].filter(Boolean).join(" | ")) }));
 vi.mock("./motion", () => ({ reveal: undefined }));
 vi.mock("./use-pull-refresh", () => ({ usePullRefresh: vi.fn() }));
 import { LargeTitle, Screen, ScreenChromeProvider, ScreenHeading, sectionTitleText, useScreenHeading } from "./layout";
@@ -180,4 +180,60 @@ it("keeps short section titles on one line and lets long ones wrap", () => {
   expect(sectionTitleText("Access & privacy")).toBe(`Access${String.fromCharCode(0xa0)}&${String.fromCharCode(0xa0)}privacy`);
   const long = "A very long section title that must still be able to wrap";
   expect(sectionTitleText(long)).toBe(long);
+});
+
+describe("one page-top scope row", () => {
+  it("shows the computer as a pill and lets the route's project pill replace a static project", async () => {
+    const { ScreenScopeControl } = await import("./screen-chrome");
+    const pill = createElement("button", null, "Project pill");
+    const html = renderToStaticMarkup(createElement(ScreenChromeProvider, { nativeTitle: true },
+      createElement(ScreenScopeControl, { value: pill },
+        createElement(ScreenHeading, { title: "Terminals", scope: { computer: "bab", project: "bycoda" }, actions: createElement("button", null, "Refresh") }))));
+    expect(html).toContain("data-scope-pills");
+    expect(html).toContain("bab");
+    expect(html).not.toContain("bycoda");
+    expect(html.match(/Project pill/g)).toHaveLength(1);
+    expect(html).toContain("Refresh");
+  });
+  it("keeps a static project pill when nothing can change it", () => {
+    const html = renderToStaticMarkup(createElement(ScreenChromeProvider, { nativeTitle: true },
+      createElement(ScreenHeading, { title: "Board", scope: { computer: "bab", project: "Jira project" } })));
+    expect(html).toContain("bab | Jira project");
+  });
+});
+
+describe("computer scope in the page top", () => {
+  it("leads a page that follows the active computer with the switchable pill and binds other pages read-only", async () => {
+    const { ScreenComputerControl } = await import("./screen-chrome");
+    const Switcher = () => createElement("button", null, "Computer switcher");
+    const render = (props: Record<string, unknown>) => renderToStaticMarkup(createElement(ScreenComputerControl, { value: Switcher },
+      createElement(ScreenChromeProvider, { nativeTitle: true }, createElement(ScreenHeading, { title: "Page", ...props }))));
+    const following = render({ scope: { computer: "bab" }, computerSwitch: true });
+    expect(following).toContain("Computer switcher");
+    expect(following).not.toContain("data-scope-pills");
+    // A project pill of its own means the page reads the active computer.
+    expect(render({ scopeControl: createElement("button", null, "Project pill") })).toContain("Computer switcher");
+    const bound = render({ scope: { computer: "bab" } });
+    expect(bound).not.toContain("Computer switcher");
+    expect(bound).toContain("bab");
+    // A tab identity already carries the computer pill.
+    const tab = renderToStaticMarkup(createElement(ScreenComputerControl, { value: Switcher },
+      createElement(ScreenChromeProvider, { headerIdentity: () => createElement("nav", null, "Tab identity") },
+        createElement(ScreenHeading, { title: "Inbox", scopeControl: createElement("button", null, "Project pill") }))));
+    expect(tab).not.toContain("Computer switcher");
+  });
+});
+
+describe("tab title row trailing command", () => {
+  it("puts the app-wide command at the far right of a tab's title row only", () => {
+    const identity = () => createElement("nav", null, "Inbox · bab");
+    const html = renderToStaticMarkup(createElement(ScreenChromeProvider, { headerIdentity: identity, headerTrailing: createElement("button", null, "Voice assistant") },
+      createElement(ScreenHeading, { title: "Inbox", actions: createElement("button", null, "Add") })));
+    expect(html.indexOf("Add")).toBeLessThan(html.indexOf("Voice assistant"));
+    expect(html.indexOf("Inbox · bab")).toBeLessThan(html.indexOf("Add"));
+    // A pushed page under a native title never shows it.
+    const pushed = renderToStaticMarkup(createElement(ScreenChromeProvider, { nativeTitle: true, headerTrailing: createElement("button", null, "Voice assistant") },
+      createElement(ScreenHeading, { title: "Tasks", actions: createElement("button", null, "Add") })));
+    expect(pushed).not.toContain("Voice assistant");
+  });
 });

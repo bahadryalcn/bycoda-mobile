@@ -3,6 +3,7 @@ import type {
   MobilePairingRedemption,
 } from "../../../../src/integrations/mobile-pairing";
 import type { HostDescriptor, MobileMachine } from "@/remote/types";
+import type { DeviceProofJwk } from "../../../../src/integrations/device-proof";
 import type { useComputerConnection } from "./use-computer-connection";
 
 export type ConnectionDraft = {
@@ -28,6 +29,10 @@ export type ComputerConnectionInput = {
   credential: string;
   expectedEnvironmentId?: string;
   editingId?: string;
+  /** Seed of the key this credential was bound to at pairing; absent for a pasted credential. */
+  proofSeed?: Uint8Array;
+  /** The pairing endpoint is a public-internet route the owner allowed. */
+  public?: true;
 };
 
 export type ComputerConnectionDependencies = {
@@ -37,10 +42,15 @@ export type ComputerConnectionDependencies = {
     signal: AbortSignal,
     lanKey?: string,
     environmentId?: string,
+    proofSeed?: Uint8Array,
   ) => Promise<HostDescriptor>;
   flushDrafts: () => Promise<void>;
   getMachines: () => MobileMachine[];
-  saveMachine: (machine: MobileMachine, credential: string) => Promise<void>;
+  saveMachine: (
+    machine: MobileMachine,
+    credential: string,
+    proofSeed?: Uint8Array,
+  ) => Promise<void>;
   createId: () => string;
   assertAccess: () => void;
   signal: AbortSignal;
@@ -53,6 +63,8 @@ export type PairingRedeemOptions = {
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
   assertAccess: () => void;
+  /** Public JWK of the phone key the new credential is bound to. */
+  proofKey: DeviceProofJwk;
   timeoutMs?: number;
   now?: () => number;
 };

@@ -4,14 +4,16 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useInboxSeen } from "../inbox/inbox-seen-store";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Notice, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, StateView } from "@/ui/primitives";
+import { Body, Notice, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, StateView } from "@/ui/primitives";
+import { useMobileTheme } from "@/ui/theme";
+import { ProjectPicker } from "../workspace/project-picker";
 import { useCopy } from "@/ui/copy";
 import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { getLocales } from "expo-localization";
 import { resolveLocale } from "@/localization";
-import { Scope } from "./shared/scope";
+import { ProjectScopePill } from "../workspace/project-scope-pill";
 import { useInboxLocalScope } from "../inbox/inbox-local-scope";
 import { AttentionRow } from "../inbox/attention-row";
 import { attentionPartial } from "../inbox/attention-partial";
@@ -37,32 +39,75 @@ function relativeTime(value: number, copy: ReturnType<typeof useCopy>) {
 export function InboxScreen() {
   const copy = useCopy();
   const { view } = useLocalSearchParams<{ view?: string }>();
-  const [mode, setMode] = useState<"attention" | "providers">(view === "jira" || view === "issues" ? "providers" : "attention");
-  const issuesLabel = copy("Issue ve PR", "Issues & PRs");
   return (
-    <InboxBrowseMemoryProvider><Screen scroll={false} title={copy("Gelen kutusu", "Inbox")}>
-      <ScreenHeader>
-        <SegmentedControl
-          hideLabel
-          label={copy("Gelen kutusu", "Inbox")}
-          value={mode}
-          options={[
-            { value: "attention", label: copy("Bekleyen işler", "Attention") },
-            { value: "providers", label: issuesLabel },
-          ]}
-          onChange={setMode}
-        />
-      </ScreenHeader>
-      {mode === "providers"
-        ? <ProviderInboxScreen embedded openJira={view === "jira"} />
-        : <AttentionInboxScreen />}
+    <InboxBrowseMemoryProvider><Screen scroll={false} title={copy("Gelen kutusu", "Inbox")} scopeControl={<InboxProjectScope />}>
+      <InboxBody view={view} />
     </Screen></InboxBrowseMemoryProvider>
   );
 }
+/** Both Inbox modes read the one Inbox scope, so its pill sits in the shared page identity. */
+function InboxProjectScope() {
+  const { projectId, setProjectId } = useInboxLocalScope();
+  return <ProjectScopePill allowAll={false} projectId={projectId} onChange={setProjectId} />;
+}
+
+/**
+ * Two plainly named views of one project: agent work that waits for the owner, and the project's
+ * issues and pull requests from connected services. A one-line caption says what the open view
+ * holds. The Inbox always reads one project; an all-projects provider read fans out over every
+ * repository on the desktop and could hold the list on its placeholder for minutes.
+ */
+function InboxBody({ view }: { view?: string }) {
+  const copy = useCopy();
+  const { colors, uiStyles } = useMobileTheme();
+  const machine = useActiveMachine();
+  const { projectId, setProjectId } = useInboxLocalScope();
+  const [mode, setMode] = useState<"attention" | "providers">(view === "jira" || view === "issues" ? "providers" : "attention");
+  const [choosingProject, setChoosingProject] = useState(false);
+  if (machine && !projectId) return (
+    <View style={{ flex: 1 }}>
+      <StateView
+        size="region"
+        title={copy("Bir proje seç", "Choose a project")}
+        description={copy("Gelen kutusu bir seferde bir projeyi gösterir. Takip etmek istediğin projeyi seç.",
+          "The inbox shows one project at a time. Choose the project you want to follow.")}
+        action={{ label: copy("Proje seçin", "Choose a project"), onPress: () => setChoosingProject(true) }}
+      />
+      {choosingProject ? <ProjectPicker key={machine.id} visible selectedId={projectId}
+        onClose={() => setChoosingProject(false)}
+        onSelect={(selected) => { setChoosingProject(false); setProjectId(selected.id); }} /> : null}
+    </View>
+  );
+  return <>
+    <ScreenHeader>
+      <SegmentedControl
+        hideLabel
+        label={copy("Gelen kutusu", "Inbox")}
+        value={mode}
+        options={[
+          { value: "attention", label: copy("Senin için", "For you") },
+          { value: "providers", label: copy("Issue ve PR", "Issues & PRs") },
+        ]}
+        onChange={setMode}
+      />
+      <Body style={[uiStyles.caption, { color: colors.muted }]}>
+        {mode === "providers"
+          ? copy("Bu projenin GitHub, GitLab, Jira gibi bağlı servislerdeki issue ve pull request’leri.",
+            "This project's issues and pull requests from connected services such as GitHub, GitLab and Jira.")
+          : copy("Ajanların onayını, yanıtını veya yardımını bekleyen işler.",
+            "Agent work waiting for your approval, answer or help.")}
+      </Body>
+    </ScreenHeader>
+    {mode === "providers"
+      ? <ProviderInboxScreen embedded openJira={view === "jira"} />
+      : <AttentionInboxScreen />}
+  </>;
+}
+
 function AttentionInboxScreen() {
   const copy = useCopy();
   const machine = useActiveMachine();
-  const { projectId, setProjectId, matches } = useInboxLocalScope();
+  const { projectId, matches } = useInboxLocalScope();
   const selectProject = useMachines((state) => state.selectProject);
   const memory = useInboxBrowseMemory()?.attention ?? null;
   const origin = { machineId: machine?.id ?? "", projectId };
@@ -133,7 +178,6 @@ function AttentionInboxScreen() {
         onRetry={() => { void refresh(); }} /> : null}
       </>}
       keyExtractor={(item) => item.id}
-      context={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
       ListEmptyComponent={
         <>
           {!machine ? <NoComputerState /> :!scopeCurrent || query.isEnabled === false && !query.error ? (

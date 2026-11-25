@@ -10,7 +10,7 @@ import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { HostProject } from "@/domain/types";
-import { Body, Disclosure, Row, IconButton, NavigationRow, QueryState, RowIcon, ScreenList, SearchField, StatusText } from "@/ui/primitives";
+import { Body, Disclosure, Row, IconButton, NavigationRow, QueryState, RowIcon, ScreenList, SearchField, StatusText, useCollapsibleSearch } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { iconSize } from "@/ui/tokens";
@@ -40,6 +40,7 @@ export function DevicesScreen({ project }: { project: HostProject }) {
   const [search, setSearch] = useState("");
   const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
   const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
+  const deviceSearch = useCollapsibleSearch(<SearchField ref={searchInput} label={copy("Cihaz ara", "Search devices")} value={search} onChangeText={setSearch} />);
   const [selected, setSelected] = useState<DeviceScope & { device: DeviceSummary }>();
   const [runtime, setRuntime] = useState<DeviceScope>();
   const currentScope = { machineId: machine?.id, projectId: project.id, reviewed: reviewedMachine(machine), connection };
@@ -107,6 +108,7 @@ export function DevicesScreen({ project }: { project: HostProject }) {
       query={list}
       refreshState={refresh}
       actions={<>
+        {deviceSearch.trigger}
         <IconButton label={copy("Yenile", "Refresh")} busy={refresh.refreshing}
           disabled={status.isFetching || list.isFetching} onPress={() => { void refresh.onRefresh(); }}>
           <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
@@ -118,7 +120,7 @@ export function DevicesScreen({ project }: { project: HostProject }) {
       header={
         <>
           <Stack.Screen options={{ title: copy("Cihazlar", "Devices") }} />
-          <SearchField ref={searchInput} label={copy("Cihaz ara", "Search devices")} value={search} onChangeText={setSearch} />
+          {deviceSearch.field}
           <QueryState query={status} loading="none" />
           {partialErrors.length ? <IssueSummary issues={availabilityIssues}
             details={availabilityIssues.length > 1 ? availabilityDetails : undefined}

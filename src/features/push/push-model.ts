@@ -84,6 +84,8 @@ export type PushStatus =
   | { state: "permission" }
   | { state: "unsupported" }
   | { state: "unconfigured" }
+  /** No usable connection to the active computer yet, so nothing could be checked or sent. */
+  | { state: "disconnected" }
   | { state: "error"; error: unknown };
 
 export const usePushStatus = create<{

@@ -8,6 +8,8 @@ export async function discoverMachine(
     fetchImpl?: typeof fetch;
     lanKey?: string;
     environmentId?: string;
+    /** The key this credential is bound to; signs the request when the Host already knows it. */
+    proofSeed?: Uint8Array;
   } = {},
 ): Promise<HostDescriptor> {
   // Pairing uses a transient owner-entered key rather than the saved-key reader.
@@ -25,5 +27,6 @@ export async function discoverMachine(
     async () => credential,
     options.fetchImpl,
     assertAppAccess,
+    options.proofSeed ? async () => options.proofSeed! : undefined,
   ).describe(options);
 }

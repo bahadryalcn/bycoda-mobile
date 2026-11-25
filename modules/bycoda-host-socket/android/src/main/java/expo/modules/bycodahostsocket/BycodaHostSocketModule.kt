@@ -140,6 +140,12 @@ class BycodaHostSocketModule : Module() {
     require(Regex("[A-Za-z0-9_-]{43}").matches(value))
     return value
   }
+  /** The Ed25519 seed bound to this credential, or null while the Host has not bound a phone key yet. */
+  private suspend fun proofSeed(binding: HostBinding): ByteArray? =
+    runCatching { secureStore().bycodaHostReadNative(DeviceProof.seedKey(binding.machineId)) }.getOrNull()?.let { DeviceProof.decodeSeed(it) }
+  /** The `DPoP` header value for one request of a key-bound credential. */
+  private fun deviceProof(seed: ByteArray?, binding: HostBinding, token: String, path: String): String? =
+    seed?.let { DeviceProof.sign(it, token, "GET", path, binding.environmentId) }
   private fun digest(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
   private fun voiceCurrent(voice: VoiceScope?) = voice != null && VoiceCompanionRuntime.allowsSession(voice.sessionId)
   private fun current(connection: Connection) = connections[connection.id] === connection && (if (connection.credential.voice != null) voiceCurrent(connection.credential.voice) else foreground && accessAllowed)
@@ -189,6 +195,7 @@ class BycodaHostSocketModule : Module() {
       .addQueryParameter("alias", alias).build()
     val id = UUID.randomUUID().toString()
     val session = TunnelSession(id, credential.binding.machineId, client, url, value, spec, alias,
+      proofSeed = proofSeed(credential.binding), environmentId = credential.binding.environmentId,
       onError = { code -> sendEvent("onTunnelEvent", mapOf("tunnelId" to id, "type" to "error", "code" to code)) },
       onClosed = { code -> synchronized(lock) { tunnels.remove(id) }; sendEvent("onTunnelEvent", mapOf("tunnelId" to id, "type" to "closed", "code" to code)) })
     val replaced = synchronized(lock) {
@@ -227,7 +234,9 @@ class BycodaHostSocketModule : Module() {
         connections[id] = connection
         socketJobs.add(connection)
       }
-      val request = Request.Builder().url(credential.binding.endpoint).header("Authorization", "Bearer $value").header("Sec-WebSocket-Protocol", "bycoda.rpc.v2").build()
+      val socketPath = URI(credential.binding.endpoint).rawPath.ifEmpty { "/" }
+      val request = Request.Builder().url(credential.binding.endpoint).header("Authorization", "Bearer $value").header("Sec-WebSocket-Protocol", "bycoda.rpc.v2")
+        .apply { deviceProof(proofSeed(credential.binding), credential.binding, value, socketPath)?.let { header(DeviceProof.HEADER, it) } }.build()
       connection.socket = client.newWebSocket(request, object : WebSocketListener() {
         override fun onOpen(ws: WebSocket, response: Response) {
           synchronized(lock) {
@@ -360,7 +369,8 @@ class BycodaHostSocketModule : Module() {
       val client = HostTls.client(credential.binding)
       val endpoint = URI(credential.binding.endpoint)
       val url = HttpUrl.Builder().scheme("https").host(endpoint.host).port(if (endpoint.port < 0) 443 else endpoint.port).addPathSegment("ws-bulk").addPathSegment(descriptor.transferId).addQueryParameter("offset", offset.toLong().toString()).build()
-      val call = client.newCall(Request.Builder().url(url).header("Authorization", "Bearer $value").build())
+      val call = client.newCall(Request.Builder().url(url).header("Authorization", "Bearer $value")
+        .apply { deviceProof(proofSeed(credential.binding), credential.binding, value, url.encodedPath)?.let { header(DeviceProof.HEADER, it) } }.build())
       val epoch = synchronized(lock) {
         if (!foreground || !accessAllowed || credential.binding.accessEpoch != accessEpoch || credentials[handle] !== credential || bulkCalls.size >= 2) throw error("bulk_unavailable")
         bulkCalls[call] = credential.binding.machineId; lifecycleEpoch

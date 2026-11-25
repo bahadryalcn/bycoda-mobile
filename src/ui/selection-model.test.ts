@@ -9,10 +9,10 @@ describe("searchable selection", () => {
   });
   it("searches labels and paths, preserving duplicate display names", () => {
     const options = [
-      { value: "a", label: "monocode", detail: "G:/Projects/a" },
-      { value: "b", label: "monocode", detail: "G:/Projects/b" },
+      { value: "a", label: "sample-project", detail: "G:/Projects/a" },
+      { value: "b", label: "sample-project", detail: "G:/Projects/b" },
     ];
-    expect(filterSelection(options, "MONOCODE")).toHaveLength(2);
+    expect(filterSelection(options, "SAMPLE-PROJECT")).toHaveLength(2);
     expect(filterSelection(options, " /b ").map((option) => option.value)).toEqual(["b"]);
   });
   it("uses the requested locale and normalizes whitespace without losing duplicate identities", () => {

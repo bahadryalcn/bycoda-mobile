@@ -1,5 +1,6 @@
 import type { MobileMachine, MobileRoute } from "../remote/types";
 import { sameRoute } from "./machine-model";
+import { routeRank } from "./route-kind";
 
 /** True when the route answers at all; authentication happens on the real connection. */
 export type RouteProbe = (route: MobileRoute, signal: AbortSignal) => Promise<boolean>;
@@ -12,9 +13,15 @@ export const ROUTE_RECHECK_INTERVAL_MS = 60_000;
 /** Failure and interval checks never run closer together than this. */
 export const ROUTE_CHECK_MIN_GAP_MS = 15_000;
 
-/** Local-network routes first: at home they are faster and need no VPN. */
+/**
+ * Local network first (faster, no VPN), then Tailscale, then other addresses. A public-internet
+ * route is last: it is used only when every private one failed. Stable within a rank.
+ */
 export function orderRoutes(routes: readonly MobileRoute[]): MobileRoute[] {
-  return [...routes.filter((route) => route.lanKey), ...routes.filter((route) => !route.lanKey)];
+  return routes
+    .map((route, index) => ({ route, index }))
+    .sort((a, b) => routeRank(a.route) - routeRank(b.route) || a.index - b.index)
+    .map(({ route }) => route);
 }
 
 /**

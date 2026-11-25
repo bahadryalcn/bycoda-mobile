@@ -3,6 +3,7 @@ import type { DevicePushToken } from "expo-notifications";
 import { withTimeout } from "../../../../src/shared/lib/withTimeout";
 import { notifications } from "../permissions/device-permissions";
 import type { PushPreferenceKind, PushPreferences } from "./push-model";
+import { PushTokenError } from "./push-token-error";
 
 type Copy = (tr: string, en: string) => string;
 const PUSH_TOKEN_TIMEOUT_MS = 15_000;
@@ -66,11 +67,16 @@ export async function expoPushToken(projectId: string, options?: { fresh?: boole
   const generation = rotations;
   const request = withTimeout(
     notifications().then(async (api) => {
-      if (!devicePushToken) {
-        const observedToken = await api.getDevicePushTokenAsync();
-        devicePushToken ??= observedToken;
+      try {
+        if (!devicePushToken) {
+          const observedToken = await api.getDevicePushTokenAsync();
+          devicePushToken ??= observedToken;
+        }
+        return (await api.getExpoPushTokenAsync({ projectId, devicePushToken })).data;
+      } catch (error) {
+        // Raw native text ("Default FirebaseApp is not initialized", "no valid aps-environment…") is not owner copy.
+        throw new PushTokenError(error);
       }
-      return (await api.getExpoPushTokenAsync({ projectId, devicePushToken })).data;
     }),
     PUSH_TOKEN_TIMEOUT_MS,
     "Notification token",

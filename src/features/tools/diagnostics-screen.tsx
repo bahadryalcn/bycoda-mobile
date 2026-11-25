@@ -33,7 +33,7 @@ export function DiagnosticsScreen() {
   });
   const sample = query.data?.samples.at(-1);
   const refresh = usePullRefresh(() => query.refetch());
-  return <Screen title={copy(...toolLabels.diagnostics)} scope={{ computer: machine?.name }}
+  return <Screen title={copy(...toolLabels.diagnostics)} computerSwitch scope={{ computer: machine?.name }}
     subtitle={sample ? `${copy("Güncellendi", "Updated")} ${clockLabel(sample.at)}` : undefined}
     query={query}
     refreshState={refresh}

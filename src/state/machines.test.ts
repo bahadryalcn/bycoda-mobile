@@ -575,3 +575,64 @@ describe("multiple routes to one computer", () => {
     expect(useMachines.getState().machines[0]).toMatchObject(lan);
   });
 });
+
+describe("device proof seed lifecycle", () => {
+  const proof = { ...machine, providers: ["cursor" as const] };
+  const seedA = new Uint8Array(32).fill(1);
+  const store = new Map<string, string>();
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    store.clear();
+    storage.getItem.mockResolvedValue(null);
+    storage.setItem.mockResolvedValue(undefined);
+    access.assertAppAccess.mockImplementation(() => undefined);
+    secrets.getItemAsync.mockImplementation(async (key: string) => store.get(key) ?? null);
+    secrets.setItemAsync.mockImplementation(async (key: string, value: string) => {
+      store.set(key, value);
+    });
+    secrets.deleteItemAsync.mockImplementation(async (key: string) => {
+      store.delete(key);
+    });
+    useMachines.setState({
+      machines: [],
+      projects: {},
+      activeId: null,
+      selectedProjectId: null,
+      hydrated: false,
+      storageError: null,
+    });
+    await useMachines.getState().hydrate();
+  });
+  it("stores the pairing seed next to the credential and reads it back under the identity guard", async () => {
+    await useMachines.getState().saveMachine(proof, token, seedA);
+    expect([...store.keys()].sort()).toEqual(["bycoda.remote.computer-a", "bycoda.remote.proof.computer-a"]);
+    expect(store.get("bycoda.remote.proof.computer-a")).toHaveLength(43);
+    expect(await credentials.getProofSeed(machine.id, proof)).toEqual(seedA);
+    expect(await credentials.getProofSeed(machine.id, { ...proof, endpoint: "https://other.example" })).toBeNull();
+  });
+  it("keeps the seed for the same credential and drops it when the credential is replaced without one", async () => {
+    await useMachines.getState().saveMachine(proof, token, seedA);
+    await useMachines.getState().saveMachine({ ...proof, name: "Renamed" }, token);
+    expect(await credentials.getProofSeed(machine.id)).toEqual(seedA);
+    await useMachines.getState().saveMachine(proof, replacement);
+    expect(await credentials.getProofSeed(machine.id)).toBeNull();
+    expect(store.has("bycoda.remote.proof.computer-a")).toBe(false);
+  });
+  it("persists a seed for a saved computer and removes it with the computer", async () => {
+    await useMachines.getState().saveMachine(proof, token);
+    expect(await credentials.getProofSeed(machine.id)).toBeNull();
+    await credentials.saveProofSeed(machine.id, seedA);
+    expect(await credentials.getProofSeed(machine.id)).toEqual(seedA);
+    await useMachines.getState().removeMachine(machine.id);
+    expect(store.size).toBe(0);
+  });
+  it("restores the previous seed when the metadata save fails", async () => {
+    await useMachines.getState().saveMachine(proof, token, seedA);
+    storage.setItem.mockRejectedValueOnce(new Error("Disk full"));
+    await expect(
+      useMachines.getState().saveMachine(proof, replacement, new Uint8Array(32).fill(2)),
+    ).rejects.toThrow("could not be saved");
+    expect(await credentials.getProofSeed(machine.id)).toEqual(seedA);
+    expect(store.get("bycoda.remote.computer-a")).toBe(token);
+  });
+});

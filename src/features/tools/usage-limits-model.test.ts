@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compactMoney, isPartialScan, omittedCost, readCostReport, readLimitsReport, resetCountdown, wholePercent } from "./usage-limits-model";
+import { compactMoney, isPartialScan, omittedCost, presentLimitsReport, quotaFailure, readCostReport, readLimitsReport, resetCountdown, wholePercent, type UsageLimitsReport } from "./usage-limits-model";
 
 const NOW = Date.parse("2026-11-09T12:00:00Z");
 const reading = { usedPercent: 63, leftPercent: 37, regainPercent: 63, windowMinutes: 10080, resetsAt: NOW + 4.5 * 86_400_000, timeLeftPercent: 64.3, pace: "ahead" };
@@ -85,5 +85,62 @@ describe("usage limits model", () => {
     expect(omittedCost(report({ models: [row(10, 1000)] }), "models")).toBeNull();
     expect(isPartialScan(report({}))).toBe(false);
     expect(isPartialScan(report({ coverage: { truncated: true, filesScanned: 20000, unpricedModels: [] } }))).toBe(true);
+  });
+});
+
+describe("Host default account presentation", () => {
+  const weekly = (left: number, resetsAt: number | null = NOW + 86_400_000) => ({ ...reading, leftPercent: left, resetsAt });
+  const account = (id: string, label: string, status: "ok" | "unavailable" | "error" = "ok") =>
+    ({ id, label, color: "#fff", status, error: status === "ok" ? null : "Claude usage will update when this account is used again", resetCredits: null });
+  const report = (hostLeft: number | null, hostStatus: "ok" | "unavailable" | "error" = "ok", hostReset?: number | null) => {
+    const entries = [
+      ...(hostLeft === null ? [] : [{ id: "default", label: "Host default", color: "#fff", reading: weekly(hostLeft, hostReset) }]),
+      { id: "personal", label: "Personal", color: "#fff", reading: weekly(87) },
+      { id: "work", label: "work", color: "#fff", reading: weekly(64, NOW + 3_600_000) },
+    ].sort((a, b) => b.reading.leftPercent - a.reading.leftPercent);
+    return {
+      environmentId: "env", sampledAt: NOW, source: "host-provider-api",
+      providers: [{
+        provider: "claude",
+        cards: [{ key: "weekly", kind: "weekly", model: null, best: entries[0]!.reading, accounts: entries }],
+        accounts: [account("default", "Host default", hostStatus), account("personal", "Personal"), account("work", "work")],
+      }],
+    } as UsageLimitsReport;
+  };
+
+  it("drops the Host profile when it repeats a named profile's quota, even with a failed reread", () => {
+    const [claude] = presentLimitsReport(report(87.2, "error"), "Default account").providers;
+    expect(claude!.accounts.map((entry) => entry.id)).toEqual(["personal", "work"]);
+    expect(claude!.cards[0]!.accounts.map((entry) => entry.id)).toEqual(["personal", "work"]);
+    expect(claude!.cards[0]!.best.leftPercent).toBe(87);
+  });
+
+  it("renames a distinct Host profile instead of leaking its internal label", () => {
+    const [claude] = presentLimitsReport(report(40), "Default account").providers;
+    expect(claude!.accounts.map((entry) => entry.label)).toEqual(["Default account", "Personal", "work"]);
+    expect(claude!.cards[0]!.accounts.find((entry) => entry.id === "default")!.label).toBe("Default account");
+  });
+
+  it("needs a matching reset instant before treating two accounts as one", () => {
+    const [claude] = presentLimitsReport(report(87, "ok", NOW + 2 * 86_400_000), "Default account").providers;
+    expect(claude!.accounts.some((entry) => entry.id === "default")).toBe(true);
+  });
+
+  it("leaves out a signed-out Host profile beside named profiles", () => {
+    const [claude] = presentLimitsReport(report(null, "unavailable"), "Default account").providers;
+    expect(claude!.accounts.map((entry) => entry.id)).toEqual(["personal", "work"]);
+  });
+
+  it("keeps a lone Host profile and other providers' synthetic default accounts", () => {
+    const lone = { ...report(null), providers: [{ provider: "opencode", cards: [], accounts: [{ ...account("default", "OpenCode Go") }] }] } as UsageLimitsReport;
+    expect(presentLimitsReport(lone, "Default account").providers[0]!.accounts[0]!.label).toBe("OpenCode Go");
+  });
+
+  it("names known Host failures", () => {
+    expect(quotaFailure({ status: "error", error: "Claude usage will update when this account is used again" })).toBe("renewal");
+    expect(quotaFailure({ status: "error", error: "Claude sign-in expired" })).toBe("signedOut");
+    expect(quotaFailure({ status: "error", error: "Claude usage request failed (429)" })).toBe("rateLimited");
+    expect(quotaFailure({ status: "unavailable", error: "Codex CLI not found" })).toBe("unavailable");
+    expect(quotaFailure({ status: "error", error: "Claude usage request failed" })).toBe("unreadable");
   });
 });

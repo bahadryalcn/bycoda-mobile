@@ -16,6 +16,8 @@ vi.mock("@/ui/primitives", () => {
   return { Body: Item, Button: ({ label }: { label: string }) => createElement("button", null, label), StatusText: ({ label }: { label: string }) => createElement("span", null, label), Card: Item, StatusRow: ({ label, children }: PropsWithChildren<{ label: string }>) => createElement("div", null, label, children), QueryState: () => null, SectionHeader: ({ title, trailing }: { title: string; trailing?: unknown }) => createElement("h2", null, title, trailing as never) };
 });
 vi.mock("@/ui/metric-value", () => ({ MetricValue: ({ children }: PropsWithChildren) => createElement("strong", null, children) }));
+vi.mock("@/ui/metric-row", () => ({ MetricRow: ({ label, value }: { label: string; value: string }) => createElement("p", null, `${label}: ${value}`) }));
+vi.mock("@/ui/use-pull-refresh", () => ({ usePullRefresh: () => ({ refreshing: false, onRefresh: async () => {} }) }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: { caption: {} } }) }));
 vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("@/ui/provider-account-kind", () => ({ ProviderAccountKind: () => null }));

@@ -27,13 +27,15 @@ vi.mock("@/ui/search-field",()=>({CollectionToolbar:({field,actions}:any)=>creat
 vi.mock("@/ui/styles",()=>({uiStyles:{caption:{}}}));
 vi.mock("@/ui/copy",()=>({useCopy:()=>(_tr:string,en:string)=>en}));
 vi.mock("@/state/machines",()=>({useActiveMachine:()=>state.hasMachine?{id:state.active}:undefined,
- useMachines:Object.assign((selector:any)=>selector({selectedProjectId:state.project,selectProject:state.select}),{getState:()=>({activeId:state.active,selectedProjectId:state.project,language:"en"})})}));
+ useMachines:Object.assign((selector:any)=>selector({selectedProjectId:state.project,selectProject:state.select}),{getState:()=>({activeId:state.active,selectedProjectId:state.project,language:"en",selectProject:state.select})})}));
 vi.mock("@/state/queries",()=>({useHostQuery:(_key:unknown,_method:unknown,_params:unknown,options:{enabled:boolean})=>{
  state.reads.push(options.enabled);return{data:{items:state.rows,externalProviderInboxAvailable:state.external,unavailableProjectIds:state.unavailable},isEnabled:state.enabled,fetchStatus:state.paused?"paused":"idle",error:state.error,refetch:state.refetch};
 }}));
 vi.mock("@/ui/no-computer",()=>({NoComputerState:()=>createElement("p",null,"Connect a computer first")}));
 vi.mock("../inbox/pending-approvals-row",()=>({PendingApprovalsRow:()=>null}));
-vi.mock("./shared/scope",()=>({Scope:()=>null}));
+vi.mock("../workspace/project-scope-pill", () => ({ ProjectScopePill: () => null }));
+vi.mock("../workspace/project-picker", () => ({ ProjectPicker: ({ onSelect }: { onSelect: (project: { id: string }) => void }) =>
+  createElement("button", { onClick: () => onSelect({ id: "picked" }) }, "Pick project") }));
 vi.mock("./shared/status",()=>({Status:({value}:{value:string})=>createElement("span",null,value),statusLabel:(value:string)=>value}));
 vi.mock("../inbox/provider-inbox-screen",()=>({ProviderInboxScreen:({embedded}:{embedded:boolean})=>createElement("p",{"data-embedded":embedded},"Provider mode")}));
 vi.mock("../inbox/inbox-browse-memory-provider",()=>({InboxBrowseMemoryProvider:({children}:PropsWithChildren)=>children,useInboxBrowseMemory:()=>state.memory}));
@@ -44,7 +46,7 @@ vi.mock("@/ui/primitives",()=>{
  const Button=({label,onPress}:any)=>createElement("button",{onClick:onPress},label);
  return{Button,Body:Wrap,Row:Wrap,Stack:Wrap,SectionHeader:({title}:{title:string})=>createElement("h3",null,title),Badge:({label}:{label:string})=>createElement("span",null,label), StatusText: ({ label }: { label: string }) => createElement("span", null, label),
  ActionMenu:({actions}:any)=>{state.actions=actions.filter(Boolean);return createElement("div",null,...state.actions.map(a=>createElement("button",{key:a.key,onClick:a.onPress},a.key)));},
- Sheet:({visible,children,onClose}:any)=>visible?createElement("aside",null,children,createElement("button",{onClick:onClose},"Close help")):null,Screen:Wrap,ScreenHeader:Wrap,StateView:({title,description}:{title:string;description?:string})=>createElement("p",null,title,description),
+ Sheet:({visible,children,onClose}:any)=>visible?createElement("aside",null,children,createElement("button",{onClick:onClose},"Close help")):null,Screen:Wrap,ScreenHeader:Wrap,StateView:({title,description,action}:{title:string;description?:string;action?:{label:string;onPress:()=>void}})=>createElement("p",null,title,description,action?createElement("button",{onClick:action.onPress},action.label):null),
  QueryState:({query,empty}:{query:{error?:Error;data?:unknown};empty?:boolean})=>query.error && query.data === undefined?createElement("p",null,query.error.message):empty?createElement("p",null,"Nothing needs your attention"):null,
  Notice:({message,onRetry}:{message:string;onRetry?:()=>void})=>createElement("div",{role:"status"},message,createElement("button",{onClick:onRetry},"Retry")),
  SegmentedControl:({options,onChange}:{options:Array<{label:string;value:string}>;onChange:(value:string)=>void})=>createElement("nav",null,...options.map(o=>createElement("button",{key:o.value,onClick:()=>onChange(o.value)},o.label))),
@@ -101,6 +103,18 @@ it("preserves the Attention position through concealment without changing provid
 });
 it("retires row and refresh callbacks on mode unmount",async()=>{
  await mount();const old=state.presses.get(row.title)!,refresh=state.bindings.refresh;await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="Issues & PRs")!.click());await act(async()=>{old();refresh();});expect(state.push).not.toHaveBeenCalled();expect(state.select).not.toHaveBeenCalled();expect(state.refetch).not.toHaveBeenCalled();
+});
+it("asks for one project instead of reading every project, and adopts the chosen one",async()=>{
+ state.project=null as never;await mount();
+ expect(host.textContent).toContain("Choose a project");expect(host.textContent).not.toContain("Issues & PRs");expect(state.reads).toEqual([]);
+ await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="Choose a project")!.click());
+ await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="Pick project")!.click());
+ expect(state.select).toHaveBeenCalledExactlyOnceWith("picked");
+});
+it("names both views plainly and explains the open one in one line",async()=>{
+ await mount();expect(host.textContent).toContain("For you");expect(host.textContent).toContain("Agent work waiting for your approval");
+ await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="Issues & PRs")!.click());
+ expect(host.textContent).toContain("issues and pull requests from connected services");expect(host.textContent).toContain("Provider mode");
 });
 it("shows computer recovery without reading or navigating when no machine is selected",async()=>{
  await mount();state.hasMachine=false;await render();expect(host.textContent).toContain("Connect a computer first");expect(host.querySelector("main")!.getAttribute("data-count")).toBe("0");expect(state.reads.at(-1)).toBe(false);

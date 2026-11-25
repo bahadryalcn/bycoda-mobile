@@ -31,6 +31,8 @@ const sliders: {
   onChange: (value: string) => void;
 }[] = [];
 let searchShown = false;
+const headings: string[] = [];
+const subheadings: string[] = [];
 
 vi.mock("@/ui/provider-account-kind", () => ({ ProviderAccountKind: () => null }));
 vi.mock("react-native", () => ({
@@ -39,6 +41,11 @@ vi.mock("react-native", () => ({
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("@/ui/agent-avatar", () => ({ ProviderAccountMark: () => null }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: {} }) }));
+vi.mock("@/ui/group-heading", () => ({
+  GroupHeading: ({ title }: { title: string }) => { headings.push(title); return null; },
+  SubgroupHeading: ({ title }: { title: string }) => { subheadings.push(title); return null; },
+}));
 vi.mock("@/ui/level-slider", () => ({
   LevelSlider: (props: {
     label: string;
@@ -147,6 +154,8 @@ beforeEach(() => {
   toggles.length = 0;
   disclosures.length = 0;
   searchShown = false;
+  headings.length = 0;
+  subheadings.length = 0;
 });
 
 it.each([false, true])("keeps a saved model outside the catalogue and preserves independent settings when selecting a listed model (sparse %s)", sparseSettings => {
@@ -181,61 +190,72 @@ describe("model picker view", () => {
     expect(selects).toHaveLength(0);
   });
   it("keeps a removed saved account explicit and offers an owner-selected repair", () => {
-    const onChooseProvider = vi.fn();
+    const onChooseModel = vi.fn();
     const available = {
       key: "claude:research",
       provider: "claude" as const,
       accountId: "research",
       label: "Research",
     };
+    const catalog = { models: { claude: models(2) }, errors: {} } as never;
     render({
       choices: [available],
       choice: { key: "claude:gone", provider: "claude", label: "Account unavailable" },
       unavailableAccount: true,
-      onChooseProvider,
+      catalog,
+      onChooseModel,
     });
-    const account = selects.find((select) => select.label === "Account")!;
-    expect(account.value).toBe("claude:gone");
-    expect(account.options).toContainEqual(
-      expect.objectContaining({
-        value: "claude:gone",
-        label: "Account unavailable",
-        disabled: true,
-      }),
-    );
-    expect(account.disabled).toBeFalsy();
-    expect(pressables.filter((item) => item.kind === "row").every((item) => item.disabled)).toBe(
-      true,
-    );
-    expect(onChooseProvider).not.toHaveBeenCalled();
-    account.onChange("claude:research");
-    expect(onChooseProvider).toHaveBeenCalledWith(available);
+    expect(headings).toEqual(["Claude · Account unavailable", "Claude · Research"]);
+    const rows = pressables.filter((item) => item.kind === "row");
+    // The unavailable account's own rows are locked; another account's rows repair the choice.
+    expect(rows.slice(0, 3).every((item) => item.disabled)).toBe(true);
+    expect(rows.slice(3).every((item) => !item.disabled)).toBe(true);
+    rows[4]!.onPress();
+    expect(onChooseModel).toHaveBeenCalledWith(available, "m1", {});
   });
 
-  it("picks the agent in one select and the account in a second one", () => {
+  it("lists every provider and account as a group, in product order, without separate selects", () => {
     const codex: ProviderChoice = { key: "codex:", provider: "codex", label: "Codex" };
-    const onChooseProvider = vi.fn();
-    render({
-      choices: [choice("claude:"), choice("claude:a"), choice("claude:b"), codex],
-      onChooseProvider,
+    const opencode: ProviderChoice = { key: "opencode:", provider: "opencode", label: "OpenCode" };
+    const claude = (key: string, label: string, accountId?: string): ProviderChoice =>
+      ({ key, provider: "claude", label, detail: "Claude", ...(accountId ? { accountId } : {}) });
+    const catalog = {
+      models: { claude: models(2), codex: [model("gpt")], opencode: [model("beam")] },
+      errors: {},
+    } as never;
+    const onChooseModel = vi.fn();
+    const onChange = render({
+      // The session's provider first must not change the product order.
+      choices: [opencode, codex, claude("claude:", "Default account"), claude("claude:w", "Work", "w")],
+      choice: claude("claude:", "Default account"),
+      models: models(2),
+      catalog,
+      onChooseModel,
     });
-    expect(pressables.filter((p) => p.kind === "account")).toHaveLength(0);
-    expect(selects.map((select) => select.label)).toEqual(["Agent", "Account"]);
-    expect(selects[0]!.options.map((option) => option.value)).toEqual(["claude", "codex"]);
-    expect(selects[1]!.options.map((option) => option.value)).toEqual([
-      "claude:",
-      "claude:a",
-      "claude:b",
-    ]);
-    selects[1]!.onChange("claude:b");
-    expect(onChooseProvider).toHaveBeenCalledWith(expect.objectContaining({ key: "claude:b" }));
-    selects[0]!.onChange("codex");
-    expect(onChooseProvider).toHaveBeenLastCalledWith(codex);
+    expect(selects).toHaveLength(0);
+    expect(headings).toEqual(["Claude · Default account", "Claude · Work", "Codex", "OpenCode"]);
+    const rows = pressables.filter((item) => item.kind === "row");
+    expect(rows.map((item) => item.label)).toEqual(["M0", "M1", "M0", "M1", "GPT", "BEAM"]);
+    expect(rows.filter((item) => item.selected).map((item) => item.label)).toEqual(["M0"]);
+    // The same model under another account keeps the effort; another provider starts from defaults.
+    rows[2]!.onPress();
+    expect(onChooseModel).toHaveBeenLastCalledWith(expect.objectContaining({ key: "claude:w" }), "m0", {});
+    rows[4]!.onPress();
+    expect(onChooseModel).toHaveBeenLastCalledWith(codex, "gpt", {});
+    rows[1]!.onPress();
+    expect(onChange).toHaveBeenCalledWith("m1", {});
   });
 
-  it("offers no account select when the chosen agent has one login", () => {
-    render({ choices: [choice("claude:"), { key: "codex:", provider: "codex", label: "Codex" }] });
-    expect(selects.map((select) => select.label)).toEqual(["Agent"]);
+  it("groups effort variants of one model under its name", () => {
+    const variants = ["Gemini 4 (High)", "Gemini 4 (Low)", "Flash"].map((name, index) =>
+      ({ id: `g${index}`, name } as unknown as AgentModel));
+    render({
+      choices: [{ key: "antigravity:", provider: "antigravity", label: "Antigravity" }],
+      models: variants,
+      model: "g0",
+    });
+    expect(subheadings).toEqual(["Gemini 4"]);
+    expect(pressables.filter((item) => item.kind === "row").map((item) => item.label)).toEqual(["High", "Low", "Flash"]);
   });
 
   it("shows the reasoning scale as one slider and applies the released step as the new settings", () => {

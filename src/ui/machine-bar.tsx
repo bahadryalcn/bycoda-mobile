@@ -1,23 +1,23 @@
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
 import { Text, View } from "react-native";
-import { LifecycleButton as PanelButton } from "./busy-indicator";
-import { haptic } from "./motion";
+import { ScopePill } from "./scope-pill";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Laptop from "lucide-react-native/icons/laptop";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import WifiOff from "lucide-react-native/icons/wifi-off";
 import CircleAlert from "lucide-react-native/icons/circle-alert";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { notifyManager, useQueryClient } from "@tanstack/react-query";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useActiveMachine, useMachines } from "../state/machines";
 import { useConsentPending, useHostClient, useHostConsentGranted, useHostQuery } from "../state/queries";
 import { selectMobileHostTransport } from "../remote/lan-ws";
 import { useSecurity } from "../state/security";
+import { ensureDeviceProofBinding } from "../state/proof-binding";
+import { proofRefusalOf } from "../remote/device-proof";
 import type { HostDescriptor } from "../remote/types";
-import { hitSlopFor, metrics, radii, space } from "./tokens";
+import { radii, space } from "./tokens";
 import { Body, Button, NavigationGroup, NavigationRow, Sheet } from "./primitives";
 import { IconTile } from "./icon-tile";
 import HardDrive from "lucide-react-native/icons/hard-drive";
@@ -96,8 +96,14 @@ export function useMachineStatus() {
   const refresh = useMachines((s) => s.refreshDescriptor);
   // The descriptor is persisted connection metadata, rather than an editable copy of query data.
   useEffect(() => {
-    if (machine && health.isSuccess && health.data) refresh(machine.id, health.data);
-  }, [machine?.id, health.isSuccess, health.data, refresh]);
+    if (!machine || !health.isSuccess || !health.data) return;
+    refresh(machine.id, health.data);
+    // A credential paired before device keys binds itself on the first private connection.
+    if (client)
+      void ensureDeviceProofBinding(machine, health.data, (method, params, options) =>
+        client.request(method, params, options),
+      ).catch(() => undefined);
+  }, [machine?.id, health.isSuccess, health.data, refresh, client]);
   // A probe still in flight after PROBE_STALL_MS means the link is unproven now, not when the probe finally fails.
   const probeStalled = useProbeStalled(health.isFetching);
   // The live socket state is the primary signal; the describe poll only covers computers without one.
@@ -140,7 +146,13 @@ export function useMachineStatus() {
   };
   const status = statuses[phase];
   const errorKind = remoteErrorKind(health.error);
-  const reason = connectionReason(phase, errorKind, machine?.name ?? "", copy);
+  const reason = connectionReason(
+    phase,
+    errorKind,
+    machine?.name ?? "",
+    copy,
+    proofRefusalOf(health.error),
+  );
   const needsPairing = connectionNeedsPairing(phase, errorKind);
   const statusColor =
     phase === "connected"
@@ -187,8 +199,9 @@ export function MachineConnectionStatus() {
 
 /** Page title with a compact computer pill: one 48dp-tall row, no stacked subtitle. */
 
-export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?: string } = {}) {
-  const { colors, uiStyles, pressedFill } = useMobileTheme();
+/** `accessory` (the shared project scope) follows the computer selector in the same wrapping row. */
+export function MachinePill({ heading, subtitle, accessory }: { heading?: string; subtitle?: string; accessory?: ReactNode } = {}) {
+  const { colors, uiStyles } = useMobileTheme();
   const { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError, reason, needsPairing } = useMachineStatus();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
@@ -219,39 +232,23 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
   const pillStatus = phase === "startup-failed" ? copy("Hata", "Error")
     : phase === "offline" ? copy("Çevrimdışı", "Offline") : status;
   const StatusIcon = phase === "offline" || phase === "disconnected" ? WifiOff : CircleAlert;
+  // The shared scope pill: the project pill beside it has the same shape, label and chevron.
   const pill = (
-          <PanelButton
-            accessibilityRole="button"
+          <ScopePill
             accessibilityLabel={[heading, name, machine ? status : undefined, subtitle, copy("Bilgisayar seç", "Choose computer")]
               .filter(Boolean)
               .join(". ")}
-            accessibilityState={{ expanded: menuOpen && unlocked }}
-            aria-expanded={menuOpen && unlocked}
-            variant="ghost"
-            pressScale={1}
-            className="rounded-full border-0 shadow-none active:opacity-75"
-            hitSlop={hitSlopFor(metrics.chipHeight)}
+            expanded={menuOpen && unlocked}
             onPress={() => {
-              haptic.select();
               if (process.env.EXPO_OS !== "web") setMenuOpen(unlocked);
             }}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: space.xs + 2,
-              height: metrics.chipHeight,
-              minHeight: metrics.chipHeight,
-              paddingStart: space.row,
-              paddingEnd: space.sm,
-              paddingVertical: 0,
-              borderRadius: radii.pill,
-              backgroundColor: menuOpen && unlocked ? pressedFill : colors.fill,
-              flexShrink: 1,
-              maxWidth: "100%",
-              minWidth: 64,
-            }}
-          >
-            {machine ? (
+            label={name}
+            status={degraded ? (
+              <Text numberOfLines={1} style={[uiStyles.caption, { color: statusColor, flexShrink: 0 }]}>
+                {pillStatus}
+              </Text>
+            ) : undefined}
+            icon={machine ? (
               health.isFetching && !successAt ? (
                 <Spinner size="sm" color={statusColor} />
               ) : degraded ? (
@@ -263,17 +260,7 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
             ) : (
               <Laptop size={14} strokeWidth={2} color={colors.muted} />
             )}
-            {/* Only the name yields to a narrow pill; the status below never shrinks or truncates. */}
-            <Text numberOfLines={1} style={[uiStyles.caption, { color: colors.text, flexShrink: 1, minWidth: 0 }]}>
-              {name}
-            </Text>
-            {degraded ? (
-              <Text numberOfLines={1} style={[uiStyles.caption, { color: statusColor, flexShrink: 0 }]}>
-                {pillStatus}
-              </Text>
-            ) : null}
-            <ChevronDown size={12} strokeWidth={2.6} color={colors.muted} style={{ flexShrink: 0 }} />
-          </PanelButton>
+          />
   );
   return (
     // The title keeps its full width; when title and pill no longer fit (large text), the pill wraps below it.
@@ -402,6 +389,7 @@ export function MachinePill({ heading, subtitle }: { heading?: string; subtitle?
           </Sheet>
         </>
       )}
+      {accessory}
     </View>
   );
 }

@@ -12,11 +12,6 @@ export type AgentFieldsProps = {
   onValidityChange?: (valid: boolean) => void;
   showRunLimit?: boolean;
 };
-export type ScopeProps = {
-  allowAll?: boolean;
-  projectId: string | null;
-  onChange: (id: string | null) => void;
-};
 export type ScopeChooser = { search: string } | null;
 export type StatusProps = { value: string };
-export type ManagementScreenProps = { section: string; initialProjectId?: string | null };
+export type ManagementScreenProps = { section: string };

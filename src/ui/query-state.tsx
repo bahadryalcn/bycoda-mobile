@@ -12,7 +12,7 @@ import { SheetGuardContext } from "./sheet-guard-context";
 import { useConnectionFeedbackOwner } from "./connection-feedback-scope";
 import { FormActionBusy } from "./form-action-context";
 import { isTransientConnectionError, READ_RETRY_GRACE_MS, reconnectRefetchDelay } from "../state/query-retry";
-import { useActiveHostLinkDown, useActiveHostRecoveryMachine, useHostRuntimeState } from "../state/host-runtime-state";
+import { useActiveHostLinkDown, useActiveHostRecoveryMachine, useHostForegroundGeneration, useHostRuntimeState } from "../state/host-runtime-state";
 import { useDeviceOffline } from "../state/device-network";
 import { RemoteHostError } from "../remote/host-error";
 
@@ -21,15 +21,17 @@ const RECONNECT_ATTEMPTS = 4;
 
 /** Delay recovery feedback without changing the caller's read or write gates. */
 export function useReadRetryNotice(recovering: boolean, machineId: string | null) {
-  const [elapsed, setElapsed] = useState<{ machineId: string | null } | null>(null);
+  // A return to the foreground starts the grace over: the socket reconnects before anything loads.
+  const generation = useHostForegroundGeneration();
+  const [elapsed, setElapsed] = useState<{ machineId: string | null; generation: number } | null>(null);
   // Keep the initial loading surface while automatic recovery has a chance to finish.
   useEffect(() => {
     setElapsed(null);
     if (!recovering) return;
-    const timer = setTimeout(() => setElapsed({ machineId }), READ_RETRY_GRACE_MS);
+    const timer = setTimeout(() => setElapsed({ machineId, generation }), READ_RETRY_GRACE_MS);
     return () => clearTimeout(timer);
-  }, [recovering, machineId]);
-  return recovering && elapsed?.machineId === machineId;
+  }, [recovering, machineId, generation]);
+  return recovering && elapsed?.machineId === machineId && elapsed.generation === generation;
 }
 
 /** A dropped link (Host restart, network switch) refetches itself instead of asking for Retry. */
@@ -37,6 +39,9 @@ function useQuietReconnect(query: QueryStateProps["query"], transient: boolean, 
   const [attempt, setAttempt] = useState(0);
   const refetch = useRef(query.refetch);
   refetch.current = query.refetch;
+  // A resumed app reconnects its socket first; it gets the whole quiet budget again.
+  const generation = useHostForegroundGeneration();
+  useEffect(() => setAttempt(0), [generation]);
   // An initial refetch can clear the previous error while it is pending. Keep the retry budget.
   useEffect(() => {
     if (!transient) {
@@ -73,6 +78,9 @@ export function useFailureGrace(failing: boolean, fetching: boolean, refetch?: (
   const [retrying, setRetrying] = useState(false);
   const latest = useRef(refetch);
   latest.current = refetch;
+  // A failure shown before the app left is quiet again while the resumed socket reconnects.
+  const generation = useHostForegroundGeneration();
+  useEffect(() => setPhase((current) => current === "shown" ? "grace" : current), [generation]);
   useEffect(() => {
     if (failing && phase === "idle") setPhase("grace");
     // The episode ends once nothing fails and nothing for it runs (data arrived or the query changed).
@@ -90,7 +98,7 @@ export function useFailureGrace(failing: boolean, fetching: boolean, refetch?: (
     }, GRACE_RETRY_DELAY_MS);
     const shown = setTimeout(() => setPhase("shown"), READ_RETRY_GRACE_MS);
     return () => { clearTimeout(retry); clearTimeout(shown); };
-  }, [phase]);
+  }, [phase, generation]);
   return { hidden: failing && (phase !== "shown" || retrying), slow: failing && phase === "shown" && retrying };
 }
 
@@ -98,19 +106,30 @@ export function useFailureGrace(failing: boolean, fetching: boolean, refetch?: (
 export function useStaleFailureVisible(stale: boolean, error: unknown) {
   const [failures, setFailures] = useState<{ last: unknown; count: number }>({ last: undefined, count: 0 });
   const [aged, setAged] = useState(false);
+  // Time away and refreshes that failed while the socket was closed do not mark shown data stale:
+  // a return to the foreground counts failures and age from zero again.
+  const generation = useHostForegroundGeneration();
+  const counted = useRef(generation);
   useEffect(() => {
     if (!stale) {
+      counted.current = generation;
       setFailures((current) => current.count ? { last: undefined, count: 0 } : current);
       setAged(false);
       return;
     }
+    if (counted.current !== generation) {
+      counted.current = generation;
+      setFailures({ last: error, count: 0 });
+      setAged(false);
+      return;
+    }
     setFailures((current) => current.last === error ? current : { last: error, count: current.count + 1 });
-  }, [stale, error]);
+  }, [stale, error, generation]);
   useEffect(() => {
     if (!stale) return;
     const timer = setTimeout(() => setAged(true), STALE_NOTICE_AFTER_MS);
     return () => clearTimeout(timer);
-  }, [stale]);
+  }, [stale, generation]);
   return stale && (failures.count >= STALE_FAILURE_COUNT || aged);
 }
 

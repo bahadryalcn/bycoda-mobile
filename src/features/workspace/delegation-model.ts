@@ -18,6 +18,7 @@ import {
   type ImageModelId,
 } from "../../../../src/shared/model/host-contracts/image-models";
 import type { HostModelCatalog, RemoteProvider } from "./wire";
+import { accountName } from "./provider-choices";
 
 /**
  * bycoda's own cross-provider delegation as the phone edits it: one advisor, several subagent
@@ -34,6 +35,10 @@ export type DelegateCandidate = {
   name: string;
   /** Account name; absent for providers without accounts. */
   account?: string;
+  /** Account identity for grouping; absent for providers without accounts. */
+  accountKey?: string;
+  /** The provider's default login. */
+  defaultAccount?: boolean;
   color?: string;
   kind?: "personal" | "work";
   derivedKind?: "personal" | "work";
@@ -55,22 +60,28 @@ export function refKey(ref: DelegateModelRef): string {
   );
 }
 
-/** Accounts sharing a label stay apart by their id, like the desktop display label. */
+/**
+ * Accounts sharing a label stay apart by their id, like the desktop display label. The Host's
+ * generic default label ("Host default") reads as the localized default account.
+ */
 function accountLabel(
-  accounts: readonly { id: string; label: string }[],
-  account: { id: string; label: string },
+  accounts: readonly { id: string; label: string; isDefault?: boolean }[],
+  account: { id: string; label: string; isDefault?: boolean },
+  defaultLabel: string,
 ) {
-  const key = account.label.trim().toLocaleLowerCase();
+  const name = accountName(account, defaultLabel);
+  const key = name.trim().toLocaleLowerCase();
   const shared = accounts.some(
-    (other) => other.id !== account.id && other.label.trim().toLocaleLowerCase() === key,
+    (other) => other.id !== account.id && accountName(other, defaultLabel).trim().toLocaleLowerCase() === key,
   );
-  return shared ? `${account.label} · ${account.id}` : account.label;
+  return shared ? `${name} · ${account.id}` : name;
 }
 
 /** Every model of every connected provider, one entry per account for Claude and Codex. */
 export function delegationCandidates(
   catalog: HostModelCatalog | undefined,
   providers: readonly RemoteProvider[],
+  defaultAccountLabel = "Default account",
 ): DelegateCandidate[] {
   return providers.flatMap((provider) => {
     const accounts = ACCOUNT_PROVIDERS.includes(provider)
@@ -82,7 +93,7 @@ export function delegationCandidates(
         return [{ ref, key: refKey(ref), provider, name: model.name, label: model.name }];
       }
       return accounts.map((account) => {
-        const account_ = accountLabel(accounts, account);
+        const account_ = accountLabel(accounts, account, defaultAccountLabel);
         const ref: DelegateModelRef = {
           harness: provider,
           model: model.id,
@@ -94,6 +105,8 @@ export function delegationCandidates(
           provider,
           name: model.name,
           account: account_,
+          accountKey: account.id,
+          defaultAccount: account.id === DEFAULT_ACCOUNT_ID,
           color: account.color,
           kind: account.kind,
           derivedKind: account.derivedKind,

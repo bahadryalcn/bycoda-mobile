@@ -12,14 +12,24 @@ const listEntry = (projectId: string | undefined, items: unknown[]) => [["machin
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ getQueriesData: () => state.cached, getQueryCache: () => ({ subscribe: () => () => {} }) }) }));
 vi.mock("@/state/queries", () => ({ hostKey: (machineId: string | null, key: readonly unknown[]) => ["machine", machineId, ...key] }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => state.params, router: { push: state.push, back: state.back, replace: state.replace, canGoBack: () => state.canGoBack }, Stack: { Screen: () => null } }));
-vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: state.machine, name: "Computer" }), useMachines: { getState: () => ({ activeId: state.machine, selectedProjectId: "unrelated-project" }) } }));
+const selection = vi.hoisted(() => ({ projectId: "unrelated-project" as string | null, listeners: new Set<() => void>() }));
+vi.mock("@/state/machines", async () => {
+  const { useSyncExternalStore } = await import("react");
+  // The shared project selection: the list adopts a linked project into it and reads it back.
+  const getState = () => ({ activeId: state.machine, hydrated: true, selectedProjectId: selection.projectId,
+    selectProject: (id: string | null) => { selection.projectId = id; for (const listener of selection.listeners) listener(); } });
+  const subscribe = (listener: () => void) => { selection.listeners.add(listener); return () => { selection.listeners.delete(listener); }; };
+  return { useActiveMachine: () => ({ id: state.machine, name: "Computer" }),
+    useMachines: Object.assign((select: (value: ReturnType<typeof getState>) => unknown) => useSyncExternalStore(subscribe, () => select(getState())), { getState }) };
+});
+vi.mock("../../workspace/project-scope-pill", () => ({ ProjectScopePill: () => null }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/no-computer", () => ({ NoComputerGate: () => createElement("p", null, "Connect a computer first") }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterSheet: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: { caption: {} } }) }));
 vi.mock("@/ui/tokens", () => ({ space: { sm: 8 } }));
-vi.mock("../../workspace/use-project-directory", () => ({ useProjectList: () => ({ isProjectVisible: (id: string) => state.visible && id === "project", data: [{ id: "project", name: "Project" }] }) }));
+vi.mock("../../workspace/use-project-directory", () => ({ useProjectList: () => ({ isProjectVisible: (id: string) => state.visible && id === "project", directoryReady: true, data: [{ id: "project", name: "Project" }] }) }));
 vi.mock("../../inbox/provider-queries", () => ({
   useProviderInboxAvailability: () => ({ data: { available: state.available }, isSuccess: true, refetch: state.availabilityRetry }),
   useInboxRead: (request: unknown, enabled?: boolean) => {
@@ -46,9 +56,10 @@ vi.mock("@/ui/primitives", () => {
 let root: ReturnType<typeof createRoot> | undefined, container: HTMLDivElement;
 async function render(Component = PullRequestDetailScreen) { await act(async () => root!.render(createElement(Component))); }
 async function mount(Component = PullRequestDetailScreen) { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); document.body.append(container); root = createRoot(container); await render(Component); }
-afterEach(async () => { await act(async () => root?.unmount()); container?.remove(); root = undefined; state.params = {}; state.machine = "machine"; state.visible = true; state.request = null; state.cached = []; state.readError = null; state.canGoBack = true; vi.clearAllMocks(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root?.unmount()); container?.remove(); root = undefined; state.params = {}; state.machine = "machine"; state.visible = true; state.request = null; state.cached = []; state.readError = null; state.canGoBack = true; selection.projectId = "unrelated-project"; vi.clearAllMocks(); vi.unstubAllGlobals(); });
 it("rechecks desktop availability without reading pull requests from the blocked scope", async () => {
   state.available = false;
+  selection.projectId = null;
   try {
     await mount(PullRequestsScreen);
     const retry = [...container.querySelectorAll("button")].find(button => button.textContent === "Retry");
@@ -76,9 +87,10 @@ it("opens an all-project Inbox PR without adopting workspace's selected project"
   await mount(); expect(container.textContent).toContain("authorized:null");
   state.params = { ...state.params, id: "8" }; await render(); expect(container.textContent).toContain("Could not open pull request");
 });
-it("queries the explicit project and carries its exact scope into detail navigation", async () => {
+it("adopts a linked project into the shared scope, queries it and carries it into detail navigation", async () => {
   state.params = { projectId: "project", machineId: "machine" };
   await mount(PullRequestsScreen);
+  expect(selection.projectId).toBe("project");
   expect(state.request).toMatchObject({ action: "list", input: { projectId: "project", query: { providers: ["github"], githubKinds: ["pr"] } } });
   await act(async () => container.querySelector("button")!.click());
   expect(state.push).toHaveBeenCalledWith({ pathname: "/pull-requests/[id]", params: { id: "7", repo: "owner/repo", projectPath: "/repo", machineId: "machine", projectId: "project" } });
@@ -98,6 +110,14 @@ it.each(["auth", "identity"])("explains a %s failure and conceals cached pull re
   state.readError = null;
   await render(PullRequestsScreen);
   expect(container.textContent).toContain("Open PR");
+});
+it("follows the shared project pill but never reads all projects", async () => {
+  state.params = { projectId: "project", machineId: "machine" };
+  await mount(PullRequestsScreen);
+  expect(state.request).toMatchObject({ input: { projectId: "project" } });
+  // All projects elsewhere: the list keeps one project (the last one used) instead of every repository.
+  await act(async () => { selection.projectId = null; for (const listener of selection.listeners) listener(); });
+  expect(state.request).toMatchObject({ action: "list", input: { projectId: "project" } });
 });
 it("retains prior pull requests when an ordinary refresh fails", async () => {
   state.params = { projectId: "project", machineId: "machine" };
@@ -153,4 +173,19 @@ it("runs the list's own scoped read for a cold-start detail and explains where t
   await render();
   expect(state.readEnabled).toBe(false);
   expect(container.textContent).toContain("authorized:project");
+});
+it("says why a cold-start detail could not open when the list read failed or provider access is off", async () => {
+  state.params = { id: "7", repo: "owner/repo", projectPath: "/repo", machineId: "machine", projectId: "project" };
+  state.readError = new Error("GitHub rate limit reached");
+  await mount();
+  expect(container.textContent).toContain("Could not open pull request");
+  expect(container.textContent).toContain("GitHub rate limit reached");
+  expect(container.textContent).not.toContain("Open it from the pull request list.");
+  state.readError = null; state.available = false;
+  try {
+    await render();
+    expect(container.textContent).toContain("Provider access uses your desktop session.");
+  } finally {
+    state.available = true;
+  }
 });

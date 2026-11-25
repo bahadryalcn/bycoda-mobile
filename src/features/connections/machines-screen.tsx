@@ -17,10 +17,11 @@ import { useMachineStatus } from "@/ui/machine-bar";
 import { useMachines } from "@/state/machines";
 import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { assertAppAccess } from "@/state/security";
-import { Body, Button, Disclosure, FormActions, HeaderBackButton, IconButton, Loading, NavigationGroup, NavigationRow, Notice, QueryState, RowIcon, Screen, SearchField, Sheet, StateView } from "@/ui/primitives";
+import { Body, Button, Disclosure, FormActions, HeaderBackButton, IconButton, Loading, NavigationGroup, NavigationRow, Notice, QueryState, RowIcon, Screen, SearchField, Sheet, StateView, StatusText, useCollapsibleSearch } from "@/ui/primitives";
 import { confirmAction } from "@/ui/confirm";
 import { iconSize, metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { routeKind, routeLabel } from "@/state/route-kind";
 import { errorMessage } from "@/ui/error-message";
 import { LegalLinks } from "@/ui/brand";
 import { flushWorkspaceDrafts } from "../workspace/draft-guard";
@@ -94,6 +95,10 @@ export function MachinesScreen() {
       <Plus size={iconSize.action} color={colors.accent} />
     </IconButton>
   ) : undefined;
+  // A long computer list is searchable: its icon trails the page actions, the field opens below.
+  const machineSearch = useCollapsibleSearch(<SearchField ref={searchInput} label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />);
+  const searchable = machines.length > 5 || !!search;
+  const pageActions = addComputer || searchable ? <>{searchable ? machineSearch.trigger : null}{addComputer}</> : undefined;
   const visible = selectedComputerFirst(
     machines.filter(machine => matchesSearch(`${machine.name} ${machine.endpoint}`, search, locale)),
     activeId,
@@ -153,17 +158,17 @@ export function MachinesScreen() {
       title: copy("Bilgisayarlar", "Computers"),
       gestureEnabled: !entryActive && !busy && !controller.form.dirty,
       ...stackBackOptions(nativeBack),
-      headerRight: nativeTitle && addComputer ? () => addComputer : undefined,
+      headerRight: nativeTitle && pageActions ? () => pageActions : undefined,
     }} />
     {!showPairing ? <ScreenList
       {...listMemory.listProps}
       title={copy("Bilgisayarlar", "Computers")}
-      actions={!nativeTitle ? addComputer : undefined}
+      actions={!nativeTitle ? pageActions : undefined}
       grouped data={visible} keyExtractor={machine => machine.id}
       contentContainerStyle={{ maxWidth: metrics.entryWidth }}
       header={<>{feedback}
         {!search ? <AccountComputersSection /> : null}
-        {machines.length > 5 || search ? <SearchField ref={searchInput} label={copy("Ara", "Search")} value={search} onChangeText={setSearch} /> : null}
+        {searchable ? machineSearch.field : null}
         <QueryState query={{data:visible, isPending:false, isSuccess:true}} empty={!unavailable && !busy && !!search.trim() && visible.length === 0}
           searching emptyTitle={copy("Eşleşen sonuç yok", "No matching results")}
           emptyAction={{label:copy("Aramayı temizle", "Clear search"),onPress:clearSearch}} />
@@ -180,7 +185,12 @@ export function MachinesScreen() {
               ? [machine.name, address, activeStatus.status, activeStatus.reason].filter(Boolean).join(". ")
               : undefined}
             icon={<RowIcon glyph={Laptop} />}
-            supporting={active ? <ActiveComputerStatus connection={activeStatus} /> : undefined}
+            supporting={active
+              ? <View style={{ gap: space.xs }}>
+                <ActiveComputerStatus connection={activeStatus} />
+                {routeKind(machine) ? <StatusText label={routeLabel(routeKind(machine)!, copy)} tone={machine.public ? "warning" : "default"} dot={machine.public === true} /> : null}
+              </View>
+              : undefined}
             trailing={active ? undefined : <IconButton label={copy("{p0} için seçenekler", "Options for {p0}", { p0: address ? `${machine.name} (${address})` : machine.name })} disabled={unavailable || busy} onPress={() => setManaging(machine.id)}><MoreHorizontal size={iconSize.action} color={colors.muted} /></IconButton>}
             disabled={unavailable || busy} onPress={() => active ? setManaging(machine.id) : switchToComputer(machine.id)}
           />;

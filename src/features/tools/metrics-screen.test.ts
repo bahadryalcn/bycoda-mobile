@@ -17,6 +17,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
   useIsFetching: () => 0,
 }));
 vi.mock("./usage-charts", () => ({ UsageKpis: () => null, ProviderShare: () => null }));
+vi.mock("@/ui/machine-bar", () => ({ MachinePill: ({ accessory }: { accessory?: import("react").ReactNode }) => createElement("nav", null, accessory) }));
 vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
 vi.mock("expo-router", () => ({ Stack: { Screen: ({ options }: { options: Record<string, unknown> }) => { fixture.nativeOptions.push(options); return null; } }, useLocalSearchParams: () => ({ tab: "tokens" }), router: { setParams: vi.fn() } }));
 vi.mock("@/state/machines", () => {

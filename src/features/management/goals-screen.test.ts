@@ -18,7 +18,7 @@ vi.mock("@/state/queries", () => ({ useHostQuery: (key: unknown[], method: strin
 }, useHostMutation: () => ({ isPending: false, mutate: fixture.mutate, reset: vi.fn() }) }));
 vi.mock("./shared/use-editor-record", () => ({ useEditorRecord: () => undefined }));
 vi.mock("./shared/format", () => ({ identifier: () => "fixture-automation" }));
-vi.mock("./shared/scope", () => ({ Scope: () => null }));
+vi.mock("../workspace/project-scope-pill", () => ({ ProjectScopePill: () => null }));
 vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({ data: [], directoryReady: true, isProjectVisible: () => fixture.visible }) }));
 vi.mock("./goals/goal-editor", () => ({ GoalEditor: () => null }));
 vi.mock("./goals/replan-editor", () => ({ ReplanEditor: ({ available }: { available: boolean }) => createElement(

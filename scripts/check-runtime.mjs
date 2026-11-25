@@ -51,6 +51,8 @@ const pureContracts = new Set([
   "shared/i18n/languages",
   "integrations/mobile-pairing",
   "integrations/mobile-lan",
+  // Device proof-of-possession is pure TypeScript (noble curves) shared with the Host and desktop.
+  "integrations/device-proof",
   "integrations/account-pair-crypto",
   "features/connections/model/protocol",
   "features/connections/model/sharedQueue",
@@ -80,6 +82,14 @@ const pureContracts = new Set([
   "features/sessions/model/turnInterruption",
   "features/sessions/model/sessionIssue",
   "features/sessions/model/sessionErrorPresentation",
+  // Composer helpers: crew mention parsing, skill token positions and ignored-mention markdown are pure strings.
+  "features/sessions/model/crewMentions",
+  "features/skills/model/skillTokens",
+  "shared/lib/text/ignoredMentionMarkdown",
+  // Versioned task brief parsing renders as markdown sections; no desktop runtime.
+  "features/tasks/model/taskInstructions",
+  // Dependency-free Intl number formatter cache.
+  "shared/i18n/numberFormat",
 ]);
 const errors = [];
 const contractRoots = new Set();

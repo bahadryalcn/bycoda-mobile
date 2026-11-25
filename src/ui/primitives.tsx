@@ -18,7 +18,7 @@ export { SegmentedControl } from "./segmented-control";
 export { NavigationRow, NavigationGroup, RowIcon, Separator, useInNavigationGroup } from "./navigation-row";
 export { Disclosure } from "./disclosure";
 export { ScreenList } from "./screen-list";
-export { SearchField, SearchToolbar, useDebouncedSearch } from "./search-field";
+export { SearchField, SearchToolbar, useCollapsibleSearch, useDebouncedSearch } from "./search-field";
 export { NumberField, type NumberFieldProps } from "./number-field";
 export { CodeField, type CodeFieldProps } from "./code-field";
 export { ProgressButton, type ProgressButtonProps } from "./buttons";

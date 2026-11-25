@@ -33,7 +33,12 @@ vi.mock("@/ui/primitives", () => {
 });
 vi.mock("@/ui/chat-controls", () => ({ ChatAction: () => null, ChatSummary: () => h("button", null, "Open details") }));
 vi.mock("@/ui/chat", () => ({ ChatMessage: ({ children }: PropsWithChildren) => h("article", null, children), chatUserBubbleStyle: () => ({}) }));
-vi.mock("@/ui/chat-activity", () => ({ ChatActivity: () => h("button", null, "Open activity"), ChatPlan: () => null, ChatStreaming: () => null }));
+vi.mock("@/ui/chat-activity", () => ({
+  ChatActivity: ({ title, onInspect }: { title: string; onInspect: () => void }) =>
+    h("button", { onClick: onInspect }, title),
+  ChatPlan: () => null,
+  ChatStreaming: () => null,
+}));
 vi.mock("@/ui/message-text", () => ({ MessageText: ({ text }: { text: string }) => h("p", null, text) }));
 vi.mock("@/ui/message-code", () => ({ MessageCode: ({ code }: { code: string }) => h("pre", { "data-reader": true }, code) }));
 vi.mock("./activity-inspector-approval", () => ({ ActivityApproval: () => h("div", { "data-approval": true }, "Guarded approval") }));
@@ -83,6 +88,31 @@ it("mounts guarded approval and bounded raw output readers in activity details",
   act(() => root!.render(h(TranscriptBlock, { block, scope: { machineId: "m", sessionId: "s" }, getRevision: () => undefined, disabled: false, onCommand: vi.fn(), activityDetail: true } as TranscriptBlockProps)));
   expect(container.querySelector("[data-approval]")).not.toBeNull();
   expect(container.querySelector("[data-reader]")?.textContent).toBe("command output");
+});
+
+it("shows the action name in the tool card and its detail sheet", () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  root = createRoot(container);
+  const block: Block = {
+    id: "tool",
+    role: "tool",
+    text: "",
+    tool: { kind: "mcp", title: "mcp__workspace-tools__delegate_task" },
+  };
+  act(() =>
+    root!.render(h(TranscriptBlock, {
+      block,
+      scope: { machineId: "m", sessionId: "s" },
+      getRevision: () => undefined,
+      disabled: false,
+      onCommand: vi.fn(),
+    })),
+  );
+  const card = container.querySelector("button");
+  expect(card?.textContent).toBe("delegate task");
+  act(() => card?.click());
+  expect(container.querySelector("section")?.getAttribute("aria-label")).toBe("delegate task");
 });
 
 it("gives expanded remote activity one retry and retains the last full text after a refresh failure", () => {

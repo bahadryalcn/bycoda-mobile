@@ -25,8 +25,8 @@ import { AssistantEntryButton } from "@/features/assistant/assistant-entry-butto
 import { useEffect, useState, type ComponentProps } from "react";
 
 type IconProps = { color: ColorValue; focused: boolean };
-function ComputerPageIdentity({ title, subtitle }: HeaderIdentityProps) {
-  return <MachinePill heading={title} subtitle={subtitle} />;
+function ComputerPageIdentity({ title, subtitle, scopeControl }: HeaderIdentityProps) {
+  return <MachinePill heading={title} subtitle={subtitle} accessory={scopeControl} />;
 }
 const icon = (name: DockIconName) =>
   function TabIcon({ color }: IconProps) {
@@ -107,6 +107,8 @@ export default function TabsLayout() {
       bottomSafeArea={!dockVisible}
       bottomInset={assistantReserve}
       headerIdentity={!isWelcome && machineId ? ComputerPageIdentity : undefined}
+      // The voice assistant sits at the far right of each tab's title row.
+      headerTrailing={!isWelcome && machineId ? <AssistantEntryButton /> : undefined}
     >
       {machineId ? <MachineHealthMonitor /> : null}
       {machineId ? <TabActivityBridge /> : null}
@@ -119,7 +121,6 @@ export default function TabsLayout() {
               <BadgedDock
                 {...props}
                 onInsetChange={setDockHeight}
-                assistantAction={machineId ? <AssistantEntryButton /> : undefined}
                 quickAction={machineId ? {
                   label: copy("Yeni oturum", "New session"),
                   onPress: () => setNewSessionOpen(true),

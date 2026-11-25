@@ -36,7 +36,7 @@ vi.mock("@/state/queries", () => ({
     fixture.enabled = options.enabled;
     const data = method === "providers.center.read"
       ? { providers: [], acp: { revision: "revision", agents: [{ id: "searchable-id", name: "Fixture agent" }] } }
-      : { devices: [], tunnels: null, lan: { state: "ready" }, privateNetwork: { state: "offline" } };
+      : { devices: [], tunnels: null, lan: { state: "ready" }, privateNetwork: { state: "setup-required" } };
     return { data, isSuccess: true, isFetching: fixture.fetching, refetch: fixture.refetch };
   },
 }));

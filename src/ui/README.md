@@ -136,8 +136,8 @@ and accidentally suppress the authorized original-target route.
 Attention rows place time and status in the existing wrapping `supporting` slot,
 leaving the main text its readable width. Reserve `trailing` for a compact
 accessory, not a metadata column that squeezes a large-text title into fragments.
-Attention uses `CollectionToolbar` for project scope and the secondary
-refresh/help menu, matching provider collections. Optional guidance opens a
+Attention and the provider collections share the Inbox page's header project
+scope pill. Optional guidance opens a
 compact shared Sheet rather than adding a permanent row before records. Its
 content lease retires on access/scope changes, including old menu callbacks.
 The row's spoken label includes its title, detail, time and translated status;
@@ -715,12 +715,23 @@ PanelUI's exported PortalProvider, PortalHost and ToastViewport with those
 existing owners, avoiding duplicate native managers. Its portal host disappears
 immediately on lock while the mounted workspace preserves drafts.
 
-Management collection headers put their interactive project selector in
-`ScreenList.context` or `Screen.context`. ScreenHeading keeps that context next to direct actions
-when the navigator owns the title; ordinary custom headings retain their title
-above the context inside the identity column. Do not add a second project row
-to the list header. Scope validation, project search, current selection and
-directory recovery remain owned by Scope. At large text, controls and context
+Project scope is one shared selection: `useMachines().selectedProjectId`
+(persisted per computer, null is All projects), and exactly one project is
+managed at a time: no page shows a different project than the pill. Pages read
+it through `useLocalProjectScope` (management/shared) or `useInboxLocalScope`;
+a route, link or notification for one project adopts it into the selection with
+`useAdoptProjectScope` (manage sections, tools, pull requests, project and
+session routes) instead of holding a private project. Pages pass `ProjectScopePill`
+(`src/features/workspace/project-scope-pill.tsx`) as `scopeControl` on
+`Screen`/`ScreenList`. In the tab shell the pill joins the computer pill in the
+identity row (`HeaderIdentityProps.scopeControl` → `MachinePill.accessory`);
+under a native title it leads the heading context. The computer pill and the
+project pill both render `ScopePill` (`src/ui/scope-pill.tsx`). A page that needs
+one project (Crews, project tools, Usage Tokens) asks to choose one while All is
+selected, and that choice sets the shared selection. Do not add a project field to a toolbar,
+filter sheet or list header. Project search, current selection and directory
+loading/privacy/failure recovery stay inside the `ProjectPicker` sheet the pill
+opens, never as a page row. Pages where a project is irrelevant omit the pill. At large text, controls and context
 may grow or wrap; never shrink labels to preserve a one-line toolbar. Search and
 applied-filter summaries stay in the list header and keep their state owners.
 `ContextControls` column basis grows with system font scale so narrow large-text

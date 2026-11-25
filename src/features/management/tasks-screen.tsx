@@ -27,8 +27,8 @@ import { useActiveMachine } from "@/state/machines";
 import type { HostTask } from "@/domain/types";
 import { identifier } from "./shared/format";
 import { initialAgent, useAgentProviders } from "./shared/agent";
-import { Scope } from "./shared/scope";
-import { useLocalProjectScope } from "./shared/local-project-scope";
+import { ProjectScopePill } from "../workspace/project-scope-pill";
+import { useAdoptProjectScope, useLocalProjectScope } from "./shared/local-project-scope";
 import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite";
 import { taskMatchesFilter } from "./task-actions";
 
@@ -67,6 +67,8 @@ export function TasksScreen() {
   }>();
   const { projectId: selectedProjectId, setProjectId } = useLocalProjectScope();
   const linkedTaskId = linked.machineId === machine?.id ? linked.taskId : undefined;
+  // A linked task opens on its own project, which becomes the shared selection.
+  useAdoptProjectScope(linkedTaskId ? linked.projectId || undefined : undefined, linked.machineId);
   const projectId = linkedTaskId && linked.projectId ? linked.projectId : selectedProjectId;
   const { providers, query: providerQuery } = useAgentProviders(projectId);
   const lifecycleSupported = !!machine?.capabilities?.includes("tasks.workspaces");
@@ -213,6 +215,9 @@ export function TasksScreen() {
     <View style={{ flex: 1 }}>
       <ManagementList<HostTask>
         title={linkedTaskId ? copy("Görev", "Task") : copy("Görevler", "Tasks")}
+        // A linked task is bound to its computer; the list follows the active computer.
+        computerSwitch={!linkedTaskId}
+        scopeControl={linkedTaskId ? undefined : <ProjectScopePill projectId={selectedProjectId} onChange={setProjectId} />}
         query={query}
         ListEmptyComponent={listState}
         data={visible ?? []}
@@ -243,7 +248,6 @@ export function TasksScreen() {
             {!linkedTaskId ? (
               <>
                 <ManagementToolbar
-                  project={<Scope allowAll projectId={selectedProjectId} onChange={setProjectId} />}
                   search={
                     <SearchField
                       placeholder={copy("Ara", "Search")}
@@ -259,6 +263,7 @@ export function TasksScreen() {
                     unfilteredValue: "all",
                     options: filterOptions,
                     onChange: setFilter,
+                    filterable: hasScopedTasks,
                   }}
                 />
                 {machine ? bulk.entry : null}

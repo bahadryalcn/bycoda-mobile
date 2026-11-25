@@ -10,7 +10,19 @@ export function validateMachine(value: unknown): MobileMachine {
 }
 export const MAX_MACHINE_ROUTES = 4;
 export const sameRoute = (a: MobileRoute, b: MobileRoute) =>
-  a.endpoint === b.endpoint && a.lanKey === b.lanKey;
+  a.endpoint === b.endpoint && a.lanKey === b.lanKey && !!a.public === !!b.public;
+/** The route a machine is using now, as a route entry. */
+export const activeRoute = (
+  machine: Pick<MobileRoute, "endpoint" | "lanKey" | "public">,
+): MobileRoute => ({
+  endpoint: machine.endpoint,
+  ...(machine.lanKey !== undefined ? { lanKey: machine.lanKey } : {}),
+  ...(machine.public ? { public: true as const } : {}),
+});
+/** A public route is HTTPS only and never keyed; anything else carrying the flag is malformed. */
+const publicFlagValid = (item: { lanKey?: unknown; public?: unknown }, endpoint: string) =>
+  item.public === undefined ||
+  (item.public === true && item.lanKey === undefined && endpoint.startsWith("https://"));
 
 /**
  * Validates saved routes, keeps the active one first and drops duplicates or
@@ -25,9 +37,12 @@ export function mergeRoutes(active: MobileRoute, ...others: (MobileRoute[] | und
       if (item.lanKey !== undefined && typeof item.lanKey !== "string") continue;
       let route: MobileRoute;
       try {
+        const endpoint = normalizeHostEndpoint(item.endpoint, item.lanKey);
+        if (!publicFlagValid(item, endpoint)) continue;
         route = {
-          endpoint: normalizeHostEndpoint(item.endpoint, item.lanKey),
+          endpoint,
           ...(item.lanKey !== undefined ? { lanKey: item.lanKey } : {}),
+          ...(item.public ? { public: true as const } : {}),
         };
       } catch {
         continue;
@@ -42,21 +57,24 @@ export function mergeRoutes(active: MobileRoute, ...others: (MobileRoute[] | und
  * now, so a phone paired over one route learns the others without pairing
  * again. The active route stays first. A reported local listener replaces a
  * saved one with the same key at another address (its DHCP address changed);
- * other saved routes stay. Undefined when the Host reports nothing (older Host).
+ * other saved routes stay. Only keyed routes (local network or tailnet, pinned by their
+ * host key) and public HTTPS routes (`public: true`, allowed by the owner) are learned; any
+ * other unkeyed one is never a route. Undefined when the Host reports nothing (older Host).
  */
 export function learnRoutes(machine: MobileMachine, reported: unknown): MobileRoute[] | undefined {
   if (!Array.isArray(reported)) return undefined;
-  const active: MobileRoute = {
-    endpoint: machine.endpoint,
-    ...(machine.lanKey !== undefined ? { lanKey: machine.lanKey } : {}),
-  };
-  const fresh = mergeRoutes(active, reported as MobileRoute[]).slice(1);
+  const active = activeRoute(machine);
+  const keyed = (routes: MobileRoute[]) =>
+    routes.filter((route) => route?.lanKey !== undefined || route?.public === true);
+  const fresh = mergeRoutes(active, keyed(reported as MobileRoute[])).slice(1);
   const moved = (route: MobileRoute) =>
-    fresh.some((known) => known.lanKey && known.lanKey === route.lanKey && !sameRoute(known, route));
+    fresh.some(
+      (known) => known.lanKey && known.lanKey === route.lanKey && !sameRoute(known, route),
+    );
   return mergeRoutes(
     active,
     fresh,
-    (machine.routes ?? []).filter((route) => !moved(route)),
+    keyed(machine.routes ?? []).filter((route) => !moved(route)),
   );
 }
 
@@ -85,10 +103,12 @@ export function restoreMachines(value: unknown): MobileMachine[] {
       return [];
     try {
       const endpoint = normalizeHostEndpoint(source.endpoint, source.lanKey as string | undefined);
-      const active: MobileRoute = {
+      if (!publicFlagValid(source, endpoint)) return [];
+      const active = activeRoute({
         endpoint,
-        ...(source.lanKey !== undefined ? { lanKey: source.lanKey as string } : {}),
-      };
+        lanKey: source.lanKey as string | undefined,
+        public: source.public as true | undefined,
+      });
       const routes = mergeRoutes(
         active,
         Array.isArray(source.routes) ? (source.routes as MobileRoute[]) : undefined,
@@ -100,6 +120,7 @@ export function restoreMachines(value: unknown): MobileMachine[] {
           name: source.name,
           endpoint,
           ...(source.lanKey !== undefined ? { lanKey: source.lanKey as string } : {}),
+          ...(source.public ? { public: true as const } : {}),
           ...(routes.length > 1 ? { routes } : {}),
           environmentId: source.environmentId,
           providers: Array.isArray(source.providers)

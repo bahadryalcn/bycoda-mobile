@@ -1,10 +1,13 @@
 node_modules/
+.vitest/
 .expo/
 dist/
 web-build/
 # Generated Expo application projects; local module native sources are maintained.
 /android/
 /ios/
+/fastlane/report.xml
+/fastlane/Preview.html
 # Generated outputs inside maintained local native modules.
 /modules/**/android/.gradle/
 /modules/**/android/.cxx/

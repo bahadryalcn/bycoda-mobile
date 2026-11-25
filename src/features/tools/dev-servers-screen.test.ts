@@ -35,6 +35,7 @@ vi.mock("@/ui/primitives", () => {
     Notice: () => null, IconButton: Button, NavigationRow: Button,
     ErrorText: ({ error }: any) => error ? createElement("p", null, error.message) : null,
     SearchField: () => null,
+    useCollapsibleSearch: (field: unknown) => ({ open: true, trigger: null, field }),
     Field: ({ label, value, onChangeText }: any) => createElement("input", { "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) }),
     Sheet: ({ visible, children }: any) => visible ? createElement("aside", null, children) : null,
     FormActions: ({ submitLabel, onSubmit, feedback }: any) => { fixture.submit = onSubmit; return createElement("div", null, feedback, createElement(Button, { label: `Submit ${submitLabel}`, onPress: onSubmit })); },

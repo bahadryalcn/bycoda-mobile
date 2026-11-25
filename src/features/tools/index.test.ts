@@ -35,9 +35,8 @@ vi.mock("@/ui/primitives", () => ({
   StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: { message: string }) => createElement("p", null, message),
   Button: ({ label }: { label: string }) => createElement("button", null, label),
 }));
-vi.mock("./dev-servers-screen", () => ({ DevServersScreen: () => null }));
-vi.mock("./runtime-logs-screen", () => ({ RuntimeLogsScreen: () => createElement("div", null,
-  createElement("p", null, "Project logs"), createElement("input", { "aria-label": "Tool draft", defaultValue: "" })) }));
+vi.mock("./dev-servers-screen", () => ({ DevServersScreen: () => createElement("div", null,
+  createElement("p", null, "Project servers"), createElement("input", { "aria-label": "Tool draft", defaultValue: "" })) }));
 vi.mock("./devices-screen", () => ({ DevicesScreen: () => null }));
 vi.mock("./browser-screen", () => ({ BrowserScreen: () => null }));
 vi.mock("./terminal-screen", () => ({ TerminalScreen: () => null }));
@@ -55,16 +54,20 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 
-it.each([{ capabilities: [] }, { capabilities: ["runtime.logs"] }])("identifies unknown tools independently of advertised capabilities: %j", ({ capabilities }) => {
+it.each([{ capabilities: [] }, { capabilities: ["dev.servers"] }])("identifies unknown tools independently of advertised capabilities: %j", ({ capabilities }) => {
   state.capabilities = capabilities;
   const html = renderToStaticMarkup(createElement(HostToolScreen, { tool: "unknown", projectId: "project" }));
   expect(html).toContain("Tool not found");
   expect(html).not.toContain("bycoda may be outdated");
   expect(html).toContain("Back to projects");
 });
+it("no longer offers runtime logs on mobile, even when the host advertises them", () => {
+  state.capabilities = ["runtime.logs"];
+  expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "logs", projectId: "project" }))).toContain("Tool not found");
+});
 it("retains host-update guidance for a recognized unsupported tool", () => {
   state.capabilities = [];
-  const html = renderToStaticMarkup(createElement(HostToolScreen, { tool: "logs", projectId: "project" }));
+  const html = renderToStaticMarkup(createElement(HostToolScreen, { tool: "servers", projectId: "project" }));
   expect(html).toContain("bycoda may be outdated");
   expect(html).not.toContain("Tool not found");
 });
@@ -116,18 +119,21 @@ it("opens computer usage and resources without a project", () => {
   expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "diagnostics" }))).toContain("Unavailable");
 });
 
-it("opens the supported tool for a project chosen from its empty state", async () => {
+it("sets the shared project chosen from a tool's empty state", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.capabilities = ["dev.servers"];
   const container = document.createElement("div");
   const root = createRoot(container);
   try {
-    await act(async () => root.render(createElement(HostToolScreen, { tool: "servers" })));
+    const onSelectProject = vi.fn();
+    await act(async () => root.render(createElement(HostToolScreen, { tool: "servers", onSelectProject })));
     expect(container.textContent).not.toContain("Back to projects");
     await act(async () => container.querySelector("button")!.click());
     expect(container.querySelectorAll("button")[1]?.textContent).toBe("Project");
     await act(async () => container.querySelectorAll("button")[1]!.click());
-    expect(router.setParams).toHaveBeenCalledWith({ projectId: "project", machineId: "machine" });
+    // The choice sets the shared selection, never a route-private project.
+    expect(onSelectProject).toHaveBeenCalledWith("project");
+    expect(router.setParams).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
   }
@@ -137,7 +143,7 @@ it.each(["loading", "error", "sync-required"])("does not replace %s project veri
   Object.assign(state.directory, { data: undefined, directoryReady: false,
     isPending: readiness === "loading", privacyUnavailable: readiness === "sync-required",
     error: readiness === "error" ? new Error("Connection unavailable") : undefined });
-  const html = renderToStaticMarkup(createElement(HostToolScreen, { tool: "logs", projectId: "project" }));
+  const html = renderToStaticMarkup(createElement(HostToolScreen, { tool: "servers", projectId: "project" }));
   expect(html).not.toContain("Choose a project");
   expect(html).not.toContain("bycoda may be outdated");
   expect(html).toContain(readiness === "loading" ? "Verifying project…" : readiness === "error" ? "Connection unavailable" : "sync the project directory");
@@ -145,10 +151,10 @@ it.each(["loading", "error", "sync-required"])("does not replace %s project veri
 
 it("preserves the mounted tool draft while expired project proof is concealed and reverified", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  state.capabilities = ["runtime.logs"];
+  state.capabilities = ["dev.servers"];
   const container = document.createElement("div");
   const root = createRoot(container);
-  const render = () => root.render(createElement(HostToolScreen, { tool: "logs", projectId: "project" }));
+  const render = () => root.render(createElement(HostToolScreen, { tool: "servers", projectId: "project" }));
   try {
     await act(async () => { render(); });
     const input = container.querySelector("input")!;

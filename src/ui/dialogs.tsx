@@ -26,6 +26,7 @@ import { sheetCardMaxHeight, sheetPresentation } from "./sheet-layout-model";
 import { useKeyCommand } from "../../modules/bycoda-key-commands";
 import { useKeepFocusedFieldVisible } from "./use-sheet-focused-field";
 import { SectionErrorBoundary } from "./error-boundary";
+import { ScreenScopeControl } from "./screen-chrome";
 
 const SheetActionsContext = createContext<ReturnType<typeof createSheetActionsStore> | null>(null);
 
@@ -215,7 +216,8 @@ export function Sheet({
     paddingBottom: size === "compact" ? space.md : space.xl,
   };
   // One broken block inside the body never removes the whole sheet or the screen under it.
-  const content = <SectionErrorBoundary scope="sheet">{children}</SectionErrorBoundary>;
+  // A sheet is its own surface: the page route's project pill never appears in its headings.
+  const content = <ScreenScopeControl value={undefined}><SectionErrorBoundary scope="sheet">{children}</SectionErrorBoundary></ScreenScopeControl>;
   return (
     <ScreenOverlay visible={visible} label={title} onClose={requestClose}>
       <KeyboardAvoidingView

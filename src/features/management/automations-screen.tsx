@@ -23,7 +23,7 @@ import type { HostAutomation } from "@/domain/types";
 import { useProjectList } from "../workspace/use-project-directory";
 import { identifier } from "./shared/format";
 import { initialAgent, useAgentProviders } from "./shared/agent";
-import { Scope } from "./shared/scope";
+import { ProjectScopePill } from "../workspace/project-scope-pill";
 import { useLocalProjectScope } from "./shared/local-project-scope";
 import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite";
 
@@ -143,6 +143,7 @@ export function AutomationsScreen() {
   return (
     <ManagementList<HostAutomation>
       title={copy("Otomasyonlar", "Automations")}
+      scopeControl={<ProjectScopePill projectId={projectId} onChange={setProjectId} />}
       query={query}
       ListEmptyComponent={listState}
       data={visible ?? []}
@@ -170,7 +171,6 @@ export function AutomationsScreen() {
             </>
           ) : null}
           <ManagementToolbar
-            project={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
             search={
               <SearchField
                 placeholder={copy("Ara", "Search")}
@@ -186,6 +186,7 @@ export function AutomationsScreen() {
               unfilteredValue: "all",
               options: filterOptions,
               onChange: setFilter,
+              filterable: !!scoped?.length,
             }}
           />
 

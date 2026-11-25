@@ -67,6 +67,14 @@ Before enabling the endpoint:
    workflow, then verify delivery, rejection, timeout/retry and receipt behavior
    against the deployed service on native devices.
 
-No backend, moderation console or App Check integration is deployed by this
-source preparation. Firebase push notifications/FCM are a separate integration;
-report delivery does not register push tokens or change notification permissions.
+The [receiver source](../../services/content-reporting/firebase.json) has its own
+Firebase deploy boundary. It accepts only App Check tokens issued for the
+explicit `REPORT_ALLOWED_APPS` Firebase app IDs and takes `REPORT_REGION` and
+`REPORT_RETENTION_DAYS` at deployment. Configure the Firestore TTL policy for
+`contentReports.expiresAt` and verify deny-by-default client access before
+deploying. Run `npm ci` and `npm test` from its `functions` directory.
+
+Keep the client endpoint unset until the native App Check token integration,
+Firestore rules, moderation workflow and end-to-end delivery have been verified.
+Firebase push notifications/FCM are a separate integration. Report delivery does
+not register push tokens or change notification permissions.

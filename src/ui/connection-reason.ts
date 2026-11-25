@@ -12,11 +12,24 @@ export function connectionReason(
   kind: RemoteErrorKind | undefined,
   name: string,
   copy: Copy,
+  proofRefusal?: "required" | "invalid",
 ): string | undefined {
   if (phase === "startup-failed")
     return copy("Bycoda’yı kapatıp yeniden aç.", "Close and reopen Bycoda.");
   if (phase !== "disconnected" && phase !== "access") return undefined;
   const values = { p0: name };
+  if (kind === "auth" && proofRefusal === "required")
+    return copy(
+      "{p0} bu telefonu önce yerel ağ veya Tailscale üzerinden doğrulamalı. Bir kez orada bağlan veya yeniden eşleştir.",
+      "{p0} must confirm this phone over the local network or Tailscale first. Connect there once, or pair again.",
+      values,
+    );
+  if (kind === "auth" && proofRefusal === "invalid")
+    return copy(
+      "{p0} bu telefonun anahtarını doğrulayamadı. Telefonun tarih ve saatini kontrol et veya yeniden eşleştir.",
+      "{p0} couldn't verify this phone's key. Check the phone's date and time, or pair again.",
+      values,
+    );
   if (phase === "access" || kind === "auth")
     return copy("Eşleşme süresi doldu. {p0} bilgisayarını yeniden eşleştir.", "Pairing expired. Pair {p0} again.", values);
   switch (kind) {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { connectComputer } from "./computer-connection";
+import { pairingRouteIsPublic } from "./pairing-code";
 import type { HostDescriptor, MobileMachine } from "@/remote/types";
 import type { ComputerConnectionDependencies, ComputerConnectionInput } from "./connection-types";
 
@@ -43,6 +44,19 @@ function setup(machines: MobileMachine[] = []) {
 }
 
 describe("shared QR and manual computer connection", () => {
+  it("signs discovery with the pairing key and saves the seed and the public route with the credential", async () => {
+    const setupValue = setup();
+    const proofSeed = new Uint8Array(32).fill(5);
+    await connectComputer({ ...input, proofSeed, public: true }, setupValue.dependencies);
+    expect(setupValue.discover.mock.calls[0][5]).toBe(proofSeed);
+    expect(setupValue.saveMachine.mock.calls[0][0]).toMatchObject({ public: true });
+    expect(setupValue.saveMachine.mock.calls[0][2]).toBe(proofSeed);
+  });
+  it("labels only an unkeyed non-tailnet HTTPS pairing address as a public route", () => {
+    expect(pairingRouteIsPublic({ endpoint: "https://pc.example" })).toBe(true);
+    expect(pairingRouteIsPublic({ endpoint: "https://pc.tail1234.ts.net" })).toBe(false);
+    expect(pairingRouteIsPublic({ endpoint: "http://192.168.1.20:3777", lanKey: "ab".repeat(32) })).toBe(false);
+  });
   it("carries the pinned key through discovery and saved metadata", async () => {
     const setupValue = setup();
     const lanKey = "ab".repeat(32);
@@ -54,6 +68,7 @@ describe("shared QR and manual computer connection", () => {
       setupValue.dependencies.signal,
       lanKey,
       input.expectedEnvironmentId,
+      undefined,
     );
     expect(setupValue.saveMachine.mock.calls[0][0]).toMatchObject({
       endpoint: lan.endpoint,

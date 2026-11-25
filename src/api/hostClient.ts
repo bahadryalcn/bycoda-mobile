@@ -55,8 +55,15 @@ export class HostClient {
     fetcher?: FetchLike,
     credentialReader?: () => Promise<string | null>,
     assertAccess?: () => void,
+    proofSeedReader?: () => Promise<Uint8Array | null>,
   ) {
-    this.transport = new HostTransport(connection, fetcher, credentialReader, assertAccess);
+    this.transport = new HostTransport(
+      connection,
+      fetcher,
+      credentialReader,
+      assertAccess,
+      proofSeedReader,
+    );
   }
   request = <T>(method: string, params: object = {}, options?: RequestOptions): Promise<T> =>
     this.transport.request<T>(method, params, options);
@@ -327,4 +334,5 @@ export const createHostClient = (
   fetcher?: FetchLike,
   credentialReader?: () => Promise<string | null>,
   assertAccess?: () => void,
-) => new HostClient(connection, fetcher, credentialReader, assertAccess);
+  proofSeedReader?: () => Promise<Uint8Array | null>,
+) => new HostClient(connection, fetcher, credentialReader, assertAccess, proofSeedReader);

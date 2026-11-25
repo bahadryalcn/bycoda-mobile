@@ -6,6 +6,7 @@ import {
 } from "../../../../src/integrations/mobile-pairing";
 import type { MobilePairingCode } from "../../../../src/integrations/mobile-pairing";
 import { RemoteHostError } from "@/remote/transport";
+import { routeKind } from "@/state/route-kind";
 import type { PairingCopy, PairingFailureKind } from "./connection-types";
 
 export { parseMobilePairingCode };
@@ -34,6 +35,11 @@ export function parseDesktopPairingCode(value: string): MobilePairingCode {
 export function desktopIssueClock(expiresAt: unknown): number {
   const expiry = typeof expiresAt === "string" ? Date.parse(expiresAt) : Number.NaN;
   return Number.isFinite(expiry) ? expiry - MOBILE_PAIRING_TTL_MS : Date.now();
+}
+
+/** An unkeyed HTTPS pairing address that is not a tailnet name is the owner's public-internet route. */
+export function pairingRouteIsPublic(code: Pick<MobilePairingCode, "endpoint" | "lanKey">): boolean {
+  return code.lanKey === undefined && routeKind({ endpoint: code.endpoint }) === null;
 }
 
 export class PairingFailure extends Error {

@@ -21,14 +21,20 @@ import { space } from "@/ui/tokens";
 import { ProjectIcon } from "@/ui/project-icon";
 import { useMobileTheme } from "@/ui/theme";
 
-type Props = { visible: boolean; onClose(): void; onSelect(project: HostProject): void };
+type Props = {
+  visible: boolean; onClose(): void; onSelect(project: HostProject): void;
+  /** Shared scope selection: marks the current choice; null with `onSelectAll` is All projects. */
+  selectedId?: string | null;
+  /** Offers an All projects row before the list (shared scope only). */
+  onSelectAll?(): void;
+};
 
 /** Search and queued events belong to one explicit opening, not a hidden picker. */
 export function ProjectPicker({ visible, ...props }: Props) {
   return visible ? <ProjectPickerOpening {...props} /> : null;
 }
 
-function ProjectPickerOpening({ onClose, onSelect }: Omit<Props, "visible">) {
+function ProjectPickerOpening({ onClose, onSelect, selectedId, onSelectAll }: Omit<Props, "visible">) {
   const { uiStyles } = useMobileTheme();
   const copy = useCopy(), locale = useLocale(), machine = useActiveMachine();
   const connection = useConnectionScope(), parent = usePrivateContentAccess();
@@ -48,8 +54,8 @@ function ProjectPickerOpening({ onClose, onSelect }: Omit<Props, "visible">) {
     matchesSearch(`${project.name} ${project.cwd}`, search, locale)), preferences), [readable, projects.data, preferences, search, locale]);
   const view = useMemo(() => ({}), [port, rows, normalized, locale]);
   const feedback = useMemo(() => ({}), [port, projects.error, projects.readiness, projects.privacyUnavailable, projects.refetch]);
-  const live = useRef({ port, view, feedback, parent, projects, rows, onClose, onSelect });
-  live.current = { port, view, feedback, parent, projects, rows, onClose, onSelect };
+  const live = useRef({ port, view, feedback, parent, projects, rows, onClose, onSelect, onSelectAll });
+  live.current = { port, view, feedback, parent, projects, rows, onClose, onSelect, onSelectAll };
   const current = () => mounted.current && !retired.current && live.current.port === port && scopeCurrent() &&
     live.current.parent.allowed && live.current.parent.check();
   const close = () => { if (!mounted.current || retired.current) return; retired.current = true; live.current.onClose(); };
@@ -59,6 +65,10 @@ function ProjectPickerOpening({ onClose, onSelect }: Omit<Props, "visible">) {
     if (!current() || live.current.view !== view || !live.current.projects.directoryReady || !opening.review ||
       !live.current.rows.some(row => row === item) || !live.current.projects.isProjectVisible(item.id, item.cwd)) return;
     retired.current = true; live.current.onSelect(item);
+  };
+  const selectAll = () => {
+    if (!current() || live.current.view !== view || !live.current.projects.directoryReady || !opening.review || !live.current.onSelectAll) return;
+    retired.current = true; live.current.onSelectAll();
   };
   const manageConnections = () => {
     if (!current() || live.current.feedback !== feedback) return;
@@ -94,9 +104,11 @@ function ProjectPickerOpening({ onClose, onSelect }: Omit<Props, "visible">) {
         ListEmptyComponent={<ProjectDirectorySlot {...feedbackProps} />}
         header={<>
           {opening.name ? <Body muted style={uiStyles.caption}>{opening.name}</Body> : null}
+          {onSelectAll && readable && !normalized ? <NavigationRow variant="plain" label={copy("Tüm projeler", "All projects")}
+            icon={<ProjectIcon group />} selected={selectedId === null} onPress={selectAll} /> : null}
         </>}
         renderItem={({ item }) => <NavigationRow variant="plain" label={item.name} detail={projectPathLabel(item.cwd, preferences.fullPaths)} detailEllipsizeMode="middle" detailLines={preferences.fullPaths ? 0 : 1}
-          icon={<ProjectIcon appearance={item.appearance} />} onPress={() => select(item)} />}
+          icon={<ProjectIcon appearance={item.appearance} />} selected={selectedId === undefined ? undefined : item.id === selectedId} onPress={() => select(item)} />}
       /></ScreenChromeProvider>
     </>}
   </Sheet>;

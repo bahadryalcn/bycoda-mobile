@@ -254,8 +254,16 @@ it("starts a session on tap without running a command on hold or selecting a tab
   expect(onPress).toHaveBeenCalledTimes(1);
   expect(state.navigate).not.toHaveBeenCalled();
 });
+it("fits all five destinations beside the new-session command at 320 without a divider", async () => {
+  state.fontScale = 2;
+  await render({ quickAction: { label: "New session", onPress: vi.fn() } });
+  expect(container.querySelector('[aria-label^="More"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Voice assistant"]')).toBeNull();
+});
 it("keeps large-text destinations reachable while the quick action owns a slot", async () => {
   state.fontScale = 2;
+  // Narrower than any supported phone, so a destination moves to More.
+  state.width = 290;
   await render({
     quickAction: {
       label: "New session",

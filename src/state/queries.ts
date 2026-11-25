@@ -126,6 +126,7 @@ function createHostClient(machine: MobileMachine, privateAccess: PrivateContentA
     () => readPermittedCredential(() => credentials.get(machine.id, machine), assertAccess),
     undefined,
     assertAccess,
+    () => credentials.getProofSeed(machine.id, machine),
   );
 }
 

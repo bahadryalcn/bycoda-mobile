@@ -6,7 +6,7 @@ import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { PreferenceStorageNotice } from "@/ui/preference-storage-notice";
 import AudioLines from "lucide-react-native/icons/audio-lines";
-import { ActionMenu, Body, Button, ConfirmationCard, Disclosure, ErrorNotice, NavigationGroup, NavigationRow, QueryState, ScopeLine, Section, SettingIcon, StateView, StatusText, ValueRow } from "@/ui/primitives";
+import { ActionMenu, Body, Button, ConfirmationCard, Disclosure, ErrorNotice, NavigationGroup, NavigationRow, QueryState, Section, SettingIcon, StateView, StatusText, ValueRow } from "@/ui/primitives";
 import { formatBytes } from "../settings/local-data-sizes";
 import { SettingsPage } from "../settings/settings-page";
 import { downloadPercent, modelBusy, modelRowState, parseLocalModels, parseModelJob, type LocalVoiceModel, type ModelAction } from "./voice-models-model";
@@ -47,8 +47,11 @@ export function VoiceSettings() {
 /** Settings → Voice assistant: Microphone, Voice, Dictation and Conversation style, as the desktop groups them. */
 export function VoiceSettingsScreen() {
   const copy = useCopy();
+  const machine = useActiveMachine();
+  const storageError = useMachines((state) => state.storageError);
+  // The computer these choices serve is the page's scope pill, in the shared scope row.
   return (
-    <SettingsPage title={copy("Sesli asistan", "Voice assistant")}>
+    <SettingsPage title={copy("Sesli asistan", "Voice assistant")} scope={machine && !storageError ? { computer: machine.name } : undefined}>
       <VoiceSettingsBody />
     </SettingsPage>
   );
@@ -65,10 +68,9 @@ export function VoiceSettingsBody() {
   const localSupported = machine?.capabilities?.includes("voice.local.v1") === true;
   const waitingForComputer = !hydratedMachines || (!machine && connectionPending);
   const ready = !!machine && !storageError && !waitingForComputer;
-  // Screen's own gap spaces the groups; the computer these choices serve is the page's scope line.
+  // Screen's own gap spaces the groups; the computer these choices serve is the page's scope pill.
   return (
     <>
-      {ready ? <ScopeLine scope={{ computer: machine.name }} /> : null}
       <PreferenceStorageNotice error={preferenceError} retry={retryPreference} />
       {storageError || waitingForComputer ? (
         <QueryState query={{ error: storageError, isLoading: waitingForComputer }} loading="content" />

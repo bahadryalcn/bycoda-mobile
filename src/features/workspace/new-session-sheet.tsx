@@ -440,6 +440,11 @@ function QuickStart({
             setPicked({ provider: next.provider, accountId: next.accountId, model: changedProvider ? "" : draft.model });
             if (changedProvider) setSettings((previous) => carryCrossDelegation(previous, {}));
           }}
+          onChooseModel={(next, model, nextSettings) => {
+            if (!active() || locked || submit.isPending()) return;
+            setPicked({ provider: next.provider, accountId: next.accountId, model });
+            setSettings(nextSettings);
+          }}
           onChange={(model, nextSettings) => {
             if (!active() || locked || submit.isPending()) return;
             setPicked({ ...draft, model });

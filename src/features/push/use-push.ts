@@ -81,7 +81,13 @@ export function usePushRegistration() {
   useEffect(() => onPushTokenRotated(() => setTokenEpoch((epoch) => epoch + 1)), []);
   // Resume, an explicit retry, or a completed permission prompt rechecks the registration.
   useEffect(() => {
-    if (!client || !machine || !preferences.hydrated || !active) return;
+    if (!machine || !preferences.hydrated || !active) return;
+    if (!client) {
+      // Without this, Settings said "Checking…" for as long as the computer was unreachable. A known
+      // result stays: a computer that accepted the registration keeps it while offline.
+      if (usePushStatus.getState().status.state === "checking") setStatus({ state: "disconnected" });
+      return;
+    }
     if (!supported) {
       setStatus({ state: "unsupported" });
       return;

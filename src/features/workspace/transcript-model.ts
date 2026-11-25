@@ -259,7 +259,7 @@ export function completeResponseText(blocks: readonly Block[], id: string) {
   return text.join("\n\n");
 }
 
-/** "mcp__t3-code__delegate_task" reads as "delegate task": drop the server prefix and underscores. */
+/** "mcp__workspace-tools__delegate_task" reads as "delegate task": drop the server prefix and underscores. */
 export function readableToolName(name: string) {
   const tool = /^mcp__.+?__(.+)$/.exec(name)?.[1];
   return tool ? tool.replace(/_+/g, " ").trim() || name : name;

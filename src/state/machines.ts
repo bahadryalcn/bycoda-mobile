@@ -6,11 +6,13 @@ import type { HostDescriptor, MobileMachine, MobileRoute } from "../remote/types
 import {
   mergeRoutes,
   restoreMachines,
+  activeRoute,
   learnRoutes,
   sameRoute,
   validateMachine,
   type MobileLanguage,
 } from "./machine-model";
+import { decodeProofSeed, encodeProofSeed } from "../remote/device-proof";
 import { assertAppAccess } from "./security";
 export { isMachinePending } from "./reviewed-machine";
 
@@ -22,6 +24,9 @@ const secretKey = (id: string) => {
 };
 const validToken = (value: string) => /^[A-Za-z0-9_-]{43}$/.test(value);
 const webCredentials = new Map<string, string>();
+const webProofSeeds = new Map<string, string>();
+/** Same SecureStore service and policy as the credential; the native socket module reads this key too. */
+const proofSeedKey = (id: string) => `bycoda.remote.proof.${secretKey(id).slice("bycoda.remote.".length)}`;
 const changingCredentials = new Map<string, number>();
 const readSecret = (id: string): Promise<string | null> =>
   process.env.EXPO_OS === "web"
@@ -41,7 +46,67 @@ async function deleteSecret(id: string) {
   if (process.env.EXPO_OS === "web") webCredentials.delete(id);
   else await SecureStore.deleteItemAsync(secretKey(id));
 }
+const readProofSeed = (id: string): Promise<string | null> =>
+  process.env.EXPO_OS === "web"
+    ? Promise.resolve(webProofSeeds.get(id) ?? null)
+    : SecureStore.getItemAsync(proofSeedKey(id));
+async function writeProofSeed(id: string, value: string) {
+  if (!decodeProofSeed(value)) throw new Error("Invalid device proof key.");
+  if (process.env.EXPO_OS === "web") webProofSeeds.set(id, value);
+  else
+    await SecureStore.setItemAsync(proofSeedKey(id), value, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+}
+async function deleteProofSeed(id: string) {
+  if (process.env.EXPO_OS === "web") webProofSeeds.delete(id);
+  else await SecureStore.deleteItemAsync(proofSeedKey(id));
+}
+/** Puts the previous seed (or its absence) back after a failed save. */
+async function restoreProofSeed(id: string, previous: string | null) {
+  if (previous) await writeProofSeed(id, previous);
+  else await deleteProofSeed(id);
+}
 export const credentials = {
+  /**
+   * The Ed25519 seed bound to this computer's credential, under the same identity guard as the
+   * credential itself; null when the credential is not key-bound yet.
+   */
+  async getProofSeed(
+    id: string,
+    expected?: Pick<MobileMachine, "endpoint" | "environmentId" | "lanKey">,
+  ): Promise<Uint8Array | null> {
+    assertAppAccess();
+    if (!validId(id) || changingCredentials.has(id)) return null;
+    const state = useMachines.getState();
+    if (!state.hydrated || state.storageError)
+      throw new Error("Saved computer connections are unavailable.");
+    const current = state.machines.find((machine) => machine.id === id);
+    if (
+      !current ||
+      (expected &&
+        (current.endpoint !== expected.endpoint ||
+          current.environmentId !== expected.environmentId ||
+          current.lanKey !== expected.lanKey))
+    )
+      return null;
+    let value: string | null;
+    try {
+      value = await readProofSeed(id);
+    } catch {
+      throw new Error("The saved computer credential could not be read.");
+    }
+    assertAppAccess();
+    return changingCredentials.has(id) ? null : decodeProofSeed(value);
+  },
+  /** Persists the seed of an already saved computer after `devices.bindProofKey` was attempted. */
+  async saveProofSeed(id: string, seed: Uint8Array) {
+    try {
+      await writeProofSeed(id, encodeProofSeed(seed));
+    } catch {
+      throw new Error("The computer credential could not be saved securely.");
+    }
+  },
   async get(
     id: string,
     expected?: Pick<MobileMachine, "endpoint" | "environmentId" | "lanKey">,
@@ -114,7 +179,8 @@ type MachineState = {
   /** A change that is not tied to one computer is running; it affects every computer. */
   accountPending: boolean;
   hydrate(): Promise<void>;
-  saveMachine(machine: MobileMachine, token: string): Promise<void>;
+  /** `proofSeed` is the key the credential was bound to at pairing; a replaced credential without one drops the old seed. */
+  saveMachine(machine: MobileMachine, token: string, proofSeed?: Uint8Array): Promise<void>;
   /** Makes another saved route of the same computer the active one. */
   switchRoute(id: string, route: MobileRoute): Promise<boolean>;
   removeMachine(id: string, expected?: Pick<MobileMachine, "endpoint" | "environmentId" | "lanKey">): Promise<void>;
@@ -245,7 +311,7 @@ export const useMachines = create<MachineState>((set, get) => ({
     });
     return hydration;
   },
-  async saveMachine(input, token) {
+  async saveMachine(input, token, proofSeed) {
     const validated = validateMachine(input);
     if (!validToken(token)) throw new Error("Enter a valid 43-character device credential.");
     return serializeMutation(validated.id, async () => {
@@ -262,19 +328,25 @@ export const useMachines = create<MachineState>((set, get) => ({
         ? validateMachine({
             ...validated,
             routes: mergeRoutes(
-              { endpoint: validated.endpoint, ...(validated.lanKey ? { lanKey: validated.lanKey } : {}) },
+              activeRoute(validated),
               validated.routes,
-              existing.routes ?? [
-                { endpoint: existing.endpoint, ...(existing.lanKey ? { lanKey: existing.lanKey } : {}) },
-              ],
+              existing.routes ?? [activeRoute(existing)],
             ),
           })
         : validated;
       let oldToken: string | null;
+      let oldSeed: string | null = null;
+      let seedRead = false;
       try {
         oldToken = await readSecret(machine.id);
+        oldSeed = await readProofSeed(machine.id);
+        seedRead = true;
+        // The credential and its key change together; a failure restores the previous pair.
+        if (proofSeed) await writeProofSeed(machine.id, encodeProofSeed(proofSeed));
+        else if (oldToken !== token && oldSeed) await deleteProofSeed(machine.id);
         await writeSecret(machine.id, token);
       } catch {
+        if (seedRead) await restoreProofSeed(machine.id, oldSeed).catch(() => {});
         throw new Error("The computer credential could not be saved securely.");
       }
       set((s) => ({
@@ -293,6 +365,7 @@ export const useMachines = create<MachineState>((set, get) => ({
         try {
           if (oldToken) await writeSecret(machine.id, oldToken);
           else await deleteSecret(machine.id);
+          await restoreProofSeed(machine.id, oldSeed);
         } catch {
           set({
             storageError:
@@ -318,11 +391,19 @@ export const useMachines = create<MachineState>((set, get) => ({
       if (!origin) return;
       if (expectedIdentity && (origin.endpoint !== expectedIdentity.endpoint || origin.environmentId !== expectedIdentity.environmentId || origin.lanKey !== expectedIdentity.lanKey))
         throw new Error("This computer connection changed. Reopen its current route.");
-      let oldToken: string | null;
+      let oldToken: string | null = null;
+      let oldSeed: string | null = null;
+      let seedRead = false;
       try {
         oldToken = await readSecret(id);
+        oldSeed = await readProofSeed(id);
+        seedRead = true;
         await deleteSecret(id);
+        if (oldSeed) await deleteProofSeed(id);
       } catch {
+        // A half-removed credential must not lose its key: put back what was deleted.
+        if (oldToken) await writeSecret(id, oldToken).catch(() => {});
+        if (seedRead) await restoreProofSeed(id, oldSeed).catch(() => {});
         throw new Error(
           "The computer credential could not be removed securely. The connection was kept for retry.",
         );
@@ -348,6 +429,7 @@ export const useMachines = create<MachineState>((set, get) => ({
         });
         try {
           if (oldToken) await writeSecret(id, oldToken);
+          await restoreProofSeed(id, oldSeed);
         } catch {
           set({
             storageError:
@@ -374,6 +456,7 @@ export const useMachines = create<MachineState>((set, get) => ({
         ...current,
         endpoint: target.endpoint,
         lanKey: target.lanKey,
+        public: target.public,
       });
       set((s) => ({ machines: s.machines.map((m) => (m.id === id ? next : m)) }));
       try {

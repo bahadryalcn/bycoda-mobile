@@ -6,6 +6,7 @@ import { ActiveSessionsScreen } from "../../src/features/workspace/active-sessio
 import { TabletRail } from "../../src/features/workspace/tablet-rail";
 import { useMachines } from "../../src/state/machines";
 import { WorkspaceRouteScope } from "../../src/features/workspace/route-scope";
+import { useAdoptProjectScope } from "../../src/features/management/shared/local-project-scope";
 import { useAdaptiveLayout } from "../../src/ui/adaptive-layout";
 import { ScreenChromeProvider } from "../../src/ui/layout";
 import { ConnectionFeedbackScope } from "../../src/ui/connection-feedback-scope";
@@ -23,6 +24,8 @@ export default function SessionRoute() {
     targetTurnId?: string;
   }>();
   useRememberLastSession(id, projectId, machineId);
+  // A session of another project (link, notification) switches the shared scope; All already contains it.
+  useAdoptProjectScope(projectId || undefined, machineId, { withinAll: true });
   const active = useMachines((s) => s.activeId);
   const { tablet, split } = useAdaptiveLayout();
   useTabletSessionBackFallback(tablet);

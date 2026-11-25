@@ -86,6 +86,7 @@ export async function redeemMobilePairingCode(
         ticket: code.ticket,
         claimId,
         deviceName: deviceName.trim(),
+        proofKey: options.proofKey,
       }),
       signal: controller.signal,
       redirect: "error",

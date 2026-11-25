@@ -6,11 +6,11 @@ import { PushSection } from "./PushSection";
 const fixture = vi.hoisted(() => ({
   runtime: {}, device: { id: "phone" } as { id: string } | null, available: true,
   permission: { granted: false, canAskAgain: false, status: "denied" },
-  read: vi.fn(), enable: vi.fn(), sync: vi.fn(), allow: vi.fn(), settings: vi.fn(async () => undefined),
+  read: vi.fn(), enable: vi.fn(), reregister: vi.fn(), sync: vi.fn(), allow: vi.fn(), settings: vi.fn(async () => undefined),
   readError: null as Error | null,
   change: null as null | ((state: string) => void), remove: vi.fn(), press: null as null | (() => void),
 }));
-vi.mock("./account-context", () => ({ useAccount: () => ({ runtime: fixture.runtime, device: fixture.device }) }));
+vi.mock("./account-context", () => ({ useAccount: () => ({ runtime: fixture.runtime, device: fixture.device, retryRegistration: fixture.reregister }) }));
 vi.mock("../../permissions/device-permissions", () => ({ readDevicePermission: fixture.read, allowDevicePermission: fixture.allow }));
 vi.mock("../model/push-account", () => ({ accountPushAvailable: () => fixture.available, enableAccountPush: fixture.enable, syncAccountPush: fixture.sync }));
 vi.mock("react-native", () => ({ Linking: { openSettings: fixture.settings }, AppState: { addEventListener: (_event: string, change: (state: string) => void) => { fixture.change = change; return { remove: fixture.remove }; } } }));
@@ -80,4 +80,21 @@ it("ends a failed or expired permission read in a visible state with Refresh, ne
   fixture.readError = null; await act(async () => fixture.press!());
   expect(fixture.read).toHaveBeenCalledTimes(2); expect(fixture.enable).not.toHaveBeenCalled(); expect(fixture.allow).not.toHaveBeenCalled();
   expect(labels()).toEqual(["Open phone settings"]);
+});
+it("names why account notifications failed although the OS permission is on, and re-registers a lost device", async () => {
+  const { AccountApiError } = await import("../contracts/errors");
+  fixture.permission = { granted: true, canAskAgain: true, status: "granted" };
+  fixture.sync.mockRejectedValueOnce(new AccountApiError(404, "not_found", "Device not found"));
+  await mount();
+  expect(labels()).toEqual(["Try again"]);
+  expect(detail()).toBe("This phone's account registration was not found. Retry to register it again.");
+  await act(async () => fixture.press!());
+  expect(fixture.reregister).toHaveBeenCalledOnce(); expect(fixture.enable).not.toHaveBeenCalled();
+});
+it("shows the token failure instead of a generic one", async () => {
+  const { PushTokenError } = await import("../../push/push-token-error");
+  fixture.permission = { granted: true, canAskAgain: true, status: "granted" };
+  fixture.sync.mockRejectedValueOnce(new PushTokenError(new Error("SERVICE_NOT_AVAILABLE")));
+  await mount();
+  expect(detail()).toMatch(/did not give this phone a notification token/);
 });

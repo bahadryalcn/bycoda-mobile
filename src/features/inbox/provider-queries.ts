@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { RemoteInboxAvailability } from "../../../../src/features/inbox/model/remoteInbox";
 import { useActiveMachine } from "@/state/machines";
 import { hostKey, useHostClient, useHostQuery, useHostReadActive } from "@/state/queries";
+import { retryTransientRead, transientRetryDelay } from "@/state/query-retry";
 import { InboxJobError, runInboxJob } from "./provider-jobs";
 import type { InboxJobRequest, InboxJobResults, InboxReadAction } from "./provider-protocol";
 
@@ -34,7 +35,10 @@ export function useInboxRead<Action extends InboxReadAction>(
       return runInboxJob<Action>(client, request, signal);
     },
     enabled: !!client && active && enabled,
-    retry: false,
+    // A read only asks the desktop again with a fresh request ID; a dropped link (an app resume
+    // while the socket reconnects) retries quietly like every other Host read.
+    retry: retryTransientRead,
+    retryDelay: transientRetryDelay,
     staleTime: 20_000,
   });
 }

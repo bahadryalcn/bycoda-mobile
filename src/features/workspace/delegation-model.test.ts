@@ -18,9 +18,12 @@ const catalog = {
 describe("delegation candidates", () => {
   const list = delegationCandidates(catalog, ["codex", "claude", "grok"]);
   it("expands accounts for Claude and Codex only, labelled Model · Account", () => {
-    expect(list.map((item) => item.label)).toEqual(["GPT · Default", "Sonnet · Personal", "Sonnet · Work", "Grok"]);
+    // The Host's generic default label reads as the default account.
+    expect(list.map((item) => item.label)).toEqual(["GPT · Default account", "Sonnet · Personal", "Sonnet · Work", "Grok"]);
     expect(list[2]!.ref).toEqual({ harness: "claude", model: "claude:sonnet", providerAccountId: "w" });
     expect(list[3]!.ref).toEqual({ harness: "grok", model: "g1" });
+    expect(list[1]).toMatchObject({ accountKey: "default", defaultAccount: true, account: "Personal" });
+    expect(delegationCandidates(catalog, ["codex"], "Varsayılan hesap")[0]!.account).toBe("Varsayılan hesap");
   });
   it("treats an omitted account as the default login", () => {
     expect(refKey({ harness: "codex", model: "gpt" })).toBe(refKey({ harness: "codex", model: "gpt", providerAccountId: "default" }));

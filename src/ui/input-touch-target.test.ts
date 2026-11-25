@@ -26,6 +26,7 @@ vi.mock("panelui-native/components/input", () => ({ Input: (props: Record<string
 vi.mock("panelui-native/components/search-bar", () => ({ SearchBar: (props: Record<string, unknown>) => { state.fields.push(props); return null; } }));
 vi.mock("panelui-native/hooks/use-debounced-value", () => ({ useDebouncedValue: (value: string) => value }));
 vi.mock("lucide-react-native/icons/search", () => ({ default: () => null }));
+vi.mock("./buttons", () => ({ IconButton: () => null }));
 let root: ReturnType<typeof createRoot> | undefined;
 afterEach(() => { act(() => root?.unmount()); root = undefined; state.fields = []; vi.unstubAllGlobals(); });
 

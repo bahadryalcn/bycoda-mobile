@@ -1,5 +1,8 @@
 import type { AgentModel } from "../../../../src/features/sessions/model/models";
 import { groupedSettings, isPrimarySetting, settingLabel } from "./agent-model-settings";
+import { groupModels, type ModelGroupSection } from "./model-groups";
+import { providerName, type ProviderChoice } from "./provider-choices";
+import { filterSelection } from "@/ui/selection-model";
 
 type ModelRow = { value: string; label: string; searchKeywords?: string; selected: boolean };
 
@@ -13,6 +16,63 @@ export function modelRows(models: readonly AgentModel[], current: string): Model
     selected: entry === selected,
   }));
   return current && !selected ? [{ value: current, label: current, selected: true }, ...rows] : rows;
+}
+
+export type PickerModelItem = {
+  /** Unique across sections: the account choice and the model id. */
+  value: string;
+  choice: ProviderChoice;
+  model: string;
+  provider: ProviderChoice["provider"];
+  accountKey: string;
+  account?: string;
+  defaultAccount?: boolean;
+  name: string;
+  searchKeywords?: string;
+  selected: boolean;
+};
+
+/**
+ * The picker's grouped list: every provider account the computer offers, in product order, with
+ * the models of that provider. The current account shows its live list (a saved custom id first);
+ * the others come from the computer's catalog. A search filters within the sections.
+ */
+export function pickerSections(
+  choices: readonly ProviderChoice[],
+  current: ProviderChoice | undefined,
+  models: readonly AgentModel[],
+  model: string,
+  catalogModels: Partial<Record<string, readonly AgentModel[]>> | undefined,
+  search = "",
+  locale?: string,
+): ModelGroupSection<PickerModelItem>[] {
+  const all = current && !choices.some((item) => item.key === current.key) ? [current, ...choices] : choices;
+  const items = all.flatMap((choice): PickerModelItem[] => {
+    const own = choice.key === current?.key;
+    const rows = own ? modelRows(models, model) : modelRows(catalogModels?.[choice.provider] ?? [], "");
+    const account = choice.label !== providerName(choice.provider) ? choice.label : undefined;
+    return rows.map((row) => ({
+      value: `${choice.key}\u0000${row.value}`,
+      choice,
+      model: row.value,
+      provider: choice.provider,
+      accountKey: choice.key,
+      ...(account ? { account } : {}),
+      ...(account && !choice.accountId ? { defaultAccount: true } : {}),
+      name: row.label,
+      searchKeywords: row.searchKeywords,
+      selected: own && row.selected,
+    }));
+  });
+  const sections = groupModels(items);
+  if (!search.trim()) return sections;
+  return sections
+    .map((section) => {
+      const rows = section.rows.filter(({ item, family, label }) =>
+        filterSelection([{ value: item.value, label, group: section.title, subgroup: family, searchKeywords: item.searchKeywords }], search, locale).length > 0);
+      return { ...section, rows };
+    })
+    .filter((section) => section.rows.length > 0);
 }
 
 /** Reasoning first, then the speed and thinking toggles: the settings shown inline in the picker. */

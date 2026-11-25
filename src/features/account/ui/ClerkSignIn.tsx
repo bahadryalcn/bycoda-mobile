@@ -11,17 +11,16 @@ import { SignInProviderMark } from "./SignInProviderMark";
 /** Clerk e-mail verification codes are six digits. */
 const CODE_LENGTH = 6;
 
-type Provider = "google" | "facebook" | "apple" | "github";
+type Provider = "google" | "apple" | "github";
 type Step = { name: "choose" } | { name: "code"; mode: "signIn" | "signUp"; email: string };
 
 const STRATEGY = {
   google: "oauth_google",
-  facebook: "oauth_facebook",
   apple: "oauth_apple",
   github: "oauth_github",
 } as const;
 
-/** Sign-in choices backed by Clerk: Google, Facebook, Apple, GitHub and an e-mail code. No passwords. */
+/** Sign-in choices backed by Clerk: Apple, Google, GitHub and an e-mail code. No passwords. */
 export default function ClerkSignIn({ onStepChange }: { onStepChange?: (step: Step["name"]) => void }) {
   const copy = useCopy();
   const { colors } = useMobileTheme();
@@ -138,7 +137,6 @@ export default function ClerkSignIn({ onStepChange }: { onStepChange?: (step: St
   const social: { provider: Provider; label: string }[] = [
     { provider: "apple", label: copy("Apple ile devam et", "Continue with Apple") },
     { provider: "google", label: copy("Google ile devam et", "Continue with Google") },
-    { provider: "facebook", label: copy("Facebook ile devam et", "Continue with Facebook") },
     { provider: "github", label: copy("GitHub ile devam et", "Continue with GitHub") },
   ];
   return (

@@ -15,7 +15,7 @@ import { settingsRoutes } from "./settings-routes";
  */
 export function SettingsPage({ title, scope, footer, children }: PropsWithChildren<{
   title: string; footer?: ReactNode;
-  /** Which computer the page edits: the shared scope line, never a hand-built caption. */
+  /** Which computer the page edits: a read-only pill in the shared scope row, never a hand-built caption. */
   scope?: PageScope;
 }>) {
   const copy = useCopy();
@@ -48,7 +48,8 @@ export function SettingsPage({ title, scope, footer, children }: PropsWithChildr
   return (
     <SheetGuardContext value={context}>
       <RouterStack.Screen options={{ title, gestureEnabled: !guards.dirty && !guards.pending }} />
-      <Screen title={title} scope={scope} footer={footer}>{children}</Screen>
+      {/* A computer setting edits the active computer, so its pill switches computers. */}
+      <Screen title={title} scope={scope} computerSwitch={!!scope?.computer} footer={footer}>{children}</Screen>
     </SheetGuardContext>
   );
 }

@@ -44,6 +44,7 @@ export class HostTransport {
     private readonly fetcher?: FetchLike,
     private readonly credentialReader?: () => Promise<string | null>,
     private readonly assertAccess?: () => void,
+    private readonly proofSeedReader?: () => Promise<Uint8Array | null>,
   ) {
     try {
       this.endpoint = normalizeHostEndpoint(connection.endpoint, connection.lanKey);
@@ -71,6 +72,7 @@ export class HostTransport {
       this.credentialReader ?? (async () => this.connection.token),
       this.fetcher,
       this.assertAccess,
+      this.proofSeedReader,
     );
   }
   acceptIdentity(identity: string) {

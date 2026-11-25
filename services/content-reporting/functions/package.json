@@ -1,0 +1,16 @@
+{
+  "name": "bycoda-content-reporting",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "firebase-admin": "14.5.1",
+    "firebase-functions": "7.4.0"
+  },
+  "engines": {
+    "node": "22"
+  }
+}

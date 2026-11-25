@@ -22,7 +22,6 @@ export type FloatingTabBarProps = TabBarProps & {
   onInsetChange?: (height: number) => void;
   /** Session creation is a command, not another navigation destination. */
   quickAction?: { label: string; onPress(): void };
-  assistantAction?: ReactNode;
 };
 
 /** Badge value that draws an unread dot (desktop's rail dot) instead of a count pill. */
@@ -218,7 +217,6 @@ export function FloatingTabBar({
   navigateToTab,
   onInsetChange,
   quickAction,
-  assistantAction,
 }: FloatingTabBarProps) {
   const { colors } = useMobileTheme();
   const reducedMotion = useReducedMotionPreference();
@@ -236,10 +234,9 @@ export function FloatingTabBar({
     wide ? metrics.wideDockWidth : metrics.contentWidth,
     width - Math.max(insets.left, space.xs) - Math.max(insets.right, space.xs),
   );
-  const hasCommands = !!(quickAction || assistantAction);
-  const commandWidth =
-    (Number(!!quickAction) + Number(!!assistantAction)) * metrics.touchTarget +
-    (hasCommands ? space.sm * 2 + (bar ? 0 : 1) : 0);
+  // The new-session command follows the destinations after a plain gap; the voice assistant lives
+  // in the tab page's title row, not in the dock.
+  const commandWidth = quickAction ? metrics.touchTarget + space.sm : 0;
   // Icon-only phone items are a fixed 48 pt target whatever the text size; only labeled items
   // grow with text, so only they budget by fontScale. Large text keeps all five phone destinations.
   const slots = Math.max(
@@ -368,17 +365,7 @@ export function FloatingTabBar({
               />
             ) : null}
           </View>
-          {hasCommands ? (
-            <View
-              style={{
-                width: bar ? 0 : 1,
-                height: 24,
-                marginHorizontal: space.sm,
-                backgroundColor: colors.border,
-              }}
-            />
-          ) : null}
-          {assistantAction}
+          {quickAction ? <View style={{ width: space.sm }} /> : null}
           {quickAction ? (
               <AnimatedPressable
                 pressScale={1}

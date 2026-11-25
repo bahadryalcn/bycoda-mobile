@@ -132,16 +132,11 @@ export function AccessCenter() {
   const states: Record<HostAccessReport["lan"]["state"], string> = {
     ready: copy("Hazır", "Ready"),
     "setup-required": copy("Kurulum gerekli", "Setup required"),
-    "install-required": copy("Kurulum gerekli", "Installation required"),
-    "sign-in-required": copy("Oturum açılması gerekli", "Sign-in required"),
-    offline: copy("Çevrimdışı", "Offline"),
-    "approval-required": copy("Onay gerekiyor", "Approval required"),
-    "permission-required": copy("İzin gerekiyor", "Permission required"),
     unavailable: copy("Kullanılamıyor", "Unavailable"),
   };
   // Optional setup is not a problem; only states that block a configured network need attention.
   const networkTone = (state: HostAccessReport["lan"]["state"]) =>
-    ["ready", "setup-required", "install-required", "offline"].includes(state) ? "default" as const : "warning" as const;
+    ["ready", "setup-required"].includes(state) ? "default" as const : "warning" as const;
   const startHint = copy(
     "Tünelleri bilgisayardaki bycoda’dan yönetin.",
     "Manage tunnels in bycoda on the computer.",
@@ -167,6 +162,7 @@ export function AccessCenter() {
     <>
       <ScreenList<AccessRow>
         title={copy("Bilgisayar erişimi", "Host access")}
+        computerSwitch
         scope={{ computer: machine?.name }}
         query={supported ? query : undefined}
         refreshState={supported ? refresh : undefined}

@@ -21,8 +21,8 @@ import { getQueryPresentation } from "@/ui/query-presentation";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import type { HostGoal, HostTask } from "@/domain/types";
 import { useAgentProviders } from "./shared/agent";
-import { Scope } from "./shared/scope";
-import { useLocalProjectScope } from "./shared/local-project-scope";
+import { ProjectScopePill } from "../workspace/project-scope-pill";
+import { useRequiredProjectScope } from "./shared/required-project-scope";
 import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite";
 
 import { goalFlowReducer } from "./goals/flow";
@@ -65,7 +65,7 @@ export function GoalsScreen() {
     { value: "awaiting", label: copy("Onay bekleyen", "Awaiting approval") },
     { value: "finished", label: copy("Bitmiş", "Finished") },
   ];
-  const { projectId, setProjectId } = useLocalProjectScope();
+  const { projectId, setProjectId } = useRequiredProjectScope();
   const { providers, query: providerQuery } = useAgentProviders(projectId);
   const query = useHostQuery<HostGoal[]>(
     ["goals"],
@@ -169,6 +169,7 @@ export function GoalsScreen() {
   return (
     <ManagementList<HostGoal>
       title={copy("Epicler", "Epics")}
+      scopeControl={<ProjectScopePill allowAll={false} projectId={projectId} onChange={setProjectId} />}
       query={query}
       ListEmptyComponent={listState}
       data={visible ?? []}
@@ -196,7 +197,6 @@ export function GoalsScreen() {
             </>
           )}
           <ManagementToolbar
-            project={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
             search={
               <SearchField
                 placeholder={copy("Ara", "Search")}
@@ -212,6 +212,7 @@ export function GoalsScreen() {
               unfilteredValue: "all",
               options: filterOptions,
               onChange: setFilter,
+              filterable: !!scoped?.length,
             }}
           />
           {taskScope.enabled && (

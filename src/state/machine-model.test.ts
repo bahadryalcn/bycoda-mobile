@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { MAX_MACHINE_ROUTES, restoreMachines } from "./machine-model";
+import type { MobileMachine } from "../remote/types";
+import { learnRoutes, MAX_MACHINE_ROUTES, restoreMachines } from "./machine-model";
+import { orderRoutes } from "./route-selection";
 describe("saved remote computers", () => {
   it("restores pinned LAN metadata and rejects unpinned or public HTTP", () => {
     const lan = {
@@ -65,7 +67,7 @@ describe("saved remote computers", () => {
   });
   it("restores every paired route with the active one first and drops invalid ones", () => {
     const lan = { endpoint: "http://192.168.1.20:3777", lanKey: "ab".repeat(32) };
-    const tailscale = { endpoint: "https://home.tail1.ts.net" };
+    const tailscale = { endpoint: "http://100.101.102.103:42000", lanKey: "cd".repeat(32) };
     const [restored] = restoreMachines([
       {
         id: "home",
@@ -88,5 +90,42 @@ describe("saved remote computers", () => {
     ]);
     expect(many?.routes).toHaveLength(MAX_MACHINE_ROUTES);
     expect(single).not.toHaveProperty("routes");
+  });
+});
+
+describe("public routes", () => {
+  const lan = { endpoint: "http://192.168.1.20:3777", lanKey: "ab".repeat(32) };
+  const tailnet = { endpoint: "http://100.101.102.103:42000", lanKey: "cd".repeat(32) };
+  const pub = { endpoint: "https://phones.example.com", public: true as const };
+  const machine = { id: "m", name: "M", environmentId: "e", ...lan } as MobileMachine;
+
+  it("learns a public https route and rejects other unkeyed routes", () => {
+    const routes = learnRoutes(machine, [
+      pub,
+      { endpoint: "https://proxy.example.com" },
+      { endpoint: "http://203.0.113.9:80", public: true },
+      { endpoint: "https://keyed.example.com", lanKey: "ef".repeat(32), public: true },
+      { endpoint: "https://phones.example.com/path", public: true },
+      { endpoint: "https://phones.example.com", public: false },
+    ]);
+    expect(routes).toEqual([lan, pub]);
+  });
+
+  it("keeps a saved public route and persists it through restore", () => {
+    const [restored] = restoreMachines([{ ...machine, routes: [lan, pub] }]);
+    expect(restored?.routes).toEqual([lan, pub]);
+    expect(learnRoutes(restored!, [])).toEqual([lan, pub]);
+    const [active] = restoreMachines([{ ...machine, endpoint: pub.endpoint, lanKey: undefined, public: true }]);
+    expect(active?.public).toBe(true);
+    expect(restoreMachines([{ ...machine, public: true }])).toEqual([]);
+  });
+
+  it("orders local network, Tailscale, then public last", () => {
+    expect(orderRoutes([pub, tailnet, lan])).toEqual([lan, tailnet, pub]);
+    expect(orderRoutes([pub, lan, { endpoint: "https://proxy.example.com" }])).toEqual([
+      lan,
+      { endpoint: "https://proxy.example.com" },
+      pub,
+    ]);
   });
 });

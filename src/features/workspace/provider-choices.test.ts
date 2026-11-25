@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { choiceKey, providerChoices, providerName, selectedChoice } from "./provider-choices";
+import { accountName, choiceKey, providerChoices, providerName, selectedChoice } from "./provider-choices";
 
 const accounts = {
   claude: [
@@ -20,10 +20,10 @@ it("uses brand spelling for provider labels and preserves unknown provider ident
 it("expands multi-account providers and keeps single-login providers as one choice", () => {
   const choices = providerChoices(["claude", "codex", "grok"], accounts, "Default account");
   expect(choices.map((choice) => [choice.key, choice.label, choice.detail])).toEqual([
-    ["claude:", "Host default", "Claude"],
+    ["claude:", "Default account", "Claude"],
     ["claude:account-a", "Claude account 1", "Claude"],
     ["claude:account-b", "Claude account 2", "Claude"],
-    ["codex:", "Host default", "Codex"],
+    ["codex:", "Default account", "Codex"],
     ["grok:", "Grok", undefined],
   ]);
   expect(choices[1]).toMatchObject({ accountId: "account-a", color: "hsl(2 2% 2%)" });
@@ -44,11 +44,15 @@ it("hides unavailable accounts and does not invent a default for an empty catalo
     { id: "default", label: "Default", status: "unknown" },
   ] }, "Default").map((choice) => choice.key)).toEqual(["claude:"]);
 });
-it("localizes only the generic default label and preserves a renamed default", () => {
+it("localizes the Host's generic default label and preserves a renamed default", () => {
   const generic = providerChoices(["codex"], { codex: [{ ...accounts.codex[0]!, label: "Default account" }] }, "Varsayılan hesap");
   expect(generic[0]?.label).toBe("Varsayılan hesap");
   expect(generic[0]?.accountId).toBeUndefined();
-  expect(providerChoices(["codex"], accounts, "Varsayılan hesap")[0]?.label).toBe("Host default");
+  // "Host default" is the Host's internal name for its default login.
+  expect(providerChoices(["codex"], accounts, "Varsayılan hesap")[0]?.label).toBe("Varsayılan hesap");
+  expect(providerChoices(["codex"], { codex: [{ ...accounts.codex[0]!, label: "Personal" }] }, "Varsayılan hesap")[0]?.label).toBe("Personal");
+  // A named account is never renamed, even when its label looks generic.
+  expect(accountName({ id: "w", label: "Default" }, "Varsayılan hesap")).toBe("Default");
 });
 
 it("selects by provider and account, then falls back safely", () => {

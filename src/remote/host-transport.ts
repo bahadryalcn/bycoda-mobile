@@ -17,6 +17,13 @@ import { readonlyRequest } from "./request-policy";
 import { RemoteHostError } from "./host-error";
 import { nativeHostFetch } from "./native-fetch";
 import { encryptedLanFetch } from "./lan-fetch";
+import {
+  DEVICE_PROOF_HEADER,
+  DEVICE_PROOF_INVALID_MESSAGE,
+  DEVICE_PROOF_REQUIRED_MESSAGE,
+  isProofRefusal,
+  signRequestProof,
+} from "./device-proof";
 import { assertApprovalCommand } from "../domain/approval-command";
 import { boundedResponseParts } from "./response-body";
 import { mobileWsMethodEnabled, selectMobileHostTransport } from "./lan-ws";
@@ -101,6 +108,8 @@ export class HostTransport {
     private readonly readCredential: () => Promise<string | null>,
     private fetchImpl: typeof fetch = nativeHostFetch,
     private readonly assertAccess?: () => void,
+    /** The seed of the key this credential is bound to; absent before the Host has bound one. */
+    private readonly readProofSeed?: () => Promise<Uint8Array | null>,
   ) {
     this.endpoint = normalizeHostEndpoint(machine.endpoint, machine.lanKey);
     this.machine = Object.freeze({ ...machine, endpoint: this.endpoint });
@@ -112,6 +121,40 @@ export class HostTransport {
       { supportedProviders: [...REMOTE_PROVIDERS] },
       options,
     );
+  }
+
+  /** One fresh proof for this request, or undefined while the credential has no bound key. */
+  private async signProof(
+    credential: string,
+    controller: AbortController,
+  ): Promise<string | undefined> {
+    if (!this.readProofSeed || !this.machine.environmentId) return undefined;
+    let seed: Uint8Array | null;
+    try {
+      seed = await new Promise<Uint8Array | null>((resolve, reject) => {
+        const cancel = () => reject(new Error("Request cancelled."));
+        controller.signal.addEventListener("abort", cancel, { once: true });
+        this.readProofSeed!()
+          .then(resolve, reject)
+          .finally(() => controller.signal.removeEventListener("abort", cancel));
+      });
+    } catch {
+      if (controller.signal.aborted) throw new Error("Request cancelled.");
+      throw new RemoteHostError(
+        this.machine.id,
+        "auth",
+        "The saved device credential could not be read. Unlock the app or pair this computer again.",
+      );
+    }
+    this.requireAccess();
+    if (!seed) return undefined;
+    return signRequestProof({
+      seed,
+      token: credential,
+      method: "POST",
+      path: "/rpc",
+      environmentId: this.machine.environmentId,
+    });
   }
 
   private requireAccess(uncertain = false): void {
@@ -922,6 +965,7 @@ export class HostTransport {
           "protocol",
           "This request exceeds the host transfer limit.",
         );
+      const proof = await this.signProof(credential, controller);
       started = true;
       const fetcher = this.machine.lanKey
         ? encryptedLanFetch(
@@ -937,6 +981,7 @@ export class HostTransport {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${credential}`,
+          ...(proof ? { [DEVICE_PROOF_HEADER]: proof } : {}),
         },
         body: payload,
         signal: controller.signal,
@@ -945,7 +990,9 @@ export class HostTransport {
         cache: "no-store",
       });
       const unauthorized = response.status === 401;
-      const authMessage = "This device credential is invalid or revoked. Pair the computer again.";
+      let authMessage = "This device credential is invalid or revoked. Pair the computer again.";
+      if (unauthorized && isProofRefusal(response.headers.get("X-Bycoda-Auth-Stage")))
+        authMessage = DEVICE_PROOF_INVALID_MESSAGE;
       let parts: string[];
       try {
         parts = await boundedResponseParts(response, MAX_RESPONSE_BYTES, () => {
@@ -1005,6 +1052,12 @@ export class HostTransport {
           !read,
         );
       const envelope = value as Record<string, unknown>;
+      // The encrypted LAN envelope carries no headers; the refusal body names the reason.
+      if (unauthorized && isProofRefusal(null, envelope))
+        authMessage =
+          envelope.reason === "proof-required"
+            ? DEVICE_PROOF_REQUIRED_MESSAGE
+            : DEVICE_PROOF_INVALID_MESSAGE;
       const admittedUnknown =
         deviceHttpEffect(method) &&
         envelope.code === "HOST_DEVICE_OPERATION_UNCONFIRMED" &&

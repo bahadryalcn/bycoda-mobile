@@ -76,6 +76,8 @@ final class BycodaTunnel {
   let targetPort: UInt16
   /** Re-reads and verifies the credential for every CONNECT; nil when access is gone or the secret rotated. */
   private let tokenProvider: () -> String?
+  /** The `DPoP` proof for one CONNECT's WSS upgrade of this token, or nil while the credential has no bound key. */
+  private let proofProvider: (_ token: String, _ url: URL) -> String?
   /** (type, code, message) with type `error` or `closed`. */
   private let emit: (String, String?, String?) -> Void
   private let finished: (BycodaTunnel) -> Void
@@ -85,9 +87,9 @@ final class BycodaTunnel {
   private var proxyPort: UInt16 = 0
   private var lastError: (code: String, at: Date)?
 
-  init(tunnelId: String, alias: String, binding: HostBinding, url: URL, targetPort: UInt16, tokenProvider: @escaping () -> String?, emit: @escaping (String, String?, String?) -> Void, finished: @escaping (BycodaTunnel) -> Void) {
+  init(tunnelId: String, alias: String, binding: HostBinding, url: URL, targetPort: UInt16, tokenProvider: @escaping () -> String?, proofProvider: @escaping (_ token: String, _ url: URL) -> String?, emit: @escaping (String, String?, String?) -> Void, finished: @escaping (BycodaTunnel) -> Void) {
     self.tunnelId = tunnelId; self.alias = alias; self.machineId = binding.machineId; self.binding = binding; self.url = url
-    self.targetPort = targetPort; self.tokenProvider = tokenProvider; self.emit = emit; self.finished = finished
+    self.targetPort = targetPort; self.tokenProvider = tokenProvider; self.proofProvider = proofProvider; self.emit = emit; self.finished = finished
   }
 
   func start(_ completion: @escaping (Result<UInt16, TunnelError>) -> Void) {
@@ -151,6 +153,8 @@ final class BycodaTunnel {
   }
 
   // MARK: Called by TunnelConnection on `queue`
+
+  func proof(for token: String) -> String? { proofProvider(token, url) }
 
   func token() -> String? {
     guard !stopped else { return nil }
@@ -278,6 +282,7 @@ final class TunnelConnection {
     let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: operations)
     var request = URLRequest(url: owner.url)
     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    if let proof = owner.proof(for: token) { request.setValue(proof, forHTTPHeaderField: DeviceProof.header) }
     request.setValue("bycoda.tunnel.v1", forHTTPHeaderField: "Sec-WebSocket-Protocol")
     let task = session.webSocketTask(with: request)
     task.maximumMessageSize = 2_097_152

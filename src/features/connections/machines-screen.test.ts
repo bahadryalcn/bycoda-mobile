@@ -79,6 +79,7 @@ vi.mock("@/ui/primitives", () => {
     Skeleton: () => null,
     StateView: ({ title }: { title: string }) => createElement("p", null, title),
     SearchField: () => null,
+    useCollapsibleSearch: (field: unknown) => ({ open: true, trigger: null, field }),
     QueryState: () => null,
     MutationState: ({ success }: { success?: string }) => createElement("p", null, success ?? "Connection error"),
     IconButton: ({label, disabled, onPress}: {label:string; disabled?:boolean; onPress:()=>void}) => createElement("button", {disabled, onClick:onPress}, label),
@@ -194,7 +195,7 @@ it("owns Back from the initial Add choices, blocks busy exit and restores route 
 
 it("passes exclusive current-computer selection to the shared accessible row without claiming a live connection", () => {
   const html = renderToStaticMarkup(createElement(MachinesScreen));
-  expect(html).toContain('aria-pressed="true" aria-label="First computer. Disconnected. Computer is offline.">First computer</button><span>Active</span>');
+  expect(html).toContain('aria-pressed="true" aria-label="First computer. Disconnected. Computer is offline.">First computer</button><div><span>Active</span>');
   expect(html).toContain('aria-pressed="false">Second computer');
   expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
   expect(html).not.toContain("Connected");

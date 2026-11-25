@@ -2,6 +2,8 @@ import { errorMessage } from "@/ui/error-message";
 import { HostWsError } from "@/remote/ws-connection";
 import { RemoteHostError } from "@/remote/host-error";
 import type { AssistantVoiceStage } from "./assistant-voice-presentation";
+import { voiceHostMessage, voiceHostRefused } from "./assistant-voice-host-error";
+import { voiceNativeMessage } from "./assistant-voice-native-error";
 
 /** Why a voice call stopped or could not start. Screens translate the code; the English message is for logs and tests. */
 export type AssistantCallFailure =
@@ -84,9 +86,21 @@ export function assistantCallSleeps(error: unknown): boolean {
  */
 export function assistantCallLinkDropped(error: unknown, stage?: AssistantVoiceStage): boolean {
   if (stage === "reply") return false;
+  // The computer answered with a reason (voice setup running, settings in use): reopening would repeat it.
+  if (voiceHostRefused(error)) return false;
   if (error instanceof HostWsError) return error.uncertain || error.category === "network" || error.category === "unavailable";
   if (error instanceof RemoteHostError) return error.uncertain || error.kind === "network";
   return false;
+}
+
+/**
+ * A voice failure that is not the app's own reason: the computer's stated voice reason, the phone voice
+ * module's reason, or the shared presenter's wording for everything else.
+ */
+function voiceDetailMessage(error: unknown, copy: Copy): string {
+  if (error instanceof HostWsError && error.category === "unsupported")
+    return copy("Bu telefondan ses kullanmak için bilgisayardaki Bycoda’yı güncelle.", "Update Bycoda on the computer to use voice from this phone.");
+  return voiceHostMessage(error, copy) ?? voiceNativeMessage(error, copy) ?? errorMessage(error, copy);
 }
 
 /**
@@ -102,7 +116,7 @@ export function assistantCallErrorMessage(error: unknown, copy: Copy, where?: { 
   if (where?.stage && where.stage !== "reply" && dropped)
     return copy("Bağlantı koptu. {p0} açık ve telefonla aynı ağda mı kontrol edip yeniden dene.",
       "The connection dropped. Check that {p0} is on and on the same network as this phone, then try again.", { p0: where.computer });
-  if (!(error instanceof AssistantCallError)) return errorMessage(error, copy);
+  if (!(error instanceof AssistantCallError)) return voiceDetailMessage(error, copy);
   const reason = reasonMessage(error.reason, copy);
-  return error.detail === undefined ? reason : `${reason}\n${errorMessage(error.detail, copy)}`;
+  return error.detail === undefined ? reason : `${reason}\n${voiceDetailMessage(error.detail, copy)}`;
 }

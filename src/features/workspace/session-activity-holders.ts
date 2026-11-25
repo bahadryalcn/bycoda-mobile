@@ -31,7 +31,7 @@ export function heldBrowserFrom(status: unknown, sessionId: string): { url?: str
   return { url: typeof url === "string" && url ? url : undefined };
 }
 
-// Tool names arrive as titles such as "mcp__t3-code__device_open"; match the name, not a substring of another.
+// Tool names arrive as titles such as "mcp__workspace-tools__device_open"; match the name, not a substring of another.
 const tool = (name: string) => new RegExp(`(?:^|[^a-z0-9])(?:${name})(?![a-z0-9_])`, "i");
 const DEVICE_OPEN = tool("device_open"), DEVICE_CLOSE = tool("device_close");
 const BROWSER_OPEN = tool("preview_open|preview_navigate|browser_open|browser_navigate"), BROWSER_CLOSE = tool("preview_close|browser_close");

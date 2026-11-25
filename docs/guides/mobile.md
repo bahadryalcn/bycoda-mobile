@@ -260,11 +260,11 @@ origins, and the preview does not persist device credentials.
 ## Connect a computer
 
 In desktop **Settings → Connections**, choose **Connect phone** and the computer
-to connect. The desktop checks its private HTTPS access. If needed, **Enable secure
-connection** sets up Tailscale Serve through the host's actual loopback port;
-it preserves existing Serve handlers and chooses a separate HTTPS port when one
-is occupied. The phone must join the same private Tailscale network. HTTPS approval,
-sign-in, installation and OS permission requirements are shown in the dialog.
+to connect. The desktop checks its Tailscale access: **Tailscale access** turns on the
+computer's encrypted phone listener on its Tailscale address, so only devices signed in to
+the same Tailscale network can connect and the computer is never reachable from the public
+internet. If Tailscale is not connected on the computer, the dialog says so. The phone must
+join the same Tailscale network.
 
 After signing in, open mobile **Computers** and choose **Scan QR code** directly.
 The validated code selects the local-network or Tailscale route automatically;
@@ -790,6 +790,8 @@ whole image; tap to open the full-screen viewer. Missing or generic MIME types
 are resolved from the filename. If an image cannot be decoded, its filename and
 a retry action remain available. File reads and retries retain the current
 computer, session and private-content access checks.
+
+Tool cards and their detail sheets show the MCP action name.
 
 File links and downloaded attachments use the same reader. Images open in the
 image viewer; Markdown and HTML offer preview/source modes; text and code retain

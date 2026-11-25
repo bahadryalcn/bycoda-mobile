@@ -61,10 +61,40 @@ browser preview is not a pairing client.
 
 ## Tailscale
 
-Choose **Tailscale** to connect from a different network. Sign into the same
-Tailscale account on both devices. The existing setup flow enables a private HTTPS
-Serve endpoint without overwriting unrelated Serve services or enabling Funnel.
-Manual HTTPS address and device-key entry remains available.
+Choose **Tailscale** to connect from a different network. Sign into the same Tailscale
+network on both devices. The computer offers the same encrypted phone listener it uses on
+the local network on its Tailscale address (100.64.0.0/10) too, so only devices signed in
+to your Tailscale network can reach it and it is never reachable from the public internet.
+The setup flow only turns that listener on; it does not use Tailscale Serve or Funnel and
+leaves your Tailscale configuration alone. Turn it off in **Settings → Connections →
+Devices → Phone access → Tailscale access**. A public tunnel is used only when the owner allows it (see Public internet below). Manual device-key entry remains available.
+On iOS the connection is plain HTTP inside the tailnet (end-to-end encrypted by the Host
+key); the app's local-networking exception may not cover Tailscale addresses, so verify
+it on a device.
+
+## Public internet (opt-in)
+
+By default phones reach a computer only over private routes: the local network first, then
+Tailscale. A **Public internet** route appears only when the owner turned on **Allow phones
+over the public internet** on the computer. It is an HTTPS tunnel that anyone on the internet
+can reach; the device credential is its only protection, so the app marks it with a warning
+label. The app uses it last, only when the local network and Tailscale routes both fail, and
+never accepts an unkeyed route that the computer did not flag as public.
+
+Each computer's routes are labelled **Local network**, **Tailscale (private)** or **Public
+internet** in the computers list and on the selected computer.
+
+## Device key binding
+
+Each phone creates its own key when it pairs, keeps it in secure storage next to the
+credential, and binds the credential to it on the computer. Every request and socket
+then carries a short-lived signature of that key, so a copied credential token alone is
+useless. A phone paired before this existed binds itself automatically the first time it
+connects over the local network or Tailscale; the computer refuses to bind over a public
+route. If a bound phone cannot sign (for example a wrong phone clock) or a not yet bound
+phone only reaches the computer over the public internet, the connection shows a message
+asking to connect once over the local network or Tailscale, or to pair again. Deleting a
+computer from the phone deletes its key.
 
 ## Use both on the same computer
 

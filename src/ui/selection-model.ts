@@ -5,6 +5,10 @@ export type SelectionOption<T extends string = string> = {
   label: string;
   /** Consecutive options with this label share a visible heading. */
   group?: string;
+  /** A second heading inside a group, e.g. the model whose effort variants follow. */
+  subgroup?: string;
+  /** Complete name for the closed field's summary; defaults to "group · label". */
+  summaryLabel?: string;
   detail?: string;
   /** Product names and alternate spellings use language-neutral matching. */
   searchKeywords?: string;
@@ -22,7 +26,7 @@ export function filterSelection<T extends SelectionOption>(
   locale?: string,
 ) {
   return options.filter((option) =>
-    matchesSearch(`${option.group ?? ""} ${option.label} ${option.detail ?? ""}`, search, locale) ||
+    matchesSearch(`${option.group ?? ""} ${option.subgroup ?? ""} ${option.label} ${option.detail ?? ""}`, search, locale) ||
     (option.searchKeywords !== undefined && matchesSearch(option.searchKeywords, search, "en")),
   );
 }

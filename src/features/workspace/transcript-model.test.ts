@@ -394,7 +394,7 @@ describe("turn chrome", () => {
 
 describe("readable tool names", () => {
   it("drops the MCP server prefix and underscores", () => {
-    expect(readableToolName("mcp__t3-code__delegate_task")).toBe("delegate task");
+    expect(readableToolName("mcp__workspace-tools__delegate_task")).toBe("delegate task");
     expect(readableToolName("Read file")).toBe("Read file");
   });
 });

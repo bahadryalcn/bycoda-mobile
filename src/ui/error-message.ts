@@ -1,6 +1,7 @@
 import { RemoteHostError } from "../remote/host-error";
 import { ApprovalCommandRefused } from "../domain/approval-command";
 import { catalogs } from "../localization";
+import { DEVICE_PROOF_INVALID_MESSAGE, DEVICE_PROOF_REQUIRED_MESSAGE } from "../remote/device-proof";
 import { DraftWriteError } from "../state/local-draft-storage";
 
 type ErrorCopy = (turkish: string, english: string) => string;
@@ -104,6 +105,16 @@ function knownConnectionMessage(message: string, copy: ErrorCopy): string | unde
       return copy("Mobil uygulama ile Host verileri uyumsuz. İkisini de güncelleyip yeniden bağlan.", "The mobile app and Host use incompatible data. Update both and reconnect.");
     case "The computer certificate could not be verified. Reconnect this computer.":
       return copy("Bilgisayarın sertifikası doğrulanamadı. Bu bilgisayarı yeniden bağla.", "The computer certificate could not be verified. Reconnect this computer.");
+    case DEVICE_PROOF_REQUIRED_MESSAGE:
+      return copy(
+        "Bu bilgisayar önce telefonu yerel ağ veya Tailscale üzerinden doğrulamalı. Bir kez orada bağlan veya bu bilgisayarı yeniden eşleştir.",
+        "This computer must confirm this phone over the local network or Tailscale first. Connect there once, or pair this computer again.",
+      );
+    case DEVICE_PROOF_INVALID_MESSAGE:
+      return copy(
+        "Bu bilgisayar telefonun cihaz anahtarını doğrulayamadı. Telefonun tarih ve saatini kontrol edip yeniden bağlan veya yeniden eşleştir.",
+        "This computer could not verify this phone's device key. Check the phone's date and time, then reconnect or pair again.",
+      );
     case "This computer is busy. Try again shortly.":
       return copy("Bilgisayar meşgul. Biraz sonra yeniden dene.", "This computer is busy. Try again shortly.");
     case "This computer is not ready for this request. Try again shortly.":

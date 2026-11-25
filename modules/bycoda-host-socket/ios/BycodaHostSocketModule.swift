@@ -208,6 +208,11 @@ public final class BycodaHostSocketModule: Module {
     return value
   }
   private func digest(_ value: String) -> Data { Data(SHA256.hash(data: Data(value.utf8))) }
+  /** The `DPoP` proof for one request of a key-bound credential; nil while the Host has not bound a phone key yet. */
+  private func deviceProof(_ binding: HostBinding, token: String, url: URL) -> String? {
+    guard let raw = try? secureStore().bycodaHostReadNative(DeviceProof.seedKey(binding.machineId)), let seed = DeviceProof.decodeSeed(raw) else { return nil }
+    return DeviceProof.sign(seed: seed, token: token, method: "GET", path: DeviceProof.path(url), environmentId: binding.environmentId)
+  }
   private func event(_ connection: Connection, _ type: String, _ fields: [String: Any] = [:]) {
     sendEvent("onSocketEvent", ["connectionId": connection.id, "environmentId": connection.credential.binding.environmentId, "generation": connection.generation, "type": type].merging(fields, uniquingKeysWith: { _, new in new }))
   }
@@ -275,6 +280,7 @@ public final class BycodaHostSocketModule: Module {
     let tunnel = BycodaTunnel(
       tunnelId: tunnelId, alias: alias, binding: credential.binding, url: url, targetPort: UInt16(target.port),
       tokenProvider: { [weak self] in self?.tunnelToken(handle, tunnelId) },
+      proofProvider: { [weak self] token, url in self?.deviceProof(credential.binding, token: token, url: url) },
       emit: { [weak self] type, code, message in self?.tunnelEvent(tunnelId, type, code, message) },
       finished: { [weak self] finished in self?.tunnelFinished(tunnelId, finished) })
     try sync {
@@ -351,6 +357,7 @@ public final class BycodaHostSocketModule: Module {
     let config = URLSessionConfiguration.ephemeral; config.httpCookieStorage = nil; config.urlCredentialStorage = nil; config.timeoutIntervalForRequest = hostSocketIdleTimeout
     let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
     var request = URLRequest(url: try HostTls.endpoint(credential.binding)); request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization"); request.setValue("bycoda.rpc.v2", forHTTPHeaderField: "Sec-WebSocket-Protocol")
+    if let proof = deviceProof(credential.binding, token: token, url: request.url!) { request.setValue(proof, forHTTPHeaderField: DeviceProof.header) }
     let task = session.webSocketTask(with: request); task.maximumMessageSize = 1_048_576
     let connection = Connection(id: id, generation: generation, credential: credential, session: session, task: task, opening: promise)
     try sync {
@@ -458,6 +465,7 @@ public final class BycodaHostSocketModule: Module {
       let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
       var url = URLComponents(url: try HostTls.endpoint(credential.binding), resolvingAgainstBaseURL: false)!; url.scheme = "https"; url.path = "/ws-bulk/\(descriptor.transferId)"; url.queryItems = [URLQueryItem(name: "offset", value: String(Int(offset)))]
       var request = URLRequest(url: url.url!); request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+      if let proof = self.deviceProof(credential.binding, token: token, url: url.url!) { request.setValue(proof, forHTTPHeaderField: DeviceProof.header) }
       try self.sync { guard self.foreground, self.accessAllowed, self.lifecycleEpoch == epoch, self.credentials[handle] != nil, self.bulks.count < 2 else { session.invalidateAndCancel(); throw failure("access_changed") }; self.bulks[key] = (credential.binding.machineId, session) }
       session.dataTask(with: request).resume()
     }

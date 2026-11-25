@@ -1,0 +1,174 @@
+require "json"
+require "shellwords"
+
+ROOT = File.expand_path("..", __dir__)
+APP = JSON.parse(File.read(File.join(ROOT, "app.json"))).fetch("expo")
+OUTPUT = File.join(ROOT, "temp", "local", "store")
+
+def required(value, name)
+  UI.user_error!("Set #{name}.") if value.to_s.strip.empty?
+  value
+end
+
+def input_file(value, name)
+  path = File.expand_path(required(value, name), ROOT)
+  UI.user_error!("#{name} must point to an existing file.") unless File.file?(path)
+  path
+end
+
+def metadata_directory(value)
+  path = File.expand_path(required(value, "metadata"), ROOT)
+  UI.user_error!("metadata must point to a nonempty directory.") unless File.directory?(path) && !Dir.empty?(path)
+  path
+end
+
+def play_credentials
+  {
+    package_name: APP.fetch("android").fetch("package"),
+    json_key: input_file(ENV["BYCODA_PLAY_JSON"], "BYCODA_PLAY_JSON")
+  }
+end
+
+def apple_key
+  app_store_connect_api_key(
+    key_id: required(ENV["BYCODA_ASC_KEY_ID"], "BYCODA_ASC_KEY_ID"),
+    issuer_id: required(ENV["BYCODA_ASC_ISSUER_ID"], "BYCODA_ASC_ISSUER_ID"),
+    key_filepath: input_file(ENV["BYCODA_ASC_KEY_FILE"], "BYCODA_ASC_KEY_FILE"),
+    in_house: false
+  )
+end
+
+platform :android do
+  desc "Upload a signed AAB to Play internal testing or a specified closed track"
+  lane :internal do |options|
+    track = options[:track] || "internal"
+    UI.user_error!("Choose a Play testing track.") if track == "production"
+    notes = metadata_directory(options[:notes]) if options[:notes]
+    upload_to_play_store(
+      **play_credentials,
+      aab: input_file(options[:aab] || File.join(OUTPUT, "android", "app-release.aab"), "aab"),
+      track: track,
+      release_status: "completed",
+      metadata_path: notes,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: notes.nil?,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "Promote one tested Play build to a production draft"
+  lane :production_draft do |options|
+    version_code = required(options[:version_code], "version_code").to_s
+    UI.user_error!("version_code must be a positive integer.") unless version_code.match?(/\A[1-9]\d*\z/)
+    track = options[:track] || "internal"
+    UI.user_error!("Choose a Play testing track.") if track == "production"
+    upload_to_play_store(
+      **play_credentials,
+      track: track,
+      version_code: version_code.to_i,
+      track_promote_to: "production",
+      track_promote_release_status: "draft",
+      deactivate_on_promote: false,
+      changes_not_sent_for_review: true,
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "Update the Play listing from an edited Fastlane metadata directory"
+  lane :listing do |options|
+    upload_to_play_store(
+      **play_credentials,
+      metadata_path: metadata_directory(options[:metadata]),
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_changelogs: true,
+      changes_not_sent_for_review: true
+    )
+  end
+end
+
+platform :ios do
+  desc "Build a signed App Store IPA using local Xcode"
+  lane :archive do |options|
+    team_id = required(ENV["BYCODA_APPLE_TEAM_ID"], "BYCODA_APPLE_TEAM_ID")
+    UI.user_error!("BYCODA_APPLE_TEAM_ID must be a 10-character team ID.") unless team_id.match?(/\A[A-Z0-9]{10}\z/)
+    provisioning = ["-allowProvisioningUpdates"]
+    if options[:provision_with_api] == true
+      provisioning.concat([
+        "-authenticationKeyPath", input_file(ENV["BYCODA_ASC_KEY_FILE"], "BYCODA_ASC_KEY_FILE"),
+        "-authenticationKeyID", required(ENV["BYCODA_ASC_KEY_ID"], "BYCODA_ASC_KEY_ID"),
+        "-authenticationKeyIssuerID", required(ENV["BYCODA_ASC_ISSUER_ID"], "BYCODA_ASC_ISSUER_ID")
+      ])
+    end
+    Dir.chdir(ROOT) do
+      sh("pnpm check:release")
+      sh("pnpm theme:build")
+      sh("pnpm exec expo prebuild --platform ios --no-install")
+    end
+    Bundler.with_unbundled_env do
+      sh("pod", "install", "--project-directory=#{File.join(ROOT, 'ios')}")
+    end
+    workspace = Dir.glob(File.join(ROOT, "ios", "*.xcworkspace")).first
+    UI.user_error!("Generated iOS workspace was not found.") unless workspace
+    build_app(
+      workspace: workspace,
+      scheme: File.basename(workspace, ".xcworkspace"),
+      configuration: "Release",
+      export_method: "app-store",
+      export_team_id: team_id,
+      xcargs: Shellwords.join([*provisioning, "DEVELOPMENT_TEAM=#{team_id}"]),
+      export_xcargs: Shellwords.join(provisioning),
+      export_options: { signingStyle: "automatic" },
+      derived_data_path: File.join(OUTPUT, "ios", "DerivedData"),
+      output_directory: File.join(OUTPUT, "ios"),
+      output_name: "Bycoda.ipa"
+    )
+  end
+
+  desc "Upload an existing IPA to TestFlight"
+  lane :upload_testflight do |options|
+    upload_to_testflight(
+      api_key: apple_key,
+      app_identifier: APP.fetch("ios").fetch("bundleIdentifier"),
+      ipa: input_file(options[:ipa] || File.join(OUTPUT, "ios", "Bycoda.ipa"), "ipa"),
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  desc "Update the App Store listing and screenshots for a specific version"
+  lane :listing do |options|
+    screenshots = options[:screenshots] ? metadata_directory(options[:screenshots]) : nil
+    upload_to_app_store(
+      api_key: apple_key,
+      app_identifier: APP.fetch("ios").fetch("bundleIdentifier"),
+      app_version: required(options[:version], "version"),
+      metadata_path: metadata_directory(options[:metadata]),
+      screenshots_path: screenshots,
+      skip_screenshots: screenshots.nil?,
+      overwrite_screenshots: !screenshots.nil? && options[:replace_screenshots] == true,
+      skip_binary_upload: true
+    )
+  end
+
+  desc "Submit a specific processed TestFlight build for App Review with manual release"
+  lane :review do |options|
+    upload_to_app_store(
+      api_key: apple_key,
+      app_identifier: APP.fetch("ios").fetch("bundleIdentifier"),
+      app_version: required(options[:version], "version"),
+      build_number: required(options[:build], "build"),
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_screenshots: true,
+      precheck_include_in_app_purchases: false,
+      submit_for_review: true,
+      automatic_release: false
+    )
+  end
+end

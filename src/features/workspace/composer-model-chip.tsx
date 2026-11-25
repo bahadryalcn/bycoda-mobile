@@ -250,6 +250,9 @@ export function ComposerModelChip({
             access,
           });
         }}
+        onChooseModel={(next, id, settings) =>
+          apply({ provider: next.provider, accountId: next.accountId, model: id, settings, access })
+        }
         models={models}
         model={model}
         settings={modelSettings}

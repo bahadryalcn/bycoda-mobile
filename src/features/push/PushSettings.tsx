@@ -5,7 +5,7 @@ import { useActiveMachine } from "@/state/machines";
 import { useHostClient } from "@/state/queries";
 import { View } from "react-native";
 import { NavigationGroup, Notice, SectionHeader, StateView, ToggleField } from "@/ui/primitives";
-import { TimeoutError } from "../../../../src/shared/lib/withTimeout";
+import { pushTokenMessage } from "./push-error-copy";
 import { useInfoHint } from "@/ui/info-hint";
 import { useCopy } from "@/ui/copy";
 import { errorMessage } from "@/ui/error-message";
@@ -46,11 +46,11 @@ export function PushSettings() {
             ? copy("{p0} bu özelliği desteklemiyor; bycoda'yı güncelle.", "{p0} does not support this yet; update bycoda there.", { p0: machine.name })
             : status.state === "unconfigured"
               ? copy("Bu uygulama sürümünde uzaktan bildirim yapılandırılmamış.", "Remote notifications are not configured in this app build.")
-              : status.state === "error"
-                ? status.error instanceof TimeoutError
-                  ? copy("Bildirim hizmetinin yanıtı çok uzun sürdü.", "The notification service took too long to respond.")
-                  : errorMessage(status.error, copy)
-                : copy("Kontrol ediliyor…", "Checking…");
+              : status.state === "disconnected"
+                ? copy("{p0} bağlı değil. Bildirim seçimlerin bağlandığında gönderilir.", "{p0} is not connected. Your notification choices are sent when it connects.", { p0: machine.name })
+                : status.state === "error"
+                  ? pushTokenMessage(status.error, copy) ?? errorMessage(status.error, copy)
+                  : copy("Kontrol ediliyor…", "Checking…");
   const stateInfo = useInfoHint(status.state === "error" || !machine ? undefined : detail, "visible");
   return (
     <View style={{ gap: space.sm }}>

@@ -16,7 +16,7 @@ import {
   type DelegateCandidate,
   type ImageChoice,
 } from "./delegation-model";
-import { providerName } from "./provider-choices";
+import { delegationOptions } from "./model-groups";
 
 /** Long candidate lists get a search box. */
 const SEARCH_THRESHOLD = 6;
@@ -48,14 +48,14 @@ export function DelegationFields({
     return [...saved, ...candidates];
   }, [candidates, settings]);
   const byKey = useMemo(() => new Map(all.map((item) => [item.key, item])), [all]);
-  const options = all.map((item) => ({
-    value: item.key,
-    label: item.label,
-    detail: providerName(item.provider),
-    icon: (
-      <ProviderAccountMark provider={item.provider} color={item.color} size={18} />
-    ),
-  }));
+  // Grouped by provider and account like the model list; the mark sits in each group heading.
+  const options = useMemo(
+    () => delegationOptions(all).map(({ item, ...option }) => ({
+      ...option,
+      groupIcon: <ProviderAccountMark provider={item.provider} color={item.color} size={18} />,
+    })),
+    [all],
+  );
   const searchable = options.length > SEARCH_THRESHOLD;
   return (
     <View style={{ gap: space.lg }}>
@@ -110,5 +110,12 @@ function unknownCandidate(ref: {
   providerAccountId?: string;
 }): DelegateCandidate {
   const name = ref.model.replace(new RegExp(`^${ref.harness}:`), "");
-  return { ref, key: refKey(ref), provider: ref.harness, name, label: name };
+  const account = ref.providerAccountId && ref.providerAccountId !== "default" ? ref.providerAccountId : undefined;
+  // A missing account of a multi-account provider is its default login (see refKey).
+  const defaultLogin = !account && (ref.harness === "claude" || ref.harness === "codex");
+  return {
+    ref, key: refKey(ref), provider: ref.harness, name,
+    ...(account ? { account, accountKey: account } : defaultLogin ? { accountKey: "default", defaultAccount: true } : {}),
+    label: account ? `${name} · ${account}` : name,
+  };
 }

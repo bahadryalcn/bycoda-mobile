@@ -64,6 +64,7 @@ vi.mock("@/ui/primitives", async () => {
     ActionMenu: ({actions}:any) => createElement("div",null,actions.map((action:any)=>createElement("button",{key:action.key,onClick:action.onPress},action.label))),
     NavigationRow: ({ label, onPress }: any) => createElement("button", { onClick: onPress }, label),
     SearchField: ({ label, value, onChangeText }: any) => createElement("input", { "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) }),
+    useCollapsibleSearch: (field: unknown) => ({ open: true, trigger: null, field }),
     ScreenList: ({ header, data, renderItem, refresh, refreshState, actions, ListEmptyComponent }: any) => { fixture.refresh = refresh ?? refreshState?.onRefresh; return createElement("main", null,
       fixture.hideHeader ? null : createElement("header", null, actions, header), createElement("section", null, data.length ? null : ListEmptyComponent, data.map((item: any) => createElement("div", { key: item.id }, renderItem({ item }))))); },
   };

@@ -22,8 +22,16 @@ export async function connectComputer(
         dependencies.signal,
         input.lanKey,
         input.expectedEnvironmentId,
+        input.proofSeed,
       )
-    : await dependencies.discover(address, credential, dependencies.signal);
+    : await dependencies.discover(
+        address,
+        credential,
+        dependencies.signal,
+        undefined,
+        input.expectedEnvironmentId,
+        input.proofSeed,
+      );
   check();
   if (input.expectedEnvironmentId && host.environmentId !== input.expectedEnvironmentId) {
     throw new RemoteHostError(
@@ -52,6 +60,7 @@ export async function connectComputer(
       name: input.name.trim() || host.name,
       endpoint: address,
       ...(input.lanKey ? { lanKey: input.lanKey } : {}),
+      ...(input.public ? { public: true as const } : {}),
       environmentId: host.environmentId,
       platform: host.platform,
       providers: host.providers,
@@ -59,6 +68,7 @@ export async function connectComputer(
       lastConnectedAt: Date.now(),
     },
     credential,
+    input.proofSeed,
   );
   check();
 }

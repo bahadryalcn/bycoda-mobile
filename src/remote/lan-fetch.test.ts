@@ -4,6 +4,10 @@ import { encryptedLanFetch } from "./lan-fetch";
 import { createLanIdentity, openLanRequest } from "../../../host/mobile/mobile-lan-crypto";
 import { HostTransport } from "./host-transport";
 import { redeemMobilePairingCode } from "../features/connections/pairing-redeem";
+import { deviceProofKeyFromSeed, verifyDeviceProof } from "../../../src/integrations/device-proof";
+import { proofKeyOf } from "./device-proof";
+
+const proofKey = proofKeyOf(new Uint8Array(32).fill(7));
 
 vi.mock("expo-crypto", () => ({
   getRandomBytesAsync: async (size: number) => new Uint8Array(randomBytes(size)),
@@ -13,6 +17,38 @@ const environmentId = "computer";
 const token = "a".repeat(43);
 const ticket = "b".repeat(43);
 describe("mobile LAN encryption interoperability", () => {
+  it("carries a bound device's proof inside the encrypted envelope", async () => {
+    const identity = createLanIdentity();
+    const seed = new Uint8Array(32).fill(9);
+    let received: { proof?: string; path: string; token?: string } | undefined;
+    const wire = vi.fn<typeof fetch>(async (url, init) => {
+      if (String(url).endsWith("/hello"))
+        return new Response(JSON.stringify({ version: 1, epoch: "cd".repeat(32) }));
+      const opened = openLanRequest(JSON.parse(String(init?.body)), identity, environmentId);
+      received = opened.input;
+      return new Response(JSON.stringify(opened.seal({ status: 200, body: '{"result":[]}' })));
+    });
+    const transport = new HostTransport(
+      { id: "pc", name: "PC", endpoint, lanKey: identity.publicKey, environmentId },
+      async () => token,
+      wire,
+      undefined,
+      async () => seed,
+    );
+    await transport.request("projects.list");
+    expect(received?.proof).toBeTypeOf("string");
+    expect(wire.mock.calls.every(([, init]) => !JSON.stringify(init).includes(received!.proof!))).toBe(true);
+    expect(
+      verifyDeviceProof({
+        proof: received!.proof!,
+        token,
+        method: "POST",
+        path: received!.path,
+        environmentId,
+        expectedJkt: deviceProofKeyFromSeed(seed).jkt,
+      }),
+    ).toMatchObject({ ok: true });
+  });
   it("rechecks app access after asynchronous encryption before sending credentials", async () => {
     const wire = vi.fn<typeof fetch>();
     const identity = createLanIdentity();
@@ -75,7 +111,7 @@ describe("mobile LAN encryption interoperability", () => {
     expect(
       await redeemMobilePairingCode(code, "c".repeat(43), "Phone", {
         fetchImpl: wire,
-        assertAccess: () => {},
+        assertAccess: () => {}, proofKey,
       }),
     ).toMatchObject({ token, environmentId });
     const transport = new HostTransport(

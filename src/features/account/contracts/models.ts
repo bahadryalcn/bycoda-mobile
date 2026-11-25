@@ -356,16 +356,24 @@ function isPrivateIpv4(host: string): boolean {
   if (parts.length !== 4 || parts.some((p) => !/^(0|[1-9]\d{0,2})$/.test(p) || Number(p) > 255))
     return false;
   const [a, b] = parts.map(Number) as [number, number];
-  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  // RFC1918, or Tailscale's 100.64.0.0/10: reachable only on the home network or the tailnet.
+  return (
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127)
+  );
 }
 
-/** `https` origin, or `http` RFC1918 origin that carries a `lanKey`. No credentials, path or query. */
+/** `https` origin, or `http` private-network or tailnet origin that carries a `lanKey`. No credentials, path or query. */
 export const ConnectRoute = z
   .strictObject({
     endpoint: z.string().max(256),
     lanKey: LAN_KEY.optional(),
+    /** Added with phone access over the public internet: an owner-allowed https tunnel, never keyed. */
+    public: z.literal(true).optional(),
   })
-  .refine(({ endpoint, lanKey }) => {
+  .refine(({ endpoint, lanKey, public: isPublic }) => {
     let url: URL;
     try {
       url = new URL(endpoint);
@@ -374,6 +382,7 @@ export const ConnectRoute = z
     }
     if (url.username || url.password || url.search || url.hash || url.pathname !== "/")
       return false;
+    if (isPublic && (lanKey !== undefined || url.protocol !== "https:")) return false;
     if (url.protocol === "https:") return true;
     return url.protocol === "http:" && lanKey !== undefined && isPrivateIpv4(url.hostname);
   }, "endpoint must be an https origin, or an http private-network origin with lanKey");

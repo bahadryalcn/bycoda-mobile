@@ -1,10 +1,12 @@
 import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Device } from "../contracts";
 import { allowDevicePermission, readDevicePermission } from "../../permissions/device-permissions";
 import { expoProjectId, expoPushToken, onPushTokenRotated } from "../../push/push-registration";
 import type { AccountRuntime } from "./account-runtime";
 import { usePushStatus } from "../../push/push-model";
 import { syncHostCanonical } from "./push-host-canonical";
+import { ACCOUNT_NOTIFICATION_SETTINGS_KEY } from "./notification-settings";
 import { securePushMarkStore } from "./device-store";
 import { syncPushToken, type PushSyncResult } from "./push-sync";
 
@@ -78,10 +80,15 @@ export function useAccountPushSync(runtime: AccountRuntime | null, device: Devic
  */
 export function useAccountHostPushDedupe(runtime: AccountRuntime | null, device: Device | null) {
   const hostActive = usePushStatus((state) => state.status.state === "registered");
+  const queries = useQueryClient();
   useEffect(() => {
     if (!runtime || !device || !accountPushAvailable()) return;
-    syncHostCanonical(runtime.client, hostActive).catch((error: unknown) => {
-      console.warn("[account] Host push dedupe failed.", error instanceof Error ? error.message : error);
-    });
-  }, [runtime, device, hostActive]); // re-sync whenever Host push registration starts or stops
+    syncHostCanonical(runtime.client, hostActive).then(
+      // The settings screen saves whole documents from its cache; a stale copy would undo this change.
+      () => queries.invalidateQueries({ queryKey: ACCOUNT_NOTIFICATION_SETTINGS_KEY }),
+      (error: unknown) => {
+        console.warn("[account] Host push dedupe failed.", error instanceof Error ? error.message : error);
+      },
+    );
+  }, [runtime, device, hostActive, queries]); // re-sync whenever Host push registration starts or stops
 }

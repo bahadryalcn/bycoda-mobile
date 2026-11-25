@@ -30,6 +30,7 @@ import {
   Notice,
   Screen,
   SearchField,
+  SearchToolbar,
   Row,
   SectionHeader,
   Sheet,
@@ -327,23 +328,25 @@ function ProjectsConnectionScreen({ machine, connection }: {
             </IconButton>
           )}
         />
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-          <View style={{ flex: 1, minWidth: 0 }}>
+        <SearchToolbar
+          search={
             <SearchField
               label={copy("Projelerinde ara", "Search projects")}
               value={search}
               onChangeText={setSearch}
               placeholder={copy("Proje veya grup ara", "Search project or group")}
             />
-          </View>
-          <IconButton
-            label={`${copy("Sıralama ve görünüm", "Sort and view")}: ${sortLabels[sort]}`}
-            expanded={optionsOpen}
-            onPress={() => setOptionsOpen(true)}
-          >
-            <ArrowDownUp size={18} color={sort === "desktop" ? colors.muted : colors.accent} />
-          </IconButton>
-        </View>
+          }
+          actions={
+            <IconButton
+              label={`${copy("Sıralama ve görünüm", "Sort and view")}: ${sortLabels[sort]}`}
+              expanded={optionsOpen}
+              onPress={() => setOptionsOpen(true)}
+            >
+              <ArrowDownUp size={18} color={sort === "desktop" ? colors.muted : colors.accent} />
+            </IconButton>
+          }
+        />
         {preferencesError ? (
           <Notice
             tone="warning"

@@ -278,6 +278,9 @@ export const metrics = {
  * header or toolbar icon button, `back` is the navigation chevron.
  */
 export const iconSize = { inline: 14, status: 16, row: 20, action: 20, back: 24 };
+
+/** Widest a scope pill (computer, project) grows; long names end in an ellipsis instead of wrapping. */
+export const SCOPE_PILL_MAX_WIDTH = 240;
 /**
  * Vertical rhythm between groups: 28 from the previous group to the next section label's text. A
  * screen's parent gap (`space.lg` 16) + the header lead-in (`headerLeadIn` 4) + half of the 32 header

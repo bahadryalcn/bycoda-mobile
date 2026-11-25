@@ -4,7 +4,7 @@ import {
   protocolMismatchMessage,
 } from "../../../src/features/connections/model/protocol";
 import type { HostDescriptor } from "./types";
-import { isLanAddress, isLanKey } from "../../../src/integrations/mobile-lan";
+import { isLanKey, isPrivateRouteAddress } from "../../../src/integrations/mobile-lan";
 import {
   HOST_HTTP_MAX_RESPONSE_BYTES,
   HOST_RESULT_TOO_LARGE_CODE,
@@ -31,12 +31,15 @@ export function normalizeHostEndpoint(input: string, lanKey?: string): string {
   const loopback = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
   if (
     lanKey !== undefined &&
-    (!isLanKey(lanKey) || url.protocol !== "http:" || !isLanAddress(url.hostname))
+    (!isLanKey(lanKey) || url.protocol !== "http:" || !isPrivateRouteAddress(url.hostname))
   )
-    throw new Error("Scan a valid local network pairing code.");
+    throw new Error("Scan a valid local network or Tailscale pairing code.");
   if (
     url.protocol !== "https:" &&
-    !(url.protocol === "http:" && (loopback || (isLanAddress(url.hostname) && isLanKey(lanKey))))
+    !(
+      url.protocol === "http:" &&
+      (loopback || (isPrivateRouteAddress(url.hostname) && isLanKey(lanKey)))
+    )
   )
     throw new Error(
       "Remote bycoda connections require HTTPS. Use the computer’s trusted HTTPS proxy address.",

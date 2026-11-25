@@ -3,7 +3,7 @@ import { router, type Href } from "expo-router";
 import AudioLines from "lucide-react-native/icons/audio-lines";
 import { IconButton } from "@/ui/buttons";
 import { useCopy } from "@/ui/copy";
-import { radii } from "@/ui/tokens";
+import { iconSize, radii } from "@/ui/tokens";
 import { useMobileTheme } from "@/ui/theme";
 import { useAssistantCall } from "./assistant-call-state";
 
@@ -19,7 +19,10 @@ export function assistantEntryStatus(call: { phase: string; error?: unknown; rec
 
 export const ASSISTANT_ROUTE = "/assistant" as Href;
 
-/** Dock command. Keep live call status visible while the assistant is minimized. */
+/**
+ * The voice assistant entry at the far right of each tab's title row (after the page actions).
+ * Keeps live call status visible while the assistant is minimized.
+ */
 export function AssistantEntryButton() {
   const copy = useCopy(), { colors } = useMobileTheme();
   const status = useAssistantCall(state => assistantEntryStatus(state));
@@ -30,8 +33,8 @@ export function AssistantEntryButton() {
     : copy("Sesli asistan", "Voice assistant");
   return (
     <View>
-      <IconButton label={label} reserveTouchTarget onPress={() => router.navigate(ASSISTANT_ROUTE)}>
-        <AudioLines size={24} color={colors.text} />
+      <IconButton label={label} onPress={() => router.navigate(ASSISTANT_ROUTE)}>
+        <AudioLines size={iconSize.action} color={colors.text} />
       </IconButton>
       {dot ? <View pointerEvents="none" style={{ position: "absolute", top: 8, end: 8, width: 10, height: 10, borderRadius: radii.pill, backgroundColor: dot, borderWidth: 2, borderColor: colors.panel }} /> : null}
     </View>

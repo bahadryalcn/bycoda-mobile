@@ -13,6 +13,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }), HintSection: ({ children }: PropsWithChildren) => createElement("div", null, children), InfoHint: () => null, InfoPanel: () => null, HintLabel: () => null, UnitHint: () => null, isUnitHint: () => false }));
 vi.mock("./usage-charts", () => ({ UsageKpis: () => null, ProviderShare: () => null }));
+vi.mock("@/ui/machine-bar", () => ({ MachinePill: ({ accessory }: { accessory?: import("react").ReactNode }) => createElement("nav", null, accessory) }));
 vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
 vi.mock("@/ui/metric-row", () => ({ MetricRow: ({ label, value }: { label: string; value: string | number }) => createElement("div", null, label, ": ", value) }));
 

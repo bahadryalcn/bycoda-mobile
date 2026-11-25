@@ -7,7 +7,9 @@ import { useHostQuery } from "@/state/queries";
 import { NewSessionSheet } from "./new-session-sheet";
 import { useLatestCallback } from "./use-latest-callback";
 import { useAsyncAction } from "@/state/actions";
-import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
+import { AppliedFilters, FilterButton, FilterChipRow, FilterSheet } from "@/ui/filter-sheet";
+import { useLocalProjectScope } from "../management/shared/local-project-scope";
+import { ProjectScopePill } from "./project-scope-pill";
 import {
   QueryState,
   ScreenList,
@@ -50,7 +52,8 @@ import {
 } from "./session-filters";
 
 type StatusFilter = "all" | "running" | "reply";
-type FilterDraft = { status: StatusFilter; archived: boolean; snoozed: boolean; project: string; list: SessionListFilters };
+// The project is the shared header scope, not a filter-sheet field.
+type FilterDraft = { status: StatusFilter; archived: boolean; snoozed: boolean; list: SessionListFilters };
 
 export function ActiveSessionsScreen({
   overview = false,
@@ -99,7 +102,7 @@ export function ActiveSessionsScreen({
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [archived, setArchived] = useState(false);
   const [snoozed, setSnoozed] = useState(false);
-  const [projectFilter, setProjectFilter] = useState("");
+  const scope = useLocalProjectScope();
   const [listFilters, setListFilters] = useState<SessionListFilters>(defaultSessionListFilters);
   const [draft, setDraft] = useState<FilterDraft | null>(null);
   const [creating, setCreating] = useState(overview && initialCreate);
@@ -114,6 +117,10 @@ export function ActiveSessionsScreen({
     label: project.name,
     detail: project.cwd,
   }));
+  // The overview follows the shared project scope; a project no longer on this computer shows all.
+  const projectFilter = overview && scope.projectId &&
+    (!activity.directoryReady || projectOptions.some((project) => project.value === scope.projectId))
+    ? scope.projectId : "";
   const lifecycle = useHostQuery<{ records: { sessionId: string; state: string }[] }>(
     ["sessions-lifecycle"],
     "sessions.lifecycle.list",
@@ -148,7 +155,6 @@ export function ActiveSessionsScreen({
   const listFilterCount = overview ? activeSessionFilterCount(listFilters) : 0;
   const narrowed = snoozed || !!search.trim() || !!projectFilter || (!archived && filter !== "all") || listFilterCount > 0;
   const title = overview ? copy("Oturumlar", "Sessions") : copy("Aktif oturumlar", "Active sessions");
-  const projectLabel = projectOptions.find((project) => project.value === projectFilter)?.label;
   const statusOptions = [
     { value: "all" as const, label: copy("Tümü", "All") },
     { value: "running" as const, label: copy("Çalışıyor", "Working") },
@@ -165,11 +171,10 @@ export function ActiveSessionsScreen({
   const providerOptions = providers.map((value) => ({ value, label: providerName(value) }));
   const shownProviders = providers.filter((provider) => !listFilters.hiddenProviders.includes(provider));
   const managedLabel = copy("Asistan yönetimli", "Assistant-managed");
-  const filterCount = Number(snoozed) + Number(archived) + Number(!!projectFilter) + listFilterCount;
+  const filterCount = Number(snoozed) + Number(archived) + listFilterCount;
   const appliedFilters = [
     snoozed && copy("Ertelenmiş", "Snoozed"),
     archived && copy("Arşivlenmiş", "Archived"),
-    projectFilter && `${copy("Proje", "Project")}: ${projectLabel ?? projectFilter}`,
     listFilters.hiddenProviders.length > 0 &&
       `${copy("Sağlayıcı", "Provider")}: ${shownProviders.map(providerName).join(", ") || "–"}`,
     listFilters.managed && managedLabel,
@@ -212,11 +217,13 @@ export function ActiveSessionsScreen({
   };
   const listLabel = copy("Oturumlar yükleniyor…", "Loading sessions…");
   const resetFilters = () => {
-    setSearch(""); setFilter("all"); setProjectFilter(""); setArchived(false); setSnoozed(false); setListFilters(defaultSessionListFilters);
+    setSearch(""); setFilter("all"); if (projectFilter) scope.setProjectId(null); setArchived(false); setSnoozed(false); setListFilters(defaultSessionListFilters);
   };
   const showEmpty = activity.directoryReady && !rows.length;
   const canCreate = overview && !!projectOptions.length && !activity.privacyPending;
   const olderSessions = windowed && visible.length > 0;
+  // Nothing to narrow: an empty directory with no applied filter shows no filter controls.
+  const filtersShown = !waitingForConnection && (directory.length > 0 || filterCount > 0 || filter !== "all");
   const emptyState = waitingForConnection ? (
     <ProjectDirectoryFeedback query={listQuery} readiness={activity.readiness} privacyUnavailable={activity.privacyUnavailable} shareConnectionFeedback={shareConnectionFeedback} />
   ) : queryOwnsRegion(listQuery) ? (
@@ -254,6 +261,7 @@ export function ActiveSessionsScreen({
       grouped
       keyExtractor={(row) => row.key}
       title={title}
+      scopeControl={overview ? <ProjectScopePill projectId={scope.projectId} onChange={scope.setProjectId} /> : undefined}
       refresh={activity.refetch}
       ListEmptyComponent={emptyState ?? undefined}
       query={{ ...activity.projects, isFetching: activity.refreshing, isPending: activity.pending }}
@@ -264,31 +272,24 @@ export function ActiveSessionsScreen({
             <>
               <SearchToolbar
                 search={<SearchField label={copy("Oturum ara", "Search sessions")} value={search} onChangeText={setSearch} />}
-                actions={waitingForConnection ? null : (
-                  <FilterButton count={filterCount} onPress={() => setDraft({ status: filter, archived, snoozed, project: projectFilter, list: listFilters })} />
-                )}
+                actions={filtersShown ? (
+                  <FilterButton count={filterCount} onPress={() => setDraft({ status: filter, archived, snoozed, list: listFilters })} />
+                ) : null}
               />
-              {waitingForConnection ? null : (
+              {filtersShown ? (
                 <>
                   {/* Quick status filter: the frequent choice stays one tap away, the rest is in the sheet. */}
-                  <Row>
-                    {statusOptions.map((option) => (
-                      <SessionFilterChip key={option.value} label={option.label} selected={!archived && filter === option.value}
-                        disabled={archived} onPress={() => setFilter(option.value)} />
-                    ))}
-                  </Row>
+                  <FilterChipRow label={copy("Durum", "Status")} value={filter} options={statusOptions}
+                    disabled={archived} onChange={setFilter} />
                   <AppliedFilters filters={appliedFilters} />
                 </>
-              )}
+              ) : null}
               {draft ? <FilterSheet visible onClose={() => setDraft(null)}
-                onReset={() => setDraft({ status: draft.status, archived: false, snoozed: false, project: "", list: defaultSessionListFilters })}
+                onReset={() => setDraft({ status: draft.status, archived: false, snoozed: false, list: defaultSessionListFilters })}
                 onApply={() => {
-                  setFilter(draft.status); setArchived(draft.archived); setSnoozed(draft.snoozed); setProjectFilter(draft.project);
+                  setFilter(draft.status); setArchived(draft.archived); setSnoozed(draft.snoozed);
                   setListFilters(draft.list); setDraft(null);
                 }}>
-                <SelectField label={copy("Proje", "Project")} searchable value={draft.project}
-                  options={[{ value: "", label: copy("Tüm projeler", "All projects") }, ...projectOptions]}
-                  disabled={activity.privacyPending} onChange={(project) => setDraft({ ...draft, project })} />
                 <SelectField label={copy("Zaman", "Time")} value={draft.list.time} options={timeOptions}
                   onChange={(time) => setDraft({ ...draft, list: { ...draft.list, time } })} />
                 {providerOptions.length > 1 || draft.list.hiddenProviders.length ? (

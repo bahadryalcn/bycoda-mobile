@@ -130,7 +130,7 @@ export function ProviderCenter() {
   </Screen>;
   const ready = getQueryPresentation(query) === "ready" && !!report;
   return <>
-    <ScreenList<ProviderCenterAgent> title={copy("Sağlayıcı merkezi", "Provider center")} scope={{ computer: machine.name }}
+    <ScreenList<ProviderCenterAgent> title={copy("Sağlayıcı merkezi", "Provider center")} computerSwitch scope={{ computer: machine.name }}
       query={supported ? query : undefined}
       refreshState={supported ? refresh : undefined}
       grouped

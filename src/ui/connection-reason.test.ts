@@ -15,6 +15,12 @@ describe("connection reason", () => {
     expect(connectionReason("disconnected", "unsupported", "bab", copy)).toBe("bycoda on bab needs an update.");
     expect(connectionReason("disconnected", undefined, "bab", copy)).toBe("Can't reach bab on this network.");
   });
+  it("names the private connection a proof refusal needs instead of an expired pairing", () => {
+    expect(connectionReason("access", "auth", "bab", copy, "required")).toBe(
+      "bab must confirm this phone over the local network or Tailscale first. Connect there once, or pair again.",
+    );
+    expect(connectionReason("access", "auth", "bab", copy, "invalid")).toContain("couldn't verify this phone's key");
+  });
   it("asks to pair again when the pairing was refused or replaced", () => {
     expect(connectionReason("access", "auth", "bab", copy)).toBe("Pairing expired. Pair bab again.");
     expect(connectionReason("disconnected", "identity", "bab", copy)).toBe("A different computer answered. Pair bab again.");

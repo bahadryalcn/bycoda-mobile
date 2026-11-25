@@ -90,11 +90,17 @@ export class MobileHostRuntimeRegistry {
   async openVoice(machine: MobileMachine, scope: AssistantVoiceScope, current: () => boolean) {
     this.assertAccess();
     const runtime = this.runtimes.get(machine.id);
-    if (!this.native || !runtime || runtime.binding.machineId !== machine.id) throw new HostWsError("unavailable");
+    if (!this.native || !runtime || runtime.binding.machineId !== machine.id)
+      throw new HostWsError("unavailable");
     // Returning from the microphone prompt (Android pauses the app for it) reconnects the shared
     // socket under a new access epoch; the call waits for that instead of failing at once.
     await this.whenReady(runtime);
-    return openScopedVoiceConnection(this.native, { ...runtime.binding, accessEpoch: this.accessEpoch }, scope, current);
+    return openScopedVoiceConnection(
+      this.native,
+      { ...runtime.binding, accessEpoch: this.accessEpoch },
+      scope,
+      current,
+    );
   }
   private whenReady(runtime: Runtime): Promise<void> {
     if (runtime.state === "ready") return Promise.resolve();
@@ -109,7 +115,10 @@ export class MobileHostRuntimeRegistry {
         if (state === "ready") finish();
         else if (state === "blocked" || state === "closed") finish(new HostWsError("unavailable"));
       };
-      const timer = setTimeout(() => finish(new HostWsError("unavailable")), VOICE_READY_TIMEOUT_MS);
+      const timer = setTimeout(
+        () => finish(new HostWsError("unavailable")),
+        VOICE_READY_TIMEOUT_MS,
+      );
       runtime.states.add(listen);
     });
   }
@@ -387,7 +396,11 @@ export class MobileHostRuntimeRegistry {
    * blocked until the app is backgrounded. A revoked credential keeps failing the same way.
    */
   private recheckBlocked(runtime: Runtime): void {
-    if (runtime.timer || !runtime.refs || !["authentication", "tls"].includes(runtime.blockedBy ?? ""))
+    if (
+      runtime.timer ||
+      !runtime.refs ||
+      !["authentication", "tls"].includes(runtime.blockedBy ?? "")
+    )
       return;
     const delay = BLOCKED_RECHECK_MS[runtime.blockedRechecks];
     // Ladder exhausted: stay blocked until a real recovery event resets it.
@@ -471,7 +484,30 @@ export class MobileHostRuntimeRegistry {
 
 let appRegistry: MobileHostRuntimeRegistry | undefined;
 let appAccessEpoch = Date.now();
-export function openAssistantVoiceRuntime(machine: MobileMachine, scope: AssistantVoiceScope, current: () => boolean) {
+/** The Host describes one WSS bootstrap per phone listener (local network, tailnet); the
+ * route's own listener is the one that serves this machine's endpoint address. */
+function mobileTlsForRoute(
+  descriptor: { mobileTls?: unknown; mobileTlsTailnet?: unknown },
+  machine: MobileMachine,
+): unknown {
+  const host = new URL(machine.endpoint).hostname;
+  const candidates = [descriptor.mobileTls, descriptor.mobileTlsTailnet];
+  const matching = candidates.find((candidate) => {
+    const endpoint = (candidate as { endpoint?: unknown } | undefined)?.endpoint;
+    try {
+      return typeof endpoint === "string" && new URL(endpoint).hostname === host;
+    } catch {
+      return false;
+    }
+  });
+  return matching ?? descriptor.mobileTls;
+}
+
+export function openAssistantVoiceRuntime(
+  machine: MobileMachine,
+  scope: AssistantVoiceScope,
+  current: () => boolean,
+) {
   if (!appRegistry) throw new HostWsError("unavailable");
   return appRegistry.openVoice(machine, scope, current);
 }
@@ -620,7 +656,10 @@ async function createMobileHostRuntime(options: {
           if (bootstrap.get(key) === pending) bootstrap.delete(key);
         });
       }
-      const descriptor = (await pending) as HostDescriptor & { mobileTls?: unknown };
+      const descriptor = (await pending) as HostDescriptor & {
+        mobileTls?: unknown;
+        mobileTlsTailnet?: unknown;
+      };
       assertAccess();
       if (!resolvedBootstrap.has(key)) remember(machine, descriptor);
       if (selectMobileHostTransport(descriptor.capabilities ?? [], true) === "legacy-http")
@@ -634,10 +673,11 @@ async function createMobileHostRuntime(options: {
       // The paired-CA bootstrap describes the local-network WSS listener. Use it
       // only on the local-network route; an HTTPS route (e.g. Tailscale away
       // from home) keeps its own public-CA socket on the same address.
-      if (descriptor.mobileTls !== undefined && machine.lanKey) {
+      const routeTls = machine.lanKey ? mobileTlsForRoute(descriptor, machine) : undefined;
+      if (routeTls !== undefined) {
         let trusted;
         try {
-          trusted = requireMobileTlsBootstrap(descriptor.mobileTls, machine.environmentId);
+          trusted = requireMobileTlsBootstrap(routeTls, machine.environmentId);
         } catch {
           throw new RemoteHostError(
             machine.id,

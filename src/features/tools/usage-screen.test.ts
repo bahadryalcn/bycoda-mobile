@@ -48,6 +48,7 @@ vi.mock("@/ui/feedback", () => ({
   ErrorNotice: () => null, Notice: ({ message }: any) => createElement("span", null, message), Loading: () => null, Skeleton: () => null,
   StatusLine: ({ label, action }: any) => createElement("div", null, label, action ? createElement("button", { onClick: action.onPress }, action.label) : null),
 }));
+vi.mock("@/ui/machine-bar", () => ({ MachinePill: ({ accessory }: any) => createElement("nav", null, "Computer pill", accessory) }));
 vi.mock("@/ui/metric-row", () => ({ MetricRow: ({ label, value }: any) => createElement("div", null, label, value) }));
 vi.mock("@/ui/record-card", () => ({ RecordCard: ({ title, preview }: any) => createElement("div", null, title, preview) }));
 vi.mock("@/ui/primitives", async () => {
@@ -59,7 +60,7 @@ vi.mock("@/ui/primitives", async () => {
     SegmentedControl: ({ value, onChange, options, disabled, label }: any) => createElement("div", { "aria-label": label, "data-disabled": String(!!disabled) }, options.map((o: any) => createElement("button", { key: o.value, disabled, "aria-pressed": value === o.value, onClick: () => onChange(o.value) }, o.label))),
     Card: Group, SectionHeader: ({ title }: any) => createElement("h3", null, title),
     SelectField: ({ label, value, onChange, disabled }: any) => createElement("select", { "aria-label": label, disabled, value, onChange: (e: any) => onChange(e.target.value) }, ["1", "7"].map(v => createElement("option", { key: v, value: v }, v))),
-    ScreenList: ({ header, actions, data, renderItem, footer, refreshState }: any) => { fixture.refresh = refreshState; return createElement("main", null, actions, header, data.map((item: any) => createElement("section", { key: item.sessionId }, renderItem({ item }))), footer); },
+    ScreenList: ({ header, actions, data, renderItem, footer, refreshState, scopeControl, computerSwitch }: any) => { fixture.refresh = refreshState; return createElement("main", null, computerSwitch ? "Computer pill" : null, scopeControl, actions, header, data.map((item: any) => createElement("section", { key: item.sessionId }, renderItem({ item }))), footer); },
   };
 });
 import { UsageScreen } from "./usage-screen";
@@ -167,4 +168,26 @@ it("permits Limits refresh without session usage capability and rejects a stale 
   fixture.endpoint = "https://changed.synthetic.invalid";
   await act(() => stale());
   expect(fixture.refetchReports).toHaveBeenCalledOnce();
+});
+it("shows one refresh indicator: the toolbar button or the pull, never both", async () => {
+  let resolve!: () => void;
+  fixture.refetch.mockImplementationOnce(() => new Promise(done => { resolve = () => done({}); }));
+  await render();
+  await click("Refresh");
+  expect(button("Refresh").dataset.busy).toBe("true"); expect(fixture.refresh.refreshing).toBe(false);
+  await act(async () => resolve());
+  expect(button("Refresh").dataset.busy).toBe("false");
+  fixture.refetch.mockImplementationOnce(() => new Promise(done => { resolve = () => done({}); }));
+  await act(() => fixture.refresh.onRefresh());
+  expect(fixture.refresh.refreshing).toBe(true); expect(button("Refresh").dataset.busy).toBe("false");
+  await act(async () => resolve());
+  expect(fixture.refresh.refreshing).toBe(false);
+});
+it("keeps a background report read quiet and puts the shared computer pill in the heading", async () => {
+  fixture.reportSupported = true; fixture.tab = "limits";
+  await act(() => root.render(createElement(UsageScreen, { scopeControl: createElement("span", null, "Project pill") })));
+  expect(node.textContent).toContain("Computer pill"); expect(node.textContent).not.toContain("Project pill");
+  expect(button("Refresh").dataset.busy).toBe("false"); expect(fixture.refresh.refreshing).toBe(false);
+  await click("Tokens");
+  expect(node.textContent).toContain("Project pill");
 });

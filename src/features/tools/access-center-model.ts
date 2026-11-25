@@ -11,7 +11,7 @@ export function visibleAccessDevices(devices: readonly PairedDevice[], query: st
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const allowed = (value: Record<string, unknown>, keys: string[]) => Object.keys(value).every((key) => keys.includes(key));
 const text = (value: unknown, max: number): value is string => typeof value === "string" && value.length > 0 && value.length <= max && !/[\r\n\0]/.test(value);
-const accessStates = ["ready", "setup-required", "install-required", "sign-in-required", "offline", "approval-required", "permission-required", "unavailable"];
+const accessStates = ["ready", "setup-required", "unavailable"];
 export function localTunnelUrl(value: string) {
   const url = new URL(value);
   if (!["http:", "https:"].includes(url.protocol) || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || url.username || url.password || url.search || url.hash || url.pathname !== "/" || value.length > 1024)

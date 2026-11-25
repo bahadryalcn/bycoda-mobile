@@ -8,6 +8,8 @@ import { startDiagnostics } from "../src/features/diagnostics/diagnostics-runtim
 import { AppProviders } from "../src/app-providers";
 import { KeyboardCommandsProvider, KeyboardScreen } from "../src/features/keyboard/keyboard-provider";
 import { ScreenChromeProvider } from "../src/ui/layout";
+import { ScreenComputerControl } from "../src/ui/screen-chrome";
+import { MachinePill } from "../src/ui/machine-bar";
 import { HeaderBackButton } from "../src/ui/header-back-button";
 import { stackBackItem } from "../src/ui/stack-back";
 import { useCopy } from "../src/ui/copy";
@@ -24,6 +26,11 @@ import { AppErrorScreen } from "../src/ui/error-boundary";
  * somewhere to go instead of leaving the app. Warm links and `router.push` keep their stack.
  */
 export const unstable_settings = { anchor: "(tabs)" };
+
+/** The switchable computer pill pages show in their shared scope row. */
+function ComputerControl() {
+  return <MachinePill />;
+}
 
 // Module scope: capture starts before the first render so early warnings and crashes are kept.
 startDiagnostics();
@@ -55,6 +62,7 @@ function RootNavigation() {
   };
   return (
     <ThemeProvider value={navigationTheme}>
+        <ScreenComputerControl value={ComputerControl}>
         <ScreenChromeProvider nativeTitle bottomInset={assistantReserve}>
           <Stack
             screenLayout={({ children }) => <KeyboardScreen>{children}</KeyboardScreen>}
@@ -105,6 +113,7 @@ function RootNavigation() {
             />
           </Stack>
         </ScreenChromeProvider>
+        </ScreenComputerControl>
     </ThemeProvider>
   );
 }

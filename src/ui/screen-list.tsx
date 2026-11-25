@@ -13,10 +13,14 @@ import type { PageScope } from "./scope-line";
 export type ScreenListProps<T> = FlatListProps<T> & {
   title?: string;
   subtitle?: string;
-  /** Which computer/project the page acts on: one quiet glyph-led line beside the heading actions. */
+  /** Which computer/project the page acts on: read-only scope pills at the start of the scope row. */
   scope?: PageScope;
+  /** Lead the scope row with the switchable computer pill; defaults to true with an own `scopeControl`. */
+  computerSwitch?: boolean;
   /** Current task scope beside heading actions, including under a native title. */
   context?: ReactNode;
+  /** The shared project scope control (`ProjectScopePill`): one compact pill in the page identity row. */
+  scopeControl?: ReactNode;
   header?: ReactNode;
   footer?: ReactNode;
   query?: QueryLike;
@@ -42,6 +46,8 @@ export function ScreenList<T>({
   subtitle,
   scope,
   context,
+  scopeControl,
+  computerSwitch,
   header,
   footer,
   query,
@@ -60,7 +66,7 @@ export function ScreenList<T>({
 }: ScreenListProps<T>) {
   const { colors, uiStyles } = useMobileTheme();
   const content = useScreenContentInsets();
-  const heading = useScreenHeading({ title, subtitle, scope, context, actions, onBack });
+  const heading = useScreenHeading({ title, subtitle, scope, context, scopeControl, computerSwitch, actions, onBack });
   const onRefresh = refresh ?? query?.refetch;
   const ownRefresh = usePullRefresh(refreshState ? undefined : onRefresh);
   const pullRefresh = refreshState ?? ownRefresh;
